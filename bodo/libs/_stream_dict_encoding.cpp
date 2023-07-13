@@ -28,6 +28,10 @@ struct DictEncodingState {
         int64_t,
         std::tuple<std::vector<int64_t>, std::shared_ptr<array_info>, int64_t>>
         multi_input_map;
+    // Count the number of times set is called. Used for testing.
+    int64_t num_set_calls;
+
+    DictEncodingState() { num_set_calls = 0; }
 };
 
 /**
@@ -125,6 +129,7 @@ void set_array_py_entry(DictEncodingState* state, int64_t func_id,
     state->one_input_map.insert_or_assign(
         func_id, std::tuple(cache_dict_id, std::shared_ptr<array_info>(arr),
                             new_dict_id));
+    state->num_set_calls += 1;
 }
 
 /**
@@ -231,6 +236,18 @@ void set_array_multi_input_py_entry(DictEncodingState* state, int64_t func_id,
     state->multi_input_map.insert_or_assign(
         func_id, std::tuple(cache_dict_ids_copy,
                             std::shared_ptr<array_info>(arr), new_dict_id));
+    state->num_set_calls += 1;
+}
+
+/**
+ * @brief Return how many times one of the set APIs was called on this state.
+ * This is used in place of an actual hit/miss rate.
+ *
+ * @param state DictEncodingState
+ * @return int64_t num_set_calls field.
+ */
+int64_t get_state_num_set_calls(DictEncodingState* state) {
+    return state->num_set_calls;
 }
 
 /**
@@ -256,6 +273,7 @@ PyMODINIT_FUNC PyInit_stream_dict_encoding_cpp(void) {
     SetAttrStringFromVoidPtr(m, state_contains_multi_input_dict_array);
     SetAttrStringFromVoidPtr(m, get_array_multi_input_py_entry);
     SetAttrStringFromVoidPtr(m, set_array_multi_input_py_entry);
+    SetAttrStringFromVoidPtr(m, get_state_num_set_calls);
     SetAttrStringFromVoidPtr(m, delete_dict_encoding_state);
     return m;
 }

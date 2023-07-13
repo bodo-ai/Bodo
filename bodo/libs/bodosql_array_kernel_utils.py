@@ -52,9 +52,9 @@ def indent_block(text, indentation):
         the smallest level of indentation in the block of code
 
     Returns:
-        string: the same multiline string with the indendation of all lines adjusted
+        string: the same multiline string with the indentation of all lines adjusted
         so that the first line has the indentation specified, with a trailing
-        newline character. If the input stringis None, an empty string is returned instead.
+        newline character. If the input string is None, an empty string is returned instead.
     """
     if not text:
         return ""
@@ -87,6 +87,8 @@ def gen_vectorized(
     synthesize_dict_global=False,
     synthesize_dict_unique=False,
     array_is_scalar=False,
+    dict_encoding_state_name=None,
+    func_id_name=None,
 ):
     """Creates an impl for a column compute function that has several inputs
        that could all be scalars, nulls, or arrays by broadcasting appropriately.
@@ -145,6 +147,11 @@ def gen_vectorized(
             global? Default is False.
         synthesize_dict_unique (bool): if dictionary synthesis is used, is the dictionary
             unique? Default is False.
+        dict_encoding_state_name (Optional[str]): Variable name to use for kernels that
+            support dictionary encoding caching in streaming. If none then no caching
+            is available.
+        func_id_name (Optional[str]): Variable name to use for a func_id with dictionary
+            encoding caching in streaming.
 
     Returns:
         function: a broadcasted version of the calculation described by
@@ -319,6 +326,7 @@ def gen_vectorized(
         if use_dict_encoding:
             # In this path the output is still dictionary encoded, so the indices
             # and other attributes need to be copied
+            func_text += f"   cache_dict_id = {arg_names[dict_encoded_arg]}._dict_id\n"
             if out_dtype == bodo.string_array_type:
                 func_text += (
                     f"   indices = {arg_names[dict_encoded_arg]}._indices.copy()\n"
@@ -356,14 +364,33 @@ def gen_vectorized(
         if prefix_code and not out_null:
             func_text += indent_block(prefix_code, 3)
 
+        # cache_dict_arrays dictates if we are in a streaming context where
+        # it may beneficial to cache dictionary encoded arrays. This is only supported
+        # with regular use_dict_encoding (without use_dict_synthesis) and a function
+        # only supports this if it has provided a variable for both dict_encoding_state_name
+        # and func_id_name.
+        cache_dict_arrays = (
+            not use_dict_synthesis
+            and use_dict_encoding
+            and dict_encoding_state_name is not None
+            and func_id_name is not None
+        )
+        # Additional indentation in case we are caching dictionaries.
+        dict_caching_indent = 6 if cache_dict_arrays else 3
+        # Code that can be taken in the "cache miss" (e.g. regular computation)
+        # needs to be indented as a block, so we write to an intermediate variable.
+        non_cached_text = ""
+
         # If creating a dictionary encoded output from scratch, embed the text
         # to create the dictionary itself before the main loop
         if use_dict_synthesis:
-            func_text += indent_block(synthesize_dict_setup_text, 3)
+            non_cached_text += indent_block(synthesize_dict_setup_text, 3)
             out_dtype = bodo.libs.dict_arr_ext.dict_indices_arr_type
-            func_text += "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
-            func_text += "   numba.parfors.parfor.init_prange()\n"
-            func_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
+            non_cached_text += (
+                "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
+            )
+            non_cached_text += "   numba.parfors.parfor.init_prange()\n"
+            non_cached_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
 
         # If dictionary encoded outputs are not being used, then the output is
         # still bodo.string_array_type, the number of loop iterations is still the
@@ -376,30 +403,46 @@ def gen_vectorized(
             # to output array.
             # See test_bool.py::test_equal_null[vector_scalar_string]
             dict_len = "n" if propagate_null[dict_encoded_arg] else "(n + 1)"
+            if cache_dict_arrays:
+                # Insert code to check the dictionary encoding state for possible caching.
+                # If a kernel supports cache_dict_arrays then the same dictionary may be reused
+                # for multiple iterations (based on cache_dict_id). If so, we check the state to
+                # see if we can skip the computation. Otherwise we generate the result as normal
+                # and update the dictionary encoding state.
+                func_text += f"   if bodo.libs.stream_dict_encoding.state_contains_dict_array({dict_encoding_state_name}, {func_id_name}, cache_dict_id):\n"
+                func_text += "      res, new_dict_id = bodo.libs.stream_dict_encoding.get_array(\n"
+                func_text += f"         {dict_encoding_state_name},\n"
+                func_text += f"         {func_id_name},\n"
+                func_text += "         cache_dict_id,\n"
+                func_text += "         out_dtype,\n"
+                func_text += "      )\n"
+                func_text += "   else:\n"
             if not propagate_null[dict_encoded_arg]:
                 arr_name = arg_names[dict_encoded_arg]
-                func_text += f"   {arr_name} = bodo.libs.array_kernels.concat([{arr_name}, bodo.libs.array_kernels.gen_na_array(1, {arr_name})])\n"
+                non_cached_text += f"   {arr_name} = bodo.libs.array_kernels.concat([{arr_name}, bodo.libs.array_kernels.gen_na_array(1, {arr_name})])\n"
             # adding one extra element in dictionary for null output if necessary
             if out_dtype == bodo.string_array_type:
-                func_text += f"   res = bodo.libs.str_arr_ext.pre_alloc_string_array({dict_len}, -1)\n"
+                non_cached_text += f"   res = bodo.libs.str_arr_ext.pre_alloc_string_array({dict_len}, -1)\n"
             else:
-                func_text += f"   res = bodo.utils.utils.alloc_type({dict_len}, out_dtype, (-1,))\n"
-            func_text += f"   for i in range({dict_len}):\n"
+                non_cached_text += f"   res = bodo.utils.utils.alloc_type({dict_len}, out_dtype, (-1,))\n"
+            non_cached_text += f"   for i in range({dict_len}):\n"
         else:
             if res_list:
-                func_text += "   res = []\n"
-                func_text += "   for i in range(n):\n"
+                non_cached_text += "   res = []\n"
+                non_cached_text += "   for i in range(n):\n"
             else:
-                func_text += (
+                non_cached_text += (
                     "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
                 )
-                func_text += "   numba.parfors.parfor.init_prange()\n"
-                func_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
+                non_cached_text += "   numba.parfors.parfor.init_prange()\n"
+                non_cached_text += (
+                    "   for i in numba.parfors.parfor.internal_prange(n):\n"
+                )
 
         # If the argument types imply that every row is null, then just set each
         # row of the output array to null
         if out_null:
-            func_text += f"      bodo.libs.array_kernels.setna(res, i)\n"
+            non_cached_text += f"      bodo.libs.array_kernels.setna(res, i)\n"
 
         else:
             # For each column that propagates nulls, add an isna check (and
@@ -407,32 +450,52 @@ def gen_vectorized(
             for i in range(len(arg_names)):
                 if are_arrays[i]:
                     if propagate_null[i]:
-                        func_text += f"      if bodo.libs.array_kernels.isna({arg_names[i]}, i):\n"
+                        non_cached_text += f"      if bodo.libs.array_kernels.isna({arg_names[i]}, i):\n"
                         if res_list:
-                            func_text += "         res.append(None)\n"
+                            non_cached_text += "         res.append(None)\n"
                         else:
-                            func_text += (
+                            non_cached_text += (
                                 "         bodo.libs.array_kernels.setna(res, i)\n"
                             )
-                        func_text += "         continue\n"
+                        non_cached_text += "         continue\n"
 
             # Add the local variables that the scalar computation will use
             for i in range(len(arg_names)):
                 if are_arrays[i]:
                     if alloc_array_scalars:
-                        func_text += f"      arg{i} = {arg_names[i]}[i]\n"
+                        non_cached_text += f"      arg{i} = {arg_names[i]}[i]\n"
                 else:
-                    func_text += f"      arg{i} = {arg_names[i]}\n"
+                    non_cached_text += f"      arg{i} = {arg_names[i]}\n"
 
             if not use_dict_synthesis:
                 # Add the scalar computation. The text must use the argument variables
                 # in the form arg0, arg1, etc. and store its final answer in res[i].
-                func_text += indent_block(scalar_text, 6)
+                non_cached_text += indent_block(scalar_text, 6)
 
             else:
                 # If using dictionary encoded synthesis, do the same but where res[i]
                 # will store the index in the dictionary calculated earlier
-                func_text += indent_block(synthesize_dict_scalar_text, 6)
+                non_cached_text += indent_block(synthesize_dict_scalar_text, 6)
+
+        if cache_dict_arrays:
+            # Generate the new dict id and insert the set_array call. This populates
+            # the cache with the result for the next time this kernel is called.
+            if out_dtype == bodo.string_array_type:
+                non_cached_text += (
+                    f"   new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(n)\n"
+                )
+            else:
+                non_cached_text += f"   new_dict_id = -1\n"
+            non_cached_text += "   bodo.libs.stream_dict_encoding.set_array(\n"
+            non_cached_text += f"      {dict_encoding_state_name},\n"
+            non_cached_text += f"      {func_id_name},\n"
+            non_cached_text += f"      cache_dict_id,\n"
+            non_cached_text += f"      res,\n"
+            non_cached_text += f"      new_dict_id,\n"
+            non_cached_text += "   )\n"
+
+        # Insert the caching else path into the func_text.
+        func_text += indent_block(non_cached_text, dict_caching_indent)
 
         # If using dictionary encoding, construct the output from the
         # new dictionary + the indices
