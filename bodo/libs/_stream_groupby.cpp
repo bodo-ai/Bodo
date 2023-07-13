@@ -251,6 +251,8 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
     // 3. Combine update values with local and shuffle build tables.
 
     int n_pes, myrank;
+    // trace performance
+    auto iterationEvent(groupby_state->groupby_event.iteration());
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
@@ -408,6 +410,8 @@ void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
                                      std::shared_ptr<table_info> in_table,
                                      bool is_last) {
     int n_pes, myrank;
+    // trace performance
+    auto iterationEvent(groupby_state->groupby_event.iteration());
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 

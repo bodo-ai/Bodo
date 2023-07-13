@@ -107,6 +107,8 @@ class GroupbyState {
     // TODO(njriasan): Move to initialization information.
     std::shared_ptr<ChunkedTableBuilder> output_buffer = nullptr;
 
+    tracing::ResumableEvent groupby_event;
+
     GroupbyState(std::vector<int8_t> in_arr_c_types,
                  std::vector<int8_t> in_arr_array_types,
                  std::vector<int32_t> ftypes,
@@ -121,7 +123,8 @@ class GroupbyState {
           local_build_table({}, HashGroupbyTable<true>(this),
                             KeyEqualGroupbyTable<true>(this, n_keys)),
           shuffle_build_table({}, HashGroupbyTable<false>(this),
-                              KeyEqualGroupbyTable<false>(this, n_keys)) {
+                              KeyEqualGroupbyTable<false>(this, n_keys)),
+          groupby_event("Groupby") {
         // TODO[BSE-566]: support dictionary arrays
         for (int8_t arr_type : in_arr_array_types) {
             if (arr_type == bodo_array_type::DICT) {
