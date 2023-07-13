@@ -671,6 +671,7 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
                              bool probe_table_outer_, cond_expr_fn_t cond_func_,
                              bool build_parallel_, bool probe_parallel_,
                              int64_t output_batch_size_,
+                             uint64_t shuffle_sync_iter,
                              size_t max_partition_depth_)
     : JoinState(build_arr_c_types, build_arr_array_types, probe_arr_c_types,
                 probe_arr_array_types, n_keys_, build_table_outer_,
@@ -679,6 +680,7 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
       max_partition_depth(max_partition_depth_),
       build_iter(0),
       probe_iter(0),
+      shuffle_sync_iter(shuffle_sync_iter),
       join_event("HashJoin") {
     this->build_shuffle_buffer =
         TableBuildBuffer(build_arr_c_types, build_arr_array_types,
@@ -1250,7 +1252,8 @@ void join_build_consume_batch(HashJoinState* join_state,
     }
     if (shuffle_this_iter(join_state->build_parallel, is_last,
                           join_state->build_shuffle_buffer.data_table,
-                          join_state->build_iter)) {
+                          join_state->build_iter,
+                          join_state->shuffle_sync_iter)) {
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             join_state->build_shuffle_buffer.data_table;
@@ -1483,7 +1486,8 @@ void join_probe_consume_batch(HashJoinState* join_state,
 
     if (shuffle_this_iter(shuffle_possible, is_last,
                           join_state->probe_shuffle_buffer.data_table,
-                          join_state->probe_iter)) {
+                          join_state->probe_iter,
+                          join_state->shuffle_sync_iter)) {
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             join_state->probe_shuffle_buffer.data_table;
@@ -1665,7 +1669,7 @@ JoinState* join_state_init_py_entry(
     int8_t* probe_arr_c_types, int8_t* probe_arr_array_types, int n_probe_arrs,
     uint64_t n_keys, bool build_table_outer, bool probe_table_outer,
     cond_expr_fn_t cond_func, bool build_parallel, bool probe_parallel,
-    int64_t output_batch_size) {
+    int64_t output_batch_size, uint64_t shuffle_sync_iter) {
     // nested loop join is required if there are no equality keys
     if (n_keys == 0) {
         return new NestedLoopJoinState(
@@ -1691,7 +1695,7 @@ JoinState* join_state_init_py_entry(
         std::vector<int8_t>(probe_arr_array_types,
                             probe_arr_array_types + n_probe_arrs),
         n_keys, build_table_outer, probe_table_outer, cond_func, build_parallel,
-        probe_parallel, output_batch_size);
+        probe_parallel, output_batch_size, shuffle_sync_iter);
 }
 
 /**

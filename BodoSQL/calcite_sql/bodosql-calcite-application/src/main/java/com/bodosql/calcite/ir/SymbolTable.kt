@@ -20,6 +20,7 @@ class SymbolTable {
     private var groupByApplyFnId: Int = 1
     private var globalVarId: Int = 1
     private var idxVarId: Int = 1
+    private var iterVarId: Int = 1
 
     companion object {
         private const val dummyColNameBase = "__bodo_dummy__"
@@ -38,6 +39,10 @@ class SymbolTable {
     }
     fun genIndexVar(): Variable {
         return Variable("index_${idxVarId++}")
+    }
+
+    fun genIterVar(): Variable {
+        return Variable("_iter_${iterVarId++}")
     }
 
     fun genReaderVar(): Variable {

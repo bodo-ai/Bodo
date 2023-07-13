@@ -12,9 +12,6 @@
 #ifndef SHUFFLE_THRESHOLD
 #define SHUFFLE_THRESHOLD 16000
 #endif
-#ifndef SHUFFLE_SYNC_ITER
-#define SHUFFLE_SYNC_ITER 1
-#endif
 
 mpi_comm_info::mpi_comm_info(std::vector<std::shared_ptr<array_info>>& _arrays)
     : arrays(_arrays) {
@@ -3477,7 +3474,7 @@ table_info* shuffle_renormalization_py_entrypt(table_info* in_table, int random,
 
 bool shuffle_this_iter(const bool parallel, const bool is_last,
                        const std::shared_ptr<table_info>& shuffle_table,
-                       const uint64_t iter) {
+                       const uint64_t iter, const uint64_t shuffle_sync_iter) {
     if (!parallel) {
         return false;
     }
@@ -3485,7 +3482,7 @@ bool shuffle_this_iter(const bool parallel, const bool is_last,
         return true;
     }
 
-    if (iter % SHUFFLE_SYNC_ITER == 0) {
+    if (iter % shuffle_sync_iter == 0) {
         uint64_t local_shuffle_buffer_nrows = shuffle_table->nrows();
         uint64_t reduced_shuffle_buffer_nrows;
         MPI_Allreduce(&local_shuffle_buffer_nrows,
@@ -3497,4 +3494,3 @@ bool shuffle_this_iter(const bool parallel, const bool is_last,
 }
 
 #undef SHUFFLE_THRESHOLD
-#undef SHUFFLE_SYNC_ITER

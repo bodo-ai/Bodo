@@ -91,6 +91,8 @@ class GroupbyState {
 
     // Current iteration of build steps
     uint64_t build_iter;
+    // The number of iterations between syncs
+    uint64_t shuffle_sync_iter;
 
     // Accumulating all values before update is needed
     // when one of the groupby functions is
@@ -114,7 +116,8 @@ class GroupbyState {
                  std::vector<int32_t> ftypes,
                  std::vector<int32_t> f_in_offsets_,
                  std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
-                 int64_t output_batch_size_, bool parallel_)
+                 int64_t output_batch_size_, bool parallel_,
+                 uint64_t shuffle_sync_iter_)
         : n_keys(n_keys_),
           output_batch_size(output_batch_size_),
           f_in_offsets(std::move(f_in_offsets_)),
@@ -124,6 +127,7 @@ class GroupbyState {
                             KeyEqualGroupbyTable<true>(this, n_keys)),
           shuffle_build_table({}, HashGroupbyTable<false>(this),
                               KeyEqualGroupbyTable<false>(this, n_keys)),
+          shuffle_sync_iter(shuffle_sync_iter_),
           groupby_event("Groupby") {
         // TODO[BSE-566]: support dictionary arrays
         for (int8_t arr_type : in_arr_array_types) {

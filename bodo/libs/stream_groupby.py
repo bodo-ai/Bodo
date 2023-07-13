@@ -335,6 +335,9 @@ def _init_groupby_state(
         output_batch_size = context.get_constant(
             types.int64, bodo.bodosql_streaming_batch_size
         )
+        shuffle_sync_iter = context.get_constant(
+            types.uint64, bodo.stream_loop_sync_iters
+        )
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
@@ -348,6 +351,7 @@ def _init_groupby_state(
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(1),
+                lir.IntType(64),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -364,6 +368,7 @@ def _init_groupby_state(
             n_keys,
             output_batch_size,
             parallel,
+            shuffle_sync_iter,
         )
         ret = builder.call(fn_tp, input_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)

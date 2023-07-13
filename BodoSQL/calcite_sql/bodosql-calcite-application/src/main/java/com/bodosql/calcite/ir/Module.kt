@@ -148,9 +148,9 @@ class Module(private val frame: Frame) {
          * Updates a builder to create a new activeFrame
          * as a StreamingPipelineFrame.
          */
-        fun startStreamingPipelineFrame(exitCond: Variable) {
+        fun startStreamingPipelineFrame(exitCond: Variable, iterVar: Variable) {
             parentFrames.add(activeFrame)
-            activeFrame = StreamingPipelineFrame(exitCond)
+            activeFrame = StreamingPipelineFrame(exitCond, iterVar)
         }
 
         /**
