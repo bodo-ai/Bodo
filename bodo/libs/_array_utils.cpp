@@ -241,7 +241,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
     if (use_nullable_arr &&
         (is_integer(dtype) || is_float(dtype) || dtype == Bodo_CTypes::_BOOL)) {
         out_arr = alloc_array(nRowOut, -1, -1,
-                              bodo_array_type::NULLABLE_INT_BOOL, dtype, 0, 0);
+                              bodo_array_type::NULLABLE_INT_BOOL, dtype);
         char* out_data1 = out_arr->data1();
         if (dtype == Bodo_CTypes::_BOOL) {
             // Boolean needs a special implementation because the output
@@ -271,7 +271,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
             }
         }
     } else {
-        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype);
 
         if (siztype == sizeof(int32_t)) {
             using T = int32_t;
@@ -334,7 +334,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     std::shared_ptr<array_info> out_arr =
-        alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+        alloc_array(nRowOut, -1, -1, arr_type, dtype);
     uint64_t siztype = numpy_item_size[dtype];
 
     if (dtype == Bodo_CTypes::_BOOL) {
@@ -448,7 +448,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
                 tot_size_data += size_data;
             }
             out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data,
-                                  arr_type, dtype, 0, 0);
+                                  arr_type, dtype);
             uint8_t* out_sub_null_bitmask =
                 (uint8_t*)out_arr->sub_null_bitmask();
             offset_t pos_index = 0;
@@ -514,7 +514,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
                 ListSizes[iRow] = size;
                 n_chars += size;
             }
-            out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
+            out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype);
             offset_t* out_offsets = (offset_t*)out_arr->data2();
             char* out_data1 = out_arr->data1();
             offset_t pos = 0;
@@ -542,11 +542,11 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             std::shared_ptr<array_info> out_indices =
                 RetrieveArray_SingleColumn_F_nullable(in_indices, in_arr_idxs,
                                                       nRowOut);
-            out_arr = create_dict_string_array(
-                in_arr->child_arrays[0], out_indices,
-                in_arr->has_global_dictionary,
-                in_arr->has_deduped_local_dictionary,
-                in_arr->has_sorted_dictionary, in_arr->dict_id);
+            out_arr =
+                create_dict_string_array(in_arr->child_arrays[0], out_indices,
+                                         in_arr->has_global_dictionary,
+                                         in_arr->has_deduped_local_dictionary,
+                                         in_arr->has_sorted_dictionary);
             break;
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
@@ -560,7 +560,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             std::vector<char> vectNaN = RetrieveNaNentry(dtype);
             char* left_data = in_arr->data1();
             char* right_data = in_arr->data2();
-            out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+            out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype);
             char* out_left_data = out_arr->data1();
             char* out_right_data = out_arr->data2();
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -678,7 +678,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
     if ((arr1 != nullptr) && (arr2 != nullptr) &&
         (arr1->arr_type == bodo_array_type::DICT) &&
         (arr2->arr_type == bodo_array_type::DICT) &&
-        !is_matching_dictionary(arr1, arr2)) {
+        !is_matching_dictionary(arr1->child_arrays[0], arr2->child_arrays[0])) {
         throw std::runtime_error(
             "RetrieveArray_TwoColumns: don't know if arrays have unified "
             "dictionary");
@@ -735,7 +735,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             tot_size_data += size_data;
         }
         out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data, arr_type,
-                              dtype, 0, 0);
+                              dtype);
         uint8_t* out_sub_null_bitmask = (uint8_t*)out_arr->sub_null_bitmask();
         offset_t pos_index = 0;
         offset_t pos_data = 0;
@@ -800,7 +800,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             ListSizes[iRow] = size;
             n_chars += size;
         }
-        out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
+        out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype);
         offset_t pos = 0;
         offset_t* out_offsets = (offset_t*)out_arr->data2();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -830,7 +830,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         //    column doesn't have a global dictionary");
         std::shared_ptr<array_info> out_indices =
             alloc_array(nRowOut, -1, -1, arr1->child_arrays[1]->arr_type,
-                        arr1->child_arrays[1]->dtype, 0, 0);
+                        arr1->child_arrays[1]->dtype);
         uint64_t siztype = numpy_item_size[arr1->child_arrays[1]->dtype];
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
@@ -852,8 +852,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         }
         out_arr = create_dict_string_array(
             arr1->child_arrays[0], out_indices, arr1->has_global_dictionary,
-            arr1->has_deduped_local_dictionary, arr1->has_sorted_dictionary,
-            arr1->dict_id);
+            arr1->has_deduped_local_dictionary, arr1->has_sorted_dictionary);
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // In the case of NULLABLE array, we do a single loop for
@@ -862,7 +861,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // suffices for the copy.
         // In the case of missing array a value of false is assigned
         // to the bitmask.
-        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype);
         if (dtype == Bodo_CTypes::_BOOL) {
             // Nullable boolean arrays store 1 bit per boolean so we
             // need to use a different loop.
@@ -928,7 +927,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // ---floating point: std::nan as here both notions match.
         uint64_t siztype = numpy_item_size[dtype];
         std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
                 get_iRow(iRow);
@@ -1270,7 +1269,8 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
     if (arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
         arr1->arr_type == bodo_array_type::DICT) {
         if (arr1->arr_type == bodo_array_type::DICT) {
-            if (!is_matching_dictionary(arr1, arr2)) {
+            if (!is_matching_dictionary(arr1->child_arrays[0],
+                                        arr2->child_arrays[0])) {
                 throw std::runtime_error(
                     "TestEqualColumn: don't know if arrays have unified "
                     "dictionary");
@@ -1589,7 +1589,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
     }
     if (arr1->arr_type == bodo_array_type::DICT) {
         if (arr2->arr_type == bodo_array_type::DICT) {
-            if (!is_matching_dictionary(arr1, arr2)) {
+            if (!is_matching_dictionary(arr1->child_arrays[0],
+                                        arr2->child_arrays[0])) {
                 throw std::runtime_error(
                     "KeyComparisonAsPython_Column: don't know if arrays "
                     "have unified dictionary");

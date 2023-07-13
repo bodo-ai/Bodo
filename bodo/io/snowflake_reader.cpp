@@ -50,7 +50,7 @@ class SnowflakeDictionaryBuilder {
                 std::shared_ptr<arrow::Array> dictionary =
                     reinterpret_cast<arrow::DictionaryArray*>(first_chunk.get())
                         ->dictionary();
-                dict_ids[i] = generate_dict_id(dictionary->length());
+                dict_ids[i] = generate_array_id(dictionary->length());
             } else {
                 // For all other columns just copy the column to the table.
                 new_cols[i] = col;

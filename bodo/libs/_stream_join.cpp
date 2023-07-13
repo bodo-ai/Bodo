@@ -499,10 +499,9 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
                     "between build and probe tables!");
             }
             std::shared_ptr<array_info> dict = alloc_array(
-                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING, 0, 0);
-            int64_t dict_id = generate_dict_id(dict->length);
+                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             this->key_dict_builders[i] =
-                std::make_shared<DictionaryBuilder>(dict, true, dict_id);
+                std::make_shared<DictionaryBuilder>(dict, true);
             // Also set this as the dictionary of the dummy probe table
             // for consistency, else there will be issues during output
             // generation.
@@ -518,10 +517,9 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
     for (size_t i = this->n_keys; i < this->build_arr_array_types.size(); i++) {
         if (this->build_arr_array_types[i] == bodo_array_type::DICT) {
             std::shared_ptr<array_info> dict = alloc_array(
-                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING, 0, 0);
-            int64_t dict_id = generate_dict_id(dict->length);
+                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             build_table_non_key_dict_builders.emplace_back(
-                std::make_shared<DictionaryBuilder>(dict, false, dict_id));
+                std::make_shared<DictionaryBuilder>(dict, false));
         } else {
             build_table_non_key_dict_builders.emplace_back(nullptr);
         }
@@ -533,10 +531,9 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
     for (size_t i = this->n_keys; i < this->probe_arr_array_types.size(); i++) {
         if (this->probe_arr_array_types[i] == bodo_array_type::DICT) {
             std::shared_ptr<array_info> dict = alloc_array(
-                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING, 0, 0);
-            int64_t dict_id = generate_dict_id(dict->length);
+                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             probe_table_non_key_dict_builders.emplace_back(
-                std::make_shared<DictionaryBuilder>(dict, false, dict_id));
+                std::make_shared<DictionaryBuilder>(dict, false));
             // Also set this as the dictionary of the dummy probe table
             // for consistency, else there will be issues during output
             // generation.
@@ -1887,6 +1884,6 @@ PyMODINIT_FUNC PyInit_stream_join_cpp(void) {
     SetAttrStringFromVoidPtr(m, join_probe_consume_batch_py_entry);
     SetAttrStringFromVoidPtr(m, delete_join_state);
     SetAttrStringFromVoidPtr(m, nested_loop_join_build_consume_batch_py_entry);
-    SetAttrStringFromVoidPtr(m, generate_dict_id);
+    SetAttrStringFromVoidPtr(m, generate_array_id);
     return m;
 }

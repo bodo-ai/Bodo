@@ -222,7 +222,7 @@ void apply_sum_to_column_string(std::shared_ptr<array_info> in_col,
     size_t num_groups = grp_info.num_groups;
     int64_t n_chars = in_col->n_sub_elems();
     std::shared_ptr<array_info> out_arr =
-        alloc_string_array(out_col->dtype, num_groups, n_chars, 0);
+        alloc_string_array(out_col->dtype, num_groups, n_chars);
     size_t n_bytes = (num_groups + 7) >> 3;
     memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
 
@@ -445,7 +445,7 @@ void apply_sum_to_column_dict(std::shared_ptr<array_info> in_col,
     }
 
     std::shared_ptr<array_info> out_arr =
-        alloc_string_array(out_col->dtype, num_groups, n_chars, 0);
+        alloc_string_array(out_col->dtype, num_groups, n_chars);
     memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
     char* data_o = out_arr->data1();
     offset_t* offsets_o = (offset_t*)out_arr->data2();
