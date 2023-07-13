@@ -19,7 +19,10 @@ from bodo.tests.utils import (
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
     get_start_end,
+    pytest_pandas,
 )
+
+pytestmark = pytest_pandas
 
 
 def test_dataframe_sample_number(memory_leak_check):

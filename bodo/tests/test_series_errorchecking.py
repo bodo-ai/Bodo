@@ -6,7 +6,10 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.utils import pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 def test_isin(memory_leak_check):

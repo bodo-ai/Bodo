@@ -38,9 +38,12 @@ from bodo.tests.utils import (
     gen_random_decimal_array,
     gen_random_list_string_array,
     is_bool_object_series,
+    pytest_pandas,
     reduce_sum,
 )
 from bodo.utils.typing import BodoError, BodoWarning
+
+pytestmark = pytest_pandas
 
 
 @pytest.fixture(

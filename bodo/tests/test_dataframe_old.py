@@ -14,7 +14,10 @@ from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_OneDs,
     count_parfor_REPs,
+    pytest_pandas,
 )
+
+pytestmark = pytest_pandas
 
 
 @bodo.jit

@@ -22,8 +22,11 @@ from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
     has_udf_call,
+    pytest_pandas,
 )
 from bodo.utils.typing import BodoError, BodoWarning, ColNamesMetaType
+
+pytestmark = pytest_pandas
 
 
 def test_pd_isna_getitem(memory_leak_check):

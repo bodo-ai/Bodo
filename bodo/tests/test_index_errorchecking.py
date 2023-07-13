@@ -29,7 +29,10 @@ from bodo.hiframes.pd_index_ext import (
     td_index_unsupported_methods,
 )
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+from bodo.tests.utils import pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 def test_object_dtype(memory_leak_check):

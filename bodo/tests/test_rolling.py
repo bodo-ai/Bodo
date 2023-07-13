@@ -10,8 +10,15 @@ import pytest
 
 import bodo
 from bodo.hiframes.rolling import supported_rolling_funcs
-from bodo.tests.utils import check_func, count_array_REPs, count_parfor_REPs
+from bodo.tests.utils import (
+    check_func,
+    count_array_REPs,
+    count_parfor_REPs,
+    pytest_pandas,
+)
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 LONG_TEST = (
     int(os.environ["BODO_LONG_ROLLING_TEST"]) != 0
@@ -198,6 +205,7 @@ def test_column_select(memory_leak_check):
 @pytest.mark.slow
 def test_min_periods(memory_leak_check):
     """test min_periods argument in rolling calls"""
+
     # fixed window
     def impl1(df, center, minp):
         return df.rolling(3, center=center, min_periods=minp)[["A", "B"]].mean()
@@ -294,6 +302,7 @@ def g(a):
 @pytest.mark.slow
 def test_fixed_apply_nested_func(memory_leak_check):
     """test nested UDF decorated with Bodo (make sure it doesn't hang due to barriers)"""
+
     # test sequentially with manually created dfs
     def test_impl(df):
         return df.rolling(2).apply(lambda a: g(a))
@@ -834,6 +843,7 @@ class TestRolling(unittest.TestCase):
                 pd.testing.assert_series_equal(
                     bodo_func(S2, *args), test_impl(S2, *args)
                 )
+
         # test apply
         def apply_test_impl(S, w, c):
             return S.rolling(w, center=c).apply(lambda a: a.sum())

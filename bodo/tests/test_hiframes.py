@@ -20,7 +20,10 @@ from bodo.tests.utils import (
     dist_IR_contains,
     gen_random_string_binary_array,
     get_start_end,
+    pytest_pandas,
 )
+
+pytestmark = pytest_pandas
 
 
 @pytest.mark.slow
@@ -524,6 +527,7 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
+
         # size 7 with unroll
         def test_impl_2(n):
             df = pd.DataFrame({"A": np.arange(n) + 1.0, "B": np.random.ranf(n)})

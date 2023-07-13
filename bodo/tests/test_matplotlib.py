@@ -10,7 +10,10 @@ import pytest
 from matplotlib.testing.decorators import check_figures_equal
 
 import bodo
+from bodo.tests.utils import pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 def bodo_check_figures_equal(*, extensions=("png", "pdf", "svg"), tol=0):

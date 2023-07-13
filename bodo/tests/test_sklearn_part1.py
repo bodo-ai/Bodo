@@ -20,8 +20,10 @@ from sklearn.metrics import (
 from sklearn.metrics.pairwise import cosine_similarity
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.tests.utils import _get_dist_arg, check_func, pytest_ml
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_ml
 
 # ---------------------- sklearn.metrics score tests ----------------------
 
