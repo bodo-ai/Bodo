@@ -524,7 +524,7 @@ std::shared_ptr<table_info> mpi_exscan_computation_Tkey(
         int end = func_offsets[k + 1];
         for (int j = start; j != end; j++) {
             std::shared_ptr<array_info> out_col =
-                alloc_array(n_rows, 1, 1, col->arr_type, col->dtype, 0,
+                alloc_array(n_rows, 1, 1, col->arr_type, col->dtype, -1, 0,
                             col->num_categories);
             int ftype = ftypes[j];
             aggfunc_output_initialize(out_col, ftype, use_sql_rules);

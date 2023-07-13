@@ -12,12 +12,11 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
     }
 
     std::shared_ptr<array_info> batch_dict = in_arr->child_arrays[0];
-    bool valid_arr_id = in_arr->dict_id >= 0;
+    bool valid_arr_id = batch_dict->array_id >= 0;
     bool dicts_match =
-        valid_arr_id && (this->dict_id == 0 || in_arr->dict_id == 0 ||
-                         this->dict_id == in_arr->dict_id);
-    bool not_empty_builder = this->dict_id != 0;
-    bool empty_arr = in_arr->dict_id == 0;
+        is_matching_dictionary(this->dict_buff->data_array, batch_dict);
+    bool not_empty_builder = this->dict_buff->data_array->array_id != 0;
+    bool empty_arr = batch_dict->array_id == 0;
     if (dicts_match && (not_empty_builder || empty_arr)) {
         // If the dictionaries already match and we don't need
         // to update either dictionary, we can just return without
@@ -28,7 +27,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
 
     // Compute the cached_transpose_map if this isn't the same as the
     // previous batch
-    if (!valid_arr_id || (this->cached_dict_id != in_arr->dict_id)) {
+    if (!valid_arr_id || (this->cached_array_id != batch_dict->array_id)) {
         this->dict_buff->ReserveArray(batch_dict);
         // Clear the cache.
         this->cached_transpose_map.clear();
@@ -69,19 +68,19 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
             }
         }
         // Update the cached id
-        this->cached_dict_id = in_arr->dict_id;
+        this->cached_array_id = batch_dict->array_id;
         if (dicts_match && (batch_dict->length == this->dict_buff->size)) {
             // If the dictionary was copied without changing (e.g. no entries
             // had to be removed, then we can take the id of the input and
             // simply return the input without remapping.
-            this->dict_id = in_arr->dict_id;
+            this->dict_buff->data_array->array_id = batch_dict->array_id;
             // We now know the dictionary is unique
             in_arr->has_deduped_local_dictionary = true;
             return in_arr;
         } else if (found_insert) {
             // Update the dict id if there was any change to the dictionary.
-            this->dict_id =
-                generate_dict_id(this->dict_buff->data_array->length);
+            this->dict_buff->data_array->array_id =
+                generate_array_id(this->dict_buff->data_array->length);
         }
     }
 
@@ -106,9 +105,9 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
             out_indices_arr->set_null_bit(i, true);
         }
     }
-    return create_dict_string_array(
-        this->dict_buff->data_array, out_indices_arr, false,
-        /*_has_deduped_local_dictionary=*/true, false, this->dict_id);
+    return create_dict_string_array(this->dict_buff->data_array,
+                                    out_indices_arr, false,
+                                    /*_has_deduped_local_dictionary=*/true);
 }
 
 std::shared_ptr<bodo::vector<uint32_t>>

@@ -421,7 +421,8 @@ struct ChunkedTableArrayBuilder {
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
                           const std::span<const int64_t> idxs, size_t idx_start,
                           size_t idx_length) {
-        if (!is_matching_dictionary(this->data_array, in_arr)) {
+        if (!is_matching_dictionary(this->data_array->child_arrays[0],
+                                    in_arr->child_arrays[0])) {
             throw std::runtime_error(
                 "ChunkedTableArrayBuilder::UnsafeAppendRows: "
                 "Dictionaries "

@@ -103,7 +103,8 @@ void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr) {
     }
 
     if (in_arr->arr_type == bodo_array_type::DICT &&
-        !is_matching_dictionary(this->data_array, in_arr)) {
+        !is_matching_dictionary(this->data_array->child_arrays[0],
+                                in_arr->child_arrays[0])) {
         throw std::runtime_error("dictionary not unified in ReserveArray");
     }
 
@@ -252,8 +253,6 @@ TableBuildBuffer::TableBuildBuffer(
             // Set the dictionary to the one from the dict builder:
             this->data_table->columns[i]->child_arrays[0] =
                 dict_builders[i]->dict_buff->data_array;
-            // Update the dict id to be consistent
-            this->data_table->columns[i]->dict_id = dict_builders[i]->dict_id;
         }
         array_buffers.emplace_back(this->data_table->columns[i],
                                    dict_builders[i]);
@@ -631,7 +630,8 @@ std::shared_ptr<table_info> alloc_table(
             (bodo_array_type::arr_type_enum)arr_array_types[i];
         Bodo_CTypes::CTypeEnum dtype = (Bodo_CTypes::CTypeEnum)arr_c_types[i];
 
-        arrays.push_back(alloc_array(0, 0, 0, arr_type, dtype, 0, 0, pool, mm));
+        arrays.push_back(
+            alloc_array(0, 0, 0, arr_type, dtype, -1, 0, 0, pool, mm));
     }
     return std::make_shared<table_info>(arrays);
 }
@@ -642,7 +642,7 @@ std::shared_ptr<table_info> alloc_table_like(
     for (size_t i = 0; i < table->ncols(); i++) {
         bodo_array_type::arr_type_enum arr_type = table->columns[i]->arr_type;
         Bodo_CTypes::CTypeEnum dtype = table->columns[i]->dtype;
-        arrays.push_back(alloc_array(0, 0, 0, arr_type, dtype, 0, 0));
+        arrays.push_back(alloc_array(0, 0, 0, arr_type, dtype));
         // For dict encoded columns, re-use the same dictionary
         // if reuse_dictionaries = true
         if (reuse_dictionaries && (arr_type == bodo_array_type::DICT)) {

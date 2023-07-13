@@ -302,7 +302,7 @@ std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
 
 std::unique_ptr<array_info> alloc_string_array(
     Bodo_CTypes::CTypeEnum typ_enum, int64_t length, int64_t n_chars,
-    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    int64_t array_id, int64_t extra_null_bytes, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
     // allocate data/offsets/null_bitmap arrays
     std::unique_ptr<BodoBuffer> data_buffer =
@@ -320,41 +320,42 @@ std::unique_ptr<array_info> alloc_string_array(
     offsets_ptr[0] = 0;
     offsets_ptr[length] = n_chars;
 
+    // Generate a valid array id
+    if (array_id < 0) {
+        array_id = generate_array_id(length);
+    }
+
     return std::make_unique<array_info>(
         bodo_array_type::STRING, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {std::move(data_buffer), std::move(offsets_buffer),
-             std::move(null_bitmap_buffer)}));
+             std::move(null_bitmap_buffer)}),
+        std::vector<std::shared_ptr<array_info>>({}), 0, 0, 0, array_id);
 }
 
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
     bool has_global_dictionary, bool has_deduped_local_dictionary,
-    int64_t dict_id, bodo::IBufferPool* const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm) {
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // dictionary
     std::shared_ptr<array_info> dict_data_arr = alloc_string_array(
-        Bodo_CTypes::CTypeEnum::STRING, n_keys, n_chars_keys, 0, pool, mm);
+        Bodo_CTypes::CTypeEnum::STRING, n_keys, n_chars_keys, -1, 0, pool, mm);
     // indices
     std::shared_ptr<array_info> indices_data_arr = alloc_nullable_array(
         length, Bodo_CTypes::INT32, 0, pool, std::move(mm));
-
-    if (dict_id < 0) {
-        dict_id = generate_dict_id(n_keys);
-    }
 
     return std::make_unique<array_info>(
         bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
         std::vector<std::shared_ptr<BodoBuffer>>({}),
         std::vector<std::shared_ptr<array_info>>(
             {dict_data_arr, indices_data_arr}),
-        0, 0, 0, dict_id, has_global_dictionary, has_deduped_local_dictionary,
+        0, 0, 0, -1, has_global_dictionary, has_deduped_local_dictionary,
         false);
 }
 
 std::unique_ptr<array_info> create_string_array(
     Bodo_CTypes::CTypeEnum typ_enum, bodo::vector<uint8_t> const& null_bitmap,
-    bodo::vector<std::string> const& list_string) {
+    bodo::vector<std::string> const& list_string, int64_t array_id) {
     size_t len = list_string.size();
     // Calculate the number of characters for allocating the string.
     size_t nb_char = 0;
@@ -365,9 +366,8 @@ std::unique_ptr<array_info> create_string_array(
         }
         iter++;
     }
-    size_t extra_bytes = 0;
     std::unique_ptr<array_info> out_col =
-        alloc_string_array(typ_enum, len, nb_char, extra_bytes);
+        alloc_string_array(typ_enum, len, nb_char, array_id);
     // update string array payload to reflect change
     char* data_o = out_col->data1();
     offset_t* offsets_o = (offset_t*)out_col->data2();
@@ -456,16 +456,12 @@ std::unique_ptr<array_info> create_list_string_array(
 std::unique_ptr<array_info> create_dict_string_array(
     std::shared_ptr<array_info> dict_arr,
     std::shared_ptr<array_info> indices_arr, bool has_global_dictionary,
-    bool has_deduped_local_dictionary, bool has_sorted_dictionary,
-    int64_t dict_id) {
-    if (dict_id < 0) {
-        dict_id = generate_dict_id(dict_arr->length);
-    }
+    bool has_deduped_local_dictionary, bool has_sorted_dictionary) {
     std::unique_ptr<array_info> out_col = std::make_unique<array_info>(
         bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
         indices_arr->length, std::vector<std::shared_ptr<BodoBuffer>>({}),
         std::vector<std::shared_ptr<array_info>>({dict_arr, indices_arr}), 0, 0,
-        0, dict_id, has_global_dictionary, has_deduped_local_dictionary,
+        0, -1, has_global_dictionary, has_deduped_local_dictionary,
         has_sorted_dictionary);
     return out_col;
 }
@@ -508,7 +504,7 @@ std::unique_ptr<array_info> alloc_list_string_array(
     // allocate string data array
     std::shared_ptr<array_info> data_arr = alloc_array(
         n_strings, n_chars, -1, bodo_array_type::arr_type_enum::STRING,
-        Bodo_CTypes::UINT8, extra_null_bytes, 0, pool, mm);
+        Bodo_CTypes::UINT8, -1, extra_null_bytes, 0, pool, mm);
 
     return alloc_list_string_array(n_lists, data_arr, extra_null_bytes, pool,
                                    std::move(mm));
@@ -568,7 +564,7 @@ void decref_numpy_payload(numpy_arr_payload arr) {
 std::unique_ptr<array_info> alloc_array(
     int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
     bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
-    int64_t extra_null_bytes, int64_t num_categories,
+    int64_t array_id, int64_t extra_null_bytes, int64_t num_categories,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     switch (arr_type) {
         case bodo_array_type::LIST_STRING:
@@ -577,7 +573,7 @@ std::unique_ptr<array_info> alloc_array(
                                            std::move(mm));
 
         case bodo_array_type::STRING:
-            return alloc_string_array(dtype, length, n_sub_elems,
+            return alloc_string_array(dtype, length, n_sub_elems, array_id,
                                       extra_null_bytes, pool, std::move(mm));
 
         case bodo_array_type::NULLABLE_INT_BOOL:
@@ -596,8 +592,7 @@ std::unique_ptr<array_info> alloc_array(
 
         case bodo_array_type::DICT:
             return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
-                                           false, false, -1, pool,
-                                           std::move(mm));
+                                           false, false, pool, std::move(mm));
         default:
             throw std::runtime_error("Type not covered in alloc_array");
     }
@@ -733,12 +728,15 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr) {
         std::shared_ptr<array_info> indices = copy_array(earr->child_arrays[1]);
         farr = create_dict_string_array(
             dictionary, indices, earr->has_global_dictionary,
-            earr->has_deduped_local_dictionary, earr->has_sorted_dictionary,
-            earr->dict_id);
+            earr->has_deduped_local_dictionary, earr->has_sorted_dictionary);
     } else {
+        int64_t array_id = -1;
+        if (earr->arr_type == bodo_array_type::STRING) {
+            array_id = earr->array_id;
+        }
         farr = alloc_array(earr->length, earr->n_sub_elems(),
                            earr->n_sub_sub_elems(), earr->arr_type, earr->dtype,
-                           extra_null_bytes, earr->num_categories);
+                           array_id, extra_null_bytes, earr->num_categories);
     }
     if (earr->arr_type == bodo_array_type::NUMPY ||
         earr->arr_type == bodo_array_type::CATEGORICAL) {
@@ -842,7 +840,7 @@ size_t get_stats_mi_free() { return NRT_MemSys_get_stats_mi_free(); }
  * id.
  * @return int64_t The new id that is generated.
  */
-static int64_t generate_dict_id_state(int64_t length) {
+static int64_t generate_array_id_state(int64_t length) {
     static int64_t id_counter = 1;
     if (length == 0) {
         // Ensure we can identify all length 0 dictionaries
@@ -853,8 +851,8 @@ static int64_t generate_dict_id_state(int64_t length) {
     }
 }
 
-int64_t generate_dict_id(int64_t length) {
-    return generate_dict_id_state(length);
+int64_t generate_array_id(int64_t length) {
+    return generate_array_id_state(length);
 }
 
 extern "C" {

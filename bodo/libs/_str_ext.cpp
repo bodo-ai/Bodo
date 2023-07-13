@@ -928,8 +928,9 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
     delete str_arr;
 
     // Create Dictionary String Values
+    int64_t dict_id = generate_array_id(num_dict_strs);
     std::shared_ptr<array_info> values_arr = alloc_string_array(
-        Bodo_CTypes::STRING, num_dict_strs, total_dict_chars);
+        Bodo_CTypes::STRING, num_dict_strs, total_dict_chars, dict_id);
     int64_t n_null_bytes = (num_dict_strs + 7) >> 3;
     memset(values_arr->null_bitmask(), 0xFF, n_null_bytes);  // No nulls
 
@@ -942,12 +943,9 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
     }
     out_offsets[num_dict_strs] = static_cast<offset_t>(total_dict_chars);
 
-    int64_t dict_id = generate_dict_id(num_dict_strs);
-
     // Python is responsible for deleting pointer
     return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
-                          arr_len, {}, {values_arr, indices_arr}, 0, 0, 0,
-                          dict_id, false, false, false);
+                          arr_len, {}, {values_arr, indices_arr});
 }
 
 // Inspired by the Cpython implementation

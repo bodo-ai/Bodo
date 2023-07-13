@@ -222,7 +222,8 @@ struct ArrayBuildBuffer {
     void AppendBatch(const std::shared_ptr<array_info>& in_arr,
                      const std::vector<bool>& append_rows,
                      uint64_t append_rows_sum) {
-        if (!is_matching_dictionary(this->data_array, in_arr)) {
+        if (!is_matching_dictionary(this->data_array->child_arrays[0],
+                                    in_arr->child_arrays[0])) {
             throw std::runtime_error("dictionary not unified in AppendRow");
         }
 
@@ -231,8 +232,6 @@ struct ArrayBuildBuffer {
             in_arr->child_arrays[1], append_rows, append_rows_sum);
         this->size += append_rows_sum;
         this->data_array->length = this->size;
-        // Update the dict id to be consistent
-        this->data_array->dict_id = dict_builder->dict_id;
     }
 
     /**
@@ -448,7 +447,8 @@ struct ArrayBuildBuffer {
               Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::DICT)
     void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
-        if (!is_matching_dictionary(this->data_array, in_arr)) {
+        if (!is_matching_dictionary(this->data_array->child_arrays[0],
+                                    in_arr->child_arrays[0])) {
             throw std::runtime_error("dictionary not unified in AppendRow");
         }
         this->dict_indices->AppendBatch<bodo_array_type::NULLABLE_INT_BOOL,
@@ -458,8 +458,6 @@ struct ArrayBuildBuffer {
         // case.
         this->size += in_arr->length;
         this->data_array->length = this->size;
-        // Update the dict id to be consistent
-        this->data_array->dict_id = dict_builder->dict_id;
     }
 
     /**
@@ -560,15 +558,14 @@ struct ArrayBuildBuffer {
                                 "Resize Failed!");
             } break;
             case bodo_array_type::DICT: {
-                if (!is_matching_dictionary(this->data_array, in_arr)) {
+                if (!is_matching_dictionary(this->data_array->child_arrays[0],
+                                            in_arr->child_arrays[0])) {
                     throw std::runtime_error(
                         "dictionary not unified in AppendRow");
                 }
                 this->dict_indices->AppendRow(in_arr->child_arrays[1], row_ind);
                 size++;
                 data_array->length = size;
-                // Update the dict id to be consistent
-                this->data_array->dict_id = dict_builder->dict_id;
             } break;
             case bodo_array_type::NUMPY: {
                 uint64_t size_type = numpy_item_size[in_arr->dtype];

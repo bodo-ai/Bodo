@@ -364,7 +364,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
         bodo_array_type::arr_type_enum out_array_type =
             is_nullable ? bodo_array_type::NULLABLE_INT_BOOL
                         : bodo_array_type::NUMPY;
-        out_array = alloc_array(length, -1, -1, out_array_type, dtype, 0, -1);
+        out_array = alloc_array(length, -1, -1, out_array_type, dtype);
     }
 
     PrimitiveBuilder(std::shared_ptr<arrow::DataType> type, int64_t length,
@@ -464,7 +464,8 @@ class StringBuilder : public TableBuilder::BuilderColumn {
     /**
      * @param dtype : Bodo type of input array. Either STRING or BINARY.
      */
-    StringBuilder(Bodo_CTypes::CTypeEnum dtype) : dtype(dtype) {}
+    StringBuilder(Bodo_CTypes::CTypeEnum dtype, int64_t array_id = -1)
+        : dtype(dtype), array_id(array_id) {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // Reserve some space up front in case of multiple chunks.
@@ -511,7 +512,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                 arrow::Concatenate(arrays, bodo::BufferPool::DefaultPtr());
             std::shared_ptr<arrow::Array> concat_res;
             CHECK_ARROW_AND_ASSIGN(res, "Concatenate", concat_res);
-            out_array = arrow_array_to_bodo(concat_res);
+            out_array = arrow_array_to_bodo(concat_res, array_id);
         }
         return out_array;
     }
@@ -519,6 +520,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
    private:
     Bodo_CTypes::CTypeEnum dtype;
     arrow::ArrayVector arrays;
+    int64_t array_id;
 };
 
 /// Column builder for dictionary-encoded string arrays
@@ -592,7 +594,7 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         // copy from Arrow arrays to Bodo array
 
         // copy dictionary
-        StringBuilder dictionary_builder(Bodo_CTypes::STRING);
+        StringBuilder dictionary_builder(Bodo_CTypes::STRING, dict_id);
         arrow::ArrayVector dict_v{dictionary};
         dictionary_builder.append(
             std::make_shared<arrow::ChunkedArray>(dict_v));
@@ -613,11 +615,7 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         indices_builder.append(
             std::make_shared<arrow::ChunkedArray>(indices_chunks));
         std::shared_ptr<array_info> bodo_indices = indices_builder.get_output();
-        if (dict_id < 0) {
-            dict_id = generate_dict_id(bodo_dictionary->length);
-        }
-        out_array = create_dict_string_array(bodo_dictionary, bodo_indices,
-                                             false, false, false, dict_id);
+        out_array = create_dict_string_array(bodo_dictionary, bodo_indices);
         all_chunks.clear();
         return out_array;
     }
@@ -690,7 +688,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         }
         std::shared_ptr<array_info> dict_arr =
             alloc_array(total_distinct_strings, total_distinct_chars, -1,
-                        bodo_array_type::STRING, dtype, 0, -1);
+                        bodo_array_type::STRING, dtype);
         int64_t n_null_bytes = (total_distinct_strings + 7) >> 3;
         offset_t* out_offsets = (offset_t*)dict_arr->data2();
         // We know there's no nulls in the dictionary, so memset the
@@ -889,7 +887,7 @@ class AllNullsBuilder : public TableBuilder::BuilderColumn {
     AllNullsBuilder(int64_t length) {
         // Arrow null arrays are typed as string in parquet_pio.py
         out_array = alloc_array(length, 0, 0, bodo_array_type::STRING,
-                                Bodo_CTypes::STRING, 0, -1);
+                                Bodo_CTypes::STRING);
         // set offsets to zero
         memset(out_array->data2(), 0, sizeof(offset_t) * length);
         // setting all to null
