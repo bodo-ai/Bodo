@@ -25,9 +25,12 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
     check_func,
+    pytest_pandas,
     reduce_sum,
 )
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 def test_dataframe_apply_method_str(memory_leak_check):

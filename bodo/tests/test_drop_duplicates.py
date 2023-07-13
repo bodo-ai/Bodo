@@ -8,7 +8,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from bodo.tests.utils import check_func, gen_random_list_string_array
+from bodo.tests.utils import (
+    check_func,
+    gen_random_list_string_array,
+    pytest_pandas,
+)
+
+pytestmark = pytest_pandas
 
 
 @pytest.fixture(

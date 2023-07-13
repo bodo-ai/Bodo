@@ -19,8 +19,10 @@ from sklearn.utils._testing import assert_array_equal, assert_raises
 from sklearn.utils.validation import check_random_state
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.tests.utils import _get_dist_arg, check_func, pytest_ml
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_ml
 
 
 # --------------------Multinomial Naive Bayes Tests-----------------#

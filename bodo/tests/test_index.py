@@ -11,8 +11,10 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import AnalysisTestPipeline, check_func
+from bodo.tests.utils import AnalysisTestPipeline, check_func, pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 @pytest.mark.slow

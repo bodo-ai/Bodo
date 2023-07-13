@@ -15,8 +15,11 @@ from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
     get_start_end,
+    pytest_pandas,
 )
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 _cov_corr_series = [
     (pd.Series(x), pd.Series(y))
