@@ -5,8 +5,9 @@ package com.bodosql.calcite.ir
  * within the same while loop.
  *
  * exitCond: The variable that controls when the pipeline loop is exited.
+ * iterVar: The variable that tracks the count of iterations of the pipeline loop.
  * **/
-class StreamingPipelineFrame(var exitCond: Variable): Frame {
+class StreamingPipelineFrame(var exitCond: Variable, private var iterVar: Variable): Frame {
 
     /** Values to initialize before the loop generation. **/
     private var initializations: MutableList<Op.Assign> = mutableListOf()
@@ -20,6 +21,7 @@ class StreamingPipelineFrame(var exitCond: Variable): Frame {
 
     init {
         initExitCond()
+        initIterVar()
     }
 
     /**
@@ -31,6 +33,8 @@ class StreamingPipelineFrame(var exitCond: Variable): Frame {
             initVal.emit(doc)
         }
         ensureExitCondSynchronized()
+        /** Add variable tracking iteration number **/
+        code.add(Op.Assign(iterVar, Expr.Binary("+", iterVar, Expr.IntegerLiteral(1))))
         /** Generate the condition. **/
         val cond = Expr.Unary("not", exitCond)
         /** Emit the while loop. **/
@@ -116,10 +120,8 @@ class StreamingPipelineFrame(var exitCond: Variable): Frame {
     fun ensureExitCondSynchronized() {
         if (!synchronized) {
             // TODO: Move Logical_And.value from Expr.Raw
-            val andOp =
-                Expr.Call("np.int32", listOf(Expr.Raw("bodo.libs.distributed_api.Reduce_Type.Logical_And.value")))
             // Generate the MPI call
-            val syncCall = Expr.Call("bodo.libs.distributed_api.dist_reduce", listOf(exitCond, andOp))
+            val syncCall = Expr.Call("bodo.libs.distributed_api.sync_is_last", listOf(exitCond, iterVar))
             code.add(Op.Assign(exitCond, syncCall))
         }
         synchronized = true
@@ -131,5 +133,12 @@ class StreamingPipelineFrame(var exitCond: Variable): Frame {
     private fun initExitCond() {
         synchronized = false
         initializations.add(Op.Assign(exitCond, Expr.BooleanLiteral(false)))
+    }
+
+    /**
+     * Initialize the variable tracking iterations for the generated code.
+     */
+    private fun initIterVar() {
+        initializations.add(Op.Assign(iterVar, Expr.IntegerLiteral(0)))
     }
 }

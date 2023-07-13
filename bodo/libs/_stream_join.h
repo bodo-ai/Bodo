@@ -403,6 +403,8 @@ class HashJoinState : public JoinState {
     // Current iteration of the build and probe steps
     uint64_t build_iter;
     uint64_t probe_iter;
+    // The number of iterations between syncs
+    uint64_t shuffle_sync_iter;
 
     HashJoinState(const std::vector<int8_t>& build_arr_c_types,
                   const std::vector<int8_t>& build_arr_array_types,
@@ -411,7 +413,8 @@ class HashJoinState : public JoinState {
                   uint64_t n_keys_, bool build_table_outer_,
                   bool probe_table_outer_, cond_expr_fn_t cond_func_,
                   bool build_parallel_, bool probe_parallel_,
-                  int64_t output_batch_size_, size_t max_partition_depth_ = 5);
+                  int64_t output_batch_size_, uint64_t shuffle_sync_iter,
+                  size_t max_partition_depth_ = 5);
 
     /**
      * @brief Create a global bloom filter for this Hash Join
