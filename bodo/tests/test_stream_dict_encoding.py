@@ -2,6 +2,9 @@
 These tests are focused on the core correctness of the state operations
 and any SQL APIs requiring additional testing.
 """
+import textwrap
+from typing import Tuple
+
 import pandas as pd
 
 import bodo
@@ -21,7 +24,6 @@ def test_basic_caching(memory_leak_check):
         dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
         finished = False
         batch_num = 0
-        cache_misses = 0
         arr_size = len(arr)
         batches = []
         while not finished:
@@ -30,7 +32,6 @@ def test_basic_caching(memory_leak_check):
             if bodo.libs.stream_dict_encoding.state_contains_dict_array(
                 dict_encoding_state, func_id, section._dict_id
             ):
-                # Cache hit
                 new_dict, new_dict_id = bodo.libs.stream_dict_encoding.get_array(
                     dict_encoding_state,
                     func_id,
@@ -38,8 +39,6 @@ def test_basic_caching(memory_leak_check):
                     bodo.string_array_type,
                 )
             else:
-                # Cache miss
-                cache_misses += 1
                 new_dict = bodo.libs.bodosql_array_kernels.lower(section._data)
                 new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(len(new_dict))
                 # Update the cache
@@ -59,9 +58,12 @@ def test_basic_caching(memory_leak_check):
             )
             batches.append(out_arr)
             batch_num += 1
+        num_sets = bodo.libs.stream_dict_encoding.get_state_num_set_calls(
+            dict_encoding_state
+        )
         bodo.libs.stream_dict_encoding.delete_dict_encoding_state(dict_encoding_state)
         out_arr = bodo.libs.array_kernels.concat(batches)
-        return (out_arr, cache_misses)
+        return (out_arr, num_sets)
 
     arr = pd.array(["Hierq", "owerew", None, "Help", "help", "HELP", "cons"] * 2)
     py_output = (pd.Series(arr).str.lower().array, 1)
@@ -84,7 +86,7 @@ def test_multi_dictionary(memory_leak_check):
     slice_size = 3
 
     def impl(S1, S2):
-        def process_arr(dict_encoding_state, arr, batches, cache_misses):
+        def process_arr(dict_encoding_state, arr, batches):
             arr_size = len(arr)
             batch_num = 0
             finished = False
@@ -102,8 +104,6 @@ def test_multi_dictionary(memory_leak_check):
                         bodo.string_array_type,
                     )
                 else:
-                    # Cache miss
-                    cache_misses += 1
                     new_dict = bodo.libs.bodosql_array_kernels.lower(section._data)
                     new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(len(new_dict))
                     # Update the cache
@@ -123,18 +123,19 @@ def test_multi_dictionary(memory_leak_check):
                 )
                 batches.append(out_arr)
                 batch_num += 1
-            return cache_misses
 
         arr1 = bodo.hiframes.pd_series_ext.get_series_data(S1)
         arr2 = bodo.hiframes.pd_series_ext.get_series_data(S2)
         dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
-        cache_misses = 0
         batches = []
-        cache_misses = process_arr(dict_encoding_state, arr1, batches, cache_misses)
-        cache_misses = process_arr(dict_encoding_state, arr2, batches, cache_misses)
+        process_arr(dict_encoding_state, arr1, batches)
+        process_arr(dict_encoding_state, arr2, batches)
+        num_sets = bodo.libs.stream_dict_encoding.get_state_num_set_calls(
+            dict_encoding_state
+        )
         bodo.libs.stream_dict_encoding.delete_dict_encoding_state(dict_encoding_state)
         out_arr = bodo.libs.array_kernels.concat(batches)
-        return (out_arr, cache_misses)
+        return (out_arr, num_sets)
 
     arr1 = pd.array(["Hierq", "owerew", None, "Help", "help", "HELP", "cons"] * 2)
     arr2 = pd.array(["qwew", "fe", None, "Help"] * 2)
@@ -167,7 +168,6 @@ def test_multi_function(memory_leak_check):
         dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
         finished = False
         batch_num = 0
-        cache_misses = 0
         arr_size = len(arr)
         batches = []
         while not finished:
@@ -176,7 +176,6 @@ def test_multi_function(memory_leak_check):
             if bodo.libs.stream_dict_encoding.state_contains_dict_array(
                 dict_encoding_state, func_id1, section._dict_id
             ):
-                # Cache hit
                 new_dict, new_dict_id = bodo.libs.stream_dict_encoding.get_array(
                     dict_encoding_state,
                     func_id1,
@@ -184,8 +183,6 @@ def test_multi_function(memory_leak_check):
                     bodo.string_array_type,
                 )
             else:
-                # Cache miss
-                cache_misses += 1
                 new_dict = bodo.libs.bodosql_array_kernels.lower(section._data)
                 new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(len(new_dict))
                 # Update the cache
@@ -206,7 +203,6 @@ def test_multi_function(memory_leak_check):
             if bodo.libs.stream_dict_encoding.state_contains_dict_array(
                 dict_encoding_state, func_id2, out_arr1._dict_id
             ):
-                # Cache hit
                 new_dict, new_dict_id = bodo.libs.stream_dict_encoding.get_array(
                     dict_encoding_state,
                     func_id2,
@@ -214,8 +210,6 @@ def test_multi_function(memory_leak_check):
                     bodo.string_array_type,
                 )
             else:
-                # Cache miss
-                cache_misses += 1
                 new_dict = bodo.libs.bodosql_array_kernels.ltrim(out_arr1._data, " ")
                 new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(len(new_dict))
                 # Update the cache
@@ -235,9 +229,12 @@ def test_multi_function(memory_leak_check):
             )
             batches.append(out_arr2)
             batch_num += 1
+        num_sets = bodo.libs.stream_dict_encoding.get_state_num_set_calls(
+            dict_encoding_state
+        )
         bodo.libs.stream_dict_encoding.delete_dict_encoding_state(dict_encoding_state)
         out_arr = bodo.libs.array_kernels.concat(batches)
-        return (out_arr, cache_misses)
+        return (out_arr, num_sets)
 
     arr = pd.array(
         [" Hierq", "owerew ", None, " Help", "help  ", "HELP", "   cons   "] * 2
@@ -255,7 +252,7 @@ def test_multi_function(memory_leak_check):
 
 def test_coalesce(memory_leak_check):
     """
-    Tests that coalesce works when supplying a dictionary inputs and caching.
+    Tests that coalesce works when supplying dictionary inputs and caching state.
     """
     func_id = 1
     slice_size = 3
@@ -268,8 +265,6 @@ def test_coalesce(memory_leak_check):
         batch_num = 0
         arr_size = len(arr1)
         batches = []
-        # Detect cache hits by measuring how many new ids we generated.
-        start_id = bodo.libs.dict_arr_ext.generate_dict_id(1000)
         while not finished:
             section1 = arr1[batch_num * slice_size : (batch_num + 1) * slice_size]
             section2 = arr2[batch_num * slice_size : (batch_num + 1) * slice_size]
@@ -279,11 +274,12 @@ def test_coalesce(memory_leak_check):
             )
             batches.append(out_batch)
             batch_num += 1
-        end_id = bodo.libs.dict_arr_ext.generate_dict_id(1000)
-        num_ids = (end_id - start_id) - 1
+        num_sets = bodo.libs.stream_dict_encoding.get_state_num_set_calls(
+            dict_encoding_state
+        )
         bodo.libs.stream_dict_encoding.delete_dict_encoding_state(dict_encoding_state)
         out_arr = bodo.libs.array_kernels.concat(batches)
-        return out_arr, num_ids
+        return out_arr, num_sets
 
     arr1 = pd.array(["Hierq", "owerew", None, "Help", None, "HELP", "cons"] * 2)
     arr2 = pd.array(["Hieq", None, None, "HelP", "heLp", "HELP", None] * 2)
@@ -295,6 +291,103 @@ def test_coalesce(memory_leak_check):
     check_func(
         impl,
         (pd.Series(arr1), pd.Series(arr2)),
+        py_output=py_output,
+        only_seq=True,
+        use_dict_encoded_strings=True,
+    )
+
+
+def _build_1_arg_streaming_function(
+    output_generation_text: str, additional_arg_names: Tuple[str] = ()
+):
+    """Generate the implementation of a 1 argument streaming function for testing where
+    the only difference is the "function call that generates the output.
+
+    This function assumes a single Series input (that will be converted to an array)
+    and can have additional scalar arguments.
+
+    Args:
+        output_generation_text (str): Block of code inserted to update the output array.
+        This should not include an output variable name.
+        additional_args (Tuple[str]): Names of any additional scalars.
+
+    Return:
+        A function that can be executed in a Bodo streaming fashion. This function always returns
+        2 arguments
+            - An output array.
+            - The number of set calls to the dictionary state (e.g. cache misses).
+    """
+    additional_args_str = ", ".join(additional_arg_names)
+
+    func_id = 1
+    slice_size = 3
+
+    func_text = textwrap.dedent(
+        f"""
+    def impl(S, {additional_args_str}):
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
+        finished = False
+        batch_num = 0
+        arr_size = len(arr)
+        batches = []
+        while not finished:
+            section = arr[batch_num * slice_size : (batch_num + 1) * slice_size]
+            finished = ((batch_num + 1) * slice_size) >= arr_size
+            out_batch = {output_generation_text}
+            batches.append(out_batch)
+            batch_num += 1
+        num_sets = bodo.libs.stream_dict_encoding.get_state_num_set_calls(
+            dict_encoding_state
+        )
+        bodo.libs.stream_dict_encoding.delete_dict_encoding_state(dict_encoding_state)
+        out_arr = bodo.libs.array_kernels.concat(batches)
+        return out_arr, num_sets
+    """
+    )
+    glbls = {"bodo": bodo, "func_id": func_id, "slice_size": slice_size}
+    local_vars = {}
+    exec(func_text, glbls, local_vars)
+    return local_vars["impl"]
+
+
+def test_like(memory_leak_check):
+    """
+    Tests that like works when supplying a dictionary input and caching state.
+    """
+
+    impl1 = _build_1_arg_streaming_function(
+        'bodo.libs.bodosql_array_kernels.like_kernel(section, "h%", "", False, dict_encoding_state, func_id)'
+    )
+    impl2 = _build_1_arg_streaming_function(
+        'bodo.libs.bodosql_array_kernels.like_kernel(section, pattern, "", True, dict_encoding_state, func_id)',
+        ("pattern",),
+    )
+
+    arr = pd.array(["hierq", "owerew", None, "Help", None, "HELP", "cons"] * 2)
+    py_output = (
+        pd.array([True, False, None, False, None, False, False] * 2),
+        # Number of cache misses. Should be 1 for the first iteration.
+        1,
+    )
+    # Only test sequential because it simplifies the test logic with pd.concat.
+    check_func(
+        impl1,
+        (pd.Series(arr),),
+        py_output=py_output,
+        only_seq=True,
+        use_dict_encoded_strings=True,
+    )
+
+    py_output = (
+        pd.array([True, False, None, True, None, True, False] * 2),
+        # Number of cache misses. Should be 1 for the first iteration.
+        1,
+    )
+    # Only test sequential because it simplifies the test logic with pd.concat.
+    check_func(
+        impl2,
+        (pd.Series(arr), "h%"),
         py_output=py_output,
         only_seq=True,
         use_dict_encoded_strings=True,
