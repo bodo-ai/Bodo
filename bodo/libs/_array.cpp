@@ -1423,6 +1423,11 @@ char* array_info_getitem(array_info* arr, int64_t row_num,
 
 char* array_info_getdata1(array_info* arr) { return arr->data1(); }
 
+/// @brief Wrapper Function to Test if Array Unpinning Works
+/// as expected in our tests. See
+/// test_memory.py::test_array_unpinned
+void array_info_unpin(array_info* arr) { arr->unpin(); }
+
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
     MOD_DEF(m, "array_ext", "No docs", NULL);
@@ -1554,6 +1559,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, get_stats_mi_free);
     SetAttrStringFromVoidPtr(m, array_info_getitem);
     SetAttrStringFromVoidPtr(m, array_info_getdata1);
+    SetAttrStringFromVoidPtr(m, array_info_unpin);
     // End section of functions which only use C and cannot throw exceptions
 
     // C++ Cache functions for Like Kernel with dictionary encoded inputs
