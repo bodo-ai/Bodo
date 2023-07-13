@@ -838,12 +838,12 @@ void HashJoinState::AppendBuildBatch(
                     "any matching partition for row!");
             }
         }
-        this->partitions[0]->AppendBuildBatch<true>(
-            in_table, join_hashes, append_rows_by_partition[0]);
-        for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
-            this->partitions[i_part]->AppendBuildBatch(
-                in_table, join_hashes, append_rows_by_partition[i_part]);
-        }
+    }
+    this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes,
+                                                append_rows_by_partition[0]);
+    for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
+        this->partitions[i_part]->AppendBuildBatch(
+            in_table, join_hashes, append_rows_by_partition[i_part]);
     }
 }
 
@@ -925,10 +925,10 @@ void HashJoinState::AppendProbeBatchToInactivePartition(
                     "any matching partition for row!");
             }
         }
-        for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
-            this->partitions[i_part]->AppendInactiveProbeBatch(
-                in_table, join_hashes, append_rows_by_partition[i_part]);
-        }
+    }
+    for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
+        this->partitions[i_part]->AppendInactiveProbeBatch(
+            in_table, join_hashes, append_rows_by_partition[i_part]);
     }
 }
 
@@ -1125,7 +1125,13 @@ void join_build_consume_batch(HashJoinState* join_state,
     batch_hashes_join.reset();
     in_table.reset();
 
-    if (!is_last && join_state->partitions[0]->is_near_full()) {
+    // For now, we will allow re-partitioning only in the case where the build
+    // side is distributed. If we allow re-partitioning in the replicated build
+    // side case, we must assume that the partitioning state is identical on all
+    // ranks. This might not always be true.
+    // XXX Revisit this in the future if needed.
+    if (!is_last && join_state->build_parallel &&
+        join_state->partitions[0]->is_near_full()) {
         join_state->SplitPartition(0);
     }
 
@@ -1306,7 +1312,7 @@ void join_build_consume_batch(HashJoinState* join_state,
             // Make the bloom filter global.
             join_state->global_bloom_filter->union_reduction();
         }
-        // TODO: clear probe_shuffle_buffer memory
+        // TODO: clear build_shuffle_buffer memory
         join_state->FinalizeBuild();
     }
     join_state->build_iter++;
