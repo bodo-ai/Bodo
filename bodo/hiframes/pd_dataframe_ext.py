@@ -3026,20 +3026,28 @@ def concat_overload(
     # list of dataframes
     if isinstance(objs, types.List) and isinstance(objs.dtype, DataFrameType):
         check_runtime_cols_unsupported(objs.dtype, "pandas.concat()")
-        # TODO(ehsan): index
         df_type = objs.dtype
-        for col_no, c in enumerate(df_type.columns):
-            func_text += "  arrs{} = []\n".format(col_no)
+
+        # create output data columns
+        if df_type.is_table_format:
+            func_text += "  in_tables = []\n"
             func_text += "  for i in range(len(objs)):\n"
             func_text += "    df = objs[i]\n"
-            func_text += "    arrs{0}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0}))\n".format(
-                col_no
-            )
+            func_text += "    in_tables.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df))\n"
             func_text += (
-                "  out_arr{0} = bodo.libs.array_kernels.concat(arrs{0})\n".format(
-                    col_no
-                )
+                "  out_table = bodo.utils.table_utils.concat_tables(in_tables)\n"
             )
+            data_args = "out_table"
+        else:
+            for col_no, c in enumerate(df_type.columns):
+                func_text += f"  arrs{col_no} = []\n"
+                func_text += "  for i in range(len(objs)):\n"
+                func_text += "    df = objs[i]\n"
+                func_text += f"    arrs{col_no}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {col_no}))\n"
+                func_text += f"  out_arr{col_no} = bodo.libs.array_kernels.concat(arrs{col_no})\n"
+            data_args = ", ".join(f"out_arr{i}" for i in range(len(df_type.columns)))
+
+        # create output Index
         if ignore_index:
             index = (
                 "bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr0), 1, None)"
@@ -3055,10 +3063,11 @@ def concat_overload(
             else:
                 name = objs.dtype.index.name_typ.literal_value
             index = f"bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(arrs_index), {name!r})\n"
+
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text,
             df_type.columns,
-            ", ".join("out_arr{}".format(i) for i in range(len(df_type.columns))),
+            data_args,
             index,
         )
 

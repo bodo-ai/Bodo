@@ -1972,6 +1972,46 @@ def test_table_astype_multiple_cols_different_cast(datapath, memory_leak_check):
     check_func(impl, (), check_dtype=False)
 
 
+def test_concat_tables_used_cols(datapath, memory_leak_check):
+    """Make sure used_cols in concat_tables() is set properly"""
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        in_dfs = []
+        for _ in range(3):
+            in_dfs.append(df1)
+
+        df2 = pd.concat(in_dfs)
+        return df2[["Column3", "Column6"]]
+
+    check_func(impl, (), only_seq=True)
+    bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+    bodo_func()
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    typemap = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_typemap"]
+    found = False
+    for block in fir.blocks.values():
+        for stmt in block.body:
+            if isinstance(stmt, ir.Assign) and is_expr(stmt.value, "call"):
+                rhs = stmt.value
+                fdef = numba.core.ir_utils.guard(
+                    numba.core.ir_utils.find_callname, fir, rhs
+                )
+                if fdef == ("concat_tables", "bodo.utils.table_utils"):
+                    found = True
+                    kws = dict(rhs.kws)
+                    assert "used_cols" in kws, "used_cols not found"
+                    used_cols = bodo.utils.typing.unwrap_typeref(
+                        typemap[kws["used_cols"].name]
+                    )
+                    assert used_cols == bodo.utils.typing.MetaType(
+                        (3, 6)
+                    ), "invalid used_cols"
+
+    assert found, "concat_tables not found."
+
+
 def test_filter_del_cols(datapath, memory_leak_check):
     """
     Test table_filter properly creates del_column
