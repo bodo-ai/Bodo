@@ -2,6 +2,7 @@
 """
 Test correctness of SQL aggregation operations without groupby on BodoSQL
 """
+
 import bodosql
 import numpy as np
 import pandas as pd

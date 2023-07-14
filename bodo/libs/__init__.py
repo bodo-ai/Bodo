@@ -6,5 +6,6 @@ from bodo.ext import (  # noqa
     hdist,
     hio,
     hstr_ext,
+    listagg,
     quantile_alg,
 )

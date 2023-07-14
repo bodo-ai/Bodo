@@ -21,7 +21,6 @@ import static com.bodosql.calcite.application.JoinCondVisitor.getStreamingJoinKe
 import static com.bodosql.calcite.application.JoinCondVisitor.visitJoinCond;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitNonEquiConditions;
 import static com.bodosql.calcite.application.Utils.AggHelpers.aggContainsFilter;
-import static com.bodosql.calcite.application.Utils.AggHelpers.aggContainsListagg;
 import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.integerLiteralArange;
 import static com.bodosql.calcite.application.Utils.Utils.isSnowflakeCatalogTable;
@@ -1501,10 +1500,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     if (aggContainsFilter(aggCallList)) {
       // If we have a Filter we need to generate a groupby apply
-      if (aggContainsListagg(aggCallList)) {
-        throw new BodoSQLCodegenException(
-            "Cannot handle calls to listAgg alongside aggregation calls that contain filters.");
-      }
 
       exprAndAdditionalGeneratedCode =
           generateApplyCodeWithGroupBy(

@@ -643,7 +643,7 @@ void ListAggColSet::alloc_update_columns(
 // Struct that contains templated helper functions
 // for string/dict encoded strings in listagg update
 template <bool is_dict>
-struct listagg_utils {
+struct listagg_groupby_utils {
     inline static void get_data_and_offsets(
         const std::shared_ptr<array_info> in_col, char** data_in_ptr,
         offset_t** offsets_in_ptr,
@@ -656,7 +656,7 @@ struct listagg_utils {
 };
 
 template <>
-struct listagg_utils<true> {
+struct listagg_groupby_utils<true> {
     inline static void get_data_and_offsets(
         const std::shared_ptr<array_info> in_col, char** data_in_ptr,
         offset_t** offsets_in_ptr,
@@ -679,7 +679,7 @@ struct listagg_utils<true> {
 };
 
 template <>
-struct listagg_utils<false> {
+struct listagg_groupby_utils<false> {
     inline static void get_data_and_offsets(
         const std::shared_ptr<array_info> in_col, char** data_in_ptr,
         offset_t** offsets_in_ptr,
@@ -797,8 +797,8 @@ void listagg_update_helper(
     // dict_indices is only used for dict array, uninitialized in string case
     std::shared_ptr<array_info> dict_indices = nullptr;
 
-    listagg_utils<is_dict>::get_data_and_offsets(in_col, &data_in, &offsets_in,
-                                                 &dict_indices);
+    listagg_groupby_utils<is_dict>::get_data_and_offsets(
+        in_col, &data_in, &offsets_in, &dict_indices);
 
     //----------Step 0, find the traversal order of the input array----------
     std::shared_ptr<array_info> traversal_order = get_traversal_order(
@@ -827,12 +827,12 @@ void listagg_update_helper(
             continue;
         }
 
-        bool null_bit =
-            listagg_utils<is_dict>::get_null_bit(in_col, dict_indices, i);
+        bool null_bit = listagg_groupby_utils<is_dict>::get_null_bit(
+            in_col, dict_indices, i);
 
         if (null_bit) {
             int32_t offsets_idx =
-                listagg_utils<is_dict>::get_offset_idx(dict_indices, i);
+                listagg_groupby_utils<is_dict>::get_offset_idx(dict_indices, i);
 
             offset_t len =
                 offsets_in[offsets_idx + 1] - offsets_in[offsets_idx];
@@ -893,15 +893,15 @@ void listagg_update_helper(
         size_t i = getv<int64_t>(traversal_order, j);
 
         int64_t i_grp = grp_info.row_to_group[i];
-        bool null_bit =
-            listagg_utils<is_dict>::get_null_bit(in_col, dict_indices, i);
+        bool null_bit = listagg_groupby_utils<is_dict>::get_null_bit(
+            in_col, dict_indices, i);
 
         // NOTE: i_grp != -1  can happen when the group key is null and,
         // we still want to do group operation on it (i.e.
         // groupby(dropna=False))
         if ((i_grp != -1) && null_bit) {
             int32_t offsets_idx =
-                listagg_utils<is_dict>::get_offset_idx(dict_indices, i);
+                listagg_groupby_utils<is_dict>::get_offset_idx(dict_indices, i);
 
             offset_t input_string_len =
                 offsets_in[offsets_idx + 1] - offsets_in[offsets_idx];

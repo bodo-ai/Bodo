@@ -4,6 +4,7 @@ import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.bodo_sql_rules.JoinExtractOverRule
+import com.bodosql.calcite.application.bodo_sql_rules.ListAggOptionalReplaceRule
 import com.bodosql.calcite.rel.metadata.PandasRelMetadataProvider
 import org.apache.calcite.plan.*
 import org.apache.calcite.plan.hep.HepPlanner
@@ -146,6 +147,7 @@ object BodoPrograms {
                         SubQueryRemoveRule.Config.PROJECT.toRule(),
                         SubQueryRemoveRule.Config.JOIN.toRule(),
                         JoinExtractOverRule.Config.DEFAULT.toRule(),
+                        ListAggOptionalReplaceRule.Config.DEFAULT.toRule(),
                     ),
                 )
                 .build(),

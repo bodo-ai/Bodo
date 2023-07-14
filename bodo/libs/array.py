@@ -2708,7 +2708,7 @@ def groupby_and_aggregate(
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
+            lir.IntType(8).as_pointer(),  # table_info*
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
