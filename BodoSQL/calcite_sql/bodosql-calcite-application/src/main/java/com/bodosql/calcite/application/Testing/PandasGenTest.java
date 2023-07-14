@@ -19,6 +19,7 @@ public class PandasGenTest {
 
     String sql = "select CURRENT_DATE()";
     int plannerChoice = RelationalAlgebraGenerator.HEURISTIC_PLANNER;
+    boolean enableStreamingGroupBy = false;
 
     LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
     ArrayList arr = new ArrayList();
@@ -101,7 +102,12 @@ public class PandasGenTest {
 
     RelationalAlgebraGenerator generator =
         new RelationalAlgebraGenerator(
-            schema, paramTableName, plannerChoice, 0, BatchingProperty.defaultBatchSize, false);
+            schema,
+            paramTableName,
+            plannerChoice,
+            0,
+            BatchingProperty.defaultBatchSize,
+            enableStreamingGroupBy);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String unOptimizedPlanStr = getRelationalAlgebraString(generator, sql, false);
