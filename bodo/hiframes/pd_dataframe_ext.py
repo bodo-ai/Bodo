@@ -3049,9 +3049,8 @@ def concat_overload(
 
         # create output Index
         if ignore_index:
-            index = (
-                "bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr0), 1, None)"
-            )
+            out_name = "out_table" if df_type.is_table_format else "out_arr0"
+            index = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({out_name}), 1, None)"
         else:
             func_text += "  arrs_index = []\n"
             func_text += "  for i in range(len(objs)):\n"
