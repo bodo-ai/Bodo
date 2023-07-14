@@ -77,7 +77,7 @@ ll.add_symbol("array_size", hstr_ext.array_size)
 ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
 
 # the number of dataframe columns above which we use table format in unboxing
-TABLE_FORMAT_THRESHOLD = 20
+TABLE_FORMAT_THRESHOLD = 0
 
 # A flag to use dictionary-encode string arrays for all string arrays
 # Used for testing purposes

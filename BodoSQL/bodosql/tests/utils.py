@@ -78,7 +78,7 @@ def check_query(
     pyspark_schemas: Optional[Dict[str, pyspark.sql.types.StructType]] = None,
     named_params_timedelta_interval: bool = False,
     convert_nullable_bodosql: bool = True,
-    use_table_format: Optional[bool] = None,
+    use_table_format: Optional[bool] = True,
     use_dict_encoded_strings: Optional[bool] = None,
     is_out_distributed: bool = True,
     check_typing_issues: bool = True,

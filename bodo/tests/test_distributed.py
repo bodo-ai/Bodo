@@ -1021,6 +1021,7 @@ def test_getitem_slice_const_size(memory_leak_check):
     """test getitem of multi-dim distributed array with a constant slice in first
     dimension.
     """
+
     # setitem without stride
     def impl1():
         N = 10
@@ -1140,6 +1141,7 @@ def test_setitem_scalar(memory_leak_check):
 @pytest.mark.parametrize("dtype", [np.float32, np.uint8, np.int64])
 def test_arr_reshape(dtype, memory_leak_check):
     """test reshape of multi-dim distributed arrays"""
+
     # reshape to more dimensions
     def impl1(A, n):
         return A.reshape(3, n // 3)
@@ -1413,6 +1415,7 @@ def test_dist_dict_setitem1(memory_leak_check):
 
 def test_return_maybe_dist(memory_leak_check):
     """test returns_maybe_distributed jit flag"""
+
     # tuple return
     def impl1(n):
         df = pd.DataFrame({"A": np.arange(n), "B": np.ones(n)})
@@ -1866,6 +1869,7 @@ def test_diagnostics_list(capsys, memory_leak_check):
 
 def test_sort_output_1D_Var_size(memory_leak_check):
     """Test using size variable of an output 1D_Var array of a Sort node"""
+
     # RangeIndex of output Series needs size of Sort output array
     def impl(S):
         res = pd.Series(S.sort_values().values)
@@ -2392,7 +2396,9 @@ def test_gatherv_empty_df(memory_leak_check):
 
     df = pd.DataFrame()
     df_gathered = bodo.jit()(impl)(df)
-    pd.testing.assert_frame_equal(df, df_gathered, check_column_type=False)
+    pd.testing.assert_frame_equal(
+        df, df_gathered, check_column_type=False, check_index_type=False
+    )
 
 
 def test_gatherv_str(memory_leak_check):
@@ -2505,7 +2511,6 @@ def test_bcast_scalar(val1, val2):
 
 @pytest.mark.slow
 def test_bcast_tuple():
-
     dt_val1, dt_val2 = (
         np.datetime64("2005-02-25").astype("datetime64[ns]"),
         np.datetime64("2000-01-01").astype("datetime64[ns]"),
@@ -2622,7 +2627,6 @@ def test_bcast(arr_tuple_val):
     ],
 )
 def test_all_to_all(val0, val1, val2, val3):
-
     if bodo.get_size() > 4:
         return
 
