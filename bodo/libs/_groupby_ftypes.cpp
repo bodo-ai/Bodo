@@ -1,5 +1,7 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_ftypes.h"
+#include <iostream>
+#include <string>
 
 /**
  * This file defines the various ftype helper functions that shouldn't
@@ -68,6 +70,11 @@ const char* Bodo_FTypes_names[] = {"no_op",
                                    "idxmax_na_first",
                                    "idx_n_columns"};
 
-const char* get_name_for_Bodo_FTypes(int enumVal) {
-    return Bodo_FTypes_names[enumVal];
+const std::string get_name_for_Bodo_FTypes(int enumVal) {
+    if (enumVal < 0 || enumVal >= Bodo_FTypes::num_funcs) {
+        throw std::runtime_error(std::string("Unknown function type: ") +
+                                 std::to_string(enumVal));
+    } else {
+        return std::string(Bodo_FTypes_names[enumVal]);
+    }
 }

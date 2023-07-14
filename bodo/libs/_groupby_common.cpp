@@ -29,9 +29,10 @@ void aggfunc_output_initialize_kernel(
     // Generate an error message for unsupported paths that includes the name
     // of the function and the dtype.
     std::string error_msg = std::string("unsupported aggregate function: ") +
-                            std::string(get_name_for_Bodo_FTypes(ftype)) +
+                            get_name_for_Bodo_FTypes(ftype) +
                             std::string(" for column dtype: ") +
                             std::string(GetDtype_as_string(out_col->dtype));
+
     // TODO: Move to an arg from Python
     if (out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         bool init_val;
@@ -70,11 +71,13 @@ void aggfunc_output_initialize_kernel(
         InitializeBitMask((uint8_t*)out_col->null_bitmask(), out_col->length,
                           init_val, start_row);
     }
+
     if (out_col->arr_type == bodo_array_type::STRING ||
         out_col->arr_type == bodo_array_type::LIST_STRING) {
         InitializeBitMask((uint8_t*)out_col->null_bitmask(), out_col->length,
                           false, start_row);
     }
+
     if (out_col->arr_type == bodo_array_type::CATEGORICAL) {
         if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
             ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last) {

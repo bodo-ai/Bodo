@@ -2,6 +2,9 @@
 #ifndef _GROUPBY_FTYPES_H_INCLUDED
 #define _GROUPBY_FTYPES_H_INCLUDED
 
+#include <iostream>
+#include <string>
+
 /**
  * This file defines the various function types supported by groupby and shared
  * by the groupby infrastructure. In addition this defines some common helper
@@ -94,6 +97,6 @@ struct Bodo_FTypes {
     };
 };
 
-const char* get_name_for_Bodo_FTypes(int enumVal);
+const std::string get_name_for_Bodo_FTypes(int enumVal);
 
 #endif  // _GROUPBY_FTYPES_H_INCLUDED
