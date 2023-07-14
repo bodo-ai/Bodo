@@ -787,7 +787,7 @@ void apply_to_column_categorical(std::shared_ptr<array_info> in_col,
             throw std::runtime_error(
                 std::string(
                     "do_apply_to_column: unsupported Categorical function: ") +
-                std::string(get_name_for_Bodo_FTypes(ftype)));
+                get_name_for_Bodo_FTypes(ftype));
     }
 }
 
@@ -2170,6 +2170,10 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             return apply_to_column<double, Bodo_FTypes::kurt_eval,
                                    Bodo_CTypes::FLOAT64>(in_col, out_col,
                                                          aux_cols, grp_info);
+        default:
+            throw std::runtime_error(
+                std::string("do_apply_to_column: unsupported function: ") +
+                get_name_for_Bodo_FTypes(ftype));
     }
 #undef APPLY_TO_COLUMN_CALL
     throw std::runtime_error(
