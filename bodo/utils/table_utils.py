@@ -21,6 +21,7 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
     raise_bodo_error,
+    unwrap_typeref,
 )
 
 
@@ -68,11 +69,8 @@ def generate_mappable_table_func(
     if has_func:
         func_name = get_overload_const_str(func_name)
         is_method_const = get_overload_const_bool(is_method)
-    out_typ = (
-        out_arr_typ.instance_type
-        if isinstance(out_arr_typ, types.TypeRef)
-        else out_arr_typ
-    )
+
+    out_typ = unwrap_typeref(out_arr_typ)
     # Do we reuse the input data type
     keep_input_typ = out_typ == types.none
     num_cols = len(table.arr_types)
@@ -240,9 +238,7 @@ def table_concat(table, col_nums_meta, arr_type):
     that all column data in col_nums columns are of arr_type, that all column data comes from the same block and
     that there are no duplicates in col_nums. Returns a data array of type arr_type.
     """
-    arr_type = (
-        arr_type.instance_type if isinstance(arr_type, types.TypeRef) else arr_type
-    )
+    arr_type = unwrap_typeref(arr_type)
     concat_blk = table.type_to_blk[arr_type]
     glbls: Dict[str, Any] = {"bodo": bodo}
     glbls["col_indices"] = np.array(table.block_to_arr_ind[concat_blk], dtype=np.int64)
@@ -287,6 +283,97 @@ def table_concat(table, col_nums_meta, arr_type):
     impl = loc_vars["impl"]
 
     return impl
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def concat_tables(in_tables, used_cols=None):
+    """Concatenate rows of all tables in a list of tables.
+
+    Args:
+        in_tables (types.List(TableType)): input list of tables
+        used_cols (types.TypeRef(bodo.MetaType)
+            | types.none): If not None, the columns that should be selected
+            for concat. This is filled by the table column deletion steps.
+
+    Returns:
+        TableType: The concatenated table.
+    """
+    assert isinstance(in_tables, types.List) and isinstance(
+        in_tables.dtype, TableType
+    ), "concat_tables: list of TableType expected"
+
+    table_type = in_tables.dtype
+
+    glbls = {
+        "bodo": bodo,
+        "init_table": bodo.hiframes.table.init_table,
+        "get_table_block": bodo.hiframes.table.get_table_block,
+        "ensure_column_unboxed": bodo.hiframes.table.ensure_column_unboxed,
+        "set_table_block": bodo.hiframes.table.set_table_block,
+        "set_table_len": bodo.hiframes.table.set_table_len,
+        "alloc_list_like": bodo.hiframes.table.alloc_list_like,
+        "table_type": table_type,
+    }
+    if not is_overload_none(used_cols):
+        used_cols_type = used_cols.instance_type
+        used_cols_data = np.array(used_cols_type.meta, dtype=np.int64)
+        glbls["used_cols_vals"] = used_cols_data
+        kept_blks = set([table_type.block_nums[i] for i in used_cols_data])
+    else:
+        used_cols_data = None
+
+    func_text = "def table_concat_func(in_tables, used_cols=None):\n"
+    func_text += f"  T2 = init_table(table_type, False)\n"
+    func_text += f"  l = 0\n"
+
+    # set table length using input lengths and return if no table column is used
+    if used_cols_data is not None and len(used_cols_data) == 0:
+        func_text += f"  for T in in_tables:\n"
+        func_text += f"    l += len(T)\n"
+        func_text += f"  T2 = set_table_len(T2, l)\n"
+        func_text += f"  return T2\n"
+        loc_vars = {}
+        exec(func_text, glbls, loc_vars)
+        return loc_vars["table_concat_func"]
+
+    if used_cols_data is not None:
+        func_text += f"  used_set = set(used_cols_vals)\n"
+
+    for blk in table_type.type_to_blk.values():
+        # allocate output block array list
+        func_text += f"  arr_list_{blk}_init = get_table_block(in_tables[0], {blk})\n"
+        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}_init, len(arr_list_{blk}_init), False)\n"
+
+        if used_cols_data is None or blk in kept_blks:
+            # Check if anything from this type is live. If not skip generating
+            # the loop code.
+            glbls[f"arr_inds_{blk}"] = np.array(
+                table_type.block_to_arr_ind[blk], dtype=np.int64
+            )
+            func_text += f"  for i in range(len(arr_inds_{blk})):\n"
+            func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
+            if used_cols_data is not None:
+                func_text += f"    if arr_ind_{blk} not in used_set: continue\n"
+
+            func_text += f"    in_arrs_{blk} = []\n"
+            func_text += f"    for T_{blk} in in_tables:\n"
+            func_text += f"      arr_list_{blk} = get_table_block(T_{blk}, {blk})\n"
+            func_text += f"      ensure_column_unboxed(T_{blk}, arr_list_{blk}, i, arr_ind_{blk})\n"
+            func_text += f"      in_arrs_{blk}.append(arr_list_{blk}[i])\n"
+
+            func_text += (
+                f"    out_arr_{blk} = bodo.libs.array_kernels.concat(in_arrs_{blk})\n"
+            )
+            func_text += f"    l = len(out_arr_{blk})\n"
+            func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
+
+        func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
+    func_text += f"  T2 = set_table_len(T2, l)\n"
+    func_text += f"  return T2\n"
+
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["table_concat_func"]
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)

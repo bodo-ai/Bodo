@@ -336,6 +336,7 @@ no_side_effect_call_tuples = {
     ("generate_mappable_table_func", "table_utils", "utils", bodo),
     ("table_astype", "table_utils", "utils", bodo),
     ("table_concat", "table_utils", "utils", bodo),
+    ("concat_tables", "table_utils", "utils", bodo),
     ("table_filter", "table", "hiframes", bodo),
     ("table_subset", "table", "hiframes", bodo),
     ("logical_table_to_table", "table", "hiframes", bodo),
