@@ -1781,6 +1781,13 @@ class DistributedAnalysis:
                 self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == (
+            "bodosql_listagg_distributed",
+            "bodo.libs.bodosql_listagg",
+        ) or fdef == ("bodosql_listagg", "bodo.libs.bodosql_listagg"):
+            # Output is a string, so we don't need to explicitly set the distribution
+            return
+
         if (
             func_name in broadcasted_fixed_arg_functions
             and func_mod == "bodo.libs.bodosql_array_kernels"

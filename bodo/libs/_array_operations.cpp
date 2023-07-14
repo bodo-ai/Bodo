@@ -250,6 +250,8 @@ std::shared_ptr<table_info> get_samples_from_table_parallel(
 /**
  *   SORT VALUES
  *
+ * Sorts the input table by the first n_key_t columns.
+ *
  * @param is_parallel: true if data is distributed (used to indicate whether
  * tracing should be parallel or not)
  */

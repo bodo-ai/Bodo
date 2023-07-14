@@ -25,7 +25,6 @@ class PandasAggregateRule private constructor(config: Config) : ConverterRule(co
             )
             .withRuleFactory { config -> PandasAggregateRule(config) }
 
-
         fun isValidNode(node: Aggregate): Boolean {
             for (aggCall: AggregateCall in node.aggCallList) {
                 if (aggCall.aggregation.kind == SqlKind.LISTAGG && aggCall.argList.size == 1) {
@@ -34,10 +33,12 @@ class PandasAggregateRule private constructor(config: Config) : ConverterRule(co
             }
             return true;
         }
+
     }
 
     override fun convert(rel: RelNode): RelNode? {
         val agg = rel as Aggregate
+
 
         if (!PandasAggregateRule.isValidNode(agg)) {
             return null;
