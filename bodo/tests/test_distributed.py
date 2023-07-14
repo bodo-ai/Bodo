@@ -898,7 +898,7 @@ def test_dist_list_mul_concat(memory_leak_check):
         return pd.concat([df] * n)
 
     def impl2(df, n):
-        return pd.concat(n * [df])
+        return pd.concat(n * [df], ignore_index=True)
 
     df = pd.DataFrame(
         {
