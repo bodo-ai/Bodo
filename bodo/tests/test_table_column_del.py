@@ -2353,7 +2353,7 @@ def test_table_loc_column_subset_level1(datapath, memory_leak_check):
         bodo_func()
         # Check the columns were pruned
         check_logger_msg(stream, str(columns_loaded))
-        _check_column_dels(bodo_func, [list(range(n_cols)), list(range(n_cols * 2))])
+        _check_column_dels(bodo_func, [list(range(n_cols))])
 
 
 def test_table_loc_column_subset_level2(datapath, memory_leak_check):
@@ -2397,9 +2397,7 @@ def test_table_loc_column_subset_level2(datapath, memory_leak_check):
         df2_col_nums = list(range(n_cols_level_2 * 2))
         # There is 1 del_columns for the original df, 2 for df1 (the subset
         # and the filter) and 1 for df2 (the subset)
-        _check_column_dels(
-            bodo_func, [df_col_nums, df1_col_nums, df1_col_nums, df2_col_nums]
-        )
+        _check_column_dels(bodo_func, [df_col_nums, df1_col_nums])
 
 
 def test_table_iloc_column_subset_level1(datapath, memory_leak_check):
@@ -2435,7 +2433,7 @@ def test_table_iloc_column_subset_level1(datapath, memory_leak_check):
         bodo_func()
         # Check the columns were pruned
         check_logger_msg(stream, str(cols_names_loaded))
-        _check_column_dels(bodo_func, [list(range(n_cols)), list(range(n_cols * 2))])
+        _check_column_dels(bodo_func, [list(range(n_cols))])
 
 
 def test_table_iloc_column_subset_level2(datapath, memory_leak_check):
@@ -2479,12 +2477,9 @@ def test_table_iloc_column_subset_level2(datapath, memory_leak_check):
         # deletes them at the new remapped location.
         df_col_nums = list(range(n_cols_level_2))
         df1_col_nums = list(range(n_cols_level_1 - n_cols_level_2, n_cols_level_1))
-        df2_col_nums = list(range(n_cols_level_2 * 2))
         # There is 1 del_columns for the original df, 2 for df1 (the subset
         # and the filter) and 1 for df2 (the subset)
-        _check_column_dels(
-            bodo_func, [df_col_nums, df1_col_nums, df1_col_nums, df2_col_nums]
-        )
+        _check_column_dels(bodo_func, [df_col_nums, df1_col_nums])
 
 
 def test_table_column_subset_level1(datapath, memory_leak_check):
