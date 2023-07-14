@@ -443,9 +443,25 @@ public class PandasCodeGenVisitor extends RelVisitor {
     activePipeline.addInitialization(
         new Op.Assign(batchAccumulatorVariable, new Expr.List(List.of())));
 
+    // Fetch the underlying table
+    Variable inputTable = genTableVar();
+    Expr.Call dfData =
+        new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(inputDFVar));
+    int numInputCols = node.getRowType().getFieldCount();
+    List<Expr.IntegerLiteral> inputIndices = integerLiteralArange(numInputCols);
+    Variable colNums = lowerAsMetaType(new Expr.Tuple(inputIndices));
+    Expr.Call inputTableCall =
+        new Expr.Call(
+            "bodo.hiframes.table.logical_table_to_table",
+            dfData,
+            new Expr.Tuple(List.of()),
+            colNums,
+            new Expr.IntegerLiteral(numInputCols));
+    generatedCode.add(new Assign(inputTable, inputTableCall));
+
     // Append to the list at the end of the loop.
     List<Expr> args = new ArrayList<>();
-    args.add(inputDFVar);
+    args.add(inputTable);
     Op appendStatement =
         new Op.Stmt(new Expr.Call.Method(batchAccumulatorVariable, "append", args, List.of()));
     generatedCode.add(appendStatement);
@@ -457,12 +473,34 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Finally, concatenate the batches in the accumulator into one dataframe, so that the following
     // operations that
     // expect a single-batch dataframe can operate as needed.
+    Variable accumulatedTable = genTableVar();
+    Expr concatenatedTable =
+        new Expr.Call("bodo.utils.table_utils.concat_tables", List.of(batchAccumulatorVariable));
+    generatedCode.add(new Op.Assign(accumulatedTable, concatenatedTable));
+
     Variable accumulatedDfVar = this.genDfVar();
-    kotlin.Pair<String, Expr.BooleanLiteral> ignoreIndex =
-        new kotlin.Pair<>("ignore_index", new Expr.BooleanLiteral(true));
-    Expr concatenatedDataFrame =
-        new Expr.Call("pd.concat", List.of(batchAccumulatorVariable), List.of(ignoreIndex));
-    generatedCode.add(new Op.Assign(accumulatedDfVar, concatenatedDataFrame));
+    // Generate an index.
+    Variable indexVar = genIndexVar();
+    Expr.Call lenCall = new Expr.Call("len", List.of(accumulatedTable));
+    Expr.IntegerLiteral zero = new IntegerLiteral(0);
+    Expr.IntegerLiteral one = new IntegerLiteral(1);
+    Expr.Call indexCall =
+        new Expr.Call(
+            "bodo.hiframes.pd_index_ext.init_range_index",
+            List.of(zero, lenCall, one, Expr.None.INSTANCE));
+    generatedCode.add(new Op.Assign(indexVar, indexCall));
+    // Generate a DataFrame
+    Expr.Tuple tableTuple = new Expr.Tuple(List.of(accumulatedTable));
+    // Generate the column names global
+    List<Expr.StringLiteral> colNamesLiteral =
+        stringsToStringLiterals(node.getRowType().getFieldNames());
+    Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
+    Variable colNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
+    Expr.Call initDfCall =
+        new Expr.Call(
+            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+            List.of(tableTuple, indexVar, colNamesMeta));
+    generatedCode.add(new Op.Assign(accumulatedDfVar, initDfCall));
     this.varGenStack.push(accumulatedDfVar);
   }
 
