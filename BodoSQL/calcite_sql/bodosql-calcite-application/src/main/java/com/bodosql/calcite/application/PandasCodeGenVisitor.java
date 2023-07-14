@@ -1434,7 +1434,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable batchExitCond = inputPipeline.getExitCond();
     Variable buildTable = genTableVar();
     Expr.Call buildDfData = getDfData(buildDf);
-    int numBuildCols = node.getRowType().getFieldCount();
+    int numBuildCols = node.getInput().getRowType().getFieldCount();
     List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numBuildCols);
     generateStreamingTableCode(buildIndices, buildDfData, numBuildCols, buildTable);
     Expr.Call batchCall =
