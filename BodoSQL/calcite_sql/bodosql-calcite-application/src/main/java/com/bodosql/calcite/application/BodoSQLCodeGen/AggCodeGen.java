@@ -57,6 +57,11 @@ public class AggCodeGen {
   // of arguments
   static HashMap<String, String> equivalentExtendedNamedAggAggregates;
 
+  // Maps a given SqlKind to its name in the supportedAggFuncs list
+  static HashMap<SqlKind, String> kindToSupportAggFuncNameMap;
+  // Maps a given SqlKind to its name in the supportedAggFuncs list
+  static HashMap<String, String> nameToSupportAggFuncNameMap;
+
   // !!! IMPORTANT: this is supposed to match the positions in
   // Bodo_FTypes::FTypeEnum in _groupby_ftypes.h
   // TODO: [BSE-711] Remove this and refactor init_groupby_state to accept strings
@@ -98,6 +103,7 @@ public class AggCodeGen {
           "bitxor_agg",
           "count_if",
           "listagg",
+          "mode",
           "udf",
           "gen_udf",
           "window",
@@ -130,6 +136,14 @@ public class AggCodeGen {
     equivalentNumpyFuncNameMap = new HashMap<>();
     equivalentHelperFnMap = new HashMap<>();
     equivalentExtendedNamedAggAggregates = new HashMap<>();
+    kindToSupportAggFuncNameMap = new HashMap<>();
+    nameToSupportAggFuncNameMap = new HashMap<>();
+
+    kindToSupportAggFuncNameMap.put(SqlKind.STDDEV_POP, "std_pop");
+    kindToSupportAggFuncNameMap.put(SqlKind.VAR_POP, "var_pop");
+    kindToSupportAggFuncNameMap.put(SqlKind.ANY_VALUE, "first");
+    kindToSupportAggFuncNameMap.put(SqlKind.SINGLE_VALUE, "first");
+    nameToSupportAggFuncNameMap.put("VARIANCE_POP", "var_pop");
 
     equivalentPandasMethodMap.put(SqlKind.SUM, "sum");
     equivalentPandasMethodMap.put(SqlKind.SUM0, "sum");
@@ -831,7 +845,12 @@ public class AggCodeGen {
     for (int i = 0; i < aggCalls.size(); i++) {
       SqlKind kind = aggCalls.get(i).getAggregation().getKind();
       String name = aggCalls.get(i).getAggregation().getName();
-      if (equivalentPandasMethodMap.containsKey(kind)) {
+
+      if (kindToSupportAggFuncNameMap.containsKey(kind)) {
+        name = kindToSupportAggFuncNameMap.get(kind);
+      } else if (nameToSupportAggFuncNameMap.containsKey(name)) {
+        name = nameToSupportAggFuncNameMap.get(name);
+      } else if (equivalentPandasMethodMap.containsKey(kind)) {
         name = equivalentPandasMethodMap.get(kind);
       } else if (equivalentNumpyFuncMap.containsKey(kind)) {
         name = equivalentNumpyFuncMap.get(kind);
@@ -847,8 +866,14 @@ public class AggCodeGen {
         name = name.toLowerCase();
       }
       int index = supportedAggFuncs.indexOf(name);
-      // assert index != -1 : "Unsupported function: " + aggCalls.get(i).getAggregation().getName();
-      // TODO: [BSE-714] Support ANY_VALUE and SINGLE_VALUE in streaming and add this assert back
+
+      if (index == -1) {
+        throw new RuntimeException(
+            "Unsupported function for streaming group by: "
+                + aggCalls.get(i).getAggregation().getName());
+      }
+
+      // TODO: [BSE-714] Support ANY_VALUE and SINGLE_VALUE in streaming
       ftypes.add(new Expr.IntegerLiteral(index));
     }
     return visitor.lowerAsMetaType(new Expr.Tuple(ftypes));
