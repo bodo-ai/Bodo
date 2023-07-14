@@ -10,7 +10,6 @@ import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.*;
@@ -94,7 +93,7 @@ public class RelationalAlgebraGenerator {
   private final int streamingBatchSize;
 
   /** Enable/Disable groupby streaming. This is configurable for testing purposes */
-  public static boolean enableGroupbyStreaming;
+  public static boolean enableGroupbyStreaming = false;
 
   /**
    * Helper method for RelationalAlgebraGenerator constructor to create a Connection object so that
