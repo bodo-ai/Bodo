@@ -827,6 +827,20 @@ class SeriesPass:
             impl = overload_func(rhs_type)
             return replace_func(self, impl, [rhs.value])
 
+        # Replace T.shape to optimize out T.shape[1] (can be generated in BodoSQL)
+        if (
+            isinstance(rhs_type, bodo.TableType)
+            and rhs.attr == "shape"
+            and not rhs_type.has_runtime_cols
+        ):
+            n_cols = len(rhs_type.arr_types)
+            return compile_func_single_block(
+                eval(f"lambda T: (len(T), {n_cols})"),
+                [rhs.value],
+                assign.target,
+                self,
+            )
+
         # replace series/arr.dtype since PA replacement inserts in the
         # beginning of block, preventing fusion. TODO: fix PA
         if rhs.attr == "dtype" and isinstance(

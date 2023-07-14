@@ -207,3 +207,18 @@ def test_logical_table_to_table_dels(datapath, memory_leak_check):
         columns_list = [f"Column{i}" for i in [2, 7, 11]]
         check_logger_msg(stream, f"Columns loaded {columns_list}")
         _check_column_dels(bodo_func, [[2, 11, 7]])
+
+
+def test_table_shape_opt(datapath, table_value, memory_leak_check):
+    """
+    Make sure table.shape[1] is optimized out (used in BodoSQL)
+    """
+
+    def impl(T):
+        return T.shape[1]
+
+    check_func(impl, (table_value,), py_output=len(table_value.arrays), only_seq=True)
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+    bodo_func(table_value)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert not dist_IR_contains(f_ir, "shape")
