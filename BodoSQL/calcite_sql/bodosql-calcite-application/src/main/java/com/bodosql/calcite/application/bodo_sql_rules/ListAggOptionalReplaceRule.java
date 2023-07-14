@@ -18,6 +18,12 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.tools.RelBuilder;
 import org.immutables.value.Value;
 
+/**
+ * Rule that converts LISTAGG(A) calls to the equivalent expression LISTAGG(A, ''). This is needed
+ * because the LISTAGG implementation currently requires the optional separator argument to be a
+ * column instead of a scalar. Therefore, this rule is required in order to produce a calcite plan
+ * where the separator is passed into the aggregate node as a column.
+ */
 @BodoSQLStyleImmutable
 @Value.Enclosing
 public class ListAggOptionalReplaceRule extends RelRule<ListAggOptionalReplaceRule.Config>

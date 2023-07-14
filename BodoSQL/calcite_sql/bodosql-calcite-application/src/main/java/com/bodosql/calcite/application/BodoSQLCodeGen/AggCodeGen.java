@@ -62,7 +62,7 @@ public class AggCodeGen {
   // TODO: [BSE-711] Remove this and refactor init_groupby_state to accept strings
   static List<String> supportedAggFuncs =
       Arrays.asList(
-          "no_op",  // needed to ensure that 0 value isn't matched with any function
+          "no_op", // needed to ensure that 0 value isn't matched with any function
           "ngroup",
           "head",
           "transform",
@@ -168,6 +168,62 @@ public class AggCodeGen {
     equivalentHelperFnMap.put("APPROX_PERCENTILE", "approx_percentile");
 
     equivalentExtendedNamedAggAggregates.put("LISTAGG", "listagg");
+  }
+
+  /**
+   * Helper function that handles code generation for aggregateCall non grouping call to listagg.
+   *
+   * @param inVar Input dataframe
+   * @param inputColumnNames Column names of the input dataframe
+   * @param aggregateCall the listagg aggregate call
+   * @return
+   */
+  private static Expr genNonGroupedListaggCall(
+      Variable inVar, List<String> inputColumnNames, AggregateCall aggregateCall) {
+    assert aggregateCall.getAggregation().getKind() == SqlKind.LISTAGG
+        : "Internal error in genNonGroupedListaggCall: input aggregation is not listagg";
+    String fn_name = "bodo.libs.bodosql_listagg.bodosql_listagg";
+    Expr.StringLiteral aggColString =
+        new Expr.StringLiteral(inputColumnNames.get(aggregateCall.getArgList().get(0)));
+
+    List<Expr.StringLiteral> orderbyList = new ArrayList<>();
+    List<Expr.BooleanLiteral> ascendingList = new ArrayList<>();
+    List<Expr.StringLiteral> nullDirList = new ArrayList<>();
+    if (aggregateCall.collation != null) {
+      // The collation is where the WITHIN GROUP orderby clause information gets stored.
+      // If the collation exists, populate the relevant fields
+
+      for (int j = 0; j < aggregateCall.collation.getFieldCollations().size(); j++) {
+        RelFieldCollation curCollation = aggregateCall.collation.getFieldCollations().get(j);
+        orderbyList.add(new Expr.StringLiteral(inputColumnNames.get(curCollation.getFieldIndex())));
+        ascendingList.add(getAscendingExpr(curCollation.direction));
+        nullDirList.add(getNAPositionStringLiteral(curCollation.nullDirection));
+      }
+    }
+
+    assert (aggregateCall.getArgList().size() == 2)
+        : "Internal error in generateAggCodeNoGroupBy: listagg must have 2 arguments";
+
+    // The separator is always coerced to aggregateCall column by calcite. Since the function
+    // expects aggregateCall scalar,
+    // We convert it back to scalar by simply taking the 0'th element of the array.
+    Expr sepExpr =
+        new Expr.Index(
+            new Expr.Index(
+                inVar,
+                new Expr.StringLiteral(inputColumnNames.get(aggregateCall.getArgList().get(1)))),
+            new Expr.IntegerLiteral(0));
+
+    List<Expr> argsList =
+        List.of(
+            inVar,
+            aggColString,
+            new Expr.Tuple(orderbyList),
+            new Expr.Tuple(ascendingList),
+            new Expr.Tuple(nullDirList),
+            sepExpr);
+
+    return new Expr.Call(fn_name, argsList);
   }
 
   /**
@@ -292,6 +348,9 @@ public class AggCodeGen {
             .append(quantile_str)
             .append(")");
 
+      } else if (aggFunc.equals("listagg")) {
+
+        aggString.append(genNonGroupedListaggCall(inVar, inputColumnNames, a).emit());
       } else {
         if (!isMethod) {
           // If we have a function surround the column
@@ -547,6 +606,7 @@ public class AggCodeGen {
       List<AggregateCall> aggCallList,
       List<String> aggCallNames,
       Variable funcVar) {
+
     StringBuilder fnString = new StringBuilder();
 
     final String indent = getBodoIndent();
@@ -618,6 +678,8 @@ public class AggCodeGen {
       } else if (aggFunc.equals("count_if")) {
         fnString.append(seriesVar);
         fnString.append(".sum()");
+      } else if (aggFunc.equals("listagg")) {
+        fnString.append(genNonGroupedListaggCall(new Variable("df"), inputColumnNames, a).emit());
       } else {
         if (!isMethod) {
           // If we have a function surround the column
@@ -721,15 +783,16 @@ public class AggCodeGen {
       ImmutableBitSet groupSet, PandasCodeGenVisitor visitor) {
     List<Expr.IntegerLiteral> indices = new ArrayList<>();
     for (int i = 0; i < groupSet.size(); i++) {
-      if (groupSet.get(i))
+      if (groupSet.get(i)) {
         indices.add(new Expr.IntegerLiteral(i));
+      }
     }
     return visitor.lowerAsMetaType(new Expr.Tuple(indices));
   }
 
   /**
-   * Generate two lists of integers, the first one is the offset list of each aggregate call,
-   * the second one is the list of indices of all aggregate calls.
+   * Generate two lists of integers, the first one is the offset list of each aggregate call, the
+   * second one is the list of indices of all aggregate calls.
    *
    * @param aggCalls The list of aggregate calls.
    * @param visitor The visitor used for lowering global variables.
@@ -755,8 +818,8 @@ public class AggCodeGen {
   }
 
   /**
-   * Generate a list of integer that represents the aggregate function based on
-   * the order in Bodo_FTypes::FTypeEnum in _groupby_ftypes.h
+   * Generate a list of integer that represents the aggregate function based on the order in
+   * Bodo_FTypes::FTypeEnum in _groupby_ftypes.h
    *
    * @param aggCalls The list of aggregate calls.
    * @param visitor The visitor used for lowering global variables.

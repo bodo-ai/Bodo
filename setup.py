@@ -261,6 +261,7 @@ ext_metadata["sources"] += [
     "bodo/libs/_dict_builder.cpp",
     "bodo/libs/_table_builder.cpp",
     "bodo/libs/_chunked_table_builder.cpp",
+    "bodo/libs/_listagg.cpp",
     "bodo/libs/_operator_pool.cpp",
     "bodo/libs/_stream_dict_encoding.cpp",
 ]
@@ -307,6 +308,7 @@ ext_metadata["depends"] += [
     "bodo/libs/simd-block-fixed-fpp.h",
     "bodo/libs/_dict_builder.h",
     "bodo/libs/_table_builder.h",
+    "bodo/libs/_listagg.h",
     "bodo/libs/_chunked_table_builder.h",
     "bodo/libs/_operator_pool.h",
 ]

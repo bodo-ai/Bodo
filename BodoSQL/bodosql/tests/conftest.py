@@ -2,6 +2,7 @@ import datetime
 import functools
 import hashlib
 import os
+import string
 import sys
 
 import numpy as np
@@ -1888,3 +1889,28 @@ def timeadd_arguments(request, timeadd_dataframe):
         }
     )
     return request.param, answer
+
+
+@pytest.fixture()
+def listagg_data():
+    """When doing listagg without any grouping, the order is completely random.
+    Therefore, to avoid non-deterministic expected output,
+    we include several columns for which the
+    value is always the same per group.
+    """
+    return {
+        "table1": pd.DataFrame(
+            {
+                "key_col": [1] * 6 + [2] * 6 + [3] * 6,
+                "group_constant_str_col": ["a"] * 6 + ["œ"] * 6 + ["e"] * 6,
+                "group_constant_str_col2": ["į"] * 6 + ["ë"] * 6 + ["₠"] * 6,
+                "non_constant_str_col": list(string.ascii_uppercase[:6]) * 3,
+                "order_col_1": [None, 1, None, 2, None, 3] * 3,
+                "order_col_2": [1, None, 2, None, 3, None] * 3,
+                "order_col_3": np.arange(18),
+                # Group 1 will pass the HAVING check, group 2 will not
+                # Group 3 will pass
+                "having_len_str": [""] * 6 + ["aaaa"] * 6 + ["a"] * 6,
+            }
+        )
+    }
