@@ -516,19 +516,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable iterVar = genIterVar();
     generatedCode.startStreamingPipelineFrame(exitCond, iterVar);
     StreamingPipelineFrame streamingInfo = generatedCode.getCurrentStreamingPipeline();
-    // Initialize the iteration.
-    Variable iteratorNumber = genGenericTempVar();
-    Op.Assign assn = new Op.Assign(iteratorNumber, new Expr.IntegerLiteral(0));
-    streamingInfo.addInitialization(assn);
 
     Variable outputDfVar = genDfVar();
     Expr sliceStart =
-        new Expr.Binary(
-            "*", iteratorNumber, new Expr.IntegerLiteral(streamingOptions.getChunkSize()));
+        new Expr.Binary("*", iterVar, new Expr.IntegerLiteral(streamingOptions.getChunkSize()));
     Expr sliceEnd =
         new Expr.Binary(
             "*",
-            new Expr.Binary("+", iteratorNumber, new Expr.IntegerLiteral(1)),
+            new Expr.Binary("+", iterVar, new Expr.IntegerLiteral(1)),
             new Expr.IntegerLiteral(streamingOptions.getChunkSize()));
 
     Expr slicedDfExpr = new Expr.DataFrameSlice(nonStreamingInput, sliceStart, sliceEnd);
@@ -542,10 +537,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Check if we're at the end
     generatedCode.add(new Op.Assign(exitCond, done));
-    // Increment the iterator variable
-    generatedCode.add(
-        new Op.Assign(
-            iteratorNumber, new Expr.Binary("+", iteratorNumber, new Expr.IntegerLiteral(1))));
 
     this.varGenStack.push(outputDfVar);
   }
