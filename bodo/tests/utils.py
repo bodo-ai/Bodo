@@ -158,7 +158,7 @@ def check_func(
     check_categorical=False,
     atol: float = 1e-08,
     rtol: float = 1e-05,
-    use_table_format=None,
+    use_table_format=True,
     use_dict_encoded_strings=None,
     convert_to_nullable_float=True,
 ):
