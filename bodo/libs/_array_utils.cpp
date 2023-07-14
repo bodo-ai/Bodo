@@ -545,7 +545,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             out_arr =
                 create_dict_string_array(in_arr->child_arrays[0], out_indices,
                                          in_arr->has_global_dictionary,
-                                         in_arr->has_deduped_local_dictionary,
+                                         in_arr->has_unique_local_dictionary,
                                          in_arr->has_sorted_dictionary);
             break;
         }
@@ -852,7 +852,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         }
         out_arr = create_dict_string_array(
             arr1->child_arrays[0], out_indices, arr1->has_global_dictionary,
-            arr1->has_deduped_local_dictionary, arr1->has_sorted_dictionary);
+            arr1->has_unique_local_dictionary, arr1->has_sorted_dictionary);
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // In the case of NULLABLE array, we do a single loop for

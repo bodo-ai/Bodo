@@ -118,7 +118,7 @@ class DictionaryArrayModel(models.StructModel):
             # flag to indicate whether the dictionary has unique values on this rank.
             # This is used to support optimized implementations where decisions can be
             # made just based on indices.
-            ("has_deduped_local_dictionary", types.bool_),
+            ("has_unique_local_dictionary", types.bool_),
             # Dictionary id that helps identify identical equivalent dictionaries quickly.
             # This is unique inside a rank but not globally.
             ("dict_id", types.int64),
@@ -132,7 +132,7 @@ make_attribute_wrapper(
     DictionaryArrayType, "has_global_dictionary", "_has_global_dictionary"
 )
 make_attribute_wrapper(
-    DictionaryArrayType, "has_deduped_local_dictionary", "_has_deduped_local_dictionary"
+    DictionaryArrayType, "has_unique_local_dictionary", "_has_unique_local_dictionary"
 )
 make_attribute_wrapper(DictionaryArrayType, "dict_id", "_dict_id")
 
@@ -158,7 +158,7 @@ def init_dict_arr(
         dict_arr.data = data
         dict_arr.indices = indices
         dict_arr.has_global_dictionary = glob_dict
-        dict_arr.has_deduped_local_dictionary = unique_dict
+        dict_arr.has_unique_local_dictionary = unique_dict
         if generate_id:
             # Fetch the length of the data.
             # TODO: Is this too much compilation?
@@ -283,7 +283,7 @@ def unbox_dict_arr(typ, val, c):
     # assume dictionaries are not the same across all ranks to be conservative
     dict_arr.has_global_dictionary = c.context.get_constant(types.bool_, False)
     # assume dictionaries are not unique to be conservative
-    dict_arr.has_deduped_local_dictionary = c.context.get_constant(types.bool_, False)
+    dict_arr.has_unique_local_dictionary = c.context.get_constant(types.bool_, False)
     # Fetch the length of the dictionary.
     nitems_obj = c.pyapi.call_method(np_str_arr_obj, "__len__", [])
     nitems = c.unbox(types.int64, nitems_obj).value
@@ -409,7 +409,7 @@ def overload_dict_arr_copy(A):
             A._data.copy(),
             A._indices.copy(),
             A._has_global_dictionary,
-            A._has_deduped_local_dictionary,
+            A._has_unique_local_dictionary,
             A._dict_id,
         )
 
@@ -448,7 +448,7 @@ def lower_constant_dict_arr(context, builder, typ, pyval):
     )
 
     has_global_dictionary = context.get_constant(types.bool_, False)
-    has_deduped_local_dictionary = context.get_constant(types.bool_, False)
+    has_unique_local_dictionary = context.get_constant(types.bool_, False)
     # TODO(njriasan): FIXME. We cannot call the C++ function because it doesn't
     # get registered as a global function. There is probably a way to do this
     # with cgutils.global_constant, but that could mess up the id's properties.
@@ -460,7 +460,7 @@ def lower_constant_dict_arr(context, builder, typ, pyval):
             data_arr,
             indices_arr,
             has_global_dictionary,
-            has_deduped_local_dictionary,
+            has_unique_local_dictionary,
             dict_id,
         ]
     )
@@ -489,7 +489,7 @@ def dict_arr_getitem(A, ind):
         A._data,
         A._indices[ind],
         A._has_global_dictionary,
-        A._has_deduped_local_dictionary,
+        A._has_unique_local_dictionary,
         A._dict_id,
     )  # pragma: no cover
 
@@ -580,7 +580,7 @@ def find_dict_ind_non_unique(arr, val):  # pragma: no cover
 def dict_arr_eq(arr, val):  # pragma: no cover
     """implements equality comparison between a dictionary array and a scalar value"""
     n = len(arr)
-    if arr._has_deduped_local_dictionary:
+    if arr._has_unique_local_dictionary:
         dict_ind = find_dict_ind_unique(arr, val)
         if dict_ind == -1:
             # TODO: Add an API for just copying the null bitmap?
@@ -616,7 +616,7 @@ def dict_arr_eq(arr, val):  # pragma: no cover
 def dict_arr_ne(arr, val):  # pragma: no cover
     """implements inequality comparison between a dictionary array and a scalar value"""
     n = len(arr)
-    if arr._has_deduped_local_dictionary:
+    if arr._has_unique_local_dictionary:
         # In bodo, if we have a global dictionary, then we know that
         # the values in the dictionary are unique.
         dict_ind = find_dict_ind_unique(arr, val)
@@ -838,7 +838,7 @@ def str_replace(arr, pat, repl, flags, regex):  # pragma: no cover
             out_str_arr[i] = data_arr[i].replace(pat, repl)
 
     # NOTE: this operation may introduce non-unique values in the dictionary. Therefore,
-    # We have to set _has_deduped_local_dictionary to false
+    # We have to set _has_unique_local_dictionary to false
     return init_dict_arr(
         out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False, None
     )
@@ -1041,7 +1041,7 @@ def create_simple_str2str_methods(func_name, func_args, can_create_non_unique):
     if can_create_non_unique:
         func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False, None)\n"
     else:
-        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary, arr._has_deduped_local_dictionary, None)\n"
+        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary, arr._has_unique_local_dictionary, None)\n"
 
     loc_vars = {}
     exec(
@@ -1293,7 +1293,7 @@ def str_slice(arr, start, stop, step):  # pragma: no cover
         out_str_arr[i] = data_arr[i][start:stop:step]
 
     # Slice can result in duplicate values in the data array, so we have to set
-    # _has_deduped_local_dictionary to False in the output
+    # _has_unique_local_dictionary to False in the output
     return init_dict_arr(
         out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False, None
     )
@@ -1344,12 +1344,12 @@ def str_repeat_int(arr, repeats):  # pragma: no cover
             continue
         out_str_arr[i] = data_arr[i] * repeats
 
-    # NOTE: _has_deduped_local_dictionary must be false in the case that repeats is 0, as we would generate copies in the data array
+    # NOTE: _has_unique_local_dictionary must be false in the case that repeats is 0, as we would generate copies in the data array
     return init_dict_arr(
         out_str_arr,
         arr._indices.copy(),
         arr._has_global_dictionary,
-        arr._has_deduped_local_dictionary and repeats != 0,
+        arr._has_unique_local_dictionary and repeats != 0,
         None,
     )
 
@@ -1443,7 +1443,7 @@ def str_extract(arr, pat, flags, n_cols):  # pragma: no cover
 
     out_arr_list = [
         # Note: extract can return duplicate values, so we have to
-        # set _has_deduped_local_dictionary=False
+        # set _has_unique_local_dictionary=False
         init_dict_arr(
             out_dict_arr_list[i],
             out_indices_arr.copy(),

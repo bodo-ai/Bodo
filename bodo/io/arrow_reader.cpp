@@ -562,7 +562,7 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         if (length == 0) {
             this->out_array = alloc_dict_string_array(
                 0, 0, 0, /*has_global_dictionary=*/false,
-                /*has_deduped_local_dictionary=*/false);
+                /*has_unique_local_dictionary=*/false);
             return this->out_array;
         }
 
@@ -683,7 +683,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         if (length == 0) {
             this->out_array = alloc_dict_string_array(
                 0, 0, 0, /*has_global_dictionary=*/false,
-                /*has_deduped_local_dictionary=*/false);
+                /*has_unique_local_dictionary=*/false);
             return this->out_array;
         }
         std::shared_ptr<array_info> dict_arr =
@@ -702,7 +702,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         }
         out_offsets[total_distinct_strings] =
             static_cast<offset_t>(total_distinct_chars);
-        // We set _has_deduped_local_dictionary=true since we constructed the
+        // We set _has_unique_local_dictionary=true since we constructed the
         // dictionary ourselves and made sure not to put nulls in the
         // dictionary.
         out_array =

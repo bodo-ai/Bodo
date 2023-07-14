@@ -70,7 +70,7 @@ ll.add_symbol("string_array_to_info", array_ext.string_array_to_info)
 ll.add_symbol("dict_str_array_to_info", array_ext.dict_str_array_to_info)
 ll.add_symbol("get_has_global_dictionary", array_ext.get_has_global_dictionary)
 ll.add_symbol(
-    "get_has_deduped_local_dictionary", array_ext.get_has_deduped_local_dictionary
+    "get_has_unique_local_dictionary", array_ext.get_has_unique_local_dictionary
 )
 ll.add_symbol("get_dict_id", array_ext.get_dict_id)
 ll.add_symbol("numpy_array_to_info", array_ext.numpy_array_to_info)
@@ -359,7 +359,7 @@ def array_to_info_codegen(context, builder, sig, args):
                 lir.IntType(8).as_pointer(),  # string_array_info
                 lir.IntType(8).as_pointer(),  # indices_arr_info
                 lir.IntType(32),  # has_global_dictionary flag
-                lir.IntType(32),  # has_deduped_local_dictionary flag
+                lir.IntType(32),  # has_unique_local_dictionary flag
                 lir.IntType(64),  # dict_id
             ],
         )
@@ -369,8 +369,8 @@ def array_to_info_codegen(context, builder, sig, args):
 
         # cast boolean to int32 to avoid potential bool data model mismatch
         has_global_dictionary = builder.zext(arr.has_global_dictionary, lir.IntType(32))
-        has_deduped_local_dictionary = builder.zext(
-            arr.has_deduped_local_dictionary, lir.IntType(32)
+        has_unique_local_dictionary = builder.zext(
+            arr.has_unique_local_dictionary, lir.IntType(32)
         )
         return builder.call(
             fn_tp,
@@ -378,7 +378,7 @@ def array_to_info_codegen(context, builder, sig, args):
                 str_arr_info,
                 indices_arr_info,
                 has_global_dictionary,
-                has_deduped_local_dictionary,
+                has_unique_local_dictionary,
                 arr.dict_id,
             ],
         )
@@ -954,9 +954,9 @@ def info_to_array_codegen(context, builder, sig, args):
         )
 
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="get_has_deduped_local_dictionary"
+            builder.module, fnty, name="get_has_unique_local_dictionary"
         )
-        has_deduped_local_dictionary = builder.call(
+        has_unique_local_dictionary = builder.call(
             fn_tp,
             [
                 in_info,
@@ -964,8 +964,8 @@ def info_to_array_codegen(context, builder, sig, args):
         )
 
         # cast int32 to bool
-        dict_array.has_deduped_local_dictionary = builder.trunc(
-            has_deduped_local_dictionary, cgutils.bool_t
+        dict_array.has_unique_local_dictionary = builder.trunc(
+            has_unique_local_dictionary, cgutils.bool_t
         )
 
         fnty = lir.FunctionType(

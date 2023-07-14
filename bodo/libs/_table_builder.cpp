@@ -220,7 +220,7 @@ void ArrayBuildBuffer::Reset() {
             // Reset the flags:
             this->data_array->has_global_dictionary =
                 false;  // by default, dictionary builders are not global.
-            this->data_array->has_deduped_local_dictionary =
+            this->data_array->has_unique_local_dictionary =
                 true;  // the dictionary builder guarantees deduplication by
                        // design.
             this->data_array->has_sorted_dictionary =

@@ -438,7 +438,7 @@ inline void SetBitTo(std::vector<uint8_t, Alloc>& V, int64_t i,
  *     the main info share a bitmap.
  * --- has_global_dictionary is true if the dictionary has the same
  *     values in the same order for all ranks.
- * --- has_deduped_local_dictionary is true if a dictionary doesn't have
+ * --- has_unique_local_dictionary is true if a dictionary doesn't have
  *     any duplicates on the current rank. This may be false if the values
  *     are unique but we couldn't safely determine this. There are no false
  *     positives.
@@ -469,9 +469,9 @@ struct array_info {
     // array itself because dictionary builders just work with the string array
     // and we need data to be consistent.
     int64_t array_id;
-    bool has_global_dictionary;         // for dict-encoded arrays
-    bool has_deduped_local_dictionary;  // for dict-encoded arrays
-    bool has_sorted_dictionary;         // for dict-encoded arrays
+    bool has_global_dictionary;        // for dict-encoded arrays
+    bool has_unique_local_dictionary;  // for dict-encoded arrays
+    bool has_sorted_dictionary;        // for dict-encoded arrays
 
     // Starting point into the physical data buffer (in bytes, not logical
     // values) for NUMPY, NULLABLE_INT_BOOL, CATEGORICAL arrays. This is needed
@@ -487,7 +487,7 @@ struct array_info {
                int32_t _precision = 0, int32_t _scale = 0,
                int64_t _num_categories = 0, int64_t _array_id = -1,
                bool _has_global_dictionary = false,
-               bool _has_deduped_local_dictionary = false,
+               bool _has_unique_local_dictionary = false,
                bool _has_sorted_dictionary = false, int64_t _offset = 0,
                std::vector<std::string> _field_names = {})
         : arr_type(_arr_type),
@@ -498,7 +498,7 @@ struct array_info {
           num_categories(_num_categories),
           array_id(_array_id),
           has_global_dictionary(_has_global_dictionary),
-          has_deduped_local_dictionary(_has_deduped_local_dictionary),
+          has_unique_local_dictionary(_has_unique_local_dictionary),
           has_sorted_dictionary(_has_sorted_dictionary),
           offset(_offset) {
         this->buffers = std::move(_buffers);
@@ -872,7 +872,7 @@ std::unique_ptr<array_info> alloc_list_string_array(
 
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
-    bool has_global_dictionary, bool has_deduped_local_dictionary,
+    bool has_global_dictionary, bool has_unique_local_dictionary,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -917,7 +917,7 @@ std::unique_ptr<array_info> create_list_string_array(
  * @param dict_arr: the underlying data array
  * @param indices_arr: the underlying indices array
  * @param has_global_dictionary: Is the dict_arr global?
- * @param has_deduped_local_dictionary Can dict_arr contain
+ * @param has_unique_local_dictionary Can dict_arr contain
  * duplicates on this rank?
  * @param has_sorted_dictionary Is dict_arr sorted on this rank?
  * @return std::shared_ptr<array_info> The dictionary array.
@@ -925,7 +925,7 @@ std::unique_ptr<array_info> create_list_string_array(
 std::unique_ptr<array_info> create_dict_string_array(
     std::shared_ptr<array_info> dict_arr,
     std::shared_ptr<array_info> indices_arr, bool has_global_dictionary = false,
-    bool has_deduped_local_dictionary = false,
+    bool has_unique_local_dictionary = false,
     bool has_sorted_dictionary = false);
 
 /* The "get-value" functionality for array_info.

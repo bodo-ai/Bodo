@@ -3052,7 +3052,7 @@ def repeat_kernel_overload(A, repeats):
                     data_arr,
                     out_ind_arr,
                     A._has_global_dictionary,
-                    A._has_deduped_local_dictionary,
+                    A._has_unique_local_dictionary,
                     A._dict_id,
                 )
 
@@ -3095,7 +3095,7 @@ def repeat_kernel_overload(A, repeats):
                 data_arr,
                 out_ind_arr,
                 A._has_global_dictionary,
-                A._has_deduped_local_dictionary,
+                A._has_unique_local_dictionary,
                 A._dict_id,
             )
 

@@ -586,7 +586,7 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
             return;
         }
         if ((array->has_global_dictionary &&
-             array->has_deduped_local_dictionary) ||
+             array->has_unique_local_dictionary) ||
             !is_parallel || !global_dict_needed) {
             // in this case we can just hash the indices since the dictionary is
             // synchronized across ranks or is only needed for a local
@@ -860,7 +860,7 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
             return;
         }
         if ((array->has_global_dictionary &&
-             array->has_deduped_local_dictionary) ||
+             array->has_unique_local_dictionary) ||
             !global_dict_needed || !is_parallel) {
             // in this case we can just hash the indices since the dictionary is
             // synchronized across ranks or is only needed for a local
@@ -1078,7 +1078,7 @@ void coherent_hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
         // unify_dictionaries and is checked above.
         //
         // 3. The dictionary does not contain any duplicate values. This is
-        // enforced by the has_deduped_local_dictionary check in
+        // enforced by the has_unique_local_dictionary check in
         // unify_dictionaries and is updated by
         // make_dictionary_global_and_unique. In particular,
         // make_dictionary_global_and_unique contains a drop duplicates step
@@ -1443,7 +1443,7 @@ void ensure_dicts_can_unify(std::vector<std::shared_ptr<array_info>>& arrs,
             throw std::runtime_error(
                 "unify_dictionaries: array does not have global dictionary");
         }
-        if (!arrs[i]->has_deduped_local_dictionary) {
+        if (!arrs[i]->has_unique_local_dictionary) {
             throw std::runtime_error(
                 "unify_dictionaries: array's dictionary has duplicate "
                 "values");

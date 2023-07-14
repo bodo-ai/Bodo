@@ -685,7 +685,7 @@ void update_local_dictionary_remove_duplicates(
         // global if it was already global.
         dict_array->has_global_dictionary = true;
     }
-    dict_array->has_deduped_local_dictionary = true;
+    dict_array->has_unique_local_dictionary = true;
 
     // -------------
     // calculate mapping from old (local) indices to global ones
@@ -778,7 +778,7 @@ void update_local_dictionary_remove_duplicates(
 
 void drop_duplicates_local_dictionary(std::shared_ptr<array_info> dict_array,
                                       bool sort_dictionary_if_modified) {
-    if (dict_array->has_deduped_local_dictionary) {
+    if (dict_array->has_unique_local_dictionary) {
         return;
     }
     update_local_dictionary_remove_duplicates(std::move(dict_array), false,
@@ -1574,7 +1574,7 @@ std::shared_ptr<table_info> shuffle_table_kernel(
             in_arr = in_table->columns[i];
             std::shared_ptr<array_info> out_dict_arr = create_dict_string_array(
                 in_arr->child_arrays[0], out_arr, in_arr->has_global_dictionary,
-                in_arr->has_deduped_local_dictionary,
+                in_arr->has_unique_local_dictionary,
                 in_arr->has_sorted_dictionary);
             out_arr = out_dict_arr;
         }
@@ -2021,7 +2021,7 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
             in_arr = in_table->columns[i];
             std::shared_ptr<array_info> out_dict_arr = create_dict_string_array(
                 in_arr->child_arrays[0], out_arr, in_arr->has_global_dictionary,
-                in_arr->has_deduped_local_dictionary,
+                in_arr->has_unique_local_dictionary,
                 in_arr->has_sorted_dictionary);
             out_arr = out_dict_arr;
         }
@@ -2602,7 +2602,7 @@ std::shared_ptr<table_info> broadcast_table(
             // Create a DICT out_arr
             out_arr = create_dict_string_array(
                 dict_arr, out_arr, ref_arr->has_global_dictionary,
-                ref_arr->has_deduped_local_dictionary,
+                ref_arr->has_unique_local_dictionary,
                 ref_arr->has_sorted_dictionary);
         }
         in_arr.reset();
@@ -3295,7 +3295,7 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                 out_arr = create_dict_string_array(
                     in_arr->child_arrays[0], out_arr,
                     in_arr->has_global_dictionary,
-                    in_arr->has_deduped_local_dictionary,
+                    in_arr->has_unique_local_dictionary,
                     in_arr->has_sorted_dictionary);
             }  // else out_arr is already NULL, so doesn't need to be
                // handled

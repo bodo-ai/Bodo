@@ -3944,7 +3944,7 @@ def to_parquet_overload(
     # Arrow doesn't support writing DictionaryArrays with nulls in the dictionary.
     # In most cases, we shouldn't end up with nulls in the dictionary, but it might
     # still happen in some array kernels.
-    # `has_deduped_local_dictionary` means there's no nulls in the dictionary.
+    # `has_unique_local_dictionary` means there's no nulls in the dictionary.
     # It might be false even when there aren't any nulls, but even in those cases,
     # deduplicating locally shouldn't be very expensive.
     # TODO [BE-4383] Handle dict encoded array deduplication for runtime columns case

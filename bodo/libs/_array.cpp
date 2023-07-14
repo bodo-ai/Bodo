@@ -95,7 +95,7 @@ array_info* string_array_to_info(uint64_t n_items, NRT_MemInfo* data,
 
 array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
                                    int32_t has_global_dictionary,
-                                   int32_t has_deduped_local_dictionary,
+                                   int32_t has_unique_local_dictionary,
                                    int64_t dict_id) {
     // Update the id for the string array
     // TODO(njriasan): Should we move this to string_array_to_info?
@@ -109,7 +109,7 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
                           {std::shared_ptr<array_info>(str_arr),
                            std::shared_ptr<array_info>(indices_arr)},
                           0, 0, 0, -1, bool(has_global_dictionary),
-                          bool(has_deduped_local_dictionary), false);
+                          bool(has_unique_local_dictionary), false);
 }
 
 // Raw pointer since called from Python
@@ -118,8 +118,8 @@ int32_t get_has_global_dictionary(array_info* dict_arr) {
 }
 
 // Raw pointer since called from Python
-int32_t get_has_deduped_local_dictionary(array_info* dict_arr) {
-    return int32_t(dict_arr->has_deduped_local_dictionary);
+int32_t get_has_unique_local_dictionary(array_info* dict_arr) {
+    return int32_t(dict_arr->has_unique_local_dictionary);
 }
 
 // Raw pointer since called from Python
@@ -1450,7 +1450,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     // Not covered by error handler
     SetAttrStringFromVoidPtr(m, dict_str_array_to_info);
     SetAttrStringFromVoidPtr(m, get_has_global_dictionary);
-    SetAttrStringFromVoidPtr(m, get_has_deduped_local_dictionary);
+    SetAttrStringFromVoidPtr(m, get_has_unique_local_dictionary);
     SetAttrStringFromVoidPtr(m, get_dict_id);
     // Not covered by error handler
     SetAttrStringFromVoidPtr(m, numpy_array_to_info);

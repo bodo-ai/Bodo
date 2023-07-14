@@ -335,7 +335,7 @@ std::unique_ptr<array_info> alloc_string_array(
 
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
-    bool has_global_dictionary, bool has_deduped_local_dictionary,
+    bool has_global_dictionary, bool has_unique_local_dictionary,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // dictionary
     std::shared_ptr<array_info> dict_data_arr = alloc_string_array(
@@ -349,8 +349,7 @@ std::unique_ptr<array_info> alloc_dict_string_array(
         std::vector<std::shared_ptr<BodoBuffer>>({}),
         std::vector<std::shared_ptr<array_info>>(
             {dict_data_arr, indices_data_arr}),
-        0, 0, 0, -1, has_global_dictionary, has_deduped_local_dictionary,
-        false);
+        0, 0, 0, -1, has_global_dictionary, has_unique_local_dictionary, false);
 }
 
 std::unique_ptr<array_info> create_string_array(
@@ -456,12 +455,12 @@ std::unique_ptr<array_info> create_list_string_array(
 std::unique_ptr<array_info> create_dict_string_array(
     std::shared_ptr<array_info> dict_arr,
     std::shared_ptr<array_info> indices_arr, bool has_global_dictionary,
-    bool has_deduped_local_dictionary, bool has_sorted_dictionary) {
+    bool has_unique_local_dictionary, bool has_sorted_dictionary) {
     std::unique_ptr<array_info> out_col = std::make_unique<array_info>(
         bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
         indices_arr->length, std::vector<std::shared_ptr<BodoBuffer>>({}),
         std::vector<std::shared_ptr<array_info>>({dict_arr, indices_arr}), 0, 0,
-        0, -1, has_global_dictionary, has_deduped_local_dictionary,
+        0, -1, has_global_dictionary, has_unique_local_dictionary,
         has_sorted_dictionary);
     return out_col;
 }
@@ -728,7 +727,7 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr) {
         std::shared_ptr<array_info> indices = copy_array(earr->child_arrays[1]);
         farr = create_dict_string_array(
             dictionary, indices, earr->has_global_dictionary,
-            earr->has_deduped_local_dictionary, earr->has_sorted_dictionary);
+            earr->has_unique_local_dictionary, earr->has_sorted_dictionary);
     } else {
         int64_t array_id = -1;
         if (earr->arr_type == bodo_array_type::STRING) {
