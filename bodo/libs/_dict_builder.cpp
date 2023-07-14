@@ -18,6 +18,13 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
     bool not_empty_builder = this->dict_buff->data_array->array_id != 0;
     bool empty_arr = batch_dict->array_id == 0;
     if (dicts_match && (not_empty_builder || empty_arr)) {
+        // Note: dict_buff->data_array is always unique.
+        // Since the dictionaries match, we can set
+        // has has_unique_local_dictionary = True for the input.
+        // This is always safe because either empty_arr = True (and
+        // 0 element dictionaries are unique) or we checked unique
+        // in a previous UnifyDictionaryArray call.
+        in_arr->has_unique_local_dictionary = true;
         // If the dictionaries already match and we don't need
         // to update either dictionary, we can just return without
         // transposing. Otherwise if we need to update the
@@ -75,7 +82,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
             // simply return the input without remapping.
             this->dict_buff->data_array->array_id = batch_dict->array_id;
             // We now know the dictionary is unique
-            in_arr->has_deduped_local_dictionary = true;
+            in_arr->has_unique_local_dictionary = true;
             return in_arr;
         } else if (found_insert) {
             // Update the dict id if there was any change to the dictionary.
@@ -107,7 +114,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
     }
     return create_dict_string_array(this->dict_buff->data_array,
                                     out_indices_arr, false,
-                                    /*_has_deduped_local_dictionary=*/true);
+                                    /*_has_unique_local_dictionary=*/true);
 }
 
 std::shared_ptr<bodo::vector<uint32_t>>

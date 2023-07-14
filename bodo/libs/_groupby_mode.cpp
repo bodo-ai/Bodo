@@ -180,7 +180,7 @@ void mode_operation_strings(std::shared_ptr<array_info> arr,
     // from the mode computation
     std::shared_ptr<array_info> new_out_arr = create_dict_string_array(
         arr->child_arrays[0], out_indices, arr->has_global_dictionary,
-        arr->has_deduped_local_dictionary, arr->has_sorted_dictionary);
+        arr->has_unique_local_dictionary, arr->has_sorted_dictionary);
     *out_arr = std::move(*new_out_arr);
 }
 
