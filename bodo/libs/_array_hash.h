@@ -137,8 +137,8 @@ struct multi_col_key {
                 case bodo_array_type::DICT: {
                     // Require the dictionary to always have unique values. If
                     // the data is distributed it must also be global.
-                    if (c1->has_deduped_local_dictionary &&
-                        c2->has_deduped_local_dictionary &&
+                    if (c1->has_unique_local_dictionary &&
+                        c2->has_unique_local_dictionary &&
                         (!is_parallel || c1->has_global_dictionary) &&
                         (!other.is_parallel || c2->has_global_dictionary)) {
                         if (!is_matching_dictionary(c1->child_arrays[0],
@@ -414,7 +414,7 @@ class ElementComparator {
                     "ElementComparator: don't know if arrays have "
                     "unified dictionary.");
             }
-            if (!(arr1_->has_deduped_local_dictionary)) {
+            if (!(arr1_->has_unique_local_dictionary)) {
                 throw std::runtime_error(
                     "ElementComparator: Dictionary is not deduplicated.");
             }

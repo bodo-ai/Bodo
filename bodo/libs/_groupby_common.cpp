@@ -656,7 +656,7 @@ void alloc_init_keys(
             new_key_col = create_dict_string_array(
                 key_col->child_arrays[0], new_key_indices,
                 key_col->has_global_dictionary,
-                key_col->has_deduped_local_dictionary,
+                key_col->has_unique_local_dictionary,
                 key_col->has_sorted_dictionary);
         }
         if (key_col->arr_type == bodo_array_type::STRING) {

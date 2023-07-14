@@ -577,7 +577,7 @@ void pq_write_partitioned_py_entry(
                         // `make_dictionary_global_and_unique` on all dict
                         // encoded arrays, we can be sure that there's no nulls
                         // in the dictionary of the dict-encoded arrays (since
-                        // `has_deduped_local_dictionary` means no nulls in the
+                        // `has_unique_local_dictionary` means no nulls in the
                         // dict)
                         bool isna = !GetBit((uint8_t *)part_col->child_arrays[1]
                                                 ->null_bitmask(),
