@@ -56,6 +56,7 @@ import com.bodosql.calcite.ir.Expr.StringLiteral;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Op.Assign;
+import com.bodosql.calcite.ir.StateVariable;
 import com.bodosql.calcite.ir.StreamingPipelineFrame;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
@@ -255,6 +256,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     return generatedCode.getSymbolTable().genGenericTempVar();
   }
 
+  public StateVariable genStateVar() {
+    return generatedCode.getSymbolTable().genStateVar();
+  }
+
   /**
    * Generate the new temporary variable for step by step pandas codegen.
    *
@@ -395,7 +400,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else if (node instanceof PandasSort) {
       this.visitPandasSort((PandasSort) node);
     } else if (node instanceof PandasAggregate) {
-      this.visitLogicalAggregate((PandasAggregate) node);
+      this.visitPandasAggregate((PandasAggregate) node);
     } else if (node instanceof PandasUnion) {
       this.visitLogicalUnion((PandasUnion) node);
     } else if (node instanceof PandasIntersect) {
@@ -1230,15 +1235,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Visitor for Logical Aggregate, support for Aggregations in SQL such as SUM, COUNT, MIN, MAX.
+   * Visitor for Pandas Aggregate, support for Aggregations in SQL such as SUM, COUNT, MIN, MAX.
    *
-   * @param node LogicalAggregate node to be visited
+   * @param node BatchingProperty node to be visited
    */
-  public void visitLogicalAggregate(PandasAggregate node) {
+  public void visitPandasAggregate(PandasAggregate node) {
     if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
-      visitStreamingLogicalAggregate(node);
+      visitStreamingPandasAggregate(node);
     } else {
-      visitSingleBatchedLogicalAggregate(node);
+      visitSingleBatchedPandasAggregate(node);
     }
   }
 
@@ -1247,7 +1252,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node aggregate node being visited
    */
-  private void visitSingleBatchedLogicalAggregate(PandasAggregate node) {
+  private void visitSingleBatchedPandasAggregate(PandasAggregate node) {
     final List<Integer> groupingVariables = node.getGroupSet().asList();
     final List<ImmutableBitSet> groups = node.getGroupSets();
 
@@ -1398,13 +1403,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node aggregate node being visited
    */
-  private void visitStreamingLogicalAggregate(PandasAggregate node) {
+  private void visitStreamingPandasAggregate(PandasAggregate node) {
     // Visit the input node
     this.visit(node.getInput(), 0, node);
     Variable buildDf = varGenStack.pop();
     // Create the state var.
     // TODO: Add streaming timer support
-    Variable groupbyStateVar = genGenericTempVar();
+    StateVariable groupbyStateVar = genStateVar();
     Variable keyIndices = getStreamingGroupbyKeyIndices(node.getGroupSet(), this);
     Pair<Variable, Variable> offsetAndCols =
         getStreamingGroupbyOffsetAndCols(node.getAggCallList(), this);
@@ -1667,7 +1672,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
     // Create the reader before the loop
     timerInfo.insertStateStartTimer();
-    Variable readerVar = this.genReaderVar();
+    StateVariable readerVar = this.genStateVar();
     currentPipeline.addInitialization(new Op.Assign(readerVar, readCode));
     timerInfo.insertStateEndTimer();
 
@@ -1793,12 +1798,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
             node.loggingTitle(),
             node.nodeDetails(),
             node.getTimerType());
-    Variable joinStateVar = visitStreamingPandasJoinBatch(node, timerInfo);
+    StateVariable joinStateVar = visitStreamingPandasJoinBatch(node, timerInfo);
     visitStreamingPandasJoinProbe(node, joinStateVar, timerInfo);
     timerInfo.terminateTimer();
   }
 
-  private Variable visitStreamingPandasJoinState(PandasJoin node, StreamingRelNodeTimer timerInfo) {
+  private StateVariable visitStreamingPandasJoinState(
+      PandasJoin node, StreamingRelNodeTimer timerInfo) {
     // Extract the Hash Join information
     timerInfo.initializeTimer();
     timerInfo.insertStateStartTimer();
@@ -1827,7 +1833,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Fetch the batch state
     StreamingPipelineFrame batchPipeline = generatedCode.getCurrentStreamingPipeline();
     // Create the state var.
-    Variable joinStateVar = genGenericTempVar();
+    StateVariable joinStateVar = genStateVar();
     Expr.BooleanLiteral isLeftOuter =
         new Expr.BooleanLiteral(node.getJoinType().generatesNullsOnRight());
     Expr.BooleanLiteral isRightOuter =
@@ -1849,11 +1855,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     return joinStateVar;
   }
 
-  private Variable visitStreamingPandasJoinBatch(PandasJoin node, StreamingRelNodeTimer timerInfo) {
+  private StateVariable visitStreamingPandasJoinBatch(
+      PandasJoin node, StreamingRelNodeTimer timerInfo) {
     // Visit the batch side
     this.visit(node.getLeft(), 0, node);
     Variable buildDf = varGenStack.pop();
-    Variable joinStateVar = visitStreamingPandasJoinState(node, timerInfo);
+    StateVariable joinStateVar = visitStreamingPandasJoinState(node, timerInfo);
     timerInfo.insertLoopOperationStartTimer();
     // Fetch the batch state
     StreamingPipelineFrame batchPipeline = generatedCode.getCurrentStreamingPipeline();
@@ -1878,7 +1885,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   private void visitStreamingPandasJoinProbe(
-      PandasJoin node, Variable joinStateVar, StreamingRelNodeTimer timerInfo) {
+      PandasJoin node, StateVariable joinStateVar, StreamingRelNodeTimer timerInfo) {
     // Visit the probe side
     this.visit(node.getRight(), 1, node);
     timerInfo.insertLoopOperationStartTimer();
