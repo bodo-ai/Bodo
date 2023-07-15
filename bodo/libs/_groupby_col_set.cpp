@@ -310,6 +310,19 @@ void BoolXorColSet::eval(const grouping_info& grp_info) {
                        Bodo_FTypes::boolxor_eval);
 }
 
+std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+           std::vector<Bodo_CTypes::CTypeEnum>>
+BoolXorColSet::getUpdateColumnTypes(
+    const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
+    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) {
+    return std::tuple(
+        std::vector<bodo_array_type::arr_type_enum>{
+            bodo_array_type::NULLABLE_INT_BOOL,
+            bodo_array_type::NULLABLE_INT_BOOL},
+        std::vector<Bodo_CTypes::CTypeEnum>{Bodo_CTypes::_BOOL,
+                                            Bodo_CTypes::_BOOL});
+}
+
 // ############################## Var/Std ##############################
 
 VarStdColSet::VarStdColSet(std::shared_ptr<array_info> in_col, int ftype,
@@ -320,6 +333,7 @@ VarStdColSet::~VarStdColSet() {}
 
 void VarStdColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    // If I am not doing a combine, allocate the ouput as well
     if (!this->combine_step) {
         // need to create output column now
         std::shared_ptr<array_info> col =

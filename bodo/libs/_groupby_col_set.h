@@ -351,17 +351,24 @@ class BoolXorColSet : public BasicColSet {
     BoolXorColSet(std::shared_ptr<array_info> in_col, int ftype,
                   bool combine_step, bool use_sql_rules);
 
-    virtual ~BoolXorColSet();
+    ~BoolXorColSet() override;
 
-    virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_update_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
-    virtual void combine(const grouping_info& grp_info,
-                         int64_t init_start_row = 0);
+    void combine(const grouping_info& grp_info,
+                 int64_t init_start_row = 0) override;
 
-    virtual void eval(const grouping_info& grp_info);
+    void eval(const grouping_info& grp_info) override;
+
+    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+               std::vector<Bodo_CTypes::CTypeEnum>>
+    getUpdateColumnTypes(
+        const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
+        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override;
 };
 
 /**
