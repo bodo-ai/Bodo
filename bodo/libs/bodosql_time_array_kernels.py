@@ -7,19 +7,15 @@ import numba
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.libs.bodosql_snowflake_conversion_array_kernels import (
-    convert_snowflake_date_format_str_to_py_format,
-    pd_to_datetime_error_checked,
-)
 from bodo.utils.typing import (
     get_overload_const_bool,
-    raise_bodo_error,
     is_overload_none,
+    raise_bodo_error,
 )
 
 
 @numba.generated_jit(nopython=True)
-def to_time(arr, format_str, _try):
+def to_time(arr, format_str, _try, dict_encoding_state=None, func_id=-1):
     """Handles TIME/TO_TIME/TRY_TO_TIME and forwards
     to the appropriate version of the real implementation"""
 
@@ -30,23 +26,30 @@ def to_time(arr, format_str, _try):
                 "arr",
                 "format_str",
                 "_try",
+                "dict_encoding_state",
+                "func_id",
             ],
             0,
+            default_map={"dict_encoding_state": None, "func_id": -1},
         )
 
-    def impl(arr, format_str, _try):  # pragma: no cover
-        return to_time_util(arr, format_str, _try)
+    def impl(
+        arr, format_str, _try, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return to_time_util(arr, format_str, _try, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def to_time_util(arr, format_str, _try):  # pragma: no cover
+def to_time_util(
+    arr, format_str, _try, dict_encoding_state, func_id
+):  # pragma: no cover
     """Kernel for `TO_TIME`, `TIME`, and `TRY_TO_TIME`"""
 
-    arg_names = ["arr", "format_str", "_try"]
-    arg_types = [arr, format_str, _try]
-    propagate_null = [True, False, False]
+    arg_names = ["arr", "format_str", "_try", "dict_encoding_state", "func_id"]
+    arg_types = [arr, format_str, _try, dict_encoding_state, func_id]
+    propagate_null = [True, False, False, False, False]
 
     _try = get_overload_const_bool(_try)
 
@@ -74,8 +77,17 @@ def to_time_util(arr, format_str, _try):  # pragma: no cover
             "TIME/TO_TIME/TRY_TO_TIME argument must be a string, timestamp, or null"
         )
     out_dtype = bodo.TimeArrayType(9)
-
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @numba.generated_jit(nopython=True)

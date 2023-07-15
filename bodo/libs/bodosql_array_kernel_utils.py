@@ -572,7 +572,9 @@ def gen_vectorized(
     return impl
 
 
-def unopt_argument(func_name, arg_names, i, container_arg=0, container_length=None):
+def unopt_argument(
+    func_name, arg_names, i, container_arg=0, container_length=None, default_map=None
+):
     """Creates an impl that cases on whether or not a certain argument to a function
        is None in order to un-optionalize that argument
 
@@ -586,10 +588,20 @@ def unopt_argument(func_name, arg_names, i, container_arg=0, container_length=No
         a container of this many arguments. Used so we can pass in arbitrary sized
         containers or arguments to handle SQL functions with variadic arguments,
         such as coalesce
+        default_map (Optional[Dict[str, any]]): A map from argument name to default value
+            for the header.
 
     Returns:
         function: the impl that re-calls func_name with arg_names[i] no longer optional
     """
+    # Fill in the default argument.
+    if default_map is None:
+        header_list = arg_names
+    else:
+        header_list = [
+            f"{arg}={default_map[arg]!r}" if arg in default_map else arg
+            for arg in arg_names
+        ]
     if container_length != None:
         # If this path the one of the arguments is a tuple of arrays and the optional
         # value is a member of the tuple. In this path we execute the follow steps.
@@ -629,7 +641,7 @@ def unopt_argument(func_name, arg_names, i, container_arg=0, container_length=No
         total_args2 = [
             arg_names[j] if j != i else args2_str for j in range(len(arg_names))
         ]
-        func_text = f"def impl({', '.join(arg_names)}):\n"
+        func_text = f"def impl({', '.join(header_list)}):\n"
         func_text += f"   if {arg_names[i]}[{container_arg}] is None:\n"
         func_text += f"      return {func_name}({', '.join(total_args1)})\n"
         func_text += f"   else:\n"
@@ -649,7 +661,7 @@ def unopt_argument(func_name, arg_names, i, container_arg=0, container_length=No
             else f"bodo.utils.indexing.unoptional({arg_names[j]})"
             for j in range(len(arg_names))
         ]
-        func_text = f"def impl({', '.join(arg_names)}):\n"
+        func_text = f"def impl({', '.join(header_list)}):\n"
         func_text += f"   if {arg_names[i]} is None:\n"
         func_text += f"      return {func_name}({', '.join(args1)})\n"
         func_text += f"   else:\n"

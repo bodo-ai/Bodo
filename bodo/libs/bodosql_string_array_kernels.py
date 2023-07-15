@@ -28,26 +28,27 @@ def char(arr):
 
 
 @numba.generated_jit(nopython=True)
-def contains(arr, pattern):
+def contains(arr, pattern, dict_encoding_state=None, func_id=-1):
     """Handles cases where CONTAINS receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, pattern]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.contains",
-                ["arr", "pattern"],
+                ["arr", "pattern", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, pattern):  # pragma: no cover
-        return contains_util(arr, pattern)
+    def impl(arr, pattern, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return contains_util(arr, pattern, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def contains_util(arr, pattern):
+def contains_util(arr, pattern, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function CONTAINS which takes in two strings/string columns
     and returns a Boolean in regards to whether or not the second string exists in the first
 
@@ -63,65 +64,84 @@ def contains_util(arr, pattern):
     verify_string_binary_arg(pattern, "CONTAINS", "pattern")
 
     out_dtype = bodo.boolean_array_type
-    arg_names = ["arr", "pattern"]
-    arg_types = [arr, pattern]
-    propagate_null = [True] * 2
+    arg_names = ["arr", "pattern", "dict_encoding_state", "func_id"]
+    arg_types = [arr, pattern, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
     scalar_text = "res[i] = arg1 in arg0\n"
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @numba.generated_jit(nopython=True)
-def editdistance_no_max(s, t):
+def editdistance_no_max(s, t, dict_encoding_state=None, func_id=-1):
     """Handles cases where EDITDISTANCE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [s, t]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.editdistance_no_max",
-                ["s", "t"],
+                ["s", "t", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(s, t):  # pragma: no cover
-        return editdistance_no_max_util(s, t)
+    def impl(s, t, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return editdistance_no_max_util(s, t, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def editdistance_with_max(s, t, maxDistance):
+def editdistance_with_max(s, t, maxDistance, dict_encoding_state=None, func_id=-1):
     """Handles cases where EDITDISTANCE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [s, t, maxDistance]
-    for i in range(3):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.editdistance_with_max",
-                ["s", "t", "maxDistance"],
+                ["s", "t", "maxDistance", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(s, t, maxDistance):  # pragma: no cover
-        return editdistance_with_max_util(s, t, maxDistance)
+    def impl(
+        s, t, maxDistance, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return editdistance_with_max_util(
+            s, t, maxDistance, dict_encoding_state, func_id
+        )
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def endswith(source, suffix):
+def endswith(source, suffix, dict_encoding_state=None, func_id=-1):
     """Handles cases where ENDSWITH receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [source, suffix]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.endswith", ["source", "suffix"], i
+                "bodo.libs.bodosql_array_kernels.endswith",
+                ["source", "suffix", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(source, suffix):  # pragma: no cover
-        return endswith_util(source, suffix)
+    def impl(source, suffix, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return endswith_util(source, suffix, dict_encoding_state, func_id)
 
     return impl
 
@@ -131,8 +151,8 @@ def format(arr, places):
     """Handles cases where FORMAT receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, places]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.format", ["arr", "places"], i
             )
@@ -144,356 +164,417 @@ def format(arr, places):
 
 
 @numba.generated_jit(nopython=True)
-def initcap(arr, delim):
+def initcap(arr, delim, dict_encoding_state=None, func_id=-1):
     """Handles cases where INITCAP receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, delim]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.initcap",
-                ["arr", "delim"],
+                ["arr", "delim", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, delim):  # pragma: no cover
-        return initcap_util(arr, delim)
+    def impl(arr, delim, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return initcap_util(arr, delim, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def insert(source, pos, length, inject):
+def insert(source, pos, length, inject, dict_encoding_state=None, func_id=-1):
     """Handles cases where INSERT receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [source, pos, length, inject]
-    for i in range(4):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.insert",
-                ["source", "pos", "length", "inject"],
+                ["source", "pos", "length", "inject", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(source, pos, length, inject):  # pragma: no cover
-        return insert_util(source, pos, length, inject)
+    def impl(
+        source, pos, length, inject, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return insert_util(source, pos, length, inject, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def instr(arr, target):
+def instr(arr, target, dict_encoding_state=None, func_id=-1):
     """Handles cases where INSTR receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, target]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.instr", ["arr", "target"], i
+                "bodo.libs.bodosql_array_kernels.instr",
+                ["arr", "target", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, target):  # pragma: no cover
-        return instr_util(arr, target)
+    def impl(arr, target, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return instr_util(arr, target, dict_encoding_state, func_id)
 
     return impl
 
 
-def left(arr, n_chars):  # pragma: no cover
+def left(arr, n_chars, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
 @overload(left)
-def overload_left(arr, n_chars):
+def overload_left(arr, n_chars, dict_encoding_state=None, func_id=-1):
     """Handles cases where LEFT receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [arr, n_chars]
-    for i in range(2):
-        if isinstance(args[i], types.optional):
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.left", ["arr", "n_chars"], i
+                "bodo.libs.bodosql_array_kernels.left",
+                ["arr", "n_chars", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, n_chars):  # pragma: no cover
-        return left_util(arr, n_chars)
+    def impl(arr, n_chars, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return left_util(arr, n_chars, dict_encoding_state, func_id)
 
     return impl
 
 
-def lpad(arr, length, padstr):  # pragma: no cover
+def lpad(arr, length, padstr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
 @overload(lpad)
-def overload_lpad(arr, length, padstr):
+def overload_lpad(arr, length, padstr, dict_encoding_state=None, func_id=-1):
     """Handles cases where LPAD receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [arr, length, padstr]
-    for i in range(3):
-        if isinstance(args[i], types.optional):
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.lpad", ["arr", "length", "padstr"], i
+                "bodo.libs.bodosql_array_kernels.lpad",
+                ["arr", "length", "padstr", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, length, padstr):  # pragma: no cover
-        return lpad_util(arr, length, padstr)
+    def impl(
+        arr, length, padstr, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return lpad_util(arr, length, padstr, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def ord_ascii(arr):
+def ord_ascii(arr, dict_encoding_state=None, func_id=-1):
     """Handles cases where ORD/ASCII receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument(
-            "bodo.libs.bodosql_array_kernels.ord_ascii_util", ["arr"], 0
+            "bodo.libs.bodosql_array_kernels.ord_ascii_util",
+            ["arr", "dict_encoding_state", "func_id"],
+            0,
+            default_map={"dict_encoding_state": None, "func_id": -1},
         )
 
-    def impl(arr):  # pragma: no cover
-        return ord_ascii_util(arr)
+    def impl(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return ord_ascii_util(arr, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def position(substr, source, start):
+def position(substr, source, start, dict_encoding_state=None, func_id=-1):
     """Handles cases where POSITION receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [substr, source, start]
-    for i in range(3):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.position",
-                ["substr", "source", "start"],
+                ["substr", "source", "start", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(substr, source, start):  # pragma: no cover
-        return position_util(substr, source, start)
+    def impl(
+        substr, source, start, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return position_util(substr, source, start, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def repeat(arr, repeats):
-    """Handles cases where REPEEAT receives optional arguments and forwards
+def repeat(arr, repeats, dict_encoding_state=None, func_id=-1):
+    """Handles cases where REPEAT receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [arr, repeats]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.repeat", ["arr", "repeats"], i
+                "bodo.libs.bodosql_array_kernels.repeat",
+                ["arr", "repeats", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, repeats):  # pragma: no cover
-        return repeat_util(arr, repeats)
+    def impl(arr, repeats, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return repeat_util(arr, repeats, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def replace(arr, to_replace, replace_with):
+def replace(arr, to_replace, replace_with, dict_encoding_state=None, func_id=-1):
     """Handles cases where REPLACE receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, to_replace, replace_with]
-    for i in range(3):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.replace",
-                ["arr", "to_replace", "replace_with"],
+                ["arr", "to_replace", "replace_with", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, to_replace, replace_with):  # pragma: no cover
-        return replace_util(arr, to_replace, replace_with)
+    def impl(
+        arr, to_replace, replace_with, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return replace_util(arr, to_replace, replace_with, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def reverse(arr):
+def reverse(arr, dict_encoding_state=None, func_id=-1):
     """Handles cases where REVERSE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument(
-            "bodo.libs.bodosql_array_kernels.reverse_util", ["arr"], 0
+            "bodo.libs.bodosql_array_kernels.reverse_util",
+            ["arr", "dict_encoding_state", "func_id"],
+            0,
+            default_map={"dict_encoding_state": None, "func_id": -1},
         )
 
-    def impl(arr):  # pragma: no cover
-        return reverse_util(arr)
+    def impl(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return reverse_util(arr, dict_encoding_state, func_id)
 
     return impl
 
 
-def right(arr, n_chars):  # pragma: no cover
+def right(arr, n_chars, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
 @overload(right)
-def overload_right(arr, n_chars):
+def overload_right(arr, n_chars, dict_encoding_state=None, func_id=-1):
     """Handles cases where RIGHT receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [arr, n_chars]
-    for i in range(2):
-        if isinstance(args[i], types.optional):
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.right", ["arr", "n_chars"], i
+                "bodo.libs.bodosql_array_kernels.right",
+                ["arr", "n_chars", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, n_chars):  # pragma: no cover
-        return right_util(arr, n_chars)
+    def impl(arr, n_chars, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return right_util(arr, n_chars, dict_encoding_state, func_id)
 
     return impl
 
 
-def rpad(arr, length, padstr):  # pragma: no cover
+def rpad(arr, length, padstr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
 @overload(rpad)
-def overload_rpad(arr, length, padstr):
+def overload_rpad(arr, length, padstr, dict_encoding_state=None, func_id=-1):
     """Handles cases where RPAD receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [arr, length, padstr]
-    for i in range(3):
-        if isinstance(args[i], types.optional):
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.rpad", ["arr", "length", "padstr"], i
+                "bodo.libs.bodosql_array_kernels.rpad",
+                ["arr", "length", "padstr", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, length, padstr):  # pragma: no cover
-        return rpad_util(arr, length, padstr)
+    def impl(
+        arr, length, padstr, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return rpad_util(arr, length, padstr, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def rtrimmed_length(arr):
+def rtrimmed_length(arr, dict_encoding_state=None, func_id=-1):
     """Handles cases where RTRIMED_LENGTH receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument(
-            "bodo.libs.bodosql_array_kernels.rtrimmed_length_util", ["arr"], 0
+            "bodo.libs.bodosql_array_kernels.rtrimmed_length_util",
+            ["arr", "dict_encoding_state", "func_id"],
+            0,
+            default_map={"dict_encoding_state": None, "func_id": -1},
         )
 
-    def impl(arr):  # pragma: no cover
-        return rtrimmed_length_util(arr)
+    def impl(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return rtrimmed_length_util(arr, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def space(n_chars):
+def space(n_chars, dict_encoding_state=None, func_id=-1):
     """Handles cases where SPACE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if isinstance(n_chars, types.optional):  # pragma: no cover
         return unopt_argument(
-            "bodo.libs.bodosql_array_kernels.space_util", ["n_chars"], 0
+            "bodo.libs.bodosql_array_kernels.space_util",
+            ["n_chars", "dict_encoding_state", "func_id"],
+            0,
+            default_map={"dict_encoding_state": None, "func_id": -1},
         )
 
-    def impl(n_chars):  # pragma: no cover
-        return space_util(n_chars)
+    def impl(n_chars, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return space_util(n_chars, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def split_part(source, delim, part):
+def split_part(source, delim, part, dict_encoding_state=None, func_id=-1):
     """Handles cases where SPLIT_PART receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [source, delim, part]
-    for i in range(3):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.split_part",
-                ["source", "delim", "part"],
+                ["source", "delim", "part", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(source, delim, part):  # pragma: no cover
-        return split_part_util(source, delim, part)
+    def impl(
+        source, delim, part, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return split_part_util(source, delim, part, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def startswith(source, prefix):
+def startswith(source, prefix, dict_encoding_state=None, func_id=-1):
     """Handles cases where STARTSWITH receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [source, prefix]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.startswith", ["source", "prefix"], i
+                "bodo.libs.bodosql_array_kernels.startswith",
+                ["source", "prefix", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(source, prefix):  # pragma: no cover
-        return startswith_util(source, prefix)
+    def impl(source, prefix, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return startswith_util(source, prefix, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def strcmp(arr0, arr1):
+def strcmp(arr0, arr1, dict_encoding_state=None, func_id=-1):
     """Handles cases where STRCMP receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [arr0, arr1]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.strcmp",
-                ["arr0", "arr1"],
+                ["arr0", "arr1", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr0, arr1):  # pragma: no cover
-        return strcmp_util(arr0, arr1)
+    def impl(arr0, arr1, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return strcmp_util(arr0, arr1, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def strtok(source, delim, part):
+def strtok(source, delim, part, dict_encoding_state=None, func_id=-1):
     """Handles cases where STRTOK receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [source, delim, part]
-    for i in range(3):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.strtok", ["source", "delim", "part"], i
+                "bodo.libs.bodosql_array_kernels.strtok",
+                ["source", "delim", "part", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(source, delim, part):  # pragma: no cover
-        return strtok_util(source, delim, part)
+    def impl(
+        source, delim, part, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return strtok_util(source, delim, part, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def substring(arr, start, length):
+def substring(arr, start, length, dict_encoding_state=None, func_id=-1):
     """Handles cases where SUBSTRING receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, start, length]
-    for i in range(3):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.substring",
-                ["arr", "start", "length"],
+                ["arr", "start", "length", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, start, length):  # pragma: no cover
-        return substring_util(arr, start, length)
+    def impl(
+        arr, start, length, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return substring_util(arr, start, length, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def substring_suffix(arr, start):  # pragma: no cover
+def substring_suffix(
+    arr, start, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
     """Handles cases where SUBSTR/SUBSTRING receives two [optional] arguments only and forwards
     to args appropriate version of the real implementation
 
@@ -505,54 +586,63 @@ def substring_suffix(arr, start):  # pragma: no cover
         string array/scalar: the string/column of extracted substrings
     """
     args = [arr, start]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.substring_suffix",
-                ["arr", "start"],
+                ["arr", "start", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, start):  # pragma: no cover
-        return substring_suffix_util(arr, start)
+    def impl(arr, start, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return substring_suffix_util(arr, start, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def substring_index(arr, delimiter, occurrences):
+def substring_index(arr, delimiter, occurrences, dict_encoding_state=None, func_id=-1):
     """Handles cases where SUBSTRING_INDEX receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, delimiter, occurrences]
-    for i in range(3):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.substring_index",
-                ["arr", "delimiter", "occurrences"],
+                ["arr", "delimiter", "occurrences", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, delimiter, occurrences):  # pragma: no cover
-        return substring_index_util(arr, delimiter, occurrences)
+    def impl(
+        arr, delimiter, occurrences, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return substring_index_util(
+            arr, delimiter, occurrences, dict_encoding_state, func_id
+        )
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def translate(arr, source, target):
+def translate(arr, source, target, dict_encoding_state=None, func_id=-1):
     """Handles cases where TRANSLATE receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, source, target]
-    for i in range(3):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.translate",
-                ["arr", "source", "target"],
+                ["arr", "source", "target", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, source, target):  # pragma: no cover
-        return translate_util(arr, source, target)
+    def impl(
+        arr, source, target, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return translate_util(arr, source, target, dict_encoding_state, func_id)
 
     return impl
 
@@ -588,7 +678,7 @@ def char_util(arr):
 
 
 @numba.generated_jit(nopython=True)
-def initcap_util(arr, delim):
+def initcap_util(arr, delim, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function INITCAP which takes in a source
     string (or column) and a delimeter string (or column) capitalizes the first
     character and every character after the characters in the delimeter string.
@@ -606,9 +696,9 @@ def initcap_util(arr, delim):
     verify_string_arg(arr, "INITCAP", "arr")
     verify_string_arg(delim, "INITCAP", "delim")
 
-    arg_names = ["arr", "delim"]
-    arg_types = [arr, delim]
-    propagate_null = [True] * 2
+    arg_names = ["arr", "delim", "dict_encoding_state", "func_id"]
+    arg_types = [arr, delim, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
     scalar_text = "capitalized = arg0[:1].upper()\n"
     scalar_text += "for j in range(1, len(arg0)):\n"
     scalar_text += "   if arg0[j-1] in arg1:\n"
@@ -619,6 +709,7 @@ def initcap_util(arr, delim):
 
     out_dtype = bodo.string_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -626,11 +717,14 @@ def initcap_util(arr, delim):
         scalar_text,
         out_dtype,
         may_cause_duplicate_dict_array_values=True,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def instr_util(arr, target):
+def instr_util(arr, target, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function INSTR which takes in 2 strings
     (or string columns) and returns the location where the second string
     first occurs inside the first (with 1-indexing), default zero if it is
@@ -649,14 +743,24 @@ def instr_util(arr, target):
     verify_string_arg(arr, "instr", "arr")
     verify_string_arg(target, "instr", "target")
 
-    arg_names = ["arr", "target"]
-    arg_types = [arr, target]
-    propagate_null = [True] * 2
+    arg_names = ["arr", "target", "dict_encoding_state", "func_id"]
+    arg_types = [arr, target, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
     scalar_text = "res[i] = arg0.find(arg1) + 1"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @register_jitable
@@ -692,7 +796,6 @@ def min_edit_distance(s, t):  # pragma: no cover
 
         # Loop over the rest of s to see if it matches with the corresponding letter of t
         for j in range(1, m + 1):
-
             # If these two characters match, then the diagonal entry above them is the MED
             if s[j - 1] == t[i - 1]:
                 arr[row, j] = arr[otherRow, j - 1]
@@ -753,7 +856,6 @@ def min_edit_distance_with_max(s, t, maxDistance):  # pragma: no cover
 
         # Loop over the rest of s to see if it matches with the corresponding letter of t
         for j in range(1, m + 1):
-
             # If these two characters match, then the diagonal entry above them is the MED
             if s[j - 1] == t[i - 1]:
                 arr[row, j] = arr[otherRow, j - 1]
@@ -774,7 +876,7 @@ def min_edit_distance_with_max(s, t, maxDistance):  # pragma: no cover
 
 
 @numba.generated_jit(nopython=True)
-def editdistance_no_max_util(s, t):
+def editdistance_no_max_util(s, t, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function EDITDISTANCE which two strings
     (or columns) and returns the minimum edit distance between them (i.e. the
     smallest number of insertions/deletions/replacements required to make the
@@ -786,26 +888,36 @@ def editdistance_no_max_util(s, t):
         t (string array/series/scalar): the second string(s) being compared
 
     Returns:
-        int series/scalar: the minimum edit distnace between the two strings
+        int series/scalar: the minimum edit distance between the two strings
     """
 
     verify_string_arg(s, "editdistance_no_max", "s")
     verify_string_arg(t, "editdistance_no_max", "t")
 
-    arg_names = ["s", "t"]
-    arg_types = [s, t]
-    propagate_null = [True] * 2
+    arg_names = ["s", "t", "dict_encoding_state", "func_id"]
+    arg_types = [s, t, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
     scalar_text = (
         "res[i] = bodo.libs.bodosql_array_kernels.min_edit_distance(arg0, arg1)"
     )
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @numba.generated_jit(nopython=True)
-def editdistance_with_max_util(s, t, maxDistance):
+def editdistance_with_max_util(s, t, maxDistance, dict_encoding_state, func_id):
     """Same as editdistance_no_max_util, except it supports the version with
     the third argument for the maximum distance to search before giving up.
 
@@ -816,7 +928,7 @@ def editdistance_with_max_util(s, t, maxDistance):
         maxDistance (int array/series/scalar): the distance(s) to search before giving up
 
     Returns:
-        int series/scalar: the minimum edit distnace between the two strings.
+        int series/scalar: the minimum edit distance between the two strings.
         if it is greater than maxDistance, then maxDistance is returned. If
         maxDistance is negative, 0 is returned.
     """
@@ -825,18 +937,28 @@ def editdistance_with_max_util(s, t, maxDistance):
     verify_string_arg(t, "editdistance_no_max", "t")
     verify_int_arg(maxDistance, "editdistance_no_max", "t")
 
-    arg_names = ["s", "t", "maxDistance"]
-    arg_types = [s, t, maxDistance]
-    propagate_null = [True] * 3
+    arg_names = ["s", "t", "maxDistance", "dict_encoding_state", "func_id"]
+    arg_types = [s, t, maxDistance, dict_encoding_state, func_id]
+    propagate_null = [True] * 3 + [False] * 2
     scalar_text = "res[i] = bodo.libs.bodosql_array_kernels.min_edit_distance_with_max(arg0, arg1, arg2)"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @numba.generated_jit(nopython=True)
-def endswith_util(source, suffix):
+def endswith_util(source, suffix, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function ENDSWITH which takes in 2 strings
     (or string columns) and whether or not the first string ends with the second
 
@@ -846,7 +968,7 @@ def endswith_util(source, suffix):
         suffix (string array/series/scalar): the string(s) being searched for
 
     Returns:
-        booleam series/scalar: whether or not the source contains the suffix
+        boolean series/scalar: whether or not the source contains the suffix
     """
 
     arr_is_string = verify_string_binary_arg(source, "endswith", "source")
@@ -855,19 +977,23 @@ def endswith_util(source, suffix):
     ):  # pragma: no cover
         raise BodoError("String and suffix must both be strings or both binary")
 
-    arg_names = ["source", "suffix"]
-    arg_types = [source, suffix]
-    propagate_null = [True] * 2
+    arg_names = ["source", "suffix", "dict_encoding_state", "func_id"]
+    arg_types = [source, suffix, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
     scalar_text = "res[i] = arg0.endswith(arg1)"
 
     out_dtype = bodo.boolean_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
         propagate_null,
         scalar_text,
         out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
@@ -902,7 +1028,7 @@ def format_util(arr, places):
 
 # TODO: alter to handle negatives the same way Snowflake does ([BE-3719])
 @numba.generated_jit(nopython=True)
-def insert_util(arr, pos, length, inject):
+def insert_util(arr, pos, length, inject, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function INSERT which takes in two strings
        and two integers (either of which can be a column) and inserts the second
        string inside the first, starting at the index of the first integer
@@ -930,9 +1056,9 @@ def insert_util(arr, pos, length, inject):
     ):  # pragma: no cover
         raise BodoError("String and injected value must both be strings or both binary")
 
-    arg_names = ["arr", "pos", "length", "inject"]
-    arg_types = [arr, pos, length, inject]
-    propagate_null = [True] * 4
+    arg_names = ["arr", "pos", "length", "inject", "dict_encoding_state", "func_id"]
+    arg_types = [arr, pos, length, inject, dict_encoding_state, func_id]
+    propagate_null = [True] * 4 + [False] * 2
 
     # Assertions create control flow with raise nodes, so we
     # raise runtime errors in a helper function.
@@ -943,6 +1069,7 @@ def insert_util(arr, pos, length, inject):
 
     out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -950,15 +1077,18 @@ def insert_util(arr, pos, length, inject):
         scalar_text,
         out_dtype,
         may_cause_duplicate_dict_array_values=True,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
-def left_util(arr, n_chars):  # pragma: no cover
+def left_util(arr, n_chars, dict_encoding_state, func_id):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
-def right_util(arr, n_chars):  # pragma: no cover
+def right_util(arr, n_chars, dict_encoding_state, func_id):  # pragma: no cover
     # Dummy function used for overload
     return
 
@@ -976,15 +1106,15 @@ def create_left_right_util_overload(func_name):  # pragma: no cover
         arguments could be arrays/scalars/nulls.
     """
 
-    def overload_left_right_util(arr, n_chars):
+    def overload_left_right_util(arr, n_chars, dict_encoding_state, func_id):
         arr_is_string = verify_string_binary_arg(arr, func_name, "arr")
         verify_int_arg(n_chars, func_name, "n_chars")
 
         empty_char = "''" if arr_is_string else "b''"
 
-        arg_names = ["arr", "n_chars"]
-        arg_types = [arr, n_chars]
-        propagate_null = [True] * 2
+        arg_names = ["arr", "n_chars", "dict_encoding_state", "func_id"]
+        arg_types = [arr, n_chars, dict_encoding_state, func_id]
+        propagate_null = [True] * 2 + [False] * 2
         scalar_text = "if arg1 <= 0:\n"
         scalar_text += f"   res[i] = {empty_char}\n"
         scalar_text += "else:\n"
@@ -995,6 +1125,7 @@ def create_left_right_util_overload(func_name):  # pragma: no cover
 
         out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
 
+        use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
             arg_names,
             arg_types,
@@ -1002,6 +1133,11 @@ def create_left_right_util_overload(func_name):  # pragma: no cover
             scalar_text,
             out_dtype,
             may_cause_duplicate_dict_array_values=True,
+            # Add support for dict encoding caching with streaming.
+            dict_encoding_state_name="dict_encoding_state"
+            if use_dict_caching
+            else None,
+            func_id_name="func_id" if use_dict_caching else None,
         )
 
     return overload_left_right_util
@@ -1017,12 +1153,12 @@ def _install_left_right_overload():
 _install_left_right_overload()
 
 
-def lpad_util(arr, length, padstr):  # pragma: no cover
+def lpad_util(arr, length, padstr, dict_encoding_state, func_id):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
-def rpad_util(arr, length, padstr):  # pragma: no cover
+def rpad_util(arr, length, padstr, dict_encoding_state, func_id):  # pragma: no cover
     # Dummy function used for overload
     return
 
@@ -1040,7 +1176,7 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
         arguments could be arrays/scalars/nulls.
     """
 
-    def overload_lpad_rpad_util(arr, length, pad_string):
+    def overload_lpad_rpad_util(arr, length, pad_string, dict_encoding_state, func_id):
         pad_is_string = verify_string_binary_arg(pad_string, func_name, "pad_string")
         arr_is_string = verify_string_binary_arg(arr, func_name, "arr")
         if arr_is_string != pad_is_string and not (
@@ -1058,9 +1194,9 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
         elif func_name == "RPAD":
             pad_line = f"arg0 + (arg2 * quotient) + arg2[:remainder]"
 
-        arg_names = ["arr", "length", "pad_string"]
-        arg_types = [arr, length, pad_string]
-        propagate_null = [True] * 3
+        arg_names = ["arr", "length", "pad_string", "dict_encoding_state", "func_id"]
+        arg_types = [arr, length, pad_string, dict_encoding_state, func_id]
+        propagate_null = [True] * 3 + [False] * 2
 
         empty_char = "''" if arr_is_string else "b''"
 
@@ -1076,6 +1212,7 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
                     remainder = (arg1 - len(arg0)) % len(arg2)
                     res[i] = {pad_line}"""
 
+        use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
             arg_names,
             arg_types,
@@ -1083,6 +1220,11 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
             scalar_text,
             out_dtype,
             may_cause_duplicate_dict_array_values=True,
+            # Add support for dict encoding caching with streaming.
+            dict_encoding_state_name="dict_encoding_state"
+            if use_dict_caching
+            else None,
+            func_id_name="func_id" if use_dict_caching else None,
         )
 
     return overload_lpad_rpad_util
@@ -1099,7 +1241,7 @@ _install_lpad_rpad_overload()
 
 
 @numba.generated_jit(nopython=True)
-def ord_ascii_util(arr):
+def ord_ascii_util(arr, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function ORD/ASCII which takes in a string
        (or string column) and returns the ord value of the first character
 
@@ -1114,9 +1256,9 @@ def ord_ascii_util(arr):
 
     verify_string_arg(arr, "ORD", "arr")
 
-    arg_names = ["arr"]
-    arg_types = [arr]
-    propagate_null = [True]
+    arg_names = ["arr", "dict_encoding_state", "func_id"]
+    arg_types = [arr, dict_encoding_state, func_id]
+    propagate_null = [True] + [False] * 2
     scalar_text = "if len(arg0) == 0:\n"
     scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
     scalar_text += "else:\n"
@@ -1124,13 +1266,23 @@ def ord_ascii_util(arr):
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @numba.generated_jit(nopython=True)
-def position_util(substr, source, start):
+def position_util(substr, source, start, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function POSITION which takes in two strings
-    (or columns) and returns the locaiton of the first string within the second
+    (or columns) and returns the location of the first string within the second
     (1-indexed), with an optional starting location. If no match is found,
     zero is returned. The actual function can take in 2 or 3 arguments, but
     this kernel assumes that the 3rd argument is always provided.
@@ -1152,9 +1304,9 @@ def position_util(substr, source, start):
         raise BodoError("Substring and source must be both strings or both binary")
     verify_int_arg(start, "POSITION", "start")
 
-    arg_names = ["substr", "source", "start"]
-    arg_types = [substr, source, start]
-    propagate_null = [True] * 3
+    arg_names = ["substr", "source", "start", "dict_encoding_state", "func_id"]
+    arg_types = [substr, source, start, dict_encoding_state, func_id]
+    propagate_null = [True] * 3 + [False] * 2
 
     if is_str:
         scalar_text = "res[i] = arg1.find(arg0, arg2 - 1) + 1"
@@ -1163,11 +1315,21 @@ def position_util(substr, source, start):
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @numba.generated_jit(nopython=True)
-def repeat_util(arr, repeats):
+def repeat_util(arr, repeats, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function REPEAT which takes in a string
        and integer (either of which can be a scalar or vector) and
        concatenates the string to itself repeatedly according to the integer
@@ -1183,9 +1345,9 @@ def repeat_util(arr, repeats):
     verify_string_arg(arr, "REPEAT", "arr")
     verify_int_arg(repeats, "REPEAT", "repeats")
 
-    arg_names = ["arr", "repeats"]
-    arg_types = [arr, repeats]
-    propagate_null = [True] * 2
+    arg_names = ["arr", "repeats", "dict_encoding_state", "func_id"]
+    arg_types = [arr, repeats, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
     scalar_text = "if arg1 <= 0:\n"
     scalar_text += "   res[i] = ''\n"
     scalar_text += "else:\n"
@@ -1193,6 +1355,7 @@ def repeat_util(arr, repeats):
 
     out_dtype = bodo.string_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     # NOTE: we can cause duplicate values in the case that repeats == 0 (everything goes to empty str)
     return gen_vectorized(
         arg_names,
@@ -1201,11 +1364,14 @@ def repeat_util(arr, repeats):
         scalar_text,
         out_dtype,
         may_cause_duplicate_dict_array_values=True,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def replace_util(arr, to_replace, replace_with):
+def replace_util(arr, to_replace, replace_with, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function REVERSE which takes in a base string
        (or string column), a second string to locate in the base string, and a
        third string with which to replace it.
@@ -1217,7 +1383,7 @@ def replace_util(arr, to_replace, replace_with):
         replace_with (string array/series/scalar): the string(s) that replace to_replace
 
     Returns:
-        string array/scalar: the string/column where each ocurrence of
+        string array/scalar: the string/column where each occurrence of
         to_replace has been replaced by replace_with
     """
 
@@ -1225,9 +1391,9 @@ def replace_util(arr, to_replace, replace_with):
     verify_string_arg(to_replace, "REPLACE", "to_replace")
     verify_string_arg(replace_with, "REPLACE", "replace_with")
 
-    arg_names = ["arr", "to_replace", "replace_with"]
-    arg_types = [arr, to_replace, replace_with]
-    propagate_null = [True] * 3
+    arg_names = ["arr", "to_replace", "replace_with", "dict_encoding_state", "func_id"]
+    arg_types = [arr, to_replace, replace_with, dict_encoding_state, func_id]
+    propagate_null = [True] * 3 + [False] * 2
     scalar_text = "if arg1 == '':\n"
     scalar_text += "   res[i] = arg0\n"
     scalar_text += "else:\n"
@@ -1235,6 +1401,7 @@ def replace_util(arr, to_replace, replace_with):
 
     out_dtype = bodo.string_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -1242,11 +1409,14 @@ def replace_util(arr, to_replace, replace_with):
         scalar_text,
         out_dtype,
         may_cause_duplicate_dict_array_values=True,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def reverse_util(arr):
+def reverse_util(arr, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function REVERSE which takes in a string
        (or string column) and reverses it
 
@@ -1260,19 +1430,29 @@ def reverse_util(arr):
 
     arr_is_string = verify_string_binary_arg(arr, "REVERSE", "arr")
 
-    arg_names = ["arr"]
-    arg_types = [arr]
-    propagate_null = [True]
+    arg_names = ["arr", "dict_encoding_state", "func_id"]
+    arg_types = [arr, dict_encoding_state, func_id]
+    propagate_null = [True] + [False] * 2
     scalar_text = "res[i] = arg0[::-1]"
 
     out_dtype = bodo.string_array_type
     out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @numba.generated_jit(nopython=True)
-def rtrimmed_length_util(arr):
+def rtrimmed_length_util(arr, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function RTRIMMED_LENGTH which takes in a
        string (or string column) and returns the number of characters after
        trailing whitespace has been removed
@@ -1289,18 +1469,28 @@ def rtrimmed_length_util(arr):
 
     verify_string_arg(arr, "RTRIMMED_LENGTH", "arr")
 
-    arg_names = ["arr"]
-    arg_types = [arr]
-    propagate_null = [True]
+    arg_names = ["arr", "dict_encoding_state", "func_id"]
+    arg_types = [arr, dict_encoding_state, func_id]
+    propagate_null = [True] + [False] * 2
     scalar_text = "res[i] = len(arg0.rstrip(' '))"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @numba.generated_jit(nopython=True)
-def space_util(n_chars):
+def space_util(n_chars, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function SPACE which takes in an integer
        (or integer column) and returns that many spaces
 
@@ -1314,9 +1504,9 @@ def space_util(n_chars):
 
     verify_int_arg(n_chars, "SPACE", "n_chars")
 
-    arg_names = ["n_chars"]
-    arg_types = [n_chars]
-    propagate_null = [True]
+    arg_names = ["n_chars", "dict_encoding_state", "func_id"]
+    arg_types = [n_chars, dict_encoding_state, func_id]
+    propagate_null = [True] + [False] * 2
     scalar_text = "if arg0 <= 0:\n"
     scalar_text += "   res[i] = ''\n"
     scalar_text += "else:\n"
@@ -1324,15 +1514,25 @@ def space_util(n_chars):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @numba.generated_jit(nopython=True)
-def split_part_util(source, delim, part):
+def split_part_util(source, delim, part, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function SPLIT_PART which takes in a
-    source string (or column), a delimeter string (or column), and a part
+    source string (or column), a delimiter string (or column), and a part
     integer (or column), then splits the source string by occurrences of
-    the entire delimeter string and outputs the value specified by the part.
+    the entire delimiter string and outputs the value specified by the part.
     Part is allowed to be negative.
 
     Has the following edge cases:
@@ -1354,9 +1554,9 @@ def split_part_util(source, delim, part):
     verify_string_arg(delim, "SPLIT_PART", "delim")
     verify_int_arg(part, "SPLIT_PART", "part")
 
-    arg_names = ["source", "delim", "part"]
-    arg_types = [source, delim, part]
-    propagate_null = [True] * 3
+    arg_names = ["source", "delim", "part", "dict_encoding_state", "func_id"]
+    arg_types = [source, delim, part, dict_encoding_state, func_id]
+    propagate_null = [True] * 3 + [False] * 2
     # Splitting by '' is valid in SQL, but not in Python
     scalar_text = "tokens = arg0.split(arg1) if arg1 != '' else [arg0]\n"
     scalar_text += "if abs(arg2) > len(tokens):\n"
@@ -1366,6 +1566,7 @@ def split_part_util(source, delim, part):
 
     out_dtype = bodo.string_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -1373,11 +1574,14 @@ def split_part_util(source, delim, part):
         scalar_text,
         out_dtype,
         may_cause_duplicate_dict_array_values=True,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def startswith_util(source, prefix):
+def startswith_util(source, prefix, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function STARTSWITH which takes in 2 strings
     (or string columns) and whether or not the first string starts with the second
 
@@ -1398,24 +1602,28 @@ def startswith_util(source, prefix):
     ):  # pragma: no cover
         raise BodoError("String and prefix must both be strings or both binary")
 
-    arg_names = ["source", "prefix"]
-    arg_types = [source, prefix]
-    propagate_null = [True] * 2
+    arg_names = ["source", "prefix", "dict_encoding_state", "func_id"]
+    arg_types = [source, prefix, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
     scalar_text = "res[i] = arg0.startswith(arg1)"
 
     out_dtype = bodo.boolean_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
         propagate_null,
         scalar_text,
         out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def strcmp_util(arr0, arr1):
+def strcmp_util(arr0, arr1, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function STRCMP which takes in 2 strings
     (or string columns) and returns 1 if the first is greater than the second,
     -1 if it is less, and 0 if they are equal
@@ -1432,9 +1640,9 @@ def strcmp_util(arr0, arr1):
     verify_string_arg(arr0, "strcmp", "arr0")
     verify_string_arg(arr1, "strcmp", "arr1")
 
-    arg_names = ["arr0", "arr1"]
-    arg_types = [arr0, arr1]
-    propagate_null = [True] * 2
+    arg_names = ["arr0", "arr1", "dict_encoding_state", "func_id"]
+    arg_types = [arr0, arr1, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
     scalar_text = "if arg0 < arg1:\n"
     scalar_text += "   res[i] = -1\n"
     scalar_text += "elif arg0 > arg1:\n"
@@ -1444,17 +1652,21 @@ def strcmp_util(arr0, arr1):
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
         propagate_null,
         scalar_text,
         out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def strtok_util(source, delim, part):
+def strtok_util(source, delim, part, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function STRTOK which works the same
     as SPLIT_PART with the following differences:
 
@@ -1477,9 +1689,9 @@ def strtok_util(source, delim, part):
     verify_string_arg(delim, "STRTOK", "delim")
     verify_int_arg(part, "STRTOK", "part")
 
-    arg_names = ["source", "delim", "part"]
-    arg_types = [source, delim, part]
-    propagate_null = [True] * 3
+    arg_names = ["source", "delim", "part", "dict_encoding_state", "func_id"]
+    arg_types = [source, delim, part, dict_encoding_state, func_id]
+    propagate_null = [True] * 3 + [False] * 2
     scalar_text = "if (arg0 == '' and arg1 == '') or arg2 <= 0:\n"
     scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
     scalar_text += "else:\n"
@@ -1501,6 +1713,7 @@ def strtok_util(source, delim, part):
 
     out_dtype = bodo.string_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -1508,11 +1721,14 @@ def strtok_util(source, delim, part):
         scalar_text,
         out_dtype,
         may_cause_duplicate_dict_array_values=True,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def substring_util(arr, start, length):
+def substring_util(arr, start, length, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function SUBSTRING which takes in a string,
        (or string column), and two integers (or integer columns) and returns
        the string starting from the index of the first integer, with a length
@@ -1534,9 +1750,9 @@ def substring_util(arr, start, length):
 
     out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
 
-    arg_names = ["arr", "start", "length"]
-    arg_types = [arr, start, length]
-    propagate_null = [True] * 3
+    arg_names = ["arr", "start", "length", "dict_encoding_state", "func_id"]
+    arg_types = [arr, start, length, dict_encoding_state, func_id]
+    propagate_null = [True] * 3 + [False] * 2
     scalar_text = "if arg2 <= 0:\n"
     scalar_text += "   res[i] = ''\n" if arr_is_string else "   res[i] = b''\n"
     scalar_text += "elif arg1 < 0 and arg1 + arg2 >= 0:\n"
@@ -1545,6 +1761,7 @@ def substring_util(arr, start, length):
     scalar_text += "   if arg1 > 0: arg1 -= 1\n"
     scalar_text += "   res[i] = arg0[arg1:arg1+arg2]\n"
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -1552,11 +1769,14 @@ def substring_util(arr, start, length):
         scalar_text,
         out_dtype,
         may_cause_duplicate_dict_array_values=True,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def substring_suffix_util(arr, start):
+def substring_suffix_util(arr, start, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function SUBSTR/SUBSTRING which takes in a string,
        (or string column), and one integer (or integer columns) and returns
        the string starting from the index of the first integer.
@@ -1574,12 +1794,13 @@ def substring_suffix_util(arr, start):
 
     out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
 
-    arg_names = ["arr", "start"]
-    arg_types = [arr, start]
-    propagate_null = [True] * 2
+    arg_names = ["arr", "start", "dict_encoding_state", "func_id"]
+    arg_types = [arr, start, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
     scalar_text = "  if arg1 > 0: arg1 -= 1\n"
     scalar_text += "  res[i] = arg0[arg1:]\n"
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -1587,24 +1808,27 @@ def substring_suffix_util(arr, start):
         scalar_text,
         out_dtype,
         may_cause_duplicate_dict_array_values=True,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def substring_index_util(arr, delimiter, occurrences):
+def substring_index_util(arr, delimiter, occurrences, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function SUBSTRING_INDEX which takes in a
        string, (or string column), a delimiter string (or string column) and an
        occurrences integer (or integer column) and returns the prefix of the
-       first string before that number of occurences of the delimiter
+       first string before that number of occurrences of the delimiter
 
 
     Args:
         arr (string array/series/scalar): the strings(s) to be modified
         delimiter (string array/series/scalar): the delimiter(s) to look for
-        occurences (integer array/series/scalar): how many of the delimiter to look for
+        occurrences (integer array/series/scalar): how many of the delimiter to look for
 
     Returns:
-        string array/scalar: the string/column of prefixes before ocurrences
+        string array/scalar: the string/column of prefixes before occurrences
         many of the delimiter string occur
     """
 
@@ -1612,9 +1836,9 @@ def substring_index_util(arr, delimiter, occurrences):
     verify_string_arg(delimiter, "SUBSTRING_INDEX", "delimiter")
     verify_int_arg(occurrences, "SUBSTRING_INDEX", "occurrences")
 
-    arg_names = ["arr", "delimiter", "occurrences"]
-    arg_types = [arr, delimiter, occurrences]
-    propagate_null = [True] * 3
+    arg_names = ["arr", "delimiter", "occurrences", "dict_encoding_state", "func_id"]
+    arg_types = [arr, delimiter, occurrences, dict_encoding_state, func_id]
+    propagate_null = [True] * 3 + [False] * 2
     scalar_text = "if arg1 == '' or arg2 == 0:\n"
     scalar_text += "   res[i] = ''\n"
     scalar_text += "elif arg2 >= 0:\n"
@@ -1624,6 +1848,7 @@ def substring_index_util(arr, delimiter, occurrences):
 
     out_dtype = bodo.string_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -1631,11 +1856,14 @@ def substring_index_util(arr, delimiter, occurrences):
         scalar_text,
         out_dtype,
         may_cause_duplicate_dict_array_values=True,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def translate_util(arr, source, target):
+def translate_util(arr, source, target, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function TRANSLATE which takes in a string
        (or string column) and two alphabet strings (or columns) and replaces
        each character in the source string from the first alphabet with the
@@ -1657,9 +1885,9 @@ def translate_util(arr, source, target):
     verify_string_arg(source, "translate", "source")
     verify_string_arg(target, "translate", "target")
 
-    arg_names = ["arr", "source", "target"]
-    arg_types = [arr, source, target]
-    propagate_null = [True] * 3
+    arg_names = ["arr", "source", "target", "dict_encoding_state", "func_id"]
+    arg_types = [arr, source, target, dict_encoding_state, func_id]
+    propagate_null = [True] * 3 + [False] * 2
     scalar_text = "translated = ''\n"
     scalar_text += "for char in arg0:\n"
     scalar_text += "   index = arg1.find(char)\n"
@@ -1671,6 +1899,7 @@ def translate_util(arr, source, target):
 
     out_dtype = bodo.string_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -1678,74 +1907,76 @@ def translate_util(arr, source, target):
         scalar_text,
         out_dtype,
         may_cause_duplicate_dict_array_values=True,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
-def length(arr):  # pragma: no cover
+def length(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     pass
 
 
-def lower(arr):  # pragma: no cover
+def lower(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     pass
 
 
-def upper(arr):  # pragma: no cover
+def upper(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     pass
 
 
-def trim(source, chars):  # pragma: no cover
+def trim(source, chars, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     pass
 
 
-def ltrim(source, chars):  # pragma: no cover
+def ltrim(source, chars, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     pass
 
 
-def rtrim(source, chars):  # pragma: no cover
+def rtrim(source, chars, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     pass
 
 
-def length_util(arr):  # pragma: no cover
+def length_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
-def lower_util(arr):  # pragma: no cover
+def lower_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
-def upper_util(arr):  # pragma: no cover
+def upper_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
-def trim_util(source, chars):  # pragma: no cover
+def trim_util(source, chars, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
-def ltrim_util(source, chars):  # pragma: no cover
+def ltrim_util(source, chars, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
-def rtrim_util(source, chars):  # pragma: no cover
+def rtrim_util(source, chars, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
 def create_trim_fn_overload(fn_name):
-    def overload_func(source, chars):
-        """Handles cases where this one argument string function recieves optional
+    def overload_func(source, chars, dict_encoding_state=None, func_id=-1):
+        """Handles cases where this one argument string function receives optional
         arguments and forwards to the appropriate version of the real implementation"""
         args = [source, chars]
-        for i in range(2):
-            if isinstance(args[i], types.optional):  # pragma: no cover
+        for i, arg in enumerate(args):
+            if isinstance(arg, types.optional):  # pragma: no cover
                 return unopt_argument(
                     f"bodo.libs.bodosql_array_kernels.{fn_name}",
-                    ["source", "chars"],
+                    ["source", "chars", "dict_encoding_state", "func_id"],
                     i,
+                    default_map={"dict_encoding_state": None, "func_id": -1},
                 )
 
-        func_text = "def impl(source, chars):\n"
-        func_text += (
-            f"  return bodo.libs.bodosql_array_kernels.{fn_name}_util(source, chars)"
-        )
+        func_text = "def impl(source, chars, dict_encoding_state=None, func_id=-1):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.{fn_name}_util(source, chars, dict_encoding_state, func_id)"
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
 
@@ -1767,12 +1998,14 @@ def create_trim_fn_util_overload(fn_name):
         function.
     """
 
-    def overload_trim_fn(source, chars):  # pragma: no cover
+    def overload_trim_fn(
+        source, chars, dict_encoding_state, func_id
+    ):  # pragma: no cover
         verify_string_arg(source, fn_name, "source")
         verify_string_arg(chars, fn_name, "chars")
-        arg_names = ["source", "chars"]
-        arg_types = [source, chars]
-        propagate_null = [True] * 2
+        arg_names = ["source", "chars", "dict_encoding_state", "func_id"]
+        arg_types = [source, chars, dict_encoding_state, func_id]
+        propagate_null = [True] * 2 + [False] * 2
         if fn_name == "ltrim":
             scalar_text = "res[i] = arg0.lstrip(arg1)\n"
         elif fn_name == "rtrim":
@@ -1781,12 +2014,19 @@ def create_trim_fn_util_overload(fn_name):
             scalar_text = "res[i] = arg0.strip(arg1)\n"
 
         out_dtype = bodo.string_array_type
+
+        use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
             arg_names,
             arg_types,
             propagate_null,
             scalar_text,
             out_dtype,
+            # Add support for dict encoding caching with streaming.
+            dict_encoding_state_name="dict_encoding_state"
+            if use_dict_caching
+            else None,
+            func_id_name="func_id" if use_dict_caching else None,
         )
 
     return overload_trim_fn
@@ -1810,18 +2050,19 @@ _install_trim_fn_overloads()
 
 
 def create_one_arg_str_fn_overload(fn_name):
-    def overload_func(arr):
+    def overload_func(arr, dict_encoding_state=None, func_id=-1):
         """Handles cases where this one argument string function receives optional
         arguments and forwards to the appropriate version of the real implementation"""
         if isinstance(arr, types.optional):  # pragma: no cover
             return unopt_argument(
                 f"bodo.libs.bodosql_array_kernels.{fn_name}_util",
-                ["arr"],
+                ["arr", "dict_encoding_state", "func_id"],
                 0,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-        func_text = "def impl(arr):\n"
-        func_text += f"  return bodo.libs.bodosql_array_kernels.{fn_name}_util(arr)"
+        func_text = "def impl(arr, dict_encoding_state=None, func_id=-1):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.{fn_name}_util(arr, dict_encoding_state, func_id)"
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
 
@@ -1843,7 +2084,7 @@ def create_one_arg_str_fn_util_overload(fn_name):
         function.
     """
 
-    def overload_one_arg_str_fn(arr):  # pragma: no cover
+    def overload_one_arg_str_fn(arr, dict_encoding_state, func_id):  # pragma: no cover
         if fn_name == "length":
             # Length also supports binary data.
             verify_string_binary_arg(arr, fn_name, "arr")
@@ -1856,11 +2097,12 @@ def create_one_arg_str_fn_util_overload(fn_name):
             may_cause_duplicate_dict_array_values = True
             fn_call = f"arg0.{fn_name}()"
 
-        arg_names = ["arr"]
-        arg_types = [arr]
-        propagate_null = [True]
+        arg_names = ["arr", "dict_encoding_state", "func_id"]
+        arg_types = [arr, dict_encoding_state, func_id]
+        propagate_null = [True] + [False] * 2
         scalar_text = f"res[i] = {fn_call}"
 
+        use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
             arg_names,
             arg_types,
@@ -1868,6 +2110,11 @@ def create_one_arg_str_fn_util_overload(fn_name):
             scalar_text,
             out_dtype,
             may_cause_duplicate_dict_array_values=may_cause_duplicate_dict_array_values,
+            # Add support for dict encoding caching with streaming.
+            dict_encoding_state_name="dict_encoding_state"
+            if use_dict_caching
+            else None,
+            func_id_name="func_id" if use_dict_caching else None,
         )
 
     return overload_one_arg_str_fn
@@ -1891,26 +2138,27 @@ _install_one_arg_str_fn_overloads()
 
 
 @numba.generated_jit(nopython=True)
-def split(string, separator):  # pragma: no cover
+def split(string, separator, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     """Handles cases where SPLIT receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [string, separator]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.split",
-                ["string", "separator"],
+                ["string", "separator", "dict_encoding_state", "func_id"],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(string, separator):
-        return split_util(string, separator)
+    def impl(string, separator, dict_encoding_state=None, func_id=-1):
+        return split_util(string, separator, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def split_util(string, separator):  # pragma: no cover
+def split_util(string, separator, dict_encoding_state, func_id):  # pragma: no cover
     """A dedicated kernel for the SQL function SPLIT which takes in a
            string, (or string column) and a separator string (or string column) ans
            returns the result strings in arrays
@@ -1925,9 +2173,9 @@ def split_util(string, separator):  # pragma: no cover
 
     verify_string_arg(string, "SPLIT", "string")
     verify_string_arg(separator, "SPLIT", "separator")
-    arg_names = ["string", "separator"]
-    arg_types = [string, separator]
-    propagate_null = [True] * 2
+    arg_names = ["string", "separator", "dict_encoding_state", "func_id"]
+    arg_types = [string, separator, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
     out_dtype = bodo.ArrayItemArrayType(bodo.string_array_type)
     scalar_text = "if arg1 == '':\n"
     scalar_text += "    str_list = [arg0]\n"
@@ -1935,10 +2183,14 @@ def split_util(string, separator):  # pragma: no cover
     scalar_text += "    str_list = arg0.split(arg1)\n"
     scalar_text += "res[i] = bodo.libs.str_arr_ext.str_list_to_array(str_list)"
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
         propagate_null,
         scalar_text,
         out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )

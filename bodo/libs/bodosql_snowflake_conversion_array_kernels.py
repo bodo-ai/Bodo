@@ -17,7 +17,6 @@ from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_bool,
-    get_overload_const_int,
     get_overload_const_str,
     is_literal_type,
     is_overload_constant_bool,
@@ -32,16 +31,20 @@ def make_to_boolean(_try):
     """Generate utility functions to unopt TO_BOOLEAN arguments"""
 
     @numba.generated_jit(nopython=True)
-    def func(arr):
+    def func(arr, dict_encoding_state=None, func_id=-1):
         """Handles cases where TO_BOOLEAN receives optional arguments and forwards
         to the appropriate version of the real implementation"""
         if isinstance(arr, types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.to_boolean", ["arr"], 0
+                "bodo.libs.bodosql_array_kernels.to_boolean",
+                ["arr", "dict_encoding_state", "func_id"],
+                0,
             )
 
-        def impl(arr):  # pragma: no cover
-            return to_boolean_util(arr, numba.literally(_try))
+        def impl(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+            return to_boolean_util(
+                arr, numba.literally(_try), dict_encoding_state, func_id
+            )
 
         return impl
 
@@ -53,7 +56,7 @@ to_boolean = make_to_boolean(False)
 
 
 @numba.generated_jit(nopython=True)
-def to_boolean_util(arr, _try=False):
+def to_boolean_util(arr, _try, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function TO_BOOLEAN which takes in a
     number (or column) and returns True if it is not zero and not null,
     False if it is zero, and NULL otherwise.
@@ -83,9 +86,9 @@ def to_boolean_util(arr, _try=False):
             f"""raise ValueError("invalid value for boolean conversion: {err_msg}")"""
         )
 
-    arg_names = ["arr", "_try"]
-    arg_types = [arr, _try]
-    propagate_null = [True, False]
+    arg_names = ["arr", "_try", "dict_encoding_state", "func_id"]
+    arg_types = [arr, _try, dict_encoding_state, func_id]
+    propagate_null = [True, False, False, False]
 
     prefix_code = None
     if is_string:
@@ -110,6 +113,7 @@ def to_boolean_util(arr, _try=False):
 
     out_dtype = bodo.libs.bool_arr_ext.boolean_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -117,34 +121,45 @@ def to_boolean_util(arr, _try=False):
         scalar_text,
         out_dtype,
         prefix_code=prefix_code,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
-def date(conversionVal, format_str):  # pragma: no cover
+def date(
+    conversionVal, format_str, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
     return
 
 
-def to_date(conversionVal, format_str):  # pragma: no cover
+def to_date(
+    conversionVal, format_str, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
     return
 
 
-def try_to_date(conversionVal, format_str):  # pragma: no cover
+def try_to_date(
+    conversionVal, format_str, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
     return
 
 
-def to_timestamp(conversionVal, format_str, time_zone, scale):  # pragma: no cover
+def date_util(
+    conversionVal, format_str, dict_encoding_state, func_id
+):  # pragma: no cover
     return
 
 
-def date_util(conversionVal, format_str):  # pragma: no cover
+def to_date_util(
+    conversionVal, format_str, dict_encoding_state, func_id
+):  # pragma: no cover
     return
 
 
-def to_date_util(conversionVal, format_str):  # pragma: no cover
-    return
-
-
-def try_to_date_util(conversionVal, format_str):  # pragma: no cover
+def try_to_date_util(
+    conversionVal, format_str, dict_encoding_state, func_id
+):  # pragma: no cover
     return
 
 
@@ -165,7 +180,7 @@ def create_date_cast_util(func, error_on_fail):
     else:
         error_str = "bodo.libs.array_kernels.setna(res, i)"
 
-    def overload_impl(conversionVal, format_str):
+    def overload_impl(conversionVal, format_str, dict_encoding_state, func_id):
         verify_string_arg(format_str, func, "format_str")
 
         # When returning a scalar we return a pd.Timestamp type.
@@ -249,9 +264,9 @@ def create_date_cast_util(func, error_on_fail):
                 f"Internal error: unsupported type passed to to_date_util for argument conversionVal: {conversionVal}"
             )
 
-        arg_names = ["conversionVal", "format_str"]
-        arg_types = [conversionVal, format_str]
-        propagate_null = [True, False]
+        arg_names = ["conversionVal", "format_str", "dict_encoding_state", "func_id"]
+        arg_types = [conversionVal, format_str, dict_encoding_state, func_id]
+        propagate_null = [True, False, False, False]
 
         out_dtype = DatetimeDateArrayType()
 
@@ -261,6 +276,7 @@ def create_date_cast_util(func, error_on_fail):
             "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
             "to_date_auto_error_checked": to_date_auto_error_checked,
         }
+        use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
             arg_names,
             arg_types,
@@ -268,6 +284,11 @@ def create_date_cast_util(func, error_on_fail):
             scalar_text,
             out_dtype,
             extra_globals=extra_globals,
+            # Add support for dict encoding caching with streaming.
+            dict_encoding_state_name="dict_encoding_state"
+            if use_dict_caching
+            else None,
+            func_id_name="func_id" if use_dict_caching else None,
         )
 
     return overload_impl
@@ -278,20 +299,21 @@ def create_date_cast_func(func_name):
     the wrapper function for the corresponding kernel.
     """
 
-    def overload_func(conversionVal, format_str):
+    def overload_func(conversionVal, format_str, dict_encoding_state=None, func_id=-1):
         """Handles cases where func_name receives an optional argument and forwards
         to the appropriate version of the real implementation"""
         args = [conversionVal, format_str]
-        for i in range(len(args)):
-            if isinstance(args[i], types.optional):  # pragma: no cover
+        for i, arg in enumerate(args):
+            if isinstance(arg, types.optional):  # pragma: no cover
                 return unopt_argument(
                     f"bodo.libs.bodosql_array_kernels.{func_name.lower()}_util",
-                    ["conversionVal", "format_str"],
+                    ["conversionVal", "format_str", "dict_encoding_state", "func_id"],
                     i,
+                    default_map={"dict_encoding_state": None, "func_id": -1},
                 )
 
-        func_text = "def impl(conversionVal, format_str):\n"
-        func_text += f"  return bodo.libs.bodosql_array_kernels.{func_name.lower()}_util(conversionVal, format_str)"
+        func_text = "def impl(conversionVal, format_str, dict_encoding_state=None, func_id=-1):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.{func_name.lower()}_util(conversionVal, format_str, dict_encoding_state, func_id)"
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
 
@@ -314,16 +336,26 @@ def _install_date_cast_overloads():
 _install_date_cast_overloads()
 
 
-def try_to_timestamp(conversionVal, format_str, time_zone, scale):  # pragma: no cover
+def to_timestamp(
+    conversionVal, format_str, time_zone, scale, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
     return
 
 
-def to_timestamp_util(conversionVal, format_str, time_zone, scale):  # pragma: no cover
+def try_to_timestamp(
+    conversionVal, format_str, time_zone, scale, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
+    return
+
+
+def to_timestamp_util(
+    conversionVal, format_str, time_zone, scale, dict_encoding_state, func_id
+):  # pragma: no cover
     return
 
 
 def try_to_timestamp_util(
-    conversionVal, format_str, time_zone, scale
+    conversionVal, format_str, time_zone, scale, dict_encoding_state, func_id
 ):  # pragma: no cover
     return
 
@@ -360,7 +392,9 @@ def create_timestamp_cast_util(func, error_on_fail):
     else:
         error_str = "bodo.libs.array_kernels.setna(res, i)"
 
-    def overload_impl(conversionVal, format_str, time_zone, scale):
+    def overload_impl(
+        conversionVal, format_str, time_zone, scale, dict_encoding_state, func_id
+    ):
         verify_string_arg(format_str, func, "format_str")
 
         # The scale must be a constant scalar, per Snowflake
@@ -463,9 +497,23 @@ def create_timestamp_cast_util(func, error_on_fail):
                 f"Internal error: unsupported type passed to to_timestamp_util for argument conversionVal: {conversionVal}"
             )
 
-        arg_names = ["conversionVal", "format_str", "time_zone", "scale"]
-        arg_types = [conversionVal, format_str, time_zone, scale]
-        propagate_null = [True, False, False, False]
+        arg_names = [
+            "conversionVal",
+            "format_str",
+            "time_zone",
+            "scale",
+            "dict_encoding_state",
+            "func_id",
+        ]
+        arg_types = [
+            conversionVal,
+            format_str,
+            time_zone,
+            scale,
+            dict_encoding_state,
+            func_id,
+        ]
+        propagate_null = [True, False, False, False, False, False]
 
         # Determine the output dtype. If a timezone is provided then we have a
         # tz-aware output. Otherwise we output datetime64ns.
@@ -480,6 +528,7 @@ def create_timestamp_cast_util(func, error_on_fail):
             "convert_snowflake_date_format_str_to_py_format": convert_snowflake_date_format_str_to_py_format,
             "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
         }
+        use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
             arg_names,
             arg_types,
@@ -488,26 +537,46 @@ def create_timestamp_cast_util(func, error_on_fail):
             out_dtype,
             prefix_code=prefix_code,
             extra_globals=extra_globals,
+            # Add support for dict encoding caching with streaming.
+            dict_encoding_state_name="dict_encoding_state"
+            if use_dict_caching
+            else None,
+            func_id_name="func_id" if use_dict_caching else None,
         )
 
     return overload_impl
 
 
 def create_timestamp_cast_func(func_name):
-    def overload_func(conversionVal, format_str, time_zone, scale):
+    def overload_func(
+        conversionVal,
+        format_str,
+        time_zone,
+        scale,
+        dict_encoding_state=None,
+        func_id=-1,
+    ):
         """Handles cases where func_name receives an optional argument and forwards
         to the appropriate version of the real implementation"""
         args = [conversionVal, format_str, time_zone, scale]
-        for i in range(len(args)):
-            if isinstance(args[i], types.optional):  # pragma: no cover
+        for i, arg in enumerate(args):
+            if isinstance(arg, types.optional):  # pragma: no cover
                 return unopt_argument(
                     f"bodo.libs.bodosql_array_kernels.{func_name.lower()}_util",
-                    ["conversionVal", "format_str", "time_zone", "scale"],
+                    [
+                        "conversionVal",
+                        "format_str",
+                        "time_zone",
+                        "scale",
+                        "dict_encoding_state",
+                        "func_id",
+                    ],
                     i,
+                    default_map={"dict_encoding_state": None, "func_id": -1},
                 )
 
-        func_text = "def impl(conversionVal, format_str, time_zone, scale):\n"
-        func_text += f"  return bodo.libs.bodosql_array_kernels.{func_name.lower()}_util(conversionVal, format_str, time_zone, scale)"
+        func_text = "def impl(conversionVal, format_str, time_zone, scale, dict_encoding_state=None, func_id=-1):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.{func_name.lower()}_util(conversionVal, format_str, time_zone, scale, dict_encoding_state, func_id)"
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
 
@@ -530,31 +599,37 @@ _install_timestamp_cast_overloads()
 
 
 @numba.generated_jit(nopython=True)
-def to_binary(arr):
+def to_binary(arr, dict_encoding_state=None, func_id=-1):
     """Handles cases where TO_BINARY receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument(
-            "bodo.libs.bodosql_array_kernels.to_binary_util", ["arr"], 0
+            "bodo.libs.bodosql_array_kernels.to_binary_util",
+            ["arr", "dict_encoding_state", "func_id"],
+            0,
+            default_map={"dict_encoding_state": None, "func_id": -1},
         )
 
-    def impl(arr):  # pragma: no cover
-        return to_binary_util(arr)
+    def impl(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return to_binary_util(arr, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def try_to_binary(arr):
+def try_to_binary(arr, dict_encoding_state=None, func_id=-1):
     """Handles cases where TRY_TO_BINARY receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument(
-            "bodo.libs.bodosql_array_kernels.try_to_binary_util", ["arr"], 0
+            "bodo.libs.bodosql_array_kernels.try_to_binary_util",
+            ["arr", "dict_encoding_state", "func_id"],
+            0,
+            default_map={"dict_encoding_state": None, "func_id": -1},
         )
 
-    def impl(arr):  # pragma: no cover
-        return try_to_binary_util(arr)
+    def impl(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return try_to_binary_util(arr, dict_encoding_state, func_id)
 
     return impl
 
@@ -687,20 +762,29 @@ def make_to_double(_try):
     """Generate utility functions to unopt TO_DOUBLE arguments"""
 
     @numba.generated_jit(nopython=True)
-    def func(val, optional_format_string):
+    def func(val, optional_format_string, dict_encoding_state=None, func_id=-1):
         """Handles cases where TO_DOUBLE receives optional arguments and forwards
         to the appropriate version of the real implementation"""
         args = [val, optional_format_string]
-        for i in range(2):
-            if isinstance(val, types.optional):  # pragma: no cover
+        for i, arg in enumerate(args):
+            if isinstance(arg, types.optional):  # pragma: no cover
                 return unopt_argument(
                     "bodo.libs.bodosql_array_kernels.to_double",
-                    ["val", "optional_format_string"],
+                    ["val", "optional_format_string", "dict_encoding_state", "func_id"],
                     i,
+                    default_map={"dict_encoding_state": None, "func_id": -1},
                 )
 
-        def impl(val, optional_format_string):  # pragma: no cover
-            return to_double_util(val, optional_format_string, numba.literally(_try))
+        def impl(
+            val, optional_format_string, dict_encoding_state=None, func_id=-1
+        ):  # pragma: no cover
+            return to_double_util(
+                val,
+                optional_format_string,
+                numba.literally(_try),
+                dict_encoding_state,
+                func_id,
+            )
 
         return impl
 
@@ -769,7 +853,7 @@ def is_string_numeric(expr):  # pragma: no cover
 
 
 @numba.generated_jit(nopython=True)
-def to_double_util(val, optional_format_string, _try=False):
+def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function TO_DOUBLE which takes in a
     number (or column) and converts it to float64.
 
@@ -822,9 +906,15 @@ def to_double_util(val, optional_format_string, _try=False):
             f"Internal error: unsupported type passed to to_double_util for argument val: {val}"
         )
 
-    arg_names = ["val", "optional_format_string", "_try"]
-    arg_types = [val, optional_format_string, _try]
-    propagate_null = [True, False, False]
+    arg_names = [
+        "val",
+        "optional_format_string",
+        "_try",
+        "dict_encoding_state",
+        "func_id",
+    ]
+    arg_types = [val, optional_format_string, _try, dict_encoding_state, func_id]
+    propagate_null = [True, False, False, False, False]
 
     if bodo.libs.float_arr_ext._use_nullable_float:
         out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
@@ -834,6 +924,7 @@ def to_double_util(val, optional_format_string, _try=False):
     extra_globals = {
         "is_string_numeric": is_string_numeric,
     }
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -841,6 +932,9 @@ def to_double_util(val, optional_format_string, _try=False):
         scalar_text,
         out_dtype,
         extra_globals=extra_globals,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
@@ -1282,64 +1376,73 @@ def overload_cast_tz_aware_to_tz_naive_util(arr, normalize):
     )
 
 
-def cast_str_to_tz_aware(arr, tz):  # pragma: no cover
+def cast_str_to_tz_aware(
+    arr, tz, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
     pass
 
 
 @overload(cast_str_to_tz_aware, no_unliteral=True)
-def overload_cast_str_to_tz_aware(arr, tz):
+def overload_cast_str_to_tz_aware(arr, tz, dict_encoding_state=None, func_id=-1):
     if not is_literal_type(tz):
         raise_bodo_error("cast_str_to_tz_aware(): 'tz' must be a literal value")
     if isinstance(arr, types.optional):
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.cast_str_to_tz_aware",
-            ["arr", "tz"],
+            ["arr", "tz", "dict_encoding_state", "func_id"],
             0,
+            default_map={"dict_encoding_state": None, "func_id": -1},
         )
 
-    def impl(arr, tz):  # pragma: no cover
-        return cast_str_to_tz_aware_util(arr, tz)
+    def impl(arr, tz, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return cast_str_to_tz_aware_util(arr, tz, dict_encoding_state, func_id)
 
     return impl
 
 
-def cast_str_to_tz_aware_util(arr, tz):  # pragma: no cover
+def cast_str_to_tz_aware_util(
+    arr, tz, dict_encoding_state, func_id
+):  # pragma: no cover
     pass
 
 
 @overload(cast_str_to_tz_aware_util, no_unliteral=True)
-def overload_cast_str_to_tz_aware_util(arr, tz):
+def overload_cast_str_to_tz_aware_util(arr, tz, dict_encoding_state, func_id):
     if not is_literal_type(tz):
         raise_bodo_error("cast_str_to_tz_aware(): 'tz' must be a literal value")
     verify_string_arg(arr, "cast_str_to_tz_aware", "arr")
-    arg_names = ["arr", "tz"]
-    arg_types = [arr, tz]
+    arg_names = ["arr", "tz", "dict_encoding_state", "func_id"]
+    arg_types = [arr, tz, dict_encoding_state, func_id]
     # tz can never be null
-    propagate_null = [True, False]
+    propagate_null = [True, False, False, False]
     # Note: pd.to_datetime doesn't support tz as an argument.
     scalar_text = f"res[i] = pd.to_datetime(arg0).tz_localize(arg1)"
     tz = get_literal_value(tz)
     out_dtype = bodo.DatetimeArrayType(tz)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
         propagate_null,
         scalar_text,
         out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
-def to_binary_util(arr):  # pragma: no cover
+def to_binary_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
-def try_to_binary_util(arr):  # pragma: no cover
+def try_to_binary_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
 # TODO ([BE-4344]): implement and test to_binary with other formats
 def create_to_binary_util_overload(fn_name, error_on_fail):
-    def impl(arr):  # pragma: no cover
+    def impl(arr, dict_encoding_state, func_id):  # pragma: no cover
         verify_string_binary_arg(fn_name, arr, "arr")
         if error_on_fail:
             fail_str = 'raise ValueError("invalid value for binary (HEX) conversion")'
@@ -1361,16 +1464,22 @@ def create_to_binary_util_overload(fn_name, error_on_fail):
         else:
             # If the input is binary data, just copy it directly
             scalar_text = "res[i] = arg0"
-        arg_names = ["arr"]
-        arg_types = [arr]
-        propagate_null = [True]
+        arg_names = ["arr", "dict_encoding_state", "func_id"]
+        arg_types = [arr, dict_encoding_state, func_id]
+        propagate_null = [True, False, False]
         out_dtype = bodo.binary_array_type
+        use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
             arg_names,
             arg_types,
             propagate_null,
             scalar_text,
             out_dtype,
+            # Add support for dict encoding caching with streaming.
+            dict_encoding_state_name="dict_encoding_state"
+            if use_dict_caching
+            else None,
+            func_id_name="func_id" if use_dict_caching else None,
         )
 
     return impl
@@ -1389,33 +1498,37 @@ _install_to_binary_funcs()
 
 
 @numba.generated_jit(nopython=True)
-def to_number(expr):  # pragma: no cover
+def to_number(expr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     """Handle TO_NUMBER and it's variants."""
     if isinstance(expr, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_snowflake_conversion_array_kernels.to_number_util",
-            ["expr"],
-            None,
+            ["expr", "dict_encoding_state", "func_id"],
+            0,
+            default_map={"dict_encoding_state": None, "func_id": -1},
         )
 
-    def impl(expr):  # pragma: no cover
-        return to_number_util(expr, numba.literally(False))
+    def impl(expr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return to_number_util(
+            expr, numba.literally(False), dict_encoding_state, func_id
+        )
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def try_to_number(expr):  # pragma: no cover
+def try_to_number(expr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     """Handle TRY_TO_NUMBER and it's variants."""
     if isinstance(expr, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_snowflake_conversion_array_kernels.to_number_util",
-            ["expr"],
-            None,
+            ["expr", "dict_encoding_state", "func_id"],
+            0,
+            default_map={"dict_encoding_state": None, "func_id": -1},
         )
 
-    def impl(expr):  # pragma: no cover
-        return to_number_util(expr, numba.literally(True))
+    def impl(expr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return to_number_util(expr, numba.literally(True), dict_encoding_state, func_id)
 
     return impl
 
@@ -1448,7 +1561,7 @@ def _is_string_numeric(expr):  # pragma: no cover
 
 
 @numba.generated_jit(nopython=True)
-def to_number_util(expr, _try=False):  # pragma: no cover
+def to_number_util(expr, _try, dict_encoding_state, func_id):  # pragma: no cover
     """Equivalent to the SQL [TRY] TO_NUMBER/TO_NUMERIC/TO_DECIMAL function.
     With the default args, this converts the input to a 64-bit integer.
     TODO: support non-default `scale` arg, which could result in float.
@@ -1459,9 +1572,9 @@ def to_number_util(expr, _try=False):  # pragma: no cover
     Returns:
         numeric series/scalar: the converted number
     """
-    arg_names = ["expr", "_try"]
-    arg_types = [expr, _try]
-    propagate_null = [True]
+    arg_names = ["expr", "_try", "dict_encoding_state", "func_id"]
+    arg_types = [expr, _try, dict_encoding_state, func_id]
+    propagate_null = [True, False, False, False]
 
     is_string = is_valid_string_arg(expr)
     if not is_string:
@@ -1486,7 +1599,17 @@ def to_number_util(expr, _try=False):  # pragma: no cover
     else:
         scalar_text = "res[i] = np.int64(arg0)"
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @numba.generated_jit(nopython=True)

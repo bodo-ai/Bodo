@@ -321,6 +321,7 @@ ext_metadata["depends"] += [
     "bodo/libs/_listagg.h",
     "bodo/libs/_chunked_table_builder.h",
     "bodo/libs/_operator_pool.h",
+    "bodo/libs/_stream_dict_encoding.h",
 ]
 
 # We cannot compile with -Werror yet because _fsspec_reader.cpp
