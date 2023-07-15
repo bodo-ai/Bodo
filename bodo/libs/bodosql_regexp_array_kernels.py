@@ -9,10 +9,14 @@ import numba
 from numba.core import types
 
 import bodo
-from bodo.libs.array import get_replace_regex
+from bodo.libs.array import get_replace_regex, get_replace_regex_dict_state
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.libs.re_ext import init_const_pattern
-from bodo.utils.typing import get_overload_const_int, is_overload_constant_int
+from bodo.utils.typing import (
+    get_overload_const_int,
+    is_overload_constant_int,
+    is_overload_none,
+)
 
 
 def posix_to_re(pattern):
@@ -85,7 +89,7 @@ def make_flag_bitvector(flags):
 
 
 @numba.generated_jit(nopython=True)
-def regexp_count(arr, pattern, position, flags):
+def regexp_count(arr, pattern, position, flags, dict_encoding_state=None, func_id=-1):
     """Handles cases where REGEXP_COUNT receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, pattern, position, flags]
@@ -93,20 +97,45 @@ def regexp_count(arr, pattern, position, flags):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.regexp_count",
-                ["arr", "pattern", "position", "flags"],
+                [
+                    "arr",
+                    "pattern",
+                    "position",
+                    "flags",
+                    "dict_encoding_state",
+                    "func_id",
+                ],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, pattern, position, flags):  # pragma: no cover
+    def impl(
+        arr, pattern, position, flags, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
         return regexp_count_util(
-            arr, numba.literally(pattern), position, numba.literally(flags)
+            arr,
+            numba.literally(pattern),
+            position,
+            numba.literally(flags),
+            dict_encoding_state,
+            func_id,
         )
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def regexp_instr(arr, pattern, position, occurrence, option, flags, group):
+def regexp_instr(
+    arr,
+    pattern,
+    position,
+    occurrence,
+    option,
+    flags,
+    group,
+    dict_encoding_state=None,
+    func_id=-1,
+):
     """Handles cases where REGEXP_INSTR receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, pattern, position, occurrence, option, flags, group]
@@ -122,12 +151,23 @@ def regexp_instr(arr, pattern, position, occurrence, option, flags, group):
                     "option",
                     "flags",
                     "group",
+                    "dict_encoding_state",
+                    "func_id",
                 ],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
     def impl(
-        arr, pattern, position, occurrence, option, flags, group
+        arr,
+        pattern,
+        position,
+        occurrence,
+        option,
+        flags,
+        group,
+        dict_encoding_state=None,
+        func_id=-1,
     ):  # pragma: no cover
         return regexp_instr_util(
             arr,
@@ -137,13 +177,15 @@ def regexp_instr(arr, pattern, position, occurrence, option, flags, group):
             option,
             numba.literally(flags),
             group,
+            dict_encoding_state,
+            func_id,
         )
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def regexp_like(arr, pattern, flags):
+def regexp_like(arr, pattern, flags, dict_encoding_state=None, func_id=-1):
     """Handles cases where REGEXP_LIKE receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, pattern, flags]
@@ -151,19 +193,41 @@ def regexp_like(arr, pattern, flags):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.regexp_like",
-                ["arr", "pattern", "flags"],
+                [
+                    "arr",
+                    "pattern",
+                    "flags",
+                    "dict_encoding_state",
+                    "func_id",
+                ],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, pattern, flags):  # pragma: no cover
-        return regexp_like_util(arr, numba.literally(pattern), numba.literally(flags))
+    def impl(
+        arr, pattern, flags, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return regexp_like_util(
+            arr,
+            numba.literally(pattern),
+            numba.literally(flags),
+            dict_encoding_state,
+            func_id,
+        )
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
 def regexp_replace(
-    arr, pattern, replacement, position, occurrence, flags, is_parallel=False
+    arr,
+    pattern,
+    replacement,
+    position,
+    occurrence,
+    flags,
+    dict_encoding_state=None,
+    func_id=-1,
 ):
     """Handles cases where REGEXP_REPLACE receives optional arguments and forwards
     to args appropriate version of the real implementation"""
@@ -179,13 +243,22 @@ def regexp_replace(
                     "position",
                     "occurrence",
                     "flags",
-                    "is_parallel=False",
+                    "dict_encoding_state",
+                    "func_id",
                 ],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
     def impl(
-        arr, pattern, replacement, position, occurrence, flags, is_parallel=False
+        arr,
+        pattern,
+        replacement,
+        position,
+        occurrence,
+        flags,
+        dict_encoding_state=None,
+        func_id=-1,
     ):  # pragma: no cover
         return regexp_replace_util(
             arr,
@@ -194,14 +267,24 @@ def regexp_replace(
             position,
             occurrence,
             numba.literally(flags),
-            is_parallel,
+            dict_encoding_state,
+            func_id,
         )
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def regexp_substr(arr, pattern, position, occurrence, flags, group):
+def regexp_substr(
+    arr,
+    pattern,
+    position,
+    occurrence,
+    flags,
+    group,
+    dict_encoding_state=None,
+    func_id=-1,
+):
     """Handles cases where REGEXP_SUBSTR receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, pattern, position, occurrence, flags, group]
@@ -209,11 +292,30 @@ def regexp_substr(arr, pattern, position, occurrence, flags, group):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.regexp_substr",
-                ["arr", "pattern", "position", "occurrence", "flags", "group"],
+                [
+                    "arr",
+                    "pattern",
+                    "position",
+                    "occurrence",
+                    "flags",
+                    "group",
+                    "dict_encoding_state",
+                    "func_id",
+                ],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(arr, pattern, position, occurrence, flags, group):  # pragma: no cover
+    def impl(
+        arr,
+        pattern,
+        position,
+        occurrence,
+        flags,
+        group,
+        dict_encoding_state=None,
+        func_id=-1,
+    ):  # pragma: no cover
         return regexp_substr_util(
             arr,
             numba.literally(pattern),
@@ -221,13 +323,15 @@ def regexp_substr(arr, pattern, position, occurrence, flags, group):
             occurrence,
             numba.literally(flags),
             group,
+            dict_encoding_state,
+            func_id,
         )
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def regexp_count_util(arr, pattern, position, flags):
+def regexp_count_util(arr, pattern, position, flags, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function REGEXP_COUNT which takes in a string
        (or column), a pattern, a position, and regexp control flags and returns
        the number of occurrences of the pattern in the string starting at the
@@ -249,9 +353,16 @@ def regexp_count_util(arr, pattern, position, flags):
     verify_int_arg(position, "REGEXP_COUNT", "position")
     verify_scalar_string_arg(flags, "REGEXP_COUNT", "flags")
 
-    arg_names = ["arr", "pattern", "position", "flags"]
-    arg_types = [arr, pattern, position, flags]
-    propagate_null = [True] * 4
+    arg_names = [
+        "arr",
+        "pattern",
+        "position",
+        "flags",
+        "dict_encoding_state",
+        "func_id",
+    ]
+    arg_types = [arr, pattern, position, flags, dict_encoding_state, func_id]
+    propagate_null = [True] * 4 + [False] * 2
 
     pattern_str = bodo.utils.typing.get_overload_const_str(pattern)
     converted_pattern = posix_to_re(pattern_str)
@@ -282,6 +393,7 @@ def regexp_count_util(arr, pattern, position, flags):
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -290,11 +402,24 @@ def regexp_count_util(arr, pattern, position, flags):
         out_dtype,
         prefix_code=prefix_code,
         extra_globals=extra_globals,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def regexp_instr_util(arr, pattern, position, occurrence, option, flags, group):
+def regexp_instr_util(
+    arr,
+    pattern,
+    position,
+    occurrence,
+    option,
+    flags,
+    group,
+    dict_encoding_state,
+    func_id,
+):
     """A dedicated kernel for the SQL function REGEXP_INSTR which takes in a string
        (or column), a pattern, a number of occurrences, an option flag, a position,
        regexp control flags, and a group number, and returns the location of an
@@ -330,9 +455,29 @@ def regexp_instr_util(arr, pattern, position, occurrence, option, flags, group):
     verify_scalar_string_arg(flags, "REGEXP_INSTR", "flags")
     verify_int_arg(group, "REGEXP_INSTR", "group")
 
-    arg_names = ["arr", "pattern", "position", "occurrence", "option", "flags", "group"]
-    arg_types = [arr, pattern, position, occurrence, option, flags, group]
-    propagate_null = [True] * 7
+    arg_names = [
+        "arr",
+        "pattern",
+        "position",
+        "occurrence",
+        "option",
+        "flags",
+        "group",
+        "dict_encoding_state",
+        "func_id",
+    ]
+    arg_types = [
+        arr,
+        pattern,
+        position,
+        occurrence,
+        option,
+        flags,
+        group,
+        dict_encoding_state,
+        func_id,
+    ]
+    propagate_null = [True] * 7 + [False] * 2
 
     pattern_str = bodo.utils.typing.get_overload_const_str(pattern)
     converted_pattern = posix_to_re(pattern_str)
@@ -389,6 +534,7 @@ def regexp_instr_util(arr, pattern, position, occurrence, option, flags, group):
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -397,11 +543,14 @@ def regexp_instr_util(arr, pattern, position, occurrence, option, flags, group):
         out_dtype,
         prefix_code=prefix_code,
         extra_globals=extra_globals,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def regexp_like_util(arr, pattern, flags):
+def regexp_like_util(arr, pattern, flags, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function REGEXP_LIKE which takes in a string
        (or column), a pattern, and regexp control flags and returns
        whether or not the pattern matches the entire string.
@@ -419,9 +568,9 @@ def regexp_like_util(arr, pattern, flags):
     verify_scalar_string_arg(pattern, "REGEXP_LIKE", "pattern")
     verify_scalar_string_arg(flags, "REGEXP_LIKE", "flags")
 
-    arg_names = ["arr", "pattern", "flags"]
-    arg_types = [arr, pattern, flags]
-    propagate_null = [True] * 3
+    arg_names = ["arr", "pattern", "flags", "dict_encoding_state", "func_id"]
+    arg_types = [arr, pattern, flags, dict_encoding_state, func_id]
+    propagate_null = [True] * 3 + [False] * 2
     pattern_str = bodo.utils.typing.get_overload_const_str(pattern)
     converted_pattern = posix_to_re(pattern_str)
     flag_str = bodo.utils.typing.get_overload_const_str(flags)
@@ -440,6 +589,7 @@ def regexp_like_util(arr, pattern, flags):
 
     out_dtype = bodo.libs.bool_arr_ext.boolean_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -447,12 +597,15 @@ def regexp_like_util(arr, pattern, flags):
         scalar_text,
         out_dtype,
         extra_globals=extra_globals,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
 def regexp_replace_util(
-    arr, pattern, replacement, position, occurrence, flags, is_parallel
+    arr, pattern, replacement, position, occurrence, flags, dict_encoding_state, func_id
 ):
     """A dedicated kernel for the SQL function REGEXP_REPLACE which takes in a string
        (or column), a pattern, a replacement string, an occurrence number, a position,
@@ -466,10 +619,6 @@ def regexp_replace_util(
         pattern (string): the regexp being searched for.
         replacement (string array/series/scalar): the string to replace matches with.
         position (integer array/series/scalar): the starting position(s) (1-indexed).
-        is_parallel (boolean): Is this called on parallel data. If we have a parallel
-        data and a global dictionary, then depending on the dictionary size and
-        communication cost we may opt to have each rank replace only a chunk of the
-        dictionary and then perform an allgatherv to merge the dictionaries.
         occurrence (integer array/series/scalar): which matches to replace (1-indexed).
         Throws an error if negative.
         If 0, replaces all the matches.
@@ -494,10 +643,20 @@ def regexp_replace_util(
         "position",
         "occurrence",
         "flags",
-        "is_parallel",
+        "dict_encoding_state",
+        "func_id",
     ]
-    arg_types = [arr, pattern, replacement, position, occurrence, flags, is_parallel]
-    propagate_null = [True] * 6 + [False]
+    arg_types = [
+        arr,
+        pattern,
+        replacement,
+        position,
+        occurrence,
+        flags,
+        dict_encoding_state,
+        func_id,
+    ]
+    propagate_null = [True] * 6 + [False, False]
 
     pattern_str = bodo.utils.typing.get_overload_const_str(pattern)
     converted_pattern = posix_to_re(pattern_str)
@@ -521,17 +680,48 @@ def regexp_replace_util(
         and flag_bitvector == 0
     ):
         # Optimized implementation just calls into C++ and has it handle the entire array.
-        def impl(
-            arr, pattern, replacement, position, occurrence, flags, is_parallel
-        ):  # pragma: no cover
-            utf8_pattern = bodo.libs.str_ext.unicode_to_utf8(pattern)
-            utf8_replacement = bodo.libs.str_ext.unicode_to_utf8(replacement)
-            out_arr = get_replace_regex(
-                arr, utf8_pattern, utf8_replacement, is_parallel
-            )
-            return out_arr
+        use_dict_caching = arr = bodo.dict_str_arr_type and not is_overload_none(
+            dict_encoding_state
+        )
+        if use_dict_caching:
 
-        return impl
+            def impl_state(
+                arr,
+                pattern,
+                replacement,
+                position,
+                occurrence,
+                flags,
+                dict_encoding_state,
+                func_id,
+            ):  # pragma: no cover
+                utf8_pattern = bodo.libs.str_ext.unicode_to_utf8(pattern)
+                utf8_replacement = bodo.libs.str_ext.unicode_to_utf8(replacement)
+                out_arr = get_replace_regex_dict_state(
+                    arr, utf8_pattern, utf8_replacement, dict_encoding_state, func_id
+                )
+                return out_arr
+
+            return impl_state
+
+        else:
+
+            def impl(
+                arr,
+                pattern,
+                replacement,
+                position,
+                occurrence,
+                flags,
+                dict_encoding_state,
+                func_id,
+            ):  # pragma: no cover
+                utf8_pattern = bodo.libs.str_ext.unicode_to_utf8(pattern)
+                utf8_replacement = bodo.libs.str_ext.unicode_to_utf8(replacement)
+                out_arr = get_replace_regex(arr, utf8_pattern, utf8_replacement)
+                return out_arr
+
+            return impl
 
     prefix_code = "\n"
     scalar_text = ""
@@ -575,6 +765,7 @@ def regexp_replace_util(
 
     out_dtype = bodo.string_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -586,11 +777,16 @@ def regexp_replace_util(
         # pattern, so there could be duplicates.
         may_cause_duplicate_dict_array_values=True,
         extra_globals=extra_globals,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
 @numba.generated_jit(nopython=True)
-def regexp_substr_util(arr, pattern, position, occurrence, flags, group):
+def regexp_substr_util(
+    arr, pattern, position, occurrence, flags, group, dict_encoding_state, func_id
+):
     """A dedicated kernel for the SQL function REGEXP_SUBSTR which takes in a string
        (or column), a pattern, a number of occurrences, a position, regexp control
        flags, and a group number, and returns the substring of the original
@@ -623,9 +819,27 @@ def regexp_substr_util(arr, pattern, position, occurrence, flags, group):
     verify_scalar_string_arg(flags, "REGEXP_SUBSTR", "flags")
     verify_int_arg(group, "REGEXP_SUBSTR", "group")
 
-    arg_names = ["arr", "pattern", "position", "occurrence", "flags", "group"]
-    arg_types = [arr, pattern, position, occurrence, flags, group]
-    propagate_null = [True] * 6
+    arg_names = [
+        "arr",
+        "pattern",
+        "position",
+        "occurrence",
+        "flags",
+        "group",
+        "dict_encoding_state",
+        "func_id",
+    ]
+    arg_types = [
+        arr,
+        pattern,
+        position,
+        occurrence,
+        flags,
+        group,
+        dict_encoding_state,
+        func_id,
+    ]
+    propagate_null = [True] * 6 + [False] * 2
 
     pattern_str = bodo.utils.typing.get_overload_const_str(pattern)
     converted_pattern = posix_to_re(pattern_str)
@@ -687,6 +901,7 @@ def regexp_substr_util(arr, pattern, position, occurrence, flags, group):
             scalar_text += "      arg0 = arg0[end:]\n"
     out_dtype = bodo.string_array_type
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -697,4 +912,7 @@ def regexp_substr_util(arr, pattern, position, occurrence, flags, group):
         may_cause_duplicate_dict_array_values=True,
         prefix_code=prefix_code,
         extra_globals=extra_globals,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )

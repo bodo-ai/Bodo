@@ -125,6 +125,10 @@ ll.add_symbol("get_groupby_labels_py_entry", array_ext.get_groupby_labels_py_ent
 ll.add_symbol("array_isin_py_entry", array_ext.array_isin_py_entry)
 ll.add_symbol("get_search_regex_py_entry", array_ext.get_search_regex_py_entry)
 ll.add_symbol("get_replace_regex_py_entry", array_ext.get_replace_regex_py_entry)
+ll.add_symbol(
+    "get_replace_regex_dict_state_py_entry",
+    array_ext.get_replace_regex_dict_state_py_entry,
+)
 ll.add_symbol("array_info_getitem", array_ext.array_info_getitem)
 ll.add_symbol("array_info_getdata1", array_ext.array_info_getdata1)
 ll.add_symbol("union_tables", array_ext.union_tables)
@@ -2850,10 +2854,43 @@ _get_search_regex = types.ExternalFunction(
 
 _get_replace_regex = types.ExternalFunction(
     "get_replace_regex_py_entry",
-    # params: in array, pattern, replacement, is_parallel
+    # params: in array, pattern, replacement,
     # Output: out array
-    array_info_type(array_info_type, types.voidptr, types.voidptr, types.bool_),
+    array_info_type(array_info_type, types.voidptr, types.voidptr),
 )
+
+
+@intrinsic
+def _get_replace_regex_dict_state(
+    typingctx, arr_info_t, pattern_t, replace_t, dict_encoding_state_t, func_id_t
+):
+    assert arr_info_t == array_info_type
+    assert func_id_t == types.int64, "func_id must be an int64"
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="get_replace_regex_dict_state_py_entry"
+        )
+        ret = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
+
+    sig = array_info_type(
+        arr_info_t, types.voidptr, types.voidptr, dict_encoding_state_t, func_id_t
+    )
+    return sig, codegen
 
 
 @numba.njit(no_cpython_wrapper=True)
@@ -2871,14 +2908,23 @@ def get_search_regex(in_arr, case, match, pat, out_arr):  # pragma: no cover
 
 
 @numba.njit(no_cpython_wrapper=True)
-def get_replace_regex(
-    in_arr, pattern_typ, replace_typ, is_parallel_typ
+def get_replace_regex(in_arr, pattern_typ, replace_typ):  # pragma: no cover
+    in_arr_info = array_to_info(in_arr)
+    out_arr_info = _get_replace_regex(in_arr_info, pattern_typ, replace_typ)
+    check_and_propagate_cpp_exception()
+    out = info_to_array(out_arr_info, in_arr)
+    delete_info(out_arr_info)
+    return out
+
+
+@numba.njit(no_cpython_wrapper=True)
+def get_replace_regex_dict_state(
+    in_arr, pattern_typ, replace_typ, dict_encoding_state, func_id
 ):  # pragma: no cover
     in_arr_info = array_to_info(in_arr)
-    out_arr_info = _get_replace_regex(
-        in_arr_info, pattern_typ, replace_typ, is_parallel_typ
+    out_arr_info = _get_replace_regex_dict_state(
+        in_arr_info, pattern_typ, replace_typ, dict_encoding_state, func_id
     )
-    check_and_propagate_cpp_exception()
     out = info_to_array(out_arr_info, in_arr)
     delete_info(out_arr_info)
     return out

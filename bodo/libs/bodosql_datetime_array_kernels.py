@@ -3,7 +3,6 @@
 Implements datetime array kernels that are specific to BodoSQL
 """
 
-from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 import numba
 import numpy as np
 import pandas as pd
@@ -1433,12 +1432,16 @@ def _install_dt_diff_fn_overload():
 _install_dt_diff_fn_overload()
 
 
-def date_trunc(date_or_time_part, date_or_time_expr):  # pragma: no cover
+def date_trunc(
+    date_or_time_part, date_or_time_expr, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
     pass
 
 
 @overload(date_trunc)
-def overload_date_trunc(date_or_time_part, date_or_time_expr):
+def overload_date_trunc(
+    date_or_time_part, date_or_time_expr, dict_encoding_state=None, func_id=-1
+):
     """
     Truncates a given Timestamp argument to the provided
     date_or_time_part. This corresponds to DATE_TRUNC inside snowflake
@@ -1452,31 +1455,41 @@ def overload_date_trunc(date_or_time_part, date_or_time_expr):
     Returns:
         types.Type: The bodo.Time/timestamp after being truncated, which has same type as date_or_time_expr
     """
-    if isinstance(date_or_time_part, types.optional):  # pragma: no cover
-        return unopt_argument(
-            "bodo.libs.bodosql_array_kernels.date_trunc",
-            ["date_or_time_part", "date_or_time_expr"],
-            0,
-        )
-    if isinstance(date_or_time_expr, types.optional):  # pragma: no cover
-        return unopt_argument(
-            "bodo.libs.bodosql_array_kernels.date_trunc",
-            ["date_or_time_part", "date_or_time_expr"],
-            1,
-        )
+    args = [date_or_time_part, date_or_time_expr]
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.date_trunc",
+                [
+                    "date_or_time_part",
+                    "date_or_time_expr",
+                    "dict_encoding_state",
+                    "func_id",
+                ],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
+            )
 
-    def impl(date_or_time_part, date_or_time_expr):  # pragma: no cover
-        return date_trunc_util(date_or_time_part, date_or_time_expr)
+    def impl(
+        date_or_time_part, date_or_time_expr, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return date_trunc_util(
+            date_or_time_part, date_or_time_expr, dict_encoding_state, func_id
+        )
 
     return impl
 
 
-def date_trunc_util(date_or_time_part, date_or_time_expr):  # pragma: no cover
+def date_trunc_util(
+    date_or_time_part, date_or_time_expr, dict_encoding_state, func_id
+):  # pragma: no cover
     pass
 
 
 @overload(date_trunc_util)
-def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
+def overload_date_trunc_util(
+    date_or_time_part, date_or_time_expr, dict_encoding_state, func_id
+):
     """
     Truncates a given bodo.Time/datetime.date/Timestamp argument to the provided
     date_or_time_part. This corresponds to DATE_TRUNC inside snowflake
@@ -1491,9 +1504,17 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
                     which has same type as date_or_time_expr.
     """
     verify_string_arg(date_or_time_part, "DATE_TRUNC", "date_or_time_part")
-    arg_names = ["date_or_time_part", "date_or_time_expr"]
-    arg_types = [date_or_time_part, date_or_time_expr]
-    propagate_null = [True, True]
+    arg_names = [
+        "date_or_time_part",
+        "date_or_time_expr",
+        "dict_encoding_state",
+        "func_id",
+    ]
+    arg_types = [date_or_time_part, date_or_time_expr, dict_encoding_state, func_id]
+    propagate_null = [True, True, False, False]
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    dict_encoding_state_name = "dict_encoding_state" if use_dict_caching else None
+    func_id_name = "func_id" if use_dict_caching else None
     # Standardize the input to limit the condition in the loop
     scalar_text = "part_str = bodo.libs.bodosql_array_kernels.standardize_snowflake_date_time_part(arg0)\n"
     if is_valid_time_arg(date_or_time_expr):  # truncate a bodo.Time object/array
@@ -1533,6 +1554,8 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
             propagate_null,
             scalar_text,
             out_dtype,
+            dict_encoding_state_name=dict_encoding_state_name,
+            func_id_name=func_id_name,
         )
     elif is_valid_date_arg(date_or_time_expr):
         scalar_text += "if part_str == 'year':\n"
@@ -1553,6 +1576,8 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
             propagate_null,
             scalar_text,
             out_dtype,
+            dict_encoding_state_name=dict_encoding_state_name,
+            func_id_name=func_id_name,
         )
     else:  # Truncate a timestamp object/array
         verify_datetime_arg_allow_tz(
@@ -1619,6 +1644,8 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
         scalar_text,
         out_dtype,
         extra_globals={"tz_literal": tz_literal},
+        dict_encoding_state_name=dict_encoding_state_name,
+        func_id_name=func_id_name,
     )
 
 
@@ -2697,12 +2724,12 @@ def overload_interval_add_interval_util(arr0, arr1):
     )
 
 
-def create_timestamp(arr):  # pragma: no cover
+def create_timestamp(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     pass
 
 
 @overload(create_timestamp)
-def overload_create_timestamp(arr):
+def overload_create_timestamp(arr, dict_encoding_state=None, func_id=-1):
     """BodoSQL array kernel to create a Timestamp. This function will accept
     anything accepted by the `pd.Timestamp()` constructor
     now, so we don't type check.
@@ -2716,22 +2743,25 @@ def overload_create_timestamp(arr):
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.create_timestamp_util",
-            ["arr"],
+            ["arr", "dict_encoding_state", "func_id"],
             0,
+            default_map={"dict_encoding_state": None, "func_id": -1},
         )
 
-    def impl(arr):  # pragma: no cover
-        return create_timestamp_util(arr)
+    def impl(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return create_timestamp_util(arr, dict_encoding_state, func_id)
 
     return impl
 
 
-def create_timestamp_util(arr):  # pragma: no cover
+def create_timestamp_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
 @overload(create_timestamp_util)
-def overload_create_timestamp_util(arr):  # pragma: no cover
+def overload_create_timestamp_util(
+    arr, dict_encoding_state, func_id
+):  # pragma: no cover
     """BodoSQL array kernel to create a Timestamp. This function will accept
     anything accepted by the `pd.Timestamp()` constructor
     now, so we don't type check.
@@ -2742,9 +2772,9 @@ def overload_create_timestamp_util(arr):  # pragma: no cover
     Returns:
         types.Type: scalar or array of Timestamp values.
     """
-    arg_names = ["arr"]
-    arg_types = [arr]
-    propagate_null = [True]
+    arg_names = ["arr", "dict_encoding_state", "func_id"]
+    arg_types = [arr, dict_encoding_state, func_id]
+    propagate_null = [True, False, False]
     out_dtype = types.Array(bodo.datetime64ns, 1, "C")
     unbox_str = (
         "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
@@ -2753,12 +2783,16 @@ def overload_create_timestamp_util(arr):  # pragma: no cover
     )
 
     scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0))\n"
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
         propagate_null,
         scalar_text,
         out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 

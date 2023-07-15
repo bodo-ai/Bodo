@@ -13,7 +13,7 @@ from numba.extending import intrinsic, overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import raise_bodo_error
+from bodo.utils.typing import is_overload_none, raise_bodo_error
 
 
 @numba.generated_jit(nopython=True)
@@ -100,24 +100,27 @@ def cond(arr, ifbranch, elsebranch):
 
 
 @numba.generated_jit(nopython=True)
-def equal_null(A, B):
+def equal_null(A, B, dict_encoding_state=None, func_id=-1):
     """Handles cases where EQUAL_NULL receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [A, B]
     for i in range(2):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.equal_null", ["A", "B"], i
+                "bodo.libs.bodosql_array_kernels.equal_null",
+                ["A", "B", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(A, B):  # pragma: no cover
-        return equal_null_util(A, B)
+    def impl(A, B, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return equal_null_util(A, B, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def not_equal_null(A, B):
+def not_equal_null(A, B, dict_encoding_state=None, func_id=-1):
     """Handles cases where NOT_EQUAL_NULL receives optional arguments and forwards
     to the appropriate version of the real implementation. This is implemented
     by calling NOT on EQUAL_NULL"""
@@ -125,11 +128,16 @@ def not_equal_null(A, B):
     for i in range(2):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.not_equal_null", ["A", "B"], i
+                "bodo.libs.bodosql_array_kernels.not_equal_null",
+                ["A", "B", "dict_encoding_state", "func_id="],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(A, B):  # pragma: no cover
-        return bodo.libs.bodosql_array_kernels.boolnot(equal_null_util(A, B))
+    def impl(A, B, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return bodo.libs.bodosql_array_kernels.boolnot(
+            equal_null_util(A, B, dict_encoding_state, func_id)
+        )
 
     return impl
 
@@ -213,7 +221,7 @@ def booland_util(A, B):
 def boolor_util(A, B):
     """A dedicated kernel for the SQL function BOOLOR which takes in two numbers
     (or columns) and returns True if at least one of them is not zero or null,
-    False if both of them are equal to zero, and null otheriwse
+    False if both of them are equal to zero, and null otherwise
 
 
     Args:
@@ -351,18 +359,20 @@ def boolnot_util(A):
 
 
 @numba.generated_jit(nopython=True)
-def nullif(arr0, arr1):
+def nullif(arr0, arr1, dict_encoding_state=None, func_id=-1):
     """Handles cases where NULLIF receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr0, arr1]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.nullif", ["arr0", "arr1"], i
+                "bodo.libs.bodosql_array_kernels.nullif",
+                ["arr0", "arr1", "dict_encoding_state=None", "func_id=-1"],
+                i,
             )
 
-    def impl(arr0, arr1):  # pragma: no cover
-        return nullif_util(arr0, arr1)
+    def impl(arr0, arr1, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return nullif_util(arr0, arr1, dict_encoding_state, func_id)
 
     return impl
 
@@ -370,7 +380,7 @@ def nullif(arr0, arr1):
 @numba.generated_jit(nopython=True)
 def regr_valx(y, x):
     """Handles cases where REGR_VALX receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     args = [y, x]
     for i in range(2):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -389,7 +399,7 @@ def regr_valx(y, x):
 @numba.generated_jit(nopython=True)
 def regr_valy(y, x):
     """Handles cases where REGR_VALY receives optional arguments and forwards
-    to the apropriate version of the real implementaiton (recycles regr_valx
+    to the appropriate version of the real implementation (recycles regr_valx
     by swapping the order of the arguments)"""
     args = [y, x]
     for i in range(2):
@@ -487,7 +497,7 @@ def cond_util(arr, ifbranch, elsebranch):
 
 
 @numba.generated_jit(nopython=True)
-def equal_null_util(A, B):
+def equal_null_util(A, B, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function EQUAL_NULL which takes in two values
     (or columns) and returns True if they are equal (where NULL is treated as
     a known value)
@@ -502,9 +512,9 @@ def equal_null_util(A, B):
 
     get_common_broadcasted_type([A, B], "EQUAL_NULL")
 
-    arg_names = ["A", "B"]
-    arg_types = [A, B]
-    propagate_null = [False] * 2
+    arg_names = ["A", "B", "dict_encoding_state", "func_id"]
+    arg_types = [A, B, dict_encoding_state, func_id]
+    propagate_null = [False, False, False, False]
 
     if A == bodo.none:
         # A = scalar null, B = scalar null
@@ -555,12 +565,21 @@ def equal_null_util(A, B):
         scalar_text = "res[i] = arg0 == arg1"
 
     out_dtype = bodo.libs.bool_arr_ext.boolean_array_type
-
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
 
 
 @numba.generated_jit(nopython=True)
-def nullif_util(arr0, arr1):
+def nullif_util(arr0, arr1, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function NULLIF which takes in two
     scalars (or columns), which returns NULL if the two values are equal, and
     arg0 otherwise.
@@ -575,10 +594,10 @@ def nullif_util(arr0, arr1):
         string series/scalar: the string/column of formatted numbers
     """
 
-    arg_names = ["arr0", "arr1"]
-    arg_types = [arr0, arr1]
+    arg_names = ["arr0", "arr1", "dict_encoding_state", "func_id"]
+    arg_types = [arr0, arr1, dict_encoding_state, func_id]
     # If the first argument is NULL, the output is always NULL
-    propagate_null = [True, False]
+    propagate_null = [True, False, False, False]
     # NA check needs to come first here, otherwise the equality check misbehaves
 
     if arr1 == bodo.none:
@@ -595,7 +614,7 @@ def nullif_util(arr0, arr1):
         scalar_text += "   bodo.libs.array_kernels.setna(res, i)"
 
     out_dtype = get_common_broadcasted_type([arr0, arr1], "NULLIF")
-
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -605,6 +624,9 @@ def nullif_util(arr0, arr1):
         # We need to remove NAs because we treat them as duplicates.
         # TODO: Avoid this in the future.
         may_cause_duplicate_dict_array_values=True,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
