@@ -8,78 +8,78 @@ from numba.extending import overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, is_overload_none
 
 
-def cast_float64(arr):  # pragma: no cover
+def cast_float64(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     return
 
 
-def cast_float64_util(arr):  # pragma: no cover
+def cast_float64_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     return
 
 
-def cast_float32(arr):  # pragma: no cover
+def cast_float32(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     return
 
 
-def cast_float32_util(arr):  # pragma: no cover
+def cast_float32_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     return
 
 
-def cast_int64(arr):  # pragma: no cover
+def cast_int64(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     return
 
 
-def cast_int64_util(arr):  # pragma: no cover
+def cast_int64_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     return
 
 
-def cast_int32(arr):  # pragma: no cover
+def cast_int32(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     return
 
 
-def cast_int32_util(arr):  # pragma: no cover
+def cast_int32_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     return
 
 
-def cast_int16(arr):  # pragma: no cover
+def cast_int16(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     return
 
 
-def cast_int16_util(arr):  # pragma: no cover
+def cast_int16_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     return
 
 
-def cast_int8(arr):  # pragma: no cover
+def cast_int8(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     return
 
 
-def cast_int8_util(arr):  # pragma: no cover
+def cast_int8_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     return
 
 
-def cast_boolean(arr):  # pragma: no cover
+def cast_boolean(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     return
 
 
-def cast_char(arr):  # pragma: no cover
+def cast_char(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     return
 
 
-def cast_date(arr):  # pragma: no cover
+def cast_date(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     return arr
 
 
-def cast_timestamp(arr):  # pragma: no cover
+def cast_timestamp(ar, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     return
 
 
-def cast_interval(arr):  # pragma: no cover
+def cast_interval(arr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     return
 
 
-def cast_interval_util(arr):  # pragma: no cover
+def cast_interval_util(arr, dict_encoding_state, func_id):  # pragma: no cover
     return
 
 
@@ -96,7 +96,7 @@ cast_funcs_utils_names = (
     (cast_char, None, "char"),
     (cast_date, None, "date"),
     (cast_timestamp, None, "timestamp"),
-    (cast_interval, cast_interval, "interval"),
+    (cast_interval, cast_interval_util, "interval"),
 )
 
 # mapping from function name to equivalent numpy function
@@ -127,25 +127,26 @@ fname_to_dtype = {
 
 
 def create_cast_func_overload(func_name):
-    def overload_cast_func(arr):
+    def overload_cast_func(arr, dict_encoding_state=None, func_id=-1):
         if isinstance(arr, types.optional):
             return unopt_argument(
-                f"bodo.libs.bodosql_array_kernels.cast_{func_name}", ["arr"], 0
+                f"bodo.libs.bodosql_array_kernels.cast_{func_name}",
+                ["arr", "dict_encoding_state", "func_id"],
+                0,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-        func_text = "def impl(arr):\n"
+        func_text = "def impl(arr, dict_encoding_state=None, func_id=-1):\n"
         if func_name == "boolean":
-            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_boolean_util(arr, numba.literally(True))\n"
+            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_boolean_util(arr, numba.literally(True), dict_encoding_state, func_id)\n"
         elif func_name == "char":
             func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_char_util(arr)\n"
         elif func_name == "date":
-            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_date_util(arr, None)\n"
+            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_date_util(arr, None, dict_encoding_state, func_id)\n"
         elif func_name == "timestamp":
-            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_timestamp_util(arr, None, None, 0)\n"
+            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_timestamp_util(arr, None, None, 0, dict_encoding_state, func_id)\n"
         else:
-            func_text += (
-                f"  return bodo.libs.bodosql_array_kernels.cast_{func_name}_util(arr)"
-            )
+            func_text += f"  return bodo.libs.bodosql_array_kernels.cast_{func_name}_util(arr, dict_encoding_state, func_id)"
 
         loc_vars = {}
         exec(func_text, {"bodo": bodo, "numba": numba}, loc_vars)
@@ -156,10 +157,10 @@ def create_cast_func_overload(func_name):
 
 
 def create_cast_util_overload(func_name):
-    def overload_cast_util(arr):
-        arg_names = ["arr"]
-        arg_types = [arr]
-        propagate_null = [True]
+    def overload_cast_util(arr, dict_encoding_state, func_id):
+        arg_names = ["arr", "dict_encoding_state", "func_id"]
+        arg_types = [arr, dict_encoding_state, func_id]
+        propagate_null = [True, False, False]
         scalar_text = ""
         if (
             func_name[:3] == "int"
@@ -225,12 +226,18 @@ def create_cast_util_overload(func_name):
 
         out_dtype = fname_to_dtype[func_name]
 
+        use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
             arg_names,
             arg_types,
             propagate_null,
             scalar_text,
             out_dtype,
+            # Add support for dict encoding caching with streaming.
+            dict_encoding_state_name="dict_encoding_state"
+            if use_dict_caching
+            else None,
+            func_id_name="func_id" if use_dict_caching else None,
         )
 
     return overload_cast_util

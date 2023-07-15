@@ -2,6 +2,7 @@
 #define _ARRAY_OPERATIONS_H_INCLUDED
 
 #include "_bodo_common.h"
+#include "_stream_dict_encoding.h"
 
 /**
  * Compute the boolean array on output corresponds to the "isin" function in
@@ -272,14 +273,32 @@ void get_search_regex_py_entry(array_info* in_arr, const bool case_sensitive,
  * @param pat A utf-8 encoded regex pattern.
  * @param replacement A utf-8 encoded replacement string to insert based on the
  * pattern.
- * @param is_parallel Whether this operation is called in parallel. When true
- * we can potentially do optimizations that would otherwise be unsafe.
  * @return array_info* A output array with the replaced values.
  * This is either dictionary encoded or regular string array depending on the
  * input array.
  */
-array_info* get_replace_regex_py_entry(array_info* in_arr,
+array_info* get_replace_regex_py_entry(array_info* p_in_arr,
                                        char const* const pat,
-                                       char const* replacement,
-                                       const bool is_parallel);
+                                       char const* replacement);
+
+/**
+ * @brief Equivalent to get_replace_regex_py_entry, but contains extra
+ * information to enable caching dictionary arrays for use in streaming.
+ *
+ * @param in_arr The input array of string needed replacement. This must be a
+ * dictionary encoded array.
+ * @param pat A utf-8 encoded regex pattern.
+ * @param replacement A utf-8 encoded replacement string to insert based on the
+ * pattern.
+ * @param state Dictionary encoding state used for caching the output.
+ * @param func_id The id used as the key for the function.
+ * @return array_info* A output array with the replaced values.
+ * This is either dictionary encoded or regular string array depending on the
+ * input array.
+ */
+array_info* get_replace_regex_dict_state_py_entry(array_info* p_in_arr,
+                                                  char const* const pat,
+                                                  char const* replacement,
+                                                  DictEncodingState* state,
+                                                  int64_t func_id);
 #endif  // _ARRAY_OPERATIONS_H_INCLUDED

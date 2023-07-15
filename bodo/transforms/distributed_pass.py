@@ -519,13 +519,6 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
-        if fdef == (
-            "regexp_replace",
-            "bodo.libs.bodosql_array_kernels",
-        ) and self._is_1D_or_1D_Var_arr(lhs):
-            self._set_last_arg_to_true(assign.value)
-            return [assign]
-
         if (
             fdef == ("init_join_state", "bodo.libs.stream_join")
             and lhs in self._dist_analysis.array_dists

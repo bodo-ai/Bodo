@@ -67,11 +67,9 @@ def test_basic_caching(memory_leak_check):
 
     arr = pd.array(["Hierq", "owerew", None, "Help", "help", "HELP", "cons"] * 2)
     py_output = (pd.Series(arr).str.lower().array, 1)
-    # Only test sequential because it simplifies the test logic with pd.concat.
     check_func(
         impl,
         (pd.Series(arr),),
-        only_seq=True,
         py_output=py_output,
         use_dict_encoded_strings=True,
     )
@@ -143,7 +141,8 @@ def test_multi_dictionary(memory_leak_check):
         pd.concat((pd.Series(arr1).str.lower(), pd.Series(arr2).str.lower())).array,
         2,
     )
-    # Only test sequential because it simplifies the test logic with pd.concat.
+    # TODO(njriasan): Only sequential tests work by the slices in this function aren't "local"
+    # slices. As a result the code isn't logically consistent in parallel.
     check_func(
         impl,
         (pd.Series(arr1), pd.Series(arr2)),
@@ -240,12 +239,10 @@ def test_multi_function(memory_leak_check):
         [" Hierq", "owerew ", None, " Help", "help  ", "HELP", "   cons   "] * 2
     )
     py_output = (pd.Series(arr).str.lower().str.lstrip().array, 2)
-    # Only test sequential because it simplifies the test logic with pd.concat.
     check_func(
         impl,
         (pd.Series(arr),),
         py_output=py_output,
-        only_seq=True,
         use_dict_encoded_strings=True,
     )
 
@@ -287,12 +284,10 @@ def test_coalesce(memory_leak_check):
         pd.array([arr2[i] if pd.isna(arr1[i]) else arr1[i] for i in range(len(arr1))]),
         1,
     )
-    # Only test sequential because it simplifies the test logic with pd.concat.
     check_func(
         impl,
         (pd.Series(arr1), pd.Series(arr2)),
         py_output=py_output,
-        only_seq=True,
         use_dict_encoded_strings=True,
     )
 
@@ -370,12 +365,10 @@ def test_like(memory_leak_check):
         # Number of cache misses. Should be 1 for the first iteration.
         1,
     )
-    # Only test sequential because it simplifies the test logic with pd.concat.
     check_func(
         impl1,
         (pd.Series(arr),),
         py_output=py_output,
-        only_seq=True,
         use_dict_encoded_strings=True,
     )
 
@@ -384,11 +377,112 @@ def test_like(memory_leak_check):
         # Number of cache misses. Should be 1 for the first iteration.
         1,
     )
-    # Only test sequential because it simplifies the test logic with pd.concat.
     check_func(
         impl2,
         (pd.Series(arr), "h%"),
         py_output=py_output,
-        only_seq=True,
+        use_dict_encoded_strings=True,
+    )
+
+
+def test_decode(memory_leak_check):
+    impl1 = _build_1_arg_streaming_function(
+        'bodo.libs.bodosql_array_kernels.decode((section, "a", "one", "b", "two"), dict_encoding_state, func_id)'
+    )
+    impl2 = _build_1_arg_streaming_function(
+        'bodo.libs.bodosql_array_kernels.decode((section, "a", 1, "b", 2), dict_encoding_state, func_id)'
+    )
+    arr = pd.array(["a", "b", None, "c", None, "d", "v"] * 2)
+    py_output = (
+        pd.array(["one", "two", None, None, None, None, None] * 2),
+        # Number of cache misses. Should be 1 for the first iteration.
+        1,
+    )
+    check_func(
+        impl1,
+        (pd.Series(arr),),
+        py_output=py_output,
+        use_dict_encoded_strings=True,
+    )
+    py_output = (
+        pd.array([1, 2, None, None, None, None, None] * 2, dtype="Int64"),
+        # Number of cache misses. Should be 1 for the first iteration.
+        1,
+    )
+    check_func(
+        impl2,
+        (pd.Series(arr),),
+        py_output=py_output,
+        use_dict_encoded_strings=True,
+    )
+
+
+def test_concat_ws(memory_leak_check):
+    impl = _build_1_arg_streaming_function(
+        'bodo.libs.bodosql_array_kernels.concat_ws(("a", section, "c"), ",", dict_encoding_state, func_id)'
+    )
+    arr = pd.array(["a", "b", None, "c", None, "def", "v"] * 2)
+    py_output = (
+        pd.array(["a,a,c", "a,b,c", None, "a,c,c", None, "a,def,c", "a,v,c"] * 2),
+        # Number of cache misses. Should be 1 for the first iteration.
+        1,
+    )
+    check_func(
+        impl,
+        (pd.Series(arr),),
+        py_output=py_output,
+        use_dict_encoded_strings=True,
+    )
+
+
+def test_least_greatest(memory_leak_check):
+    impl1 = _build_1_arg_streaming_function(
+        'bodo.libs.bodosql_array_kernels.least(("cat", section), dict_encoding_state, func_id)'
+    )
+    impl2 = _build_1_arg_streaming_function(
+        'bodo.libs.bodosql_array_kernels.greatest((section, "cat"), dict_encoding_state, func_id)'
+    )
+    arr = pd.array(["a", "b", None, "c", None, "def", "v"] * 2)
+    py_output = (
+        pd.array(["a", "b", None, "c", None, "cat", "cat"] * 2),
+        # Number of cache misses. Should be 1 for the first iteration.
+        1,
+    )
+    check_func(
+        impl1,
+        (pd.Series(arr),),
+        py_output=py_output,
+        use_dict_encoded_strings=True,
+    )
+    py_output = (
+        pd.array(["cat", "cat", None, "cat", None, "def", "v"] * 2),
+        # Number of cache misses. Should be 1 for the first iteration.
+        1,
+    )
+    check_func(
+        impl2,
+        (pd.Series(arr),),
+        py_output=py_output,
+        use_dict_encoded_strings=True,
+    )
+
+
+def test_regexp_replace_cplusplus(memory_leak_check):
+    """
+    Test the regexp_replace code that goes to C++ properly does dictionary caching.
+    """
+    impl = _build_1_arg_streaming_function(
+        'bodo.libs.bodosql_array_kernels.regexp_replace(section, "ad?a", "done", 1, 0, "", dict_encoding_state, func_id)'
+    )
+    arr = pd.array(["adabc", "fabbbea", None, "aafewfew", None, "fewf", "qeqewr"] * 2)
+    py_output = (
+        pd.array(["donebc", "fabbbea", None, "donefewfew", None, "fewf", "qeqewr"] * 2),
+        # Number of cache misses. Should be 1 for the first iteration.
+        1,
+    )
+    check_func(
+        impl,
+        (pd.Series(arr),),
+        py_output=py_output,
         use_dict_encoded_strings=True,
     )

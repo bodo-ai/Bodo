@@ -364,10 +364,11 @@ def overload_like_kernel(
                     "pattern",
                     "escape",
                     "case_insensitive",
-                    "dict_encoding_state=None",
-                    "func_id=-1",
+                    "dict_encoding_state",
+                    "func_id",
                 ],
                 i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
     if is_overload_constant_str(pattern) and is_overload_constant_str(escape):

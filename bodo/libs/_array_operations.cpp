@@ -2203,7 +2203,7 @@ void get_search_regex_py_entry(array_info* in_arr, const bool case_sensitive,
  * not included in the output.
  */
 std::shared_ptr<array_info> get_replace_regex_slice(
-    std::shared_ptr<array_info> in_arr, char const* const pat,
+    const std::shared_ptr<array_info>& in_arr, char const* const pat,
     char const* replacement, size_t start_idx, size_t end_idx) {
     // See:
     // https://www.boost.org/doc/libs/1_76_0/boost/xpressive/regex_constants.hpp
@@ -2236,7 +2236,7 @@ std::shared_ptr<array_info> get_replace_regex_slice(
         // Allocate a working buffer to contain the result of the regex
         // replace.
         size_t buffer_size = 1000;
-        char* buffer = (char*)malloc(buffer_size);
+        std::vector<char> buffer(buffer_size);
         // To construct the output array we need to know how many characters
         // are in the output. As a result we compute the result twice, once
         // to get the size of the output and once with the result.
@@ -2249,16 +2249,14 @@ std::shared_ptr<array_info> get_replace_regex_slice(
                 const offset_t end_pos = in_data2[iRow + 1];
                 while (((end_pos - start_pos) * repLen) >= buffer_size) {
                     buffer_size *= 2;
-                    buffer = (char*)realloc(buffer, buffer_size);
+                    buffer.resize(buffer_size);
                 }
                 char* out_buffer = boost::xpressive::regex_replace(
-                    buffer, in_data1 + start_pos, in_data1 + end_pos, pattern,
-                    replacement);
-                num_chars += out_buffer - buffer;
+                    buffer.data(), in_data1 + start_pos, in_data1 + end_pos,
+                    pattern, replacement);
+                num_chars += out_buffer - buffer.data();
             }
         }
-        // Free the buffer now that its no longer needed.
-        free(buffer);
     }
     // Allocate the output array. We add 1 because regex_replace
     // may insert a null terminator
@@ -2290,8 +2288,7 @@ std::shared_ptr<array_info> get_replace_regex_slice(
 
 array_info* get_replace_regex_py_entry(array_info* p_in_arr,
                                        char const* const pat,
-                                       char const* replacement,
-                                       const bool is_parallel) {
+                                       char const* replacement) {
     std::shared_ptr<array_info> in_arr = std::shared_ptr<array_info>(p_in_arr);
     std::shared_ptr<array_info> out_arr = nullptr;
 
@@ -2299,56 +2296,60 @@ array_info* get_replace_regex_py_entry(array_info* p_in_arr,
         out_arr = get_replace_regex_slice(in_arr, pat, replacement, 0,
                                           in_arr->length);
     } else if (in_arr->arr_type == bodo_array_type::DICT) {
-        // Threshold used to determine whether to use the parallel path for a
-        // global dictionary. The takeaway here is that large dictionaries may
-        // benefit from splitting the compute and adding extra communication.
-        // TODO[BE-4418]: Benchmark and creat a reasonable threshold for
-        // dividing computation that accounts for the cost to compute replace on
-        // each byte, the communication initialization overhead, and the cost to
-        // perform the allgatherv.
-        const size_t LOCAL_COMPUTE_THRESHOLD = 1000000;
         // For dictionary-encoded string arrays, we optimize
         // by recursing on the dictionary (info1)
         // (which is presumably much smaller), and then
         // copying the null bitmap and indices.
         std::shared_ptr<array_info> dict_arr = in_arr->child_arrays[0];
         std::shared_ptr<array_info> indices_arr = in_arr->child_arrays[1];
-
-        // We use a special path for large dictionaries that are global and
-        // called in parallel.
-        bool use_parallel_path = is_parallel && in_arr->has_global_dictionary &&
-                                 dict_arr->length >= LOCAL_COMPUTE_THRESHOLD;
-        std::shared_ptr<array_info> new_dict;
-        if (use_parallel_path) {
-            // Compute your local slice of the dictionary.
-            size_t rank = dist_get_rank();
-            size_t nranks = dist_get_size();
-            size_t start_idx = dist_get_start(dict_arr->length, nranks, rank);
-            size_t end_idx = dist_get_end(dict_arr->length, nranks, rank);
-            // Compute the length with just your chunk.
-            std::shared_ptr<array_info> dict_slice = get_replace_regex_slice(
-                dict_arr, pat, replacement, start_idx, end_idx);
-            // Wrap the dictionary in a table so we can do an allgatherv.
-            std::shared_ptr<table_info> dict_table =
-                std::make_shared<table_info>();
-            dict_table->columns.push_back(dict_slice);
-            std::shared_ptr<table_info> gathered_table =
-                gather_table(dict_table, 1, true, true);
-            new_dict = gathered_table->columns[0];
-        } else {
-            // Just recurse on the dictionary locally
-            new_dict = get_replace_regex_slice(dict_arr, pat, replacement, 0,
-                                               dict_arr->length);
-        }
+        std::shared_ptr<array_info> new_dict = get_replace_regex_slice(
+            dict_arr, pat, replacement, 0, dict_arr->length);
         std::shared_ptr<array_info> new_indices = copy_array(indices_arr);
         out_arr = create_dict_string_array(new_dict, new_indices,
                                            in_arr->has_global_dictionary);
     } else {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "array in_arr type should be string");
+        Bodo_PyErr_SetString(
+            PyExc_RuntimeError,
+            "get_replace_regex_py_entry: array in_arr type should be string");
     }
     if (out_arr != nullptr) {
         return new array_info(*out_arr);
     }
     return nullptr;
+}
+
+array_info* get_replace_regex_dict_state_py_entry(array_info* p_in_arr,
+                                                  char const* const pat,
+                                                  char const* replacement,
+                                                  DictEncodingState* state,
+                                                  int64_t func_id) {
+    std::shared_ptr<array_info> in_arr = std::shared_ptr<array_info>(p_in_arr);
+    if (in_arr->arr_type != bodo_array_type::DICT) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "get_replace_regex_dict_state_py_entry: array "
+                             "in_arr type should be dictionary encoded");
+        return nullptr;
+    }
+    // For dictionary-encoded string arrays, we optimize
+    // by recursing on the dictionary (info1)
+    // (which is presumably much smaller), and then
+    // copying the null bitmap and indices.
+    std::shared_ptr<array_info> dict_arr = in_arr->child_arrays[0];
+    std::shared_ptr<array_info> new_dict;
+    int64_t new_id;
+    int64_t old_id = dict_arr->array_id;
+    if (state->contains(func_id, old_id)) {
+        std::tie(new_dict, new_id) = state->get_array(func_id, old_id);
+    } else {
+        new_dict = get_replace_regex_slice(dict_arr, pat, replacement, 0,
+                                           dict_arr->length);
+        new_id = new_dict->array_id;
+        state->set_array(func_id, old_id, new_dict, new_id);
+    }
+
+    std::shared_ptr<array_info> indices_arr = in_arr->child_arrays[1];
+    std::shared_ptr<array_info> new_indices = copy_array(indices_arr);
+    std::shared_ptr<array_info> out_arr = create_dict_string_array(
+        new_dict, new_indices, in_arr->has_global_dictionary);
+    return new array_info(*out_arr);
 }

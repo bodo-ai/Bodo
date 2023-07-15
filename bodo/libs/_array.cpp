@@ -1502,6 +1502,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, array_isin_py_entry);
     SetAttrStringFromVoidPtr(m, get_search_regex_py_entry);
     SetAttrStringFromVoidPtr(m, get_replace_regex_py_entry);
+    SetAttrStringFromVoidPtr(m, get_replace_regex_dict_state_py_entry);
 
     // Functions in the section below only use C which cannot throw exceptions,
     // so typical exception handling is not required

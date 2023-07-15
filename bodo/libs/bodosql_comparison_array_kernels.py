@@ -7,53 +7,62 @@ from numba.extending import overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.utils.typing import is_overload_none
 
 
-def equal(arr0, arr1):  # pragma: no cover
+def equal(arr0, arr1, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     pass
 
 
-def not_equal(arr0, arr1):  # pragma: no cover
+def not_equal(arr0, arr1, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     pass
 
 
-def less_than(arr0, arr1):  # pragma: no cover
+def less_than(arr0, arr1, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     pass
 
 
-def greater_than(arr0, arr1):  # pragma: no cover
+def greater_than(arr0, arr1, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     pass
 
 
-def less_than_or_equal(arr0, arr1):  # pragma: no cover
+def less_than_or_equal(
+    arr0, arr1, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
     pass
 
 
-def greater_than_or_equal(arr0, arr1):  # pragma: no cover
+def greater_than_or_equal(
+    arr0, arr1, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
     pass
 
 
-def equal_util(arr0, arr1):  # pragma: no cover
+def equal_util(arr0, arr1, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
-def not_equal_util(arr0, arr1):  # pragma: no cover
+def not_equal_util(arr0, arr1, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
-def less_than_util(arr0, arr1):  # pragma: no cover
+def less_than_util(arr0, arr1, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
-def greater_than_util(arr0, arr1):  # pragma: no cover
+def greater_than_util(arr0, arr1, dict_encoding_state, func_id):  # pragma: no cover
     pass
 
 
-def less_than_or_equal_util(arr0, arr1):  # pragma: no cover
+def less_than_or_equal_util(
+    arr0, arr1, dict_encoding_state, func_id
+):  # pragma: no cover
     pass
 
 
-def greater_than_or_equal_util(arr0, arr1):  # pragma: no cover
+def greater_than_or_equal_util(
+    arr0, arr1, dict_encoding_state, func_id
+):  # pragma: no cover
     pass
 
 
@@ -68,7 +77,7 @@ def create_comparison_operators_func_overload(func_name):
         (function): a utility that returns an overload with the operator functionality.
     """
 
-    def overload_func(arr0, arr1):
+    def overload_func(arr0, arr1, dict_encoding_state=None, func_id=-1):
         """Handles cases where func_name receives an optional argument and forwards
         to the appropriate version of the real implementation"""
         args = [arr0, arr1]
@@ -76,14 +85,13 @@ def create_comparison_operators_func_overload(func_name):
             if isinstance(args[i], types.optional):
                 return unopt_argument(
                     f"bodo.libs.bodosql_array_kernels.{func_name}",
-                    ["arr0", "arr1"],
+                    ["arr0", "arr1", "dict_encoding_state", "func_id"],
                     i,
+                    default_map={"dict_encoding_state": None, "func_id": -1},
                 )
 
-        func_text = "def impl(arr0, arr1):\n"
-        func_text += (
-            f"  return bodo.libs.bodosql_array_kernels.{func_name}_util(arr0, arr1)"
-        )
+        func_text = "def impl(arr0, arr1, dict_encoding_state=None, func_id=-1):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.{func_name}_util(arr0, arr1, dict_encoding_state, func_id)"
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
 
@@ -103,10 +111,10 @@ def create_comparison_operators_util_func_overload(func_name):  # pragma: no cov
         (function): a utility that returns an overload with the operator functionality.
     """
 
-    def overload_func_util(arr0, arr1):
-        arg_names = ["arr0", "arr1"]
-        arg_types = [arr0, arr1]
-        propagate_null = [True] * 2
+    def overload_func_util(arr0, arr1, dict_encoding_state, func_id):
+        arg_names = ["arr0", "arr1", "dict_encoding_state", "func_id"]
+        arg_types = [arr0, arr1, dict_encoding_state, func_id]
+        propagate_null = [True, True, False, False]
         out_dtype = bodo.boolean_array_type
         if func_name == "equal":
             operator_str = "=="
@@ -123,8 +131,18 @@ def create_comparison_operators_util_func_overload(func_name):  # pragma: no cov
 
         # Always unbox in case of Timestamp to avoid issues
         scalar_text = f"res[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg0) {operator_str} bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg1)"
+        use_dict_caching = not is_overload_none(dict_encoding_state)
         return gen_vectorized(
-            arg_names, arg_types, propagate_null, scalar_text, out_dtype
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+            # Add support for dict encoding caching with streaming.
+            dict_encoding_state_name="dict_encoding_state"
+            if use_dict_caching
+            else None,
+            func_id_name="func_id" if use_dict_caching else None,
         )
 
     return overload_func_util

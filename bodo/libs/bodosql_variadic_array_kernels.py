@@ -41,10 +41,11 @@ def overload_coalesce(A, dict_encoding_state=None, func_id=-1):
             # leak as the dict-encoding result will be cast to a regular string array.
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.coalesce",
-                ["A", "dict_encoding_state=None", "func_id=-1"],
+                ["A", "dict_encoding_state", "func_id"],
                 0,
                 container_arg=i,
                 container_length=len(A),
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
     def impl(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
@@ -385,29 +386,30 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
 
 
 @numba.generated_jit(nopython=True)
-def decode(A):
+def decode(A, dict_encoding_state=None, func_id=-1):
     """Handles cases where DECODE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if not isinstance(A, (types.Tuple, types.UniTuple)):
         raise_bodo_error("Decode argument must be a tuple")
-    for i in range(len(A)):
-        if isinstance(A[i], types.optional):
+    for i, val in enumerate(A):
+        if isinstance(val, types.optional):
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.decode",
-                ["A"],
+                ["A", "dict_encoding_state", "func_id"],
                 0,
                 container_arg=i,
                 container_length=len(A),
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(A):  # pragma: no cover
-        return decode_util(A)
+    def impl(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return decode_util(A, dict_encoding_state, func_id)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def decode_util(A):
+def decode_util(A, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function decode which takes in an input
     scalar/column a variable number of arguments in pairs (with an
     optional default argument at the end) with the following behavior:
@@ -525,7 +527,7 @@ def decode_util(A):
 
     # Create the mapping from each local variable to the corresponding element in the array
     # of columns/scalars
-    arg_string = "A"
+    arg_string = "A, dict_encoding_state, func_id"
     arg_sources = {f"A{i}": f"A[{i}]" for i in range(len(A))}
 
     # Extract all of the arguments that correspond to inputs vs outputs
@@ -556,6 +558,9 @@ def decode_util(A):
         and len(arg_types) % 2 == 1
     )
 
+    use_dict_caching = support_dict_encoding and not is_overload_none(
+        dict_encoding_state
+    )
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -565,53 +570,60 @@ def decode_util(A):
         arg_string,
         arg_sources,
         support_dict_encoding=support_dict_encoding,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
-def concat_ws(A, sep):  # pragma: no cover
+def concat_ws(A, sep, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
 @overload(concat_ws)
-def overload_concat_ws(A, sep):
+def overload_concat_ws(A, sep, dict_encoding_state=None, func_id=-1):
     """Handles cases where concat_ws receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if not isinstance(A, (types.Tuple, types.UniTuple)):
         raise_bodo_error("concat_ws argument must be a tuple")
-    for i in range(len(A)):
-        if isinstance(A[i], types.optional):
+    arg_names = ["A", "sep", "dict_encoding_state", "func_id"]
+    default_map = {"dict_encoding_state": None, "func_id": -1}
+    for i, val in enumerate(A):
+        if isinstance(val, types.optional):
             # Note: If we have an optional scalar and its not the last argument,
             # then the NULL vs non-NULL case can lead to different decisions
             # about dictionary encoding in the output. This will lead to a memory
             # leak as the dict-encoding result will be cast to a regular string array.
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.concat_ws",
-                ["A", "sep"],
+                arg_names,
                 0,
                 container_arg=i,
                 container_length=len(A),
+                default_map=default_map,
             )
     if isinstance(sep, types.optional):
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.concat_ws",
-            ["A", "sep"],
+            arg_names,
             1,
+            default_map=default_map,
         )
 
-    def impl(A, sep):  # pragma: no cover
-        return concat_ws_util(A, sep)
+    def impl(A, sep, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return concat_ws_util(A, sep, dict_encoding_state, func_id)
 
     return impl
 
 
-def concat_ws_util(A, sep):  # pragma: no cover
+def concat_ws_util(A, sep, dict_encoding_state, func_id):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
 @overload(concat_ws_util, no_unliteral=True)
-def overload_concat_ws_util(A, sep):
+def overload_concat_ws_util(A, sep, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function CONCAT_WS which takes in array of
        1+ columns/scalars and a separator and returns the result of concatenating
        together all of the values.
@@ -648,11 +660,12 @@ def overload_concat_ws_util(A, sep):
     out_dtype = bodo.string_array_type
 
     # Create the mapping from the tuple to the local variable.
-    arg_string = "A, sep"
+    arg_string = "A, sep, dict_encoding_state, func_id"
     arg_sources = {f"A{i}": f"A[{i}]" for i in range(len(A))}
 
     concat_args = ",".join([f"arg{i}" for i in range(len(A))])
     scalar_text = f"  res[i] = arg{len(A)}.join([{concat_args}])\n"
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -661,10 +674,13 @@ def overload_concat_ws_util(A, sep):
         out_dtype,
         arg_string,
         arg_sources,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
-def least_greatest_codegen(A, is_greatest):
+def least_greatest_codegen(A, is_greatest, dict_encoding_state, func_id):
     """
     A codegen function for SQL functions LEAST and GREATEST,
     which takes in an array of 1+ columns/scalars. Depending on
@@ -706,7 +722,7 @@ def least_greatest_codegen(A, is_greatest):
         out_dtype = get_common_scalar_dtype(arg_types)[0]
 
     # Create the mapping from the tuple to the local variable.
-    arg_string = "A"
+    arg_string = "A, dict_encoding_state, func_id"
     arg_sources = {f"A{i}": f"A[{i}]" for i in range(len(A))}
 
     # When returning a scalar we return a pd.Timestamp type.
@@ -729,6 +745,7 @@ def least_greatest_codegen(A, is_greatest):
     extra_globals = {
         "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
     }
+    use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -738,16 +755,19 @@ def least_greatest_codegen(A, is_greatest):
         arg_string,
         arg_sources,
         extra_globals=extra_globals,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
-def least(A):  # pragma: no cover
+def least(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
 @overload(least)
-def overload_least(A):
+def overload_least(A, dict_encoding_state=None, func_id=-1):
     """Handles cases where LEAST receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if not isinstance(A, (types.Tuple, types.UniTuple)):
@@ -760,25 +780,26 @@ def overload_least(A):
             # leak as the dict-encoding result will be cast to a regular string array.
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.least",
-                ["A"],
+                ["A", "dict_encoding_state", "func_id"],
                 0,
                 container_arg=i,
                 container_length=len(A),
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(A):  # pragma: no cover
-        return least_util(A)
+    def impl(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return least_util(A, dict_encoding_state, func_id)
 
     return impl
 
 
-def least_util(A):  # pragma: no cover
+def least_util(A, dict_encoding_state, func_id):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
 @overload(least_util, no_unliteral=True)
-def overload_least_util(A):
+def overload_least_util(A, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function LEAST which takes in array of
        1+ columns/scalars and returns the smallest value.
 
@@ -790,16 +811,18 @@ def overload_least_util(A):
         an array containing the smallest value of the input array
     """
 
-    return least_greatest_codegen(A, is_greatest=False)
+    return least_greatest_codegen(
+        A, is_greatest=False, dict_encoding_state=dict_encoding_state, func_id=func_id
+    )
 
 
-def greatest(A):  # pragma: no cover
+def greatest(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
 @overload(greatest)
-def overload_greatest(A):
+def overload_greatest(A, dict_encoding_state=None, func_id=-1):
     """Handles cases where GREATEST receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if not isinstance(A, (types.Tuple, types.UniTuple)):
@@ -812,25 +835,26 @@ def overload_greatest(A):
             # leak as the dict-encoding result will be cast to a regular string array.
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.greatest",
-                ["A"],
+                ["A", "dict_encoding_state", "func_id"],
                 0,
                 container_arg=i,
                 container_length=len(A),
+                default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(A):  # pragma: no cover
-        return greatest_util(A)
+    def impl(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return greatest_util(A, dict_encoding_state, func_id)
 
     return impl
 
 
-def greatest_util(A):  # pragma: no cover
+def greatest_util(A, dict_encoding_state, func_id):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
 @overload(greatest_util, no_unliteral=True)
-def overload_greatest_util(A):
+def overload_greatest_util(A, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function GREATEST which takes in array of
        1+ columns/scalars and returns the largest value.
 
@@ -841,7 +865,9 @@ def overload_greatest_util(A):
     Returns:
         an array containing the largest value of the input array
     """
-    return least_greatest_codegen(A, is_greatest=True)
+    return least_greatest_codegen(
+        A, is_greatest=True, dict_encoding_state=dict_encoding_state, func_id=func_id
+    )
 
 
 def row_number(df, by_cols, ascending, na_position):  # pragma: no cover
