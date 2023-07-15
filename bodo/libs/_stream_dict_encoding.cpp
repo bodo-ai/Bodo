@@ -1,6 +1,6 @@
 #include "_stream_dict_encoding.h"
 
-DictEncodingState::DictEncodingState() : num_set_calls(0) { }
+DictEncodingState::DictEncodingState() : num_set_calls(0) {}
 
 std::tuple<bool, std::tuple<std::shared_ptr<array_info>, int64_t>>
 DictEncodingState::contains_and_value(int64_t func_id, int64_t dict_id) {
