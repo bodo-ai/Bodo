@@ -2,7 +2,6 @@ package com.bodosql.calcite.ir
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import org.apache.calcite.rel.RelNode
-import java.lang.Exception
 import java.util.*
 
 /**
