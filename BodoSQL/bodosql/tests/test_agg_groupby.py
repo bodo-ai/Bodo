@@ -783,7 +783,7 @@ def test_any_value(args, spark_info, memory_leak_check):
         pytest.param(
             "SELECT booland_agg(F) FROM table1 GROUP BY G",
             [None, False, False, False, True, True, True],
-            id="booloand_agg-float",
+            id="booland_agg-float",
         ),
         pytest.param(
             "SELECT boolxor_agg(I) FROM table1 GROUP BY G",
