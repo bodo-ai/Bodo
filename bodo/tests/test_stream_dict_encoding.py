@@ -11,6 +11,44 @@ import bodo
 from bodo.tests.utils import check_func
 
 
+def test_concat_allocation(memory_leak_check):
+    """
+    Test that concat won't allocate a new id if all dictionaries
+    have the same id.
+    """
+    slice_size = 3
+
+    def impl(S):
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        # Allocate ids at the start and end to determine how many ids
+        # we used in this function. Concat should use 0 since its the
+        # same dictionary.
+        start_id = bodo.libs.dict_arr_ext.generate_dict_id(len(arr))
+        finished = False
+        batch_num = 0
+        arr_size = len(arr)
+        batches = []
+        while not finished:
+            section = arr[batch_num * slice_size : (batch_num + 1) * slice_size]
+            finished = ((batch_num + 1) * slice_size) >= arr_size
+            batches.append(section)
+            batch_num += 1
+        out_arr = bodo.libs.array_kernels.concat(batches)
+        end_id = bodo.libs.dict_arr_ext.generate_dict_id(len(out_arr))
+        num_ids = (end_id - start_id) - 1
+        return (out_arr, num_ids)
+
+    arr = pd.array(["Hierq", "owerew", None, "Help", "help", "HELP", "cons"] * 2)
+    # Verify the input is unchanged and no new ids were allocated.
+    py_output = (arr, 0)
+    check_func(
+        impl,
+        (pd.Series(arr),),
+        py_output=py_output,
+        use_dict_encoded_strings=True,
+    )
+
+
 def test_basic_caching(memory_leak_check):
     """
     Test that a basic implementation with the dictionary returns
