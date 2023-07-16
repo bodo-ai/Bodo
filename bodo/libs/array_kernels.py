@@ -1796,60 +1796,121 @@ def concat_overload(arr_list):
                 Combine the dictionaries by stacking the inner dict-array
                 and remap the indices. drop_duplicates_local_dictionary is
                 called at the end to remove duplicates.
+
+                If all dictionaries share the same id then we can skip the transpose step.
                 """
-                # allocate the inner dict array
+                if len(arr_list) == 0:
+                    # 0 array edge case that probably never happens.
+                    out_dict_arr = pre_alloc_string_array(0, 0)
+                    out_ind_arr = bodo.libs.int_arr_ext.alloc_int_array(0, np.int32)
+                    # Note: we shouldn't assume this value is global.
+                    return init_dict_arr(out_dict_arr, out_ind_arr, False, True, None)
+
+                # Check if all dictionaries have the same id.
+                all_same_id = True
+                first_arr = arr_list[0]
+                initial_id = first_arr._dict_id
+                has_global_dictionary = first_arr._has_global_dictionary
+                # Track unique for the id case. We want to avoid false negatives.
+                has_unique_local_dictionary_if_same = (
+                    first_arr._has_unique_local_dictionary
+                )
                 num_strs = 0
                 num_chars = 0
                 num_elems = 0
-                # If all dictionaries were global they remain global.
-                has_global_dictionary = True
-                for A in arr_list:
-                    data_arr = A._data
-                    indices_arr = A._indices
-                    has_global_dictionary = (
-                        has_global_dictionary and A._has_global_dictionary
-                    )
+                for arr in arr_list:
+                    data_arr = arr._data
+                    indices_arr = arr._indices
+                    # Compute the sizes
                     num_elems += len(indices_arr)
                     num_strs += len(data_arr)
                     num_chars += bodo.libs.str_arr_ext.num_total_chars(data_arr)
-
-                out_dict_arr = pre_alloc_string_array(num_strs, num_chars)
-                out_ind_arr = bodo.libs.int_arr_ext.alloc_int_array(num_elems, np.int32)
-                bodo.libs.str_arr_ext.set_null_bits_to_value(out_dict_arr, -1)
-
-                # copy data to output
-                curr_str_ind = 0
-                curr_chars_ind = 0
-                curr_elem_ind = 0
-                for A in arr_list:
-                    data_arr = A._data
-                    indices_arr = A._indices
-                    num_elems = len(indices_arr)
-                    bodo.libs.str_arr_ext.set_string_array_range(
-                        out_dict_arr, data_arr, curr_str_ind, curr_chars_ind
+                    # Compute the dicitonary metadata.
+                    has_global_dictionary = (
+                        has_global_dictionary and arr._has_global_dictionary
                     )
-                    for i in range(num_elems):
-                        if bodo.libs.array_kernels.isna(
-                            indices_arr, i
-                        ) or bodo.libs.array_kernels.isna(data_arr, indices_arr[i]):
-                            bodo.libs.array_kernels.setna(
-                                out_ind_arr, curr_elem_ind + i
-                            )
-                        else:
-                            out_ind_arr[curr_elem_ind + i] = (
-                                curr_str_ind + indices_arr[i]
-                            )
-                    curr_str_ind += len(data_arr)
-                    curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(data_arr)
-                    curr_elem_ind += num_elems
+                    has_unique_local_dictionary_if_same = (
+                        has_unique_local_dictionary_if_same
+                        or arr._has_unique_local_dictionary
+                    )
+                    all_same_id = all_same_id and arr._dict_id == initial_id
 
-                out_arr = init_dict_arr(
-                    out_dict_arr, out_ind_arr, has_global_dictionary, False, None
-                )
-                # drop_duplicates_local_dictionary will drop any local duplicates,
-                # potentially remaping the indices.
-                unique_out_arr = drop_duplicates_local_dictionary(out_arr, False)
-                return unique_out_arr
+                if all_same_id:
+                    # If all the dictionaries shared the same id we can reuse the same dictionary.
+                    out_dict_arr = first_arr._data
+                    # Check the indices
+                    out_ind_arr = bodo.libs.int_arr_ext.alloc_int_array(
+                        num_elems, np.int32
+                    )
+                    # copy the indices to the output
+                    curr_elem_ind = 0
+                    for A in arr_list:
+                        indices_arr = A._indices
+                        num_elems = len(indices_arr)
+                        for i in range(num_elems):
+                            if bodo.libs.array_kernels.isna(
+                                indices_arr, i
+                            ) or bodo.libs.array_kernels.isna(
+                                out_dict_arr, indices_arr[i]
+                            ):
+                                bodo.libs.array_kernels.setna(
+                                    out_ind_arr, curr_elem_ind + i
+                                )
+                            else:
+                                # No need to remap data
+                                out_ind_arr[curr_elem_ind + i] = indices_arr[i]
+                        curr_elem_ind += num_elems
+                    return init_dict_arr(
+                        out_dict_arr,
+                        out_ind_arr,
+                        has_global_dictionary,
+                        has_unique_local_dictionary_if_same,
+                        initial_id,
+                    )
+
+                else:
+                    # allocate the inner dict array
+                    out_dict_arr = pre_alloc_string_array(num_strs, num_chars)
+                    out_ind_arr = bodo.libs.int_arr_ext.alloc_int_array(
+                        num_elems, np.int32
+                    )
+                    bodo.libs.str_arr_ext.set_null_bits_to_value(out_dict_arr, -1)
+
+                    # copy data to output
+                    curr_str_ind = 0
+                    curr_chars_ind = 0
+                    curr_elem_ind = 0
+                    for A in arr_list:
+                        data_arr = A._data
+                        indices_arr = A._indices
+                        num_elems = len(indices_arr)
+                        bodo.libs.str_arr_ext.set_string_array_range(
+                            out_dict_arr, data_arr, curr_str_ind, curr_chars_ind
+                        )
+                        for i in range(num_elems):
+                            if bodo.libs.array_kernels.isna(
+                                indices_arr, i
+                            ) or bodo.libs.array_kernels.isna(data_arr, indices_arr[i]):
+                                bodo.libs.array_kernels.setna(
+                                    out_ind_arr, curr_elem_ind + i
+                                )
+                            else:
+                                out_ind_arr[curr_elem_ind + i] = (
+                                    curr_str_ind + indices_arr[i]
+                                )
+                        curr_str_ind += len(data_arr)
+                        curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(
+                            data_arr
+                        )
+                        curr_elem_ind += num_elems
+
+                    out_arr = init_dict_arr(
+                        out_dict_arr, out_ind_arr, has_global_dictionary, False, None
+                    )
+                    # drop_duplicates_local_dictionary will drop any local duplicates,
+                    # potentially remapping the indices.
+                    unique_out_arr = drop_duplicates_local_dictionary(out_arr, False)
+                    return unique_out_arr
 
             return impl_dict_arr
 
