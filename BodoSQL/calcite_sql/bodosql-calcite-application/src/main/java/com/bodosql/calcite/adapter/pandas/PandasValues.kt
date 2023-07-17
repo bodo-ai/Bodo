@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.StateVariable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -25,6 +26,14 @@ class PandasValues(
     }
 
     override fun emit(implementor: PandasRel.Implementor): Dataframe {
+        TODO("Not yet implemented")
+    }
+
+    override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
+        TODO("Not yet implemented")
+    }
+
+    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
         TODO("Not yet implemented")
     }
 

@@ -1,9 +1,10 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.ir.Dataframe
-import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
+import com.bodosql.calcite.traits.BatchingProperty
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableSet
 import org.apache.calcite.plan.RelOptCluster
@@ -56,6 +57,14 @@ class PandasJoin(
     }
 
     override fun emit(implementor: PandasRel.Implementor): Dataframe {
+        TODO("Not yet implemented")
+    }
+
+    override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
+        TODO("Not yet implemented")
+    }
+
+    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
         TODO("Not yet implemented")
     }
 

@@ -50,7 +50,6 @@ import com.bodosql.calcite.application.timers.StreamingRelNodeTimer;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Dataframe;
 import com.bodosql.calcite.ir.Expr;
-import com.bodosql.calcite.ir.Expr.Call;
 import com.bodosql.calcite.ir.Expr.IntegerLiteral;
 import com.bodosql.calcite.ir.Expr.StringLiteral;
 import com.bodosql.calcite.ir.Module;
@@ -71,7 +70,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Stack;
 import java.util.function.Supplier;
+import kotlin.Unit;
 import kotlin.jvm.functions.Function1;
+import kotlin.jvm.functions.Function2;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
@@ -82,7 +83,6 @@ import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.core.TableScan;
-import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
@@ -1618,76 +1618,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Helper function that handles the setup for an IO loop that draws from a streaming iterator.
-   *
-   * <p>Handles: Creating the streaming Pipeline Calling read_arrow_next on the iterator object
-   * Converting the output table from read_arrow_next into a dataframe
-   *
-   * @param readCode The expression that evaluates to the streaming iterator object.
-   * @param columnNames The expected output column names.
-   * @return Dataframe variable for a fully initialized dataframe, containing a batch of data.
-   */
-  public Variable initStreamingIoLoop(PandasRel node, Expr readCode, List<String> columnNames) {
-
-    Variable flagVar = genFinishedStreamingFlag();
-    Variable iterVar = genIterVar();
-    // start the streaming pipeline
-    this.generatedCode.startStreamingPipelineFrame(flagVar, iterVar);
-
-    // TODO: Move to a wrapper function to avoid the timerInfo calls.
-    // This requires more information about the high level design of the streaming
-    // operators since there are several parts (e.g. state, multiple loop sections, etc.)
-    // At this time it seems like it would be too much work to have a clean interface.
-    // There may be a need to pass in several lambdas, so other changes may be needed to avoid
-    // constant rewriting.
-    StreamingRelNodeTimer timerInfo =
-        StreamingRelNodeTimer.createStreamingTimer(
-            this.generatedCode,
-            this.verboseLevel,
-            node.operationDescriptor(),
-            node.loggingTitle(),
-            node.nodeDetails(),
-            node.getTimerType());
-    timerInfo.initializeTimer();
-
-    StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
-    // Create the reader before the loop
-    timerInfo.insertStateStartTimer();
-    StateVariable readerVar = this.genStateVar();
-    currentPipeline.addInitialization(new Op.Assign(readerVar, readCode));
-    timerInfo.insertStateEndTimer();
-
-    timerInfo.insertLoopOperationStartTimer();
-    Variable dfChunkVar = this.genTableVar();
-
-    Call read_arrow_next_call =
-        new Call("bodo.io.arrow_reader.read_arrow_next", List.of(readerVar), List.of());
-    this.generatedCode.add(new Op.TupleAssign(List.of(dfChunkVar, flagVar), read_arrow_next_call));
-
-    Expr.Call df_len = new Call("len", dfChunkVar);
-
-    Variable idx_var = genIndexVar();
-
-    generateRangeIndexCode(df_len, idx_var);
-
-    List<Expr.StringLiteral> colNamesLiteral = new ArrayList<>();
-    for (int i = 0; i < columnNames.size(); i++) {
-      colNamesLiteral.add(new Expr.StringLiteral(columnNames.get(i)));
-    }
-    Variable outVar = this.genDfVar();
-    generateInitOutputDfCode(colNamesLiteral, dfChunkVar, idx_var, outVar);
-    timerInfo.insertLoopOperationEndTimer();
-    timerInfo.terminateTimer();
-
-    // Delete the reader state at end of loop
-    Op.Stmt deleteState =
-        new Op.Stmt(new Expr.Call("bodo.io.arrow_reader.arrow_reader_del", List.of(readerVar)));
-    currentPipeline.addTermination(deleteState);
-
-    return outVar;
-  }
-
-  /**
    * Visitor for Join: Supports JOIN clause in SQL.
    *
    * @param node join node being visited
@@ -2141,10 +2071,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
       return singleBatchTimer(node, () -> fn.invoke(new PandasCodeGenVisitor.BuildContext(node)));
     }
 
-    @org.jetbrains.annotations.Nullable
+    @NotNull
     @Override
     public Dataframe buildStreaming(
-        @NotNull Function1<? super PandasRel.BuildContext, Dataframe> fn) {
+        @NotNull Function1<? super PandasRel.BuildContext, StateVariable> initFn,
+        @NotNull Function2<? super PandasRel.BuildContext, ? super StateVariable, Dataframe> bodyFn,
+        @NotNull Function2<? super PandasRel.BuildContext, ? super StateVariable, Unit> deleteFn) {
       // TODO: Move to a wrapper function to avoid the timerInfo calls.
       // This requires more information about the high level design of the streaming
       // operators since there are several parts (e.g. state, multiple loop sections, etc.)
@@ -2159,20 +2091,27 @@ public class PandasCodeGenVisitor extends RelVisitor {
               node.loggingTitle(),
               node.nodeDetails(),
               node.getTimerType());
+      PandasCodeGenVisitor.BuildContext buildContext = new PandasCodeGenVisitor.BuildContext(node);
       timerInfo.initializeTimer();
+      // Init the state and time it.
+      timerInfo.insertStateStartTimer();
+      StateVariable stateVar = initFn.invoke(buildContext);
+      timerInfo.insertStateEndTimer();
+      // Handle the loop body
       timerInfo.insertLoopOperationStartTimer();
-      Dataframe res = fn.invoke(new PandasCodeGenVisitor.BuildContext(node));
+      Dataframe res = bodyFn.invoke(buildContext, stateVar);
       timerInfo.insertLoopOperationEndTimer();
+      // Delete the state
+      deleteFn.invoke(buildContext, stateVar);
       timerInfo.terminateTimer();
       return res;
     }
 
-    @org.jetbrains.annotations.Nullable
     @Override
-    public Dataframe buildStreamingNoTimer(
-        @NotNull Function1<? super PandasRel.BuildContext, Dataframe> fn) {
-      // This is a temporary function call for sections that require manual timer calls.
-      return fn.invoke(new PandasCodeGenVisitor.BuildContext(node));
+    public void createStreamingPipeline() {
+      Variable exitCond = genFinishedStreamingFlag();
+      Variable iterVariable = genIterVar();
+      generatedCode.startStreamingPipelineFrame(exitCond, iterVariable);
     }
   }
 
@@ -2220,15 +2159,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     @Override
     public StreamingOptions streamingOptions() {
       return streamingOptions;
-    }
-
-    @NotNull
-    @Override
-    public Dataframe initStreamingIoLoop(
-        @NotNull final Expr expr, @NotNull final RelDataType rowType) {
-      List<String> columnNames = rowType.getFieldNames();
-      Variable out = PandasCodeGenVisitor.this.initStreamingIoLoop(node, expr, columnNames);
-      return new Dataframe(out.getName(), node);
     }
   }
 }
