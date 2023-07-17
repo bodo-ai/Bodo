@@ -46,6 +46,7 @@ def save_output_impl(
             print("Output Shape: ", output.shape)
             if print_output:
                 print("Output:")
+                print(output)
             if pq_out_filename != "":
                 print("Saving output as parquet dataset to: ", pq_out_filename)
                 t0 = time.time()
@@ -113,15 +114,17 @@ def main(args):
     else:
         bodo.bodosql_use_streaming_plan = False
 
-    print(
-        "VOLCANO:",
-        bodo.bodosql_use_volcano_plan,
-        "STREAMING: ",
-        bodo.bodosql_use_streaming_plan,
-    )
+    if bodo.get_rank() == 0:
+        print(
+            "VOLCANO:",
+            bodo.bodosql_use_volcano_plan,
+            "STREAMING: ",
+            bodo.bodosql_use_streaming_plan,
+        )
 
     if args.streaming_batch_size:
-        print("Set batch size to ", args.streaming_batch_size, file=sys.stderr)
+        if bodo.get_rank() == 0:
+            print("Set batch size to ", args.streaming_batch_size, file=sys.stderr)
         bodo.bodosql_streaming_batch_size = args.streaming_batch_size
     # Throw an error in the case that the use supplied both only_test_compiles, and an argument that
     # requires a full run
@@ -155,10 +158,13 @@ def main(args):
         cparams["schema"] = args.sf_schema
 
     if args.local_catalog:
+        if bodo.get_rank() == 0:
+            print("USING LOCAL TABLES")
         tables = load_tables(args)
         bc = bodosql.BodoSQLContext(tables)
     else:
-        print("USING SNOWFLAKE")
+        if bodo.get_rank() == 0:
+            print("USING SNOWFLAKE CATALOG")
         # Create catalog from credentials and args
         bsql_catalog = bodosql.SnowflakeCatalog(
             username=catalog["SF_USERNAME"],
@@ -197,7 +203,8 @@ def main(args):
         assert (
             compiles_flag
         ), f"Query failed to compile with error message: {error_message}"
-        print(f"Query compiled in {compile_time} seconds.")
+        if bodo.get_rank() == 0:
+            print(f"Query compiled in {compile_time} seconds.")
     else:
         sf_write_conn = ""
         sf_out_table_name = ""
