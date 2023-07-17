@@ -22,7 +22,6 @@ public class SetOpCodeGen {
   /**
    * Function that return the necessary generated code for a Union expression.
    *
-   * @param outVar The output variable.
    * @param outputColumnNames a list containing the expected output column names
    * @param childExprs The child expressions to be Unioned together. The expressions must all be
    *     dataframes

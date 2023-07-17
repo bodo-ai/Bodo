@@ -278,12 +278,12 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case FIRST_VALUE:
       case LAST_VALUE:
         throw new BodoSQLCodegenException(
-            "Error during codegen: " + innerCallKind.toString() + " requires OVER clause.");
+            "Error during codegen: " + innerCallKind + " requires OVER clause.");
       default:
         throw new BodoSQLCodegenException(
             "Error during codegen: Unreachable code entered while evaluating the following rex"
                 + " node in visitNullTreatmentOp: "
-                + node.toString());
+                + node);
     }
   }
 
@@ -432,7 +432,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           pattern,
           escape,
           // Use the opposite. The python call is for case insensitivity while
-          // our boolean is for case sensitivity so they are opposites.
+          // our boolean is for case sensitivity, so they are opposites.
           new Expr.BooleanLiteral(!op.isCaseSensitive()));
     }
   }
@@ -1104,10 +1104,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             assert operands.size() == 3;
             strExpr =
                 generateConvCode(
-                    operands.get(0).emit(),
-                    operands.get(1).emit(),
-                    operands.get(2).emit(),
-                    isSingleRow || isScalar(fnOperation));
+                    operands.get(0).emit(), operands.get(1).emit(), operands.get(2).emit());
             return new Expr.Raw(strExpr);
           case "RAND":
             return new Expr.Raw("np.random.rand()");
@@ -1267,7 +1264,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TRY_TO_NUMBER":
           case "TRY_TO_NUMERIC":
           case "TRY_TO_DECIMAL":
-            return generateTryToNumberCode(operands.get(0), fnName);
+            return generateTryToNumberCode(operands.get(0));
           case "UNIX_TIMESTAMP":
             return generateUnixTimestamp();
           case "FROM_UNIXTIME":

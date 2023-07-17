@@ -46,39 +46,4 @@ public class PostfixOpCodeGen {
 
     return codeBuilder.toString();
   }
-
-  /**
-   * Function that returns the generated name for a Postfix Operator call.
-   *
-   * @param name The name for the arg.
-   * @param postfixOp The postfix operator.
-   * @return The name generated that matches Postfix Operator call.
-   */
-  public static String generatePostfixOpName(String name, SqlOperator postfixOp) {
-    StringBuilder nameBuilder = new StringBuilder();
-    switch (postfixOp.getKind()) {
-      case IS_NULL:
-        nameBuilder.append("IS_NULL(").append(name).append(")");
-        break;
-      case IS_NOT_NULL:
-        nameBuilder.append("IS_NOT_NULL(").append(name).append(")");
-        break;
-      case IS_NOT_FALSE:
-        nameBuilder.append("IS_NOT_FALSE(").append(name).append(")");
-        break;
-      case IS_TRUE:
-        nameBuilder.append("IS_TRUE(").append(name).append(")");
-        break;
-      case IS_FALSE:
-        nameBuilder.append("IS_FALSE(").append(name).append(")");
-        break;
-      case IS_NOT_TRUE:
-        nameBuilder.append("IS_NOT_TRUE(").append(name).append(")");
-        break;
-      default:
-        throw new BodoSQLCodegenException(
-            "Internal Error: Calcite Plan Produced an Unsupported Postfix Operator");
-    }
-    return nameBuilder.toString();
-  }
 }
