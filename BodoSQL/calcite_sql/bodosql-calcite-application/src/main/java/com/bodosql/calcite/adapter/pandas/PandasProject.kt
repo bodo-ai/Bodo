@@ -2,10 +2,7 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.Utils.BodoArrayHelpers
 import com.bodosql.calcite.application.Utils.IsScalar
-import com.bodosql.calcite.ir.Dataframe
-import com.bodosql.calcite.ir.Expr
-import com.bodosql.calcite.ir.Op
-import com.bodosql.calcite.ir.Variable
+import com.bodosql.calcite.ir.*
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.traits.BatchingProperty
@@ -46,27 +43,54 @@ class PandasProject(
     }
 
     override fun emit(implementor: PandasRel.Implementor): Dataframe {
+        val inputVar = implementor.visitChild(this.input, 0)
         // Choose the build implementation.
         // TODO(jsternberg): Go over this interface again. It feels to me
         // like the implementor could just choose the correct version
         // for us rather than having us check this condition ourselves.
-        val implement = if (isStreaming()) {
-            implementor::buildStreaming
+        if (isStreaming()) {
+            return emitStreaming(implementor, inputVar)
         } else {
-            implementor::build
+            return emitSingleBatch(implementor, inputVar)
         }
+    }
 
-        val inputVar = implementor.visitChild(this.input, 0);
-        return implement { ctx ->
-            try {
-                if (canUseLoc()) {
-                    return@implement generateLocCode(ctx, inputVar)
-                }
-                generateProject(ctx, inputVar)
-            } catch (ex: Exception) {
-                throw ex
+    private fun emitStreaming(implementor: PandasRel.Implementor, inputVar: Dataframe): Dataframe {
+        return implementor.buildStreaming (
+            {ctx -> initStateVariable(ctx)},
+            {ctx, stateVar -> generateDataFrame(ctx, inputVar, stateVar)},
+            {ctx, stateVar -> deleteStateVariable(ctx, stateVar)}
+        )
+    }
+
+    private fun emitSingleBatch(implementor: PandasRel.Implementor, inputVar: Dataframe): Dataframe {
+        return implementor::build {ctx -> generateDataFrame(ctx, inputVar)}
+    }
+
+    private fun generateDataFrame(ctx: PandasRel.BuildContext, inputVar: Dataframe, streamingStateVar: StateVariable? = null): Dataframe {
+        try {
+            if (canUseLoc()) {
+                return generateLocCode(ctx, inputVar)
             }
+            return generateProject(ctx, inputVar, streamingStateVar)
+        } catch (ex: Exception) {
+            throw ex
         }
+    }
+
+
+    override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
+        val builder = ctx.builder()
+        val currentPipeline = builder.getCurrentStreamingPipeline()
+        val readerVar = builder.symbolTable.genStateVar()
+        currentPipeline.addInitialization(Op.Assign(readerVar, Expr.Call("bodo.libs.stream_dict_encoding.init_dict_encoding_state")))
+        return readerVar
+    }
+
+    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+        val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
+        val deleteState = Op.Stmt(Expr.Call("bodo.libs.stream_dict_encoding.delete_dict_encoding_state", listOf(stateVar)))
+        currentPipeline.addTermination(deleteState)
     }
 
     /**
@@ -152,7 +176,7 @@ class PandasProject(
      *
      * This is the general catch-all for most projections.
      */
-    private fun generateProject(ctx: PandasRel.BuildContext, input: Dataframe): Dataframe {
+    private fun generateProject(ctx: PandasRel.BuildContext, input: Dataframe, streamingStateVar: StateVariable?): Dataframe {
         // Extract window aggregates and replace them with local references.
         val (windowAggregate, projectExprs) = extractWindows(cluster, input, projects)
 

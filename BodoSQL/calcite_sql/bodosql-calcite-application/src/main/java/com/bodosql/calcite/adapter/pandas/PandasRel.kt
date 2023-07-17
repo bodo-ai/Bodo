@@ -1,15 +1,11 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
-import com.bodosql.calcite.ir.Dataframe
-import com.bodosql.calcite.ir.Expr
-import com.bodosql.calcite.ir.Module
-import com.bodosql.calcite.ir.Variable
+import com.bodosql.calcite.ir.*
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.type.RelDataType
 import java.util.*
 
 interface PandasRel : RelNode {
@@ -57,6 +53,18 @@ interface PandasRel : RelNode {
      */
     fun isStreaming() = traitSet.contains(BatchingProperty.STREAMING)
 
+    /**
+     * Function to create the initial state for a streaming pipeline.
+     * This should be called from emit.
+     */
+    fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable
+
+    /**
+     * Function to delete the initial state for a streaming pipeline.
+     * This should be called from emit.
+     */
+    fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable)
+
     interface Implementor {
         fun visitChild(input: RelNode, ordinal: Int): Dataframe
 
@@ -65,9 +73,9 @@ interface PandasRel : RelNode {
 
         fun build(fn: (BuildContext) -> Dataframe): Dataframe
 
-        fun buildStreaming(fn: (BuildContext) -> Dataframe): Dataframe
+        fun buildStreaming(initFn: (BuildContext) -> StateVariable, bodyFn: (BuildContext, StateVariable) -> Dataframe, deleteFn: (BuildContext, StateVariable) -> Unit): Dataframe
 
-        fun buildStreamingNoTimer(fn: (BuildContext) -> Dataframe): Dataframe
+        fun createStreamingPipeline()
     }
 
     interface BuildContext {
@@ -104,15 +112,5 @@ interface PandasRel : RelNode {
          * Returns configuration used for streaming.
          */
         fun streamingOptions(): StreamingOptions
-
-        /**
-         * Initialize the streaming IO loop.
-         *
-         * TODO(jsternberg): I haven't investigated the streaming code well enough, but
-         * I suspect this shouldn't be here and the streaming code loop should be handled
-         * by the exchanges or some other common interaction rather than having so much
-         * of the logic in the code emitters.
-         */
-        fun initStreamingIoLoop(expr: Expr, rowType: RelDataType): Dataframe
     }
 }

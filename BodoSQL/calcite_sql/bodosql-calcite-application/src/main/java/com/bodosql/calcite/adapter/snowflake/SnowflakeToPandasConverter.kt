@@ -2,9 +2,7 @@ package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
-import com.bodosql.calcite.ir.Dataframe
-import com.bodosql.calcite.ir.Expr
-import com.bodosql.calcite.ir.Variable
+import com.bodosql.calcite.ir.*
 import com.bodosql.calcite.plan.makeCost
 import org.apache.calcite.plan.*
 import org.apache.calcite.rel.RelNode
@@ -39,6 +37,20 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     } else {
         getSnowflakeSQL()
     })!!
+
+    override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
+        val builder = ctx.builder()
+        val currentPipeline = builder.getCurrentStreamingPipeline()
+        val readerVar = builder.symbolTable.genStateVar()
+        currentPipeline.addInitialization(Op.Assign(readerVar, generateReadExpr(ctx)))
+        return readerVar
+    }
+
+    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+        val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
+        val deleteState = Op.Stmt(Expr.Call("bodo.io.arrow_reader.arrow_reader_del", listOf(stateVar)))
+        currentPipeline.addTermination(deleteState)
+    }
 
     override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost? {
         // Determine the average row size which determines how much data is returned.
@@ -76,7 +88,12 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
 
     override fun emit(implementor: PandasRel.Implementor): Dataframe =
         if (isStreaming()) {
-            implementor.buildStreamingNoTimer { ctx -> generateStreamingDataFrame(ctx) }
+            implementor.createStreamingPipeline()
+            implementor.buildStreaming (
+                {ctx -> initStateVariable(ctx)},
+                {ctx, stateVar -> generateStreamingDataFrame(ctx, stateVar)},
+                {ctx, stateVar -> deleteStateVariable(ctx, stateVar)}
+            )
         } else {
             implementor.build { ctx -> generateNonStreamingDataFrame(ctx)}
         }
@@ -159,16 +176,18 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         }
 
     /**
-     * Generate the DataFrame for streaming code. The code leverages the code generation process
-     * from initStreamingIoLoop and does not yet support RelNode caching.
+     * Generate the DataFrame for the body of the streaming code.
      */
-    private fun generateStreamingDataFrame(ctx: PandasRel.BuildContext): Dataframe {
-        val readExpr = generateReadExpr(ctx)
-        // Note: Using getRowType() instead of rowType because Calcite
-        // lazily initializes the data.
-        val initOutput: Variable =
-            ctx.initStreamingIoLoop(readExpr, getRowType())
-        return Dataframe(initOutput.name, this)
+    private fun generateStreamingDataFrame(ctx: PandasRel.BuildContext, stateVar: StateVariable): Dataframe {
+        val builder = ctx.builder()
+        val currentPipeline = builder.getCurrentStreamingPipeline()
+        val dfChunkVar = builder.genDataFrameAsTable(this)
+        val isLastVar = currentPipeline.exitCond
+        val readArrowNextCall = Expr.Call("bodo.io.arrow_reader.read_arrow_next", listOf(stateVar))
+        builder.add(Op.TupleAssign(listOf(dfChunkVar, isLastVar), readArrowNextCall))
+        // Convert the output to a DataFrame (TODO(kian): Remove)
+        val idxVar = generateRangeIndex(ctx, dfChunkVar)
+        return generateInitDataframeCode(ctx, dfChunkVar, idxVar)
     }
 
     /**
@@ -177,5 +196,45 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     private fun generateNonStreamingDataFrame(ctx: PandasRel.BuildContext): Dataframe {
         val readExpr = generateReadExpr(ctx)
         return ctx.returns(readExpr)
+    }
+
+    /**
+     * Produces a dummy index that can be used for the created table.
+     *
+     * BodoSQL never uses Index values and doing this avoid a MultiIndex issue
+     * and allows Bodo to optimize more.
+     */
+    private fun generateRangeIndex(ctx: PandasRel.BuildContext, input: Dataframe): Variable {
+        val builder = ctx.builder()
+        val indexVar = builder.symbolTable.genIndexVar()
+        builder.add(Op.Assign(indexVar, Expr.Call("bodo.hiframes.pd_index_ext.init_range_index",
+            Expr.IntegerLiteral(0),
+            Expr.Call("len", input),
+            Expr.IntegerLiteral(1),
+            Expr.None,
+        )))
+        return indexVar
+    }
+
+    /**
+     * This method takes a table from streaming and initializes
+     * the dataframe with the column names and a fake index.
+     *
+     * @param ctx the pandas BuildContext for code generation.
+     * @param output the target output dataframe
+     * @param input the input table with the underlying data
+     */
+    private fun generateInitDataframeCode(ctx: PandasRel.BuildContext, input: Variable, rangeIndex: Variable): Dataframe {
+        val globalVarName = ctx.lowerAsGlobal(
+            Expr.Call("ColNamesMetaType",
+                Expr.Tuple(rowType.fieldNames.map { Expr.StringLiteral(it) })
+            )
+        )
+        val initDataframeExpr = Expr.Call("bodo.hiframes.pd_dataframe_ext.init_dataframe",
+            Expr.Tuple(input),
+            rangeIndex,
+            globalVarName,
+        )
+        return ctx.returns(initDataframeExpr)
     }
 }

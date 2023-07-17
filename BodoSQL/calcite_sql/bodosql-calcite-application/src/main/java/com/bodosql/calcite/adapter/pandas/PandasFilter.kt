@@ -1,10 +1,7 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.Utils.IsScalar.isScalar
-import com.bodosql.calcite.ir.BodoSQLKernel
-import com.bodosql.calcite.ir.Dataframe
-import com.bodosql.calcite.ir.Expr
-import com.bodosql.calcite.ir.Variable
+import com.bodosql.calcite.ir.*
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.traits.BatchingProperty
@@ -60,29 +57,61 @@ class PandasFilter(
     }
 
     override fun emit(implementor: PandasRel.Implementor): Dataframe {
+        val inputVar = implementor.visitChild(input, 0)
         // Choose the build implementation.
         // TODO(jsternberg): Go over this interface again. It feels to me
         // like the implementor could just choose the correct version
         // for us rather than having us check this condition ourselves.
-        val implement = if (isStreaming()) {
-            implementor::buildStreaming
+        if (isStreaming()) {
+            return emitStreaming(implementor, inputVar)
         } else {
-            implementor::build
-        }
-
-        // Visit the input for this operation.
-        val input = implementor.visitChild(input, 0)
-        return implement { ctx ->
-            // Extract windows from the condition and emit the code for them.
-            val (windowAggregate, condition) = extractWindows(cluster, input, this.condition)
-            val localRefs = windowAggregate.emit(ctx)
-
-            // Emit the code for the condition.
-            emit(ctx, input, condition, localRefs)
+            return emitSingleBatch(implementor, inputVar)
         }
     }
 
-    private fun emit(ctx: PandasRel.BuildContext, input: Dataframe, condition: RexNode, localRefs: List<Variable>): Dataframe {
+    private fun emitStreaming(implementor: PandasRel.Implementor, inputVar: Dataframe): Dataframe {
+        return implementor.buildStreaming (
+            {ctx -> initStateVariable(ctx)},
+            {ctx, stateVar -> generateDataFrame(ctx, inputVar, stateVar)},
+            {ctx, stateVar -> deleteStateVariable(ctx, stateVar)}
+        )
+    }
+
+    private fun emitSingleBatch(implementor: PandasRel.Implementor, inputVar: Dataframe): Dataframe {
+        return implementor::build {ctx -> generateDataFrame(ctx, inputVar)}
+    }
+
+    private fun generateDataFrame(ctx: PandasRel.BuildContext, inputVar: Dataframe, streamingStateVar: StateVariable? = null): Dataframe {
+        // Extract windows from the condition and emit the code for them.
+        val (windowAggregate, condition) = extractWindows(cluster, inputVar, this.condition)
+        val localRefs = windowAggregate.emit(ctx)
+        // Emit the code for the condition.
+        return emit(ctx, inputVar, condition, localRefs, streamingStateVar)
+    }
+
+    /**
+     * Function to create the initial state for a streaming pipeline.
+     * This should be called from emit.
+     */
+    override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
+        val builder = ctx.builder()
+        val currentPipeline = builder.getCurrentStreamingPipeline()
+        val readerVar = builder.symbolTable.genStateVar()
+        currentPipeline.addInitialization(Op.Assign(readerVar, Expr.Call("bodo.libs.stream_dict_encoding.init_dict_encoding_state")))
+        return readerVar
+    }
+
+    /**
+     * Function to delete the initial state for a streaming pipeline.
+     * This should be called from emit.
+     */
+    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+        val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
+        val deleteState = Op.Stmt(Expr.Call("bodo.libs.stream_dict_encoding.delete_dict_encoding_state", listOf(stateVar)))
+        currentPipeline.addTermination(deleteState)
+    }
+
+    private fun emit(ctx: PandasRel.BuildContext, input: Dataframe, condition: RexNode, localRefs: List<Variable>, streamingStateVar: StateVariable? = null): Dataframe {
         val translator = ctx.rexTranslator(input, localRefs)
         val conditionExpr = condition.accept(translator).let { filter ->
             if (isScalarCondition()) {

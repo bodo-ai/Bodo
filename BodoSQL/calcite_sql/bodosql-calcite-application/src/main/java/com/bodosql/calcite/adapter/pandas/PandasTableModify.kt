@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.table.BodoSqlTable
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptTable
@@ -47,5 +48,13 @@ class PandasTableModify(
         val relTable = table as RelOptTableImpl
         val bodoSqlTable = relTable.table() as BodoSqlTable
         return bodoSqlTable.name
+    }
+
+    override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
+        TODO("Not yet implemented")
+    }
+
+    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+        TODO("Not yet implemented")
     }
 }
