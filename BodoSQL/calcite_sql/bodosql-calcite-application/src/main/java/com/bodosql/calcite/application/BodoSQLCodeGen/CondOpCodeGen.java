@@ -40,8 +40,7 @@ public class CondOpCodeGen {
    *
    * @param fnName the name of the function being called
    * @param codeExprs the Python expressions to calculate the arguments
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
+   * @return Expr containing the code generated for the relational expression.
    */
   public static Expr getCondFnInfo(String fnName, List<Expr> codeExprs) {
 
@@ -60,8 +59,7 @@ public class CondOpCodeGen {
    * or any of their variants.
    *
    * @param codeExprs the Python strings that calculate each of the arguments
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
+   * @return Expr containing the code generated for the relational expression.
    */
   public static Expr visitVariadic(RexCall fnOperation, List<Expr> codeExprs) {
     String fnName = fnOperation.getOperator().toString();

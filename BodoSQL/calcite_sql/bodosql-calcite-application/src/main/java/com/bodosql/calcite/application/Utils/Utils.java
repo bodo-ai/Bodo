@@ -1,7 +1,8 @@
 package com.bodosql.calcite.application.Utils;
 
+import static com.bodosql.calcite.application.Utils.IsScalar.isScalar;
+
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
 import com.bodosql.calcite.ir.Expr;
@@ -16,15 +17,19 @@ import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.CatalogTableImpl;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexLiteral;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.type.*;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 /** Class filled with static utility functions. */
 public class Utils {
@@ -103,9 +108,8 @@ public class Utils {
     return inputStr.replaceAll("(?<!\\\\)\"", "\\\\\"");
   }
 
-  public static void expectScalarArgument(
-      BodoSQLExprType.ExprType exprType, String fnName, String argName) {
-    if (exprType != BodoSQLExprType.ExprType.SCALAR) {
+  public static void expectScalarArgument(RexNode argNode, String fnName, String argName) {
+    if (!isScalar(argNode)) {
       throw new BodoSQLCodegenException(
           "Error: argument '" + argName + "' to function " + fnName + " must be a scalar.");
     }

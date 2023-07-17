@@ -1,8 +1,10 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.adapter.pandas.window.WindowAggregate
-import com.bodosql.calcite.application.ExprTypeVisitor.isScalar
-import com.bodosql.calcite.ir.*
+import com.bodosql.calcite.application.Utils.IsScalar.isScalar
+import com.bodosql.calcite.ir.BodoSQLKernel
+import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.traits.BatchingProperty
@@ -98,7 +100,7 @@ class PandasFilter(
     /**
      * Returns true if the condition returns a scalar value.
      */
-    private fun isScalarCondition(): Boolean = isScalar(this.condition, cluster.rexBuilder)
+    private fun isScalarCondition(): Boolean = isScalar(this.condition)
 
     /**
      * Coerces a scalar value to a boolean array.
