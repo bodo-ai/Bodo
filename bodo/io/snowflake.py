@@ -265,7 +265,7 @@ SF_WRITE_PARQUET_COMPRESSION = "snappy"
 # to `COPY INTO`, summed across all ranks. A lower value means COPY INTO will
 # run more frequently with fewer files in each call, allowing more parallelism
 # and perhaps incurring more overhead.
-SF_WRITE_STREAMING_NUM_FILES = 16
+SF_WRITE_STREAMING_NUM_FILES = 128
 
 # SF_WRITE_ASYNC_QUERY_FREQ (float):
 # For asynchronous Snowflake SQL queries, how often to query the Snowflake
