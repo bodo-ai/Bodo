@@ -225,9 +225,9 @@ void nested_loop_join_handle_dict_encoded(
 int get_bcast_join_threshold();
 std::shared_ptr<table_info> rebalance_join_output(
     std::shared_ptr<table_info> original_output);
+template <bool is_left_outer, bool is_right_outer, bool non_equi_condition>
 void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
                                   std::shared_ptr<table_info> right_table,
-                                  bool is_left_outer, bool is_right_outer,
                                   cond_expr_fn_batch_t cond_func,
                                   bool parallel_trace,
                                   bodo::vector<int64_t>& left_idxs,

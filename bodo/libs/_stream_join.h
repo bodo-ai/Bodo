@@ -5,6 +5,7 @@
 #include "_bodo_to_arrow.h"
 #include "_chunked_table_builder.h"
 #include "_join.h"
+#include "_nested_loop_join.h"
 #include "simd-block-fixed-fpp.h"
 
 using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;

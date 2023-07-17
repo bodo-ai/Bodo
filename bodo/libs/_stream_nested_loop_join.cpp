@@ -95,19 +95,54 @@ void nested_loop_join_local_chunk(NestedLoopJoinState* join_state,
             arrow::bit_util::BytesForBits(probe_table->nrows()), 0);
     }
 
+#ifndef JOIN_TABLE_LOCAL
+#define JOIN_TABLE_LOCAL(build_table_outer, probe_table_outer,                 \
+                         non_equi_condition, build_table_outer_exp,            \
+                         probe_table_outer_exp, non_equi_condition_exp)        \
+    if (build_table_outer == build_table_outer_exp &&                          \
+        probe_table_outer == probe_table_outer_exp &&                          \
+        non_equi_condition == non_equi_condition_exp) {                        \
+        nested_loop_join_table_local<build_table_outer_exp,                    \
+                                     probe_table_outer_exp,                    \
+                                     non_equi_condition_exp>(                  \
+            join_state->build_table_buffer.data_table, probe_table, cond_func, \
+            parallel_trace, build_idxs, probe_idxs,                            \
+            join_state->build_table_matched, probe_table_matched);             \
+    }
+#endif
+
     // cfunc is passed in batch format for nested loop join
     // see here:
     // https://github.com/Bodo-inc/Bodo/blob/fd987eca2684b9178a13caf41f23349f92a0a96e/bodo/libs/stream_join.py#L470
-    // TODO: template for cases without condition (cross join) to improve
-    // performance
     cond_expr_fn_batch_t cond_func =
         (cond_expr_fn_batch_t)join_state->cond_func;
 
-    nested_loop_join_table_local(
-        join_state->build_table_buffer.data_table, probe_table,
-        join_state->build_table_outer, join_state->probe_table_outer, cond_func,
-        parallel_trace, build_idxs, probe_idxs, join_state->build_table_matched,
-        probe_table_matched);
+    bool non_equi_condition = cond_func != nullptr;
+    JOIN_TABLE_LOCAL(join_state->build_table_outer,
+                     join_state->probe_table_outer, non_equi_condition, true,
+                     true, true)
+    JOIN_TABLE_LOCAL(join_state->build_table_outer,
+                     join_state->probe_table_outer, non_equi_condition, true,
+                     true, false)
+    JOIN_TABLE_LOCAL(join_state->build_table_outer,
+                     join_state->probe_table_outer, non_equi_condition, true,
+                     false, true)
+    JOIN_TABLE_LOCAL(join_state->build_table_outer,
+                     join_state->probe_table_outer, non_equi_condition, true,
+                     false, false)
+    JOIN_TABLE_LOCAL(join_state->build_table_outer,
+                     join_state->probe_table_outer, non_equi_condition, false,
+                     true, true)
+    JOIN_TABLE_LOCAL(join_state->build_table_outer,
+                     join_state->probe_table_outer, non_equi_condition, false,
+                     true, false)
+    JOIN_TABLE_LOCAL(join_state->build_table_outer,
+                     join_state->probe_table_outer, non_equi_condition, false,
+                     false, true)
+    JOIN_TABLE_LOCAL(join_state->build_table_outer,
+                     join_state->probe_table_outer, non_equi_condition, false,
+                     false, false)
+
     if (join_state->probe_table_outer) {
         add_unmatched_rows(probe_table_matched, probe_table->nrows(),
                            probe_idxs, build_idxs,
@@ -119,6 +154,7 @@ void nested_loop_join_local_chunk(NestedLoopJoinState* join_state,
     join_state->output_buffer->AppendJoinOutput(
         join_state->build_table_buffer.data_table, probe_table, build_idxs,
         probe_idxs, build_kept_cols, probe_kept_cols);
+#undef JOIN_TABLE_LOCAL
 }
 
 void nested_loop_join_probe_consume_batch(

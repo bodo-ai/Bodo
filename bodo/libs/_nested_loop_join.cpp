@@ -1,9 +1,9 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
+#include "_nested_loop_join.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
-#include "_join.h"
 #include "_shuffle.h"
 
 // design overview:
@@ -92,58 +92,91 @@ table_info* nested_loop_join_table(
             bodo::vector<uint8_t> bcast_row_is_matched;
             bodo::vector<uint8_t> other_row_is_matched(n_bytes_other, 0);
 
-            for (int p = 0; p < n_pes; p++) {
-                std::shared_ptr<table_info> bcast_table_chunk =
-                    broadcast_table(bcast_table, bcast_table,
-                                    bcast_table->ncols(), parallel_trace, p);
-                bool is_bcast_outer = (is_left_outer && left_table_bcast) ||
-                                      (is_right_outer && !left_table_bcast);
-                size_t n_bytes_bcast =
-                    is_bcast_outer ? (bcast_table_chunk->nrows() + 7) >> 3 : 0;
-                bcast_row_is_matched.resize(n_bytes_bcast);
-                std::fill(bcast_row_is_matched.begin(),
-                          bcast_row_is_matched.end(), 0);
-
-                bodo::vector<int64_t> left_idxs;
-                bodo::vector<int64_t> right_idxs;
-
-                // incref other table since needed in next iterations and
-                // nested_loop_join_table_local decrefs
-                if (left_table_bcast) {
-                    nested_loop_join_table_local(
-                        bcast_table_chunk, other_table, is_left_outer,
-                        is_right_outer, cond_func, parallel_trace, left_idxs,
-                        right_idxs, bcast_row_is_matched, other_row_is_matched);
-                } else {
-                    nested_loop_join_table_local(
-                        other_table, bcast_table_chunk, is_left_outer,
-                        is_right_outer, cond_func, parallel_trace, left_idxs,
-                        right_idxs, other_row_is_matched, bcast_row_is_matched);
-                }
-                // handle bcast table's unmatched rows if outer
-                if (is_left_outer && left_table_bcast) {
-                    add_unmatched_rows(bcast_row_is_matched,
-                                       bcast_table_chunk->nrows(), left_idxs,
-                                       right_idxs, true);
-                }
-                if (is_right_outer && !left_table_bcast) {
-                    add_unmatched_rows(bcast_row_is_matched,
-                                       bcast_table_chunk->nrows(), right_idxs,
-                                       left_idxs, true);
-                }
-                std::shared_ptr<table_info> left_in_chunk = bcast_table_chunk;
-                std::shared_ptr<table_info> right_in_chunk = other_table;
-                if (!left_table_bcast) {
-                    left_in_chunk = other_table;
-                    right_in_chunk = bcast_table_chunk;
-                }
-                std::shared_ptr<table_info> out_table_chunk = create_out_table(
-                    left_in_chunk, right_in_chunk, left_idxs, right_idxs,
-                    key_in_output, use_nullable_arr_type,
-                    cond_func_left_columns, cond_func_left_column_len,
-                    cond_func_right_columns, cond_func_right_column_len);
-                out_table_chunks.emplace_back(out_table_chunk);
-            }
+#ifndef JOIN_TABLE_LOCAL_DISTRIBUTED
+#define JOIN_TABLE_LOCAL_DISTRIBUTED(                                          \
+    left_table_outer, right_table_outer, non_equi_condition,                   \
+    left_table_outer_exp, right_table_outer_exp, non_equi_condition_exp)       \
+    if (left_table_outer == left_table_outer_exp &&                            \
+        right_table_outer == right_table_outer_exp &&                          \
+        non_equi_condition == non_equi_condition_exp) {                        \
+        for (int p = 0; p < n_pes; p++) {                                      \
+            std::shared_ptr<table_info> bcast_table_chunk =                    \
+                broadcast_table(bcast_table, bcast_table,                      \
+                                bcast_table->ncols(), parallel_trace, p);      \
+            bool is_bcast_outer = (is_left_outer && left_table_bcast) ||       \
+                                  (is_right_outer && !left_table_bcast);       \
+            size_t n_bytes_bcast =                                             \
+                is_bcast_outer ? (bcast_table_chunk->nrows() + 7) >> 3 : 0;    \
+            bcast_row_is_matched.resize(n_bytes_bcast);                        \
+            std::fill(bcast_row_is_matched.begin(),                            \
+                      bcast_row_is_matched.end(), 0);                          \
+                                                                               \
+            bodo::vector<int64_t> left_idxs;                                   \
+            bodo::vector<int64_t> right_idxs;                                  \
+            if (left_table_bcast) {                                            \
+                nested_loop_join_table_local<left_table_outer_exp,             \
+                                             right_table_outer_exp,            \
+                                             non_equi_condition_exp>(          \
+                    bcast_table_chunk, other_table, cond_func, parallel_trace, \
+                    left_idxs, right_idxs, bcast_row_is_matched,               \
+                    other_row_is_matched);                                     \
+            } else {                                                           \
+                nested_loop_join_table_local<left_table_outer_exp,             \
+                                             right_table_outer_exp,            \
+                                             non_equi_condition_exp>(          \
+                    other_table, bcast_table_chunk, cond_func, parallel_trace, \
+                    left_idxs, right_idxs, other_row_is_matched,               \
+                    bcast_row_is_matched);                                     \
+            }                                                                  \
+                                                                               \
+            /** handle bcast table's unmatched rows if outer **/               \
+            if (is_left_outer && left_table_bcast) {                           \
+                add_unmatched_rows(bcast_row_is_matched,                       \
+                                   bcast_table_chunk->nrows(), left_idxs,      \
+                                   right_idxs, true);                          \
+            }                                                                  \
+            if (is_right_outer && !left_table_bcast) {                         \
+                add_unmatched_rows(bcast_row_is_matched,                       \
+                                   bcast_table_chunk->nrows(), right_idxs,     \
+                                   left_idxs, true);                           \
+            }                                                                  \
+            std::shared_ptr<table_info> left_in_chunk = bcast_table_chunk;     \
+            std::shared_ptr<table_info> right_in_chunk = other_table;          \
+            if (!left_table_bcast) {                                           \
+                left_in_chunk = other_table;                                   \
+                right_in_chunk = bcast_table_chunk;                            \
+            }                                                                  \
+            std::shared_ptr<table_info> out_table_chunk = create_out_table(    \
+                left_in_chunk, right_in_chunk, left_idxs, right_idxs,          \
+                key_in_output, use_nullable_arr_type, cond_func_left_columns,  \
+                cond_func_left_column_len, cond_func_right_columns,            \
+                cond_func_right_column_len);                                   \
+            out_table_chunks.emplace_back(out_table_chunk);                    \
+        }                                                                      \
+    }
+#endif
+            bool non_equi_condition = cond_func != nullptr;
+            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
+                                         non_equi_condition, true, true, true);
+            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
+                                         non_equi_condition, true, true, false);
+            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
+                                         non_equi_condition, true, false, true);
+            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
+                                         non_equi_condition, true, false,
+                                         false);
+            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
+                                         non_equi_condition, false, true, true);
+            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
+                                         non_equi_condition, false, true,
+                                         false);
+            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
+                                         non_equi_condition, false, false,
+                                         true);
+            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
+                                         non_equi_condition, false, false,
+                                         false);
+#undef JOIN_TABLE_LOCAL_DISTRIBUTED
 
             // handle non-bcast table's unmatched rows of if outer
             if (is_left_outer && !left_table_bcast) {
@@ -187,10 +220,39 @@ table_info* nested_loop_join_table(
             bodo::vector<uint8_t> left_row_is_matched(n_bytes_left, 0);
             bodo::vector<uint8_t> right_row_is_matched(n_bytes_right, 0);
 
-            nested_loop_join_table_local(
-                left_table, right_table, is_left_outer, is_right_outer,
-                cond_func, parallel_trace, left_idxs, right_idxs,
-                left_row_is_matched, right_row_is_matched);
+#ifndef JOIN_TABLE_LOCAL_REPLICATED
+#define JOIN_TABLE_LOCAL_REPLICATED(                                       \
+    left_table_outer, right_table_outer, non_equi_condition,               \
+    left_table_outer_exp, right_table_outer_exp, non_equi_condition_exp)   \
+    if (left_table_outer == left_table_outer_exp &&                        \
+        right_table_outer == right_table_outer_exp &&                      \
+        non_equi_condition == non_equi_condition_exp) {                    \
+        nested_loop_join_table_local<left_table_outer_exp,                 \
+                                     right_table_outer_exp,                \
+                                     non_equi_condition_exp>(              \
+            left_table, right_table, cond_func, parallel_trace, left_idxs, \
+            right_idxs, left_row_is_matched, right_row_is_matched);        \
+    }
+#endif
+            bool non_equi_condition = cond_func != nullptr;
+            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
+                                        non_equi_condition, true, true, true);
+            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
+                                        non_equi_condition, true, true, false);
+            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
+                                        non_equi_condition, true, false, true);
+            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
+                                        non_equi_condition, true, false, false);
+            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
+                                        non_equi_condition, false, true, true);
+            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
+                                        non_equi_condition, false, true, false);
+            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
+                                        non_equi_condition, false, false, true);
+            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
+                                        non_equi_condition, false, false,
+                                        false);
+#undef JOIN_TABLE_LOCAL_REPLICATED
 
             // handle unmatched rows of if outer
             if (is_left_outer) {
@@ -225,121 +287,6 @@ table_info* nested_loop_join_table(
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
-    }
-}
-
-/**
- * @brief nested loop join two tables locally with a simple nested loop join.
- * steals references (decrefs) both inputs since it calls RetrieveTable.
- *
- * @param left_table left input table
- * @param right_table right input table
- * @param is_left_outer : whether we do an inner or outer merge on the left.
- * @param is_right_outer : whether we do an inner or outer merge on the right.
- * @param cond_func function generated in Python to evaluate general join
- * conditions. It takes data pointers for left/right tables and row indices.
- * @param parallel_trace parallel flag to pass to tracing calls
- * @param left_idxs row indices of left table to fill for creating output table
- * @param right_idxs row indices of right table to fill for creating output
- * table
- * @param left_row_is_matched bitmap of matched left table rows to fill (left
- * join only)
- * @param right_row_is_matched bitmap of matched right table rows to fill (right
- * join only)
- */
-void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
-                                  std::shared_ptr<table_info> right_table,
-                                  bool is_left_outer, bool is_right_outer,
-                                  cond_expr_fn_batch_t cond_func,
-                                  bool parallel_trace,
-                                  bodo::vector<int64_t>& left_idxs,
-                                  bodo::vector<int64_t>& right_idxs,
-                                  bodo::vector<uint8_t>& left_row_is_matched,
-                                  bodo::vector<uint8_t>& right_row_is_matched) {
-    tracing::Event ev("nested_loop_join_table_local", parallel_trace);
-    size_t n_rows_left = left_table->nrows();
-    size_t n_rows_right = right_table->nrows();
-
-    // if either table is empty, return early
-    // this avoids a division by zero in the block_n_rows calculation
-    if (n_rows_left == 0 || n_rows_right == 0) {
-        return;
-    }
-
-    auto [left_table_infos, col_ptrs_left, null_bitmap_left] =
-        get_gen_cond_data_ptrs(left_table);
-    auto [right_table_infos, col_ptrs_right, null_bitmap_right] =
-        get_gen_cond_data_ptrs(right_table);
-
-    // set 500K block size to make sure block data of all cores fits in L3 cache
-    int64_t block_size_bytes = 500 * 1024;
-    char* block_size = std::getenv("BODO_CROSS_JOIN_BLOCK_SIZE");
-    if (block_size) {
-        block_size_bytes = std::stoi(block_size);
-    }
-    if (block_size_bytes < 0) {
-        throw std::runtime_error(
-            "nested_loop_join_table_local: block_size_bytes < 0");
-    }
-
-    int64_t n_left_blocks = (int64_t)std::ceil(
-        table_local_memory_size(left_table) / (double)block_size_bytes);
-    int64_t n_right_blocks = (int64_t)std::ceil(
-        table_local_memory_size(right_table) / (double)block_size_bytes);
-
-    int64_t left_block_n_rows =
-        (int64_t)std::ceil(n_rows_left / (double)n_left_blocks);
-    int64_t right_block_n_rows =
-        (int64_t)std::ceil(n_rows_right / (double)n_right_blocks);
-
-    // bitmap for output of condition function for each block
-    uint8_t* match_arr = nullptr;
-    if (cond_func != nullptr) {
-        int64_t n_bytes_match =
-            ((left_block_n_rows * right_block_n_rows) + 7) >> 3;
-        match_arr = new uint8_t[n_bytes_match];
-    }
-
-    for (int64_t b_left = 0; b_left < n_left_blocks; b_left++) {
-        for (int64_t b_right = 0; b_right < n_right_blocks; b_right++) {
-            int64_t left_block_start = b_left * left_block_n_rows;
-            int64_t right_block_start = b_right * right_block_n_rows;
-            int64_t left_block_end = std::min(
-                left_block_start + left_block_n_rows, (int64_t)n_rows_left);
-            int64_t right_block_end = std::min(
-                right_block_start + right_block_n_rows, (int64_t)n_rows_right);
-            // call condition function on the input block which sets match
-            // results in match_arr bitmap
-            if (cond_func != nullptr) {
-                cond_func(left_table_infos.data(), right_table_infos.data(),
-                          col_ptrs_left.data(), col_ptrs_right.data(),
-                          null_bitmap_left.data(), null_bitmap_right.data(),
-                          match_arr, left_block_start, left_block_end,
-                          right_block_start, right_block_end);
-            }
-
-            int64_t match_ind = 0;
-            for (int64_t i = left_block_start; i < left_block_end; i++) {
-                for (int64_t j = right_block_start; j < right_block_end; j++) {
-                    bool match = (match_arr == nullptr) ||
-                                 GetBit(match_arr, match_ind++);
-                    if (match) {
-                        left_idxs.emplace_back(i);
-                        right_idxs.emplace_back(j);
-                        if (is_left_outer) {
-                            SetBitTo(left_row_is_matched.data(), i, true);
-                        }
-                        if (is_right_outer) {
-                            SetBitTo(right_row_is_matched.data(), j, true);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (match_arr != nullptr) {
-        delete[] match_arr;
     }
 }
 
