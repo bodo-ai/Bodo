@@ -16,7 +16,26 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.g
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateMySQLDateAddCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateSnowflakeDateAddCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.generateDateDiffFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.DateTimeType;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.TIME_PART_UNITS;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateConvertTimezoneCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurdateCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurrTimeCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurrTimestampCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateFormatCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateTimeTypeFromPartsCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateTruncCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateLastDayCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateMakeDateInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateTimeSliceFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateToTimeCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateUTCDateCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateUTCTimestampCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getDateTimeDataType;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getDoubleArgDatetimeFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getSingleArgDatetimeFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getYearWeekFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateDatePart;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.generateJsonTwoArgsInfo;
@@ -58,33 +77,36 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.get
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getDoubleArgTrigFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getSingleArgTrigFnInfo;
 import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
+import static com.bodosql.calcite.application.Utils.IsScalar.isScalar;
 import static com.bodosql.calcite.application.Utils.Utils.expectScalarArgument;
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
-import com.bodosql.calcite.application.ExprTypeVisitor;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.Utils.BodoCtx;
-import com.bodosql.calcite.ir.*;
+import com.bodosql.calcite.ir.Dataframe;
+import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.FrameTripleQuotedString;
+import com.bodosql.calcite.ir.ExprKt;
+import com.bodosql.calcite.ir.Frame;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Module.Builder;
+import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Op.Assign;
 import com.bodosql.calcite.ir.Op.If;
+import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
-
+import javax.annotation.Nullable;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -128,8 +150,6 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.util.Sarg;
 import org.jetbrains.annotations.NotNull;
-
-import javax.annotation.Nullable;
 
 /** Translates a RexNode into a Pandas expression. */
 public class RexToPandasTranslator implements RexVisitor<Expr> {
@@ -269,14 +289,12 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
   private Expr visitBinOpScan(RexCall operation, Builder builder) {
     List<Expr> args = new ArrayList<>();
-    List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
     SqlOperator binOp = operation.getOperator();
     // Store the argument types for TZ-Aware data
     List<RelDataType> argDataTypes = new ArrayList<>();
     for (RexNode operand : operation.operands) {
       Expr exprCode = operand.accept(this);
       args.add(exprCode);
-      exprTypes.add(visitor.exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operand, nodeId)));
       argDataTypes.add(operand.getType());
     }
     if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
@@ -362,20 +380,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           // in the case that the second argument does not consist of
           // exclusively discrete values
 
-          // Lookup the expanded nodes previously generated
           // TODO(jsternberg): This really should have been done before code generation
-          // even started.
-          RexNode searchNode =
-              visitor.searchMap.get(ExprTypeVisitor.generateRexNodeKey(node, nodeId));
-          if (searchNode == null) {
-            // In some cases, other parts of code generation can change the contents
-            // of the search node and cause this lookup to fail.
-            // Redo this process if we can't find the expanded node.
-            // TODO(jsternberg): As mentioned above, this shouldn't be here so we're
-            // hacking around the improper placement by recreating the type factory.
-            RexBuilder rexBuilder = new RexBuilder(new JavaTypeFactoryImpl(typeSystem));
-            searchNode = RexUtil.expandSearch(rexBuilder, null, node);
-          }
+          // even started. This shouldn't be here so we're
+          // hacking around the improper placement by recreating the type factory.
+          RexBuilder rexBuilder = new RexBuilder(new JavaTypeFactoryImpl(typeSystem));
+          RexNode searchNode = RexUtil.expandSearch(rexBuilder, null, node);
           return searchNode.accept(this);
         }
       default:
@@ -465,27 +474,28 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     Variable arrs = new Variable("arrs");
     for (int i = 0; i < inputFinder.size(); i++) {
       Variable localVar = new Variable(input.getName() + "_" + i);
-      localRefsBuilder.add(new Expr.Call(
-          "bodo.utils.indexing.scalar_optional_getitem", localVar, new Variable("i")));
+      localRefsBuilder.add(
+          new Expr.Call(
+              "bodo.utils.indexing.scalar_optional_getitem", localVar, new Variable("i")));
 
-      Op.Assign initLine =
-          new Assign(localVar, new Expr.GetItem(arrs, new Expr.IntegerLiteral(i)));
+      Op.Assign initLine = new Assign(localVar, new Expr.GetItem(arrs, new Expr.IntegerLiteral(i)));
       builder.add(initLine);
     }
     List<Expr> localRefs = localRefsBuilder.build();
-    Variable caseBodyInit = visitor.lowerAsMetaType(
-        new FrameTripleQuotedString(builder.endFrame(), 1));
+    Variable caseBodyInit =
+        visitor.lowerAsMetaType(new FrameTripleQuotedString(builder.endFrame(), 1));
 
     // Create a local translator for the case operands and initialize it with the
     // local variables we initialized above.
     RexToPandasTranslator localTranslator =
-        new RexToPandasTranslator.ScalarContext(visitor, builder, typeSystem, nodeId, input, localRefs);
+        new RexToPandasTranslator.ScalarContext(
+            visitor, builder, typeSystem, nodeId, input, localRefs);
 
     // Start a new codegen frame as we will perform our processing there.
     builder.startCodegenFrame();
     Variable outputVar = visitCaseOperands(localTranslator, operands);
-    Variable caseBodyGlobal = visitor.lowerAsGlobal(
-        new FrameTripleQuotedString(builder.endFrame(), 2));
+    Variable caseBodyGlobal =
+        visitor.lowerAsGlobal(new FrameTripleQuotedString(builder.endFrame(), 2));
 
     ImmutableList.Builder<Expr> caseArgsBuilder = ImmutableList.builder();
     for (RexNode ref : inputFinder.getRefs()) {
@@ -501,27 +511,25 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     // Generate the call to bodosql_case_placeholder and assign the results
     // to a temporary value that we return as the output.
     Variable tempVar = builder.getSymbolTable().genGenericTempVar();
-    Variable outputArrayTypeGlobal = visitor.lowerAsGlobal(
-        sqlTypeToBodoArrayType(node.getType(), false));
-    Expr casePlaceholder = new Expr.Call("bodo.utils.typing.bodosql_case_placeholder",
-        List.of(
-            new Expr.Tuple(caseArgsBuilder.build()),
-            new Expr.Call("len", input),
-            caseBodyInit,
-            caseBodyGlobal,
-            // Note: The variable name must be a string literal here.
-            new Expr.StringLiteral(outputVar.getName()),
-            outputArrayTypeGlobal
-        ),
-        namedArgs
-        );
+    Variable outputArrayTypeGlobal =
+        visitor.lowerAsGlobal(sqlTypeToBodoArrayType(node.getType(), false));
+    Expr casePlaceholder =
+        new Expr.Call(
+            "bodo.utils.typing.bodosql_case_placeholder",
+            List.of(
+                new Expr.Tuple(caseArgsBuilder.build()),
+                new Expr.Call("len", input),
+                caseBodyInit,
+                caseBodyGlobal,
+                // Note: The variable name must be a string literal here.
+                new Expr.StringLiteral(outputVar.getName()),
+                outputArrayTypeGlobal),
+            namedArgs);
     builder.add(new Op.Assign(tempVar, casePlaceholder));
     return tempVar;
   }
 
-  /**
-   * Utility to find variable uses inside a case statement.
-   */
+  /** Utility to find variable uses inside a case statement. */
   private static class CaseInputFinder extends RexShuttle {
     private final ArrayList<RexSlot> refs;
     private final Set<String> namedParams;
@@ -648,9 +656,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     RelDataType inputType = operation.operands.get(0).getType();
     RelDataType outputType = operation.getType();
 
-    boolean outputScalar =
-        visitor.exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operation, nodeId))
-            == BodoSQLExprType.ExprType.SCALAR;
+    boolean outputScalar = isScalar(operation);
     List<Expr> args = visitList(operation.operands);
     Expr child = args.get(0);
     String exprCode = generateCastCode(child.emit(), inputType, outputType, outputScalar);
@@ -675,7 +681,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     boolean isDate = node.operands.get(1).getType().getSqlTypeName().toString().equals("DATE");
     Expr dateVal = args.get(0);
     Expr column = args.get(1);
-    return generateExtractCode(dateVal.emit(), column, isTime, isDate, this.weekStart, this.weekOfYearPolicy);
+    return generateExtractCode(
+        dateVal.emit(), column, isTime, isDate, this.weekStart, this.weekOfYearPolicy);
   }
 
   private Expr visitSubstringScan(RexCall node) {
@@ -695,12 +702,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
   protected Expr visitGenericFuncOp(RexCall fnOperation, boolean isSingleRow) {
     String fnName = fnOperation.getOperator().toString();
-
-    List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
-    for (RexNode node : fnOperation.getOperands()) {
-      exprTypes.add(visitor.exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, nodeId)));
-    }
-
     // Handle functions that do not care about nulls seperately
     if (fnName == "COALESCE"
         || fnName == "NVL"
@@ -718,17 +719,15 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         || fnName == "HASH") {
       List<Expr> codeExprs = new ArrayList<>();
       BodoCtx localCtx = new BodoCtx();
-      int j = 0;
       for (RexNode operand : fnOperation.operands) {
         Expr operandInfo = operand.accept(this);
         // Need to unbox scalar timestamp values.
-        if (isSingleRow || (exprTypes.get(j) == BodoSQLExprType.ExprType.SCALAR)) {
+        if (isSingleRow || isScalar(operand)) {
           operandInfo =
               new Expr.Call(
                   "bodo.utils.conversion.unbox_if_tz_naive_timestamp", List.of(operandInfo));
         }
         codeExprs.add(operandInfo);
-        j++;
       }
 
       Expr result;
@@ -792,7 +791,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         // Uses Calcite parser, accepts both quoted and unquoted time units
         dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(2));
         unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
-        assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
+        assert isScalar(fnOperation.operands.get(0));
         return new Expr.Raw(generateSnowflakeDateAddCode(operands, unit));
       case TIMESTAMP_DIFF:
         assert operands.size() == 3;
@@ -895,7 +894,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             if (operands.size() == 3) {
               dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(2));
               unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
-              assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
+              assert isScalar(fnOperation.operands.get(0));
               return new Expr.Raw(generateSnowflakeDateAddCode(operands, unit));
             }
           case "DATE_ADD":
@@ -938,7 +937,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                         operands.get(0).emit(),
                         inputType,
                         outputType,
-                        exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+                        isSingleRow || isScalar(fnOperation.operands.get(0)));
                 arg0 = new Expr.Raw(casted_expr);
               }
               // add/minus a date interval to a date object should return a date object
@@ -1003,7 +1002,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             }
             strExpr =
                 generateStrToDateCode(
-                    operands.get(0).emit(), exprTypes.get(0), operands.get(1).emit());
+                    operands.get(0).emit(),
+                    isScalar(fnOperation.operands.get(0)),
+                    operands.get(1).emit());
             return new Expr.Raw(strExpr);
           case "TIMESTAMP":
             return generateTimestampFnCode(operands.get(0).emit());
@@ -1106,10 +1107,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                     operands.get(0).emit(),
                     operands.get(1).emit(),
                     operands.get(2).emit(),
-                    isSingleRow
-                        || (visitor.exprTypesMap.get(
-                                ExprTypeVisitor.generateRexNodeKey(fnOperation, nodeId))
-                            == BodoSQLExprType.ExprType.SCALAR));
+                    isSingleRow || isScalar(fnOperation));
             return new Expr.Raw(strExpr);
           case "RAND":
             return new Expr.Raw("np.random.rand()");
@@ -1117,8 +1115,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return new Expr.Raw("np.pi");
           case "UNIFORM":
             assert operands.size() == 3;
-            expectScalarArgument(exprTypes.get(0), "UNIFORM", "lo");
-            expectScalarArgument(exprTypes.get(1), "UNIFORM", "hi");
+            expectScalarArgument(fnOperation.operands.get(0), "UNIFORM", "lo");
+            expectScalarArgument(fnOperation.operands.get(1), "UNIFORM", "hi");
             return generateUniformFnInfo(operands);
           case "CONCAT":
             return generateConcatFnInfo(operands);
@@ -1150,7 +1148,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             assert operands.size() == 2;
             return generateMakeDateInfo(operands.get(0), operands.get(1));
           case "DATE_FORMAT":
-            if (!(operands.size() == 2 && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR)) {
+            if (!(operands.size() == 2) && isScalar(fnOperation.operands.get(1))) {
               throw new BodoSQLCodegenException(
                   "Error, invalid argument types passed to DATE_FORMAT");
             }
@@ -1213,7 +1211,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 fnName, operands.get(0).emit(), operands.get(1).emit());
           case "DATE_PART":
             assert operands.size() == 2;
-            assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
+            assert isScalar(fnOperation.operands.get(0));
             isTime =
                 fnOperation
                     .getOperands()
@@ -1230,7 +1228,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                     .getSqlTypeName()
                     .toString()
                     .equals("DATE");
-            return generateDatePart(operands, isTime, isDate, this.weekStart, this.weekOfYearPolicy);
+            return generateDatePart(
+                operands, isTime, isDate, this.weekStart, this.weekOfYearPolicy);
           case "TO_DAYS":
             return generateToDaysCode(operands.get(0));
           case "TO_SECONDS":
@@ -1240,9 +1239,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TIME":
           case "TO_TIME":
           case "TRY_TO_TIME":
-            return generateToTimeCode(
-                operands,
-                fnName);
+            return generateToTimeCode(operands, fnName);
           case "DATE_FROM_PARTS":
           case "DATEFROMPARTS":
             tzStr = "None";
@@ -1283,8 +1280,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               throw new BodoSQLCodegenException(
                   "Error, invalid number of arguments passed to REGEXP_LIKE");
             }
-            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
-                || (operands.size() == 3 && exprTypes.get(2) != BodoSQLExprType.ExprType.SCALAR)) {
+            if (!isScalar(fnOperation.operands.get(1))
+                || (operands.size() == 3 && !isScalar(fnOperation.operands.get(2)))) {
               throw new BodoSQLCodegenException(
                   "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
             }
@@ -1294,8 +1291,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               throw new BodoSQLCodegenException(
                   "Error, invalid number of arguments passed to REGEXP_COUNT");
             }
-            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
-                || (operands.size() == 4 && exprTypes.get(3) != BodoSQLExprType.ExprType.SCALAR)) {
+            if (!isScalar(fnOperation.operands.get(1))
+                || (operands.size() == 4 && !isScalar(fnOperation.operands.get(3)))) {
               throw new BodoSQLCodegenException(
                   "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
             }
@@ -1305,8 +1302,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               throw new BodoSQLCodegenException(
                   "Error, invalid number of arguments passed to REGEXP_REPLACE");
             }
-            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
-                || (operands.size() == 6 && exprTypes.get(5) != BodoSQLExprType.ExprType.SCALAR)) {
+            if (!isScalar(fnOperation.operands.get(1))
+                || (operands.size() == 6 && !isScalar(fnOperation.operands.get(5)))) {
               throw new BodoSQLCodegenException(
                   "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
             }
@@ -1316,8 +1313,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               throw new BodoSQLCodegenException(
                   "Error, invalid number of arguments passed to REGEXP_SUBSTR");
             }
-            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
-                || (operands.size() > 4 && exprTypes.get(4) != BodoSQLExprType.ExprType.SCALAR)) {
+            if (!isScalar(fnOperation.operands.get(1))
+                || (operands.size() > 4 && !isScalar(fnOperation.operands.get(4)))) {
               throw new BodoSQLCodegenException(
                   "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
             }
@@ -1327,8 +1324,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               throw new BodoSQLCodegenException(
                   "Error, invalid number of arguments passed to REGEXP_INSTR");
             }
-            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
-                || (operands.size() > 5 && exprTypes.get(5) != BodoSQLExprType.ExprType.SCALAR)) {
+            if (!isScalar(fnOperation.operands.get(1))
+                || (operands.size() > 5 && !isScalar(fnOperation.operands.get(5)))) {
               throw new BodoSQLCodegenException(
                   "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
             }
@@ -1431,7 +1428,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                     .getSqlTypeName()
                     .toString()
                     .equals("DATE");
-            return generateExtractCode(fnName, operands.get(0), isTime, isDate, this.weekStart, this.weekOfYearPolicy);
+            return generateExtractCode(
+                fnName, operands.get(0), isTime, isDate, this.weekStart, this.weekOfYearPolicy);
           case "REGR_VALX":
           case "REGR_VALY":
             return getCondFnInfo(fnName, operands);

@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.ir.Expr;
 import java.util.ArrayList;
@@ -28,7 +28,7 @@ public class RegexpCodeGen {
    * Function that returns the rexInfo for a REGEXP_LIKE Function call
    *
    * @param operandsInfo the information about the 2-3 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generateRegexpLikeInfo(List<Expr> operandsInfo) {
     StringBuilder expr_code = new StringBuilder();
@@ -48,7 +48,7 @@ public class RegexpCodeGen {
    * Function that returns the rexInfo for a REGEXP_COUNT Function call
    *
    * @param operandsInfo the information about the 2-4 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generateRegexpCountInfo(List<Expr> operandsInfo) {
     StringBuilder expr_code = new StringBuilder();
@@ -69,7 +69,7 @@ public class RegexpCodeGen {
    * Function that returns the rexInfo for a REGEXP_REPLACE Function call
    *
    * @param operandsInfo the information about the 2-6 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generateRegexpReplaceInfo(List<Expr> operandsInfo) {
     StringBuilder expr_code = new StringBuilder();
@@ -92,7 +92,7 @@ public class RegexpCodeGen {
    * Function that returns the rexInfo for a REGEXP_SUBSTR Function call
    *
    * @param operandsInfo the information about the 2-6 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generateRegexpSubstrInfo(List<Expr> operandsInfo) {
     List<String> funcArgs = new ArrayList<>();
@@ -151,7 +151,7 @@ public class RegexpCodeGen {
    * Function that returns the rexInfo for a REGEXP_INSTR Function call
    *
    * @param operandsInfo the information about the 2-7 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generateRegexpInstrInfo(List<Expr> operandsInfo) {
     List<String> funcArgs = new ArrayList<>();

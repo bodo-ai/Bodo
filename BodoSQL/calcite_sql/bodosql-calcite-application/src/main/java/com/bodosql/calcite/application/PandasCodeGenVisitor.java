@@ -116,16 +116,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private static final String ROW_ID_COL_NAME = "_bodo_row_id";
   private static final String MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change";
 
-  // Mapping from a unique key per node to exprTypes
-  public final HashMap<String, BodoSQLExprType.ExprType> exprTypesMap;
-
-  // Mapping from String Key of Search Nodes to the RexNodes expanded
-  // TODO: Replace this code with something more with an actual
-  // update to the plan.
-  // Ideally we can use RexRules when they are available
-  // https://issues.apache.org/jira/browse/CALCITE-4559
-  public final HashMap<String, RexNode> searchMap;
-
   // Map of RelNode ID -> <DataFrame variable name>
   // Because the logical plan is a tree, Nodes that are at the bottom of
   // the tree must be repeated, even if they are identical. However, when
@@ -179,8 +169,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private @Nullable String fileListAndSnapshotIdArgs;
 
   public PandasCodeGenVisitor(
-      HashMap<String, BodoSQLExprType.ExprType> exprTypesMap,
-      HashMap<String, RexNode> searchMap,
       HashMap<String, String> loweredGlobalVariablesMap,
       String originalSQLQuery,
       RelDataTypeSystem typeSystem,
@@ -188,8 +176,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
       int verboseLevel,
       int batchSize) {
     super();
-    this.exprTypesMap = exprTypesMap;
-    this.searchMap = searchMap;
     this.varCache = new HashMap<>();
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
@@ -580,15 +566,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void visitLogicalValues(PandasValues node) {
     Variable outVar = this.genDfVar();
     List<String> exprCodes = new ArrayList<>();
-    int id = node.getId();
     if (node.getTuples().size() != 0) {
       for (RexLiteral colLiteral : node.getTuples().get(0)) {
         // We cannot be within a case statement since LogicalValues is a RelNode and
         // cannot be inside a case statement (which is a RexNode)
-        RexNodeVisitorInfo literalExpr = this.visitLiteralScan(colLiteral, false);
-        assert exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(colLiteral, id))
-            == BodoSQLExprType.ExprType.SCALAR;
-        exprCodes.add(literalExpr.getExprCode());
+        Expr literalExpr = this.visitLiteralScan(colLiteral, false);
+        exprCodes.add(literalExpr.emit());
       }
     }
     singleBatchTimer(
@@ -1525,12 +1508,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node isSingleRow flag for if table references refer to a single row or the whole table.
    *     This is used for determining if an expr returns a scalar or a column. Only CASE statements
    *     set this to True currently.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
+   * @return Expr for the literal rexpression.
    */
-  public RexNodeVisitorInfo visitLiteralScan(RexLiteral node, boolean isSingleRow) {
-    Expr literal = generateLiteralCode(node, isSingleRow, this);
-    return new RexNodeVisitorInfo(literal.emit());
+  public Expr visitLiteralScan(RexLiteral node, boolean isSingleRow) {
+    return generateLiteralCode(node, isSingleRow, this);
   }
 
   /**

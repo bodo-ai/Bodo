@@ -3,15 +3,10 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import static com.bodosql.calcite.application.SQLToPython.FormatHelpers.SQLFormatToPandasToDatetimeFormat;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.ir.Expr;
-
+import com.bodosql.calcite.ir.ExprKt;
 import java.util.ArrayList;
 import java.util.List;
-
-import com.bodosql.calcite.ir.ExprKt;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.type.SqlTypeName;
 
 public class ConversionCodeGen {
   /**
@@ -23,9 +18,9 @@ public class ConversionCodeGen {
    * @return The code generated that matches the StrToDate expression.
    */
   public static String generateStrToDateCode(
-      String strExpr, BodoSQLExprType.ExprType strExprType, String SQLFormatStr) {
+      String strExpr, boolean is_scalar, String SQLFormatStr) {
     StringBuilder strBuilder = new StringBuilder();
-    if (strExprType == BodoSQLExprType.ExprType.COLUMN) {
+    if (!is_scalar) {
       strBuilder
           .append("pd.to_datetime(")
           .append(strExpr)
@@ -119,13 +114,25 @@ public class ConversionCodeGen {
       // 2nd argument is a format string
       if (operandsInfo.get(1) instanceof Expr.StringLiteral) {
         // kernel argument order: conversionVal, format_str, time_zone, scale
-        args = List.of(operandsInfo.get(0), operandsInfo.get(1), new Expr.Raw(tzStr), new Expr.IntegerLiteral(0));
+        args =
+            List.of(
+                operandsInfo.get(0),
+                operandsInfo.get(1),
+                new Expr.Raw(tzStr),
+                new Expr.IntegerLiteral(0));
       } else {
         // 2nd argument is a scale (integer)
-        args = List.of(operandsInfo.get(0), Expr.None.INSTANCE, new Expr.Raw(tzStr), operandsInfo.get(1));
+        args =
+            List.of(
+                operandsInfo.get(0), Expr.None.INSTANCE, new Expr.Raw(tzStr), operandsInfo.get(1));
       }
     } else {
-      args = List.of(operandsInfo.get(0), Expr.None.INSTANCE, new Expr.Raw(tzStr), new Expr.IntegerLiteral(0));
+      args =
+          List.of(
+              operandsInfo.get(0),
+              Expr.None.INSTANCE,
+              new Expr.Raw(tzStr),
+              new Expr.IntegerLiteral(0));
     }
     return ExprKt.BodoSQLKernel(kernelName, args, List.of());
   }

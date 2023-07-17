@@ -76,7 +76,7 @@ public class NumericCodeGen {
    *
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static String getSingleArgNumericFnInfo(String fnName, String arg1Expr) {
 
@@ -93,7 +93,7 @@ public class NumericCodeGen {
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
    * @param arg2Expr The string expression of arg2
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static String getDoubleArgNumericFnInfo(String fnName, String arg1Expr, String arg2Expr) {
 
