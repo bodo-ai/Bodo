@@ -129,7 +129,7 @@ def not_equal_null(A, B, dict_encoding_state=None, func_id=-1):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.not_equal_null",
-                ["A", "B", "dict_encoding_state", "func_id="],
+                ["A", "B", "dict_encoding_state", "func_id"],
                 i,
                 default_map={"dict_encoding_state": None, "func_id": -1},
             )
