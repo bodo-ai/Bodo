@@ -1,8 +1,7 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.ir.Dataframe
-import com.bodosql.calcite.ir.Module
+import com.bodosql.calcite.ir.StateVariable
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptSamplingParameters
 import org.apache.calcite.plan.RelTraitSet
@@ -35,6 +34,14 @@ class PandasSample(
     }
 
     override fun emit(implementor: PandasRel.Implementor): Dataframe {
+        TODO("Not yet implemented")
+    }
+
+    override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
+        TODO("Not yet implemented")
+    }
+
+    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
         TODO("Not yet implemented")
     }
 

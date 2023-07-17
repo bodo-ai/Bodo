@@ -2,6 +2,7 @@ package com.bodosql.calcite.traits
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.Cost
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
@@ -34,6 +35,14 @@ class CombineStreamsExchange(cluster: RelOptCluster, traits: RelTraitSet, input:
 
     override fun splitCount(numRanks: Int): Int {
         return 1
+    }
+
+    override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
+        TODO("Not yet implemented")
+    }
+
+    override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
+        TODO("Not yet implemented")
     }
 
     override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {

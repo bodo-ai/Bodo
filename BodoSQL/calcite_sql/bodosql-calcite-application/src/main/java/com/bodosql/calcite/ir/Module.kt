@@ -119,6 +119,19 @@ class Module(private val frame: Frame) {
             return Dataframe(v.name, rel)
         }
 
+        /**
+         * Generate a new DataFrame variable but using
+         * the Table code generation.
+         *
+         * TODO(knasre): When DataFrames are eliminated
+         * as the requirement should we have a separate
+         * PythonTable type that is used instead.
+         */
+        fun genDataFrameAsTable(rel: RelNode): Dataframe {
+            val v = symbolTable.genTableVar()
+            return Dataframe(v.name, rel)
+        }
+
 
         /**
          * Construct a module from the built code.
