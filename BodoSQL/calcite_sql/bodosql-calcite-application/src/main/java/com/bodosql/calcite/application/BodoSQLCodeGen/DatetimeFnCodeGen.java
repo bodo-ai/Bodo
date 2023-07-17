@@ -5,16 +5,14 @@ import static com.bodosql.calcite.application.Utils.DateTimeHelpers.isStringLite
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
-
-import com.bodosql.calcite.ir.ExprKt;
 import kotlin.Pair;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.type.BodoTZInfo;
-import org.apache.calcite.sql.type.SqlTypeName;
 
 public class DatetimeFnCodeGen {
   static List<String> fnList =
@@ -50,7 +48,7 @@ public class DatetimeFnCodeGen {
    *
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr getSingleArgDatetimeFnInfo(String fnName, String arg1Expr) {
     StringBuilder expr_code = new StringBuilder();
@@ -71,7 +69,7 @@ public class DatetimeFnCodeGen {
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
    * @param arg2Expr The string expression of arg2
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr getDoubleArgDatetimeFnInfo(String fnName, String arg1Expr, String arg2Expr) {
     StringBuilder expr_code = new StringBuilder();
@@ -97,7 +95,7 @@ public class DatetimeFnCodeGen {
    *
    * @param arg1Info The VisitorInfo for the first argument
    * @param arg2Info The VisitorInfo for the second argument
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generateMakeDateInfo(Expr arg1Info, Expr arg2Info) {
     String outputExpr =
@@ -131,7 +129,8 @@ public class DatetimeFnCodeGen {
   public static Expr generateCurrTimeCode(String opName, BodoTZInfo tzInfo) {
     String fnExpression =
         String.format(
-            "bodo.libs.bodosql_array_kernels.to_time(pd.Timestamp.now(%s), format_str=None, _try=True)",
+            "bodo.libs.bodosql_array_kernels.to_time(pd.Timestamp.now(%s), format_str=None,"
+                + " _try=True)",
             tzInfo == null ? "" : tzInfo.getPyZone());
     return new Expr.Raw(fnExpression);
   }
@@ -185,7 +184,6 @@ public class DatetimeFnCodeGen {
     return new Expr.Raw(outputExpression);
   }
 
-
   /**
    * Helper function that handles codegen for CONVERT_TIMEZONE
    *
@@ -208,7 +206,7 @@ public class DatetimeFnCodeGen {
   /**
    * Helper function that handles codegen for CURDATE and CURRENTDATE
    *
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generateCurdateCode() {
     String fnExpression = "datetime.date.today()";
@@ -219,7 +217,7 @@ public class DatetimeFnCodeGen {
    * Helper function that handles codegen for YearWeek
    *
    * @param arg0Info The name and codegen for the argument.
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr getYearWeekFnInfo(Expr arg0Info) {
     String arg0Expr = arg0Info.emit();
@@ -247,14 +245,15 @@ public class DatetimeFnCodeGen {
    * @return the rexNodeVisitorInfo for the function call
    */
   public static Expr generateToTimeCode(List<Expr> args, String opName) {
-    Pair<String, Expr> tryPair = new Pair<>("_try", new Expr.BooleanLiteral(opName.contains("TRY")));
+    Pair<String, Expr> tryPair =
+        new Pair<>("_try", new Expr.BooleanLiteral(opName.contains("TRY")));
     List<Pair<String, Expr>> keywordArgs = new ArrayList<>();
 
     if (args.size() == 1) {
       keywordArgs.add(new Pair<>("format_str", Expr.None.INSTANCE));
     }
     keywordArgs.add(tryPair);
-    
+
     return ExprKt.BodoSQLKernel("to_time", args, keywordArgs);
   }
 

@@ -12,7 +12,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Properties;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import javax.annotation.Nullable;
 import org.apache.calcite.jdbc.CalciteConnection;
@@ -20,14 +23,15 @@ import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
-import org.apache.calcite.rel.type.*;
-import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlMerge;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
-import org.apache.calcite.sql.type.*;
-import org.apache.calcite.tools.*;
+import org.apache.calcite.sql.type.BodoTZInfo;
+import org.apache.calcite.tools.Planner;
+import org.apache.calcite.tools.RelConversionException;
+import org.apache.calcite.tools.ValidationException;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -389,23 +393,17 @@ public class RelationalAlgebraGenerator {
     return getPandasStringUnoptimized(sql, false);
   }
 
-  private String getPandasStringFromPlan(RelRoot plan, String originalSQL, boolean debugDeltaTable)
-      throws Exception {
+  private String getPandasStringFromPlan(
+      RelRoot plan, String originalSQL, boolean debugDeltaTable) {
     /**
      * HashMap that maps a Calcite Node using a unique identifier for different "values". To do
      * this, we use two components. First, each RelNode comes with a unique id, which This is used
      * to track exprTypes before code generation.
      */
     RelNode rel = PandasUtilKt.pandasProject(plan);
-    HashMap<String, BodoSQLExprType.ExprType> exprTypes = new HashMap<>();
-    // Map from search unique id to the expanded code generated
-    HashMap<String, RexNode> searchMap = new HashMap<>();
-    ExprTypeVisitor.determineRelNodeExprType(rel, exprTypes, searchMap);
     this.loweredGlobalVariables = new HashMap<>();
     PandasCodeGenVisitor codegen =
         new PandasCodeGenVisitor(
-            exprTypes,
-            searchMap,
             this.loweredGlobalVariables,
             originalSQL,
             this.typeSystem,

@@ -5,10 +5,9 @@ import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
 import java.util.ArrayList;
 import java.util.List;
-
-import com.bodosql.calcite.ir.ExprKt;
 import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlKind;
 
@@ -51,7 +50,12 @@ public class ExtractCodeGen {
    * @return The code generated that matches the Extract expression.
    */
   public static Expr generateExtractCode(
-      String datetimeVal, Expr column, boolean isTime, boolean isDate, Integer weekStart, Integer weekOfYearPolicy) {
+      String datetimeVal,
+      Expr column,
+      boolean isTime,
+      boolean isDate,
+      Integer weekStart,
+      Integer weekOfYearPolicy) {
     if (isTime && dayPlusUnits.contains(datetimeVal)) {
       throw new BodoSQLCodegenException("Cannot extract unit " + datetimeVal + " from TIME values");
     }
@@ -123,14 +127,18 @@ public class ExtractCodeGen {
   }
 
   /**
-   * Returns the RexNodeVisitorInfo for DATE_PART by mapping the string literals to the same code
-   * gen as EXTRACT
+   * Returns the Expr for DATE_PART by mapping the string literals to the same code gen as EXTRACT
    *
    * @param operandsInfo The information about the arguments to the call
    * @param isTime Is the input TIME data?
    * @return The name generated that matches the Extract expression.
    */
-  public static Expr generateDatePart(List<Expr> operandsInfo, boolean isTime, boolean isDate, int weekStart, int weekOfYearPolicy) {
+  public static Expr generateDatePart(
+      List<Expr> operandsInfo,
+      boolean isTime,
+      boolean isDate,
+      int weekStart,
+      int weekOfYearPolicy) {
     String unit = makeQuoted(operandsInfo.get(0).emit().toLowerCase());
     switch (unit) {
       case "\"year\"":
@@ -239,6 +247,7 @@ public class ExtractCodeGen {
         throw new BodoSQLCodegenException(
             "Unsupported DATE_PART unit: " + operandsInfo.get(0).emit());
     }
-    return generateExtractCode(unit, operandsInfo.get(1), isTime, isDate, weekStart, weekOfYearPolicy);
+    return generateExtractCode(
+        unit, operandsInfo.get(1), isTime, isDate, weekStart, weekOfYearPolicy);
   }
 }

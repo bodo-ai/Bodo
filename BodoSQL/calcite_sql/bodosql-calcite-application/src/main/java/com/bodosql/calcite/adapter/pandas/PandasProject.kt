@@ -1,8 +1,7 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.adapter.pandas.window.WindowAggregate
-import com.bodosql.calcite.application.ExprTypeVisitor
 import com.bodosql.calcite.application.Utils.BodoArrayHelpers
+import com.bodosql.calcite.application.Utils.IsScalar
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
@@ -210,7 +209,7 @@ class PandasProject(
      *
      * @param node input node to determine if it is a scalar or not.
      */
-    private fun isScalar(node: RexNode): Boolean = ExprTypeVisitor.isScalar(node, cluster.rexBuilder)
+    private fun isScalar(node: RexNode): Boolean = IsScalar.isScalar(node)
 
     /**
      * Generates code to coerce a scalar value into an array.

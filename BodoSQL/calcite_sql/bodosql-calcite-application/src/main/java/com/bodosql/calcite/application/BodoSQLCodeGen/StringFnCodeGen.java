@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
@@ -59,7 +59,7 @@ public class StringFnCodeGen {
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
    * @param fnName The name of arg1
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr getSingleArgStringFnInfo(String fnName, String arg1Expr) {
     // If the functions has a broadcasted array kernel, always use it
@@ -78,7 +78,7 @@ public class StringFnCodeGen {
    * @param fnName The name of the function
    * @param arg1Info The rexVisitorInfo of arg1
    * @param arg2Info The rexVisitorInfo of arg2
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr getTwoArgStringFnInfo(String fnName, Expr arg1Info, Expr arg2Info) {
 
@@ -102,7 +102,7 @@ public class StringFnCodeGen {
    * @param arg1Expr The rexVisitorInfo of arg1
    * @param arg2Expr The rexVisitorInfo of arg2
    * @param arg3Expr The rexVisitorInfo of arg3
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static String getThreeArgStringFnInfo(
       String fnName, String arg1Expr, String arg2Expr, String arg3Expr) {
@@ -121,7 +121,7 @@ public class StringFnCodeGen {
    * Function that returns the rexInfo for the Concat Function Call.
    *
    * @param operandsInfo The rexInfo for all of the arguments to the Concat Call
-   * @return The RexNodeVisitorInfo generated that matches the Concat expression.
+   * @return The Expr generated that matches the Concat expression.
    */
   public static Expr generateConcatFnInfo(List<Expr> operandsInfo) {
     Expr separatorInfo = new Expr.Raw(makeQuoted(""));
@@ -133,7 +133,7 @@ public class StringFnCodeGen {
    *
    * @param separatorInfo the rexInfo for the string used for the separator
    * @param operandsInfo The rexInfo for the list of string arguments to be concatenated
-   * @return The RexNodeVisitorInfo generated that matches the Concat_ws expression.
+   * @return The Expr generated that matches the Concat_ws expression.
    */
   public static Expr generateConcatWSFnInfo(Expr separatorInfo, List<Expr> operandsInfo) {
     StringBuilder concatCodeGen = new StringBuilder();
@@ -153,7 +153,7 @@ public class StringFnCodeGen {
    * Function that returns the rexInfo for a INITCAP Function call
    *
    * @param operandsInfo the information about the 1-2 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generateInitcapInfo(List<Expr> operandsInfo) {
     StringBuilder expr_code = new StringBuilder();
@@ -183,7 +183,7 @@ public class StringFnCodeGen {
    * Function that returns the rexInfo for an STRTOK Function Call.
    *
    * @param operandsInfo the information about the 1-3 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generateStrtok(List<Expr> operandsInfo) {
     int argCount = operandsInfo.size();
@@ -223,7 +223,7 @@ public class StringFnCodeGen {
    * Function that returns the rexInfo for an EDITDISTANCE Function Call.
    *
    * @param operandsInfo the information about the two/three arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generateEditdistance(List<Expr> operandsInfo) {
 
@@ -253,7 +253,7 @@ public class StringFnCodeGen {
    * Function that returns the rexInfo for an INSERT Function Call.
    *
    * @param operandsInfo the information about the 4 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generateInsert(List<Expr> operandsInfo) {
     int argCount = operandsInfo.size();
@@ -281,7 +281,7 @@ public class StringFnCodeGen {
    * Function that returns the rexInfo for a POSITION/CHARINDEX Function Call.
    *
    * @param operandsInfo the information about the two/three arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generatePosition(List<Expr> operandsInfo) {
 
@@ -332,7 +332,7 @@ public class StringFnCodeGen {
    * Function that returns the rexInfo for a SUBSTR/MID Function call
    *
    * @param operandsInfo the information about the 2-3 arguments
-   * @return The RexNodeVisitorInfo corresponding to the function call
+   * @return The Expr corresponding to the function call
    */
   public static Expr generateSubstringInfo(List<Expr> operandsInfo) {
     StringBuilder expr_code = new StringBuilder();
