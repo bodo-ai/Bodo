@@ -165,7 +165,6 @@ public class BinOpCodeGen {
         throw new BodoSQLCodegenException(
             "Unsupported Operator, " + binOpKind + " specified in query.");
     }
-    StringBuilder codeBuilder = new StringBuilder();
     /** Create the function calls */
     Expr prevVar = args.get(0);
     Variable outputVar = null;
@@ -180,26 +179,6 @@ public class BinOpCodeGen {
       prevVar = outputVar;
     }
     return outputVar;
-  }
-
-  /**
-   * Function that returns the generated name for a Binop Call. This function may have more than two
-   * arguments because repeated use of the same operator are grouped into the same Node.
-   *
-   * @param names The names of the arguments to the binop
-   * @param binOp The Binary operator to apply to each pair of arguments.
-   * @return The name generated that matches the Binop expression.
-   */
-  public static String generateBinOpName(List<String> names, SqlOperator binOp) {
-    StringBuilder nameBuilder = new StringBuilder();
-    for (int i = 0; i < names.size(); i++) {
-      nameBuilder.append(binOp.toString()).append("(");
-    }
-    nameBuilder.append(names.get(0));
-    for (int i = 1; i < names.size(); i++) {
-      nameBuilder.append(", ").append(names.get(i)).append(")");
-    }
-    return nameBuilder.toString();
   }
 
   /**
