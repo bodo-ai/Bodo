@@ -74,13 +74,18 @@ class JoinPartition {
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
             build_table_dict_builders,
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
-            probe_table_dict_builders)
+            probe_table_dict_builders,
+        const uint64_t probe_batch_size_)
         : build_table_buffer(build_arr_c_types, build_arr_array_types,
                              build_table_dict_builders),
           build_table({}, HashHashJoinTable(this),
                       KeyEqualHashJoinTable(this, n_keys_)),
           probe_table_buffer(probe_arr_c_types, probe_arr_array_types,
-                             probe_table_dict_builders),
+                             probe_table_dict_builders, probe_batch_size_,
+                             DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
+          probe_batch_size(probe_batch_size_),
+          dummy_probe_table(
+              alloc_table(probe_arr_c_types, probe_arr_array_types)),
           num_top_bits(num_top_bits_),
           top_bitmask(top_bitmask_),
           build_table_outer(build_table_outer_),
@@ -108,13 +113,15 @@ class JoinPartition {
     // Probe state (only used when this partition is inactive).
     // We don't need partitioning hashes since we should never
     // need to repartition.
-    // XXX These will be converted to use chunked arrays.
-    TableBuildBuffer probe_table_buffer;
+    ChunkedTableBuilder probe_table_buffer;
     bodo::vector<uint32_t> probe_table_buffer_join_hashes;
+    const int64_t probe_batch_size;
 
     // Temporary state during probe step. These will be
     // reset between iterations.
     std::shared_ptr<table_info> probe_table;
+    // Dummy probe table. Useful for the build_table_outer case.
+    std::shared_ptr<table_info> dummy_probe_table;
     // Join hashes corresponding to data in probe_table.
     // We're using a raw pointer here so we can populate this field using the
     // vector (using .data()) or the uint32_t[] shared_ptr directly (using
@@ -639,20 +646,34 @@ void nested_loop_join_probe_consume_batch(
     const std::vector<uint64_t> build_kept_cols,
     const std::vector<uint64_t> probe_kept_cols, bool is_last);
 
+/* ----------------------------- Helper Functions --------------------------- */
+
 /**
  * @brief Get the dtypes and arr types from an existing table
  *
  * @param table Reference table
- * @return std::tuple<std::vector<int8_t>, std::vector<int8_t>>
+ * @return std::tuple<std::vector<int8_t>, std::vector<int8_t>> Vector of
+ * C types and vector of array types
  */
-static std::tuple<std::vector<int8_t>, std::vector<int8_t>>
-get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table) {
-    size_t n_cols = table->columns.size();
-    std::vector<int8_t> arr_c_types(n_cols);
-    std::vector<int8_t> arr_array_types(n_cols);
-    for (size_t i = 0; i < n_cols; i++) {
-        arr_c_types[i] = table->columns[i]->dtype;
-        arr_array_types[i] = table->columns[i]->arr_type;
-    }
-    return std::make_tuple(arr_c_types, arr_array_types);
-}
+std::tuple<std::vector<int8_t>, std::vector<int8_t>>
+get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table);
+
+/**
+ * @brief Get the dict builders from a table build buffer object.
+ *
+ * @param table_build_buffer TableBuildBuffer to get the dict builders from.
+ * @return std::vector<std::shared_ptr<DictionaryBuilder>>
+ */
+std::vector<std::shared_ptr<DictionaryBuilder>>
+get_dict_builders_from_table_build_buffer(
+    const TableBuildBuffer& table_build_buffer);
+
+/**
+ * @brief Get the dict builders from a chunked table builder object.
+ *
+ * @param chunked_table_builder ChunkedTableBuilder to get dict builders from
+ * @return std::vector<std::shared_ptr<DictionaryBuilder>>
+ */
+std::vector<std::shared_ptr<DictionaryBuilder>>
+get_dict_builders_from_chunked_table_builder(
+    const ChunkedTableBuilder& chunked_table_builder);

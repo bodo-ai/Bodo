@@ -963,7 +963,7 @@ std::tuple<std::shared_ptr<table_info>, int64_t> ChunkedTableBuilder::PopChunk(
 
     // If there's a finalized chunk available, pop and return that.
     // Note that FinalizeActiveChunk would have been a NOP if the
-    // active-chunk was empty, so we still need this check.
+    // active_chunk was empty, so we still need this check.
     if (this->chunks.size() > 0) {
         std::shared_ptr<table_info> chunk = this->chunks.front();
         this->chunks.pop_front();

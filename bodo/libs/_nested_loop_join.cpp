@@ -433,37 +433,38 @@ void add_unmatched_rows(bodo::vector<uint8_t>& bit_map, size_t n_rows,
  * as a fast path for accessing numeric data. These include both keys
  * and data columns as either can be used in the cond_func.
  *
- * @param table input table
- * @return std::tuple<std::vector<std::shared_ptr<array_info>>,
- * std::vector<void*>, std::vector<void*>> vectors of array infos, data1
- * pointers, and null bitmap pointers
+ * @param table Input table
+ * @return std::tuple<std::vector<array_info*>, std::vector<void*>,
+ * std::vector<void*>> Vectors of array info, data1, and null bitmap pointers
  */
 std::tuple<std::vector<array_info*>, std::vector<void*>, std::vector<void*>>
 get_gen_cond_data_ptrs(std::shared_ptr<table_info> table) {
-    // get raw array_info pointers for cond_func
-    std::vector<array_info*> table_infos;
-    for (std::shared_ptr<array_info> arr : table->columns) {
-        table_infos.push_back(arr.get());
-    }
-    std::vector<void*> col_ptrs(table->ncols());
-    std::vector<void*> null_bitmaps(table->ncols());
+    std::vector<array_info*> array_infos;
+    std::vector<void*> col_ptrs;
+    std::vector<void*> null_bitmaps;
 
-    for (size_t i = 0; i < table->ncols(); i++) {
-        col_ptrs[i] = static_cast<void*>(table->columns[i]->data1());
-        null_bitmaps[i] = static_cast<void*>(table->columns[i]->null_bitmask());
-    }
-    return std::make_tuple(table_infos, col_ptrs, null_bitmaps);
+    // get raw array_info pointers for cond_func
+    get_gen_cond_data_ptrs(table, &array_infos, &col_ptrs, &null_bitmaps);
+    return std::make_tuple(array_infos, col_ptrs, null_bitmaps);
 }
 
-/**
- * @brief handle dict-encoded columns of input tables to nested loop join.
- * Dictionaries need to be global since we use broadcast.
- *
- * @param left_table left input table to nested loop join
- * @param right_table right input table to nested loop join
- * @param left_parallel left table is parallel
- * @param right_parallel right table is parallel
- */
+// Header and docstring are defined in _join.h
+void get_gen_cond_data_ptrs(std::shared_ptr<table_info> table,
+                            std::vector<array_info*>* array_infos,
+                            std::vector<void*>* col_ptrs,
+                            std::vector<void*>* null_bitmaps) {
+    array_infos->reserve(table->ncols());
+    col_ptrs->reserve(table->ncols());
+    null_bitmaps->reserve(table->ncols());
+
+    for (const std::shared_ptr<array_info>& arr : table->columns) {
+        array_infos->push_back(arr.get());
+        col_ptrs->push_back(static_cast<void*>(arr->data1()));
+        null_bitmaps->push_back(static_cast<void*>(arr->null_bitmask()));
+    }
+}
+
+// Header and docstring are defined in _join.h
 void nested_loop_join_handle_dict_encoded(
     std::shared_ptr<table_info> left_table,
     std::shared_ptr<table_info> right_table, bool left_parallel,
