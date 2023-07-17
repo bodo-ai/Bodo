@@ -40,34 +40,6 @@ public class ConversionCodeGen {
   }
 
   /**
-   * Function that returns the generated name for a StrToDate Function Call.
-   *
-   * @param argName The string Expression's name.
-   * @param SQLFormatStr A string literal SQL format string.
-   * @return The name generated that matches the StrToDate expression.
-   */
-  public static String generateStrToDateName(String argName, String SQLFormatStr) {
-    StringBuilder nameBuilder = new StringBuilder();
-    nameBuilder
-        .append("STR_TO_DATE(")
-        .append(argName)
-        .append(", ")
-        .append(SQLFormatStr)
-        .append(")");
-    return nameBuilder.toString();
-  }
-
-  /**
-   * Does the codegen for MySQL DATE function
-   *
-   * @param datetimeStr the datetime string to convert to a date
-   * @return RexVisitorInfo for the DATE function
-   */
-  public static Expr generateDateFnCode(String datetimeStr) {
-    return new Expr.Raw("bodo.libs.bodosql_array_kernels.create_date(" + datetimeStr + ")");
-  }
-
-  /**
    * Handles codegen for Snowflake TO_DATE/TRY_TO_DATE function.
    *
    * @param operandsInfo List of operands

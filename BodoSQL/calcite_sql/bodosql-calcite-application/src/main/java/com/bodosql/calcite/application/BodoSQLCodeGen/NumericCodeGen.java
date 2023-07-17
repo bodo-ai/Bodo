@@ -109,11 +109,9 @@ public class NumericCodeGen {
    * @param inputExpr The first argument of the CONV call, either a scalar, or a column
    * @param curBaseExpr The second argument of the CONV call, the current base
    * @param newBaseExpr The second argument of the CONV call, the base to convert to.
-   * @param outputScalar Should the output generate scalar code.
    * @return The code generated that matches the CONV expression.
    */
-  public static String generateConvCode(
-      String inputExpr, String curBaseExpr, String newBaseExpr, boolean outputScalar) {
+  public static String generateConvCode(String inputExpr, String curBaseExpr, String newBaseExpr) {
     StringBuilder strBuilder = new StringBuilder();
     strBuilder
         .append("bodo.libs.bodosql_array_kernels.conv(")
@@ -124,27 +122,6 @@ public class NumericCodeGen {
         .append(newBaseExpr)
         .append(")");
     return strBuilder.toString();
-  }
-
-  /**
-   * Function that returns the generated name for a CONV Function Call.
-   *
-   * @param inputName The first argument of the CONV call, either a scalar, or a column
-   * @param curBaseName The second argument of the CONV call, the current base
-   * @param newBaseName The second argument of the CONV call, the base to convert to.
-   * @return The name generated that matches the CONV expression.
-   */
-  public static String generateConvName(String inputName, String curBaseName, String newBaseName) {
-    StringBuilder nameBuilder = new StringBuilder();
-    nameBuilder
-        .append("CONV(")
-        .append(inputName)
-        .append(", ")
-        .append(curBaseName)
-        .append(", ")
-        .append(newBaseName)
-        .append(")");
-    return nameBuilder.toString();
   }
 
   /**
@@ -190,7 +167,7 @@ public class NumericCodeGen {
    * @param arg1Info The VisitorInfo for the first argument.
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static Expr generateTryToNumberCode(Expr arg1Info, String fnName) {
+  public static Expr generateTryToNumberCode(Expr arg1Info) {
     String outputExpr = "bodo.libs.bodosql_array_kernels.try_to_number(" + arg1Info.emit() + ")";
     return new Expr.Raw(outputExpr);
   }

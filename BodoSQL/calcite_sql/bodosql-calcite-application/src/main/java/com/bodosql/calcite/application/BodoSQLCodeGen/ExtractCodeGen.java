@@ -1,6 +1,5 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.escapePythonQuotes;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
@@ -8,8 +7,6 @@ import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.ExprKt;
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.calcite.sql.SqlBinaryOperator;
-import org.apache.calcite.sql.SqlKind;
 
 /** Class that returns the generated code for Extract after all inputs have been visited. */
 public class ExtractCodeGen {
@@ -18,7 +15,7 @@ public class ExtractCodeGen {
   public static List<String> dayPlusUnits;
 
   static {
-    dayPlusUnits = new ArrayList<String>();
+    dayPlusUnits = new ArrayList<>();
     dayPlusUnits.add("YEAR");
     dayPlusUnits.add("QUARTER");
     dayPlusUnits.add("MONTH");
@@ -33,12 +30,6 @@ public class ExtractCodeGen {
     dayPlusUnits.add("DAYOFWEEK");
     dayPlusUnits.add("DAYOFWEEKISO");
   }
-
-  // Used for doing null checking binary operations
-  static SqlBinaryOperator addBinop =
-      new SqlBinaryOperator("PLUS", SqlKind.PLUS, 0, true, null, null, null);
-  static SqlBinaryOperator modBinop =
-      new SqlBinaryOperator("MOD", SqlKind.MOD, 0, true, null, null, null);
 
   /**
    * Function that return the necessary generated code for an Extract call.
@@ -62,7 +53,7 @@ public class ExtractCodeGen {
     if (isDate && !dayPlusUnits.contains(datetimeVal)) {
       throw new BodoSQLCodegenException("Cannot extract unit " + datetimeVal + " from DATE values");
     }
-    String kernelName = "";
+    String kernelName;
     List<Expr> args = new ArrayList<>();
     args.add(column);
     switch (datetimeVal) {
@@ -111,19 +102,6 @@ public class ExtractCodeGen {
             "ERROR, datetime value: " + datetimeVal + " not supported inside of extract");
     }
     return ExprKt.BodoSQLKernel(kernelName, args, List.of());
-  }
-
-  /**
-   * Function that returns the generated name for an Extract call.
-   *
-   * @param datetimeName The name for selecting which datetime field to extract.
-   * @param columnName The name of the column arg.
-   * @return The name generated that matches the Extract expression.
-   */
-  public static String generateExtractName(String datetimeName, String columnName) {
-    StringBuilder nameBuilder = new StringBuilder();
-    nameBuilder.append("EXTRACT(").append(datetimeName).append(", ").append(columnName).append(")");
-    return escapePythonQuotes(nameBuilder.toString());
   }
 
   /**

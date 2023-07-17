@@ -55,17 +55,4 @@ public class DateAddCodeGen {
       return new Expr.Call("bodo.libs.bodosql_array_kernels.add_interval_days", arg1, arg0);
     }
   }
-
-  /**
-   * Function that returns the generated name for a DateAdd Function Call.
-   *
-   * @param arg0Name The first arg's name.
-   * @param arg1Name The second arg's name.
-   * @return The name generated that matches the DateAdd expression.
-   */
-  public static String generateDateAddName(String arg0Name, String arg1Name) {
-    StringBuilder nameBuilder = new StringBuilder();
-    nameBuilder.append("DATE_ADD(").append(arg0Name).append(", ").append(arg1Name).append(")");
-    return nameBuilder.toString();
-  }
 }
