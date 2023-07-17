@@ -223,8 +223,10 @@ void nested_loop_join_handle_dict_encoded(
     std::shared_ptr<table_info> right_table, bool left_parallel,
     bool right_parallel);
 int get_bcast_join_threshold();
+
 std::shared_ptr<table_info> rebalance_join_output(
     std::shared_ptr<table_info> original_output);
+
 template <bool is_left_outer, bool is_right_outer, bool non_equi_condition>
 void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
                                   std::shared_ptr<table_info> right_table,
@@ -234,10 +236,12 @@ void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
                                   bodo::vector<int64_t>& right_idxs,
                                   bodo::vector<uint8_t>& left_row_is_matched,
                                   bodo::vector<uint8_t>& right_row_is_matched);
+
 void add_unmatched_rows(bodo::vector<uint8_t>& bit_map, size_t n_rows,
                         bodo::vector<int64_t>& table_idxs,
                         bodo::vector<int64_t>& other_table_idxs,
                         bool needs_reduction);
+
 std::shared_ptr<table_info> create_out_table(
     std::shared_ptr<table_info> left_table,
     std::shared_ptr<table_info> right_table, bodo::vector<int64_t>& left_idxs,
@@ -245,7 +249,38 @@ std::shared_ptr<table_info> create_out_table(
     int64_t* use_nullable_arr_type, uint64_t* cond_func_left_columns,
     uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
     uint64_t cond_func_right_column_len);
+
+/**
+ * @brief Create data structures for column data to match the format
+ * expected by cond_func. We create three vectors:
+ * the array_infos (which handle general types), and data1/nullbitmap pointers
+ * as a fast path for accessing numeric data. These include both keys
+ * and data columns as either can be used in the cond_func.
+ * Defined in _nested_loop_join.cpp
+ *
+ * @param table Input table
+ * @return std::tuple<std::vector<array_info*>, std::vector<void*>,
+ * std::vector<void*>> Vectors of array info, data1, and null bitmap pointers
+ */
 std::tuple<std::vector<array_info*>, std::vector<void*>, std::vector<void*>>
 get_gen_cond_data_ptrs(std::shared_ptr<table_info> table);
+
+/**
+ * @brief Populate existing data structures with column data to match the
+ * format expected by cond_func. We append pointers to three vectors:
+ * array_infos (which handle general types), and data1/nullbitmap pointers
+ * as a fast path for accessing numeric data. These include both keys
+ * and data columns as either can be used in the cond_func.
+ * Defined in _nested_loop_join.cpp
+ *
+ * @param table Input table
+ * @param table_infos Pointer to output vector of array infos
+ * @param col_ptrs Pointer to output vector of data1 pointers
+ * @param null_bitmaps Pointer to output vector of null_bitmap pointers
+ */
+void get_gen_cond_data_ptrs(std::shared_ptr<table_info> table,
+                            std::vector<array_info*>* array_infos,
+                            std::vector<void*>* col_ptrs,
+                            std::vector<void*>* null_bitmaps);
 
 #endif  // _JOIN_H_INCLUDED

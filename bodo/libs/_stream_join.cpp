@@ -7,19 +7,37 @@
 
 /* --------------------------- Helper Functions --------------------------- */
 
-/**
- * @brief Get the dict builders from a table build buffer object.
- *
- * @param table_build_buffer TableBuildBuffer to get the dict builders from.
- * @return std::vector<std::shared_ptr<DictionaryBuilder>>
- */
+std::tuple<std::vector<int8_t>, std::vector<int8_t>>
+get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table) {
+    size_t n_cols = table->columns.size();
+    std::vector<int8_t> arr_c_types(n_cols);
+    std::vector<int8_t> arr_array_types(n_cols);
+    for (size_t i = 0; i < n_cols; i++) {
+        arr_c_types[i] = table->columns[i]->dtype;
+        arr_array_types[i] = table->columns[i]->arr_type;
+    }
+    return std::make_tuple(arr_c_types, arr_array_types);
+}
+
 std::vector<std::shared_ptr<DictionaryBuilder>>
 get_dict_builders_from_table_build_buffer(
-    TableBuildBuffer& table_build_buffer) {
+    const TableBuildBuffer& table_build_buffer) {
     size_t n_cols = table_build_buffer.data_table->columns.size();
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders(n_cols);
     for (size_t i = 0; i < n_cols; i++) {
         dict_builders[i] = table_build_buffer.array_buffers[i].dict_builder;
+    }
+    return dict_builders;
+}
+
+std::vector<std::shared_ptr<DictionaryBuilder>>
+get_dict_builders_from_chunked_table_builder(
+    const ChunkedTableBuilder& chunked_table_builder) {
+    size_t n_cols = chunked_table_builder.active_chunk->columns.size();
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders(n_cols);
+    for (size_t i = 0; i < n_cols; i++) {
+        dict_builders[i] =
+            chunked_table_builder.active_chunk_array_builders[i].dict_builder;
     }
     return dict_builders;
 }
@@ -101,11 +119,11 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
     auto [build_arr_c_types, build_arr_array_types] =
         get_dtypes_arr_types_from_table(this->build_table_buffer.data_table);
     auto [probe_arr_c_types, probe_arr_array_types] =
-        get_dtypes_arr_types_from_table(this->probe_table_buffer.data_table);
+        get_dtypes_arr_types_from_table(this->probe_table_buffer.active_chunk);
     std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders =
         get_dict_builders_from_table_build_buffer(this->build_table_buffer);
     std::vector<std::shared_ptr<DictionaryBuilder>> probe_table_dict_builders =
-        get_dict_builders_from_table_build_buffer(this->probe_table_buffer);
+        get_dict_builders_from_chunked_table_builder(this->probe_table_buffer);
     // Get dictionary hashes from the dict-builders of build table.
     // Dictionaries of key columns are shared between build and probe tables,
     // so using either is fine.
@@ -127,12 +145,14 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         this->num_top_bits + 1, (this->top_bitmask << 1), build_arr_c_types,
         build_arr_array_types, probe_arr_c_types, probe_arr_array_types,
         this->n_keys, this->build_table_outer, this->probe_table_outer,
-        build_table_dict_builders, probe_table_dict_builders);
+        build_table_dict_builders, probe_table_dict_builders,
+        this->probe_batch_size);
     std::shared_ptr<JoinPartition> new_part2 = std::make_shared<JoinPartition>(
         this->num_top_bits + 1, (this->top_bitmask << 1) + 1, build_arr_c_types,
         build_arr_array_types, probe_arr_c_types, probe_arr_array_types,
         this->n_keys, this->build_table_outer, this->probe_table_outer,
-        build_table_dict_builders, probe_table_dict_builders);
+        build_table_dict_builders, probe_table_dict_builders,
+        this->probe_batch_size);
 
     // Reserve space in build_table_buffer and hash vectors for both
     // partitions.
@@ -201,12 +221,14 @@ void JoinPartition::BuildHashTable() {
 
 void JoinPartition::ReserveBuildTable(
     const std::shared_ptr<table_info>& in_table) {
+    // Hashes no longer should be reserved [BSE-719].
     this->build_table_buffer.ReserveTable(in_table);
 }
 
 void JoinPartition::ReserveProbeTable(
     const std::shared_ptr<table_info>& in_table) {
-    this->probe_table_buffer.ReserveTable(in_table);
+    // Intentionally left empty. Hashes no longer should be reserved [BSE-719]
+    // and ChunkedTableBuilder doesn't need reserve
 }
 
 inline void JoinPartition::InsertLastRowIntoMap() {
@@ -409,41 +431,61 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     const std::vector<uint64_t>& probe_kept_cols,
     const bool build_needs_reduction,
     const std::shared_ptr<ChunkedTableBuilder>& output_buffer) {
-    // XXX Currently, there's a single table_buffer, but in the future,
-    // there'll probably be multiple buffers.
-    this->probe_table = this->probe_table_buffer.data_table;
-    this->probe_table_hashes = this->probe_table_buffer_join_hashes.data();
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
+    // Raw array pointers from arrays for passing to non-equijoin condition
+    std::vector<array_info*> build_table_info_ptrs;
+    std::vector<array_info*> probe_table_info_ptrs;
+    // Vectors for data and null bitmaps for fast null checking from the cfunc
+    std::vector<void*> build_col_ptrs;
+    std::vector<void*> probe_col_ptrs;
+    std::vector<void*> build_null_bitmaps;
+    std::vector<void*> probe_null_bitmaps;
 
-    // TODO Pin the build table, etc.
+    this->probe_table_buffer.Finalize();
 
-    // Fetch the raw array pointers from the arrays for passing
-    // to the non-equijoin condition
-    std::vector<array_info*> build_table_info_ptrs, probe_table_info_ptrs;
-    // Vectors for data
-    std::vector<void*> build_col_ptrs, probe_col_ptrs;
-    // Vectors for null bitmaps for fast null checking from the cfunc
-    std::vector<void*> build_null_bitmaps, probe_null_bitmaps;
-    if (non_equi_condition) {
-        std::tie(build_table_info_ptrs, build_col_ptrs, build_null_bitmaps) =
-            get_gen_cond_data_ptrs(this->build_table_buffer.data_table);
-        std::tie(probe_table_info_ptrs, probe_col_ptrs, probe_null_bitmaps) =
-            get_gen_cond_data_ptrs(this->probe_table);
+    // Loop over chunked probe table's buffers/hashes and process one at a time
+    // At each loop iteration we mutate `this->probe_table`, so all `i_row` and
+    // `probe_idxs` indices refer only to the local chunk.
+    // Therefore, adding unmatched rows from the probe table to the output
+    // must be done at each iteration, while that probe table is in memory.
+    // Adding unmatched rows from the build table should be done at the end.
+    this->probe_table_hashes = this->probe_table_buffer_join_hashes.data();
+    while (!this->probe_table_buffer.chunks.empty()) {
+        auto [out_table, probe_table_nrows] =
+            this->probe_table_buffer.PopChunk();
+        this->probe_table = out_table;
+
+        // TODO Pin the build table, etc.
+
+        if (non_equi_condition) {
+            get_gen_cond_data_ptrs(this->build_table_buffer.data_table,
+                                   &build_table_info_ptrs, &build_col_ptrs,
+                                   &build_null_bitmaps);
+            get_gen_cond_data_ptrs(this->probe_table, &probe_table_info_ptrs,
+                                   &probe_col_ptrs, &probe_null_bitmaps);
+        }
+
+        for (size_t i_row = 0; i_row < this->probe_table->nrows(); i_row++) {
+            // TODO Add steps to pin the selected buffer.
+            handle_probe_input_for_partition<
+                build_table_outer, probe_table_outer, non_equi_condition>(
+                cond_func, this, i_row, build_idxs, probe_idxs,
+                build_table_info_ptrs, probe_table_info_ptrs, build_col_ptrs,
+                probe_col_ptrs, build_null_bitmaps, probe_null_bitmaps);
+        }
+        // TODO Free the selected buffer.
+
+        output_buffer->AppendJoinOutput(
+            this->build_table_buffer.data_table, this->probe_table, build_idxs,
+            probe_idxs, build_kept_cols, probe_kept_cols);
+        build_idxs.clear();
+        probe_idxs.clear();
+
+        this->probe_table_hashes += probe_table_nrows;
     }
-
-    for (size_t i_row = 0; i_row < this->probe_table->nrows(); i_row++) {
-        // TODO Add steps to pin the selected buffer.
-        handle_probe_input_for_partition<build_table_outer, probe_table_outer,
-                                         non_equi_condition>(
-            cond_func, this, i_row, build_idxs, probe_idxs,
-            build_table_info_ptrs, probe_table_info_ptrs, build_col_ptrs,
-            probe_col_ptrs, build_null_bitmaps, probe_null_bitmaps);
-    }
-    // TODO Free the selected buffer.
-
+    // Add unmatched rows from build table to output table
     if (build_table_outer) {
-        // Add unmatched rows from build table to output table
         if (build_needs_reduction) {
             generate_build_table_outer_rows_for_partition<true>(
                 this, build_idxs, probe_idxs);
@@ -451,13 +493,14 @@ void JoinPartition::FinalizeProbeForInactivePartition(
             generate_build_table_outer_rows_for_partition<false>(
                 this, build_idxs, probe_idxs);
         }
+
+        output_buffer->AppendJoinOutput(
+            this->build_table_buffer.data_table, this->dummy_probe_table,
+            build_idxs, probe_idxs, build_kept_cols, probe_kept_cols);
+        build_idxs.clear();
+        probe_idxs.clear();
     }
 
-    output_buffer->AppendJoinOutput(this->build_table_buffer.data_table,
-                                    this->probe_table, build_idxs, probe_idxs,
-                                    build_kept_cols, probe_kept_cols);
-    build_idxs.clear();
-    probe_idxs.clear();
     this->probe_table = nullptr;
     this->probe_table_hashes = nullptr;
 
@@ -697,7 +740,8 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
     this->partitions.emplace_back(std::make_shared<JoinPartition>(
         0, 0, build_arr_c_types, build_arr_array_types, probe_arr_c_types,
         probe_arr_array_types, n_keys_, build_table_outer_, probe_table_outer_,
-        this->build_table_dict_builders, this->probe_table_dict_builders));
+        this->build_table_dict_builders, this->probe_table_dict_builders,
+        /*probe_batch_size*/ this->output_batch_size));
 
     this->global_bloom_filter = create_bloom_filter();
 }
@@ -735,7 +779,7 @@ void HashJoinState::ResetPartitions() {
         get_dict_builders_from_table_build_buffer(
             this->partitions[0]->build_table_buffer);
     std::vector<std::shared_ptr<DictionaryBuilder>> probe_table_dict_builders =
-        get_dict_builders_from_table_build_buffer(
+        get_dict_builders_from_chunked_table_builder(
             this->partitions[0]->probe_table_buffer);
 
     std::shared_ptr<JoinPartition> new_partition =
@@ -743,7 +787,8 @@ void HashJoinState::ResetPartitions() {
             0, 0, this->build_arr_c_types, this->build_arr_array_types,
             this->probe_arr_c_types, this->probe_arr_array_types, this->n_keys,
             this->build_table_outer, this->probe_table_outer,
-            build_table_dict_builders, probe_table_dict_builders);
+            build_table_dict_builders, probe_table_dict_builders,
+            /*probe_batch_size*/ this->output_batch_size);
     this->partitions.clear();
     this->partitions.emplace_back(new_partition);
 }
@@ -922,9 +967,7 @@ void HashJoinState::AppendProbeBatchToInactivePartition(
             if (!found_partition) {
                 throw std::runtime_error(
                     "HashJoinState::AppendProbeBatchToInactivePartition: "
-                    "Couldn't "
-                    "find "
-                    "any matching partition for row!");
+                    "Couldn't find any matching partition for row!");
             }
         }
     }
