@@ -426,17 +426,7 @@ void add_unmatched_rows(bodo::vector<uint8_t>& bit_map, size_t n_rows,
     }
 }
 
-/**
- * @brief Create data structures for column data to match the format
- * expected by cond_func. We create three vectors:
- * the array_infos (which handle general types), and data1/nullbitmap pointers
- * as a fast path for accessing numeric data. These include both keys
- * and data columns as either can be used in the cond_func.
- *
- * @param table Input table
- * @return std::tuple<std::vector<array_info*>, std::vector<void*>,
- * std::vector<void*>> Vectors of array info, data1, and null bitmap pointers
- */
+// Header and docstring are defined in _join.h
 std::tuple<std::vector<array_info*>, std::vector<void*>, std::vector<void*>>
 get_gen_cond_data_ptrs(std::shared_ptr<table_info> table) {
     std::vector<array_info*> array_infos;

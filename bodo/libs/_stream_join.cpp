@@ -99,6 +99,7 @@ inline bool JoinPartition::is_in_partition(const uint32_t& hash) {
     }
 }
 
+template <bool is_active>
 std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
     size_t num_levels) {
     if (num_levels != 1) {
@@ -116,14 +117,32 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
     // probe_arr_array_types and dict_builders from the build and probe buffers.
     // Note that for now we will share the dict builders between all partitions,
     // but this might change in the future.
-    auto [build_arr_c_types, build_arr_array_types] =
-        get_dtypes_arr_types_from_table(this->build_table_buffer.data_table);
+    std::vector<int8_t> build_arr_c_types;
+    std::vector<int8_t> build_arr_array_types;
+    std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
+
+    if (is_active) {
+        std::tie(build_arr_c_types, build_arr_array_types) =
+            get_dtypes_arr_types_from_table(
+                this->build_table_buffer.data_table);
+        build_table_dict_builders =
+            get_dict_builders_from_table_build_buffer(this->build_table_buffer);
+    } else {
+        std::tie(build_arr_c_types, build_arr_array_types) =
+            get_dtypes_arr_types_from_table(
+                this->build_table_buffer_chunked.active_chunk);
+        build_table_dict_builders =
+            get_dict_builders_from_chunked_table_builder(
+                this->build_table_buffer_chunked);
+    }
+
     auto [probe_arr_c_types, probe_arr_array_types] =
-        get_dtypes_arr_types_from_table(this->probe_table_buffer.active_chunk);
-    std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders =
-        get_dict_builders_from_table_build_buffer(this->build_table_buffer);
+        get_dtypes_arr_types_from_table(
+            this->probe_table_buffer_chunked.active_chunk);
     std::vector<std::shared_ptr<DictionaryBuilder>> probe_table_dict_builders =
-        get_dict_builders_from_chunked_table_builder(this->probe_table_buffer);
+        get_dict_builders_from_chunked_table_builder(
+            this->probe_table_buffer_chunked);
+
     // Get dictionary hashes from the dict-builders of build table.
     // Dictionaries of key columns are shared between build and probe tables,
     // so using either is fine.
@@ -145,65 +164,119 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         this->num_top_bits + 1, (this->top_bitmask << 1), build_arr_c_types,
         build_arr_array_types, probe_arr_c_types, probe_arr_array_types,
         this->n_keys, this->build_table_outer, this->probe_table_outer,
-        build_table_dict_builders, probe_table_dict_builders,
-        this->probe_batch_size);
+        build_table_dict_builders, probe_table_dict_builders, this->batch_size,
+        is_active);
     std::shared_ptr<JoinPartition> new_part2 = std::make_shared<JoinPartition>(
         this->num_top_bits + 1, (this->top_bitmask << 1) + 1, build_arr_c_types,
         build_arr_array_types, probe_arr_c_types, probe_arr_array_types,
         this->n_keys, this->build_table_outer, this->probe_table_outer,
-        build_table_dict_builders, probe_table_dict_builders,
-        this->probe_batch_size);
+        build_table_dict_builders, probe_table_dict_builders, this->batch_size,
+        false);
 
-    // Reserve space in build_table_buffer and hash vectors for both
-    // partitions.
+    // Reserve space in hash vectors for both partitions.
+    // Also reserve in new_part1->build_table_buffer if it will become active
     // XXX This is over provisioning, so need to figure out how
     // to restrict that.
-    new_part1->build_table_buffer.ReserveTable(
-        this->build_table_buffer.data_table);
+    if (is_active) {
+        new_part1->build_table_buffer.ReserveTable(
+            this->build_table_buffer.data_table);
+    }
     new_part1->build_table_join_hashes.reserve(
         this->build_table_join_hashes.size());
-    new_part2->build_table_buffer.ReserveTable(
-        this->build_table_buffer.data_table);
     new_part2->build_table_join_hashes.reserve(
         this->build_table_join_hashes.size());
 
-    // Compute partitioning hashes:
-    std::shared_ptr<uint32_t[]> build_table_partitioning_hashes =
-        hash_keys_table(this->build_table_buffer.data_table, this->n_keys,
-                        SEED_HASH_PARTITION, false, false, dict_hashes);
+    std::vector<bool> append_partition1;
+    if (is_active) {
+        // In the active case, partition this->build_table_buffer directly
+        size_t build_table_nrows = this->build_table_buffer.data_table->nrows();
 
-    // Put the build data in the sub partitions.
-    // XXX Might be faster to pre-calculate the required
-    // sizes, build a bitmap, pre-allocated space and then append
-    // into the new partitions.
-    std::vector<bool> append_partion1(
-        this->build_table_buffer.data_table->nrows(), false);
-    for (size_t i_row = 0; i_row < build_table_buffer.data_table->nrows();
-         i_row++) {
-        append_partion1[i_row] =
-            new_part1->is_in_partition(build_table_partitioning_hashes[i_row]);
-    }
+        // Compute partitioning hashes
+        std::shared_ptr<uint32_t[]> build_table_partitioning_hashes =
+            hash_keys_table(this->build_table_buffer.data_table, this->n_keys,
+                            SEED_HASH_PARTITION, false, false, dict_hashes);
 
-    // Copy the hash values to the new partitions.
-    for (size_t i_row = 0; i_row < build_table_buffer.data_table->nrows();
-         i_row++) {
-        if (append_partion1[i_row]) {
-            new_part1->build_table_join_hashes.push_back(
-                this->build_table_join_hashes[i_row]);
-        } else {
-            new_part2->build_table_join_hashes.push_back(
-                this->build_table_join_hashes[i_row]);
+        // Put the build data in the sub partitions.
+        // XXX Might be faster to pre-calculate the required
+        // sizes, build a bitmap, pre-allocated space and then append
+        // into the new partitions.
+        append_partition1.resize(build_table_nrows, false);
+        for (size_t i_row = 0; i_row < build_table_nrows; i_row++) {
+            append_partition1[i_row] = new_part1->is_in_partition(
+                build_table_partitioning_hashes[i_row]);
+        }
+
+        // Copy the hash values to the new partitions.
+        for (size_t i_row = 0; i_row < build_table_nrows; i_row++) {
+            if (append_partition1[i_row]) {
+                new_part1->build_table_join_hashes.push_back(
+                    this->build_table_join_hashes[i_row]);
+            } else {
+                new_part2->build_table_join_hashes.push_back(
+                    this->build_table_join_hashes[i_row]);
+            }
+        }
+
+        new_part1->build_table_buffer.AppendBatch(
+            this->build_table_buffer.data_table, append_partition1);
+
+        append_partition1.flip();
+        std::vector<bool>& append_partition2 = append_partition1;
+
+        new_part2->build_table_buffer_chunked.AppendBatch(
+            this->build_table_buffer.data_table, append_partition2);
+    } else {
+        // In the inactive case, partition build_table_buffer chunk by chunk
+        uint32_t* build_table_join_hashes_chunk =
+            this->build_table_join_hashes.data();
+        this->build_table_buffer_chunked.Finalize();
+        while (!this->build_table_buffer_chunked.chunks.empty()) {
+            auto [build_table_chunk, build_table_nrows_chunk] =
+                this->build_table_buffer_chunked.PopChunk();
+
+            // Compute partitioning hashes
+            std::shared_ptr<uint32_t[]> build_table_partitioning_hashes_chunk =
+                hash_keys_table(build_table_chunk, this->n_keys,
+                                SEED_HASH_PARTITION, false, false, dict_hashes);
+
+            // Put the build data in the sub partitions.
+            // XXX Might be faster to pre-calculate the required
+            // sizes, build a bitmap, pre-allocated space and then append
+            // into the new partitions.
+            append_partition1.resize(build_table_nrows_chunk, false);
+            for (int64_t i_row = 0; i_row < build_table_nrows_chunk; i_row++) {
+                append_partition1[i_row] = new_part1->is_in_partition(
+                    build_table_partitioning_hashes_chunk[i_row]);
+            }
+
+            // Copy the hash values to the new partitions.
+            for (int64_t i_row = 0; i_row < build_table_nrows_chunk; i_row++) {
+                if (append_partition1[i_row]) {
+                    new_part1->build_table_join_hashes.push_back(
+                        build_table_join_hashes_chunk[i_row]);
+                } else {
+                    new_part2->build_table_join_hashes.push_back(
+                        build_table_join_hashes_chunk[i_row]);
+                }
+            }
+
+            new_part1->build_table_buffer_chunked.AppendBatch(
+                build_table_chunk, append_partition1);
+
+            append_partition1.flip();
+            std::vector<bool>& append_partition2 = append_partition1;
+
+            new_part2->build_table_buffer_chunked.AppendBatch(
+                build_table_chunk, append_partition2);
+
+            build_table_join_hashes_chunk += build_table_nrows_chunk;
         }
     }
 
-    new_part1->build_table_buffer.AppendBatch(
-        this->build_table_buffer.data_table, append_partion1);
-
-    append_partion1.flip();
-    std::vector<bool>& append_partion2 = append_partion1;
-
-    new_part2->build_table_buffer.AppendBatch(
-        this->build_table_buffer.data_table, append_partion2);
+    if (is_active) {
+        // Rebuild the hash table for the _new_ active partition
+        new_part1->BuildHashTable();
+    }
 
     // Splitting happens at build time, so the probe buffers should
     // be empty.
@@ -222,7 +295,10 @@ void JoinPartition::BuildHashTable() {
 void JoinPartition::ReserveBuildTable(
     const std::shared_ptr<table_info>& in_table) {
     // Hashes no longer should be reserved [BSE-719].
-    this->build_table_buffer.ReserveTable(in_table);
+    // Only TableBuildBuffer needs reserve, not ChunkedTableBuilder
+    if (this->is_active) {
+        this->build_table_buffer.ReserveTable(in_table);
+    }
 }
 
 void JoinPartition::ReserveProbeTable(
@@ -233,7 +309,7 @@ void JoinPartition::ReserveProbeTable(
 
 inline void JoinPartition::InsertLastRowIntoMap() {
     std::vector<std::vector<size_t>>& groups = this->groups;
-    size_t& group_id = this->build_table[this->curr_build_size];
+    size_t& group_id = this->build_hash_table[this->curr_build_size];
     // group_id==0 means key doesn't exist in map
     if (group_id == 0) {
         // Update the value of group_id stored in the hash map
@@ -244,9 +320,6 @@ inline void JoinPartition::InsertLastRowIntoMap() {
     groups[group_id - 1].emplace_back(this->curr_build_size);
 }
 
-// XXX Currently the implementation for the active and inactive case are
-// very similar, but this will change in the future, hence the template
-// variable.
 template <bool is_active>
 void JoinPartition::AppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
@@ -254,10 +327,14 @@ void JoinPartition::AppendBuildBatch(
     this->build_table_join_hashes.insert(this->build_table_join_hashes.end(),
                                          join_hashes.get(),
                                          join_hashes.get() + in_table->nrows());
-    this->build_table_buffer.AppendBatch(in_table);
-    for (size_t i_row = 0; is_active && i_row < in_table->nrows(); i_row++) {
-        this->InsertLastRowIntoMap();
-        this->curr_build_size++;
+    if (is_active) {
+        this->build_table_buffer.AppendBatch(in_table);
+        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+            this->InsertLastRowIntoMap();
+            this->curr_build_size++;
+        }
+    } else {
+        this->build_table_buffer_chunked.AppendBatch(in_table);
     }
 }
 
@@ -266,25 +343,33 @@ void JoinPartition::AppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& join_hashes,
     const std::vector<bool>& append_rows) {
-    this->build_table_buffer.AppendBatch(in_table, append_rows);
-    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-        if (append_rows[i_row]) {
-            this->build_table_join_hashes.push_back(join_hashes[i_row]);
-            if (is_active) {
+    if (is_active) {
+        this->build_table_buffer.AppendBatch(in_table, append_rows);
+        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+            if (append_rows[i_row]) {
+                this->build_table_join_hashes.push_back(join_hashes[i_row]);
                 this->InsertLastRowIntoMap();
                 this->curr_build_size++;
+            }
+        }
+    } else {
+        this->build_table_buffer_chunked.AppendBatch(in_table, append_rows);
+        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+            if (append_rows[i_row]) {
+                this->build_table_join_hashes.push_back(join_hashes[i_row]);
             }
         }
     }
 }
 
 void JoinPartition::FinalizeBuild() {
-    // XXX Currently, there's a single table_buffer, so we don't
-    // need to concat, etc.
-    // TODO Add steps to pin the buffers and concat.
+    // TODO Add steps to pin the buffers.
     // TODO Add logic to identify that the buffer is too large
     // and that we need to re-partition.
-    this->BuildHashTable();
+    if (!this->is_active) {
+        // Make sure this partition is active
+        this->ActivatePartition();
+    }
     if (this->build_table_outer) {
         this->build_table_matched.resize(
             arrow::bit_util::BytesForBits(
@@ -303,7 +388,7 @@ void JoinPartition::AppendInactiveProbeBatch(
             this->probe_table_buffer_join_hashes.push_back(join_hashes[i_row]);
         }
     }
-    this->probe_table_buffer.AppendBatch(in_table, append_rows);
+    this->probe_table_buffer_chunked.AppendBatch(in_table, append_rows);
 }
 
 /**
@@ -346,8 +431,8 @@ inline void handle_probe_input_for_partition(
     std::vector<void*>& build_col_ptrs, std::vector<void*>& probe_col_ptrs,
     std::vector<void*>& build_null_bitmaps,
     std::vector<void*>& probe_null_bitmaps) {
-    auto iter = partition->build_table.find(-i_row - 1);
-    if (iter == partition->build_table.end()) {
+    auto iter = partition->build_hash_table.find(-i_row - 1);
+    if (iter == partition->build_hash_table.end()) {
         if (probe_table_outer) {
             // Add unmatched rows from probe table to output table
             build_idxs.push_back(-1);
@@ -442,8 +527,6 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     std::vector<void*> build_null_bitmaps;
     std::vector<void*> probe_null_bitmaps;
 
-    this->probe_table_buffer.Finalize();
-
     // Loop over chunked probe table's buffers/hashes and process one at a time
     // At each loop iteration we mutate `this->probe_table`, so all `i_row` and
     // `probe_idxs` indices refer only to the local chunk.
@@ -451,10 +534,11 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     // must be done at each iteration, while that probe table is in memory.
     // Adding unmatched rows from the build table should be done at the end.
     this->probe_table_hashes = this->probe_table_buffer_join_hashes.data();
-    while (!this->probe_table_buffer.chunks.empty()) {
-        auto [out_table, probe_table_nrows] =
-            this->probe_table_buffer.PopChunk();
-        this->probe_table = out_table;
+    this->probe_table_buffer_chunked.Finalize();
+    while (!this->probe_table_buffer_chunked.chunks.empty()) {
+        auto [probe_table_chunk, probe_table_nrows] =
+            this->probe_table_buffer_chunked.PopChunk();
+        this->probe_table = probe_table_chunk;
 
         // TODO Pin the build table, etc.
 
@@ -505,6 +589,25 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     this->probe_table_hashes = nullptr;
 
     // TODO Unpin/Free all state
+}
+
+void JoinPartition::ActivatePartition() {
+    if (!this->is_active) {
+        this->is_active = true;
+
+        // Concatenate all build chunks into contiguous build buffer
+        this->build_table_buffer_chunked.Finalize();
+
+        while (!this->build_table_buffer_chunked.chunks.empty()) {
+            auto [build_table_chunk, build_table_nrows_chunk] =
+                this->build_table_buffer_chunked.PopChunk();
+            this->build_table_buffer.ReserveTable(build_table_chunk);
+            this->build_table_buffer.AppendBatch(build_table_chunk);
+        }
+
+        // Rebuild hash table for new active partition
+        this->BuildHashTable();
+    }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -741,7 +844,7 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
         0, 0, build_arr_c_types, build_arr_array_types, probe_arr_c_types,
         probe_arr_array_types, n_keys_, build_table_outer_, probe_table_outer_,
         this->build_table_dict_builders, this->probe_table_dict_builders,
-        /*probe_batch_size*/ this->output_batch_size));
+        /*batch_size*/ this->output_batch_size, /*is_active*/ true));
 
     this->global_bloom_filter = create_bloom_filter();
 }
@@ -758,15 +861,17 @@ void HashJoinState::SplitPartition(size_t idx) {
     }
 
     // Call SplitPartition on the current active partition
-    std::vector<std::shared_ptr<JoinPartition>> new_partitions =
-        this->partitions[idx]->SplitPartition();
+    std::vector<std::shared_ptr<JoinPartition>> new_partitions;
+    if (this->partitions[idx]->is_active_partition()) {
+        new_partitions = this->partitions[idx]->SplitPartition<true>();
+    } else {
+        new_partitions = this->partitions[idx]->SplitPartition<false>();
+    }
     // Remove the current partition (this should release its memory)
     this->partitions.erase(this->partitions.begin() + idx);
     // Insert the new partitions in its place
     this->partitions.insert(this->partitions.begin() + idx,
                             new_partitions.begin(), new_partitions.end());
-    // Rebuild the hash table for the _new_ active partition
-    this->partitions[idx]->BuildHashTable();
 
     // TODO Check if the new active partition needs to be split up further.
     // XXX Might not be required if we split proactively and there isn't
@@ -775,12 +880,13 @@ void HashJoinState::SplitPartition(size_t idx) {
 }
 
 void HashJoinState::ResetPartitions() {
+    // Partition 0 is always active
     std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders =
         get_dict_builders_from_table_build_buffer(
             this->partitions[0]->build_table_buffer);
     std::vector<std::shared_ptr<DictionaryBuilder>> probe_table_dict_builders =
         get_dict_builders_from_chunked_table_builder(
-            this->partitions[0]->probe_table_buffer);
+            this->partitions[0]->probe_table_buffer_chunked);
 
     std::shared_ptr<JoinPartition> new_partition =
         std::make_shared<JoinPartition>(
@@ -788,7 +894,7 @@ void HashJoinState::ResetPartitions() {
             this->probe_arr_c_types, this->probe_arr_array_types, this->n_keys,
             this->build_table_outer, this->probe_table_outer,
             build_table_dict_builders, probe_table_dict_builders,
-            /*probe_batch_size*/ this->output_batch_size);
+            /*batch_size*/ this->output_batch_size, /*is_active*/ true);
     this->partitions.clear();
     this->partitions.emplace_back(new_partition);
 }
@@ -840,7 +946,7 @@ void HashJoinState::AppendBuildBatch(
     this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes,
                                                 append_rows_by_partition[0]);
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
-        this->partitions[i_part]->AppendBuildBatch(
+        this->partitions[i_part]->AppendBuildBatch<false>(
             in_table, join_hashes, append_rows_by_partition[i_part]);
     }
 }
@@ -889,7 +995,7 @@ void HashJoinState::AppendBuildBatch(
     this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes,
                                                 append_rows_by_partition[0]);
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
-        this->partitions[i_part]->AppendBuildBatch(
+        this->partitions[i_part]->AppendBuildBatch<false>(
             in_table, join_hashes, append_rows_by_partition[i_part]);
     }
 }
