@@ -172,8 +172,7 @@ void mode_operation_strings(std::shared_ptr<array_info> arr,
     // Create an array of nullable integers that will store the mode
     // of the indices within each group
     std::shared_ptr<array_info> out_indices =
-        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::INT32);
+        alloc_nullable_array_all_nulls(num_groups, Bodo_CTypes::INT32, 0);
     mode_operation<bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32>(
         indices, out_indices, grp_info);
     // Create a new dictionary encoded array using the indices derived
