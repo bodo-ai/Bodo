@@ -6,6 +6,7 @@ import datetime
 
 import numba
 import numpy as np
+import pandas as pd
 from numba.core import types
 from numba.extending import overload, register_jitable
 
@@ -79,7 +80,6 @@ def _get_type_max_value(dtype):  # pragma: no cover
 
 @overload(_get_type_max_value, inline="always", no_unliteral=True)
 def _get_type_max_value_overload(dtype):
-
     # nullable float and int data
     if isinstance(
         dtype, (bodo.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
@@ -134,7 +134,6 @@ def _get_type_min_value(dtype):  # pragma: no cover
 
 @overload(_get_type_min_value, inline="always", no_unliteral=True)
 def _get_type_min_value_overload(dtype):
-
     # nullable float and int data
     if isinstance(
         dtype, (bodo.IntegerArrayType, IntDtype, FloatingArrayType, FloatDtype)
@@ -151,6 +150,15 @@ def _get_type_min_value_overload(dtype):
     # bodo.Time array
     if dtype == TimeArrayType:
         return lambda dtype: _get_time_min_value()  # pragma: no cover
+
+    # Datetime array
+    if isinstance(
+        dtype, bodo.libs.pd_datetime_arr_ext.DatetimeArrayType
+    ):  # pragma: no cover
+        tz = dtype.tz
+        return lambda dtype: pd.Timestamp(
+            numba.cpython.builtins.get_type_min_value(numba.core.types.int64), tz
+        )  # pragma: no cover
 
     # dt64
     if isinstance(dtype.dtype, types.NPDatetime):

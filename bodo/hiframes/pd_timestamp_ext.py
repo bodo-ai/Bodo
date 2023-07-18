@@ -14,6 +14,7 @@ import pytz
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
+from numba.core.typing.builtins import IndexValueType
 from numba.core.typing.templates import (
     ConcreteTemplate,
     infer_global,
@@ -2648,10 +2649,18 @@ def overload_sub_operator_timestamp(lhs, rhs):
 
         return impl
 
-    if lhs == pd_timestamp_tz_naive_type and rhs == pd_timestamp_tz_naive_type:
+    if isinstance(lhs, PandasTimestampType) and isinstance(rhs, PandasTimestampType):
+        if lhs.tz == rhs.tz:
 
-        def impl_timestamp(lhs, rhs):  # pragma: no cover
-            return convert_numpy_timedelta64_to_pd_timedelta(lhs.value - rhs.value)
+            def impl_timestamp(lhs, rhs):  # pragma: no cover
+                return convert_numpy_timedelta64_to_pd_timedelta(lhs.value - rhs.value)
+
+        else:
+
+            def impl_timestamp(lhs, rhs):  # pragma: no cover
+                return convert_numpy_timedelta64_to_pd_timedelta(
+                    lhs.tz_convert(None).value - rhs.tz_convert(None).value
+                )
 
         return impl_timestamp
 
@@ -2718,24 +2727,103 @@ def overload_add_operator_timestamp(lhs, rhs):
 
 @overload(min, no_unliteral=True)
 def timestamp_min(lhs, rhs):
-    check_tz_aware_unsupported(lhs, f"Timestamp.min()")
-    check_tz_aware_unsupported(rhs, f"Timestamp.min()")
-    if lhs == pd_timestamp_tz_naive_type and rhs == pd_timestamp_tz_naive_type:
+    if isinstance(lhs, PandasTimestampType) and isinstance(rhs, PandasTimestampType):
+        if lhs.tz == rhs.tz:
+
+            def impl(lhs, rhs):  # prama: no cover
+                return lhs if lhs.value < rhs.value else rhs
+
+        elif lhs.tz is not None and rhs.tz is not None:
+            raise BodoError(
+                "Cannot use min/max on timestamps with different timezones. Use tz_convert"
+            )
+
+        else:
+            raise BodoError("Cannot compare tz-naive and tz-aware timestamps")
+
+        return impl
+
+    elif (
+        isinstance(lhs, IndexValueType)
+        and isinstance(rhs, IndexValueType)
+        and (lhs.val_typ, PandasTimestampType)
+        and isinstance(rhs.val_typ, PandasTimestampType)
+    ):
 
         def impl(lhs, rhs):  # pragma: no cover
-            return lhs if lhs < rhs else rhs
+            # Based off of https://github.com/numba/numba/blob/249c8ff3206928b486346443ec148508f8c25f8e/numba/cpython/builtins.py#L589
+            #
+            # If both values are NaT, compare by index. If one value is not Nan and the other is, return the non-NaT. Else return the normal
+            if pd.isna(lhs) and pd.isna(rhs):
+                if lhs.index < rhs.index:
+                    return lhs
+                else:
+                    return rhs
+            elif pd.isna(lhs):
+                return rhs
+            elif pd.isna(rhs):
+                return lhs
+            elif lhs.value < rhs.value:
+                return lhs
+            elif lhs.value == rhs.value:
+                if lhs.index < rhs.index:
+                    return lhs
+                else:
+                    return rhs
+            else:
+                return rhs
 
         return impl
 
 
 @overload(max, no_unliteral=True)
 def timestamp_max(lhs, rhs):
-    check_tz_aware_unsupported(lhs, f"Timestamp.max()")
-    check_tz_aware_unsupported(rhs, f"Timestamp.max()")
-    if lhs == pd_timestamp_tz_naive_type and rhs == pd_timestamp_tz_naive_type:
+    if isinstance(lhs, PandasTimestampType) and isinstance(rhs, PandasTimestampType):
+        if lhs.tz == rhs.tz:
+
+            def impl(lhs, rhs):  # prama: no cover
+                return lhs if lhs.value > rhs.value else rhs
+
+        elif lhs.tz is not None and rhs.tz is not None:
+            raise BodoError(
+                "Cannot use min/max on timestamps with different timezones. Use tz_convert"
+            )
+
+        else:
+            raise BodoError("Cannot compare tz-naive and tz-aware timestamps")
+
+        return impl
+
+    # Won't be covered until final nullable TS changes
+    elif (
+        isinstance(lhs, IndexValueType)
+        and isinstance(rhs, IndexValueType)
+        and (lhs.val_typ, PandasTimestampType)
+        and isinstance(rhs.val_typ, PandasTimestampType)
+    ):  # pragma: no cover
 
         def impl(lhs, rhs):  # pragma: no cover
-            return lhs if lhs > rhs else rhs
+            # Based off of https://github.com/numba/numba/blob/249c8ff3206928b486346443ec148508f8c25f8e/numba/cpython/builtins.py#L589
+            #
+            # If both values are NaT, compare by index. If one value is not Nan and the other is, return the non-NaT. Else return the normal
+            if pd.isna(lhs) and pd.isna(rhs):
+                if lhs.index < rhs.index:
+                    return lhs
+                else:
+                    return rhs
+            elif pd.isna(lhs):
+                return rhs
+            elif pd.isna(rhs):
+                return lhs
+            elif lhs.value < rhs.value:
+                return rhs
+            elif lhs.value == rhs.value:
+                if lhs.index < rhs.index:
+                    return lhs
+                else:
+                    return rhs
+            else:
+                return lhs
 
         return impl
 
