@@ -277,14 +277,14 @@ def overload_sub_operator_scalars(lhs, rhs):
 
     # The order matters here: make sure offset types are before datetime types
     # Datetime types
-    if (
-        isinstance(lhs, bodo.PandasTimestampType)
-        and rhs
+    if isinstance(lhs, bodo.PandasTimestampType) and (
+        rhs
         in (
             datetime_timedelta_type,
             pd_timedelta_type,
         )
-    ) or (lhs == pd_timestamp_tz_naive_type and rhs == pd_timestamp_tz_naive_type):
+        or isinstance(rhs, bodo.PandasTimestampType)
+    ):
         # Note we don't support sub between two Timestamps with timezones,
         # but we do with Timestamp and Timedelta
         return bodo.hiframes.pd_timestamp_ext.overload_sub_operator_timestamp(lhs, rhs)
@@ -467,7 +467,6 @@ def create_overload_cmp_operator(op):
     """create overloads for the comparison operators."""
 
     def overload_cmp_operator(lhs, rhs):
-
         # Start of Dataframe Operations
         if isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType):
             # tz-aware comparison operators are supported for Series,
@@ -617,6 +616,7 @@ def create_overload_cmp_operator(op):
 
 ### Helper Functions For Checking Types
 
+
 ## Helper functions for the add operator
 def add_dt_td_and_dt_date(lhs, rhs):
     """Helper function to check types supported in datetime_date_ext overload."""
@@ -746,7 +746,6 @@ def div_timedelta_and_int(lhs, rhs):
 
 
 def div_datetime_timedelta(lhs, rhs):
-
     deltas = lhs == datetime_timedelta_type and rhs == datetime_timedelta_type
     delta_and_int = lhs == datetime_timedelta_type and rhs == types.int64
 
@@ -1239,6 +1238,7 @@ def _install_series_and_or():
 
 
 _install_series_and_or()
+
 
 ## Install operator overloads
 def _install_cmp_ops():

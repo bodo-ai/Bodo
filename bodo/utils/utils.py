@@ -949,7 +949,13 @@ def overload_alloc_type(n, t, s=None):
             n, precision, scale
         )  # pragma: no cover
 
-    if isinstance(typ, bodo.DatetimeArrayType):
+    if isinstance(typ, bodo.DatetimeArrayType) or isinstance(
+        type,
+        (
+            PandasTimestampType,
+            PandasDatetimeTZDtype,
+        ),
+    ):
         tz_literal = typ.tz
         return (
             lambda n, t, s=None: bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(

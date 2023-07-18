@@ -96,7 +96,7 @@ def test_timestamp_compare_timezones_unsupported(memory_leak_check):
             pd.Timestamp("2020-03-14T15:32:52.192548651", tz="America/New_York"),
         )
 
-    err_msg = "on Timezone-aware timestamp not yet supported"
+    err_msg = "on timestamps with different timezones"
     with pytest.raises(
         BodoError,
         match=err_msg,
