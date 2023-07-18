@@ -285,7 +285,7 @@ void insert_build_table_equi_join_some_non_equality(
         second_level_hash_maps,
     joinHashFcts::SecondLevelHashHashJoinTable second_level_hash_fct,
     joinHashFcts::SecondLevelKeyEqualHashJoinTable second_level_equal_fct,
-    bodo::vector<size_t>* groups, bodo::vector<size_t>* groups_offsets,
+    bodo::vector<size_t>& groups, bodo::vector<size_t>& groups_offsets,
     size_t build_table_rows) {
     // Vector to store the size of the groups as we iterate over the build table
     // rows. We reserve build_table_rows to avoid expensive re-allocations.
@@ -335,17 +335,17 @@ void insert_build_table_equi_join_some_non_equality(
     size_t num_groups = num_rows_in_group.size();
 
     // Resize offsets vector based on the number of groups
-    groups_offsets->resize(num_groups + 1);
+    groups_offsets.resize(num_groups + 1);
     // First element should always be 0
-    (*groups_offsets)[0] = 0;
+    groups_offsets[0] = 0;
     // Do a cumulative sum and fill the rest:
     if (num_groups > 0) {
         std::partial_sum(num_rows_in_group.cbegin(), num_rows_in_group.cend(),
-                         groups_offsets->begin() + 1);
+                         groups_offsets.begin() + 1);
     }
 
     // Resize based on how many total elements in all groups.
-    groups->resize((*groups_offsets)[groups_offsets->size() - 1]);
+    groups.resize(groups_offsets[groups_offsets.size() - 1]);
 
     // Fill the groups vector. The hashmap(s) are already populated from the
     // first iteration, so we don't need to check if the row-ids exist.
@@ -356,9 +356,9 @@ void insert_build_table_equi_join_some_non_equality(
         const size_t& first_level_group_id = (*key_rows_map)[i_build];
         auto group_map = (*second_level_hash_maps)[first_level_group_id - 1];
         const size_t& second_level_group_id = (*group_map)[i_build];
-        size_t groups_idx = (*groups_offsets)[second_level_group_id - 1] +
+        size_t groups_idx = groups_offsets[second_level_group_id - 1] +
                             group_fill_counter[second_level_group_id - 1];
-        (*groups)[groups_idx] = i_build;
+        groups[groups_idx] = i_build;
         group_fill_counter[second_level_group_id - 1]++;
     }
 }
@@ -379,8 +379,8 @@ void insert_build_table_equi_join_some_non_equality(
  */
 template <typename Map>
 void insert_build_table_equi_join_all_equality(
-    Map* key_rows_map, bodo::vector<size_t>* groups,
-    bodo::vector<size_t>* groups_offsets, size_t build_table_rows) {
+    Map* key_rows_map, bodo::vector<size_t>& groups,
+    bodo::vector<size_t>& groups_offsets, size_t build_table_rows) {
     // Vector to store the size of the groups as we iterate over the build table
     // rows. We reserve build_table_rows to avoid expensive re-allocations.
     bodo::vector<uint64_t> num_rows_in_group;
@@ -412,17 +412,17 @@ void insert_build_table_equi_join_all_equality(
     size_t num_groups = num_rows_in_group.size();
 
     // Resize offsets vector based on the number of groups
-    groups_offsets->resize(num_groups + 1);
+    groups_offsets.resize(num_groups + 1);
     // First element should always be 0
-    (*groups_offsets)[0] = 0;
+    groups_offsets[0] = 0;
     // Do a cumulative sum and fill the rest:
     if (num_groups > 0) {
         std::partial_sum(num_rows_in_group.cbegin(), num_rows_in_group.cend(),
-                         groups_offsets->begin() + 1);
+                         groups_offsets.begin() + 1);
     }
 
     // Resize based on how many total elements in all groups.
-    groups->resize((*groups_offsets)[groups_offsets->size() - 1]);
+    groups.resize(groups_offsets[groups_offsets.size() - 1]);
 
     // Fill the groups vector. The hashmap(s) are already populated from the
     // first iteration, so we don't need to check if the row-ids exist.
@@ -433,8 +433,8 @@ void insert_build_table_equi_join_all_equality(
         // Guaranteed to find a match here:
         const size_t& group_id = (*key_rows_map)[i_build];
         size_t groups_idx =
-            (*groups_offsets)[group_id - 1] + group_fill_counter[group_id - 1];
-        (*groups)[groups_idx] = i_build;
+            groups_offsets[group_id - 1] + group_fill_counter[group_id - 1];
+        groups[groups_idx] = i_build;
         group_fill_counter[group_id - 1]++;
     }
 }
@@ -976,8 +976,7 @@ struct handle_probe_table_miss<true, true> {
  * table. The groups are laid out contiguously in a single buffer, and can be
  * indexed using the 'groups_offsets' array.
  * @param[in] groups_offsets  A vector with offsets for the groups buffer.
- * It's size is num_groups + 1. This function will resize and fill these
- * offsets.
+ * It's size is num_groups + 1.
  * @param[in] build_table_rows The number of rows in the build table.
  * @param[in] probe_table_rows The number of rows in the probe table.
  * @param[in] V_build_map The bitmap that indicates which rows in the build
@@ -1003,10 +1002,10 @@ void insert_probe_table_equi_join_some_non_equality(
         size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
         joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
         second_level_hash_maps,
-    bodo::vector<size_t>* groups, bodo::vector<size_t>* groups_offsets,
-    size_t build_table_rows, size_t probe_table_rows,
-    bodo::vector<uint8_t>& V_build_map, bodo::vector<uint8_t>& V_probe_map,
-    bodo::vector<int64_t>& build_write_idxs,
+    const bodo::vector<size_t>& groups,
+    const bodo::vector<size_t>& groups_offsets, size_t build_table_rows,
+    size_t probe_table_rows, bodo::vector<uint8_t>& V_build_map,
+    bodo::vector<uint8_t>& V_probe_map, bodo::vector<int64_t>& build_write_idxs,
     bodo::vector<int64_t>& probe_write_idxs, bool build_is_left,
     std::vector<std::shared_ptr<array_info>>& left_table_infos,
     std::vector<std::shared_ptr<array_info>>& right_table_infos,
@@ -1046,10 +1045,10 @@ void insert_probe_table_equi_join_some_non_equality(
                 size_t pos = item.second - 1;
                 // Find the start and end indices for this group in the groups
                 // buffer using groups_offsets.
-                size_t group_start_idx = (*groups_offsets)[pos];
-                size_t group_end_idx = (*groups_offsets)[pos + 1];
+                size_t group_start_idx = groups_offsets[pos];
+                size_t group_end_idx = groups_offsets[pos + 1];
                 // Select a single member
-                size_t cmp_row = (*groups)[group_start_idx];
+                size_t cmp_row = groups[group_start_idx];
                 size_t left_ind = 0;
                 size_t right_ind = 0;
                 if (build_is_left) {
@@ -1072,7 +1071,7 @@ void insert_probe_table_equi_join_some_non_equality(
                     has_match = true;
                     for (size_t idx = group_start_idx; idx < group_end_idx;
                          idx++) {
-                        size_t j_build = (*groups)[idx];
+                        size_t j_build = groups[idx];
                         build_write_idxs.emplace_back(j_build);
                         probe_write_idxs.emplace_back(i_probe);
                     }
@@ -1101,7 +1100,7 @@ void insert_probe_table_equi_join_some_non_equality(
  * table. The groups are laid out contiguously in a single buffer, and can be
  * indexed using the 'groups_offsets' array.
  * @param[in] groups_offsets  A vector with offsets for the groups buffer. It's
- * size is num_groups + 1. This function will resize and fill these offsets.
+ * size is num_groups + 1.
  * @param[in] build_table_rows The number of rows in the build table.
  * @param[in] probe_table_rows The number of rows in the probe table.
  * @param[in] V_build_map The bitmap that indicates which rows in the build
@@ -1116,8 +1115,8 @@ void insert_probe_table_equi_join_some_non_equality(
 template <bool build_table_outer, bool probe_table_outer,
           bool is_outer_broadcast, typename Map>
 void insert_probe_table_equi_join_all_equality(
-    Map* key_rows_map, bodo::vector<size_t>* groups,
-    bodo::vector<size_t>* groups_offsets, size_t build_table_rows,
+    Map* key_rows_map, const bodo::vector<size_t>& groups,
+    const bodo::vector<size_t>& groups_offsets, size_t build_table_rows,
     size_t probe_table_rows, bodo::vector<uint8_t>& V_build_map,
     bodo::vector<uint8_t>& V_probe_map, bodo::vector<int64_t>& build_write_idxs,
     bodo::vector<int64_t>& probe_write_idxs) {
@@ -1136,12 +1135,12 @@ void insert_probe_table_equi_join_all_equality(
             // used or not by the probe table.
             // Find the start and end indices for this group in the groups
             // buffer using groups_offsets
-            size_t group_start_idx = (*groups_offsets)[iter->second - 1];
-            size_t group_end_idx = (*groups_offsets)[iter->second - 1 + 1];
+            size_t group_start_idx = groups_offsets[iter->second - 1];
+            size_t group_end_idx = groups_offsets[iter->second - 1 + 1];
             size_t pos = iter->second - 1;
             handle_build_table_hit<build_table_outer>::apply(V_build_map, pos);
             for (size_t idx = group_start_idx; idx < group_end_idx; idx++) {
-                size_t j_build = (*groups)[idx];
+                size_t j_build = groups[idx];
                 build_write_idxs.emplace_back(j_build);
                 probe_write_idxs.emplace_back(i_probe);
             }
@@ -1237,8 +1236,8 @@ struct insert_build_table_miss<false> {
  */
 template <bool build_miss_needs_reduction>
 void insert_build_table_misses(bodo::vector<uint8_t>& V_build_map,
-                               bodo::vector<size_t>* groups,
-                               bodo::vector<size_t>* groups_offsets,
+                               const bodo::vector<size_t>& groups,
+                               const bodo::vector<size_t>& groups_offsets,
                                bodo::vector<int64_t>& build_write_idxs,
                                bodo::vector<int64_t>& probe_write_idxs,
                                int64_t myrank, int64_t n_pes) {
@@ -1250,13 +1249,13 @@ void insert_build_table_misses(bodo::vector<uint8_t>& V_build_map,
     // Add missing rows for outer joins when there are no matching build
     // table groups.
     // (Number of groups is groups_offsets->size() - 1)
-    for (size_t pos = 0; pos < groups_offsets->size() - 1; pos++) {
-        size_t group_start_idx = (*groups_offsets)[pos];
-        size_t group_end_idx = (*groups_offsets)[pos + 1];
+    for (size_t pos = 0; pos < groups_offsets.size() - 1; pos++) {
+        size_t group_start_idx = groups_offsets[pos];
+        size_t group_end_idx = groups_offsets[pos + 1];
         bool bit = GetBit(V_build_map.data(), pos);
         if (!bit) {
             for (size_t idx = group_start_idx; idx < group_end_idx; idx++) {
-                size_t j_build = (*groups)[idx];
+                size_t j_build = groups[idx];
                 insert_build_table_miss<build_miss_needs_reduction>::apply(
                     j_build, build_write_idxs, probe_write_idxs, myrank, n_pes,
                     pos_build_disp);
@@ -1436,8 +1435,8 @@ void hash_join_compute_tuples_helper(
     const size_t build_table_rows,
     const std::shared_ptr<table_info> build_table,
     const size_t probe_table_rows, const bool probe_miss_needs_reduction,
-    Map* key_rows_map, bodo::vector<size_t>* groups,
-    bodo::vector<size_t>* groups_offsets, const bool build_table_outer,
+    Map* key_rows_map, bodo::vector<size_t>& groups,
+    bodo::vector<size_t>& groups_offsets, const bool build_table_outer,
     const bool probe_table_outer, cond_expr_fn_t& cond_func,
     tracing::Event& ev_alloc_map,
     bodo::vector<bodo::unord_map_container<
@@ -1529,7 +1528,7 @@ void hash_join_compute_tuples_helper(
     size_t n_bytes_build = 0;
     if (build_table_outer) {
         // Number of groups is groups_offsets->size() - 1
-        n_bytes_build = (groups_offsets->size() - 1 + 7) >> 3;
+        n_bytes_build = (groups_offsets.size() - 1 + 7) >> 3;
     }
     V_build_map.resize(n_bytes_build, 0);
 
@@ -1832,8 +1831,10 @@ std::shared_ptr<table_info> hash_join_table_inner(
     // 'groups' buffer (similar to how we store strings in array_info). We will
     // resize these to the exact required sizes when inserting the build table
     // into the hashmap.
-    bodo::vector<size_t>* groups = new bodo::vector<size_t>();
-    bodo::vector<size_t>* groups_offsets = new bodo::vector<size_t>();
+    std::unique_ptr<bodo::vector<size_t>> groups =
+        std::make_unique<bodo::vector<size_t>>();
+    std::unique_ptr<bodo::vector<size_t>> groups_offsets =
+        std::make_unique<bodo::vector<size_t>>();
     std::shared_ptr<uint32_t[]> build_nonequal_key_hashes =
         std::shared_ptr<uint32_t[]>(nullptr);
     bodo::vector<bodo::unord_map_container<
@@ -1907,7 +1908,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
         cond_func_left_column_len, cond_func_right_columns,                    \
         cond_func_right_column_len, parallel_trace, build_table_rows,          \
         build_table, probe_table_rows, probe_miss_needs_reduction,             \
-        key_rows_map, groups, groups_offsets, build_table_outer,               \
+        key_rows_map, *groups, *groups_offsets, build_table_outer,             \
         probe_table_outer, cond_func, ev_alloc_map, second_level_hash_maps,    \
         build_nonequal_key_hashes, V_build_map, build_write_idxs, V_probe_map, \
         probe_write_idxs);                                                     \
@@ -2141,20 +2142,21 @@ std::shared_ptr<table_info> hash_join_table_inner(
     // Handle updating the indices for any misses in the short table.
     if (build_table_outer) {
         if (build_miss_needs_reduction) {
-            insert_build_table_misses<true>(V_build_map, groups, groups_offsets,
-                                            build_write_idxs, probe_write_idxs,
-                                            myrank, n_pes);
+            insert_build_table_misses<true>(V_build_map, *groups,
+                                            *groups_offsets, build_write_idxs,
+                                            probe_write_idxs, myrank, n_pes);
         } else {
-            insert_build_table_misses<false>(V_build_map, groups,
-                                             groups_offsets, build_write_idxs,
+            insert_build_table_misses<false>(V_build_map, *groups,
+                                             *groups_offsets, build_write_idxs,
                                              probe_write_idxs, myrank, n_pes);
         }
     }
 
     tracing::Event ev_clear_groups("dealloc_groups", parallel_trace);
-    // Delete the groups buffer now that they are no longer needed.
-    delete groups;
-    delete groups_offsets;
+    // Free the groups buffer now that they are no longer needed.
+    groups.reset();
+    groups_offsets.reset();
+
     ev_clear_groups.finalize();
 
     // In replicated case, we put the long rows in distributed output
