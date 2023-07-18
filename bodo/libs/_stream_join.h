@@ -75,31 +75,42 @@ class JoinPartition {
             build_table_dict_builders,
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
             probe_table_dict_builders,
-        const uint64_t probe_batch_size_)
+        const uint64_t batch_size_, bool is_active_)
         : build_table_buffer(build_arr_c_types, build_arr_array_types,
                              build_table_dict_builders),
-          build_table({}, HashHashJoinTable(this),
-                      KeyEqualHashJoinTable(this, n_keys_)),
-          probe_table_buffer(probe_arr_c_types, probe_arr_array_types,
-                             probe_table_dict_builders, probe_batch_size_,
-                             DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
-          probe_batch_size(probe_batch_size_),
+          build_table_buffer_chunked(
+              build_arr_c_types, build_arr_array_types,
+              build_table_dict_builders, batch_size_,
+              DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
+          build_hash_table({}, HashHashJoinTable(this),
+                           KeyEqualHashJoinTable(this, n_keys_)),
+          probe_table_buffer_chunked(
+              probe_arr_c_types, probe_arr_array_types,
+              probe_table_dict_builders, batch_size_,
+              DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
+          batch_size(batch_size_),
           dummy_probe_table(
               alloc_table(probe_arr_c_types, probe_arr_array_types)),
           num_top_bits(num_top_bits_),
           top_bitmask(top_bitmask_),
           build_table_outer(build_table_outer_),
           probe_table_outer(probe_table_outer_),
-          n_keys(n_keys_) {}
+          n_keys(n_keys_),
+          is_active(is_active_) {}
 
     // Build state
-    TableBuildBuffer build_table_buffer;  // Append only buffer.
+    // Contiguous append-only buffer, used if a partition is active or after
+    // the Finalize step for inactive partitions
+    TableBuildBuffer build_table_buffer;
+    // Chunked append-only buffer, only used if a partition is inactive and
+    // not yet finalized
+    ChunkedTableBuilder build_table_buffer_chunked;
     bodo::vector<uint32_t> build_table_join_hashes;
 
+    // join hash table (key row number -> matching row numbers)
     bodo::unord_map_container<int64_t, size_t, HashHashJoinTable,
                               KeyEqualHashJoinTable>
-        build_table;  // join hash table (key row number -> matching row
-                      // numbers)
+        build_hash_table;
     // Use std::vector to avoid allocation overhead of bodo::vector.
     // TODO: use bodo::vector when we support spilling
     std::vector<std::vector<size_t>> groups;
@@ -113,9 +124,9 @@ class JoinPartition {
     // Probe state (only used when this partition is inactive).
     // We don't need partitioning hashes since we should never
     // need to repartition.
-    ChunkedTableBuilder probe_table_buffer;
+    ChunkedTableBuilder probe_table_buffer_chunked;
     bodo::vector<uint32_t> probe_table_buffer_join_hashes;
-    const int64_t probe_batch_size;
+    const int64_t batch_size;
 
     // Temporary state during probe step. These will be
     // reset between iterations.
@@ -149,6 +160,9 @@ class JoinPartition {
         return false;
     }
 
+    /// @brief Is the partition active?
+    inline bool is_active_partition() const { return this->is_active; }
+
     /**
      * @brief Split the partition into 2^num_levels partitions.
      * This will produce a new set of partitions, each with their
@@ -160,6 +174,7 @@ class JoinPartition {
      * supported at this point.
      * @return std::vector<std::shared_ptr<JoinPartition>>
      */
+    template <bool is_active>
     std::vector<std::shared_ptr<JoinPartition>> SplitPartition(
         size_t num_levels = 1);
 
@@ -196,7 +211,7 @@ class JoinPartition {
      * @param join_hashes Join hashes for the table records.
      * @param partitioning_hashes Partitioning hashes for the table records.
      */
-    template <bool is_active = false>
+    template <bool is_active>
     void AppendBuildBatch(const std::shared_ptr<table_info>& in_table,
                           const std::shared_ptr<uint32_t[]>& join_hashes);
 
@@ -218,7 +233,7 @@ class JoinPartition {
      * @param append_rows Vector of booleans indicating whether to append the
      * row
      */
-    template <bool is_active = false>
+    template <bool is_active>
     void AppendBuildBatch(const std::shared_ptr<table_info>& in_table,
                           const std::shared_ptr<uint32_t[]>& join_hashes,
                           const std::vector<bool>& append_rows);
@@ -275,6 +290,13 @@ class JoinPartition {
         const bool build_needs_reduction,
         const std::shared_ptr<ChunkedTableBuilder>& output_buffer);
 
+    /**
+     * @brief Activate this partition.
+     * At this time, this concatenates the chunked table buffer into a
+     * contiguous table buffer and builds the hashmap.
+     */
+    void ActivatePartition();
+
    private:
     const size_t num_top_bits = 0;
     const uint32_t top_bitmask = 0ULL;
@@ -285,6 +307,7 @@ class JoinPartition {
     // the number of rows from the build_table_buffer
     // that have been added to the hash table.
     int64_t curr_build_size = 0;
+    bool is_active = false;
 };
 
 class JoinState {
