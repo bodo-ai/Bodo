@@ -38,6 +38,11 @@ def timezone(request):
     return request.param
 
 
+@pytest.fixture(params=["min", "max"])
+def minmax_op(request):
+    return request.param
+
+
 def test_timestamp_timezone_boxing(timestamp_str, timezone, memory_leak_check):
     def test_impl(timestamp):
         return timestamp
@@ -251,6 +256,37 @@ def test_different_tz_unsupported(cmp_op):
         BodoError, match="requires both Timestamps share the same timezone"
     ):
         func(ts2, ts1)
+
+
+def test_different_tz_minmax_unsupported(minmax_op):
+    """Check that scalar comparison operators work between
+    Timestamps with different timezone-awareness
+    """
+    func_text = f"""@bodo.jit
+def func(x, y):
+    return {minmax_op}(x, y)"""
+    lcls = {}
+    exec(func_text, globals(), lcls)
+    func = lcls["func"]
+    ts1 = pd.Timestamp("4/4/2022", tz="Poland")
+    ts2 = pd.Timestamp("4/4/2022", tz=None)
+    ts3 = pd.Timestamp("4/4/2022", tz="US/Pacific")
+    # Check different timezones aren't supported
+    with pytest.raises(
+        BodoError, match="Cannot compare tz-naive and tz-aware timestamps"
+    ):
+        func(ts1, ts2)
+        func(ts2, ts3)
+    with pytest.raises(
+        BodoError, match="Cannot compare tz-naive and tz-aware timestamps"
+    ):
+        func(ts1, ts2)
+        func(ts2, ts3)
+    with pytest.raises(
+        BodoError, match="Cannot use min/max on timestamps with different timezones"
+    ):
+        func(ts1, ts3)
+        func(ts2, ts3)
 
 
 def test_pd_timedelta_add(representative_tz, memory_leak_check):

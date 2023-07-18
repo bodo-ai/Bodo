@@ -199,6 +199,18 @@ def test_datetime_operations(memory_leak_check):
     check_func(test_max, (t2, t1))
     check_func(test_sub, (t2, t1))
 
+    # Test Timestamps (tz-aware, same timezone)
+    t1 = pd.Timestamp(pd.Timestamp(1993, 12, 1), tz="Poland")
+    t2 = pd.Timestamp(pd.Timestamp(2013, 1, 13), tz="Poland")
+    check_func(test_min, (t1, t2))
+    check_func(test_max, (t2, t1))
+    check_func(test_sub, (t2, t1))
+
+    # Test Timestamps (tz-aware, different timezone)
+    t1 = pd.Timestamp(pd.Timestamp(1993, 12, 1, 23, 59), tz="Poland")
+    t2 = pd.Timestamp(pd.Timestamp(1994, 1, 1, 0, 0), tz="America/Los_Angeles")
+    check_func(test_sub, (t2, t1))
+
 
 def test_dt64_sub_output(memory_leak_check):
     """make sure output of Series(dt64) subtraction is Series(timedelta64) and supports
