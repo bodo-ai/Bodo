@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.pandas.window
 
 import com.bodosql.calcite.ir.Expr
 import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexWindowBound
 
 /**
  * Interface for resolving operands for aggregate functions.
@@ -23,4 +24,12 @@ internal interface OperandResolver {
      * expressions.
      */
     fun scalar(node: RexNode): Expr
+
+    /**
+     * Resolves a window bound to an expression that will be used
+     * for code generation. Unbounded bounds are the string literal
+     * "None", preceding bounds are negative integers, and
+     * following bounds are positive integers (both wrapped in strings).
+     */
+    fun bound(node: RexWindowBound?): Expr
 }

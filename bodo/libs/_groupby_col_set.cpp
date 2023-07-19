@@ -7,6 +7,7 @@
 #include "_groupby_ftypes.h"
 #include "_groupby_mode.h"
 #include "_groupby_update.h"
+#include "_window_compute.h"
 
 /**
  * This file creates the "col set" infrastructure. A col set is the

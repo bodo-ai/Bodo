@@ -331,6 +331,9 @@ supported_window_funcs = [
     "ntile",
     "conditional_true_event",
     "conditional_change_event",
+    "size",
+    "count",
+    "count_if",
 ]
 
 
@@ -2215,7 +2218,12 @@ def gen_top_level_agg_func(
     # NOTE: adding extra 0 to make sure the list is never empty to avoid Numba
     # typing issues
     func_text += "    window_args = np.array([{}], dtype=np.int64)\n".format(
-        ", ".join([f"np.int64(wrap_window_arg({arg}))" for arg in (window_args + [0])])
+        ", ".join(
+            [
+                "0" if arg is "None" else f"np.int64(wrap_window_arg({arg}))"
+                for arg in (window_args + [0])
+            ]
+        )
     )
     # NOTE: adding extra 0 to make sure the list is never empty to avoid Numba
     # typing issues

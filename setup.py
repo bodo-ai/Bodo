@@ -273,6 +273,8 @@ ext_metadata["sources"] += [
     "bodo/libs/_chunked_table_builder.cpp",
     "bodo/libs/_listagg.cpp",
     "bodo/libs/_operator_pool.cpp",
+    "bodo/libs/_window_aggfuncs.cpp",
+    "bodo/libs/_window_compute.cpp",
     "bodo/libs/_stream_dict_encoding.cpp",
 ]
 ext_metadata["depends"] += [
@@ -322,6 +324,8 @@ ext_metadata["depends"] += [
     "bodo/libs/_chunked_table_builder.h",
     "bodo/libs/_nested_loop_join.h",
     "bodo/libs/_operator_pool.h",
+    "bodo/libs/_window_aggfuncs.h",
+    "bodo/libs/_window_compute.h",
     "bodo/libs/_stream_dict_encoding.h",
 ]
 

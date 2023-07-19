@@ -3,8 +3,11 @@ package com.bodosql.calcite.adapter.pandas.window
 import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Expr
+import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexLocalRef
 import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexWindowBound
+import java.math.BigDecimal
 
 internal class OperandResolverImpl(ctx: PandasRel.BuildContext, input: Dataframe, val fields: List<Field>) :
     OperandResolver {
@@ -42,4 +45,15 @@ internal class OperandResolverImpl(ctx: PandasRel.BuildContext, input: Dataframe
         val arg = node.accept(rexTranslator)
         return Expr.StringLiteral(arg.emit())
     }
+
+    override fun bound(node: RexWindowBound?): Expr
+        = node?.let {
+            when {
+                node.isUnbounded -> Expr.StringLiteral("None")
+                node.isPreceding -> Expr.Unary("-", Expr.IntegerLiteral((node.offset as RexLiteral)!!.getValueAs(BigDecimal::class.java)!!.intValueExact()))
+                node.isFollowing -> Expr.IntegerLiteral((node.offset as RexLiteral)!!.getValueAs(BigDecimal::class.java)!!.intValueExact())
+                node.isCurrentRow -> Expr.IntegerLiteral(0)
+                else -> throw AssertionError("invalid window bound")
+                }
+            } ?: Expr.StringLiteral("None")
 }
