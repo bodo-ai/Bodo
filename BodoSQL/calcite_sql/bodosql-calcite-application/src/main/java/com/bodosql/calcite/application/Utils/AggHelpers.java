@@ -136,7 +136,7 @@ public class AggHelpers {
    * Determine if an aggCallList contains any filters. If filters are included we need to generated
    * groupby.apply instead of groupby.agg.
    *
-   * @param AggList List of aggregations
+   * @param aggCallList List of aggregations
    * @return Does any column include a filter
    */
   public static boolean aggContainsFilter(List<AggregateCall> aggCallList) {
