@@ -261,12 +261,21 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
     in_table->num_keys = groupby_state->n_keys;
     in_table = get_update_table(groupby_state, in_table);
 
-    // TODO[BSE-566]: handle dictionary encoded arrays
-    std::shared_ptr<uint32_t[]> batch_hashes_groupby = hash_keys_table(
-        in_table, groupby_state->n_keys, SEED_HASH_GROUPBY_SHUFFLE, false);
+    // Unify dictionaries to allow consistent hashing and fast key comparison
+    // using indices
+    in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table);
+
+    // Dictionary hashes for the key columns which will be used for
+    // the partitioning hashes:
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+        dict_hashes = groupby_state->GetDictionaryHashesForKeys();
+
+    std::shared_ptr<uint32_t[]> batch_hashes_groupby =
+        hash_keys_table(in_table, groupby_state->n_keys,
+                        SEED_HASH_GROUPBY_SHUFFLE, false, false);
     std::shared_ptr<uint32_t[]> batch_hashes_partition =
         hash_keys_table(in_table, groupby_state->n_keys, SEED_HASH_PARTITION,
-                        groupby_state->parallel, false);
+                        groupby_state->parallel, false, dict_hashes);
 
     // set state batch input
     groupby_state->in_table = in_table;
@@ -335,7 +344,7 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
 
         std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
             shuffle_table, groupby_state->n_keys, SEED_HASH_PARTITION,
-            groupby_state->parallel, false);
+            groupby_state->parallel, false, dict_hashes);
         // make dictionaries global for shuffle
         for (size_t i = 0; i < shuffle_table->ncols(); i++) {
             std::shared_ptr<array_info> arr = shuffle_table->columns[i];
@@ -351,8 +360,14 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
         shuffle_hashes.reset();
         groupby_state->shuffle_table_buffer.Reset();
 
-        batch_hashes_groupby = hash_keys_table(
-            new_data, groupby_state->n_keys, SEED_HASH_GROUPBY_SHUFFLE, false);
+        // unify dictionaries to allow consistent hashing and fast key
+        // comparison using indices
+        new_data = groupby_state->UnifyBuildTableDictionaryArrays(new_data);
+        dict_hashes = groupby_state->GetDictionaryHashesForKeys();
+
+        batch_hashes_groupby = hash_keys_table(new_data, groupby_state->n_keys,
+                                               SEED_HASH_GROUPBY_SHUFFLE,
+                                               groupby_state->parallel, false);
         groupby_state->in_table = new_data;
         groupby_state->in_table_hashes = batch_hashes_groupby;
 
@@ -416,11 +431,18 @@ void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
+    // Unify dictionaries to allow consistent hashing and fast key comparison
+    // using indices
+    in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table);
+    // Dictionary hashes for the key columns which will be used for
+    // the partitioning hashes:
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+        dict_hashes = groupby_state->GetDictionaryHashesForKeys();
+
     // append input rows to local or shuffle buffer
     std::shared_ptr<uint32_t[]> batch_hashes_partition =
         hash_keys_table(in_table, groupby_state->n_keys, SEED_HASH_PARTITION,
-                        groupby_state->parallel, false);
-
+                        groupby_state->parallel, false, dict_hashes);
     groupby_state->local_table_buffer.ReserveTable(in_table);
     groupby_state->shuffle_table_buffer.ReserveTable(in_table);
 
@@ -439,7 +461,6 @@ void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
         in_table, append_row_to_shuffle_table);
 
     batch_hashes_partition.reset();
-    in_table.reset();
 
     // shuffle data of other ranks and append received data to local buffer
     if (shuffle_this_iter(groupby_state->parallel, is_last,
@@ -451,7 +472,7 @@ void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
 
         std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
             shuffle_table, groupby_state->n_keys, SEED_HASH_PARTITION,
-            groupby_state->parallel, false);
+            groupby_state->parallel, false, dict_hashes);
         // make dictionaries global for shuffle
         for (size_t i = 0; i < shuffle_table->ncols(); i++) {
             std::shared_ptr<array_info> arr = shuffle_table->columns[i];
@@ -466,6 +487,10 @@ void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
                                  comm_info_table, groupby_state->parallel);
         shuffle_hashes.reset();
         groupby_state->shuffle_table_buffer.Reset();
+
+        // unify dictionaries to allow consistent hashing and fast key
+        // comparison using indices
+        new_data = groupby_state->UnifyBuildTableDictionaryArrays(new_data);
 
         groupby_state->local_table_buffer.ReserveTable(new_data);
         groupby_state->local_table_buffer.AppendBatch(new_data);
@@ -601,4 +626,40 @@ PyMODINIT_FUNC PyInit_stream_groupby_cpp(void) {
     SetAttrStringFromVoidPtr(m, groupby_produce_output_batch_py_entry);
     SetAttrStringFromVoidPtr(m, delete_groupby_state);
     return m;
+}
+
+std::shared_ptr<table_info> GroupbyState::UnifyBuildTableDictionaryArrays(
+    const std::shared_ptr<table_info>& in_table, bool only_keys) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    out_arrs.reserve(in_table->ncols());
+    for (size_t i = 0; i < in_table->ncols(); i++) {
+        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+        std::shared_ptr<array_info> out_arr;
+        if (in_arr->arr_type != bodo_array_type::DICT ||
+            (only_keys && (i >= this->n_keys))) {
+            out_arr = in_arr;
+        } else {
+            out_arr = this->build_table_dict_builders[i]->UnifyDictionaryArray(
+                in_arr);
+        }
+        out_arrs.emplace_back(out_arr);
+    }
+    return std::make_shared<table_info>(out_arrs);
+}
+
+std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+GroupbyState::GetDictionaryHashesForKeys() {
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+        dict_hashes = std::make_shared<
+            bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>(
+            this->n_keys);
+    for (uint64_t i = 0; i < this->n_keys; i++) {
+        if (this->key_dict_builders[i] == nullptr) {
+            (*dict_hashes)[i] = nullptr;
+        } else {
+            (*dict_hashes)[i] =
+                this->key_dict_builders[i]->GetDictionaryHashes();
+        }
+    }
+    return dict_hashes;
 }
