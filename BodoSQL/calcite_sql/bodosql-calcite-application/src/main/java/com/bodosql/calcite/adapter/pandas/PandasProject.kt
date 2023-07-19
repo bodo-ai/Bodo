@@ -5,6 +5,7 @@ import com.bodosql.calcite.application.Utils.IsScalar
 import com.bodosql.calcite.ir.*
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
+import com.bodosql.calcite.rel.core.ProjectBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
@@ -25,7 +26,7 @@ class PandasProject(
     input: RelNode,
     projects: List<RexNode>,
     rowType: RelDataType
-) : Project(cluster, traitSet, ImmutableList.of(), input, projects, rowType), PandasRel {
+) : ProjectBase(cluster, traitSet, ImmutableList.of(), input, projects, rowType), PandasRel {
 
     init {
         assert(convention == PandasRel.CONVENTION)
@@ -33,13 +34,6 @@ class PandasProject(
 
     override fun copy(traitSet: RelTraitSet, input: RelNode, projects: List<RexNode>, rowType: RelDataType): Project {
         return PandasProject(cluster, traitSet, input, projects, rowType)
-    }
-
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
-        val rows = mq.getRowCount(this)
-        val cost = projects.map { project -> project.accept(RexCostEstimator) }
-            .reduce { l, r -> l.plus(r) as Cost }
-        return planner.makeCost(from = cost).multiplyBy(rows)
     }
 
     override fun emit(implementor: PandasRel.Implementor): Dataframe {

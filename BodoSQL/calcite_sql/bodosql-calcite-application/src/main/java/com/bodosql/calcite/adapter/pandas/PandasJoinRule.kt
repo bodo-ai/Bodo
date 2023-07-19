@@ -1,11 +1,11 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.rel.logical.BodoLogicalJoin
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rel.core.Join
-import org.apache.calcite.rel.logical.LogicalJoin
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
@@ -18,7 +18,7 @@ class PandasJoinRule private constructor(config: Config) : ConverterRule(config)
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                LogicalJoin::class.java, Convention.NONE, PandasRel.CONVENTION,
+                BodoLogicalJoin::class.java, Convention.NONE, PandasRel.CONVENTION,
                 "PandasJoinRule")
             .withRuleFactory { config -> PandasJoinRule(config) }
 

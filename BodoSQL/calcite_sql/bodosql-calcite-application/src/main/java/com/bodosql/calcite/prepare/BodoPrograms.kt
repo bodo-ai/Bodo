@@ -5,16 +5,25 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.bodo_sql_rules.JoinExtractOverRule
 import com.bodosql.calcite.application.bodo_sql_rules.ListAggOptionalReplaceRule
+import com.bodosql.calcite.rel.logical.BodoLogicalFilter
+import com.bodosql.calcite.rel.logical.BodoLogicalJoin
+import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import com.bodosql.calcite.rel.metadata.PandasRelMetadataProvider
+import com.google.common.collect.Iterables
 import org.apache.calcite.plan.*
+import org.apache.calcite.plan.hep.HepMatchOrder
 import org.apache.calcite.plan.hep.HepPlanner
 import org.apache.calcite.plan.hep.HepProgram
 import org.apache.calcite.plan.hep.HepProgramBuilder
 import org.apache.calcite.rel.RelHomogeneousShuttle
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.RelShuttle
 import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.core.RelFactories
 import org.apache.calcite.rel.core.TableScan
+import org.apache.calcite.rel.logical.LogicalFilter
+import org.apache.calcite.rel.logical.LogicalJoin
+import org.apache.calcite.rel.logical.LogicalProject
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
 import org.apache.calcite.rel.rules.SubQueryRemoveRule
 import org.apache.calcite.rex.RexExecutorImpl
@@ -35,13 +44,12 @@ object BodoPrograms {
         if (optimize) {
             HepOptimizerProgram(BodoRules.HEURISTIC_RULE_SET)
         } else {
-            // No-op program that returns itself.
-            Program { _, rel, _, _, _ -> rel }
+            NoopProgram
         },
         SnowflakeTraitAdder(),
         // Includes minimal set of rules to produce a valid plan.
         // This is a subset of the heuristic rule set.
-        RuleSetProgram(BodoRules.MINIMAL_VOLCANO_RULE_SET),
+        RuleSetProgram(BodoRules.VOLCANO_MINIMAL_RULE_SET),
         DecorateAttributesProgram(),
         MergeRelProgram(),
     )
@@ -53,7 +61,24 @@ object BodoPrograms {
         // When the HepStandardProgram is removed entirely, we would add the
         // convention when the SnowflakeTableScan is created instead of here.
         SnowflakeTraitAdder(),
-        RuleSetProgram(if (optimize) BodoRules.VOLCANO_RULE_SET else BodoRules.MINIMAL_VOLCANO_RULE_SET),
+        if (optimize) {
+            Programs.of(
+                HepProgramBuilder()
+                    .addRuleInstance(BodoRules.FILTER_INTO_JOIN_RULE)
+                    .addMatchOrder(HepMatchOrder.BOTTOM_UP)
+                    .addRuleInstance(BodoRules.JOIN_TO_MULTI_JOIN)
+                    .build(),
+                false, PandasRelMetadataProvider()
+            )
+        } else {
+            NoopProgram
+        },
+        RuleSetProgram(
+            Iterables.concat(
+                BodoRules.VOLCANO_MINIMAL_RULE_SET,
+                ifTrue(optimize, BodoRules.VOLCANO_OPTIMIZE_RULE_SET),
+            )
+        ),
         // TODO(jsternberg): This can likely be adapted and integrated directly with
         // the VolcanoPlanner, but that hasn't been done so leave this here.
         DecorateAttributesProgram(),
@@ -61,9 +86,10 @@ object BodoPrograms {
     )
 
     /**
-     * Program to remove subqueries and correlations.
+     * Preprocessor program to remove subqueries, correlations, and perform other
+     * necessary transformations on the plan before the optimization pass.
      */
-    fun subQueryRemove(): Program = SubQueryRemoveProgram()
+    fun preprocessor(): Program = PreprocessorProgram()
 
     /**
      * General optimization program.
@@ -138,7 +164,19 @@ object BodoPrograms {
      * This program removes subqueries from the query and then
      * removes the correlation nodes that it produces.
      */
+    private class PreprocessorProgram : Program by Programs.sequence(
+        // Remove subqueries and correlation nodes from the query.
+        SubQueryRemoveProgram(),
+        // Convert calcite logical nodes to bodo logical nodes
+        // when necessary.
+        LogicalConverterProgram,
+    )
+
+    /**
+     * This program removes subqueries from the query.
+     */
     private class SubQueryRemoveProgram : Program by Programs.sequence(
+        // Remove subqueries and convert to correlations when necessary.
         Programs.of(
             HepProgram.builder()
                 .addRuleCollection(
@@ -154,6 +192,7 @@ object BodoPrograms {
             true,
             PandasRelMetadataProvider(),
         ),
+        // Remove correlations.
         DecorrelateProgram(),
     )
 
@@ -173,6 +212,33 @@ object BodoPrograms {
         ): RelNode {
             val relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.cluster, null)
             return RelDecorrelator.decorrelateQuery(rel, relBuilder)
+        }
+    }
+
+    private object LogicalConverterProgram : Program by ShuttleProgram(Visitor) {
+        private object Visitor : RelShuttleImpl() {
+            override fun visit(project: LogicalProject): RelNode =
+                BodoLogicalProject.create(
+                    project.input.accept(this),
+                    project.hints,
+                    project.projects,
+                    project.rowType,
+                )
+
+            override fun visit(filter: LogicalFilter): RelNode =
+                BodoLogicalFilter.create(
+                    filter.input.accept(this),
+                    filter.condition,
+                )
+
+            override fun visit(join: LogicalJoin): RelNode =
+                BodoLogicalJoin.create(
+                    join.left.accept(this),
+                    join.right.accept(this),
+                    join.hints,
+                    join.condition,
+                    join.joinType,
+                )
         }
     }
 
@@ -201,22 +267,14 @@ object BodoPrograms {
      * This is generally performed as a final step before code generation to allow
      * for the caching code to work properly.
      */
-    private class MergeRelProgram : Program {
-        override fun run(
-            planner: RelOptPlanner,
-            rel: RelNode,
-            requiredOutputTraits: RelTraitSet,
-            materializations: List<RelOptMaterialization>,
-            lattices: List<RelOptLattice>
-        ): RelNode {
-            return rel.accept(object : RelHomogeneousShuttle() {
-                val mapDigestToRel: HashMap<String, RelNode> = hashMapOf()
+    private class MergeRelProgram : Program by ShuttleProgram(Visitor()) {
+        private class Visitor : RelHomogeneousShuttle() {
+            val mapDigestToRel: HashMap<String, RelNode> = hashMapOf()
 
-                override fun visit(other: RelNode): RelNode {
-                    val node = visitChildren(other)
-                    return mapDigestToRel.computeIfAbsent(node.digest) { node }
-                }
-            })
+            override fun visit(other: RelNode): RelNode {
+                val node = visitChildren(other)
+                return mapDigestToRel.computeIfAbsent(node.digest) { node }
+            }
         }
     }
 
@@ -224,23 +282,44 @@ object BodoPrograms {
      * Adds SnowflakeRel.CONVENTION to any SnowflakeTableScan nodes.
      * See the comment in SnowflakeTableScan about why this is needed.
      */
-    private class SnowflakeTraitAdder : Program {
+    private class SnowflakeTraitAdder : Program by ShuttleProgram(Visitor) {
+        private object Visitor : RelShuttleImpl() {
+            override fun visit(scan: TableScan): RelNode {
+                return when (scan) {
+                    is SnowflakeTableScan -> scan.copy(scan.traitSet.replace(SnowflakeRel.CONVENTION), scan.inputs)
+                    else -> super.visit(scan)
+                }
+            }
+        }
+    }
+
+    private class ShuttleProgram(private val shuttle: RelShuttle) : Program {
+        override fun run(
+            planner: RelOptPlanner,
+            rel: RelNode,
+            requiredOutputTraits: RelTraitSet,
+            materializations: MutableList<RelOptMaterialization>,
+            lattices: MutableList<RelOptLattice>
+        ): RelNode = rel.accept(shuttle)
+    }
+
+    private object NoopProgram : Program {
         override fun run(
             planner: RelOptPlanner,
             rel: RelNode,
             requiredOutputTraits: RelTraitSet,
             materializations: List<RelOptMaterialization>,
             lattices: List<RelOptLattice>
-        ): RelNode {
-            return rel.accept(object : RelShuttleImpl() {
-                override fun visit(scan: TableScan): RelNode {
-                    return when (scan) {
-                        is SnowflakeTableScan -> scan.copy(scan.traitSet.replace(SnowflakeRel.CONVENTION), scan.inputs)
-                        else -> super.visit(scan)
-                    }
-                }
-            })
-        }
-
+        ): RelNode = rel
     }
 }
+
+/**
+ * Return the passed in iterable on true otherwise return an empty iterable.
+ */
+private fun <T> ifTrue(condition: Boolean, onTrue: Iterable<T>): Iterable<T> =
+    if (condition) {
+        onTrue
+    } else {
+        listOf()
+    }

@@ -8,26 +8,12 @@ import org.apache.calcite.plan.RelTraitDef
 enum class PlannerType {
     HEURISTIC {
         override fun programs(): ProgramCollection =
-            ProgramCollection(
-                BodoPrograms.subQueryRemove(),
-                // We create a new program each time we construct a new planner.
-                // This is because calcite 1.30.0's hep program is not threadsafe
-                // so we're just going to be careful and not use a singleton.
-                //
-                // Version 1.32.0 and beyond has fixed this and it's no longer
-                // necessary there.
-                BodoPrograms.hepStandard(optimize = false),
-                BodoPrograms.hepStandard(optimize = true)
-            )
+            ProgramCollection(BodoPrograms::hepStandard)
     },
 
     VOLCANO {
         override fun programs(): ProgramCollection =
-            ProgramCollection(
-                BodoPrograms.subQueryRemove(),
-                BodoPrograms.standard(optimize = false),
-                BodoPrograms.standard(optimize = true),
-            )
+            ProgramCollection(BodoPrograms::standard)
     },
 
     STREAMING {

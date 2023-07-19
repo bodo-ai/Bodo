@@ -2,11 +2,13 @@ package com.bodosql.calcite.application.bodo_sql_rules;
 
 import com.bodosql.calcite.application.BodoSQLOperatorTables.*;
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.rel.logical.BodoLogicalFilter;
+import com.bodosql.calcite.rel.logical.BodoLogicalProject;
+
 import java.util.*;
 import org.apache.calcite.plan.*;
 import org.apache.calcite.rel.*;
 import org.apache.calcite.rel.core.*;
-import org.apache.calcite.rel.logical.*;
 import org.apache.calcite.rel.rules.*;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.sql.*;
@@ -16,8 +18,8 @@ import org.apache.calcite.util.*;
 import org.immutables.value.*;
 
 /**
- * Planner rule that recognizes a {@link org.apache.calcite.rel.core.LogicalFilter} on top of a
- * {@link org.apache.calcite.rel.core.LogicalProject} where the filter condition is row_number() = 1
+ * Planner rule that recognizes a {@link BodoLogicalFilter} on top of a
+ * {@link BodoLogicalProject} where the filter condition is row_number() = 1
  * (which is a common case). This verifies that the filter can safely be placed before the
  * projection, pushes a new filter into the project that computes a boolean array which is true
  * where row_number() = 1 and false elsewhere, but enables skipping the sorts. The row_number() is
@@ -286,7 +288,7 @@ public class MinRowNumberFilterRule extends RelRule<MinRowNumberFilterRule.Confi
     MinRowNumberFilterRule.Config DEFAULT =
         ImmutableMinRowNumberFilterRule.Config.builder()
             .build()
-            .withOperandFor(LogicalFilter.class, LogicalProject.class);
+            .withOperandFor(BodoLogicalFilter.class, BodoLogicalProject.class);
 
     @Override
     default MinRowNumberFilterRule toRule() {

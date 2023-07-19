@@ -6,7 +6,6 @@ import org.apache.calcite.plan.RelRule
 import org.apache.calcite.rel.core.Aggregate
 import org.apache.calcite.rel.core.Filter
 import org.apache.calcite.rel.logical.LogicalAggregate
-import org.apache.calcite.rel.logical.LogicalFilter
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
@@ -119,7 +118,7 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
         )
 
         @JvmStatic
-        fun isPushableFilter(filter: LogicalFilter): Boolean {
+        fun isPushableFilter(filter: Filter): Boolean {
             // Not sure what things are ok to push, but we're going to be fairly conservative
             // and whitelist specific things rather than blacklist.
             return filter.condition.accept(object : RexVisitorImpl<Boolean?>(true) {
