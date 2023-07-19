@@ -1409,6 +1409,9 @@ def extract_window_args(
         "ntile": ["scalar"],
         "conditional_true_event": ["vector"],
         "conditional_change_event": ["vector"],
+        "size": ["scalar", "scalar"],
+        "count": ["vector", "scalar", "scalar"],
+        "count_if": ["vector", "scalar", "scalar"],
     }
     func_arg_typ = func_arg_typs.get(func_name, [])
     # Verify that the input tuple has the correct length
@@ -1508,6 +1511,9 @@ def resolve_window_funcs(
         "ntile": dtype_to_array_type(types.uint64),
         "conditional_true_event": dtype_to_array_type(types.uint64),
         "conditional_change_event": dtype_to_array_type(types.uint64),
+        "size": dtype_to_array_type(types.uint64),
+        "count": dtype_to_array_type(types.uint64),
+        "count_if": dtype_to_array_type(types.uint64),
         "percent_rank": dtype_to_array_type(types.float64),
         "cume_dist": dtype_to_array_type(types.float64),
         "min_row_number_filter": bodo.boolean_array_type,

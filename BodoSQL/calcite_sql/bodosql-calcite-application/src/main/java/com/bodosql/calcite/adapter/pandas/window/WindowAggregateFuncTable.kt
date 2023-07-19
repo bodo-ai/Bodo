@@ -24,6 +24,7 @@ internal object WindowAggregateFuncTable {
         SqlKind.PERCENT_RANK to define("percent_rank"),
         SqlKind.CUME_DIST to define("cume_dist"),
         SqlKind.NTILE to define("ntile", ExprType.SCALAR),
+        SqlKind.COUNT to WindowAggregateFunc(::count),
     )
 
     /**
@@ -38,6 +39,7 @@ internal object WindowAggregateFuncTable {
         CondOperatorTable.MIN_ROW_NUMBER_FILTER to define("min_row_number_filter"),
         CondOperatorTable.CONDITIONAL_TRUE_EVENT to define("conditional_true_event", ExprType.SERIES),
         CondOperatorTable.CONDITIONAL_CHANGE_EVENT to define("conditional_change_event", ExprType.SERIES),
+        CondOperatorTable.COUNT_IF to defineBounded("count_if", ExprType.SERIES),
     ).mapKeys { it.key.name }
 
     /**
@@ -60,8 +62,32 @@ internal object WindowAggregateFuncTable {
         SCALAR,
     }
 
+
     /**
-     * Utility function for defining a window aggregate function.
+     * Populates an argument tuple with the expressions for each
+     * argument of a window function, processed according to which
+     * of the function's arguments are series vs scalars.
+     *
+     * @param args the list where the argument literals are being stored.
+     * @param call the window function call storing information such as
+     *             its argument nodes.
+     * @param resolve the resolver of any window function arguments into codegen.
+     * @param operands list of expression types used to process arguments
+     */
+    private fun resolveOperands(args: ImmutableList.Builder<Expr>, call: OverFunc, resolve: OperandResolver, vararg operands: ExprType) {
+        operands.zip(call.operands).forEach { (exprType, operand) ->
+            val arg = when (exprType) {
+                ExprType.SERIES -> resolve.series(operand)
+                ExprType.SCALAR -> resolve.scalar(operand)
+            }
+            args.add(arg)
+        }
+    }
+
+
+    /**
+     * Utility function for defining a window aggregate function that
+     * does not accept window bounds.
      *
      * @param name the name of the bodosql window kernel function
      * @param operands list of expression types used to process arguments
@@ -70,13 +96,46 @@ internal object WindowAggregateFuncTable {
         WindowAggregateFunc(fun (call: OverFunc, resolve: OperandResolver): Expr {
             val args = ImmutableList.builder<Expr>()
             args.add(Expr.StringLiteral(name))
-            operands.zip(call.operands).forEach { (exprType, operand) ->
-                val arg = when (exprType) {
-                    ExprType.SERIES -> resolve.series(operand)
-                    ExprType.SCALAR -> resolve.scalar(operand)
-                }
-                args.add(arg)
-            }
+            resolveOperands(args, call, resolve, *operands)
             return Expr.Tuple(args.build())
         })
+
+
+    /**
+     * Utility function for defining a window aggregate function that
+     * does accept window bounds.
+     *
+     * @param name the name of the bodosql window kernel function
+     * @param operands list of expression types used to process arguments
+     */
+    private fun defineBounded(name: String, vararg operands: ExprType): WindowAggregateFunc =
+        WindowAggregateFunc(fun (call: OverFunc, resolve: OperandResolver): Expr {
+            val args = ImmutableList.builder<Expr>()
+            args.add(Expr.StringLiteral(name))
+            resolveOperands(args, call, resolve, *operands)
+            args.add(resolve.bound(call.window.lowerBound))
+            args.add(resolve.bound(call.window.upperBound))
+            return Expr.Tuple(args.build())
+        })
+
+
+    /**
+     * Utility function for defining the window aggregate function COUNT
+     * which has a special implementation for COUNT(*) if the aggregate
+     * is provided no arguments.
+     */
+    private fun count(call: OverFunc, resolve: OperandResolver): Expr {
+        val args = ImmutableList.builder<Expr>()
+        if (call.operands.isEmpty()) {
+            // If the function has zero arguments, it is a COUNT(*)
+            args.add(Expr.StringLiteral("size"))
+        } else {
+            // Otherwise, it is a regular COUNT(X)
+            args.add(Expr.StringLiteral("count"))
+            resolveOperands(args, call, resolve, ExprType.SERIES)
+        }
+        args.add(resolve.bound(call.window.lowerBound))
+        args.add(resolve.bound(call.window.upperBound))
+        return Expr.Tuple(args.build())
+    }
 }

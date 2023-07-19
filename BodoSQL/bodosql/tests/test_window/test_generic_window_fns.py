@@ -103,7 +103,6 @@ def test_two_arg_numeric_window_functions(
     "funcs",
     [
         pytest.param(["MIN", "MAX"], id="min-max"),
-        pytest.param(["COUNT(*)", "COUNT", "COUNT_IF"], id="count-count_if-count_star"),
     ],
 )
 @pytest.mark.timeout(1200)
@@ -118,25 +117,14 @@ def test_non_numeric_window_functions(
     selects = []
     convert_columns_bytearray = []
     for i in range(len(funcs)):
-        if funcs[i] == "COUNT(*)":
+        for j, col in enumerate(all_window_col_names):
             selects.append(
-                f"COUNT(*) OVER ({window_frames[0][i % len(window_frames[0])]})"
+                f"{funcs[i]}({col}) OVER ({window_frames[0][(i+j) % len(window_frames[0])]}) AS C_{i}_{j}"
             )
-        else:
-            for j, col in enumerate(all_window_col_names):
-                # Skip count_if if the datatype is not a boolean
-                if (
-                    funcs[i] == "COUNT_IF"
-                    and all_window_df["table1"][col].dtype.kind != "b"
-                ):
-                    continue
-                selects.append(
-                    f"{funcs[i]}({col}) OVER ({window_frames[0][(i+j) % len(window_frames[0])]}) AS C_{i}_{j}"
-                )
-                # If taking the min/max of a binary column, add the output to
-                # the list of conversion columns
-                if col == "BI" and funcs[i] in ("MIN", "MAX"):
-                    convert_columns_bytearray.append(f"C_{i}_{j}")
+            # If taking the min/max of a binary column, add the output to
+            # the list of conversion columns
+            if col == "BI" and funcs[i] in ("MIN", "MAX"):
+                convert_columns_bytearray.append(f"C_{i}_{j}")
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
     spark_query = get_equivalent_spark_agg_query(query)
     # TODO: Generate an expected output instead so we properly support TZ-Aware
@@ -307,4 +295,49 @@ def test_blended_fusion(memory_leak_check):
     # to how many distinct groupby-apply calls are expected after fusion.
     count_window_applies(
         pandas_code, 1, ["RANK", "AVG", "MEDIAN", "MODE", "CONDITIONAL_CHANGE_EVENT"]
+    )
+
+
+def test_count_fns(all_window_df, spark_info):
+    """
+    Tests the window functions COUNT(*), COUNT and COUNT_IF.
+    """
+    # Window frames to use for testing
+    # 0: whole frame
+    # 1: prefix frame
+    # 2: suffix frame (exclusive of the current row)
+    # 3: sliding frame
+    frames = [
+        "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING",
+        "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW",
+        "ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING",
+        "ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING",
+    ]
+    # Specify all combinations that are to be tested as a tuple of 3 components:
+    # 1. The function name to test
+    # 2. The column name to test the function with
+    # 3. List of indices corresponding to which of the frames above to test with
+    combinations = [
+        ("COUNT", "*", [0, 1, 2, 3]),
+        ("COUNT", "ST", [0, 1, 2, 3]),
+        ("COUNT", "U8", [0, 1]),
+        ("COUNT", "F64", [2, 3]),
+        ("COUNT", "DA", [0, 3]),
+        ("COUNT_IF", "BO", [0, 1, 2, 3]),
+    ]
+    selects = []
+    for func, arg, frames_subset in combinations:
+        for frame_idx in frames_subset:
+            selects.append(
+                f"{func}({arg}) OVER (PARTITION BY W2 ORDER BY W4 {frames[frame_idx]})"
+            )
+    query = f"SELECT W2, W4, {', '.join(selects)} FROM table1"
+    check_query(
+        query,
+        all_window_df,
+        spark_info,
+        sort_output=True,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
     )
