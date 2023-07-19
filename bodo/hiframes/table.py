@@ -462,6 +462,19 @@ def table_len_overload(T):
     return impl
 
 
+def local_len(x):
+    """
+    Determine the rank-local length of an object.
+    Right now, only implemented for tables, but should be expanded
+    to other datatypes in the future
+    """
+
+
+# We can reuse the same overload internally
+# Since distributed pass rewrites __builtin__.len() only
+overload(local_len)(table_len_overload)
+
+
 @lower_getattr(TableType, "shape")
 def lower_table_shape(context, builder, typ, val):
     """
@@ -1426,12 +1439,10 @@ def table_filter(T, idx, used_cols=None):
                 func_text += f"    if arr_ind_{blk} not in used_set: continue\n"
             func_text += (
                 f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
-            )
-            func_text += (
                 f"    out_arr_{blk} = ensure_contig_if_np(arr_list_{blk}[i][idx])\n"
+                f"    l = len(out_arr_{blk})\n"
+                f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
             )
-            func_text += f"    l = len(out_arr_{blk})\n"
-            func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
     func_text += f"  T2 = set_table_len(T2, l)\n"
     func_text += f"  return T2\n"
@@ -1439,6 +1450,20 @@ def table_filter(T, idx, used_cols=None):
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     return loc_vars["table_filter_func"]
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, inline="never")
+def table_local_filter(T, idx, used_cols=None):
+    """
+    Function that filters table using input boolean array or slice
+    only locally. This version is specially treated in Bodo passes.
+    See table_filter for argument and return types.
+    """
+
+    def impl(T, idx, used_cols=None):
+        return table_filter(T, idx, used_cols=used_cols)
+
+    return impl
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
@@ -1506,7 +1531,7 @@ def table_subset(T, idx, copy_arrs, used_cols=None):
     # Use the output table to only generate code per output
     # type. Here we iterate over the output type and list of
     # arrays and copy the arrays from the original table. Here
-    # is some pseudocode (omitting many details like unboxing).
+    # is some pseudo-code (omitting many details like unboxing).
 
     #   for typ in out_types:
     #       out_arrs = alloc_list(typ)
@@ -1596,6 +1621,9 @@ def table_filter_equiv(self, scope, equiv_set, loc, args, kws):
 
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_table_table_filter = table_filter_equiv
+ArrayAnalysis._analyze_op_call_bodo_hiframes_table_table_local_filter = (
+    table_filter_equiv
+)
 
 
 def table_subset_equiv(self, scope, equiv_set, loc, args, kws):
@@ -1644,7 +1672,7 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
     Args:
         in_table_type (TableType): The input table, from which to source the string columns.
                                    Must contain a string and encoded string block
-        out_table_type (TableType): The out table, whoose columns will be set.
+        out_table_type (TableType): The out table, whose columns will be set.
                                     Must contain a string block
         glbls (dict): The dict of global variable to be used when executing this functext.
                       keys 'arr_inds_(input table string block)', 'arr_inds_(input table dict encoded string block)',
@@ -1669,7 +1697,7 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
 
     # NOTE: Care must be taken to ensure that arrays are placed into the output block
     # in the correct ordering. The ordering in which the arrays will be placed into the physical table
-    # is dependent on the logical ordering of the columns in the tabletype's arr_types atribute.
+    # is dependent on the logical ordering of the columns in the tabletype's arr_types attribute.
     # For example, if the input table has array_types in the order
     # (String, dict_enc, String, dict_enc)
     # which correspond to the arrays:
@@ -1696,7 +1724,7 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
     cur_str_ary_idx = 0
     cur_dict_enc_str_ary_idx = 0
 
-    # Iterate over the logical indicies of the string/dictionary columns
+    # Iterate over the logical indices of the string/dictionary columns
     # for each physical index in the output string block, we assign it to whichever
     # column appears first in the logical ordering
     for cur_output_table_offset in range(

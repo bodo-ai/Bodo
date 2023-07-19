@@ -916,7 +916,10 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ("table_filter", "bodo.hiframes.table"):
+        if func_mod == "bodo.hiframes.table" and func_name in (
+            "table_filter",
+            "table_local_filter",
+        ):
             in_var = rhs.args[0]
             index_var = rhs.args[1]
             # Filter code matches getitem code.
@@ -1678,6 +1681,10 @@ class DistributedAnalysis:
 
         # len()
         if func_name == "len" and func_mod in ("__builtin__", "builtins"):
+            return
+
+        # bodo.hiframes.table.local_len
+        if fdef == ("local_len", "bodo.hiframes.table"):
             return
 
         # handle list.func calls
@@ -3832,7 +3839,14 @@ class DistributedAnalysis:
             self._add_diag_info(info, loc)
 
     def _analyze_getitem_array_table_inputs(
-        self, inst, lhs, in_var, index_var, rhs_loc, equiv_set, array_dists
+        self,
+        inst,
+        lhs,
+        in_var: ir.Var,
+        index_var: ir.Var,
+        rhs_loc,
+        equiv_set,
+        array_dists,
     ):
         """analyze getitem nodes for arrays/tables
         having determined the the variable and index value."""
