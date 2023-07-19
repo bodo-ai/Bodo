@@ -253,6 +253,9 @@ TableBuildBuffer::TableBuildBuffer(
             // Set the dictionary to the one from the dict builder:
             this->data_table->columns[i]->child_arrays[0] =
                 dict_builders[i]->dict_buff->data_array;
+            // Set the local value as unique
+            // All output dictionaries from dict builders are unique
+            this->data_table->columns[i]->has_unique_local_dictionary = true;
         }
         array_buffers.emplace_back(this->data_table->columns[i],
                                    dict_builders[i]);
@@ -647,6 +650,12 @@ std::shared_ptr<table_info> alloc_table_like(
         // if reuse_dictionaries = true
         if (reuse_dictionaries && (arr_type == bodo_array_type::DICT)) {
             arrays[i]->child_arrays[0] = table->columns[i]->child_arrays[0];
+            arrays[i]->has_global_dictionary =
+                table->columns[i]->has_global_dictionary;
+            arrays[i]->has_unique_local_dictionary =
+                table->columns[i]->has_unique_local_dictionary;
+            arrays[i]->has_sorted_dictionary =
+                table->columns[i]->has_sorted_dictionary;
         }
     }
     return std::make_shared<table_info>(arrays);

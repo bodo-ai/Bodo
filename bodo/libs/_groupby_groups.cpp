@@ -344,7 +344,7 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
                 continue;
             }
         }
-        multi_col_key key(hashes[i], table, i, is_parallel);
+        multi_col_key key(hashes[i], table, i);
         int64_t& group = key_to_group[key];  // this inserts 0 into the map if
                                              // key doesn't exist
         if (group == 0) {
@@ -387,7 +387,7 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
                     continue;
                 }
             }
-            multi_col_key key(hashes[i], table, i, is_parallel);
+            multi_col_key key(hashes[i], table, i);
             int64_t& group = key_to_group[key];  // this inserts 0 into the map
                                                  // if key doesn't exist
             if ((group == 0) ||
