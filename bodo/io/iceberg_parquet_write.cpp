@@ -396,7 +396,7 @@ void iceberg_pq_write(const char *table_data_loc,
 
         new_table->num_keys = transform_cols.size();
         for (uint64_t i = 0; i < new_table->nrows(); i++) {
-            multi_col_key key(hashes[i], new_table, i, is_parallel);
+            multi_col_key key(hashes[i], new_table, i);
             partition_write_info &p = key_to_partition[key];
             if (p.rows.size() == 0) {
                 // This is the path after the table_loc that will

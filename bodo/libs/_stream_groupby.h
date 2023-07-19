@@ -109,6 +109,17 @@ class GroupbyState {
     // TODO(njriasan): Move to initialization information.
     std::shared_ptr<ChunkedTableBuilder> output_buffer = nullptr;
 
+    // Dictionary builders for the key columns. This is
+    // always of length n_keys and is nullptr for non DICT keys.
+    // These will be shared between the build_table_buffers and
+    // probe_table_buffers of all partitions and the build_shuffle_buffer
+    // and probe_shuffle_buffer.
+    std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders;
+
+    // Simple concatenation of key_dict_builders and
+    // non key dict builders
+    std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
+
     tracing::ResumableEvent groupby_event;
 
     GroupbyState(std::vector<int8_t> in_arr_c_types,
@@ -129,15 +140,6 @@ class GroupbyState {
                               KeyEqualGroupbyTable<false>(this, n_keys)),
           shuffle_sync_iter(shuffle_sync_iter_),
           groupby_event("Groupby") {
-        // TODO[BSE-566]: support dictionary arrays
-        for (int8_t arr_type : in_arr_array_types) {
-            if (arr_type == bodo_array_type::DICT) {
-                throw std::runtime_error(
-                    "dictionary-encoded input not supported yet in streaming "
-                    "groupby");
-            }
-        }
-
         // Add key column types to runnig value buffer types (same type as
         // input)
         std::vector<int8_t> build_arr_array_types;
@@ -237,23 +239,86 @@ class GroupbyState {
             build_arr_c_types = in_arr_c_types;
         }
 
-        // TODO[BSE-566]: support dictionary arrays
+        this->key_dict_builders.resize(this->n_keys);
+
+        // Create dictionary builders for key columns:
+        for (uint64_t i = 0; i < this->n_keys; i++) {
+            if (build_arr_array_types[i] == bodo_array_type::DICT) {
+                std::shared_ptr<array_info> dict = alloc_array(
+                    0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
+                this->key_dict_builders[i] =
+                    std::make_shared<DictionaryBuilder>(dict, true);
+            } else {
+                this->key_dict_builders[i] = nullptr;
+            }
+        }
+
+        std::vector<std::shared_ptr<DictionaryBuilder>>
+            build_table_non_key_dict_builders;
+        // Create dictionary builders for non-key columns in build table:
+        for (size_t i = this->n_keys; i < build_arr_array_types.size(); i++) {
+            if (build_arr_array_types[i] == bodo_array_type::DICT) {
+                std::shared_ptr<array_info> dict = alloc_array(
+                    0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
+                build_table_non_key_dict_builders.emplace_back(
+                    std::make_shared<DictionaryBuilder>(dict, false));
+            } else {
+                build_table_non_key_dict_builders.emplace_back(nullptr);
+            }
+        }
+
+        this->build_table_dict_builders.insert(
+            this->build_table_dict_builders.end(),
+            this->key_dict_builders.begin(), this->key_dict_builders.end());
+
+        this->build_table_dict_builders.insert(
+            this->build_table_dict_builders.end(),
+            build_table_non_key_dict_builders.begin(),
+            build_table_non_key_dict_builders.end());
+
         local_table_buffer =
             TableBuildBuffer(build_arr_c_types, build_arr_array_types,
-                             std::vector<std::shared_ptr<DictionaryBuilder>>(
-                                 build_arr_c_types.size(), nullptr));
+                             this->build_table_dict_builders);
         shuffle_table_buffer =
             TableBuildBuffer(build_arr_c_types, build_arr_array_types,
-                             std::vector<std::shared_ptr<DictionaryBuilder>>(
-                                 build_arr_c_types.size(), nullptr));
+                             this->build_table_dict_builders);
     }
+
+    /**
+     * @brief Unify dictionaries of input table with build table
+     * (build_table_buffer of all partitions and build_shuffle_buffer which all
+     * share the same dictionaries) by appending its new dictionary values to
+     * buffer's dictionaries and transposing input's indices.
+     *
+     * @param in_table input table
+     * @param only_keys only unify key columns
+     * @return std::shared_ptr<table_info> input table with dictionaries unified
+     * with build table dictionaries.
+     */
+    std::shared_ptr<table_info> UnifyBuildTableDictionaryArrays(
+        const std::shared_ptr<table_info>& in_table, bool only_keys = false);
+
+    /**
+     * @brief Get dictionary hashes of dict-encoded string key columns (nullptr
+     * for other key columns).
+     * NOTE: output vector does not have values for data columns (length is
+     * this->n_keys).
+     *
+     * @return
+     * std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+     */
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+    GetDictionaryHashesForKeys();
 
     void InitOutputBuffer(const std::shared_ptr<table_info>& dummy_table) {
         auto [arr_c_types, arr_array_types] =
             get_dtypes_arr_types_from_table(dummy_table);
-        // TODO[BSE-566]: Support dict builders
         std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders(
             dummy_table->columns.size(), nullptr);
+        // Dictionary encoded arrays are only support for keys.
+        for (size_t i = 0; i < this->n_keys; i++) {
+            dict_builders[i] = this->build_table_dict_builders[i];
+        }
         this->output_buffer = std::make_shared<ChunkedTableBuilder>(
             arr_c_types, arr_array_types, dict_builders,
             /*chunk_size*/ this->output_batch_size,

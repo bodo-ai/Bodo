@@ -107,11 +107,10 @@ struct multi_col_key {
     uint32_t hash;
     std::shared_ptr<table_info> table;
     int64_t row;
-    bool is_parallel;
 
     multi_col_key(uint32_t _hash, std::shared_ptr<table_info> _table,
-                  int64_t _row, bool _is_parallel)
-        : hash(_hash), table(_table), row(_row), is_parallel(_is_parallel) {}
+                  int64_t _row)
+        : hash(_hash), table(_table), row(_row) {}
 
     bool operator==(const multi_col_key& other) const {
         for (int64_t i = 0; i < table->num_keys; i++) {
@@ -138,9 +137,7 @@ struct multi_col_key {
                     // Require the dictionary to always have unique values. If
                     // the data is distributed it must also be global.
                     if (c1->has_unique_local_dictionary &&
-                        c2->has_unique_local_dictionary &&
-                        (!is_parallel || c1->has_global_dictionary) &&
-                        (!other.is_parallel || c2->has_global_dictionary)) {
+                        c2->has_unique_local_dictionary) {
                         if (!is_matching_dictionary(c1->child_arrays[0],
                                                     c2->child_arrays[0])) {
                             throw std::runtime_error(
@@ -166,7 +163,7 @@ struct multi_col_key {
                     } else {
                         throw std::runtime_error(
                             "multi-key-hashing dictionary array requires "
-                            "global dictionary of unique values");
+                            "dictionary of unique values");
                     }
                 }
                     continue;

@@ -554,7 +554,7 @@ void pq_write_partitioned_py_entry(
 
         new_table->num_keys = num_partition_cols;
         for (uint64_t i = 0; i < new_table->nrows(); i++) {
-            multi_col_key key(hashes[i], new_table, i, is_parallel);
+            multi_col_key key(hashes[i], new_table, i);
             partition_write_info &p = key_to_partition[key];
             if (p.rows.size() == 0) {
                 // generate output file name
