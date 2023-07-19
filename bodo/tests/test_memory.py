@@ -2973,5 +2973,11 @@ def test_array_unpinned():
             ) == 64 * 1024 and (pool.bytes_pinned() - initial_pinned) == 0
         return passed_checks
 
-    with pytest.warns(BodoWarning, match="No parallelism found for function 'impl'"):
+    # TODO: Consider disabling test when bodo.get_size() != 1
+    if bodo.get_rank() == 0:
+        with pytest.warns(
+            BodoWarning, match="No parallelism found for function 'impl'"
+        ):
+            assert impl()
+    else:
         assert impl()
