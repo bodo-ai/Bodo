@@ -756,7 +756,11 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         block_use_map[rhs_key] = (used_cols, use_all, cannot_del_cols)
                         continue
                     # handle table filter like T2 = T1[ind]
-                    elif fdef == ("table_filter", "bodo.hiframes.table"):
+                    elif (
+                        isinstance(fdef, tuple)  # fdef can be None
+                        and fdef[1] == "bodo.hiframes.table"
+                        and fdef[0] in ("table_filter", "table_local_filter")
+                    ):
                         # NOTE: column uses of input T1 are the same as output T2.
                         # Here we simply traverse the IR in reversed order and update uses,
                         # which works because table filter variables are internally
@@ -1367,6 +1371,51 @@ def remove_dead_columns(
                     nodes = compile_func_single_block(
                         eval(
                             "lambda table, idx: bodo.hiframes.table.table_filter(table, idx, used_cols=used_columns)"
+                        ),
+                        rhs.args,
+                        stmt.target,
+                        typing_info=typing_info,
+                        extra_globals={
+                            "used_columns": bodo.utils.typing.MetaType(
+                                tuple(sorted(used_columns))
+                            )
+                        },
+                    )
+
+                    # Replace the variable in the return value to keep
+                    # distributed analysis consistent.
+                    nodes[-1].target = stmt.target
+                    # Update distributed analysis for the replaced function
+                    new_nodes = list(reversed(nodes))
+                    if dist_analysis:
+                        bodo.transforms.distributed_analysis.propagate_assign(
+                            dist_analysis.array_dists, new_nodes
+                        )
+                    new_body += new_nodes
+                    # We do not set removed = True here, as this branch does not make
+                    # any changes that could allow removal in dead code elimination.
+                    continue
+                elif fdef == ("table_local_filter", "bodo.hiframes.table"):
+                    # In this case, we've encountered a getitem that filters
+                    # the rows of a table. At this step, we can also
+                    # filter out columns that are not live out of this statement.
+
+                    # Compute all columns that are live at this statement.
+                    used_columns = _find_used_columns(
+                        lhs_table_key,
+                        len(typemap[lhs_name].arr_types),
+                        lives,
+                        equiv_vars,
+                    )
+                    if used_columns is None:
+                        # if used_columns is None it means all columns are used.
+                        # As such, we can't do any column pruning
+                        new_body.append(stmt)
+                        continue
+
+                    nodes = compile_func_single_block(
+                        eval(
+                            "lambda table, idx: bodo.hiframes.table.table_local_filter(table, idx, used_cols=used_columns)"
                         ),
                         rhs.args,
                         stmt.target,

@@ -20,6 +20,7 @@ from bodo.utils.typing import is_overload_none
 table_usecol_funcs = {
     ("get_table_data", "bodo.hiframes.table"),
     ("table_filter", "bodo.hiframes.table"),
+    ("table_local_filter", "bodo.hiframes.table"),
     ("table_subset", "bodo.hiframes.table"),
     ("set_table_data", "bodo.hiframes.table"),
     ("set_table_data_null", "bodo.hiframes.table"),
@@ -74,6 +75,7 @@ def get_table_used_columns(
         return {col_num}
     elif fdef in {
         ("table_filter", "bodo.hiframes.table"),
+        ("table_local_filter", "bodo.hiframes.table"),
         ("table_astype", "bodo.utils.table_utils"),
         ("generate_mappable_table_func", "bodo.utils.table_utils"),
         ("set_table_data", "bodo.hiframes.table"),

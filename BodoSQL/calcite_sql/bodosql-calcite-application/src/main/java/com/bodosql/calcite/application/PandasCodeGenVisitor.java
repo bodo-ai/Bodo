@@ -502,13 +502,39 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Since input is single-batch, we know the RHS of the pair must be null
     Variable nonStreamingInput = this.varGenStack.pop();
 
-    // Create the variable that "drives" the loop
+    // Create the variable that "drives" the loop / loop exits when flag is false
     Variable exitCond = genFinishedStreamingFlag();
+    // Synchronization and Slicing Counter Variable
     Variable iterVar = genIterVar();
     generatedCode.startStreamingPipelineFrame(exitCond, iterVar);
     StreamingPipelineFrame streamingInfo = generatedCode.getCurrentStreamingPipeline();
 
-    Variable outputDfVar = genDfVar();
+    // Convert input DF to table before slicing
+    Variable unwrapTable = genTableVar();
+    int numInputCols = node.getRowType().getFieldCount();
+    List<Expr.IntegerLiteral> inputIndices = integerLiteralArange(numInputCols);
+    Variable colNums = lowerAsMetaType(new Expr.Tuple(inputIndices));
+    Op.Assign unwrapTableAssn =
+        new Op.Assign(
+            unwrapTable,
+            new Expr.Call(
+                "bodo.hiframes.table.logical_table_to_table",
+                new Expr.Call(
+                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", nonStreamingInput),
+                new Expr.Tuple(List.of()),
+                colNums,
+                new Expr.IntegerLiteral(numInputCols)));
+    streamingInfo.addInitialization(unwrapTableAssn);
+    // Precompute and save local table length
+    Variable localLen = genGenericTempVar();
+    Op.Assign localLenAssn =
+        new Op.Assign(localLen, new Expr.Call("bodo.hiframes.table.local_len", unwrapTable));
+    streamingInfo.addInitialization(localLenAssn);
+
+    Variable outTableVar = genTableVar();
+    Variable outDFVar = genDfVar();
+
+    // Slice the table locally
     Expr sliceStart =
         new Expr.Binary("*", iterVar, new Expr.IntegerLiteral(streamingOptions.getChunkSize()));
     Expr sliceEnd =
@@ -516,20 +542,40 @@ public class PandasCodeGenVisitor extends RelVisitor {
             "*",
             new Expr.Binary("+", iterVar, new Expr.IntegerLiteral(1)),
             new Expr.IntegerLiteral(streamingOptions.getChunkSize()));
+    generatedCode.add(
+        new Op.Assign(
+            outTableVar,
+            new Expr.Call(
+                "bodo.hiframes.table.table_local_filter",
+                unwrapTable,
+                new Expr.Call("slice", sliceStart, sliceEnd))));
+    // Wrap the table slice into a DataFrame
+    Variable indexVar = genIndexVar();
+    generatedCode.add(
+        new Op.Assign(
+            indexVar,
+            new Expr.Call(
+                "bodo.hiframes.pd_index_ext.init_range_index",
+                new IntegerLiteral(0),
+                new Expr.Call("len", outTableVar),
+                new IntegerLiteral(1),
+                Expr.None.INSTANCE)));
+    List<Expr.StringLiteral> colNamesLiteral =
+        stringsToStringLiterals(node.getRowType().getFieldNames());
+    generatedCode.add(
+        new Op.Assign(
+            outDFVar,
+            new Expr.Call(
+                "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+                new Expr.Tuple(List.of(outTableVar)),
+                indexVar,
+                lowerAsColNamesMetaType(new Expr.Tuple(colNamesLiteral)))));
 
-    Expr slicedDfExpr = new Expr.DataFrameSlice(nonStreamingInput, sliceStart, sliceEnd);
-
-    Expr dfLen = new Expr.Call("len", List.of(nonStreamingInput), List.of());
-
-    Expr done = new Expr.Binary(">=", sliceStart, dfLen);
-
-    // Take the current slice of the dataframe
-    generatedCode.add(new Op.Assign(outputDfVar, slicedDfExpr));
-
-    // Check if we're at the end
+    // Check if we're at the end of the local piece
+    Expr done = new Expr.Binary(">=", sliceStart, localLen);
     generatedCode.add(new Op.Assign(exitCond, done));
 
-    this.varGenStack.push(outputDfVar);
+    this.varGenStack.push(outDFVar);
   }
 
   /**

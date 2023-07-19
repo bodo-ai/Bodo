@@ -451,7 +451,7 @@ class DistributedPass:
 
         return [inst]
 
-    def _run_call(self, assign, equiv_set, avail_vars):
+    def _run_call(self, assign: ir.Assign, equiv_set, avail_vars):
         lhs = assign.target.name
         rhs = assign.value
         scope = assign.target.scope
