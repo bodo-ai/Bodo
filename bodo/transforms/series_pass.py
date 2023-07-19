@@ -2626,8 +2626,10 @@ class SeriesPass:
             return replace_func(self, loc_vars["impl"], rhs.args)
 
         # optimize out trivial slicing on tables
-        if fdef == ("table_filter", "bodo.hiframes.table") and guard(
-            is_whole_slice, self.typemap, self.func_ir, rhs.args[1]
+        if (
+            func_mod == "bodo.hiframes.table"
+            and func_name in ("table_filter", "table_local_filter")
+            and guard(is_whole_slice, self.typemap, self.func_ir, rhs.args[1])
         ):
             return [ir.Assign(rhs.args[0], assign.target, assign.loc)]
 
