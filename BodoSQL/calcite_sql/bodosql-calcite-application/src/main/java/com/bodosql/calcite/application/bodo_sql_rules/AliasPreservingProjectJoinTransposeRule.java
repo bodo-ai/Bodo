@@ -3,6 +3,9 @@ package com.bodosql.calcite.application.bodo_sql_rules;
 import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.rel.logical.BodoLogicalJoin;
+import com.bodosql.calcite.rel.logical.BodoLogicalProject;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -12,8 +15,6 @@ import org.apache.calcite.plan.*;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.Project;
-import org.apache.calcite.rel.logical.LogicalJoin;
-import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.rules.PushProjector;
 import org.apache.calcite.rel.rules.TransformationRule;
 import org.apache.calcite.rel.type.RelDataType;
@@ -89,7 +90,7 @@ public class AliasPreservingProjectJoinTransposeRule
       inputRefs.add(new RexInputRef(pos, origFieldList.get(pos).getType()));
     }
     // Create the new projects. Here we reuse the hints.
-    return LogicalProject.create(node.getInput(), node.getHints(), inputRefs, keptFieldNames);
+    return BodoLogicalProject.create(node.getInput(), node.getHints(), inputRefs, keptFieldNames);
   }
 
   @Deprecated // to be removed before 2.0
@@ -233,7 +234,7 @@ public class AliasPreservingProjectJoinTransposeRule
         ImmutableAliasPreservingProjectJoinTransposeRule.Config.builder()
             .withPreserveExprCondition(expr -> !(expr instanceof RexOver))
             .build()
-            .withOperandFor(LogicalProject.class, LogicalJoin.class);
+            .withOperandFor(BodoLogicalProject.class, BodoLogicalJoin.class);
 
     @Override
     default AliasPreservingProjectJoinTransposeRule toRule() {
