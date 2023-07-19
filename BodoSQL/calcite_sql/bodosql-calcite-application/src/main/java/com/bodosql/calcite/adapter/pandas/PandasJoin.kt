@@ -2,20 +2,15 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.StateVariable
-import com.bodosql.calcite.plan.Cost
-import com.bodosql.calcite.plan.makeCost
+import com.bodosql.calcite.rel.core.JoinBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.google.common.collect.ImmutableList
-import com.google.common.collect.ImmutableSet
 import org.apache.calcite.plan.RelOptCluster
-import org.apache.calcite.plan.RelOptCost
-import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelWriter
 import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
-import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexNode
 
 class PandasJoin(
@@ -26,8 +21,7 @@ class PandasJoin(
     condition: RexNode,
     joinType: JoinRelType,
     val rebalanceOutput: Boolean,
-) : Join(cluster, traitSet, ImmutableList.of(), left, right, condition,
-    ImmutableSet.of(), joinType), PandasRel {
+) : JoinBase(cluster, traitSet, ImmutableList.of(), left, right, condition, joinType), PandasRel {
 
     init {
         assert(convention == PandasRel.CONVENTION)
@@ -68,37 +62,6 @@ class PandasJoin(
         TODO("Not yet implemented")
     }
 
-    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
-        // Join conditions are still applied on the cross product of the inputs.
-        // While we don't materialize all of these rows, the condition cost should
-        // reflect that fact.
-        val conditionRows = inputs.map { mq.getRowCount(it) }
-            .reduce { a, b -> a * b }
-        val conditionCost = condition.accept(RexCostEstimator)
-            .multiplyBy(conditionRows)
-
-        // For Bodo the build side is always the left input. This table
-        // influences the total cost because the build table needs to be collected
-        // before the probe side and is inserted into any hashmaps.
-        val buildRows = mq.getRowCount(this.left)
-        val averageBuildRowSize = mq.getAverageRowSize(this.left)
-        // Add a multiplier to try ensure the build cost isn't too impactful.
-        val buildCost = Cost(mem = averageBuildRowSize ?: 0.0).multiplyBy(buildRows).multiplyBy(0.3)
-
-
-        // We now want to compute the expected cost of producing this join's output.
-        // We do this by taking the output rows and multiplying by the number
-        // of rows we are estimated to produce. The join condition itself will influence
-        // the estimated row count.
-        val rows = mq.getRowCount(this)
-        val averageRowSize = mq.getAverageRowSize(this)
-        val outputCost = Cost(mem = averageRowSize ?: 0.0).multiplyBy(rows)
-
-        // Final cost is these three combined.
-        val totalCost = conditionCost.plus(buildCost).plus(outputCost)
-        return planner.makeCost(rows = rows, from = totalCost)
-    }
-
     override fun explainTerms(pw: RelWriter?): RelWriter {
         return super.explainTerms(pw)
             .itemIf("rebalanceOutput", rebalanceOutput, rebalanceOutput)
@@ -115,6 +78,5 @@ class PandasJoin(
             val traitSet = cluster.traitSetOf(PandasRel.CONVENTION).replace(streamingTrait)
             return PandasJoin(cluster, traitSet, left, right, condition, joinType)
         }
-
     }
 }

@@ -1,18 +1,18 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.rel.logical.BodoLogicalFilter
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rel.core.Filter
-import org.apache.calcite.rel.logical.LogicalFilter
 
 class PandasFilterRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                LogicalFilter::class.java, Convention.NONE, PandasRel.CONVENTION,
+                BodoLogicalFilter::class.java, Convention.NONE, PandasRel.CONVENTION,
                 "PandasFilterRule")
             .withRuleFactory { config -> PandasFilterRule(config) }
     }

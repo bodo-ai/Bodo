@@ -1,6 +1,8 @@
 package com.bodosql.calcite.application.bodo_sql_rules;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.rel.logical.BodoLogicalProject;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -14,7 +16,6 @@ import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Project;
-import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.rules.TransformationRule;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexFieldCollation;
@@ -98,12 +99,8 @@ public class ProjectionSubcolumnEliminationRule
 
     // Create a fused projection so columns in the outer projection can reference
     // columns from the input if necessary. This will be pruned later.
-    LogicalProject mergedProject =
-        LogicalProject.create(
-            project.getInput(), project.getHints(), totalProjects, totalFieldNames);
-
-    // Push the merged projection to enable creating input Refs
-    builder.push(mergedProject);
+    builder.push(project.getInput())
+            .project(totalProjects, totalFieldNames);
 
     // Keep track of which columns will be kept
     Set<Integer> keptIndices = new HashSet<>();
@@ -172,7 +169,7 @@ public class ProjectionSubcolumnEliminationRule
     }
     if (updated) {
       // Prune Modified Columns Step
-      int totalNumColumns = mergedProject.getProjects().size();
+      int totalNumColumns = totalProjects.size();
       // Determine which column should be removed from the original projection
       int[] adjustments = new int[totalNumColumns];
       int numRemoved = 0;
@@ -188,8 +185,8 @@ public class ProjectionSubcolumnEliminationRule
         // We decrease the project to account for removed columns.
         adjustments[i] = -numRemoved;
       }
-      LogicalProject prunedProject =
-          LogicalProject.create(input, project.getHints(), keptCols, keptFieldNames);
+      BodoLogicalProject prunedProject =
+          BodoLogicalProject.create(input, project.getHints(), keptCols, keptFieldNames);
       // Add the pruned projection to the cache
       seenNodes.add(prunedProject.getId());
       // Set the correct types for any updated input refs
@@ -199,7 +196,7 @@ public class ProjectionSubcolumnEliminationRule
         outerProjectionNodes.set(
             i, adjustInputRefs(builder, outerProjectionNodes.get(i), adjustments));
       }
-      return LogicalProject.create(
+      return BodoLogicalProject.create(
           prunedProject, project.getHints(), outerProjectionNodes, fieldNames);
     } else {
       // If no column needed to be updated just exit.

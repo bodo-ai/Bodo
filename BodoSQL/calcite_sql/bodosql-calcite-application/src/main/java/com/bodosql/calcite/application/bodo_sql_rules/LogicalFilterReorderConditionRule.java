@@ -7,6 +7,7 @@ import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import java.util.HashSet;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
+import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.rules.SubstitutionRule;
 import org.apache.calcite.rex.RexNode;
@@ -39,7 +40,7 @@ public class LogicalFilterReorderConditionRule
    * @param filter The LogicalFilter node that may be rewritten.
    * @return If the LogicalFilter contains an OR.
    */
-  public static boolean containsOrFilter(LogicalFilter filter) {
+  public static boolean containsOrFilter(Filter filter) {
     RexNode cond = filter.getCondition();
     return filterContainsOr(cond);
   }
@@ -49,7 +50,7 @@ public class LogicalFilterReorderConditionRule
   public void onMatch(RelOptRuleCall call) {
     // Now that we know the RelNode contains an OR it may be possible to extract
     // a common condition.
-    LogicalFilter filter = call.rel(0);
+    Filter filter = call.rel(0);
     RelBuilder builder = call.builder();
     HashSet<RexNode> commonExprs = new HashSet<RexNode>();
     Pair<RexNode, Boolean> updatedOR =
@@ -57,7 +58,7 @@ public class LogicalFilterReorderConditionRule
     boolean changed = updatedOR.getValue();
     if (changed) {
       // If there are common filters we can extra from OR rewrite the RexNode
-      LogicalFilter newFilter =
+      Filter newFilter =
           filter.copy(filter.getTraitSet(), filter.getInput(), updatedOR.getKey());
       call.transformTo(newFilter);
     }
@@ -71,12 +72,16 @@ public class LogicalFilterReorderConditionRule
     // an OR.
     LogicalFilterReorderConditionRule.Config DEFAULT =
         ImmutableLogicalFilterReorderConditionRule.Config.of()
-            .withOperandSupplier(
-                b ->
-                    b.operand(LogicalFilter.class)
-                        .predicate(LogicalFilterReorderConditionRule::containsOrFilter)
-                        .anyInputs())
-            .as(LogicalFilterReorderConditionRule.Config.class);
+            .withOperandFor(LogicalFilter.class);
+
+    default Config withOperandFor(Class<? extends Filter> filterClass) {
+      return withOperandSupplier(
+          b ->
+              b.operand(filterClass)
+                  .predicate(LogicalFilterReorderConditionRule::containsOrFilter)
+                  .anyInputs())
+          .as(Config.class);
+    }
 
     @Override
     default LogicalFilterReorderConditionRule toRule() {

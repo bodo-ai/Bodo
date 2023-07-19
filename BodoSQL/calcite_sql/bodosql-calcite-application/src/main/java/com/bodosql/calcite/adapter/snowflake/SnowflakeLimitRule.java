@@ -1,7 +1,8 @@
 package com.bodosql.calcite.adapter.snowflake;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
-import org.apache.calcite.rel.logical.LogicalFilter;
+import com.bodosql.calcite.rel.logical.BodoLogicalFilter;
+
 import org.apache.calcite.rel.logical.LogicalSort;
 import org.immutables.value.Value;
 import org.jetbrains.annotations.NotNull;
@@ -32,7 +33,7 @@ public class SnowflakeLimitRule extends AbstractSnowflakeLimitRule {
                         .predicate(SnowflakeLimitRule::isOnlyLimit)
                         .oneInput(
                             b1 ->
-                                b1.operand(LogicalFilter.class)
+                                b1.operand(BodoLogicalFilter.class)
                                     .predicate(SnowflakeAggregateRule::isPushableFilter)
                                     .oneInput(
                                         b2 -> b2.operand(SnowflakeTableScan.class).noInputs())))
