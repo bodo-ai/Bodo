@@ -6,9 +6,13 @@
 #include "_chunked_table_builder.h"
 #include "_join.h"
 #include "_nested_loop_join.h"
+#include "_operator_pool.h"
 #include "simd-block-fixed-fpp.h"
 
 using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
+
+// Default threshold for Join operator's OperatorBufferPool
+#define JOIN_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD 0.5
 
 class JoinPartition;
 struct HashHashJoinTable {
@@ -75,7 +79,9 @@ class JoinPartition {
             build_table_dict_builders,
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
             probe_table_dict_builders,
-        const uint64_t batch_size_, bool is_active_)
+        const uint64_t batch_size_, bool is_active_,
+        bodo::OperatorBufferPool* op_pool_,
+        const std::shared_ptr<::arrow::MemoryManager> op_mm_)
         : build_table_buffer(build_arr_c_types, build_arr_array_types,
                              build_table_dict_builders),
           build_table_buffer_chunked(
@@ -96,6 +102,8 @@ class JoinPartition {
           build_table_outer(build_table_outer_),
           probe_table_outer(probe_table_outer_),
           n_keys(n_keys_),
+          op_pool(op_pool_),
+          op_mm(op_mm_),
           is_active(is_active_) {}
 
     // Build state
@@ -307,6 +315,12 @@ class JoinPartition {
     // the number of rows from the build_table_buffer
     // that have been added to the hash table.
     int64_t curr_build_size = 0;
+    // OperatorBufferPool of the HashJoin operator that this is a partition in.
+    // The pool is owned by the parent HashJoinState, so we keep a raw pointer
+    // for simplicity.
+    bodo::OperatorBufferPool* const op_pool;
+    // Memory manager instance for op_pool.
+    const std::shared_ptr<::arrow::MemoryManager> op_mm;
     bool is_active = false;
 };
 
@@ -408,6 +422,16 @@ class JoinState {
 };
 
 class HashJoinState : public JoinState {
+   private:
+    // NOTE: These need to be declared first so that they are
+    // removed at the very end during destruction.
+
+    /// @brief OperatorBufferPool for this operator.
+    const std::unique_ptr<bodo::OperatorBufferPool> op_pool;
+    /// @brief Memory manager for op_pool. This is used during buffer
+    /// allocations.
+    const std::shared_ptr<::arrow::MemoryManager> op_mm;
+
    public:
     // Partitioning information.
     std::vector<std::shared_ptr<JoinPartition>> partitions;
@@ -605,6 +629,7 @@ class HashJoinState : public JoinState {
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
     GetDictionaryHashesForKeys();
 
+    /// @brief Tracing event for this operator.
     tracing::ResumableEvent join_event;
 };
 
