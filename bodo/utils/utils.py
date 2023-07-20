@@ -198,8 +198,7 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:
     Returns:
         int: The value for the CArrayTypeEnum value
     """
-    if isinstance(arr_type, (types.Array, bodo.DatetimeArrayType)):
-        # TODO: Fix in Travis's PR
+    if isinstance(arr_type, types.Array):
         return CArrayTypeEnum.NUMPY.value
     elif arr_type == bodo.string_array_type or arr_type == bodo.binary_array_type:
         return CArrayTypeEnum.STRING.value
