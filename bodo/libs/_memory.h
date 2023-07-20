@@ -731,6 +731,13 @@ class BufferPool final : public IBufferPool {
     bool IsPinned(uint8_t* buffer, int64_t size = -1,
                   int64_t alignment = arrow::kDefaultBufferAlignment) const;
 
+    /**
+     * @brief Getter for memory_size_bytes_.
+     *
+     * @return uint64_t
+     */
+    uint64_t get_memory_size_bytes() const;
+
    protected:
     /// @brief Options that were used for building the BufferPool.
     BufferPoolOptions options_;
