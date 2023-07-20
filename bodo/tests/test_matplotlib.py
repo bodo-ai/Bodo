@@ -4,16 +4,27 @@
     generally requires comparing visuals, so we write all
     results to images,
 """
-import matplotlib
+
+try:
+    import matplotlib  # pragma: no cover
+    from matplotlib.testing.decorators import (
+        check_figures_equal,  # pragma: no cover
+    )
+
+    matplotlib_import_failed = False
+except ImportError:
+    matplotlib_import_failed = True
+
+import warnings
+
 import numpy as np
 import pytest
-from matplotlib.testing.decorators import check_figures_equal
 
 import bodo
 from bodo.tests.utils import pytest_pandas
 from bodo.utils.typing import BodoError
 
-pytestmark = pytest_pandas
+pytestmark = pytest.mark.skip if matplotlib_import_failed else pytest_pandas
 
 
 def bodo_check_figures_equal(*, extensions=("png", "pdf", "svg"), tol=0):
@@ -23,7 +34,15 @@ def bodo_check_figures_equal(*, extensions=("png", "pdf", "svg"), tol=0):
 
     Example usage: @bodo_check_figures_equal(extensions=["png"], tol=0.1)
     """
-    if bodo.get_rank() == 0:
+    if matplotlib_import_failed:
+        # If we don't have matplotlib, throw a warning, and return a dummy function
+        # The dummy function is necessary because the decorator will be called regardless
+        # of whether we have matplotlib or not.
+        warnings.warn(
+            "bodo_check_figures_equal: Matplotlib is not installed, returning dummy function"
+        )
+        return lambda func: func
+    elif bodo.get_rank() == 0:
         return check_figures_equal(extensions=extensions, tol=tol)
     else:
         # If we aren't on rank 0, we want to run the same code but not
