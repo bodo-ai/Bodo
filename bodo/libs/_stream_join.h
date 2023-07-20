@@ -17,7 +17,7 @@ using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
 class JoinPartition;
 struct HashHashJoinTable {
     /**
-     * provides row hashes for join hash table (bodo::unordered_multimap)
+     * provides row hashes for join hash table (bodo::unord_map_container)
      *
      * Input row number iRow can refer to either build or probe table.
      * If iRow >= 0 then it is in the build table at index iRow.
@@ -36,7 +36,7 @@ struct HashHashJoinTable {
 
 struct KeyEqualHashJoinTable {
     /**
-     * provides row comparison for join hash table (bodo::unordered_multimap)
+     * provides row comparison for join hash table (bodo::unord_map_container)
      *
      * Input row number iRow can refer to either build or probe table.
      * If iRow >= 0 then it is in the build table at index iRow.
@@ -58,7 +58,7 @@ struct KeyEqualHashJoinTable {
 /**
  * @brief Holds the state of a single partition during
  * a join execution. This includes the build table buffer,
- * the hashtable (unordered_multimap), bitmap of the matches
+ * the hashtable (unord_map_container), bitmap of the matches
  * in build records, etc.
  * 'top_bitmask' and 'num_top_bits' define the partition
  * itself, i.e. a record is in this partition if the top
@@ -83,13 +83,18 @@ class JoinPartition {
         bodo::OperatorBufferPool* op_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_mm_)
         : build_table_buffer(build_arr_c_types, build_arr_array_types,
-                             build_table_dict_builders),
+                             build_table_dict_builders, op_pool_, op_mm_),
+          build_table_join_hashes(
+              bodo::STLBufferPoolAllocator<uint32_t>(op_pool_)),
           build_table_buffer_chunked(
               build_arr_c_types, build_arr_array_types,
               build_table_dict_builders, batch_size_,
               DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
-          build_hash_table({}, HashHashJoinTable(this),
-                           KeyEqualHashJoinTable(this, n_keys_)),
+          build_hash_table(
+              {}, HashHashJoinTable(this), KeyEqualHashJoinTable(this, n_keys_),
+              bodo::STLBufferPoolAllocator<std::pair<int64_t, size_t>>(
+                  op_pool_)),
+          build_table_matched(bodo::STLBufferPoolAllocator<uint8_t>(op_pool_)),
           probe_table_buffer_chunked(
               probe_arr_c_types, probe_arr_array_types,
               probe_table_dict_builders, batch_size_,
@@ -110,12 +115,18 @@ class JoinPartition {
     // Contiguous append-only buffer, used if a partition is active or after
     // the Finalize step for inactive partitions
     TableBuildBuffer build_table_buffer;
+    // TODO Open issue to convert this into a chunked buffer in the inactive
+    // partition case.
+    // These allocations will go through the OperatorBufferPool
+    // so that we can enforce limits and trigger re-partitioning.
+    bodo::vector<uint32_t> build_table_join_hashes;
     // Chunked append-only buffer, only used if a partition is inactive and
     // not yet finalized
     ChunkedTableBuilder build_table_buffer_chunked;
-    bodo::vector<uint32_t> build_table_join_hashes;
 
-    // join hash table (key row number -> matching row numbers)
+    // Join hash table (key row number -> matching row numbers).
+    // These allocations will go through the OperatorBufferPool
+    // so that we can enforce limits and trigger re-partitioning.
     bodo::unord_map_container<int64_t, size_t, HashHashJoinTable,
                               KeyEqualHashJoinTable>
         build_hash_table;
@@ -126,6 +137,8 @@ class JoinPartition {
     // Probe state (for outer joins). Note we don't use
     // vector<bool> because we may need to do an allreduce
     // on the data directly and that can't be accessed for bool.
+    // These allocations will go through the OperatorBufferPool
+    // so that we can enforce limits and trigger re-partitioning.
     bodo::vector<uint8_t>
         build_table_matched;  // state for building output table
 
@@ -133,6 +146,7 @@ class JoinPartition {
     // We don't need partitioning hashes since we should never
     // need to repartition.
     ChunkedTableBuilder probe_table_buffer_chunked;
+    // TODO Open issue to convert this into a chunked buffer
     bodo::vector<uint32_t> probe_table_buffer_join_hashes;
     const int64_t batch_size;
 

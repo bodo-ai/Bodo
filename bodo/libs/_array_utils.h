@@ -84,10 +84,10 @@
 
 namespace bodo {
 template <typename Key, typename T, typename Hash = UNORD_HASH<Key>,
-          class KeyEqual = std::equal_to<Key>>
+          class KeyEqual = std::equal_to<Key>,
+          class Allocator = bodo::STLBufferPoolAllocator<std::pair<Key, T>>>
 using unord_map_container =
-    UNORD_MAP_CONTAINER<Key, T, Hash, KeyEqual,
-                        bodo::STLBufferPoolAllocator<std::pair<Key, T>>>;
+    UNORD_MAP_CONTAINER<Key, T, Hash, KeyEqual, Allocator>;
 
 template <typename Key, typename Hash = UNORD_HASH<Key>,
           class KeyEqual = std::equal_to<Key>>
