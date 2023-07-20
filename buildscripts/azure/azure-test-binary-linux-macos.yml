@@ -179,12 +179,19 @@ jobs:
       secureFile: 'bodo.lic'
     displayName: 'Download Test License'
 
+  # - script: |
+  #     set -eo pipefail
+  #     export PATH=$HOME/mambaforge/bin:$PATH
+  #     source activate $CONDA_ENV
+  #     mamba install -y 'matplotlib<=3.5.1' -c conda-forge
+  #   displayName: 'Matplotlib installation'
+
   - script: |
       set -eo pipefail
       export PATH=$HOME/mambaforge/bin:$PATH
       source activate $CONDA_ENV
-      mamba install -y 'matplotlib<=3.5.1' 'openjdk=11' -c conda-forge
-    displayName: 'Matplotlib'
+      mamba install -y 'openjdk=11' -c conda-forge
+    displayName: 'Openjdk installation'
 
   - script: |
       set -eo pipefail

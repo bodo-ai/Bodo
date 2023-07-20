@@ -9,7 +9,7 @@ platforms:
 
 dependencies:
   - setuptools <63
-  - cython
+  - cython <3.0
   - boost-cpp =1.82
 
   # C++
