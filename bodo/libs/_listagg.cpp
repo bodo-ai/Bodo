@@ -59,7 +59,7 @@ size_t get_total_chars_needed_for_output(
 
     const uint8_t *null_bitmap = (uint8_t *)sorted_agg_col->null_bitmask();
 
-    for (int i = 0; i < sorted_agg_col->length; i++) {
+    for (uint64_t i = 0; i < sorted_agg_col->length; i++) {
         if (!GetBit(null_bitmap, i)) {
             num_null_elements++;
         } else {
@@ -106,7 +106,7 @@ void copy_array_to_output_string(
     const uint8_t *null_bitmap = (uint8_t *)sorted_agg_col->null_bitmask();
 
     size_t separator_length = separator.size();
-    for (int i = 0; i < sorted_agg_col->length; i++) {
+    for (uint64_t i = 0; i < sorted_agg_col->length; i++) {
         if (!GetBit(null_bitmap, i)) {
             continue;
         }
@@ -135,7 +135,9 @@ char *listagg_seq(std::shared_ptr<table_info> in_table,
                   int64_t *output_string_size_ptr) {
     // If the input table is empty, just return empty string
     if (in_table->nrows() == 0) {
-        return "";
+        char *retval = new char[1];
+        strcpy(retval, "");
+        return retval;
     }
 
     // Step 1: Sort the input table

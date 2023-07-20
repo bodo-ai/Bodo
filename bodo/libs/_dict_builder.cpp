@@ -76,7 +76,8 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         }
         // Update the cached id
         this->cached_array_id = batch_dict->array_id;
-        if (dicts_match && (batch_dict->length == this->dict_buff->size)) {
+        if (dicts_match && (batch_dict->length ==
+                            static_cast<uint64_t>(this->dict_buff->size))) {
             // If the dictionary was copied without changing (e.g. no entries
             // had to be removed, then we can take the id of the input and
             // simply return the input without remapping.
