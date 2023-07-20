@@ -130,14 +130,14 @@ class GroupbyState {
                  int64_t output_batch_size_, bool parallel_,
                  uint64_t shuffle_sync_iter_)
         : n_keys(n_keys_),
-          output_batch_size(output_batch_size_),
-          f_in_offsets(std::move(f_in_offsets_)),
-          f_in_cols(std::move(f_in_cols_)),
           parallel(parallel_),
+          output_batch_size(output_batch_size_),
           local_build_table({}, HashGroupbyTable<true>(this),
                             KeyEqualGroupbyTable<true>(this, n_keys)),
           shuffle_build_table({}, HashGroupbyTable<false>(this),
                               KeyEqualGroupbyTable<false>(this, n_keys)),
+          f_in_offsets(std::move(f_in_offsets_)),
+          f_in_cols(std::move(f_in_cols_)),
           shuffle_sync_iter(shuffle_sync_iter_),
           groupby_event("Groupby") {
         // Add key column types to runnig value buffer types (same type as

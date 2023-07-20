@@ -228,12 +228,13 @@ class MeanColSet : public BasicColSet {
     MeanColSet(std::shared_ptr<array_info> in_col, bool combine_step,
                bool use_sql_rules);
     virtual ~MeanColSet();
-    virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
-    virtual void update(const std::vector<grouping_info>& grp_infos);
-    virtual void combine(const grouping_info& grp_info,
-                         int64_t init_start_row = 0);
-    virtual void eval(const grouping_info& grp_info);
+    void alloc_update_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+    void update(const std::vector<grouping_info>& grp_infos) override;
+    void combine(const grouping_info& grp_info,
+                 int64_t init_start_row = 0) override;
+    void eval(const grouping_info& grp_info) override;
 
     std::tuple<std::vector<bodo_array_type::arr_type_enum>,
                std::vector<Bodo_CTypes::CTypeEnum>>
@@ -382,18 +383,20 @@ class VarStdColSet : public BasicColSet {
 
     virtual ~VarStdColSet();
 
-    virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_update_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
-    virtual void alloc_combine_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_combine_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void combine(const grouping_info& grp_info,
-                         int64_t init_start_row = 0);
+    void combine(const grouping_info& grp_info,
+                 int64_t init_start_row = 0) override;
 
-    virtual void eval(const grouping_info& grp_info);
+    void eval(const grouping_info& grp_info) override;
 
     void addOutputColumns(
         std::vector<std::shared_ptr<array_info>>& out_cols) override {
@@ -421,18 +424,20 @@ class SkewColSet : public BasicColSet {
 
     virtual ~SkewColSet();
 
-    virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_update_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
-    virtual void alloc_combine_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_combine_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void combine(const grouping_info& grp_info,
-                         int64_t init_start_row = 0);
+    void combine(const grouping_info& grp_info,
+                 int64_t init_start_row = 0) override;
 
-    virtual void eval(const grouping_info& grp_info);
+    void eval(const grouping_info& grp_info) override;
 
     void addOutputColumns(
         std::vector<std::shared_ptr<array_info>>& out_cols) override {
@@ -462,12 +467,13 @@ class ListAggColSet : public BasicColSet {
 
     virtual ~ListAggColSet();
 
-    virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_update_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
-    virtual std::shared_ptr<array_info> getOutputColumn();
+    std::shared_ptr<array_info> getOutputColumn();
 
    private:
     std::string listagg_sep;
@@ -487,18 +493,20 @@ class KurtColSet : public BasicColSet {
 
     virtual ~KurtColSet();
 
-    virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_update_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
-    virtual void alloc_combine_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_combine_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void combine(const grouping_info& grp_info,
-                         int64_t init_start_row = 0);
+    void combine(const grouping_info& grp_info,
+                 int64_t init_start_row = 0) override;
 
-    virtual void eval(const grouping_info& grp_info);
+    void eval(const grouping_info& grp_info) override;
 
     void addOutputColumns(
         std::vector<std::shared_ptr<array_info>>& out_cols) override {
@@ -527,22 +535,25 @@ class UdfColSet : public BasicColSet {
 
     virtual ~UdfColSet();
 
-    virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_update_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
-    virtual typename std::vector<std::shared_ptr<array_info>>::iterator
+    typename std::vector<std::shared_ptr<array_info>>::iterator
     update_after_shuffle(
-        typename std::vector<std::shared_ptr<array_info>>::iterator& it);
+        typename std::vector<std::shared_ptr<array_info>>::iterator& it)
+        override;
 
-    virtual void alloc_combine_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_combine_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void combine(const grouping_info& grp_info,
-                         int64_t init_start_row = 0);
+    void combine(const grouping_info& grp_info,
+                 int64_t init_start_row = 0) override;
 
-    virtual void eval(const grouping_info& grp_info);
+    void eval(const grouping_info& grp_info) override;
 
    private:
     std::shared_ptr<table_info>
@@ -582,7 +593,7 @@ class MedianColSet : public BasicColSet {
 
     virtual ~MedianColSet();
 
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
    private:
     bool skipna;
@@ -594,15 +605,11 @@ class MedianColSet : public BasicColSet {
  */
 class ModeColSet : public BasicColSet {
    public:
-    ModeColSet(std::shared_ptr<array_info> in_col, bool _is_parallel,
-               bool use_sql_rules);
+    ModeColSet(std::shared_ptr<array_info> in_col, bool use_sql_rules);
 
     virtual ~ModeColSet();
 
     void update(const std::vector<grouping_info>& grp_infos) override;
-
-   private:
-    bool is_parallel;
 };
 
 /**
@@ -617,7 +624,7 @@ class NUniqueColSet : public BasicColSet {
 
     virtual ~NUniqueColSet();
 
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
    private:
     bool dropna;
@@ -636,10 +643,11 @@ class CumOpColSet : public BasicColSet {
 
     virtual ~CumOpColSet();
 
-    virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_update_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
    private:
     bool skipna;
@@ -656,10 +664,11 @@ class ShiftColSet : public BasicColSet {
 
     virtual ~ShiftColSet();
 
-    virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_update_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
    private:
     int64_t periods;
@@ -677,15 +686,16 @@ class TransformColSet : public BasicColSet {
 
     virtual ~TransformColSet();
 
-    virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_update_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
     // Call corresponding groupby function operation to compute
     // transform_op_col column.
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
     // Fill the output column by copying values from the transform_op_col column
-    virtual void eval(const grouping_info& grp_info);
+    void eval(const grouping_info& grp_info) override;
 
    private:
     bool is_parallel;
@@ -704,11 +714,11 @@ class HeadColSet : public BasicColSet {
 
     virtual ~HeadColSet();
 
-    virtual void alloc_update_columns(
+    void alloc_update_columns(
         size_t update_col_len,
-        std::vector<std::shared_ptr<array_info>>& out_cols);
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
     void set_head_row_list(bodo::vector<int64_t>& row_list);
 
@@ -741,15 +751,11 @@ class NgroupColSet : public BasicColSet {
      * input column regardless of input column types (i.e num_groups is not used
      * in this case)
      */
-    virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_update_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
-    /**
-     * Perform update step for this column set. compute and fill my columns with
-     * the result of the ngroup operation.
-     * @param grp_infos: grouping info calculated by GroupbyPipeline
-     */
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    void update(const std::vector<grouping_info>& grp_infos) override;
 
    private:
     bool is_parallel;  // whether input column data is distributed or
