@@ -1131,6 +1131,10 @@ bool BufferPool::IsPinned(uint8_t* buffer, int64_t size,
     return true;
 }
 
+uint64_t BufferPool::get_memory_size_bytes() const {
+    return this->memory_size_bytes_;
+}
+
 ::arrow::Status BufferPool::Reallocate(int64_t old_size, int64_t new_size,
                                        int64_t alignment, uint8_t** ptr) {
     if (new_size < 0) {

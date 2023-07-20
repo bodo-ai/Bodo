@@ -165,13 +165,13 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         build_arr_array_types, probe_arr_c_types, probe_arr_array_types,
         this->n_keys, this->build_table_outer, this->probe_table_outer,
         build_table_dict_builders, probe_table_dict_builders, this->batch_size,
-        is_active);
+        is_active, this->op_pool, this->op_mm);
     std::shared_ptr<JoinPartition> new_part2 = std::make_shared<JoinPartition>(
         this->num_top_bits + 1, (this->top_bitmask << 1) + 1, build_arr_c_types,
         build_arr_array_types, probe_arr_c_types, probe_arr_array_types,
         this->n_keys, this->build_table_outer, this->probe_table_outer,
         build_table_dict_builders, probe_table_dict_builders, this->batch_size,
-        false);
+        false, this->op_pool, this->op_mm);
 
     // Reserve space in hash vectors for both partitions.
     // Also reserve in new_part1->build_table_buffer if it will become active
@@ -823,6 +823,13 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
                 probe_arr_array_types, n_keys_, build_table_outer_,
                 probe_table_outer_, cond_func_, build_parallel_,
                 probe_parallel_, output_batch_size_),
+      // Create the operator buffer pool
+      op_pool(std::make_unique<bodo::OperatorBufferPool>(
+          // Use all available memory for now:
+          bodo::BufferPool::Default()->get_memory_size_bytes(),
+          bodo::BufferPool::Default(),
+          JOIN_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD)),
+      op_mm(bodo::buffer_memory_manager(op_pool.get())),
       max_partition_depth(max_partition_depth_),
       build_iter(0),
       probe_iter(0),
@@ -839,12 +846,16 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
         TableBuildBuffer(build_arr_c_types, build_arr_array_types,
                          this->build_table_dict_builders);
 
+    // Disable the threshold enforcement in the buffer pool for now:
+    this->op_pool->DisableThresholdEnforcement();
+
     // Create the initial partition
     this->partitions.emplace_back(std::make_shared<JoinPartition>(
         0, 0, build_arr_c_types, build_arr_array_types, probe_arr_c_types,
         probe_arr_array_types, n_keys_, build_table_outer_, probe_table_outer_,
         this->build_table_dict_builders, this->probe_table_dict_builders,
-        /*batch_size*/ this->output_batch_size, /*is_active*/ true));
+        /*batch_size*/ this->output_batch_size, /*is_active*/ true,
+        this->op_pool.get(), this->op_mm));
 
     this->global_bloom_filter = create_bloom_filter();
 }
@@ -894,7 +905,8 @@ void HashJoinState::ResetPartitions() {
             this->probe_arr_c_types, this->probe_arr_array_types, this->n_keys,
             this->build_table_outer, this->probe_table_outer,
             build_table_dict_builders, probe_table_dict_builders,
-            /*batch_size*/ this->output_batch_size, /*is_active*/ true);
+            /*batch_size*/ this->output_batch_size, /*is_active*/ true,
+            this->op_pool.get(), this->op_mm);
     this->partitions.clear();
     this->partitions.emplace_back(new_partition);
 }
