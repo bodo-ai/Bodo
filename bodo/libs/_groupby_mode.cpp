@@ -166,8 +166,6 @@ void mode_operation_strings(std::shared_ptr<array_info> arr,
     // find the mode of the strings by finding the mode of the indices, then
     // extracting the corresponding string for each of them.
     std::shared_ptr<array_info> indices = arr->child_arrays[1];
-    char* data = arr->child_arrays[0]->data1();
-    offset_t* offsets = (offset_t*)arr->child_arrays[0]->data2();
     size_t num_groups = out_arr->length;
     // Create an array of nullable integers that will store the mode
     // of the indices within each group

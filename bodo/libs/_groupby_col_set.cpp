@@ -1249,10 +1249,8 @@ void MedianColSet::update(const std::vector<grouping_info>& grp_infos) {
 
 // ############################## Mode ##############################
 
-ModeColSet::ModeColSet(std::shared_ptr<array_info> in_col, bool _is_parallel,
-                       bool use_sql_rules)
-    : BasicColSet(in_col, Bodo_FTypes::mode, false, use_sql_rules),
-      is_parallel(_is_parallel) {}
+ModeColSet::ModeColSet(std::shared_ptr<array_info> in_col, bool use_sql_rules)
+    : BasicColSet(in_col, Bodo_FTypes::mode, false, use_sql_rules) {}
 
 ModeColSet::~ModeColSet() {}
 
@@ -1548,7 +1546,7 @@ std::unique_ptr<BasicColSet> makeColSet(
             colset = new MedianColSet(in_cols[0], skipna, use_sql_rules);
             break;
         case Bodo_FTypes::mode:
-            colset = new ModeColSet(in_cols[0], is_parallel, use_sql_rules);
+            colset = new ModeColSet(in_cols[0], use_sql_rules);
             break;
         case Bodo_FTypes::nunique:
             colset =
