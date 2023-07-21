@@ -247,6 +247,52 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
     }
 }
 
+void ChunkedTableArrayBuilder::Reset() {
+    this->size = 0;
+    this->resize_count = 0;
+    this->data_array->length = 0;
+    switch (this->data_array->arr_type) {
+        case bodo_array_type::NULLABLE_INT_BOOL: {
+            CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
+                            "Resize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[1]->Resize(0, false),
+                            "Resize failed!");
+        } break;
+        case bodo_array_type::NUMPY: {
+            CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
+                            "Resize failed!");
+        } break;
+        case bodo_array_type::STRING: {
+            CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
+                            "Resize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[1]->Resize(0, false),
+                            "Resize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[2]->Resize(0, false),
+                            "Resize failed!");
+        } break;
+        case bodo_array_type::DICT: {
+            this->dict_indices->Reset();
+            // Reset the dictionary to point to the one
+            // in the dict builder:
+            this->data_array->child_arrays[0] =
+                this->dict_builder->dict_buff->data_array;
+            // Reset the flags:
+            this->data_array->has_global_dictionary =
+                false;  // by default, dictionary builders are not global.
+            this->data_array->has_unique_local_dictionary =
+                true;  // the dictionary builder guarantees deduplication by
+                       // design.
+            this->data_array->has_sorted_dictionary =
+                false;  // by default, dictionary builders are not sorted.
+        } break;
+        default: {
+            throw std::runtime_error(
+                "invalid array type in Clear " +
+                GetArrType_as_string(data_array->arr_type));
+        }
+    }
+}
+
 /* ------------------------------------------------------------------------ */
 
 /* ------------------------- ChunkedTableBuilder -------------------------- */
@@ -982,6 +1028,16 @@ std::tuple<std::shared_ptr<table_info>, int64_t> ChunkedTableBuilder::PopChunk(
     return std::tuple(alloc_table_like(this->dummy_output_chunk,
                                        /*reuse_dictionaries*/ true),
                       0);
+}
+
+void ChunkedTableBuilder::Reset() {
+    this->chunks.clear();
+    for (size_t i = 0; i < this->active_chunk_array_builders.size(); i++) {
+        this->active_chunk_array_builders[i].Reset();
+    }
+    this->active_chunk_size = 0;
+    this->total_size = 0;
+    this->total_remaining = 0;
 }
 
 /* ------------------------------------------------------------------------
