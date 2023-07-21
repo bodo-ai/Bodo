@@ -214,11 +214,6 @@ Bodo Platform creates in your account to enable clusters and notebooks.
     included in the Bodo Platform charges.
 
 
-!!! seealso "See Also"
-    [Troubleshooting Managed Bodo Cloud Platform Issues on AWS][troubleshootingaws]
-
-
-
 ## Using Bodo Platform
 Check the following link on how to use the Bodo Platform once the **cloud credentials are added**.
 
