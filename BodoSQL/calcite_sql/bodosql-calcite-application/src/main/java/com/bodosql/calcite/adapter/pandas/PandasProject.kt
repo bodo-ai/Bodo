@@ -3,20 +3,15 @@ package com.bodosql.calcite.adapter.pandas
 import com.bodosql.calcite.application.Utils.BodoArrayHelpers
 import com.bodosql.calcite.application.Utils.IsScalar
 import com.bodosql.calcite.ir.*
-import com.bodosql.calcite.plan.Cost
-import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.rel.core.ProjectBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
-import org.apache.calcite.plan.RelOptCost
-import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelCollationTraitDef
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.metadata.RelMdCollation
-import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.*
 

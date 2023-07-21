@@ -2,6 +2,7 @@ package com.bodosql.calcite.traits
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.Cost
 import org.apache.calcite.plan.RelOptCluster
@@ -48,13 +49,9 @@ class CombineStreamsExchange(cluster: RelOptCluster, traits: RelTraitSet, input:
     override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
         val rows = mq.getRowCount(this)
         val averageRowSize = mq.getAverageRowSize(this)
-        val rowSize = if (averageRowSize == null) {
-            0.0
-        } else {
-            averageRowSize * rows
-        }
+        val rowSize = averageRowSize?.times(rows) ?: 0.0
         // No CPU cost, only memory cost. In reality there is a "concat",
         // but this is fixed cost.
-        return Cost(mem = rowSize, rows = rows)
+        return planner.makeCost(rows = rows, mem = rowSize)
     }
 }
