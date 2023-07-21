@@ -938,6 +938,11 @@ inline T& getv(const std::shared_ptr<array_info>& arr, size_t idx) {
     return ((T*)arr->data1())[idx];
 }
 
+template <typename T>
+inline T& getv(const std::unique_ptr<array_info>& arr, size_t idx) {
+    return ((T*)arr->data1())[idx];
+}
+
 struct mpi_comm_info {
     int myrank;
     int n_pes;
@@ -1273,6 +1278,7 @@ PyMODINIT_FUNC PyInit_hdist(void);
 PyMODINIT_FUNC PyInit_hstr_ext(void);
 PyMODINIT_FUNC PyInit_decimal_ext(void);
 PyMODINIT_FUNC PyInit_quantile_alg(void);
+PyMODINIT_FUNC PyInit_lead_lag(void);
 PyMODINIT_FUNC PyInit_hdatetime_ext(void);
 PyMODINIT_FUNC PyInit_hio(void);
 PyMODINIT_FUNC PyInit_array_ext(void);

@@ -396,7 +396,7 @@ class WindowAggfunc {
         } else {
             // Otherwise, set the entire partition equal to the first
             // value (for simplicity).
-            T val = get_arr_item<ArrayType, T, DType>(*in_arr, real_start_idx);
+            T val = get_arr_item_str<ArrayType, T, DType>(*in_arr, real_start_idx);
             for (int64_t i = start_idx; i < end_idx; i++) {
                 int64_t idx = getv<int64_t>(sorted_idx, i);
                 (*string_vector)[idx] = val;

@@ -124,6 +124,9 @@ DTYPE_TO_C_TYPE(uint64_t, Bodo_CTypes::UINT64)
 DTYPE_TO_C_TYPE(float, Bodo_CTypes::FLOAT32)
 DTYPE_TO_C_TYPE(double, Bodo_CTypes::FLOAT64)
 DTYPE_TO_C_TYPE(bool, Bodo_CTypes::_BOOL)
+
+DTYPE_TO_C_TYPE(char*, Bodo_CTypes::STRING)
+DTYPE_TO_C_TYPE(char*, Bodo_CTypes::BINARY)
 // NOTE: for functions that only need a C type with similar size (for copy,
 // equality, ...) but not the actual semantics (e.g. isna)
 DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATETIME)
@@ -1120,7 +1123,7 @@ inline T get_arr_item(array_info& arr, int64_t idx) {
 }
 
 /**
- * @brief Retrieves an item from an array.
+ * @brief Retrieves an item from an array, as a std::string_view.
  *
  * Used for string arrays.
  *
@@ -1134,7 +1137,7 @@ inline T get_arr_item(array_info& arr, int64_t idx) {
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
     requires(string_array<ArrType>)
-inline std::string_view get_arr_item(array_info& arr, int64_t idx) {
+inline std::string_view get_arr_item_str(array_info& arr, int64_t idx) {
     char* data = arr.data1();
     offset_t* offsets = (offset_t*)arr.data2();
     offset_t start_offset = offsets[idx];
@@ -1145,7 +1148,7 @@ inline std::string_view get_arr_item(array_info& arr, int64_t idx) {
 }
 
 /**
- * @brief Retrieves an item from an array.
+ * @brief Retrieves an item from an array, as a std::string_view.
  *
  * Used for dictionary encoded arrays.
  *
@@ -1159,7 +1162,7 @@ inline std::string_view get_arr_item(array_info& arr, int64_t idx) {
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
     requires(dict_array<ArrType>)
-inline std::string_view get_arr_item(array_info& arr, int64_t idx) {
+inline std::string_view get_arr_item_str(array_info& arr, int64_t idx) {
     std::shared_ptr<array_info> indices = arr.child_arrays[1];
     int64_t dict_idx = get_arr_item<bodo_array_type::NULLABLE_INT_BOOL, int64_t,
                                     Bodo_CTypes::INT64>(*indices, idx);
