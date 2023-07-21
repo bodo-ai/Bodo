@@ -83,13 +83,18 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          // What Input Types does the function accept. This function accepts only
-          // (Datetime, Interval)
-          OperandTypes.sequence(
-              "REPLACE(STRING, FIND_STRING, REPLACE_STRING)",
-              OperandTypes.STRING,
-              OperandTypes.STRING,
-              OperandTypes.STRING),
+          // What Input Types does the function accept.
+          OperandTypes.or(
+              OperandTypes.sequence(
+                  "REPLACE(STRING, FIND_STRING, REPLACE_STRING)",
+                  OperandTypes.STRING,
+                  OperandTypes.STRING,
+                  OperandTypes.STRING),
+              OperandTypes.sequence(
+                  "REPLACE(STRING, FIND_STRING)",
+                  OperandTypes.STRING,
+                  OperandTypes.STRING)
+          ),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
