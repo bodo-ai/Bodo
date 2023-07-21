@@ -1,9 +1,13 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
+import datetime
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
 import pytest
 
+from bodo import Time
 from bodo.tests.utils import check_func
 
 
@@ -16,7 +20,7 @@ def test_window_df():
     Columns:
     A: 3 distinct strings repeated 5 times, useful for partitioning.
     B: Random integers with several nulls, useful for ordering.
-    C: Randm strings with some repeats, useful for ordering with a tiebreaker.
+    C: Random strings with some repeats, useful for ordering with a tiebreaker.
     D: 12 of one integer and 3 of another, useful for partitioning where
        one of the partitions has a somewhat larger amount of elements.
     E: Nullable boolean data.
@@ -25,9 +29,12 @@ def test_window_df():
     G: Nullable integers with some nulls and some duplicates. Useful for
        testing functions where duplicates or nulls have interesting behavior.
     H: 15 distinct integers in ascending order.
-    I: Mix of identical timestamps (no timezone) and nulls.
+    I: Mix of unique timestamps (no timezone) and nulls.
     J: Mix of floats and nulls.
     K: Non-nullable booleans.
+    L: Random strings with multiple characters and some nulls.
+    M: Decimal array.
+    N: Date array.
     """
     return pd.DataFrame(
         {
@@ -51,12 +58,30 @@ def test_window_df():
             ),
             "H": pd.Series(list(range(15)), dtype=np.int32),
             "I": pd.Series(
-                [None if i % 4 == 0 else pd.Timestamp("1999-12-31") for i in range(15)]
+                [
+                    None
+                    if i % 4 == 0
+                    else pd.Timestamp("1999-12-31") + pd.Timedelta(weeks=100 * i)
+                    for i in range(15)
+                ]
             ),
             "J": pd.Series(
                 [None if i % 2 == 0 else i / 2 for i in range(15)], dtype=np.float32
             ),
             "K": pd.Series([True, False, False] * 5, dtype=np.bool_),
+            "L": [
+                None if i % 5 == 2 else "ABCDEFGHIJKLMNOP"[i : i + i % 3 + 2]
+                for i in range(15)
+            ],
+            "M": [None if i % 7 == 5 else Decimal(2 ** (4 - i % 8)) for i in range(15)],
+            "N": [
+                None
+                if i % 5 == 4
+                else datetime.date(1999, 12, 30)
+                + datetime.timedelta(days=5 ** (5 - i % 6))
+                for i in range(15)
+            ],
+            "O": [None if i % 8 == 4 else Time(nanosecond=10**i) for i in range(15)],
         }
     )
 
@@ -392,6 +417,278 @@ def test_window_df():
                 }
             ),
             id="count_fns-other_arrays",
+        ),
+        pytest.param(
+            ["D"],
+            (
+                # ANY_VALUE on a nullable integer array
+                ("any_value", "B"),
+                # ANY_VALUE on a non-nullable array of booleans
+                ("any_value", "K"),
+                # ANY_VALUE on a decimal array
+                ("any_value", "M"),
+                # ANY_VALUE on a non-nullable array of integers
+                ("any_value", "H"),
+                # ANY_VALUE on a date array
+                ("any_value", "N"),
+                # ANY_VALUE on a time array
+                ("any_value", "O"),
+                # ANY_VALUE on a string array
+                ("any_value", "L"),
+            ),
+            (),
+            (),
+            (),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": pd.Series(
+                        [None] * 12 + [-6] * 3, dtype=pd.Int32Dtype()
+                    ),
+                    "AGG_OUTPUT_1": pd.Series([True] * 15, dtype=np.bool_),
+                    "AGG_OUTPUT_2": [Decimal("16")] * 12 + [None] * 3,
+                    "AGG_OUTPUT_3": [0] * 12 + [12] * 3,
+                    "AGG_OUTPUT_4": [datetime.date(2008, 7, 20)] * 15,
+                    "AGG_OUTPUT_5": [Time(nanosecond=1)] * 12 + [None] * 3,
+                    "AGG_OUTPUT_6": ["AB"] * 12 + [None] * 3,
+                }
+            ),
+            id="any_value",
+        ),
+        pytest.param(
+            ["D"],
+            (
+                # FIRST_VALUE on a non-nullable integer array with no order / frame
+                ("first", "H", "None", "None"),
+                # FIRST_VALUE on a nullable integer array with no order / frame
+                ("first", "G", "None", "None"),
+                # FIRST_VALUE on a string array with no order / frame
+                ("first", "C", "None", "None"),
+                # FIRST_VALUE on a nullable boolean with no order / frame
+                ("first", "B", "None", "None"),
+            ),
+            (),
+            (),
+            (),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": [0] * 12 + [12] * 3,
+                    "AGG_OUTPUT_1": pd.Series([None] * 15, dtype=pd.Int32Dtype()),
+                    "AGG_OUTPUT_2": ["A"] * 12 + ["M"] * 3,
+                    "AGG_OUTPUT_3": pd.Series(
+                        [True] * 12 + [None] * 3, dtype=pd.BooleanDtype()
+                    ),
+                }
+            ),
+            id="first_value-no_frame",
+            marks=pytest.mark.skip(
+                "[BSE-724] TODO: support first_value in groupby.window"
+            ),
+        ),
+        pytest.param(
+            ["D"],
+            (
+                # FIRST_VALUE on a non-nullable integer array with a prefix frame
+                ("first", "H", "None", -1),
+                # FIRST_VALUE on a naive timestamp array with a suffix frame
+                ("first", "I", 0, "None"),
+                # FIRST_VALUE on a string array with a sliding frame
+                ("first", "C", -5, -2),
+                # FIRST_VALUE on a float array with a sliding frame
+                ("first", "J", -1, 1),
+            ),
+            ("H",),
+            (True,),
+            ("first",),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": pd.Series(
+                        [None] + [1] * 11 + [None] + [12, 12], dtype=pd.Int32Dtype()
+                    ),
+                    # This answer is identical to the input column
+                    "AGG_OUTPUT_1": pd.Series(
+                        [
+                            None
+                            if i % 4 == 0
+                            else pd.Timestamp("1999-12-31")
+                            + pd.Timedelta(weeks=100 * i)
+                            for i in range(15)
+                        ]
+                    ),
+                    "AGG_OUTPUT_2": [
+                        None,
+                        None,
+                        "A",
+                        "A",
+                        "A",
+                        "A",
+                        "L",
+                        "P",
+                        "H",
+                        "A",
+                        "T",
+                        "H",
+                        None,
+                        None,
+                        "M",
+                    ],
+                    "AGG_OUTPUT_3": pd.Series(
+                        [
+                            None,
+                            None,
+                            0.5,
+                            None,
+                            1.5,
+                            None,
+                            2.5,
+                            None,
+                            3.5,
+                            None,
+                            4.5,
+                            None,
+                            None,
+                            None,
+                            6.5,
+                        ],
+                        dtype=np.float32,
+                    ),
+                }
+            ),
+            id="first_value-with_frame",
+            marks=pytest.mark.skip(
+                "[BSE-724] TODO: support first_value in groupby.window"
+            ),
+        ),
+        pytest.param(
+            ["D"],
+            (
+                # LAST_VALUE on a non-nullable integer array with no order / frame
+                ("last", "H", "None", "None"),
+                # LAST_VALUE on a float array  with no order / frame
+                ("last", "J", "None", "None"),
+                # LAST_VALUE on a string array with no order / frame
+                ("last", "L", "None", "None"),
+                # LAST_VALUE on a date array  with no order / frame
+                ("last", "B", "None", "None"),
+            ),
+            (),
+            (),
+            (),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": [11] * 12 + [14] * 3,
+                    "AGG_OUTPUT_1": pd.Series(
+                        [5.5] * 12 + [None] * 3, dtype=np.float32
+                    ),
+                    "AGG_OUTPUT_2": ["LMNO"] * 12 + ["OP"] * 3,
+                    "AGG_OUTPUT_3": [datetime.date(1999, 12, 31)] * 12 + [None] * 3,
+                }
+            ),
+            id="last_value-no_frame",
+            marks=pytest.mark.skip(
+                "[BSE-724] TODO: support last_value in groupby.window"
+            ),
+        ),
+        pytest.param(
+            ["D"],
+            (
+                # LAST_VALUE on a nullable boolean array with a prefix frame
+                ("last", "E", "None", 0),
+                # LAST_VALUE on a decimal array with a suffix frame
+                ("last", "M", 0, "None"),
+                # LAST_VALUE on a string array with a sliding frame
+                ("last", "L", 5, 10),
+                # LAST_VALUE on a time array  with with a sliding frame
+                ("last", "B", -5, 0),
+            ),
+            (),
+            (),
+            (),
+            pd.DataFrame(
+                {
+                    # This answer is identical to the input column
+                    "AGG_OUTPUT_0": pd.Series(
+                        [[True, False, None, True, False][i % 5] for i in range(15)],
+                        dtype=pd.BooleanDtype(),
+                    ),
+                    "AGG_OUTPUT_1": [Decimal("2")] * 12 + [Decimal("0.25")] * 3,
+                    "AGG_OUTPUT_2": ["FGHI", "GH", None, "IJKL", "JK", "KLM", "LMNO"]
+                    + [None] * 8,
+                    # This answer is identical to the input column
+                    "AGG_OUTPUT_3": [
+                        None if i % 8 == 4 else Time(nanosecond=10**i)
+                        for i in range(15)
+                    ],
+                }
+            ),
+            id="last_value-with_frame",
+            marks=pytest.mark.skip(
+                "[BSE-724] TODO: support last_value in groupby.window"
+            ),
+        ),
+        pytest.param(
+            ["D"],
+            (
+                # NTH_VALUE on a string array with no order / frame
+                ("nth_value", "L", 3, "None", "None"),
+                # NTH_VALUE on a non-nullable integer array with no order / frame
+                ("nth_value", "H", 7, "None", "None"),
+                # NTH_VALUE on a nullable boolean array with no order / frame
+                ("nth_value", "E", 2, "None", "None"),
+                # NTH_VALUE on a date array with no order / frame
+                ("nth_value", "N", 5, "None", "None"),
+            ),
+            (),
+            (),
+            (),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": [None] * 12 + ["OP"] * 3,
+                    "AGG_OUTPUT_1": pd.Series(
+                        [6] * 12 + [None] * 3, dtype=pd.Int32Dtype()
+                    ),
+                    "AGG_OUTPUT_2": pd.Series(
+                        [False] * 12 + [True] * 3, dtype=pd.BooleanDtype()
+                    ),
+                    "AGG_OUTPUT_3": [None] * 15,
+                }
+            ),
+            id="nth_value-no_frame",
+            marks=pytest.mark.skip(
+                "[BSE-724] TODO: support nth_value in groupby.window"
+            ),
+        ),
+        pytest.param(
+            ["D"],
+            (
+                # NTH_VALUE on a string array with a prefix frame
+                ("nth_value", "L", 2, "None", 0),
+                # NTH_VALUE on a nullable integer array with a suffix frame
+                ("nth_value", "B", 5, 0, "None"),
+                # NTH_VALUE on a string array with a sliding frame
+                ("nth_value", "C", 5, -4, 0),
+                # NTH_VALUE on a float array with a sliding frame
+                ("nth_value", "N", 25, 1, 50),
+            ),
+            (),
+            (),
+            (),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": [None] + ["BCD"] * 11 + [None, "NOP", "NOP"],
+                    "AGG_OUTPUT_1": pd.Series(
+                        [11, None, -2, 8, -67, -4, None, -2259] + [None] * 7,
+                        dtype=pd.Int32Dtype(),
+                    ),
+                    "AGG_OUTPUT_2": [None] * 4
+                    + ["A", "T", "H", "E", "T", "A", "G", "A"]
+                    + [None] * 3,
+                    "AGG_OUTPUT_3": [None] * 15,
+                }
+            ),
+            id="nth_value-with_frame",
+            marks=pytest.mark.skip(
+                "[BSE-724] TODO: support nth_value in groupby.window"
+            ),
         ),
     ],
 )

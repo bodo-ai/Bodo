@@ -3167,7 +3167,7 @@ def get_chunk_bounds_overload(A, parallel=False):
     def impl(A, parallel=False):  # pragma: no cover
         if not parallel:
             # In the replicated case this is expected to be a NO-OP. This path exists
-            # to avoid MPI calls in case we cannot optimize out this funciton for some reason.
+            # to avoid MPI calls in case we cannot optimize out this function for some reason.
             return np.empty(0, np.int64)
 
         n_pes = get_size()

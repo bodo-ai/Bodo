@@ -1391,7 +1391,7 @@ def extract_window_args(
     func_name: str, func_args: Tuple[str]
 ) -> Tuple[List[str], List[str]]:
     """
-    Processes a function name and tuple of argument strings corresponding to a window funciton
+    Processes a function name and tuple of argument strings corresponding to a window function
     inside of a groupby.window term. Verifies that the number of arguments is correct for
     the input function, and returns the scalar and vector arguments in seperate lists
 
@@ -1412,6 +1412,7 @@ def extract_window_args(
         "size": ["scalar", "scalar"],
         "count": ["vector", "scalar", "scalar"],
         "count_if": ["vector", "scalar", "scalar"],
+        "any_value": ["vector"],
     }
     func_arg_typ = func_arg_typs.get(func_name, [])
     # Verify that the input tuple has the correct length
@@ -1517,6 +1518,8 @@ def resolve_window_funcs(
         "percent_rank": dtype_to_array_type(types.float64),
         "cume_dist": dtype_to_array_type(types.float64),
         "min_row_number_filter": bodo.boolean_array_type,
+        # None = output dtype matches input dtype
+        "any_value": None,
     }
 
     for window_func in window_funcs:
@@ -1528,9 +1531,15 @@ def resolve_window_funcs(
         func_args = window_func[1:]
         if func_name not in window_func_types:
             raise_bodo_error(f"Unrecognized window function {func_name}")
-        out_data.append(window_func_types[func_name])
         _, vector_args = extract_window_args(func_name, func_args)
         in_cols.extend(vector_args)
+        out_dtype = window_func_types[func_name]
+        # None = output dtype matches input dtype
+        if out_dtype is None:
+            ind = grp.df_type.column_index[vector_args[0]]
+            in_arr_type = grp.df_type.data[ind]
+            out_dtype = in_arr_type
+        out_data.append(out_dtype)
 
     # Generate the gb_info
     # gb_info maps (in_cols, additional_args, func_name) -> out_col

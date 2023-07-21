@@ -294,6 +294,7 @@ supported_agg_funcs = [
     "ntile",
     "conditional_true_event",
     "conditional_change_event",
+    "any_value",
 ]
 
 # This is just a list of the functions that can be used with
@@ -334,6 +335,7 @@ supported_window_funcs = [
     "size",
     "count",
     "count_if",
+    "any_value",
 ]
 
 
@@ -447,7 +449,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_pre_shuffle = 2
         func.ncols_post_shuffle = 2
         return func
-    if func_name in supported_agg_funcs[:-10]:
+    if func_name in supported_agg_funcs[:-11]:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.fname = func_name
