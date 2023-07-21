@@ -5,9 +5,9 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generate
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeNoGroupBy;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeWithGroupBy;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateApplyCodeWithGroupBy;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupByKeyIndices;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupByOffsetAndCols;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupbyFtypes;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupbyKeyIndices;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupbyOffsetAndCols;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.generateJoinCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.generateLiteralCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.generateLogicalValuesCode;
@@ -1439,9 +1439,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Create the state var.
     // TODO: Add streaming timer support
     StateVariable groupbyStateVar = genStateVar();
-    Variable keyIndices = getStreamingGroupbyKeyIndices(node.getGroupSet(), this);
+    List<Expr.IntegerLiteral> keyIndiciesList = getStreamingGroupByKeyIndices(node.getGroupSet());
+    Variable keyIndices = this.lowerAsMetaType(new Expr.Tuple(keyIndiciesList));
     Pair<Variable, Variable> offsetAndCols =
-        getStreamingGroupbyOffsetAndCols(node.getAggCallList(), this);
+        getStreamingGroupByOffsetAndCols(node.getAggCallList(), this, keyIndiciesList.get(0));
     Variable offset = offsetAndCols.left;
     Variable cols = offsetAndCols.right;
     Variable ftypes = getStreamingGroupbyFtypes(node.getAggCallList(), this);

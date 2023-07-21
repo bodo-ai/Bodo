@@ -790,18 +790,16 @@ public class AggCodeGen {
    * Generate a list that contains the indices of the key columns used for aggregate.
    *
    * @param groupSet The join equality information.
-   * @param visitor The visitor used for lowering global variables.
-   * @return A variables that contains the selected indices.
+   * @return A List of Expr.IntegerLiteral that contains the selected indices.
    */
-  public static Variable getStreamingGroupbyKeyIndices(
-      ImmutableBitSet groupSet, PandasCodeGenVisitor visitor) {
+  public static List<Expr.IntegerLiteral> getStreamingGroupByKeyIndices(ImmutableBitSet groupSet) {
     List<Expr.IntegerLiteral> indices = new ArrayList<>();
     for (int i = 0; i < groupSet.size(); i++) {
       if (groupSet.get(i)) {
         indices.add(new Expr.IntegerLiteral(i));
       }
     }
-    return visitor.lowerAsMetaType(new Expr.Tuple(indices));
+    return indices;
   }
 
   /**
@@ -810,20 +808,38 @@ public class AggCodeGen {
    *
    * @param aggCalls The list of aggregate calls.
    * @param visitor The visitor used for lowering global variables.
+   * @param firstKeyColumnIndex An expr that evaluates to the index of the first key column (Used
+   *     for COUNT(*))
    * @return A pair of variables the contains these two lists.
    */
-  public static Pair<Variable, Variable> getStreamingGroupbyOffsetAndCols(
-      List<AggregateCall> aggCalls, PandasCodeGenVisitor visitor) {
+  public static Pair<Variable, Variable> getStreamingGroupByOffsetAndCols(
+      List<AggregateCall> aggCalls,
+      PandasCodeGenVisitor visitor,
+      Expr.IntegerLiteral firstKeyColumnIndex) {
     List<Expr.IntegerLiteral> offsets = new ArrayList<>();
     offsets.add(new Expr.IntegerLiteral(0));
     List<Expr.IntegerLiteral> cols = new ArrayList<>();
     int length = 0;
     for (int i = 0; i < aggCalls.size(); i++) {
       List<Integer> argList = aggCalls.get(i).getArgList();
-      for (int j = 0; j < argList.size(); j++) {
-        cols.add(new Expr.IntegerLiteral(argList.get(j)));
+      if (argList.size() > 0) {
+        for (int j = 0; j < argList.size(); j++) {
+          cols.add(new Expr.IntegerLiteral(argList.get(j)));
+        }
+        length += argList.size();
+      } else {
+        // Count(*) case. In this case, the group by code still expects one input column.
+        // Therefore, we elect to pass the index of the first key column
+        if (aggCalls.get(i).getAggregation().getKind() != SqlKind.COUNT) {
+          throw new RuntimeException(
+              "Internal error in getStreamingGroupByOffsetAndCols: Expect 'COUNT' aggregate call."
+                  + " Found "
+                  + aggCalls.get(i).getAggregation().getKind().toString()
+                  + " instead.");
+        }
+        cols.add(firstKeyColumnIndex);
+        length += 1;
       }
-      length += argList.size();
       offsets.add(new Expr.IntegerLiteral(length));
     }
     Variable offsetVar = visitor.lowerAsMetaType(new Expr.Tuple(offsets));
@@ -843,10 +859,13 @@ public class AggCodeGen {
       List<AggregateCall> aggCalls, PandasCodeGenVisitor visitor) {
     List<Expr.IntegerLiteral> ftypes = new ArrayList<>();
     for (int i = 0; i < aggCalls.size(); i++) {
-      SqlKind kind = aggCalls.get(i).getAggregation().getKind();
-      String name = aggCalls.get(i).getAggregation().getName();
+      AggregateCall curAggCall = aggCalls.get(i);
+      SqlKind kind = curAggCall.getAggregation().getKind();
+      String name = curAggCall.getAggregation().getName();
 
-      if (kindToSupportAggFuncNameMap.containsKey(kind)) {
+      if (kind == SqlKind.COUNT) {
+        name = getCountCall(curAggCall, true).left;
+      } else if (kindToSupportAggFuncNameMap.containsKey(kind)) {
         name = kindToSupportAggFuncNameMap.get(kind);
       } else if (nameToSupportAggFuncNameMap.containsKey(name)) {
         name = nameToSupportAggFuncNameMap.get(name);
