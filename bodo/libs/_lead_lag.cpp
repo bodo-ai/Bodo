@@ -160,7 +160,7 @@ inline void handle_shift(const std::shared_ptr<array_info> &in_col,
  */
 template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
           bool ignore_nulls, bool has_default, typename T>
-    requires std::same_as<T, typename dtype_to_type<DType>::type>
+    requires (std::same_as<T, typename dtype_to_type<DType>::type> && (!string_or_dict<ArrType>))
 std::unique_ptr<array_info> lead_lag_seq(
     const std::shared_ptr<array_info> &in_col, int64_t shift_amt,
     const std::optional<T> &default_fill_val,
