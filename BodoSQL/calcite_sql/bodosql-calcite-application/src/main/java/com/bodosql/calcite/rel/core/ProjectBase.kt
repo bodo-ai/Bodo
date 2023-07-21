@@ -1,10 +1,8 @@
 package com.bodosql.calcite.rel.core
 
-import com.bodosql.calcite.adapter.pandas.PandasProject
 import com.bodosql.calcite.adapter.pandas.RexCostEstimator
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
-import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner

@@ -3,16 +3,16 @@ package com.bodosql.calcite.rel.core
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
+import com.bodosql.calcite.rel.logical.BodoLogicalUnion
 import org.apache.calcite.plan.Context
 import org.apache.calcite.plan.Contexts
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.CorrelationId
 import org.apache.calcite.rel.core.JoinRelType
-import org.apache.calcite.rel.core.RelFactories.FilterFactory
-import org.apache.calcite.rel.core.RelFactories.JoinFactory
-import org.apache.calcite.rel.core.RelFactories.ProjectFactory
+import org.apache.calcite.rel.core.RelFactories.*
 import org.apache.calcite.rel.hint.RelHint
 import org.apache.calcite.rex.RexNode
+import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.tools.RelBuilder
 import org.apache.calcite.tools.RelBuilderFactory
 
@@ -27,10 +27,14 @@ object RelFactories {
     val JOIN_FACTORY: JoinFactory = JoinFactory(::createJoin)
 
     @JvmField
+    val SET_OP_FACTORY: SetOpFactory = SetOpFactory(::createSetOp)
+
+    @JvmField
     val DEFAULT_CONTEXT: Context = Contexts.of(
         PROJECT_FACTORY,
         FILTER_FACTORY,
         JOIN_FACTORY,
+        SET_OP_FACTORY,
     )
 
     @JvmField
@@ -57,4 +61,11 @@ object RelFactories {
         } else {
             BodoLogicalJoin.create(left, right, hints, condition, joinType)
         }
+
+    private fun createSetOp(kind: SqlKind, inputs: List<RelNode>, all: Boolean): RelNode {
+        return when (kind) {
+            SqlKind.UNION -> BodoLogicalUnion.create(inputs, all)
+            else -> DEFAULT_SET_OP_FACTORY.createSetOp(kind, inputs, all);
+        }
+    }
 }
