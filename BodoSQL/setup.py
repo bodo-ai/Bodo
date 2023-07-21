@@ -75,7 +75,7 @@ def build_libs(obj):
             "calcite_sql",
             "bodosql-calcite-application",
             "target",
-            "bodosql-calcite-application-jar-with-dependencies.jar",
+            "BodoSqlCalcite.jar",
         )
         to_jar_path = os.path.join("bodosql", "jars")
         os.makedirs(to_jar_path, exist_ok=True)
@@ -146,7 +146,7 @@ setup(
     packages=find_packages(),
     package_data={
         "bodosql.tests": ["*/*"],
-        "bodosql": ["pytest.ini", "jars/*.jar"],
+        "bodosql": ["pytest.ini", "jars/*.jar", "opensource/*.NOTICE"],
     },
     # When doing `python setup.py develop`, setuptools will try to install whatever is
     # in `install_requires` after building, so we set it to empty (we don't want to
