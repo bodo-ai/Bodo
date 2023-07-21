@@ -111,7 +111,6 @@ def unicode_to_utf8_and_len(typingctx, str_typ):
                 out_tup.f1 = uni_str.length
             # non-ascii case
             with orelse:
-
                 # call utf8 encoder once to get the allocation size, then call again
                 # to write to output buffer (TODO: avoid two calls?)
                 fnty = lir.FunctionType(
@@ -365,7 +364,6 @@ dummy_use = numba.njit(lambda a: None)
 @overload(int)
 def int_str_overload(in_str, base=10):
     if in_str == string_type:
-
         if is_overload_constant_int(base) and get_overload_const_int(base) == 10:
 
             def _str_to_int_impl(in_str, base=10):  # pragma: no cover
