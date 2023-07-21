@@ -124,9 +124,6 @@ DTYPE_TO_C_TYPE(uint64_t, Bodo_CTypes::UINT64)
 DTYPE_TO_C_TYPE(float, Bodo_CTypes::FLOAT32)
 DTYPE_TO_C_TYPE(double, Bodo_CTypes::FLOAT64)
 DTYPE_TO_C_TYPE(bool, Bodo_CTypes::_BOOL)
-
-DTYPE_TO_C_TYPE(char*, Bodo_CTypes::STRING)
-DTYPE_TO_C_TYPE(char*, Bodo_CTypes::BINARY)
 // NOTE: for functions that only need a C type with similar size (for copy,
 // equality, ...) but not the actual semantics (e.g. isna)
 DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATETIME)
