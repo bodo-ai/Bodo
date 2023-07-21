@@ -1255,3 +1255,43 @@ def test_position(calculation, table, case, spark_info, memory_leak_check):
         sort_output=False,
         equivalent_spark_query=spark_query,
     )
+
+
+@pytest.mark.slow
+def test_replace_two_args_scalar(memory_leak_check):
+    """Test REPLACE works correctly with two scalar inputs"""
+    query = "SELECT REPLACE('string', 'in')"
+    check_query(
+        query,
+        {},
+        None,
+        check_names=False,
+        is_out_distributed=False,
+        expected_output=pd.DataFrame({"A": ["strg"]}),
+    )
+
+
+@pytest.mark.slow
+def test_replace_two_args_column(memory_leak_check):
+    """Test REPLACE works correctly with two column inputs"""
+    query = "SELECT REPLACE(A, B) from table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": ["abcabcabc", None, "kbykujdt", "no replace", "zzyyxxxzy"] * 4,
+                "B": ["abc", "oiu", None, "none", "zy"] * 4,
+            }
+        )
+    }
+    expected_output = pd.DataFrame(
+        {
+            "A": ["", None, None, "no replace", "zyxxx"] * 4
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        expected_output=expected_output,
+    )
