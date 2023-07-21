@@ -706,6 +706,7 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 // Window functions that do not require the sorted table
                 break;
             }
+            case Bodo_FTypes::any_value:
             case Bodo_FTypes::row_number:
             case Bodo_FTypes::rank:
             case Bodo_FTypes::dense_rank:
@@ -770,7 +771,9 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 break;
             }
             default:
-                throw std::runtime_error("Invalid window function");
+                throw std::runtime_error(
+                    "Invalid window function: " +
+                    std::string(get_name_for_Bodo_FTypes(window_funcs[i])));
         }
     }
     if (needs_sort) {
@@ -790,8 +793,8 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
         switch (window_funcs[i]) {
             // min_row_number_filter uses a sort-less implementaiton if no
             // other window functions being calculated require sorting. However,
-            // if another window funciton in this computation requires sorting
-            // the table, then we can just use the sorted groups isntead.
+            // if another window function in this computation requires sorting
+            // the table, then we can just use the sorted groups instead.
             case Bodo_FTypes::min_row_number_filter: {
                 if (needs_sort) {
                     min_row_number_filter_window_computation_already_sorted(
@@ -880,6 +883,7 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                                          frame_hi, Bodo_FTypes::size);
                 break;
             }
+            // Window functions that optionally allow a window frame
             case Bodo_FTypes::count:
             case Bodo_FTypes::count_if: {
                 frame_lo = (int64_t*)window_args[window_arg_offset];
@@ -893,8 +897,19 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 window_col_offset++;
                 break;
             }
+            // Window functions that only support partition-wide aggregation
+            case Bodo_FTypes::any_value: {
+                window_frame_computation(input_arrs[window_col_offset],
+                                         out_arrs[i], iter_table->columns[0],
+                                         iter_table->columns[idx_col], nullptr,
+                                         nullptr, window_funcs[i]);
+                window_col_offset++;
+                break;
+            }
             default:
-                throw std::runtime_error("Invalid window function");
+                throw std::runtime_error(
+                    "Invalid window function: " +
+                    std::string(get_name_for_Bodo_FTypes(window_funcs[i])));
         }
     }
 }

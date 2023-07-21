@@ -1085,6 +1085,9 @@ concept string_array = ArrType == bodo_array_type::arr_type_enum::STRING;
 template <bodo_array_type::arr_type_enum ArrType>
 concept dict_array = ArrType == bodo_array_type::arr_type_enum::DICT;
 
+template <bodo_array_type::arr_type_enum ArrType>
+concept string_or_dict = string_array<ArrType> || dict_array<ArrType>;
+
 /**
  * @brief Retrieves an item from an array.
  *
@@ -1114,6 +1117,59 @@ template <bodo_array_type::arr_type_enum ArrType, typename T,
     requires(nullable_array<ArrType> && bool_dtype<DType>)
 inline T get_arr_item(array_info& arr, int64_t idx) {
     return GetBit((uint8_t*)arr.data1(), idx);
+}
+
+/**
+ * @brief Retrieves an item from an array.
+ *
+ * Used for string arrays.
+ *
+ * @param[in] arr - The array to extract the value from.
+ * @param[in] idx - Index of item to extract.
+ *
+ * @return The item at the given index, as a string view.
+ * Note: this return is essentially a dangling pointer, which is
+ * invalid once the original array is de allocated.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+    requires(string_array<ArrType>)
+inline std::string_view get_arr_item(array_info& arr, int64_t idx) {
+    char* data = arr.data1();
+    offset_t* offsets = (offset_t*)arr.data2();
+    offset_t start_offset = offsets[idx];
+    offset_t end_offset = offsets[idx + 1];
+    offset_t len = end_offset - start_offset;
+    std::string_view substr(&data[start_offset], len);
+    return substr;
+}
+
+/**
+ * @brief Retrieves an item from an array.
+ *
+ * Used for dictionary encoded arrays.
+ *
+ * @param[in] arr - The array to extract the value from.
+ * @param[in] idx - Index of item to extract.
+ *
+ * @return The item at the given index, as a string view.
+ * Note: this return is essentially a dangling pointer, which is
+ * invalid once the original array is de allocated.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+    requires(dict_array<ArrType>)
+inline std::string_view get_arr_item(array_info& arr, int64_t idx) {
+    std::shared_ptr<array_info> indices = arr.child_arrays[1];
+    int64_t dict_idx = get_arr_item<bodo_array_type::NULLABLE_INT_BOOL, int64_t,
+                                    Bodo_CTypes::INT64>(*indices, idx);
+    char* data = arr.child_arrays[0]->data1();
+    offset_t* offsets = (offset_t*)arr.child_arrays[0]->data2();
+    offset_t start_offset = offsets[dict_idx];
+    offset_t end_offset = offsets[dict_idx + 1];
+    offset_t len = end_offset - start_offset;
+    std::string_view substr(&data[start_offset], len);
+    return substr;
 }
 
 /**
@@ -1247,6 +1303,34 @@ template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
     requires numpy_array<ArrType>
 inline void set_non_null(array_info& arr, size_t idx) {}
+
+/**
+ * Sets the null bit at the given index to false, indicating that the array
+ * at the specified location is null. Used for nullable arrays.
+ *
+ * @param[in,out] arr: The array to operate on.
+ * @param[in] idx: Index being set to non-null.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+inline void set_to_null(array_info& arr, size_t idx) {
+    arr.set_null_bit(idx, false);
+}
+
+/**
+ * Sets the null bit at the given index to false, indicating that the array
+ * at the specified location is null. Used for numpy arrays.
+ *
+ * @param[in,out] arr: The array to operate on.
+ * @param[in] idx: Index being set to non-null.
+ *
+ * Note: this function does nothing because there is no null bitmask to alter
+ * in a numpy array.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+    requires numpy_array<ArrType>
+inline void set_to_null(array_info& arr, size_t idx) {}
 
 /**
  * Sets an item in an array. Used for nullable arrays (except for booleans),

@@ -25,6 +25,7 @@ internal object WindowAggregateFuncTable {
         SqlKind.CUME_DIST to define("cume_dist"),
         SqlKind.NTILE to define("ntile", ExprType.SCALAR),
         SqlKind.COUNT to WindowAggregateFunc(::count),
+        SqlKind.ANY_VALUE to define("any_value", ExprType.SERIES),
     )
 
     /**

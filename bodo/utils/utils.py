@@ -1322,7 +1322,7 @@ def has_supported_h5py():
     return _has_h5py
 
 
-# Dummy funciton, that should be handled in untyped pass
+# Dummy function, that should be handled in untyped pass
 # Used to handle aggregations that require more arguments than just the column
 # and aggregation name.
 def ExtendedNamedAgg():

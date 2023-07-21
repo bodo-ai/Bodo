@@ -848,7 +848,7 @@ def gen_random_int64(typingcontext):
 @numba.generated_jit(nopython=True)
 def random_seedless(A):
     """Kernel for the BodoSQL function RANDOM() when no seed is provided.
-       No wrapper funciton is required
+       No wrapper function is required
 
 
     Args:
