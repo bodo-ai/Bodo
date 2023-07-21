@@ -4,6 +4,8 @@ import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
+
 import java.util.HashMap;
 import java.util.List;
 
@@ -365,5 +367,26 @@ public class StringFnCodeGen {
   public static Expr generateSplit(List<Expr> operands) {
     assert operands.size() == 2;
     return new Expr.Call("bodo.libs.bodosql_array_kernels.split", operands);
+  }
+
+  /**
+   * Generate python code for REPLACE
+   *
+   * @param operands Input arguments
+   * @return Generated code
+   */
+  public static Expr generateReplace(List<Expr> operands) {
+    if (operands.size() == 2) {
+      return ExprKt.BodoSQLKernel(
+          "replace",
+          List.of(operands.get(0), operands.get(1), new Expr.Raw("\"\"")),
+          List.of());
+    }
+    else if (operands.size() == 3) {
+      return ExprKt.BodoSQLKernel("replace", operands, List.of());
+    } else {
+      throw new BodoSQLCodegenException(
+          "Invalid number of arguments passed to REPLACE.");
+    }
   }
 }

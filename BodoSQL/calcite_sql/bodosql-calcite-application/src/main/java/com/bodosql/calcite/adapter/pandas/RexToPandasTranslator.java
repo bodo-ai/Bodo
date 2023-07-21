@@ -67,6 +67,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.gen
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateInitcapInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateInsert;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generatePosition;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateReplace;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateSplit;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateStrtok;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateSubstringInfo;
@@ -1362,7 +1363,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "RPAD":
           case "LPAD":
           case "SPLIT_PART":
-          case "REPLACE":
           case "MID":
           case "SUBSTRING_INDEX":
           case "TRANSLATE3":
@@ -1375,6 +1375,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                     operands.get(0).emit(),
                     operands.get(1).emit(),
                     operands.get(2).emit()));
+          case "REPLACE":
+            return generateReplace(operands);
           case "SUBSTR":
             return generateSubstringInfo(operands);
           case "INSERT":
