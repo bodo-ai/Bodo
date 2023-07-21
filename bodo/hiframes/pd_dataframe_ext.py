@@ -117,7 +117,7 @@ from bodo.utils.typing import (
     to_nullable_type,
     to_str_arr_if_dict_array,
 )
-from bodo.utils.utils import is_array_typ, is_null_pointer
+from bodo.utils.utils import is_null_pointer
 
 _json_write = types.ExternalFunction(
     "json_write",
@@ -1144,20 +1144,8 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     ), "init_dataframe(): invalid index type"
 
     n_cols = len(data_tup_typ.types)
-
-    # The input to init_dataframe should either be a (possibly empty) tuple of array types
-    # or a single element tuple of a table type
     if n_cols == 0:
         column_names = ()
-    elif isinstance(data_tup_typ.types[0], TableType):
-        assert (
-            n_cols == 1
-        ), "Internal error in init_dataframe: if passing a table value, only one value should be passed"
-    else:
-        for typ in data_tup_typ.types:
-            assert is_array_typ(
-                typ, False
-            ), "Internal error in init_dataframe: passed values are not arrays"
 
     untyperefed_col_names_typ = (
         col_names_typ.instance_type
