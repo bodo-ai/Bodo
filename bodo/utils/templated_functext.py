@@ -7,7 +7,7 @@ from collections import defaultdict
 from string import Template
 
 
-def generate_templated_function(func, template_ctx, global_vars={}): # pragma: no cover
+def generate_templated_function(func, template_ctx, global_vars={}):  # pragma: no cover
     """Function that allows you to generate functions with provided code substitutions.
     Replacement for existing string-based func_text approaches.
     Given a function symbol, substitute template patterns
