@@ -2583,7 +2583,7 @@ def set_broadcast_join(broadcast: bool):
 
 def nullable_float_arr_maker(L, to_null, to_nan):
     """
-    Utility funciton for helping test cases to generate nullable floating
+    Utility function for helping test cases to generate nullable floating
     point arrays that contain both NULL and NaN. Takes in a list of numbers,
     a list of indices that should be set to NULL, a list of indices that should
     be set to NaN, and outputs the corresponding floating point array.

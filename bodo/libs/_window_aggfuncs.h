@@ -7,6 +7,9 @@
 #include "_groupby_common.h"
 #include "_groupby_ftypes.h"
 
+template <int ftype>
+concept any_value = ftype == Bodo_FTypes::any_value;
+
 // Enums to specify which type of window frame is being computer, in case
 // a window function should have different implementaitons for some of
 // the formats (e.g. min/max can accumulate a running min/max for
@@ -51,8 +54,11 @@ class WindowAggfunc {
     inline void init() {
         throw std::runtime_error(
             "WindowAggfunc::init: Unimplemented for window function " +
-            std::string(get_name_for_Bodo_FTypes(ftype)));
+            std::string(get_name_for_Bodo_FTypes(ftype)) + " with array type " +
+            std::string(GetArrType_as_string(ArrayType)) + " and dtype " +
+            std::string(GetDtype_as_string(DType)));
     }
+
     /**
      * @brief Updates the acummulator by inserting the value of the input array
      * at index i (using sorted_idx as a layer of indirection).
@@ -64,7 +70,9 @@ class WindowAggfunc {
     inline void enter(int64_t i) {
         throw std::runtime_error(
             "WindowAggfunc::enter: Unimplemented for window function " +
-            std::string(get_name_for_Bodo_FTypes(ftype)));
+            std::string(get_name_for_Bodo_FTypes(ftype)) + " with array type " +
+            std::string(GetArrType_as_string(ArrayType)) + " and dtype " +
+            std::string(GetDtype_as_string(DType)));
     }
 
     /**
@@ -81,7 +89,9 @@ class WindowAggfunc {
     inline void exit(int64_t i) {
         throw std::runtime_error(
             "WindowAggfunc::exit: Unimplemented for window function " +
-            std::string(get_name_for_Bodo_FTypes(ftype)));
+            std::string(get_name_for_Bodo_FTypes(ftype)) + " with array type " +
+            std::string(GetArrType_as_string(ArrayType)) + " and dtype " +
+            std::string(GetDtype_as_string(DType)));
     }
 
     /**
@@ -97,7 +107,9 @@ class WindowAggfunc {
         throw std::runtime_error(
             "WindowAggfunc::compute_partition: Unimplemented for window "
             "function " +
-            std::string(get_name_for_Bodo_FTypes(ftype)));
+            std::string(get_name_for_Bodo_FTypes(ftype)) + " with array type " +
+            std::string(GetArrType_as_string(ArrayType)) + " and dtype " +
+            std::string(GetDtype_as_string(DType)));
     }
 
     /**
@@ -111,7 +123,7 @@ class WindowAggfunc {
      * @param[in] upper_bound: The index where the frame begins (exclusive).
      *
      * Note: any ftype that does not support window frames should throw an error
-     * instead of providing an actual implementaiton for this funciton.
+     * instead of providing an actual implementaiton for this function.
      */
     template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
               Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
@@ -119,7 +131,55 @@ class WindowAggfunc {
                               int64_t upper_bound) {
         throw std::runtime_error(
             "WindowAggfunc::compute_frame: Unimplemented for window function " +
-            std::string(get_name_for_Bodo_FTypes(ftype)));
+            std::string(get_name_for_Bodo_FTypes(ftype)) + " with array type " +
+            std::string(GetArrType_as_string(ArrayType)) + " and dtype " +
+            std::string(GetDtype_as_string(DType)));
+    }
+
+    /**
+     * @brief Performs any final operations that need to be done after all
+     * the values in each partition have been calculated. Default implementation
+     * is to do nothing.
+     */
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
+    inline void cleanup() {}
+
+    /**
+     * @brief Performs any final operations that need to be done after all
+     * the values in each partition have been calculated. The implementation
+     * for string input arrays is to convert the string / null
+     * vectors into the final array.
+     *
+     * The implementation is only used for ftypes that will have a string
+     * output.
+     */
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
+        requires(string_array<ArrayType> && any_value<ftype>)
+    inline void cleanup() {
+        std::shared_ptr<array_info> new_out_arr = create_string_array(
+            Bodo_CTypes::STRING, *null_vector, *string_vector);
+        *out_arr = std::move(*new_out_arr);
+    }
+
+    /**
+     * @brief Performs any final operations that need to be done after all
+     * the values in each partition have been calculated. The implementation
+     * for dictionary encoded input arrays is to create a new dictionary
+     * encoded array using the old dictionary and the new indices.
+     *
+     * The implementation is only used for ftypes that will have a string output
+     * where all strings come from the input dictionary (e.g. min, first_value).
+     */
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
+        requires(dict_array<ArrayType> && any_value<ftype>)
+    inline void cleanup() {
+        std::shared_ptr<array_info> new_out_arr = create_dict_string_array(
+            in_arr->child_arrays[0], out_indices, in_arr->has_global_dictionary,
+            in_arr->has_unique_local_dictionary, in_arr->has_sorted_dictionary);
+        *out_arr = std::move(*new_out_arr);
     }
 
     // COUNT(*) implementations.
@@ -227,7 +287,8 @@ class WindowAggfunc {
 
     template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
               Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
-        requires(ftype == Bodo_FTypes::count_if)
+        requires(ftype == Bodo_FTypes::count_if && !string_array<ArrayType> &&
+                 !dict_array<ArrayType>)
     inline void enter(int64_t i) {
         int64_t idx = getv<int64_t>(sorted_idx, i);
         if (non_null_at<ArrayType, T, DType>(*in_arr, idx) &&
@@ -238,7 +299,8 @@ class WindowAggfunc {
 
     template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
               Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
-        requires(ftype == Bodo_FTypes::count_if)
+        requires(ftype == Bodo_FTypes::count_if && !string_array<ArrayType> &&
+                 !dict_array<ArrayType>)
     inline void exit(int64_t i) {
         int64_t idx = getv<int64_t>(sorted_idx, i);
         if (non_null_at<ArrayType, T, DType>(*in_arr, idx) &&
@@ -269,14 +331,139 @@ class WindowAggfunc {
         getv<int64_t>(out_arr, idx) = in_window;
     }
 
+    // ANY_VALUE implementations (no frames).
+
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
+        requires(any_value<ftype> && !string_or_dict<ArrayType>)
+    inline void init() {}
+
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
+        requires(any_value<ftype>)
+    inline void enter(int64_t i) {}
+
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(any_value<ftype> && !string_or_dict<ArrayType>)
+    inline void compute_partition(int64_t start_idx, int64_t end_idx) {
+        int64_t real_start_idx = getv<int64_t>(sorted_idx, start_idx);
+        if (is_null_at<ArrayType, T, DType>(*in_arr, real_start_idx)) {
+            // If the first element is null, set the entire partition
+            // to null (for simplicity).
+            for (int64_t i = start_idx; i < end_idx; i++) {
+                int64_t idx = getv<int64_t>(sorted_idx, i);
+                set_to_null<ArrayType, T, DType>(*out_arr, idx);
+            }
+        } else {
+            // Otherwise, set the entire partition equal to the first
+            // value (for simplicity).
+            T val = get_arr_item<ArrayType, T, DType>(*in_arr, real_start_idx);
+            for (int64_t i = start_idx; i < end_idx; i++) {
+                int64_t idx = getv<int64_t>(sorted_idx, i);
+                set_arr_item<ArrayType, T, DType>(*out_arr, idx, val);
+                set_non_null<ArrayType, T, DType>(*out_arr, idx);
+            }
+        }
+    }
+
+    // ANY_VALUE implementations (string arrays)
+
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
+        requires(any_value<ftype> && string_array<ArrayType>)
+    inline void init() {
+        // If the vectors have not been allocated yet, do so.
+        if (null_vector == nullptr) {
+            int64_t length = in_arr->length;
+            string_vector = std::make_shared<bodo::vector<std::string>>(length);
+            null_vector = std::make_shared<bodo::vector<uint8_t>>(length);
+        }
+    }
+
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(any_value<ftype> && string_array<ArrayType>)
+    inline void compute_partition(int64_t start_idx, int64_t end_idx) {
+        int64_t real_start_idx = getv<int64_t>(sorted_idx, start_idx);
+        if (is_null_at<ArrayType, T, DType>(*in_arr, real_start_idx)) {
+            // If the first element is null, set the entire partition
+            // to null (for simplicity).
+            for (int64_t i = start_idx; i < end_idx; i++) {
+                int64_t idx = getv<int64_t>(sorted_idx, i);
+                SetBitTo(null_vector->data(), idx, false);
+            }
+        } else {
+            // Otherwise, set the entire partition equal to the first
+            // value (for simplicity).
+            T val = get_arr_item<ArrayType, T, DType>(*in_arr, real_start_idx);
+            for (int64_t i = start_idx; i < end_idx; i++) {
+                int64_t idx = getv<int64_t>(sorted_idx, i);
+                (*string_vector)[idx] = val;
+                SetBitTo(null_vector->data(), idx, true);
+            }
+        }
+    }
+
+    // ANY_VALUE implementations (dictionary_encoded arrays)
+
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
+        requires(any_value<ftype> && dict_array<ArrayType>)
+    inline void init() {
+        // If the indices array has not been allocated yet, do so.
+        if (out_indices == nullptr) {
+            int64_t length = in_arr->length;
+            out_indices =
+                alloc_array(length, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, 0, 0);
+        }
+    }
+
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(any_value<ftype>)
+    inline void compute_partition(int64_t start_idx, int64_t end_idx) {
+        int64_t real_start_idx = getv<int64_t>(sorted_idx, start_idx);
+        if (is_null_at<ArrayType, T, DType>(*in_arr, real_start_idx)) {
+            // If the first element is null, set the entire partition
+            // to null (for simplicity).
+            for (int64_t i = start_idx; i < end_idx; i++) {
+                int64_t idx = getv<int64_t>(sorted_idx, i);
+                set_to_null<bodo_array_type::NULLABLE_INT_BOOL, int32_t,
+                            Bodo_CTypes::INT32>(*out_indices, idx);
+            }
+        } else {
+            // Otherwise, set the entire partition equal to the first
+            // value (for simplicity).
+            int32_t val = get_arr_item<bodo_array_type::NULLABLE_INT_BOOL,
+                                       int32_t, Bodo_CTypes::INT32>(
+                *(in_arr->child_arrays[1]), real_start_idx);
+            for (int64_t i = start_idx; i < end_idx; i++) {
+                int64_t idx = getv<int64_t>(sorted_idx, i);
+                set_arr_item<bodo_array_type::NULLABLE_INT_BOOL, int32_t,
+                             Bodo_CTypes::INT32>(*out_indices, idx, val);
+                set_non_null<bodo_array_type::NULLABLE_INT_BOOL, int32_t,
+                             Bodo_CTypes::INT32>(*out_indices, idx);
+            }
+        }
+    }
+
    private:
     // Columns storing the input data, output data, and lookup from sorted to
-    // unsorted indices
+    // unsorted indices.
     std::shared_ptr<array_info> in_arr;
     std::shared_ptr<array_info> out_arr;
     std::shared_ptr<array_info> sorted_idx;
-    // Accumulator values
+    // Accumulator values.
     int64_t in_window;
+    // Vectors to store the intermediary string values before they are placed
+    // into a final array.
+    std::shared_ptr<bodo::vector<std::string>> string_vector = nullptr;
+    std::shared_ptr<bodo::vector<uint8_t>> null_vector = nullptr;
+    // Array info to store the new indices when creating a dictionary encoded
+    // array.
+    std::shared_ptr<array_info> out_indices = nullptr;
 };
 
 /**

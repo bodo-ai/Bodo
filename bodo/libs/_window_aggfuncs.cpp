@@ -26,7 +26,7 @@ void window_frame_computation_no_frame(
     std::shared_ptr<array_info> in_arr, std::shared_ptr<array_info> out_arr,
     std::shared_ptr<array_info> sorted_groups,
     std::shared_ptr<array_info> sorted_idx) {
-    int64_t n = out_arr->length;
+    int64_t n = in_arr->length;
     // Keep track of which group number came before so we can tell when
     // we have entered a new partition, and also keep track of the index
     // where the current group started.
@@ -58,6 +58,10 @@ void window_frame_computation_no_frame(
     // Repeat the aggregation/population step one more time for the final group
     aggfunc.compute_partition<window_func, ArrayType, T, DType>(group_start_idx,
                                                                 n);
+    // After the computation is complete for each partition, do any necessary
+    // final operations (e.g. converting string vectors to proper arrays)
+    aggfunc.cleanup<window_func, ArrayType, T, DType,
+                    window_frame_enum::NO_FRAME>();
 }
 
 /**
@@ -138,6 +142,13 @@ void window_frame_sliding_computation(std::shared_ptr<array_info> in_arr,
         exiting++;
         entering++;
     }
+    if (group_end_idx == in_arr->length) {
+        // After the computation is complete for each partition, do any
+        // necessary final operations (e.g. converting string vectors to proper
+        // arrays)
+        aggfunc.cleanup<window_func, ArrayType, T, DType,
+                        window_frame_enum::SLIDING>();
+    }
 }
 
 /**
@@ -203,6 +214,13 @@ void window_frame_prefix_computation(std::shared_ptr<array_info> in_arr,
         }
         entering++;
     }
+    if (group_end_idx == in_arr->length) {
+        // After the computation is complete for each partition, do any
+        // necessary final operations (e.g. converting string vectors to proper
+        // arrays)
+        aggfunc.cleanup<window_func, ArrayType, T, DType,
+                        window_frame_enum::CUMULATIVE>();
+    }
 }
 
 /**
@@ -267,12 +285,19 @@ void window_frame_suffix_computation(std::shared_ptr<array_info> in_arr,
                           window_frame_enum::CUMULATIVE>(entering);
         }
     }
+    if (group_end_idx == in_arr->length) {
+        // After the computation is complete for each partition, do any
+        // necessary final operations (e.g. converting string vectors to proper
+        // arrays)
+        aggfunc.cleanup<window_func, ArrayType, T, DType,
+                        window_frame_enum::CUMULATIVE>();
+    }
 }
 
 /**
  * @brief Computes a window aggregation with a window frame by
  * identifying which of the 3 cases (prefix, suffix or sliding)
- * the bounds match with and using the corresponding helper funciton.
+ * the bounds match with and using the corresponding helper function.
  * The function iterates across the rows and each time it detects the
  * end of a partition it calls the helper function on the subset of
  * rows corresponding to a complete partition.
@@ -299,7 +324,7 @@ void window_frame_computation_with_frame(
     std::shared_ptr<array_info> sorted_groups,
     std::shared_ptr<array_info> sorted_idx, const int64_t* frame_lo,
     const int64_t* frame_hi) {
-    int64_t n = out_arr->length;
+    int64_t n = in_arr->length;
     int64_t prev_group = -1;
     int64_t group_start_idx = 0;
     for (int64_t i = 0; i < n; i++) {
@@ -405,14 +430,13 @@ void window_frame_computation_bounds_handler(
  * See window_frame_computation_bounds_handler for more details on the
  * interpretation of frame_lo / frame_hi
  */
-template <bodo_array_type::arr_type_enum ArrayType,
+template <bodo_array_type::arr_type_enum ArrayType, typename T,
           Bodo_CTypes::CTypeEnum DType>
 void window_frame_computation_ftype_handler(
     std::shared_ptr<array_info> in_arr, std::shared_ptr<array_info> out_arr,
     std::shared_ptr<array_info> sorted_groups,
     std::shared_ptr<array_info> sorted_idx, int64_t* frame_lo,
     int64_t* frame_hi, int ftype) {
-    using T = typename dtype_to_type<DType>::type;
     switch (ftype) {
         case Bodo_FTypes::size:
             window_frame_computation_bounds_handler<Bodo_FTypes::size,
@@ -429,9 +453,15 @@ void window_frame_computation_ftype_handler(
                                                     ArrayType, T, DType>(
                 in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi);
             break;
+        case Bodo_FTypes::any_value:
+            window_frame_computation_bounds_handler<Bodo_FTypes::any_value,
+                                                    ArrayType, T, DType>(
+                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi);
+            break;
         default:
             throw std::runtime_error(
-                "Invalid window function for frame based computation");
+                "Invalid window function for frame based computation: " +
+                std::string(get_name_for_Bodo_FTypes(ftype)));
     }
 }
 
@@ -461,100 +491,100 @@ void window_frame_computation_dtype_handler(
     int64_t* frame_hi, int ftype) {
     switch (in_arr->dtype) {
         case Bodo_CTypes::_BOOL:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::_BOOL>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::_BOOL>::type,
+                Bodo_CTypes::_BOOL>(in_arr, out_arr, sorted_groups, sorted_idx,
+                                    frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::INT8:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::INT8>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::INT8>::type,
+                Bodo_CTypes::INT8>(in_arr, out_arr, sorted_groups, sorted_idx,
+                                   frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::UINT8:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::UINT8>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::UINT8>::type,
+                Bodo_CTypes::UINT8>(in_arr, out_arr, sorted_groups, sorted_idx,
+                                    frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::INT16:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::INT16>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::INT16>::type,
+                Bodo_CTypes::INT16>(in_arr, out_arr, sorted_groups, sorted_idx,
+                                    frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::UINT16:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::UINT16>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::UINT16>::type,
+                Bodo_CTypes::UINT16>(in_arr, out_arr, sorted_groups, sorted_idx,
+                                     frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::INT32:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::INT32>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::INT32>::type,
+                Bodo_CTypes::INT32>(in_arr, out_arr, sorted_groups, sorted_idx,
+                                    frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::UINT32:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::UINT32>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::UINT32>::type,
+                Bodo_CTypes::UINT32>(in_arr, out_arr, sorted_groups, sorted_idx,
+                                     frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::INT64:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::INT64>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::INT64>::type,
+                Bodo_CTypes::INT64>(in_arr, out_arr, sorted_groups, sorted_idx,
+                                    frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::UINT64:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::UINT64>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::UINT64>::type,
+                Bodo_CTypes::UINT64>(in_arr, out_arr, sorted_groups, sorted_idx,
+                                     frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::FLOAT32:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::FLOAT32>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::FLOAT32>::type,
+                Bodo_CTypes::FLOAT32>(in_arr, out_arr, sorted_groups,
+                                      sorted_idx, frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::FLOAT64:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::FLOAT64>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::FLOAT64>::type,
+                Bodo_CTypes::FLOAT64>(in_arr, out_arr, sorted_groups,
+                                      sorted_idx, frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::DECIMAL:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::DECIMAL>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::DECIMAL>::type,
+                Bodo_CTypes::DECIMAL>(in_arr, out_arr, sorted_groups,
+                                      sorted_idx, frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::DATE:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::DATE>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::DATE>::type,
+                Bodo_CTypes::DATE>(in_arr, out_arr, sorted_groups, sorted_idx,
+                                   frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::DATETIME:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::DATETIME>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::DATETIME>::type,
+                Bodo_CTypes::DATETIME>(in_arr, out_arr, sorted_groups,
+                                       sorted_idx, frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::TIMEDELTA:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::TIMEDELTA>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::TIMEDELTA>::type,
+                Bodo_CTypes::TIMEDELTA>(in_arr, out_arr, sorted_groups,
+                                        sorted_idx, frame_lo, frame_hi, ftype);
             break;
         case Bodo_CTypes::TIME:
-            window_frame_computation_ftype_handler<ArrayType,
-                                                   Bodo_CTypes::TIME>(
-                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
-                ftype);
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::TIME>::type,
+                Bodo_CTypes::TIME>(in_arr, out_arr, sorted_groups, sorted_idx,
+                                   frame_lo, frame_hi, ftype);
             break;
         default:
             throw std::runtime_error(
@@ -599,14 +629,14 @@ void window_frame_computation(std::shared_ptr<array_info> in_arr,
                                                     frame_lo, frame_hi, ftype);
             break;
         case bodo_array_type::STRING:
-            window_frame_computation_ftype_handler<bodo_array_type::STRING,
-                                                   Bodo_CTypes::STRING>(
+            window_frame_computation_ftype_handler<
+                bodo_array_type::STRING, std::string_view, Bodo_CTypes::STRING>(
                 in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
                 ftype);
             break;
         case bodo_array_type::DICT:
-            window_frame_computation_ftype_handler<bodo_array_type::DICT,
-                                                   Bodo_CTypes::STRING>(
+            window_frame_computation_ftype_handler<
+                bodo_array_type::DICT, std::string_view, Bodo_CTypes::STRING>(
                 in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi,
                 ftype);
             break;

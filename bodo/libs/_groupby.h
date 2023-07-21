@@ -109,9 +109,9 @@ struct grouping_info {
  * @param window_na_position: For groupby.window is each orderby column na last?
  * @param window_args: For groupby.window provides any extra arguments
  * @param n_window_args_per_func: For groupby.window provides offsets
- * to associate each window funciton call with its scalar arguments
+ * to associate each window function call with its scalar arguments
  * @param n_window_args_per_func: For groupby.window provides offsets
- * to associate each window funciton call with its column arguments
+ * to associate each window function call with its column arguments
  * @param maintain_input_size: Will the input df and output df have the same
  * length?
  * @param n_shuffle_keys: the number of keys to use when shuffling data across

@@ -173,9 +173,11 @@ def test_first_last_any_nth(
             convert_columns_bytearray.append(f"C_{i}")
         if "TZ" in window_calls[i]:
             convert_columns_tz_naive.append(f"C_{i}")
-        selects.append(
-            f"{window_calls[i]} OVER ({window_frames[0][i%len(window_frames[0])]}) AS C_{i}"
-        )
+        frame = window_frames[0][i % len(window_frames[0])]
+        # If the function is ANY_VALUE, remove the frame
+        if window_calls[i].startswith("ANY_VALUE") and "ROWS BETWEEN" in frame:
+            frame = frame[: frame.find("ROWS BETWEEN")]
+        selects.append(f"{window_calls[i]} OVER ({frame}) AS C_{i}")
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
     spark_query = get_equivalent_spark_agg_query(query)
     pandas_code = check_query(
@@ -340,4 +342,27 @@ def test_count_fns(all_window_df, spark_info):
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+    )
+
+
+def test_any_value(all_window_df, all_window_col_names, spark_info):
+    """Tests any_value by itself on multiple column types, using the optimized
+    groupby.window codegen path"""
+    data_cols = ["U8", "I64", "F64", "BO", "ST", "BI"]
+    selects = [
+        f"ANY_VALUE({col}) OVER (PARTITION BY W3) AS C_{col}" for col in data_cols
+    ]
+    query = f"SELECT W4, {', '.join(selects)} FROM table1"
+    convert_columns_bytearray = ["C_BI"]
+    spark_query = get_equivalent_spark_agg_query(query)
+    check_query(
+        query,
+        all_window_df,
+        spark_info,
+        equivalent_spark_query=spark_query,
+        sort_output=True,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+        convert_columns_bytearray=convert_columns_bytearray,
     )

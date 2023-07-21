@@ -1452,6 +1452,7 @@ WindowColSet::~WindowColSet() {}
 
 void WindowColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    int64_t window_col_offset = 0;
     // Allocate one output coumn for each window function call
     for (int64_t window_func : window_funcs) {
         // arr_type and dtype are assigned dummy default values.
@@ -1460,15 +1461,32 @@ void WindowColSet::alloc_update_columns(
         bodo_array_type::arr_type_enum arr_type =
             bodo_array_type::NULLABLE_INT_BOOL;
         Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::INT64;
+        // If using an ftype that requires an input array, start
+        // the arr_type and dtype as that.
+        if (window_func == Bodo_FTypes::conditional_true_event ||
+            window_func == Bodo_FTypes::conditional_change_event ||
+            window_func == Bodo_FTypes::size ||
+            window_func == Bodo_FTypes::count_if ||
+            window_func == Bodo_FTypes::any_value) {
+            arr_type = input_cols[window_col_offset]->arr_type;
+            dtype = input_cols[window_col_offset]->dtype;
+            window_col_offset++;
+        }
         // calling this modifies arr_type and dtype
         // Output dtype is based on the window function.
         std::tie(arr_type, dtype) =
             get_groupby_output_dtype(window_func, arr_type, dtype);
-        // NOTE: output size of ngroup is the same as input size
-        //       (NOT the number of groups)
-        std::shared_ptr<array_info> c =
-            alloc_array(this->input_cols[0]->length, -1, -1, arr_type, dtype);
-        aggfunc_output_initialize(c, window_func, use_sql_rules);
+        std::shared_ptr<array_info> c;
+        // String & Dictionary arrays are not allocated until the end, so
+        // a dummy column is created at this stage
+        if (arr_type == bodo_array_type::STRING ||
+            arr_type == bodo_array_type::DICT) {
+            c = alloc_string_array(Bodo_CTypes::STRING, 0, 0, 0);
+        } else {
+            c = alloc_array(this->input_cols[0]->length, -1, -1, arr_type,
+                            dtype);
+            aggfunc_output_initialize(c, window_func, use_sql_rules);
+        }
         out_cols.push_back(c);
         this->update_cols.push_back(c);
     }

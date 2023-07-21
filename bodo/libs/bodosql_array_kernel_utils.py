@@ -1699,7 +1699,7 @@ def make_slice_window_agg(
         out_dtype_fn [function]: a function that takes in the input type of
                                  the column and returns the datatype of the
                                  output array
-        agg_func [function]: a funciton that takes in a string representing a
+        agg_func [function]: a function that takes in a string representing a
                              series of values and produces the corresponding
                              aggregate output
 
