@@ -702,6 +702,16 @@ struct ChunkedTableArrayBuilder {
      *
      */
     void Finalize(bool shrink_to_fit = true);
+
+    /**
+     * @brief Clear the buffers, i.e. set size to 0.
+     * Capacity is not changed and memory is not released.
+     * For DICT arrays, the dictionary state is also reset.
+     * In particular, they reset to point to the dictionary of the original
+     * dictionary-builder which was provided during creation and the
+     * dictionary related flags are reset.
+     */
+    void Reset();
 };
 
 /**
@@ -851,4 +861,14 @@ struct ChunkedTableBuilder {
      */
     std::tuple<std::shared_ptr<table_info>, int64_t> PopChunk(
         bool force_return = false);
+
+    /**
+     * @brief Clear the buffers, i.e. set size to 0.
+     * Capacity is not changed and memory is not released.
+     * For DICT arrays, the dictionary state is also reset.
+     * In particular, they reset to point to the dictionary of the original
+     * dictionary-builder which was provided during creation and the
+     * dictionary related flags are reset.
+     */
+    void Reset();
 };
