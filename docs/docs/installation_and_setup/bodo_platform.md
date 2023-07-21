@@ -112,7 +112,7 @@ automatically.
 
 Additionally, you can select a value for **Cluster auto shutdown**. Activity is determined through attached notebooks (see
 [how to attach a notebook to a cluster][attaching_notebook_to_cluster]) and jobs
-(see [how to run a job][running_a_job]). Therefore, if you
+(see [how to run a job][running-a-job]). Therefore, if you
 don't plan to attach a notebook or a job to this cluster (and use it
 via `ssh` instead), it's recommended to set this to
 `Never`, since otherwise the cluster will be removed after
@@ -373,7 +373,7 @@ your cluster. You can place scripts and small data that are shared
 across cluster nodes in `/shared`. However, external storage, such as
 S3, should be used for reading and writing large data.
 
-## Running a Job {#running_a_job}  :material-delete-clock:{ title="Soon to be deprecated" }
+## Running a Job  :material-delete-clock:{ title="Soon to be deprecated" }
 
 Bodo Cloud Platform has support for running scheduled (and immediate)
 Python jobs without the need for Jupyter Notebooks. To create a Job,
