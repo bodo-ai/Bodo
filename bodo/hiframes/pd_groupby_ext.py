@@ -362,6 +362,8 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             f"column type of list/tuple of {in_dtype} is not supported in groupby built-in function {func_name}",
         )
 
+    elif func_name == "size":
+        return dtype_to_array_type(types.int64), "ok"
     elif (
         func_name
         in {"median", "mean", "var_pop", "std_pop", "var", "std", "kurtosis", "skew"}
