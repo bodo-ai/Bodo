@@ -25,7 +25,12 @@ import subprocess
 import sys
 import tempfile
 from contextlib import contextmanager
+from tempfile import TemporaryDirectory
 from typing import NamedTuple, Optional
+
+import pandas as pd
+
+import bodo.tests.utils
 
 LOCAL_TABLE_BASE = os.environ.get("TPCH_LOCAL_TABLE_BASE", "")
 LOCAL_TABLES = {
@@ -75,8 +80,6 @@ def DB_CONFIGS(dbname: str, schema: str) -> list[TestConfig]:
         TestConfig(database=dbname, schema=schema, streaming=False, volcano=True),
     ]
 
-
-CONFIGS = DB_CONFIGS("TEST_DB", "TPCH_SF100")  # + DB_CONFIGS("TEST_DB", "TPCH_SF1000")
 
 pattern = os.path.join(
     os.path.dirname(__file__),
@@ -146,11 +149,38 @@ parser.add_argument(
     default=False,
     action="store_true",
 )
+parser.add_argument(
+    "--check-output",
+    help="Check the output of each query against the non-volcano, non-streaming baseline and don't write back to snowflake",
+    default=False,
+    action="store_true",
+)
+
+parser.add_argument(
+    "--pq-out-dir",
+    help="Directory to write parquet output to, only used if --check-output is given",
+    default=None,
+)
+
+parser.add_argument(
+    "--test-schema",
+    help="Test schemas to run, supply multiple times to run multiple schemas",
+    nargs="*",
+    default=["TPCH_SF1"],
+    type=str,
+    action="extend",
+)
+parser.add_argument(
+    "--test-db", help="Test databases to read from", default="TEST_DB", type=str
+)
 
 args = parser.parse_args()
 print(args.include, args.exclude)
 
 NUM_ITERATIONS = 2
+CONFIGS = []
+for schema in args.test_schema:
+    CONFIGS.extend(DB_CONFIGS(args.test_db, schema))
 
 
 @contextmanager
@@ -188,6 +218,10 @@ with open(args.output, "wt") as output:
                             print("WOULD RUN", qname)
                             query_id = os.path.splitext(os.path.basename(qname))[0]
                             if not test.local:
+                                if args.check_output:
+                                    raise RuntimeError(
+                                        "Cannot check output if not writing locally"
+                                    )
                                 tmp.write(
                                     f"CREATE OR REPLACE TABLE TEST_DB.PUBLIC.test_benchmark_tpch_{query_id} AS ("
                                 )
@@ -214,6 +248,26 @@ with open(args.output, "wt") as output:
                                     extra_args.extend(
                                         ["--table", f"{tbl}:{path}:parquet"]
                                     )
+                            if args.check_output:
+                                pq_out_dir = (
+                                    args.pq_out_dir
+                                    if args.pq_out_dir is not None
+                                    else TemporaryDirectory()
+                                )
+                                pq_out_dir_name = (
+                                    pq_out_dir
+                                    if isinstance(pq_out_dir, str)
+                                    else pq_out_dir.name
+                                )
+                                extra_args.extend(
+                                    [
+                                        "--pq_out_filename",
+                                        os.path.join(
+                                            pq_out_dir_name,
+                                            f"{test.name}_{query_id}.pq",
+                                        ),
+                                    ]
+                                )
                             full_args = [
                                 "python",
                                 bodo_sql_wrapper,
@@ -233,7 +287,7 @@ with open(args.output, "wt") as output:
                             # Without this, bodo will re-use plans from streaming/non-streaming or volcano/no-volcano
                             env["BODO_PLATFORM_CACHE_LOCATION"] = d
                             print("Using cache: ", d)
-                            executable = sys.exeucutable
+                            executable = sys.executable
 
                             if args.ranks != 1:
                                 executable = "mpiexec"
@@ -271,3 +325,19 @@ with open(args.output, "wt") as output:
                                     test._make_csv_row()
                                     + [i, os.path.basename(qname), "error"]
                                 )
+            if args.check_output:
+                outputs = []
+                for output in glob.glob(
+                    os.path.join(pq_out_dir_name, f"*_{query_id}.pq")
+                ):
+                    outputs.append(pd.read_parquet(output))
+                for i in range(len(outputs) - 1):
+                    bodo.tests.utils._test_equal(
+                        outputs[i],
+                        outputs[i + 1],
+                        check_dtype=False,
+                        reset_index=True,
+                        sort_output=True,
+                    )
+                if args.pq_out_dir is None:
+                    pq_out_dir.cleanup()
