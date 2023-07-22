@@ -32,12 +32,12 @@ def test_groupby_basic(func_name, memory_leak_check):
     )
     kept_cols = bodo.utils.typing.MetaType((0, 1))
     batch_size = 3
-    ftypes = bodo.utils.typing.MetaType((supported_agg_funcs.index(func_name),))
+    fnames = bodo.utils.typing.MetaType((func_name,))
     f_in_offsets = bodo.utils.typing.MetaType((0, 1))
     f_in_cols = bodo.utils.typing.MetaType((1,))
 
     def test_groupby(df):
-        groupby_state = init_groupby_state(keys_inds, ftypes, f_in_offsets, f_in_cols)
+        groupby_state = init_groupby_state(keys_inds, fnames, f_in_offsets, f_in_cols)
         _temp1 = 0
         is_last1 = False
         while not is_last1:
@@ -105,12 +105,12 @@ def test_groupby_drop_duplicates(memory_leak_check):
     )
     kept_cols = bodo.utils.typing.MetaType((0, 1))
     batch_size = 3
-    ftypes = bodo.utils.typing.MetaType(())
+    fnames = bodo.utils.typing.MetaType(())
     f_in_offsets = bodo.utils.typing.MetaType((0))
     f_in_cols = bodo.utils.typing.MetaType(())
 
     def test_groupby(df):
-        groupby_state = init_groupby_state(keys_inds, ftypes, f_in_offsets, f_in_cols)
+        groupby_state = init_groupby_state(keys_inds, fnames, f_in_offsets, f_in_cols)
         _temp1 = 0
         is_last1 = False
         while not is_last1:
@@ -176,12 +176,12 @@ def test_groupby_key_reorder(memory_leak_check):
     )
     kept_cols = bodo.utils.typing.MetaType((0, 1))
     batch_size = 3
-    ftypes = bodo.utils.typing.MetaType((supported_agg_funcs.index("sum"),))
+    fnames = bodo.utils.typing.MetaType(("sum",))
     f_in_offsets = bodo.utils.typing.MetaType((0, 1))
     f_in_cols = bodo.utils.typing.MetaType((0,))
 
     def test_groupby(df):
-        groupby_state = init_groupby_state(keys_inds, ftypes, f_in_offsets, f_in_cols)
+        groupby_state = init_groupby_state(keys_inds, fnames, f_in_offsets, f_in_cols)
         _temp1 = 0
         is_last1 = False
         while not is_last1:
@@ -247,11 +247,11 @@ def test_groupby_dict_str(func_name, memory_leak_check):
     )
     kept_cols = bodo.utils.typing.MetaType((0, 1))
     batch_size = 3
-    ftypes = bodo.utils.typing.MetaType((supported_agg_funcs.index(func_name),))
+    fnames = bodo.utils.typing.MetaType((func_name,))
     f_in_offsets = bodo.utils.typing.MetaType((0, 1))
     f_in_cols = bodo.utils.typing.MetaType((1,))
     def test_groupby(df):
-        groupby_state = init_groupby_state(keys_inds, ftypes, f_in_offsets, f_in_cols)
+        groupby_state = init_groupby_state(keys_inds, fnames, f_in_offsets, f_in_cols)
         _temp1 = 0
         is_last1 = False
         while not is_last1:

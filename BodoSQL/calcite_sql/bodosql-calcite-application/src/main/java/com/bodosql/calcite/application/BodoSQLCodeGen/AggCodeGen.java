@@ -62,73 +62,6 @@ public class AggCodeGen {
   // Maps a given SqlKind to its name in the supportedAggFuncs list
   static HashMap<String, String> nameToSupportAggFuncNameMap;
 
-  // !!! IMPORTANT: this is supposed to match the positions in
-  // Bodo_FTypes::FTypeEnum in _groupby_ftypes.h
-  // TODO: [BSE-711] Remove this and refactor init_groupby_state to accept strings
-  static List<String> supportedAggFuncs =
-      Arrays.asList(
-          "no_op", // needed to ensure that 0 value isn't matched with any function
-          "ngroup",
-          "head",
-          "transform",
-          "size",
-          "shift",
-          "sum",
-          "count",
-          "nunique",
-          "median",
-          "cumsum",
-          "cumprod",
-          "cummin",
-          "cummax",
-          "mean",
-          "min",
-          "max",
-          "prod",
-          "first",
-          "last",
-          "idxmin",
-          "idxmax",
-          "var_pop",
-          "std_pop",
-          "var",
-          "std",
-          "kurtosis",
-          "skew",
-          "boolor_agg",
-          "booland_agg",
-          "boolxor_agg",
-          "bitor_agg",
-          "bitand_agg",
-          "bitxor_agg",
-          "count_if",
-          "listagg",
-          "mode",
-          "udf",
-          "gen_udf",
-          "window",
-          "row_number",
-          "min_row_number_filter",
-          "rank",
-          "dense_rank",
-          "percent_rank",
-          "cume_dist",
-          "ntile",
-          "conditional_true_event",
-          "conditional_change_event",
-          "num_funcs",
-          "mean_eval",
-          "var_pop_eval",
-          "std_pop_eval",
-          "var_eval",
-          "std_eval",
-          "kurt_eval",
-          "skew_eval",
-          "boolxor_eval",
-          "idxmin_na_first",
-          "idxmax_na_first",
-          "idx_n_columns");
-
   static {
     equivalentPandasMethodMap = new HashMap<>();
     equivalentNumpyFuncMap = new HashMap<>();
@@ -855,9 +788,9 @@ public class AggCodeGen {
    * @param visitor The visitor used for lowering global variables.
    * @return A variable that contains this integer list
    */
-  public static Variable getStreamingGroupbyFtypes(
+  public static Variable getStreamingGroupbyFnames(
       List<AggregateCall> aggCalls, PandasCodeGenVisitor visitor) {
-    List<Expr.IntegerLiteral> ftypes = new ArrayList<>();
+    List<Expr.StringLiteral> fnames = new ArrayList<>();
     for (int i = 0; i < aggCalls.size(); i++) {
       AggregateCall curAggCall = aggCalls.get(i);
       SqlKind kind = curAggCall.getAggregation().getKind();
@@ -884,17 +817,9 @@ public class AggCodeGen {
       } else {
         name = name.toLowerCase();
       }
-      int index = supportedAggFuncs.indexOf(name);
-
-      if (index == -1) {
-        throw new RuntimeException(
-            "Unsupported function for streaming group by: "
-                + aggCalls.get(i).getAggregation().getName());
-      }
-
       // TODO: [BSE-714] Support ANY_VALUE and SINGLE_VALUE in streaming
-      ftypes.add(new Expr.IntegerLiteral(index));
+      fnames.add(new Expr.StringLiteral(name));
     }
-    return visitor.lowerAsMetaType(new Expr.Tuple(ftypes));
+    return visitor.lowerAsMetaType(new Expr.Tuple(fnames));
   }
 }
