@@ -4419,7 +4419,7 @@ class TypingTransforms:
                 # We need to update the expected type
                 new_type = bodo.libs.stream_groupby.GroupbyStateType(
                     output_type.key_inds,
-                    output_type.ftypes,
+                    output_type.fnames,
                     output_type.f_in_offsets,
                     output_type.f_in_cols,
                     input_table_type,

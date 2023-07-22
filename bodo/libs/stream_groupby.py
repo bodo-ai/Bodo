@@ -14,13 +14,15 @@ from numba.extending import intrinsic, models, register_model
 
 import bodo
 from bodo.ext import stream_groupby_cpp
+
+from bodo.ir.aggregate import supported_agg_funcs
 from bodo.libs.array import (
     cpp_table_to_py_table,
     delete_table,
     py_data_to_cpp_table,
 )
 from bodo.libs.array import table_type as cpp_table_type
-from bodo.utils.typing import MetaType, is_overload_none, unwrap_typeref
+from bodo.utils.typing import MetaType, is_overload_none, unwrap_typeref, BodoError
 from bodo.utils.utils import numba_to_c_array_type, numba_to_c_type
 
 ll.add_symbol(
@@ -44,25 +46,25 @@ class GroupbyStateType(types.Type):
     def __init__(
         self,
         key_inds,
-        ftypes,
+        fnames,
         f_in_offsets,
         f_in_cols,
         build_table_type=types.unknown,
     ):
         self.key_inds = key_inds
-        self.ftypes = ftypes
+        self.fnames = fnames
         self.f_in_offsets = f_in_offsets
         self._f_in_cols = f_in_cols
         self.build_table_type = build_table_type
         super().__init__(
-            f"GroupbyStateType(key_inds={key_inds}, ftypes={ftypes}, f_in_offsets={f_in_offsets}, f_in_cols={f_in_cols}, build_table={build_table_type})"
+            f"GroupbyStateType(key_inds={key_inds}, fnames={fnames}, f_in_offsets={f_in_offsets}, f_in_cols={f_in_cols}, build_table={build_table_type})"
         )
 
     @property
     def key(self):
         return (
             self.key_inds,
-            self.ftypes,
+            self.fnames,
             self.f_in_offsets,
             self.f_in_cols,
             self.build_table_type,
@@ -272,7 +274,7 @@ class GroupbyStateType(types.Type):
 
         # TODO[BSE-578]: get proper output type for all functions
         out_arr_types = []
-        for i, f_type in enumerate(self.ftypes):
+        for i, f_name in enumerate(self.fnames):
             assert (
                 self.f_in_offsets[i + 1] == self.f_in_offsets[i] + 1
             ), "only functions with single input column supported in streaming groupby currently"
@@ -282,7 +284,7 @@ class GroupbyStateType(types.Type):
                 self._f_in_cols[self.f_in_offsets[i]]
             ]
             out_type, err_msg = bodo.hiframes.pd_groupby_ext.get_groupby_output_dtype(
-                in_type, bodo.ir.aggregate.supported_agg_funcs[f_type]
+                in_type, f_name
             )
             assert err_msg == "ok", "Function typing failed in streaming groupby"
             out_arr_types.append(out_type)
@@ -391,7 +393,7 @@ def _init_groupby_state(
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def init_groupby_state(
     key_inds,
-    ftypes,
+    fnames, # fnames matches function names in supported_agg_funcs
     f_in_offsets,
     f_in_cols,
     expected_state_type=None,
@@ -400,10 +402,10 @@ def init_groupby_state(
     expected_state_type = unwrap_typeref(expected_state_type)
     if is_overload_none(expected_state_type):
         key_inds = unwrap_typeref(key_inds).meta
-        ftypes = unwrap_typeref(ftypes).meta
+        fnames = unwrap_typeref(fnames).meta
         f_in_offsets = unwrap_typeref(f_in_offsets).meta
         f_in_cols = unwrap_typeref(f_in_cols).meta
-        output_type = GroupbyStateType(key_inds, ftypes, f_in_offsets, f_in_cols)
+        output_type = GroupbyStateType(key_inds, fnames, f_in_offsets, f_in_cols)
     else:
         output_type = expected_state_type
 
@@ -411,14 +413,20 @@ def init_groupby_state(
     build_arr_array_types = output_type.build_arr_array_types
     n_build_arrs = output_type.num_build_input_arrs
 
-    ftypes_arr = np.array(output_type.ftypes, np.int32)
+    # convert function name strings to integer
+    ftypes = []
+    for fname in output_type.fnames:
+        if fname not in supported_agg_funcs:
+            raise BodoError(fname + "is not a supported aggregate function.")
+        ftypes.append(supported_agg_funcs.index(fname))
+    ftypes_arr = np.array(ftypes, np.int32)
     f_in_offsets_arr = np.array(output_type.f_in_offsets, np.int32)
     f_in_cols_arr = np.array(output_type.f_in_cols, np.int32)
-    n_funcs = len(output_type.ftypes)
+    n_funcs = len(output_type.fnames)
 
     def impl(
         key_inds,
-        ftypes,
+        fnames,
         f_in_offsets,
         f_in_cols,
         expected_state_type=None,

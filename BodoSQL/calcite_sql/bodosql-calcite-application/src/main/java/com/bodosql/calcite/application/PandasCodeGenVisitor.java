@@ -5,9 +5,9 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generate
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeNoGroupBy;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeWithGroupBy;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateApplyCodeWithGroupBy;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupbyFnames;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupByKeyIndices;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupByOffsetAndCols;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupbyFtypes;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.generateJoinCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.generateLiteralCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.generateLogicalValuesCode;
@@ -1445,11 +1445,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
         getStreamingGroupByOffsetAndCols(node.getAggCallList(), this, keyIndiciesList.get(0));
     Variable offset = offsetAndCols.left;
     Variable cols = offsetAndCols.right;
-    Variable ftypes = getStreamingGroupbyFtypes(node.getAggCallList(), this);
+    Variable fnames = getStreamingGroupbyFnames(node.getAggCallList(), this);
     Expr.Call stateCall =
         new Expr.Call(
             "bodo.libs.stream_groupby.init_groupby_state",
-            List.of(keyIndices, ftypes, offset, cols),
+            List.of(keyIndices, fnames, offset, cols),
             List.of());
     Op.Assign groupbyInit = new Op.Assign(groupbyStateVar, stateCall);
     // Fetch the streaming pipeline
