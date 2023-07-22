@@ -17,7 +17,6 @@ from numba.extending import (
     register_model,
     unbox,
 )
-from numba.typed import List
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType, get_dataframe_all_data
@@ -423,15 +422,8 @@ def snowflake_writer_init(
         "    return writer\n"
     )
 
-    glbls = {
-        "bodo": bodo,
-        "check_and_propagate_cpp_exception": check_and_propagate_cpp_exception,
-        "List": List,
-        "make_new_copy_into_dir": make_new_copy_into_dir,
-        "sf_writer_alloc": sf_writer_alloc,
-        "tracing": tracing,
-    }
-
+    # Passing in all globals is for some reason required for caching.
+    glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
     l = {}
     exec(func_text, glbls, l)
     return l["impl"]
