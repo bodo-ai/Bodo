@@ -2063,7 +2063,7 @@ def check_caching(
     impl: the function to compile
     args: arguments to pass to the function
     is_cached: true if we expect the function to already be cached, false if we do not.
-    input_dist: The InputDist for the dataframe argumennts. This is used
+    input_dist: The InputDist for the dataframe arguments. This is used
         in the flags for compiling the function.
     """
     if py_output is None:
