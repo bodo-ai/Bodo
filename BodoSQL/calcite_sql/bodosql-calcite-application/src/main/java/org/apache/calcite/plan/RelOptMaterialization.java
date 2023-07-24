@@ -102,13 +102,19 @@ public class RelOptMaterialization {
                       0, 0, relOptTable.getRowType().getFieldCount());
 
               final RelOptCluster cluster = scan.getCluster();
-              final RelNode scan2 =
-                  starRelOptTable.toRel(ViewExpanders.simpleContext(cluster),
-                      scan instanceof LogicalTargetTableScan);
+              final RelNode scan2 = toRel(ViewExpanders.simpleContext(cluster), scan);
               return RelOptUtil.createProject(scan2,
                   Mappings.asListNonNull(mapping.inverse()));
             }
             return scan;
+          }
+
+          private RelNode toRel(RelOptTable.ToRelContext context, TableScan scan) {
+            if (scan instanceof LogicalTargetTableScan) {
+              return starRelOptTable.toTargetTableRel(context);
+            } else {
+              return starRelOptTable.toRel(context);
+            }
           }
 
           @Override public RelNode visit(LogicalJoin join) {
@@ -157,7 +163,7 @@ public class RelOptMaterialization {
                           Mappings.offsetSource(rightMapping, offset),
                           leftMapping.getTargetCount()));
               final RelNode project = RelOptUtil.createProject(
-                  leftRelOptTable.toRel(ViewExpanders.simpleContext(cluster), false),
+                  leftRelOptTable.toRel(ViewExpanders.simpleContext(cluster)),
                   Mappings.asListNonNull(mapping.inverse()));
               final List<RexNode> conditions = new ArrayList<>();
               if (left.condition != null) {
@@ -182,7 +188,7 @@ public class RelOptMaterialization {
                       Mappings.offsetSource(leftMapping, offset),
                       Mappings.offsetTarget(rightMapping, leftCount));
               final RelNode project = RelOptUtil.createProject(
-                  rightRelOptTable.toRel(ViewExpanders.simpleContext(cluster), false),
+                  rightRelOptTable.toRel(ViewExpanders.simpleContext(cluster)),
                   Mappings.asListNonNull(mapping.inverse()));
               final List<RexNode> conditions = new ArrayList<>();
               if (left.condition != null) {

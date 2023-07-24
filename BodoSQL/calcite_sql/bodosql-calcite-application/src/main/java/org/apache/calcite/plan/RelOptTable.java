@@ -75,7 +75,9 @@ public interface RelOptTable extends Wrapper {
    * applying {@link org.apache.calcite.plan.RelOptRule rules} to transform it
    * into more efficient access methods for this table.</p>
    */
-  RelNode toRel(ToRelContext context, boolean isTargetTable);
+  RelNode toRel(ToRelContext context);
+
+  RelNode toTargetTableRel(ToRelContext context);
 
   /**
    * Returns a description of the physical ordering (or orderings) of the rows

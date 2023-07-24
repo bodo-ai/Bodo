@@ -523,22 +523,6 @@ public class RexBuilder {
   }
 
   /**
-   * Creates a call to the TRY_CAST operator.
-   *
-   * @param type Type to cast to
-   * @param exp  Expression being cast
-   * @return Call to TRY_CAST operator
-   */
-  public RexNode makeTryCast(
-      RelDataType type,
-      RexNode exp) {
-    return new RexCall(
-        type,
-        SqlStdOperatorTable.TRY_CAST,
-        ImmutableList.of(exp));
-  }
-
-  /**
    * Creates a call to the CAST operator.
    *
    * @param type Type to cast to

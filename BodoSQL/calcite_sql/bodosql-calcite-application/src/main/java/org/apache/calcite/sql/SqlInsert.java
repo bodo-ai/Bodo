@@ -75,6 +75,14 @@ public class SqlInsert extends SqlCall {
     assert keywords != null;
   }
 
+  public SqlInsert(SqlParserPos pos,
+      SqlNodeList keywords,
+      SqlNode targetTable,
+      SqlNode source,
+      @Nullable SqlNodeList columnList) {
+    this(pos, keywords, targetTable, source, columnList, null);
+  }
+
   //~ Methods ----------------------------------------------------------------
 
   @Override public SqlKind getKind() {
