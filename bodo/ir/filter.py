@@ -1,11 +1,11 @@
 """
-This file contains dictionaries mapping BodoSQL kernel name to 
+This file contains dictionaries mapping BodoSQL kernel name to
 corresponding SQL functions. This file also contains
 supported_arrow_funcs_map, which is a dictionary that maps
 BodoSQL kernel name to an equivalent PyArrow compute function.
 
-Dictionaries are separated by category 
-(string functions, datetime functions, etc.) and 
+Dictionaries are separated by category
+(string functions, datetime functions, etc.) and
 number of arguments.
 
 The keys are the name of the BodoSQL kernel.
@@ -89,6 +89,13 @@ cond_funcs_map = {
     "greatest": "GREATEST",
 }
 
+# TODO(njriasan): Add remaining cast functions.
+# only to_char and try_to_char have 1 argument.
+cast_funcs_map = {
+    "to_char": "TO_CHAR",
+    "try_to_char": "TRY_TO_CHAR",
+}
+
 # TODO (srilman): Replace with | operation once upgrading to Python 3.9
 supported_funcs_no_arg_map = {
     **string_funcs_no_arg_map,
@@ -101,6 +108,7 @@ supported_funcs_map = {
     **numeric_funcs_map,
     **string_funcs_map,
     **cond_funcs_map,
+    **cast_funcs_map,
 }
 
 supported_arrow_funcs_map = {

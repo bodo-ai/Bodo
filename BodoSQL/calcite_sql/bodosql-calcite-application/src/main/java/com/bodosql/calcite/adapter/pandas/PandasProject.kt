@@ -47,21 +47,45 @@ class PandasProject(
     private fun emitStreaming(implementor: PandasRel.Implementor, inputVar: Dataframe): Dataframe {
         return implementor.buildStreaming (
             {ctx -> initStateVariable(ctx)},
-            {ctx, stateVar -> generateDataFrame(ctx, inputVar, stateVar)},
+            {
+                    ctx, stateVar ->
+                val (projectExprs, localRefs) = genDataFrameWindowInputs(ctx, inputVar)
+                val translator = ctx.streamingRexTranslator(inputVar, localRefs, stateVar)
+                generateDataFrame(ctx, inputVar, translator, projectExprs, localRefs)},
             {ctx, stateVar -> deleteStateVariable(ctx, stateVar)}
         )
     }
 
     private fun emitSingleBatch(implementor: PandasRel.Implementor, inputVar: Dataframe): Dataframe {
-        return implementor::build {ctx -> generateDataFrame(ctx, inputVar)}
+        return implementor::build {
+                ctx ->
+            // Extract window aggregates and update the nodes.
+            val (projectExprs, localRefs) = genDataFrameWindowInputs(ctx, inputVar)
+            val translator = ctx.rexTranslator(inputVar, localRefs)
+            generateDataFrame(ctx, inputVar, translator, projectExprs, localRefs)
+        }
     }
 
-    private fun generateDataFrame(ctx: PandasRel.BuildContext, inputVar: Dataframe, streamingStateVar: StateVariable? = null): Dataframe {
+    /**
+     * Generate the additional inputs to generateDataFrame after handling the Window
+     * Functions.
+     */
+    private fun genDataFrameWindowInputs(ctx: PandasRel.BuildContext, inputVar: Dataframe): Pair<List<RexNode>, MutableList<Variable>> {
+        val (windowAggregate, projectExprs) = extractWindows(cluster, inputVar, projects)
+        // Emit the windows and turn this into a mutable list.
+        // This is a bit strange, but we're going to add to this list
+        // in this next section by evaluating any expressions that aren't
+        // a RexSlot.
+        val localRefs = windowAggregate.emit(ctx).toMutableList()
+        return Pair(projectExprs, localRefs)
+    }
+
+    private fun generateDataFrame(ctx: PandasRel.BuildContext, inputVar: Dataframe, translator: RexToPandasTranslator, projectExprs: List<RexNode>, localRefs: MutableList<Variable>): Dataframe {
         try {
             if (canUseLoc()) {
                 return generateLocCode(ctx, inputVar)
             }
-            return generateProject(ctx, inputVar, streamingStateVar)
+            return generateProject(ctx, inputVar, translator, projectExprs, localRefs)
         } catch (ex: Exception) {
             throw ex
         }
@@ -165,16 +189,7 @@ class PandasProject(
      *
      * This is the general catch-all for most projections.
      */
-    private fun generateProject(ctx: PandasRel.BuildContext, input: Dataframe, streamingStateVar: StateVariable?): Dataframe {
-        // Extract window aggregates and replace them with local references.
-        val (windowAggregate, projectExprs) = extractWindows(cluster, input, projects)
-
-        // Emit the windows and turn this into a mutable list.
-        // This is a bit strange, but we're going to add to this list
-        // in this next section by evaluating any expressions that aren't
-        // a RexSlot.
-        val localRefs = windowAggregate.emit(ctx).toMutableList()
-
+    private fun generateProject(ctx: PandasRel.BuildContext, inputVar: Dataframe, translator: RexToPandasTranslator, projectExprs: List<RexNode>, localRefs: MutableList<Variable>): Dataframe {
         // Evaluate projections into new series.
         // In order to optimize this, we only generate new series
         // for projections that are non-trivial (aka not a RexInputRef)
@@ -182,7 +197,6 @@ class PandasProject(
         // Similar to over expressions, we replace non-trivial projections
         // with a RexLocalRef that reference our computed set of local variables.
         val builder = ctx.builder()
-        val rexTranslator = ctx.rexTranslator(input, localRefs)
 
         // newProjectRefs will be a list of RexSlot values (either RexInputRef or RexLocalRef).
         val newProjectRefs = projectExprs.map { proj ->
@@ -190,9 +204,9 @@ class PandasProject(
                 return@map proj
             }
 
-            val expr = proj.accept(rexTranslator).let {
+            val expr = proj.accept(translator).let {
                 if (isScalar(proj)) {
-                    coerceScalarToArray(ctx, proj.type, it, input)
+                    coerceScalarToArray(ctx, proj.type, it, inputVar)
                 } else {
                     it
                 }
@@ -212,8 +226,8 @@ class PandasProject(
             }
         }
 
-        val rangeIndex = generateRangeIndex(ctx, input)
-        val logicalTableVar = generateLogicalTableCode(ctx, input, indices, localRefs)
+        val rangeIndex = generateRangeIndex(ctx, inputVar)
+        val logicalTableVar = generateLogicalTableCode(ctx, inputVar, indices, localRefs)
         return generateInitDataframeCode(ctx, logicalTableVar, rangeIndex)
     }
 

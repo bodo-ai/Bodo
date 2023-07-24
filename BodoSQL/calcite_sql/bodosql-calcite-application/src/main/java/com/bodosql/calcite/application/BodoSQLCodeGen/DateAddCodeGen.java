@@ -13,22 +13,14 @@ public class DateAddCodeGen {
    * Function that return the necessary generated code for a Snowflake DATEADD function call, which
    * adds an integer amount to a datetime of a certain unit.
    *
-   * @param operandsInfo the list of arguments (UNIT, AMOUNT, START_DATETIME)
+   * @param operands the list of arguments (UNIT, AMOUNT, START_DATETIME)
    * @return The code generated that matches the DATEADD expression.
    */
-  public static String generateSnowflakeDateAddCode(List<Expr> operandsInfo, String unit) {
+  public static Expr generateSnowflakeDateAddCode(List<Expr> operands, String unit) {
     // input check for time unit is moved to standardizeTimeUnit() function,
     // which is called in PandasCodeGenVisitor.java
-    StringBuilder code = new StringBuilder();
-    code.append("bodo.libs.bodosql_array_kernels.add_interval_")
-        .append(unit)
-        .append("s(")
-        .append(operandsInfo.get(1).emit())
-        .append(", ")
-        .append(operandsInfo.get(2).emit())
-        .append(")");
-
-    return code.toString();
+    String fnName = "bodo.libs.bodosql_array_kernels.add_interval_" + unit + "s";
+    return new Expr.Call(fnName, operands);
   }
 
   /**

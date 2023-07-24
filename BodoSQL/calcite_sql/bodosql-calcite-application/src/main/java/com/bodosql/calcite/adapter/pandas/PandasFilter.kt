@@ -48,22 +48,37 @@ class PandasFilter(
     private fun emitStreaming(implementor: PandasRel.Implementor, inputVar: Dataframe): Dataframe {
         return implementor.buildStreaming (
             {ctx -> initStateVariable(ctx)},
-            {ctx, stateVar -> generateDataFrame(ctx, inputVar, stateVar)},
+            {ctx, stateVar ->
+                // Extract window aggregates and update the nodes.
+                val (condition, inputRefs) = genDataFrameWindowInputs(ctx, inputVar)
+                val translator = ctx.streamingRexTranslator(inputVar, inputRefs, stateVar)
+                emit(ctx, translator, inputVar, condition)
+            },
             {ctx, stateVar -> deleteStateVariable(ctx, stateVar)}
         )
     }
 
     private fun emitSingleBatch(implementor: PandasRel.Implementor, inputVar: Dataframe): Dataframe {
-        return implementor::build {ctx -> generateDataFrame(ctx, inputVar)}
+        return implementor::build {
+                ctx ->
+            // Extract window aggregates and update the nodes.
+            val (condition, inputRefs) = genDataFrameWindowInputs(ctx, inputVar)
+            val translator = ctx.rexTranslator(inputVar, inputRefs)
+            emit(ctx, translator, inputVar, condition)
+        }
     }
 
-    private fun generateDataFrame(ctx: PandasRel.BuildContext, inputVar: Dataframe, streamingStateVar: StateVariable? = null): Dataframe {
-        // Extract windows from the condition and emit the code for them.
+    /**
+     * Generate the additional inputs to generateDataFrame after handling the Window
+     * Functions.
+     */
+    private fun genDataFrameWindowInputs(ctx: PandasRel.BuildContext, inputVar: Dataframe): Pair<RexNode, List<Variable>> {
         val (windowAggregate, condition) = extractWindows(cluster, inputVar, this.condition)
         val localRefs = windowAggregate.emit(ctx)
-        // Emit the code for the condition.
-        return emit(ctx, inputVar, condition, localRefs, streamingStateVar)
+        return Pair(condition, localRefs)
     }
+
+
 
     /**
      * Function to create the initial state for a streaming pipeline.
@@ -87,8 +102,7 @@ class PandasFilter(
         currentPipeline.addTermination(deleteState)
     }
 
-    private fun emit(ctx: PandasRel.BuildContext, input: Dataframe, condition: RexNode, localRefs: List<Variable>, streamingStateVar: StateVariable? = null): Dataframe {
-        val translator = ctx.rexTranslator(input, localRefs)
+    private fun emit(ctx: PandasRel.BuildContext, translator: RexToPandasTranslator, input: Dataframe, condition: RexNode): Dataframe {
         val conditionExpr = condition.accept(translator).let { filter ->
             if (isScalarCondition()) {
                 // If the output of this filter is a scalar, we need to

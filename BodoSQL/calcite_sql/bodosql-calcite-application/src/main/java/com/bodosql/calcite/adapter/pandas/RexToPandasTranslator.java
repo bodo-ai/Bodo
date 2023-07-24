@@ -3,7 +3,9 @@ package com.bodosql.calcite.adapter.pandas;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen.generateBinOpCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateCastCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateTryCastCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getCondFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getCondFuncCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getCondFuncCodeOptimized;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitHash;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitVariadic;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateStrToDateCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateTimestampFnCode;
@@ -40,15 +42,13 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.gene
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.generateJsonTwoArgsInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NestedDataCodeGen.generateToArrayFnCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateConvCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLeastGreatestCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLogFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateRandomFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateToNumberCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateTryToNumberCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateUniformFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.getDoubleArgNumericFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.getSingleArgNumericFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.getNumericFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.PostfixOpCodeGen.generatePostfixOpCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.PrefixOpCodeGen.generatePrefixOpCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.RegexpCodeGen.generateRegexpCountInfo;
@@ -61,29 +61,24 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.generateToDaysCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.generateToSecondsCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.generateUnixTimestamp;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatWSFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatWSCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateEditdistance;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateInitcapInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateInsert;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generatePosition;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateReplace;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateSplit;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateStrtok;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateSubstringInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateTrimFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.getSingleArgStringFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.getThreeArgStringFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.getTwoArgStringFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getDoubleArgTrigFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getSingleArgTrigFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateSubstringCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateTrimFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.getOptimizedStringFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.getStringFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getTrigFnCode;
 import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
 import static com.bodosql.calcite.application.Utils.IsScalar.isScalar;
 import static com.bodosql.calcite.application.Utils.Utils.expectScalarArgument;
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen;
-import com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
@@ -91,10 +86,10 @@ import com.bodosql.calcite.application.Utils.BodoCtx;
 import com.bodosql.calcite.ir.Dataframe;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.FrameTripleQuotedString;
+import com.bodosql.calcite.ir.Expr.None;
 import com.bodosql.calcite.ir.ExprKt;
 import com.bodosql.calcite.ir.Frame;
 import com.bodosql.calcite.ir.Module;
-import com.bodosql.calcite.ir.Module.Builder;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Op.Assign;
 import com.bodosql.calcite.ir.Op.If;
@@ -106,8 +101,10 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import javax.annotation.Nullable;
+import kotlin.Pair;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -230,7 +227,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     } else if (call.getOperator() instanceof SqlBinaryOperator
         || call.getOperator() instanceof SqlDatetimePlusOperator
         || call.getOperator() instanceof SqlDatetimeSubtractionOperator) {
-      return visitBinOpScan(call, builder);
+      return visitBinOpScan(call);
     } else if (call.getOperator() instanceof SqlPostfixOperator) {
       return visitPostfixOpScan(call);
     } else if (call.getOperator() instanceof SqlPrefixOperator) {
@@ -288,7 +285,19 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
   }
 
-  private Expr visitBinOpScan(RexCall operation, Builder builder) {
+  protected Expr visitBinOpScan(RexCall operation) {
+    return this.visitBinOpScan(operation, List.of());
+  }
+
+  /**
+   * Generate the code for a Binary operation.
+   *
+   * @param operation The operation from which to generate the expression.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitBinOpScan(RexCall operation, List<Pair<String, Expr>> streamingNamedArgs) {
     List<Expr> args = new ArrayList<>();
     SqlOperator binOp = operation.getOperator();
     // Store the argument types for TZ-Aware data
@@ -300,23 +309,21 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
     if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
       // Support the concat operator by using the concat array kernel.
-      return StringFnCodeGen.generateConcatFnInfo(args);
+      return generateConcatCode(args, streamingNamedArgs);
     }
-    return generateBinOpCode(args, binOp, argDataTypes, builder);
+    return generateBinOpCode(args, binOp, argDataTypes, this.builder, streamingNamedArgs);
   }
 
   private Expr visitPostfixOpScan(RexCall operation) {
     List<Expr> args = visitList(operation.operands);
     Expr seriesOp = args.get(0);
-    String codeExpr = generatePostfixOpCode(seriesOp.emit(), operation.getOperator());
-    return new Expr.Raw(codeExpr);
+    return generatePostfixOpCode(seriesOp, operation.getOperator());
   }
 
   private Expr visitPrefixOpScan(RexCall operation) {
     List<Expr> args = visitList(operation.operands);
     Expr seriesOp = args.get(0);
-    String codeExpr = generatePrefixOpCode(seriesOp.emit(), operation.getOperator());
-    return new Expr.Raw(codeExpr);
+    return generatePrefixOpCode(seriesOp, operation.getOperator());
   }
 
   protected Expr visitInternalOp(RexCall node) {
@@ -394,7 +401,19 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
   }
 
-  private Expr visitLikeOp(RexCall node) {
+  protected Expr visitLikeOp(RexCall node) {
+    return visitLikeOp(node, List.of());
+  }
+
+  /**
+   * Generate the code for a like operation.
+   *
+   * @param node The node from which to generate the expression.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitLikeOp(RexCall node, List<Pair<String, Expr>> streamingNamedArgs) {
     // The input node has ${index} as its first operand, where
     // ${index} is something like $3, and a SQL regular expression
     // as its second operand. If there is an escape value it will
@@ -425,16 +444,20 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
     if (patternRegex) {
       return new Expr.Call(
-          "bodo.libs.bodosql_array_kernels.regexp_like", arg, pattern, new Expr.StringLiteral(""));
+          "bodo.libs.bodosql_array_kernels.regexp_like",
+          List.of(arg, pattern, new Expr.StringLiteral("")),
+          streamingNamedArgs);
     } else {
       return new Expr.Call(
           "bodo.libs.bodosql_array_kernels.like_kernel",
-          arg,
-          pattern,
-          escape,
-          // Use the opposite. The python call is for case insensitivity while
-          // our boolean is for case sensitivity, so they are opposites.
-          new Expr.BooleanLiteral(!op.isCaseSensitive()));
+          List.of(
+              arg,
+              pattern,
+              escape,
+              // Use the opposite. The python call is for case insensitivity while
+              // our boolean is for case sensitivity, so they are opposites.
+              new Expr.BooleanLiteral(!op.isCaseSensitive())),
+          streamingNamedArgs);
     }
   }
 
@@ -654,26 +677,48 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   }
 
   protected Expr visitCastScan(RexCall operation) {
+    return visitCastScan(operation, isScalar(operation), List.of());
+  }
+
+  /**
+   * Generate the code for a cast operation.
+   *
+   * @param operation The operation from which to generate the expression.
+   * @param outputScalar Is the output a scalar or an array?
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitCastScan(
+      RexCall operation, boolean outputScalar, List<Pair<String, Expr>> streamingNamedArgs) {
     RelDataType inputType = operation.operands.get(0).getType();
     RelDataType outputType = operation.getType();
-
-    boolean outputScalar = isScalar(operation);
-    List<Expr> args = visitList(operation.operands);
-    Expr child = args.get(0);
-    String exprCode = generateCastCode(child.emit(), inputType, outputType, outputScalar);
-    return new Expr.Raw(exprCode);
+    assert operation.operands.size() == 1;
+    Expr child = operation.getOperands().get(0).accept(this);
+    return generateCastCode(child, inputType, outputType, outputScalar, streamingNamedArgs);
   }
 
   protected Expr visitTryCastScan(RexCall operation) {
-    RelDataType inputType = operation.operands.get(0).getType();
-    if (!SqlTypeName.CHAR_TYPES.contains(inputType.getSqlTypeName()))
-      throw new BodoSQLCodegenException("TRY_CAST only supports casting from strings.");
-    RelDataType outputType = operation.getType();
+    return visitTryCastScan(operation, List.of());
+  }
 
-    List<Expr> args = visitList(operation.operands);
-    Expr child = args.get(0);
-    String exprCode = generateTryCastCode(child.emit(), outputType);
-    return new Expr.Raw(exprCode);
+  /**
+   * Generate the code for a tryCast operation.
+   *
+   * @param operation The operation from which to generate the expression.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitTryCastScan(RexCall operation, List<Pair<String, Expr>> streamingNamedArgs) {
+    RelDataType inputType = operation.operands.get(0).getType();
+    if (!SqlTypeName.CHAR_TYPES.contains(inputType.getSqlTypeName())) {
+      throw new BodoSQLCodegenException("TRY_CAST only supports casting from strings.");
+    }
+    RelDataType outputType = operation.getType();
+    assert operation.operands.size() == 1;
+    Expr child = operation.operands.get(0).accept(this);
+    return generateTryCastCode(child, outputType, streamingNamedArgs);
   }
 
   private Expr visitExtractScan(RexCall node) {
@@ -686,7 +731,19 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         dateVal.emit(), column, isTime, isDate, this.weekStart, this.weekOfYearPolicy);
   }
 
-  private Expr visitSubstringScan(RexCall node) {
+  protected Expr visitSubstringScan(RexCall node) {
+    return visitSubstringScan(node, List.of());
+  }
+
+  /**
+   * Generate the code for a substring operation.
+   *
+   * @param node The operation from which to generate the expression.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitSubstringScan(RexCall node, List<Pair<String, Expr>> streamingNamedArgs) {
     // node.operands contains
     //  * String to perform the substring operation on
     //  * start index
@@ -694,16 +751,398 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     //  All of these values can be both scalars and columns
     // NOTE: check on number of arguments happen in generateSubstringInfo
     List<Expr> operands = visitList(node.operands);
-    return generateSubstringInfo(operands);
+    return generateSubstringCode(operands, streamingNamedArgs);
   }
 
   protected Expr visitGenericFuncOp(RexCall fnOperation) {
     return visitGenericFuncOp(fnOperation, false);
   }
 
+  protected Expr visitNullIgnoringGenericFunc(RexCall fnOperation, boolean isSingleRow) {
+    return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, List.of());
+  }
+
+  /**
+   * Generate the code for generic functions that have special handling for null values.
+   *
+   * @param fnOperation The RexCall operation
+   * @param isSingleRow Does the data operate on/output a single row?
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitNullIgnoringGenericFunc(
+      RexCall fnOperation, boolean isSingleRow, List<Pair<String, Expr>> streamingNamedArgs) {
+    List<Expr> codeExprs = new ArrayList<>();
+    for (RexNode operand : fnOperation.operands) {
+      Expr operandInfo = operand.accept(this);
+      // Need to unbox scalar timestamp values.
+      if (isSingleRow || isScalar(operand)) {
+        operandInfo =
+            new Expr.Call(
+                "bodo.utils.conversion.unbox_if_tz_naive_timestamp", List.of(operandInfo));
+      }
+      codeExprs.add(operandInfo);
+    }
+    String fnName = fnOperation.getOperator().getName();
+    Expr result;
+    switch (fnName) {
+      case "IF":
+      case "IFF":
+      case "BOOLNOT":
+      case "BOOLAND":
+      case "BOOLOR":
+      case "BOOLXOR":
+        result = getCondFuncCode(fnName, codeExprs);
+        break;
+      case "EQUAL_NULL":
+        result = getCondFuncCodeOptimized(fnName, codeExprs, streamingNamedArgs);
+        break;
+      case "COALESCE":
+      case "ZEROIFNULL":
+      case "IFNULL":
+      case "NVL":
+      case "NVL2":
+      case "DECODE":
+        result = visitVariadic(fnName, codeExprs, streamingNamedArgs);
+        break;
+      case "HASH":
+        result = visitHash(fnName, codeExprs);
+        break;
+      default:
+        throw new BodoSQLCodegenException("Internal Error: reached unreachable code");
+    }
+    return result;
+  }
+
+  /**
+   * Represents a cast operation that isn't generated by the planner. TODO(njriasan): Remove and
+   * update the planner to insert these casts.
+   */
+  protected Expr visitDynamicCast(
+      Expr arg, RelDataType inputType, RelDataType outputType, boolean isScalar) {
+    return visitDynamicCast(arg, inputType, outputType, isScalar, List.of());
+  }
+
+  /**
+   * Generate the code for a cast operation that isn't generated by the planner. TODO(njriasan):
+   * Remove and update the planner to insert these casts.
+   *
+   * @param arg The arg being cast.
+   * @param inputType The input type.
+   * @param outputType The output type.
+   * @param isScalar Is the input/output a scalar value.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitDynamicCast(
+      Expr arg,
+      RelDataType inputType,
+      RelDataType outputType,
+      boolean isScalar,
+      List<Pair<String, Expr>> streamingNamedArgs) {
+    return generateCastCode(arg, inputType, outputType, isScalar, streamingNamedArgs);
+  }
+
+  protected Expr visitTrimFunc(String fnName, Expr stringToBeTrimmed, Expr charactersToBeTrimmed) {
+    return visitTrimFunc(fnName, stringToBeTrimmed, charactersToBeTrimmed, List.of());
+  }
+
+  /**
+   * Generate the code for the TRIM functions.
+   *
+   * @param fnName The name of the TRIM function.
+   * @param stringToBeTrimmed Expr for the string to be trim.
+   * @param charactersToBeTrimmed Expr for identifying the characters to trim.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitTrimFunc(
+      String fnName,
+      Expr stringToBeTrimmed,
+      Expr charactersToBeTrimmed,
+      List<Pair<String, Expr>> streamingNamedArgs) {
+    return generateTrimFnCode(fnName, stringToBeTrimmed, charactersToBeTrimmed, streamingNamedArgs);
+  }
+
+  protected Expr visitNullIfFunc(List<Expr> operands) {
+    return visitNullIfFunc(operands, List.of());
+  }
+
+  /**
+   * Generate the code for a NULLIF function.
+   *
+   * @param operands The arguments to the function.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitNullIfFunc(List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    return new Expr.Call("bodo.libs.bodosql_array_kernels.nullif", operands, streamingNamedArgs);
+  }
+
+  protected Expr visitLeastGreatest(String fnName, List<Expr> operands) {
+    return visitLeastGreatest(fnName, operands, List.of());
+  }
+
+  /**
+   * Generate the code for the Least/Greatest.
+   *
+   * @param fnName The name of the function.
+   * @param operands The arguments to the function.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitLeastGreatest(
+      String fnName, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    return generateLeastGreatestCode(fnName, operands, streamingNamedArgs);
+  }
+
+  protected Expr visitPosition(List<Expr> operands) {
+    return visitPosition(operands, List.of());
+  }
+
+  /**
+   * Generate the code for Position.
+   *
+   * @param operands The arguments to the function.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitPosition(List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    return generatePosition(operands, streamingNamedArgs);
+  }
+
+  protected Expr visitCastFunc(RexCall fnOperation, List<Expr> operands) {
+    return visitCastFunc(fnOperation, operands, List.of());
+  }
+
+  /**
+   * Generate the code for Cast function calls.
+   *
+   * @param fnOperation The RexNode for the function call.
+   * @param operands The arguments to the function.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitCastFunc(
+      RexCall fnOperation, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    String fnName = fnOperation.getOperator().getName();
+    switch (fnName) {
+      case "TIMESTAMP":
+        return generateTimestampFnCode(operands, streamingNamedArgs);
+      case "DATE":
+      case "TO_DATE":
+      case "TRY_TO_DATE":
+        return generateToDateFnCode(operands, fnName, streamingNamedArgs);
+      case "TO_TIMESTAMP":
+      case "TO_TIMESTAMP_NTZ":
+      case "TO_TIMESTAMP_LTZ":
+      case "TO_TIMESTAMP_TZ":
+      case "TRY_TO_TIMESTAMP":
+      case "TRY_TO_TIMESTAMP_NTZ":
+      case "TRY_TO_TIMESTAMP_LTZ":
+      case "TRY_TO_TIMESTAMP_TZ":
+        Expr tzInfo;
+        if (fnOperation.getType() instanceof TZAwareSqlType) {
+          // TODO(njriasan): Remove getPyZone to put all the Python conversion logic in BodoSQL
+          tzInfo = new Expr.Raw(((TZAwareSqlType) fnOperation.getType()).getTZInfo().getPyZone());
+        } else {
+          tzInfo = None.INSTANCE;
+        }
+        return generateToTimestampFnCode(operands, tzInfo, fnName, streamingNamedArgs);
+      case "TRY_TO_BOOLEAN":
+      case "TO_BOOLEAN":
+        return generateToBooleanFnCode(operands, fnName, streamingNamedArgs);
+      case "TRY_TO_BINARY":
+      case "TO_BINARY":
+        return generateToBinaryFnCode(operands, fnName, streamingNamedArgs);
+      case "TO_CHAR":
+      case "TO_VARCHAR":
+        return generateToCharFnCode(operands);
+      case "TO_NUMBER":
+      case "TO_NUMERIC":
+      case "TO_DECIMAL":
+        return generateToNumberCode(operands, streamingNamedArgs);
+      case "TRY_TO_NUMBER":
+      case "TRY_TO_NUMERIC":
+      case "TRY_TO_DECIMAL":
+        return generateTryToNumberCode(operands, streamingNamedArgs);
+      case "TO_DOUBLE":
+      case "TRY_TO_DOUBLE":
+        return generateToDoubleFnCode(operands, fnName, streamingNamedArgs);
+      case "TIME":
+      case "TO_TIME":
+      case "TRY_TO_TIME":
+        return generateToTimeCode(operands, fnName, streamingNamedArgs);
+      case "TO_ARRAY":
+        return generateToArrayFnCode(this.visitor, fnOperation, operands, streamingNamedArgs);
+      case "ARRAY_TO_STRING":
+        assert operands.size() == 2;
+        return ExprKt.BodoSQLKernel("array_to_string", operands, List.of());
+      default:
+        throw new BodoSQLCodegenException(String.format("Unexpected Cast function: %s", fnName));
+    }
+  }
+
+  /**
+   * Generate the code for Regex function calls.
+   *
+   * @param fnOperation The RexNode for the function call.
+   * @param operands The arguments to the function.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitRegexFunc(
+      RexCall fnOperation, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    String fnName = fnOperation.getOperator().getName();
+    switch (fnName) {
+      case "RLIKE":
+      case "REGEXP_LIKE":
+        if (!(2 <= operands.size() && operands.size() <= 3)) {
+          throw new BodoSQLCodegenException(
+              "Error, invalid number of arguments passed to REGEXP_LIKE");
+        }
+        if (!isScalar(fnOperation.operands.get(1))
+            || (operands.size() == 3 && !isScalar(fnOperation.operands.get(2)))) {
+          throw new BodoSQLCodegenException(
+              "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+        }
+        return generateRegexpLikeInfo(operands, streamingNamedArgs);
+      case "REGEXP_COUNT":
+        if (!(2 <= operands.size() && operands.size() <= 4)) {
+          throw new BodoSQLCodegenException(
+              "Error, invalid number of arguments passed to REGEXP_COUNT");
+        }
+        if (!isScalar(fnOperation.operands.get(1))
+            || (operands.size() == 4 && !isScalar(fnOperation.operands.get(3)))) {
+          throw new BodoSQLCodegenException(
+              "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+        }
+        return generateRegexpCountInfo(operands, streamingNamedArgs);
+      case "REGEXP_REPLACE":
+        if (!(2 <= operands.size() && operands.size() <= 6)) {
+          throw new BodoSQLCodegenException(
+              "Error, invalid number of arguments passed to REGEXP_REPLACE");
+        }
+        if (!isScalar(fnOperation.operands.get(1))
+            || (operands.size() == 6 && !isScalar(fnOperation.operands.get(5)))) {
+          throw new BodoSQLCodegenException(
+              "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+        }
+        return generateRegexpReplaceInfo(operands, streamingNamedArgs);
+      case "REGEXP_SUBSTR":
+        if (!(2 <= operands.size() && operands.size() <= 6)) {
+          throw new BodoSQLCodegenException(
+              "Error, invalid number of arguments passed to REGEXP_SUBSTR");
+        }
+        if (!isScalar(fnOperation.operands.get(1))
+            || (operands.size() > 4 && !isScalar(fnOperation.operands.get(4)))) {
+          throw new BodoSQLCodegenException(
+              "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+        }
+        return generateRegexpSubstrInfo(operands, streamingNamedArgs);
+      case "REGEXP_INSTR":
+        if (!(2 <= operands.size() && operands.size() <= 7)) {
+          throw new BodoSQLCodegenException(
+              "Error, invalid number of arguments passed to REGEXP_INSTR");
+        }
+        if (!isScalar(fnOperation.operands.get(1))
+            || (operands.size() > 5 && !isScalar(fnOperation.operands.get(5)))) {
+          throw new BodoSQLCodegenException(
+              "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+        }
+        return generateRegexpInstrInfo(operands, streamingNamedArgs);
+      default:
+        throw new BodoSQLCodegenException(String.format("Unexpected Regex function: %s", fnName));
+    }
+  }
+
+  protected Expr visitStringFunc(RexCall fnOperation, List<Expr> operands) {
+    return visitStringFunc(fnOperation, operands, List.of());
+  }
+
+  /**
+   * Generate the code for String function calls.
+   *
+   * @param fnOperation The RexNode for the function call.
+   * @param operands The arguments to the function.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitStringFunc(
+      RexCall fnOperation, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    String fnName = fnOperation.getOperator().getName();
+    switch (fnName) {
+      case "RLIKE":
+      case "REGEXP_LIKE":
+      case "REGEXP_COUNT":
+      case "REGEXP_REPLACE":
+      case "REGEXP_SUBSTR":
+      case "REGEXP_INSTR":
+        return visitRegexFunc(fnOperation, operands, streamingNamedArgs);
+      case "CHR":
+      case "CHAR":
+      case "FORMAT":
+        return getStringFnCode(fnName, operands);
+      case "ORD":
+      case "ASCII":
+      case "CHAR_LENGTH":
+      case "CHARACTER_LENGTH":
+      case "LEN":
+      case "LENGTH":
+      case "REVERSE":
+      case "LCASE":
+      case "LOWER":
+      case "UCASE":
+      case "UPPER":
+      case "SPACE":
+      case "RTRIMMED_LENGTH":
+      case "REPEAT":
+      case "STRCMP":
+      case "RIGHT":
+      case "LEFT":
+      case "CONTAINS":
+      case "INSTR":
+      case "INSERT":
+      case "STARTSWITH":
+      case "ENDSWITH":
+      case "RPAD":
+      case "LPAD":
+      case "SPLIT_PART":
+      case "MID":
+      case "SUBSTRING_INDEX":
+      case "TRANSLATE3":
+      case "SPLIT":
+        return getOptimizedStringFnCode(fnName, operands, streamingNamedArgs);
+      case "SUBSTR":
+        return generateSubstringCode(operands, streamingNamedArgs);
+      case "POSITION":
+      case "CHARINDEX":
+        return visitPosition(operands, streamingNamedArgs);
+      case "STRTOK":
+        return generateStrtok(operands, streamingNamedArgs);
+      case "EDITDISTANCE":
+        return generateEditdistance(operands, streamingNamedArgs);
+      case "INITCAP":
+        return generateInitcapInfo(operands, streamingNamedArgs);
+      case "REPLACE":
+        return generateReplace(operands, streamingNamedArgs);
+      default:
+        throw new BodoSQLCodegenException(String.format("Unexpected String function: %s", fnName));
+    }
+  }
+
   protected Expr visitGenericFuncOp(RexCall fnOperation, boolean isSingleRow) {
     String fnName = fnOperation.getOperator().toString();
-    // Handle functions that do not care about nulls seperately
+    // Handle functions that do not care about nulls separately
     if (fnName == "COALESCE"
         || fnName == "NVL"
         || fnName == "NVL2"
@@ -718,54 +1157,12 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         || fnName == "IFF"
         || fnName == "DECODE"
         || fnName == "HASH") {
-      List<Expr> codeExprs = new ArrayList<>();
-      BodoCtx localCtx = new BodoCtx();
-      for (RexNode operand : fnOperation.operands) {
-        Expr operandInfo = operand.accept(this);
-        // Need to unbox scalar timestamp values.
-        if (isSingleRow || isScalar(operand)) {
-          operandInfo =
-              new Expr.Call(
-                  "bodo.utils.conversion.unbox_if_tz_naive_timestamp", List.of(operandInfo));
-        }
-        codeExprs.add(operandInfo);
-      }
-
-      Expr result;
-      switch (fnName) {
-        case "IF":
-        case "IFF":
-        case "BOOLNOT":
-        case "BOOLAND":
-        case "BOOLOR":
-        case "BOOLXOR":
-        case "EQUAL_NULL":
-          result = getCondFnInfo(fnName, codeExprs);
-          break;
-        case "COALESCE":
-        case "ZEROIFNULL":
-        case "IFNULL":
-        case "NVL":
-        case "NVL2":
-        case "DECODE":
-        case "HASH":
-          result = visitVariadic(fnOperation, codeExprs);
-          break;
-        default:
-          throw new BodoSQLCodegenException("Internal Error: reached unreachable code");
-      }
-
-      // If we're not the top level apply, we need to pass back the information so that it is
-      // properly handled by the actual top level apply
-      ctx.unionContext(localCtx);
-      return result;
+      return visitNullIgnoringGenericFunc(fnOperation, isSingleRow);
     }
 
     // Extract all inputs to the current function.
     List<Expr> operands = visitList(fnOperation.operands);
 
-    String expr;
-    String strExpr;
     DatetimeFnCodeGen.DateTimeType dateTimeExprType1;
     DatetimeFnCodeGen.DateTimeType dateTimeExprType2;
     boolean isTime;
@@ -775,25 +1172,17 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     switch (fnOperation.getOperator().kind) {
       case CEIL:
       case FLOOR:
-        return new Expr.Raw(
-            getSingleArgNumericFnInfo(
-                fnOperation.getOperator().toString(), operands.get(0).emit()));
+      case MOD:
+        return getNumericFnCode(fnName, operands);
       case GREATEST:
       case LEAST:
-        return generateLeastGreatestCode(fnOperation.getOperator().toString(), operands);
-
-      case MOD:
-        return new Expr.Raw(
-            getDoubleArgNumericFnInfo(
-                fnOperation.getOperator().toString(),
-                operands.get(0).emit(),
-                operands.get(1).emit()));
+        return visitLeastGreatest(fnOperation.getOperator().toString(), operands);
       case TIMESTAMP_ADD:
         // Uses Calcite parser, accepts both quoted and unquoted time units
         dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(2));
         unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
         assert isScalar(fnOperation.operands.get(0));
-        return new Expr.Raw(generateSnowflakeDateAddCode(operands, unit));
+        return generateSnowflakeDateAddCode(operands.subList(1, operands.size()), unit);
       case TIMESTAMP_DIFF:
         assert operands.size() == 3;
         dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(1));
@@ -807,25 +1196,30 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         return generateDateDiffFnInfo(unit, operands.get(1), operands.get(2));
       case TRIM:
         assert operands.size() == 3;
+        // NOTE: Operand 0 is one of BOTH/LEADING/TRAILING. We should make sure this is
+        // remapped to the proper function name.
+        assert fnOperation.operands.get(0) instanceof RexLiteral;
+        RexLiteral literal = (RexLiteral) fnOperation.operands.get(0);
+        String argValue = literal.getValue2().toString().toUpperCase(Locale.ROOT);
+        if (argValue.equals("BOTH")) {
+          fnName = "trim";
+        } else if (argValue.equals("LEADING")) {
+          fnName = "ltrim";
+        } else {
+          assert argValue.equals("TRAILING");
+          fnName = "rtrim";
+        }
         // Calcite expects: TRIM(<chars> FROM <expr>>) or TRIM(<chars>, <expr>)
         // However, Snowflake/BodoSQL expects: TRIM(<expr>, <chars>)
         // So we just need to swap the arguments here.
-        return generateTrimFnInfo(
-            fnOperation.getOperator().toString(), operands.get(2), operands.get(1));
+        return visitTrimFunc(fnName, operands.get(2), operands.get(1));
       case NULLIF:
         assert operands.size() == 2;
-        expr =
-            "bodo.libs.bodosql_array_kernels.nullif("
-                + operands.get(0).emit()
-                + ", "
-                + operands.get(1).emit()
-                + ")";
-        return new Expr.Raw(expr);
-
+        return visitNullIfFunc(operands);
       case POSITION:
-        return generatePosition(operands);
+        return visitPosition(operands);
       case RANDOM:
-        return generateRandomFnInfo(input.getName(), isSingleRow);
+        return generateRandomFnInfo(input, isSingleRow);
       case OTHER:
       case OTHER_FUNCTION:
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
@@ -835,10 +1229,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "LTRIM":
           case "RTRIM":
             if (operands.size() == 1) { // no optional characters to be trimmed
-              return generateTrimFnInfo(
-                  fnName, operands.get(0), new Expr.Raw("' '")); // remove spaces by default
+              return visitTrimFunc(
+                  fnName, operands.get(0), new Expr.StringLiteral(" ")); // remove spaces by default
             } else if (operands.size() == 2) {
-              return generateTrimFnInfo(fnName, operands.get(0), operands.get(1));
+              return visitTrimFunc(fnName, operands.get(0), operands.get(1));
             } else {
               throw new BodoSQLCodegenException(
                   "Invalid number of arguments to TRIM: must be either 1 or 2.");
@@ -847,47 +1241,21 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             {
               int numOps = operands.size();
               assert numOps == 4 : "WIDTH_BUCKET takes 4 arguments, but found " + numOps;
-              StringBuilder exprCode =
-                  new StringBuilder("bodo.libs.bodosql_array_kernels.width_bucket(");
-              for (int i = 0; i < numOps; i++) {
-                exprCode.append(operands.get(i).emit());
-                if (i != (numOps - 1)) {
-                  exprCode.append(", ");
-                }
-              }
-              exprCode.append(")");
-              return new Expr.Raw(exprCode.toString());
+              return new Expr.Call("bodo.libs.bodosql_array_kernels.width_bucket", operands);
             }
           case "HAVERSINE":
             {
               assert operands.size() == 4;
-              StringBuilder exprCode =
-                  new StringBuilder("bodo.libs.bodosql_array_kernels.haversine(");
-              int numOps = fnOperation.operands.size();
-              for (int i = 0; i < numOps; i++) {
-                exprCode.append(operands.get(i).emit());
-                if (i != (numOps - 1)) {
-                  exprCode.append(", ");
-                }
-              }
-              exprCode.append(")");
-              return new Expr.Raw(exprCode.toString());
+              return new Expr.Call("bodo.libs.bodosql_array_kernels.haversine", operands);
             }
           case "DIV0":
             {
               assert operands.size() == 2 && fnOperation.operands.size() == 2;
-              StringBuilder exprCode = new StringBuilder("bodo.libs.bodosql_array_kernels.div0(");
-              exprCode.append(operands.get(0).emit());
-              exprCode.append(", ");
-              exprCode.append(operands.get(1).emit());
-              exprCode.append(")");
-              return new Expr.Raw(exprCode.toString());
+              return new Expr.Call("bodo.libs.bodosql_array_kernels.div0", operands);
             }
           case "NULLIFZERO":
             assert operands.size() == 1;
-            String exprCode =
-                "bodo.libs.bodosql_array_kernels.nullif(" + operands.get(0).emit() + ", 0)";
-            return new Expr.Raw(exprCode);
+            return visitNullIfFunc(List.of(operands.get(0), new Expr.IntegerLiteral(0)));
           case "DATEADD":
           case "TIMEADD":
             // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
@@ -896,7 +1264,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(2));
               unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
               assert isScalar(fnOperation.operands.get(0));
-              return new Expr.Raw(generateSnowflakeDateAddCode(operands, unit));
+              return generateSnowflakeDateAddCode(operands.subList(1, operands.size()), unit);
             }
           case "DATE_ADD":
           case "ADDDATE":
@@ -933,13 +1301,12 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 RelDataType inputType = fnOperation.getOperands().get(0).getType();
                 // The output type will always be the timestamp the string is being cast to.
                 RelDataType outputType = fnOperation.getType();
-                String casted_expr =
-                    generateCastCode(
-                        operands.get(0).emit(),
+                arg0 =
+                    visitDynamicCast(
+                        operands.get(0),
                         inputType,
                         outputType,
                         isSingleRow || isScalar(fnOperation.operands.get(0)));
-                arg0 = new Expr.Raw(casted_expr);
               }
               // add/minus a date interval to a date object should return a date object
               if (is_date_interval
@@ -1001,20 +1368,14 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               throw new BodoSQLCodegenException(
                   "Error STR_TO_DATE(): 'Format' must be a string literal");
             }
-            strExpr =
-                generateStrToDateCode(
-                    operands.get(0).emit(),
-                    isScalar(fnOperation.operands.get(0)),
-                    operands.get(1).emit());
-            return new Expr.Raw(strExpr);
-          case "TIMESTAMP":
-            return generateTimestampFnCode(operands.get(0).emit());
+            return generateStrToDateCode(
+                operands.get(0), isScalar(fnOperation.operands.get(0)), operands.get(1).emit());
           case "TIME_SLICE":
             return generateTimeSliceFnCode(operands, 0);
+          case "TIMESTAMP":
           case "DATE":
           case "TO_DATE":
           case "TRY_TO_DATE":
-            return generateToDateFnCode(operands, fnName);
           case "TO_TIMESTAMP":
           case "TO_TIMESTAMP_NTZ":
           case "TO_TIMESTAMP_LTZ":
@@ -1023,28 +1384,26 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TRY_TO_TIMESTAMP_NTZ":
           case "TRY_TO_TIMESTAMP_LTZ":
           case "TRY_TO_TIMESTAMP_TZ":
-            tzStr = "None";
-            if (fnOperation.getType() instanceof TZAwareSqlType) {
-              tzStr = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getPyZone();
-            }
-            return generateToTimestampFnCode(operands, tzStr, fnName);
           case "TRY_TO_BOOLEAN":
           case "TO_BOOLEAN":
-            return generateToBooleanFnCode(operands, fnName);
           case "TRY_TO_BINARY":
           case "TO_BINARY":
-            return generateToBinaryFnCode(operands, fnName);
           case "TO_CHAR":
           case "TO_VARCHAR":
-            return generateToCharFnCode(operands);
+          case "TO_NUMBER":
+          case "TO_NUMERIC":
+          case "TO_DECIMAL":
+          case "TRY_TO_NUMBER":
+          case "TRY_TO_NUMERIC":
+          case "TRY_TO_DECIMAL":
           case "TO_DOUBLE":
           case "TRY_TO_DOUBLE":
-            return generateToDoubleFnCode(operands, fnName);
+          case "TIME":
+          case "TO_TIME":
+          case "TRY_TO_TIME":
           case "TO_ARRAY":
-            return generateToArrayFnCode(this.visitor, fnOperation, operands);
           case "ARRAY_TO_STRING":
-            assert operands.size() == 2;
-            return ExprKt.BodoSQLKernel("array_to_string", operands, List.of());
+            return visitCastFunc(fnOperation, operands);
           case "ASINH":
           case "ACOSH":
           case "ATANH":
@@ -1060,9 +1419,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "ATAN":
           case "DEGREES":
           case "RADIANS":
-            return getSingleArgTrigFnInfo(fnName, operands.get(0).emit());
           case "ATAN2":
-            return getDoubleArgTrigFnInfo(fnName, operands.get(0).emit(), operands.get(1).emit());
+            return getTrigFnCode(fnName, operands);
           case "ABS":
           case "CBRT":
           case "EXP":
@@ -1074,7 +1432,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "SQUARE":
           case "SQRT":
           case "BITNOT":
-            return new Expr.Raw(getSingleArgNumericFnInfo(fnName, operands.get(0).emit()));
           case "POWER":
           case "POW":
           case "BITAND":
@@ -1083,32 +1440,26 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "BITSHIFTLEFT":
           case "BITSHIFTRIGHT":
           case "GETBIT":
-            return new Expr.Raw(
-                getDoubleArgNumericFnInfo(fnName, operands.get(0).emit(), operands.get(1).emit()));
+            return getNumericFnCode(fnName, operands);
           case "TRUNC":
           case "TRUNCATE":
           case "ROUND":
-            String arg1_expr_code;
+            List<Expr> args = new ArrayList<>();
+            args.addAll(operands);
             if (operands.size() == 1) {
               // If no value is specified by, default to 0
-              arg1_expr_code = "0";
-            } else {
-              assert operands.size() == 2;
-              arg1_expr_code = operands.get(1).emit();
+              args.add(new Expr.IntegerLiteral(0));
             }
-            return new Expr.Raw(
-                getDoubleArgNumericFnInfo(fnName, operands.get(0).emit(), arg1_expr_code));
+            assert args.size() == 2;
+            return getNumericFnCode(fnName, args);
 
           case "LOG":
             return generateLogFnInfo(operands);
           case "CONV":
             assert operands.size() == 3;
-            strExpr =
-                generateConvCode(
-                    operands.get(0).emit(), operands.get(1).emit(), operands.get(2).emit());
-            return new Expr.Raw(strExpr);
+            return new Expr.Call("bodo.libs.bodosql_array_kernels.conv", operands);
           case "RAND":
-            return new Expr.Raw("np.random.rand()");
+            return new Expr.Call("np.random.rand");
           case "PI":
             return new Expr.Raw("np.pi");
           case "UNIFORM":
@@ -1117,10 +1468,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             expectScalarArgument(fnOperation.operands.get(1), "UNIFORM", "hi");
             return generateUniformFnInfo(operands);
           case "CONCAT":
-            return generateConcatFnInfo(operands);
+            return generateConcatCode(operands, List.of());
           case "CONCAT_WS":
             assert operands.size() >= 2;
-            return generateConcatWSFnInfo(operands.get(0), operands.subList(1, operands.size()));
+            return generateConcatWSCode(
+                operands.get(0), operands.subList(1, operands.size()), List.of());
           case "GETDATE":
           case "CURRENT_TIMESTAMP":
           case "NOW":
@@ -1182,7 +1534,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return getSingleArgDatetimeFnInfo(fnName, operands.get(0).emit());
           case "YEAROFWEEK":
             assert operands.size() == 1;
-            List<Expr> args = new ArrayList<>(operands);
+            args = new ArrayList<>(operands);
             args.add(new Expr.IntegerLiteral(this.weekStart));
             args.add(new Expr.IntegerLiteral(this.weekOfYearPolicy));
             return ExprKt.BodoSQLKernel("yearofweek", args, List.of());
@@ -1234,10 +1586,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateToSecondsCode(operands.get(0));
           case "FROM_DAYS":
             return generateFromDaysCode(operands.get(0));
-          case "TIME":
-          case "TO_TIME":
-          case "TRY_TO_TIME":
-            return generateToTimeCode(operands, fnName);
           case "DATE_FROM_PARTS":
           case "DATEFROMPARTS":
             tzStr = "None";
@@ -1258,14 +1606,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               tzStr = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getPyZone();
             }
             return generateDateTimeTypeFromPartsCode(fnName, operands, tzStr);
-          case "TO_NUMBER":
-          case "TO_NUMERIC":
-          case "TO_DECIMAL":
-            return generateToNumberCode(operands.get(0), fnName);
-          case "TRY_TO_NUMBER":
-          case "TRY_TO_NUMERIC":
-          case "TRY_TO_DECIMAL":
-            return generateTryToNumberCode(operands.get(0));
           case "UNIX_TIMESTAMP":
             return generateUnixTimestamp();
           case "FROM_UNIXTIME":
@@ -1274,60 +1614,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateJsonTwoArgsInfo(fnName, operands.get(0), operands.get(1));
           case "RLIKE":
           case "REGEXP_LIKE":
-            if (!(2 <= operands.size() && operands.size() <= 3)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid number of arguments passed to REGEXP_LIKE");
-            }
-            if (!isScalar(fnOperation.operands.get(1))
-                || (operands.size() == 3 && !isScalar(fnOperation.operands.get(2)))) {
-              throw new BodoSQLCodegenException(
-                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
-            }
-            return generateRegexpLikeInfo(operands);
           case "REGEXP_COUNT":
-            if (!(2 <= operands.size() && operands.size() <= 4)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid number of arguments passed to REGEXP_COUNT");
-            }
-            if (!isScalar(fnOperation.operands.get(1))
-                || (operands.size() == 4 && !isScalar(fnOperation.operands.get(3)))) {
-              throw new BodoSQLCodegenException(
-                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
-            }
-            return generateRegexpCountInfo(operands);
           case "REGEXP_REPLACE":
-            if (!(2 <= operands.size() && operands.size() <= 6)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid number of arguments passed to REGEXP_REPLACE");
-            }
-            if (!isScalar(fnOperation.operands.get(1))
-                || (operands.size() == 6 && !isScalar(fnOperation.operands.get(5)))) {
-              throw new BodoSQLCodegenException(
-                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
-            }
-            return generateRegexpReplaceInfo(operands);
           case "REGEXP_SUBSTR":
-            if (!(2 <= operands.size() && operands.size() <= 6)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid number of arguments passed to REGEXP_SUBSTR");
-            }
-            if (!isScalar(fnOperation.operands.get(1))
-                || (operands.size() > 4 && !isScalar(fnOperation.operands.get(4)))) {
-              throw new BodoSQLCodegenException(
-                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
-            }
-            return generateRegexpSubstrInfo(operands);
           case "REGEXP_INSTR":
-            if (!(2 <= operands.size() && operands.size() <= 7)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid number of arguments passed to REGEXP_INSTR");
-            }
-            if (!isScalar(fnOperation.operands.get(1))
-                || (operands.size() > 5 && !isScalar(fnOperation.operands.get(5)))) {
-              throw new BodoSQLCodegenException(
-                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
-            }
-            return generateRegexpInstrInfo(operands);
           case "ORD":
           case "ASCII":
           case "CHAR":
@@ -1343,10 +1633,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "UPPER":
           case "SPACE":
           case "RTRIMMED_LENGTH":
-            if (operands.size() != 1) {
-              throw new BodoSQLCodegenException(fnName + " requires providing only 1 argument");
-            }
-            return getSingleArgStringFnInfo(fnName, operands.get(0).emit());
           case "FORMAT":
           case "REPEAT":
           case "STRCMP":
@@ -1356,42 +1642,22 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "INSTR":
           case "STARTSWITH":
           case "ENDSWITH":
-            if (operands.size() != 2) {
-              throw new BodoSQLCodegenException(fnName + " requires providing only 2 arguments");
-            }
-            return getTwoArgStringFnInfo(fnName, operands.get(0), operands.get(1));
           case "RPAD":
           case "LPAD":
           case "SPLIT_PART":
           case "MID":
           case "SUBSTRING_INDEX":
           case "TRANSLATE3":
-            if (operands.size() != 3) {
-              throw new BodoSQLCodegenException(fnName + " requires providing only 3 argument");
-            }
-            return new Expr.Raw(
-                getThreeArgStringFnInfo(
-                    fnName,
-                    operands.get(0).emit(),
-                    operands.get(1).emit(),
-                    operands.get(2).emit()));
           case "REPLACE":
-            return generateReplace(operands);
           case "SUBSTR":
-            return generateSubstringInfo(operands);
           case "INSERT":
-            return generateInsert(operands);
           case "POSITION":
           case "CHARINDEX":
-            return generatePosition(operands);
           case "STRTOK":
-            return generateStrtok(operands);
           case "SPLIT":
-            return generateSplit(operands);
           case "EDITDISTANCE":
-            return generateEditdistance(operands);
           case "INITCAP":
-            return generateInitcapInfo(operands);
+            return visitStringFunc(fnOperation, operands);
           case "DATE_TRUNC":
             dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(1));
             unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
@@ -1431,7 +1697,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 fnName, operands.get(0), isTime, isDate, this.weekStart, this.weekOfYearPolicy);
           case "REGR_VALX":
           case "REGR_VALY":
-            return getCondFnInfo(fnName, operands);
+            return getCondFuncCode(fnName, operands);
         }
       default:
         throw new BodoSQLCodegenException(
@@ -1521,13 +1787,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
     @Override
     protected Expr visitCastScan(RexCall operation) {
-      RelDataType inputType = operation.operands.get(0).getType();
-      RelDataType outputType = operation.getType();
-
-      List<Expr> args = visitList(operation.operands);
-      Expr child = args.get(0);
-      String exprCode = generateCastCode(child.emit(), inputType, outputType, true);
-      return new Expr.Raw(exprCode);
+      return visitCastScan(operation, true, List.of());
     }
 
     @Override

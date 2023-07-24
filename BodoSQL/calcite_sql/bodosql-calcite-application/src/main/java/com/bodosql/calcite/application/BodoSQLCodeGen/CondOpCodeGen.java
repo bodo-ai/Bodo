@@ -4,7 +4,7 @@ import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
 import java.util.HashMap;
 import java.util.List;
-import org.apache.calcite.rex.RexCall;
+import kotlin.Pair;
 
 public class CondOpCodeGen {
 
@@ -36,13 +36,13 @@ public class CondOpCodeGen {
 
   /**
    * Return a pandas expression that replicates a call to a SQL conditional function in the
-   * hashtable equivalentFnMap.
+   * hashtable equivalentFnMap. These are functions that lack dictionary encoding optimizations.
    *
    * @param fnName the name of the function being called
    * @param codeExprs the Python expressions to calculate the arguments
    * @return Expr containing the code generated for the relational expression.
    */
-  public static Expr getCondFnInfo(String fnName, List<Expr> codeExprs) {
+  public static Expr getCondFuncCode(String fnName, List<Expr> codeExprs) {
 
     String kernelName;
     if (equivalentFnMap.containsKey(fnName)) {
@@ -55,14 +55,58 @@ public class CondOpCodeGen {
   }
 
   /**
-   * Return a pandas expression that replicates a call to the SQL functions COALESCE, HASH, DECODE,
-   * or any of their variants.
+   * Return a pandas expression that replicates a call to a SQL conditional function in the
+   * hashtable equivalentFnMap. These are functions that contain optimizations for dictionary
+   * encoding.
+   *
+   * @param fnName the name of the function being called
+   * @param codeExprs the Python expressions to calculate the arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Expr containing the code generated for the relational expression.
+   */
+  public static Expr getCondFuncCodeOptimized(
+      String fnName, List<Expr> codeExprs, List<Pair<String, Expr>> streamingNamedArgs) {
+
+    String kernelName;
+    if (equivalentFnMap.containsKey(fnName)) {
+      kernelName = equivalentFnMap.get(fnName);
+    } else {
+      // If we made it here, something has gone very wrong
+      throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
+    }
+    return new Expr.Call(kernelName, codeExprs, streamingNamedArgs);
+  }
+
+  /**
+   * Return a pandas expression that replicates a call to the SQL functions HASH.
    *
    * @param codeExprs the Python strings that calculate each of the arguments
    * @return Expr containing the code generated for the relational expression.
    */
-  public static Expr visitVariadic(RexCall fnOperation, List<Expr> codeExprs) {
-    String fnName = fnOperation.getOperator().toString();
+  public static Expr visitHash(String fnName, List<Expr> codeExprs) {
+    String kernelName;
+    if (equivalentFnMap.containsKey(fnName)) {
+      kernelName = equivalentFnMap.get(fnName);
+    } else {
+      // If we made it here, something has gone very wrong
+      throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
+    }
+    return new Expr.Call(kernelName, new Expr.Tuple(codeExprs));
+  }
+
+  /**
+   * Return a pandas expression that replicates a call to the SQL functions COALESCE, DECODE, or any
+   * of their variants. These are functions may contain dictionary encoding optimizations.
+   *
+   * @param fnName the name of the function being called
+   * @param codeExprs the Python expressions to calculate the arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Expr containing the code generated for the relational expression.
+   */
+  public static Expr visitVariadic(
+      String fnName, List<Expr> codeExprs, List<Pair<String, Expr>> streamingNamedArgs) {
     String kernelName;
     if (equivalentFnMap.containsKey(fnName)) {
       kernelName = equivalentFnMap.get(fnName);
@@ -73,6 +117,6 @@ public class CondOpCodeGen {
     if (fnName == "ZEROIFNULL") {
       codeExprs.add(new Expr.Raw("0"));
     }
-    return new Expr.Call(kernelName, new Expr.Tuple(codeExprs));
+    return new Expr.Call(kernelName, List.of(new Expr.Tuple(codeExprs)), streamingNamedArgs);
   }
 }

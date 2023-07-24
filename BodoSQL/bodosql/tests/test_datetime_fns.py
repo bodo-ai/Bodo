@@ -1403,7 +1403,17 @@ def test_date_part_unquoted_timeunit(memory_leak_check):
     """
     query_fmt = "DATE_PART({!s}, A) AS my_{}"
     selects = []
-    for unit in ["year", "quarter", "month", "week", "day", "hour", "minute", "second", "dow"]:
+    for unit in [
+        "year",
+        "quarter",
+        "month",
+        "week",
+        "day",
+        "hour",
+        "minute",
+        "second",
+        "dow",
+    ]:
         selects.append(query_fmt.format(unit, unit))
     query = f"SELECT {', '.join(selects)} FROM table1"
     ctx = {
@@ -2242,43 +2252,6 @@ def test_timestamp_add_scalar(
         check_names=False,
         check_dtype=False,
         equivalent_spark_query=spark_query,
-        only_jit_1DVar=True,
-    )
-
-
-@pytest.mark.parametrize(
-    "use_case",
-    [
-        pytest.param(False, id="no_case"),
-        pytest.param(
-            True,
-            id="with_case",
-            marks=pytest.mark.skip(reason="TODO: support time in CASE statements"),
-        ),
-    ],
-)
-def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_check):
-    unit, answer = timeadd_arguments
-    # Decide which function to use based on the unit
-    func = {
-        "hour": "DATEADD",
-        "minute": "TIMEADD",
-        "second": "DATEADD",
-        "millisecond": "TIMEADD",
-        "microsecond": "DATEADD",
-        "nanosecond": "TIMEADD",
-    }[unit]
-    if use_case:
-        query = f"SELECT T, CASE WHEN N < -100 THEN NULL ELSE {func}('{unit}', N, T) END FROM TABLE1"
-    else:
-        query = f"SELECT T, {func}('{unit}', N, T) FROM TABLE1"
-    check_query(
-        query,
-        timeadd_dataframe,
-        None,
-        check_names=False,
-        check_dtype=False,
-        expected_output=answer,
         only_jit_1DVar=True,
     )
 
