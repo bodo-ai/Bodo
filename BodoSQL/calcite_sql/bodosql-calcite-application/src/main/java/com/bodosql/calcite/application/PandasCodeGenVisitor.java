@@ -5,9 +5,9 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generate
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeNoGroupBy;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeWithGroupBy;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateApplyCodeWithGroupBy;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupbyFnames;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupByKeyIndices;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupByOffsetAndCols;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupbyFnames;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.generateJoinCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.generateLiteralCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.generateLogicalValuesCode;
@@ -44,6 +44,7 @@ import com.bodosql.calcite.adapter.pandas.PandasUnion;
 import com.bodosql.calcite.adapter.pandas.PandasValues;
 import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
+import com.bodosql.calcite.adapter.pandas.StreamingRexToPandasTranslator;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer;
 import com.bodosql.calcite.application.timers.StreamingRelNodeTimer;
@@ -2084,6 +2085,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
         this, this.generatedCode, this.typeSystem, nodeId, input, localRefs);
   }
 
+  private StreamingRexToPandasTranslator getStreamingRexTranslator(
+      int nodeId,
+      Dataframe input,
+      List<? extends Expr> localRefs,
+      @NotNull StateVariable stateVar) {
+    return new StreamingRexToPandasTranslator(
+        this, this.generatedCode, this.typeSystem, nodeId, input, localRefs, stateVar);
+  }
+
   private class Implementor implements PandasRel.Implementor {
     private final @NotNull PandasRel node;
 
@@ -2206,6 +2216,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
     @Override
     public StreamingOptions streamingOptions() {
       return streamingOptions;
+    }
+
+    @NotNull
+    @Override
+    public StreamingRexToPandasTranslator streamingRexTranslator(
+        @NotNull Dataframe input,
+        @NotNull List<? extends Expr> localRefs,
+        @NotNull StateVariable stateVar) {
+      return getStreamingRexTranslator(node.getId(), input, localRefs, stateVar);
     }
   }
 }

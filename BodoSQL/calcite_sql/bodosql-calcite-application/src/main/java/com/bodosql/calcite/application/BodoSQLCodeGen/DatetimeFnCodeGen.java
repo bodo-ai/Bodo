@@ -240,21 +240,22 @@ public class DatetimeFnCodeGen {
   /**
    * Helper function that handles the codegen for snowflake SQL's TIME, TO_TIME, and TRY_TO_TIME
    *
-   * @param args The VisitorInfo for the arguments.
+   * @param operands The function arguments.
    * @param opName should be either "TIME", "TO_TIME", or "TRY_TO_TIME"
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static Expr generateToTimeCode(List<Expr> args, String opName) {
-    Pair<String, Expr> tryPair =
-        new Pair<>("_try", new Expr.BooleanLiteral(opName.contains("TRY")));
-    List<Pair<String, Expr>> keywordArgs = new ArrayList<>();
-
+  public static Expr generateToTimeCode(
+      List<Expr> operands, String opName, List<Pair<String, Expr>> streamingNamedArgs) {
+    assert operands.size() == 1;
+    List<Expr> args = new ArrayList<>();
+    args.addAll(operands);
     if (args.size() == 1) {
-      keywordArgs.add(new Pair<>("format_str", Expr.None.INSTANCE));
+      // Add the format string
+      args.add(Expr.None.INSTANCE);
     }
-    keywordArgs.add(tryPair);
-
-    return ExprKt.BodoSQLKernel("to_time", args, keywordArgs);
+    // Add the try arg.
+    args.add(new Expr.BooleanLiteral(opName.contains("TRY")));
+    return ExprKt.BodoSQLKernel("to_time", args, streamingNamedArgs);
   }
 
   /**

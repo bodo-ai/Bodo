@@ -1,8 +1,10 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import java.util.*;
-import org.apache.calcite.sql.*;
+import com.bodosql.calcite.ir.Expr;
+import java.util.Locale;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlOperator;
 
 /**
  * Class that returns the generated code for Postfix Operators after all inputs have been visited.
@@ -15,15 +17,15 @@ public class PostfixOpCodeGen {
    * @param postfixOp The postfix operator.
    * @return The code generated that matches the Postfix Operator call.
    */
-  public static String generatePostfixOpCode(String arg, SqlOperator postfixOp) {
-    StringBuilder codeBuilder = new StringBuilder();
+  public static Expr generatePostfixOpCode(Expr arg, SqlOperator postfixOp) {
     SqlKind kind = postfixOp.getKind();
+    String fnName;
     switch (kind) {
       case IS_NULL:
-        codeBuilder.append("pd.isna(").append(arg).append(")");
+        fnName = "pd.isna";
         break;
       case IS_NOT_NULL:
-        codeBuilder.append("pd.notna(").append(arg).append(")");
+        fnName = "pd.notna";
         break;
       case IS_NOT_FALSE:
       case IS_NOT_TRUE:
@@ -31,19 +33,13 @@ public class PostfixOpCodeGen {
       case IS_FALSE:
         // fn_name will be one of is_not_false, is_not_true,
         // is_true, or is_false.
-        String fn_name = kind.toString().toLowerCase(Locale.ROOT);
-        codeBuilder
-            .append("bodo.libs.bodosql_array_kernels.")
-            .append(fn_name)
-            .append("(")
-            .append(arg)
-            .append(")");
+        fnName = "bodo.libs.bodosql_array_kernels." + kind.toString().toLowerCase(Locale.ROOT);
         break;
       default:
         throw new BodoSQLCodegenException(
             "Internal Error: Calcite Plan Produced an Unsupported Postfix Operator");
     }
 
-    return codeBuilder.toString();
+    return new Expr.Call(fnName, arg);
   }
 }

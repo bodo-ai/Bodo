@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.ir.Expr;
 import org.apache.calcite.sql.SqlOperator;
 
 /**
@@ -14,20 +15,20 @@ public class PrefixOpCodeGen {
    * @param prefixOp The prefix operator.
    * @return The code generated that matches the Prefix Operator call.
    */
-  public static String generatePrefixOpCode(String arg, SqlOperator prefixOp) {
-    StringBuilder codeBuilder = new StringBuilder();
+  public static Expr generatePrefixOpCode(Expr arg, SqlOperator prefixOp) {
+    String fnName;
     switch (prefixOp.getKind()) {
       case NOT:
-        codeBuilder.append("bodo.libs.bodosql_array_kernels.boolnot(").append(arg).append(")");
+        fnName = "bodo.libs.bodosql_array_kernels.boolnot";
         break;
       case MINUS_PREFIX:
-        codeBuilder.append("bodo.libs.bodosql_array_kernels.negate(").append(arg).append(")");
+        fnName = "bodo.libs.bodosql_array_kernels.negate";
         break;
       default:
         throw new BodoSQLCodegenException(
             "Internal Error: Calcite Plan Produced an Unsupported Prefix Operator");
     }
 
-    return codeBuilder.toString();
+    return new Expr.Call(fnName, arg);
   }
 }

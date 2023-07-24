@@ -890,7 +890,6 @@ class TypingTransforms:
 
         Throws GuardException if not possible.
         """
-
         # avoid empty dataframe
         require(len(value_def.args) > 0)
         data_def = get_definition(func_ir, value_def.args[0])
@@ -1111,6 +1110,198 @@ class TypingTransforms:
                 return True
         return all(v.name not in df_names for v in stmt.list_vars())
 
+    def _find_target_node_location_for_filtering(
+        self,
+        block_body: List[ir.Stmt],
+        target_node: ir.Stmt,
+        filter_nodes: Set[ir.Expr],
+        filter_vars: Set[ir.Var],
+        non_filter_vars: Set[ir.Var],
+        related_vars: Set[ir.Var],
+        skipped_vars: Set[ir.Var],
+        df_names: Set[str],
+        used_dfs: Dict[str, ir.Expr],
+    ) -> int:
+        """For a given block_body, find the location within
+        the IR at which the target_node is located for the
+        purposes of reordering filters. Throughout this iteration
+        several restrictions on variable usage are enforced, effectively
+        requiring there can't be any overlap between filter_vars and non_filter_vars.
+        The enforce these, the sets filter_vars, non_filter_vars, related_vars, and
+        skipped_vars, as well as the dictionary used_dfs will be updated throughout
+        the execution of this function.
+
+        Args:
+            block_body (List[ir.Stmt]): The body of an IR block to search.
+            target_node (ir.Stmt): The IR statements we are trying to find
+            filter_nodes (Set[ir.Expr]): The nodes that are part of the filter and should
+                be skipped.
+            filter_vars[in, out] (Set[ir.Var]): Variables that are used in computing
+                the filter.
+            non_filter_vars[in, out] (Set[ir.Var]): Variables that are used in computation
+                unrelated to the filter. To be conservative these cannot overlap with filter variables.
+            related_vars[in, out] (Set[ir.Var]): Set of variables that are related to the use of the filter.
+                These are variables that are intermediate steps for computing the filter that need to be
+                checked for illicit use.
+            skipped_vars[in, out] (Set[ir.Var]): Set of variables that are explicitly skipped because
+                of a prior pattern matching step. Any directly assignments to these variables are also
+                updated.
+            df_names (Set[str]): The variable names for known DataFrames that
+                can be skipped.
+            used_dfs[in, out] (Dict[str, ir.Expr]): A mapping between each DataFrame
+                variable involved with pushdown and the actual IR expression.
+
+
+        Raises:
+            GuardException: Is there any overlap between filter and
+                non-filter variables (which means we cannot safely do pushdown)
+                or have types not finalized yet in a way that interferes with
+                pushdown.
+
+        Returns:
+            int: The line in block body at which the target_node can be found.
+        """
+        i = 0  # will be set to ParquetReader node's reversed index
+        for stmt in reversed(block_body):
+            i += 1
+            # ignore dataframe filter expression nodes
+            if is_assign(stmt) and stmt.value in filter_nodes:
+                continue
+            # handle a known initialization
+            # i.e. df = $1
+            if (
+                is_assign(stmt)
+                and stmt.target.name in df_names
+                and (
+                    isinstance(stmt.value, ir.Var)
+                    or stmt.value is used_dfs[stmt.target.name]
+                )
+            ):
+                if isinstance(stmt.value, ir.Var):
+                    # If we have an IR variable update df_names and used_dfs
+                    # to match the target. This is necessary because there could
+                    # be intermediate assignments between the lhs given in used_dfs
+                    df_names.add(stmt.value.name)
+                    used_dfs[stmt.value.name] = used_dfs[stmt.target.name]
+                continue
+            # Ignore variables whose creation we are directly skipping.
+            if is_assign(stmt):
+                if stmt.target.name in skipped_vars:
+                    continue
+                # For direct assignments (a = b), update the skipped vars
+                elif isinstance(stmt.value, ir.Var) and stmt.value.name in skipped_vars:
+                    skipped_vars.add(stmt.target.name)
+                    continue
+
+            # avoid nodes before the reader
+            if stmt is target_node:
+                break
+            stmt_vars: Set[str] = {v.name for v in stmt.list_vars()}
+
+            # make sure df is not used before filtering
+            if not (stmt_vars & related_vars):
+                # df_names is a non-empty set, so if the intersection
+                # is non empty then a df_name is in stmt_vars
+                require(not (df_names & stmt_vars))
+            else:
+                related_vars.update(stmt_vars - df_names)
+
+            # If the target of an assignment is a filter_var, then
+            # the inputs are involved with computing filters so they must
+            # be filter_var's too
+            if is_assign(stmt) and stmt.target.name in filter_vars:
+                filter_vars.update(stmt_vars)
+                continue
+
+            # For BoundFunction's, we need to check if the original bounded value
+            # is a filter var, so add it to stmt_vars
+            if is_call_assign(stmt):
+                # This is tested in test_snowflake_filter_pushdown_edgecase,
+                # which doesn't run on PR CI, so the pragma is needed
+                if stmt.value.func.name not in self.typemap:  # pragma: no cover
+                    self.needs_transform = True
+                    raise GuardException
+                elif isinstance(
+                    self.typemap[stmt.value.func.name], types.BoundFunction
+                ):
+                    def_loc = get_definition(self.func_ir, stmt.value.func)
+                    stmt_vars.update(v.name for v in def_loc.list_vars())
+
+            # Otherwise, if the stmt uses a filter var and the filter_var is
+            # not immutable, assume that all vars are involved and must be filter_var's
+            # If filter_var is immutable, then don't need to assume that
+            used_filter_vars: Set[str] = stmt_vars & filter_vars
+
+            # This is a defensive check, and isn't expected to be hit
+            # so we need the pragma to let coverage pass
+            for fvar in used_filter_vars:
+                if fvar not in self.typemap:  # pragma: no cover
+                    self.needs_transform = True
+                    raise GuardException
+
+            if used_filter_vars and any(
+                not is_immutable(self.typemap[fvar]) for fvar in used_filter_vars
+            ):
+                filter_vars.update(stmt_vars)
+            else:
+                non_filter_vars.update(stmt_vars - filter_vars)
+
+        require(not (filter_vars & non_filter_vars))
+
+        return len(block_body) - i
+
+    @staticmethod
+    def _move_filter_nodes(
+        block_body: List[ir.Stmt],
+        reader_ind: int,
+        filter_nodes: Set[ir.Expr],
+        filter_vars: Set[ir.Var],
+    ) -> Tuple[List[ir.Stmt], List[ir.Stmt]]:
+        """
+        Given a block that should be reordered based on filter nodes, splits the block into
+        two lists, one containing all the nodes before the reader and any reordered filters,
+        and one containing the reader and any nodes that remain after it.
+
+        Args:
+            block_body (List[ir.Stmt]): The body of an IR block to search.
+            reader_ind (int): The location in block_body of the reader node.
+                All filter variables must be moved before this.
+            filter_nodes (Set[ir.Expr]): The nodes that are part of the filter and should
+                not be reordered.
+            filter_vars (Set[ir.Var]): Variables that are used in computing
+                the filter and should be reordered.
+
+        Returns:
+            Tuple[List[ir.Stmt], List[ir.Stmt]]: Returns two lists:
+                - A list containing all statements before the reader
+                  and the reordered filter nodes.
+                - A list containing the reader statement and all statements
+                  that remain after it.
+        """
+        # move IR nodes for filter expressions before the reader node
+        new_body = block_body[:reader_ind]
+        non_filter_nodes = []
+        for i in range(reader_ind, len(block_body)):
+            stmt = block_body[i]
+            # ignore dataframe filter expression node
+            if is_assign(stmt) and stmt.value in filter_nodes:
+                non_filter_nodes.append(stmt)
+                continue
+
+            # Should only be true if:
+            # - Target of stmt is a filter_var
+            # - A mutable filter var was used in stmt
+            # In both cases, we all all used vars as filter_vars
+            # In the case that an immutable filter var is used in the stmt
+            # we don't need to move the stmt. The definition will be moved up
+            # but that should be safe
+            if all(v.name in filter_vars for v in stmt.list_vars()):
+                new_body.append(stmt)
+            else:
+                non_filter_nodes.append(stmt)
+
+        return new_body, non_filter_nodes
+
     def _reorder_filter_nodes(
         self,
         table_def_node,
@@ -1151,7 +1342,6 @@ class TypingTransforms:
         # find all variables that are potentially used in filter expressions after the
         # reader node
         # make sure they don't overlap with other nodes (to be conservative)
-        i = 0  # will be set to ParquetReader node's reversed index
         # nodes used for filtering output dataframe use filter vars as well but should
         # be excluded since they have dependency to data arrays (e.g. df["A"] == 3)
         filter_nodes = self._get_filter_nodes(index_def, func_ir)
@@ -1166,114 +1356,21 @@ class TypingTransforms:
         df_names = set(used_dfs.keys())
         for node in filter_nodes:
             related_vars.update({v.name for v in node.list_vars()})
-        for stmt in reversed(working_body):
-            i += 1
-            # ignore dataframe filter expression nodes
-            if is_assign(stmt) and stmt.value in filter_nodes:
-                continue
-            # handle a known initialization
-            # i.e. df = $1
-            if (
-                is_assign(stmt)
-                and stmt.target.name in df_names
-                and (
-                    isinstance(stmt.value, ir.Var)
-                    or stmt.value is used_dfs[stmt.target.name]
-                )
-            ):
-                if isinstance(stmt.value, ir.Var):
-                    # If we have an IR variable update df_names and used_dfs
-                    # to match the target. This is necessary because there could
-                    # be intermediate assignments between the lhs given in used_dfs
-                    df_names.add(stmt.value.name)
-                    used_dfs[stmt.value.name] = used_dfs[stmt.target.name]
-                continue
-            # Ignore variables whose creation we are directly skipping.
-            if is_assign(stmt):
-                if stmt.target.name in skipped_vars:
-                    continue
-                # For direct assignments (a = b), update the skipped vars
-                elif isinstance(stmt.value, ir.Var) and stmt.value.name in skipped_vars:
-                    skipped_vars.add(stmt.target.name)
-                    continue
 
-            # avoid nodes before the reader
-            if stmt is table_def_node:
-                break
-            stmt_vars: Set[str] = {v.name for v in stmt.list_vars()}
-
-            # make sure df is not used before filtering
-            if not (stmt_vars & related_vars):
-                # df_names is a non-empty set, so if the intersection
-                # is non empty then a df_name is in stmt_vars
-                require(not (df_names & stmt_vars))
-            else:
-                related_vars |= stmt_vars - df_names
-
-            # If the target of an assignment is a filter_var, then
-            # the inputs are involved with computing filters so they must
-            # be filter_var's too
-            if is_assign(stmt) and stmt.target.name in filter_vars:
-                filter_vars |= stmt_vars
-                continue
-
-            # For BoundFunction's, we need to check if the original bounded value
-            # is a filter var, so add it to stmt_vars
-            if is_call_assign(stmt):
-                # This is tested in test_snowflake_filter_pushdown_edgecase,
-                # which doesn't run on PR CI, so the pragma is needed
-                if stmt.value.func.name not in self.typemap:  # pragma: no cover
-                    self.needs_transform = True
-                    raise GuardException
-                elif isinstance(
-                    self.typemap[stmt.value.func.name], types.BoundFunction
-                ):
-                    def_loc = get_definition(self.func_ir, stmt.value.func)
-                    stmt_vars.update(v.name for v in def_loc.list_vars())
-
-            # Otherwise, if the stmt uses a filter var and the filter_var is
-            # not immutable, assume that all vars are involved and must be filter_var's
-            # If filter_var is immutable, then don't need to assume that
-            used_filter_vars: Set[str] = stmt_vars & filter_vars
-
-            # This is a defensive check, and isn't expected to be hit
-            # so we need the pragma to let coverage pass
-            for fvar in used_filter_vars:
-                if fvar not in self.typemap:  # pragma: no cover
-                    self.needs_transform = True
-                    raise GuardException
-
-            if used_filter_vars and any(
-                not is_immutable(self.typemap[fvar]) for fvar in used_filter_vars
-            ):
-                filter_vars |= stmt_vars
-            else:
-                non_filter_vars |= stmt_vars - filter_vars
-
-        require(not (filter_vars & non_filter_vars))
-
-        # move IR nodes for filter expressions before the reader node
-        pq_ind = len(working_body) - i
-        new_body = working_body[:pq_ind]
-        non_filter_nodes = []
-        for i in range(pq_ind, len(working_body)):
-            stmt = working_body[i]
-            # ignore dataframe filter expression node
-            if is_assign(stmt) and stmt.value in filter_nodes:
-                non_filter_nodes.append(stmt)
-                continue
-
-            # Should only be true if:
-            # - Target of stmt is a filter_var
-            # - A mutable filter var was used in stmt
-            # In both cases, we all all used vars as filter_vars
-            # In the case that an immutable filter var is used in the stmt
-            # we don't need to move the stmt. The definition will be moved up
-            # but that should be safe
-            if all(v.name in filter_vars for v in stmt.list_vars()):
-                new_body.append(stmt)
-            else:
-                non_filter_nodes.append(stmt)
+        pq_ind = self._find_target_node_location_for_filtering(
+            working_body,
+            table_def_node,
+            filter_nodes,
+            filter_vars,
+            non_filter_vars,
+            related_vars,
+            skipped_vars,
+            df_names,
+            used_dfs,
+        )
+        new_body, non_filter_nodes = self._move_filter_nodes(
+            working_body, pq_ind, filter_nodes, filter_vars
+        )
 
         # Check if the code has changed. There is only 1 change that
         # can occur, a node is moved from later into the IR earlier
@@ -1287,18 +1384,54 @@ class TypingTransforms:
         if read_node == table_def_node:
             new_working_body = new_body + non_filter_nodes
         else:  # pragma: no cover
+            # The filter pushdown structure requires the read is located at the front
+            # of the block to avoid accidentally moving any unrelated nodes via
+            # new_body. This is enforced in the current codegen where read_arrow_next
+            # should always be the first statement of the block.
+            require(pq_ind == 0)
+            # Overview of this path:
+            # https://bodo.atlassian.net/wiki/spaces/B/pages/1412366337/Dictionary-Encoding+Related+BodoSQL+Streaming+Filter+Pushdown+Changes
             # move filter nodes before the actual read IR node, not read_arrow_next()
             new_working_body = non_filter_nodes
+            # new_body must consist of only the filter nodes (there are no nodes before
+            # the read and the only moved nodes must be part of the filter). Assuming
+            # the codegen pattern is supported we will move these nodes to the IR block
+            # with the actual Reader call.
+            filter_nodes = new_body
             read_found = False
             # read node is before the while loop so it's in a predecessor block
             cfg = compute_cfg_from_blocks(self.func_ir.blocks)
             for pred, _ in cfg.predecessors(label):
+                if pred == label:
+                    # Ignore self-loops.
+                    continue
                 body = func_ir.blocks[pred].body
-                for i, inst in enumerate(body):
-                    if inst == read_node:
-                        func_ir.blocks[pred].body = body[:i] + new_body + body[i:]
-                        read_found = True
-                        break
+                pq_ind = self._find_target_node_location_for_filtering(
+                    body,
+                    read_node,
+                    filter_nodes,
+                    filter_vars,
+                    non_filter_vars,
+                    related_vars,
+                    skipped_vars,
+                    df_names,
+                    used_dfs,
+                )
+                # We only support a single predecessor, so we
+                # must find the node.
+                require(body[pq_ind] == read_node)
+                new_body, non_filter_nodes = self._move_filter_nodes(
+                    body, pq_ind, filter_nodes, filter_vars
+                )
+                start_idx, end_idx = pq_ind, len(new_body)
+                # Update changed
+                changed = (
+                    changed or body[start_idx:end_idx] != new_body[start_idx:end_idx]
+                )
+                # Note: new_body already contains all nodes before the reader.
+                new_block_stmts = new_body + filter_nodes + non_filter_nodes
+                func_ir.blocks[pred].body = new_block_stmts
+                read_found = True
             assert (
                 read_found
             ), "_reorder_filter_nodes: read node not found in streaming I/O"
@@ -2189,6 +2322,27 @@ class TypingTransforms:
         """get column name for dataframe column access like df["A"] if possible.
         Throws GuardException if not possible.
         """
+
+        def are_supported_kws(kws: List[Tuple[str, ir.Var]]) -> bool:
+            """Verify that keyword args passed into a function are supported,
+            which are only the special arguments for filter pushdown.
+
+            Args:
+                kws (List[Tuple[str, ir.Var]]): The kws passed into the IR.Call
+
+            Returns:
+                bool: Are the kws either empty or just dict_encoding_state and func_id.
+            """
+            if len(kws) == 0:
+                return True
+            else:
+                kws_dict = dict(kws)
+                return (
+                    len(kws_dict) == 2
+                    and "dict_encoding_state" in kws_dict
+                    and "func_id" in kws_dict
+                )
+
         var_def = get_definition(func_ir, var)
         var_def = self._remove_series_wrappers_from_def(var_def)
 
@@ -2247,7 +2401,7 @@ class TypingTransforms:
                         and read_node.db_type in ("snowflake", "iceberg")
                     )
                 else:
-                    require((len(var_def.args) == 1) and not var_def.kws)
+                    require((len(var_def.args) == 1) and are_supported_kws(var_def.kws))
 
                 args = find_build_tuple(self.func_ir, var_def.args[0])
                 require(len(args) == 2)
@@ -2305,7 +2459,9 @@ class TypingTransforms:
                 return (col_name, bodosql_kernel_name, new_var)
 
             # All other BodoSQL functions
-            if is_bodosql_array_kernel and not var_def.kws:  # pragma: no cover
+            if is_bodosql_array_kernel and are_supported_kws(
+                var_def.kws
+            ):  # pragma: no cover
                 bodosql_kernel_name = fdef[0]
                 require(bodosql_kernel_name in supported_funcs_map)
 
