@@ -774,15 +774,21 @@ public class RelStructuredTypeFlattener implements ReflectiveVisitor {
   }
 
   public void rewriteRel(TableScan rel) {
-    RelNode newRel = rel.getTable().toRel(toRelContext,
-        rel instanceof LogicalTargetTableScan);
-
+    RelNode newRel = toRel(rel);
     if (!SqlTypeUtil.isFlat(rel.getRowType())) {
       newRel = coverNewRelByFlatteningProjection(rel, newRel);
     } else {
       newRel = RelOptUtil.copyRelHints(rel, newRel);
     }
     setNewForOldRel(rel, newRel);
+  }
+
+  private RelNode toRel(TableScan rel) {
+    if (rel instanceof LogicalTargetTableScan) {
+      return rel.getTable().toTargetTableRel(toRelContext);
+    } else {
+      return rel.getTable().toRel(toRelContext);
+    }
   }
 
   private RelNode coverNewRelByFlatteningProjection(RelNode rel, RelNode newRel) {

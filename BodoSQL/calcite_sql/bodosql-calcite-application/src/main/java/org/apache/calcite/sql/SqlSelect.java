@@ -90,6 +90,23 @@ public class SqlSelect extends SqlCall {
     this.hints = hints;
   }
 
+  public SqlSelect(SqlParserPos pos,
+      @Nullable SqlNodeList keywordList,
+      SqlNodeList selectList,
+      @Nullable SqlNode from,
+      @Nullable SqlNode where,
+      @Nullable SqlNodeList groupBy,
+      @Nullable SqlNode having,
+      @Nullable SqlNodeList windowDecls,
+      @Nullable SqlNodeList orderBy,
+      @Nullable SqlNode offset,
+      @Nullable SqlNode fetch,
+      @Nullable SqlNodeList hints) {
+    this(pos, keywordList, selectList,
+        from, where, groupBy, having, null,
+        windowDecls, orderBy, offset, fetch, hints);
+  }
+
   //~ Methods ----------------------------------------------------------------
 
   @Override public SqlOperator getOperator() {

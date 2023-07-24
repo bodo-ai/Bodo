@@ -3767,11 +3767,11 @@ List<Object> Expression2(ExprContext exprContext) :
                     { final SqlKind k; }
                     k = comp()
                     (
-                        <SOME> { op = SqlStdOperatorTable.some(k); }
+                        <SOME> { op = SqlBodoOperatorTable.some(k); }
                     |
-                        <ANY> { op = SqlStdOperatorTable.some(k); }
+                        <ANY> { op = SqlBodoOperatorTable.some(k); }
                     |
-                        <ALL> { op = SqlStdOperatorTable.all(k); }
+                        <ALL> { op = SqlBodoOperatorTable.all(k); }
                     )
                 )
                 { s.clear().add(this); }
@@ -3886,7 +3886,7 @@ List<Object> Expression2(ExprContext exprContext) :
                         |
                             <RLIKE> { op = SqlLibraryOperators.NOT_RLIKE; }
                         |
-                            <REGEXP> { op = SqlLibraryOperators.NOT_REGEXP; }
+                            <REGEXP> { op = SqlLibraryOperators.NOT_RLIKE; }
                         |
                             <SIMILAR> <TO> { op = SqlStdOperatorTable.NOT_SIMILAR_TO; }
                         )
@@ -3897,7 +3897,7 @@ List<Object> Expression2(ExprContext exprContext) :
                     |
                         <RLIKE> { op = SqlLibraryOperators.RLIKE; }
                     |
-                        <REGEXP> { op = SqlLibraryOperators.REGEXP; }
+                        <REGEXP> { op = SqlLibraryOperators.RLIKE; }
                     |
                         <SIMILAR> <TO> { op = SqlStdOperatorTable.SIMILAR_TO; }
                     )
@@ -6209,7 +6209,7 @@ SqlNode BuiltinFunctionCall() :
             <INTERVAL> e = IntervalQualifier() { args.add(e); }
         )
         <RPAREN> {
-            return SqlStdOperatorTable.TRY_CAST.createCall(s.end(this), args);
+            return SqlBodoOperatorTable.TRY_CAST.createCall(s.end(this), args);
         }
     |
         <EXTRACT> {
@@ -7005,7 +7005,7 @@ SqlCall TimestampAddFunctionCall() :
     <COMMA>
     e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
     <RPAREN> {
-        return SqlStdOperatorTable.TIMESTAMP_ADD.createCall(
+        return SqlBodoOperatorTable.TIMESTAMP_ADD.createCall(
             s.end(this), args);
     }
 }
@@ -7058,7 +7058,7 @@ SqlCall TimestampDiffFunctionCall() :
     <COMMA>
     e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
     <RPAREN> {
-        return SqlStdOperatorTable.TIMESTAMP_DIFF.createCall(
+        return SqlBodoOperatorTable.TIMESTAMP_DIFF.createCall(
             s.end(this), args);
     }
 }
@@ -7721,9 +7721,9 @@ SqlBinaryOperator BinaryRowOperator() :
         }
         return SqlStdOperatorTable.NOT_EQUALS;
     }
-|   <NULLEQ> { return SqlStdOperatorTable.NULL_EQUALS; }
-|   <PLUS> { return SqlStdOperatorTable.PLUS; }
-|   <MINUS> { return SqlStdOperatorTable.MINUS; }
+|   <NULLEQ> { return SqlBodoOperatorTable.NULL_EQUALS; }
+|   <PLUS> { return SqlBodoOperatorTable.PLUS; }
+|   <MINUS> { return SqlBodoOperatorTable.MINUS; }
 |   <STAR> { return SqlStdOperatorTable.MULTIPLY; }
 |   <SLASH> { return SqlStdOperatorTable.DIVIDE; }
 |   <PERCENT_REMAINDER> {

@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.calcite.sql.fun;
+package com.bodosql.calcite.sql.fun;
 
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.SqlFunction;
@@ -73,5 +73,4 @@ public class BodoSqlTimestampDiffFunction extends SqlFunction {
             SqlTypeFamily.DATETIME),
         SqlFunctionCategory.TIMEDATE);
   }
-
 }

@@ -65,7 +65,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                 )
                 .convertletTable(
                     BodoConvertletTable(
-                        StandardConvertletTable(StandardConvertletTableConfig(false, false))
+                        StandardConvertletTableConfig(false, false)
                     )
                 )
                 .sqlValidatorConfig(

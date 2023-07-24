@@ -138,7 +138,7 @@ import org.apache.calcite.sql.SqlNullTreatmentOperator;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlPostfixOperator;
 import org.apache.calcite.sql.SqlPrefixOperator;
-import org.apache.calcite.sql.fun.BodoSqlTryCastFunction;
+import com.bodosql.calcite.sql.fun.BodoSqlTryCastFunction;
 import org.apache.calcite.sql.fun.SqlCaseOperator;
 import org.apache.calcite.sql.fun.SqlCastFunction;
 import org.apache.calcite.sql.fun.SqlDatetimePlusOperator;
@@ -406,7 +406,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
     // The regular expression functions only support literal patterns
     boolean patternRegex = false;
-    if (op.getKind() == SqlKind.REGEXP || op.getKind() == SqlKind.RLIKE) {
+    if (op.getKind() == SqlKind.RLIKE) {
       if (!(patternNode instanceof RexLiteral)) {
         throw new BodoSQLCodegenException(
             String.format("%s Error: Pattern must be a string literal", op.getName()));

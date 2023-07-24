@@ -632,8 +632,6 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlLibraryOperators.NOT_RLIKE,
           SqlLibraryOperators.ILIKE,
           SqlLibraryOperators.NOT_ILIKE,
-          SqlLibraryOperators.REGEXP,
-          SqlLibraryOperators.NOT_REGEXP,
           RLIKE);
 
   @Override

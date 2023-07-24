@@ -110,14 +110,14 @@ public abstract class RelOptAbstractTable implements RelOptTable {
     return Collections.emptyList();
   }
 
-  @Override public RelNode toRel(ToRelContext context, boolean isTargetTable) {
-    if (isTargetTable) {
-      return LogicalTableScan.create(context.getCluster(), this,
-          context.getTableHints());
-    } else {
-      return LogicalTargetTableScan.create(context.getCluster(), this,
-          context.getTableHints());
-    }
+  @Override public RelNode toRel(ToRelContext context) {
+    return LogicalTableScan.create(context.getCluster(), this,
+        context.getTableHints());
+  }
+
+  @Override public RelNode toTargetTableRel(ToRelContext context) {
+    return LogicalTargetTableScan.create(context.getCluster(), this,
+        context.getTableHints());
   }
 
   @Override public @Nullable Expression getExpression(Class clazz) {
