@@ -15,127 +15,167 @@ import bodo
 # [BE-3894] TODO: refactor this file like how test_rows.py was refactored
 # for window fusion
 
-@pytest.fixture(params=["LEAD", "LAG"])
-def lead_or_lag(request):
-    return request.param
-
-
 # Helper environment variable to allow for testing locally, while avoiding
 # memory issues on CI
 testing_locally = os.environ.get("BODOSQL_TESTING_LOCALLY", False)
 
 
-@pytest.fixture(
-    params=[
-        pytest.param(
-            ("CURRENT ROW", "UNBOUNDED FOLLOWING"),
-            id="suffix",
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-        ),
-        pytest.param(
-            ("UNBOUNDED PRECEDING", "1 PRECEDING"),
-            id="exclusive_prefix",
-        ),
-        pytest.param(
-            ("1 PRECEDING", "1 FOLLOWING"),
-            id="rolling_3",
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-        ),
-        pytest.param(
-            ("CURRENT ROW", "1 FOLLOWING"),
-            id="rolling2",
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-        ),
-        pytest.param(
-            ("CURRENT ROW", "CURRENT ROW"),
-            id="current_row",
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-        ),
-        pytest.param(
-            ("1 FOLLOWING", "2 FOLLOWING"),
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-            id="2_after",
-        ),
-        pytest.param(
-            ("UNBOUNDED PRECEDING", "2 FOLLOWING"),
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-            id="prefix_plus_2_after",
-        ),
-        pytest.param(
-            ("3 PRECEDING", "UNBOUNDED FOLLOWING"),
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-            id="suffix_plus_2_before",
-        ),
-    ]
+@pytest.mark.parametrize(
+    "func, cmp, use_dummy_frame",
+    [
+        pytest.param("ROW_NUMBER()", " = 1", False, id="min_row_number_filter"),
+        pytest.param("ROW_NUMBER()", " > 1", False, id="other_row_number"),
+        pytest.param("CUME_DIST()", " <= 0.5", False, id="cume_dist"),
+        pytest.param("NTILE(2)", " = 1", False, id="ntile"),
+        pytest.param("MIN(I)", " < 0", True, id="min"),
+        pytest.param("MAX(F)", " >= 1", True, id="max"),
+        pytest.param("SUM(I)", " >= 0", True, id="sum"),
+        pytest.param("STDDEV(F)", " < 3", True, id="stddev"),
+        pytest.param("COUNT(S)", " > 2", True, id="count"),
+        pytest.param("COUNT(*)", " > 2", True, id="count_star"),
+        pytest.param("FIRST_VALUE(I)", " < 0", True, id="first"),
+        pytest.param("LAST_VALUE(F)", " < 0", True, id="last"),
+        pytest.param("LEAD(I, 1, 0)", " < I", False, id="lead_respect_nulls"),
+        pytest.param("LAG(N, 1, 0) IGNORE NULLS", " > 0", False, id="lag_ignore_nulls"),
+    ],
 )
-def over_clause_bounds(request):
-    """fixture containing the upper/lower bounds for the SQL OVER clause"""
-    return request.param
+def test_qualify_no_bounds(func, cmp, use_dummy_frame, spark_info, memory_leak_check):
+    """
+    A test to ensure qualify works for window functions that do not have specified bounds.
+
+    Generates a query using the parametrized arguments as follows:
+
+    func = ROWS_NUMBER()
+    cmp = ' = 1'
+    use_dummy_frame = False
+
+    query:
+        SELECT
+            P, O, I
+        FROM table1
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY P ORDER BY O) = 1
+
+    However, since Spark does not support QUALIFY syntax, we rewrite this into the following query
+    for the purposes of generating a refsol:
+        SELECT P, O, I
+        FROM (
+            SELECT
+                P, O, I, ROW_NUMBER() OVER (PARTITION BY P ORDER BY O) AS window_val
+            FROM table1)
+        WHERE window_val = 1
+
+    If the argument 'use_dummy_frame' is set to True, then the OVER clause of the query will
+    include the term "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.
+    """
+    order_term = "ORDER BY O"
+    if use_dummy_frame:
+        order_term += " ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"
+    bodosql_query = f"SELECT P, O, I from table1 QUALIFY {func} OVER (PARTITION BY P {order_term}) {cmp}"
+    spark_subquery = f"SELECT P, O, I, {func} OVER (PARTITION BY P {order_term}) as window_val from table1"
+    spark_query = f"SELECT P, O, I from ({spark_subquery}) where window_val {cmp}"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "P": [1, 1, 2, 1, 1, 2, 3, 2, 1, 1, 2, 3, 4, 3, 2, 1],
+                "O": [15, 0, 14, 1, 13, 2, 12, 3, 11, 4, 10, 5, 9, 6, 8, 7],
+                "I": pd.Series(
+                    [-i if i % 3 == 2 else i for i in range(16)], dtype=pd.Int32Dtype()
+                ),
+                "F": [np.tan(i) for i in range(16)],
+                "S": [None if i % 5 > 2 else str(2**i) for i in range(16)],
+                "N": pd.Series(
+                    [None if i % 3 == 1 else i * (-1) ** i for i in range(16)],
+                    dtype=pd.Int32Dtype(),
+                ),
+            }
+        )
+    }
+    check_query(
+        bodosql_query,
+        ctx,
+        spark_info,
+        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+    )
 
 
-@pytest.fixture(
-    params=[
-        pytest.param("MEDIAN", id="MEDIAN"),
-        pytest.param("MAX", id="MAX"),
-        pytest.param(
-            "MIN",
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-            id="MIN",
-        ),
-        pytest.param("COUNT", marks=pytest.mark.slow, id="COUNT"),
-        pytest.param("COUNT(*)", id="COUNT(*)"),
-        pytest.param("SUM", marks=pytest.mark.slow, id="SUM"),
-        pytest.param("AVG", id="AVG"),
-        pytest.param("STDDEV", id="STDEV"),
-        pytest.param(
-            "STDDEV_POP",
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-            id="STDEV_POP",
-        ),
-        pytest.param("VARIANCE", marks=pytest.mark.slow, id="VARIANCE"),
-        pytest.param("VAR_SAMP", marks=pytest.mark.slow, id="VAR_SAMP"),
-        pytest.param("VARIANCE_SAMP", marks=pytest.mark.slow, id="VARIANCE_SAMP"),
-        pytest.param(
-            "VAR_POP",
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-            id="VAR_POP",
-        ),
-        pytest.param(
-            "VARIANCE_POP",
-            marks=[
-                pytest.mark.skipif(not testing_locally, reason="Fix Memory Leak error"),
-                pytest.mark.slow,
-            ],
-            id="VARIANCE_POP",
-        ),
-        pytest.param("FIRST_VALUE", marks=pytest.mark.slow, id="FIRST_VALUE"),
-        pytest.param("LAST_VALUE", id="LAST_VALUE"),
-        pytest.param("ANY_VALUE", marks=pytest.mark.slow, id="ANY_VALUE"),
-    ]
+@pytest.mark.parametrize(
+    "func, cmp, frame",
+    [
+        pytest.param("MIN(I)", " > 0", "prefix", id="min"),
+        pytest.param("MAX(F)", " > 0", "suffix", id="max"),
+        pytest.param("SUM(F)", " < 0", "sliding", id="sum"),
+        pytest.param("AVG(I)", " > 1", "prefix", id="sum"),
+        pytest.param("VARIANCE_POP(F)", " < 10", "suffix", id="var_pop"),
+        pytest.param("COUNT(S)", " > 1", "prefix", id="count"),
+        pytest.param("COUNT(*)", " = 3", "sliding", id="count_star"),
+        pytest.param("FIRST_VALUE(S)", " IS NULL", "sliding", id="first"),
+        pytest.param("LAST_VALUE(S)", " IS NOT NULL", "sliding", id="last"),
+    ],
 )
-def numeric_agg_funcs_subset(request):
-    """subset of numeric aggregation functions, used for testing windowed behavior"""
-    return request.param
+def test_qualify_with_bounds(func, cmp, frame, spark_info, memory_leak_check):
+    """
+    A test to ensure qualify works for window functions using window frame bounds.
+    Specifically, tests with one of 3 common window frame patterns:
+    - prefix: the current row + all rows before it
+    - suffix: the current row + all rows after it
+    - sliding: a narrow range of rows centered on the current row
+
+    Generates a query using the parametrized arguments as follows:
+
+    func = MIN(I)
+    cmp = " > 0"
+    frame = "prefix"
+
+    query:
+        SELECT
+            P, O, I
+        FROM table1
+        QUALIFY MIN(I) OVER (PARTITION BY P ORDER BY O ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) > 0
+
+    However, since Spark does not support QUALIFY syntax, we rewrite this into the following query
+    for the purposes of generating a refsol:
+        SELECT P, O, I
+        FROM (
+            SELECT
+                P, O, I, MIN(I) OVER (PARTITION BY P ORDER BY O ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) > 0 AS window_val
+            FROM table1)
+        WHERE window_val > 0
+    """
+    order_term = "ORDER BY O"
+    if frame == "prefix":
+        order_term += " ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+    elif frame == "suffix":
+        order_term += " ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING"
+    elif frame == "sliding":
+        order_term += " ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING"
+    bodosql_query = f"SELECT P, O from table1 QUALIFY {func} OVER (PARTITION BY P {order_term}) {cmp}"
+    spark_subquery = f"SELECT P, O, {func} OVER (PARTITION BY P {order_term}) as window_val from table1"
+    spark_query = f"SELECT P, O from ({spark_subquery}) where window_val {cmp}"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "P": [1, 1, 2, 1, 1, 2, 3, 2, 1, 1, 2, 3, 4, 3, 2, 1],
+                "O": [15, 0, 14, 1, 13, 2, 12, 3, 11, 4, 10, 5, 9, 6, 8, 7],
+                "I": pd.Series(
+                    [-i if i % 3 == 2 else i for i in range(16)], dtype=pd.Int32Dtype()
+                ),
+                "F": [np.tan(i) for i in range(16)],
+                "S": [None if i % 5 > 2 else str(2**i) for i in range(16)],
+            }
+        )
+    }
+    check_query(
+        bodosql_query,
+        ctx,
+        spark_info,
+        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+    )
 
 
 @pytest.fixture(
@@ -157,111 +197,6 @@ def numeric_agg_funcs_subset(request):
 def non_numeric_agg_funcs_subset(request):
     """subset of non_numeric aggregation functions, used for testing windowed behavior"""
     return request.param
-
-
-@pytest.mark.slow
-def test_QUALIFY_no_bounds(bodosql_numeric_types, spark_info, memory_leak_check):
-    """
-    A test to ensure qualify works for window functions that do not have specified bounds
-    """
-
-    df_dtype = bodosql_numeric_types["table1"]["A"].dtype
-    if not (
-        testing_locally
-        or np.issubdtype(df_dtype, np.float64)
-        or np.issubdtype(df_dtype, np.int64)
-    ):
-        pytest.skip("Skipped due to memory leak")
-
-    spark_subquery = "SELECT A, B, C, MAX(A) OVER (PARTITION BY C ORDER BY B) as window_val from table1"
-    bodosql_query = "SELECT * from table1 QUALIFY MAX(A) OVER (PARTITION BY C ORDER BY B) > 1 ORDER BY A, B, C"
-    spark_query = (
-        f"SELECT A, B, C from ({spark_subquery}) where window_val > 1 ORDER BY A, B, C"
-    )
-
-    res = check_query(
-        bodosql_query,
-        bodosql_numeric_types,
-        spark_info,
-        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
-        sort_output=False,
-        check_dtype=False,
-        check_names=False,
-        only_jit_1DVar=True,
-        return_seq_dataframe=True,
-    )
-
-    if bodo.get_size() == 1:
-        out_df = res["output_df"]
-        # ensure that the qualify filter actually leaves some output, so we can actually test correctness
-        assert len(out_df) > 0, "Qualify filtered output is empty"
-        # ensure that the qualify filter actually filters some of the output, so we can actually test correctness
-        assert len(out_df) < len(
-            bodosql_numeric_types["table1"]
-        ), f"Qualify filtered nothing. Output DF: {out_df}"
-
-
-def test_QUALIFY_upper_lower_bound_numeric(
-    bodosql_numeric_types,
-    numeric_agg_funcs_subset,
-    over_clause_bounds,
-    spark_info,
-    memory_leak_check,
-):
-    """
-    Tests qualify on numeric row functions
-    Largely a copy of test_windowed_upper_lower_bound_numeric, but using qualify
-    """
-
-    if numeric_agg_funcs_subset in ("STDDEV", "VARIANCE", "VAR_SAMP", "VARIANCE_SAMP"):
-        scalar_filter_val = "0"
-    else:
-        scalar_filter_val = "1"
-
-    # remove once memory leak is resolved
-    df_dtype = bodosql_numeric_types["table1"]["A"].dtype
-    if not (
-        testing_locally
-        or np.issubdtype(df_dtype, np.float64)
-        or np.issubdtype(df_dtype, np.int64)
-    ):
-        pytest.skip("Skipped due to memory leak")
-
-    if numeric_agg_funcs_subset == "COUNT(*)":
-        agg_fn_call = "COUNT(*)"
-    else:
-        agg_fn_call = f"{numeric_agg_funcs_subset}(A)"
-
-    window_ASC = f"(PARTITION BY B ORDER BY C ASC ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-    window_DESC = f"(PARTITION BY B ORDER BY C DESC ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-
-    # doing an orderby in the query so it's easier to tell what the error is by visual comparison
-    # should an error occur
-    query = f"select A, B, C, {agg_fn_call} OVER {window_ASC} as WINDOW_AGG_ASC FROM table1 QUALIFY WINDOW_AGG_ASC > {scalar_filter_val} OR {agg_fn_call} OVER {window_DESC} >= {scalar_filter_val} ORDER BY B, C"
-
-    spark_subquery = f"select A, B, C, {agg_fn_call} OVER {window_ASC} as WINDOW_AGG_ASC, {agg_fn_call} OVER {window_DESC} as WINDOW_AGG_DES FROM table1"
-    spark_query = f"select A, B, C, WINDOW_AGG_ASC FROM ({spark_subquery}) where WINDOW_AGG_ASC > {scalar_filter_val} OR WINDOW_AGG_DES >= {scalar_filter_val} ORDER BY B, C"
-
-    res = check_query(
-        query,
-        bodosql_numeric_types,
-        spark_info,
-        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
-        sort_output=False,
-        check_dtype=False,
-        check_names=False,
-        only_jit_1DVar=True,
-        return_seq_dataframe=True,
-    )
-
-    if bodo.get_size() == 1:
-        out_df = res["output_df"]
-        # ensure that the qualify filter acutally leaves some output, so we can actually test correctness
-        assert len(out_df) > 0, "Qualify filtered output is empty"
-        # ensure that the qualify filter actually filters some of the output, so we can actually test correctness
-        assert len(out_df) < len(
-            bodosql_numeric_types["table1"]
-        ), f"Qualify filtered nothing. Output DF: {out_df}"
 
 
 @pytest.mark.slow
@@ -584,7 +519,6 @@ def test_QUALIFY_eval_order_WHERE(spark_info, memory_leak_check):
 
 
 def test_QUALIFY_eval_order_GROUP_BY_HAVING(spark_info, memory_leak_check):
-
     """Ensures that Group by and HAVING are evaluated before QUALIFY"""
     df = pd.DataFrame(
         {
@@ -621,7 +555,6 @@ def test_QUALIFY_eval_order_GROUP_BY_HAVING(spark_info, memory_leak_check):
 
 @pytest.mark.slow
 def test_QUALIFY_eval_order_DISTINCT(spark_info, memory_leak_check):
-
     """Ensures that DISTINCT is evaluated after QUALIFY"""
     df = pd.DataFrame(
         {
@@ -663,7 +596,6 @@ def test_QUALIFY_eval_order_DISTINCT(spark_info, memory_leak_check):
 
 
 def test_QUALIFY_eval_order_LIMIT(spark_info, memory_leak_check):
-
     """Ensures that LIMIT is evaluated after QUALIFY"""
     df = pd.DataFrame(
         {
