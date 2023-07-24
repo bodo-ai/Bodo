@@ -19,7 +19,6 @@ from bodo.utils.typing import (
     get_overload_const_bool,
     get_overload_const_str,
     is_literal_type,
-    is_overload_constant_bool,
     is_overload_constant_str,
     is_overload_none,
     is_str_arr_type,
@@ -1313,58 +1312,42 @@ def overload_cast_date_to_tz_aware_util(arr, tz):
     )
 
 
-def cast_tz_aware_to_tz_naive(arr, normalize):  # pragma: no cover
+def cast_tz_aware_to_tz_naive(arr):  # pragma: no cover
     pass
 
 
 @overload(cast_tz_aware_to_tz_naive, no_unliteral=True)
-def overload_cast_tz_aware_to_tz_naive(arr, normalize):
-    if not is_overload_constant_bool(normalize):
-        raise_bodo_error(
-            "cast_tz_aware_to_tz_naive(): 'normalize' must be a literal value"
-        )
+def overload_cast_tz_aware_to_tz_naive(arr):
     if isinstance(arr, types.optional):
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive",
-            ["arr", "normalize"],
+            ["arr"],
             0,
         )
 
-    def impl(arr, normalize):  # pragma: no cover
-        return cast_tz_aware_to_tz_naive_util(arr, normalize)
+    def impl(arr):  # pragma: no cover
+        return cast_tz_aware_to_tz_naive_util(arr)
 
     return impl
 
 
-def cast_tz_aware_to_tz_naive_util(arr, normalize):  # pragma: no cover
+def cast_tz_aware_to_tz_naive_util(arr):  # pragma: no cover
     pass
 
 
 @overload(cast_tz_aware_to_tz_naive_util, no_unliteral=True)
-def overload_cast_tz_aware_to_tz_naive_util(arr, normalize):
-    if not is_overload_constant_bool(normalize):
-        raise_bodo_error(
-            "cast_tz_aware_to_tz_naive(): 'normalize' must be a literal value"
-        )
-    normalize = get_overload_const_bool(normalize)
+def overload_cast_tz_aware_to_tz_naive_util(arr):
     verify_datetime_arg_require_tz(arr, "cast_tz_aware_to_tz_naive", "arr")
-    arg_names = ["arr", "normalize"]
-    arg_types = [arr, normalize]
-    # normalize can never be null
-    propagate_null = [True, False]
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
     # If we have an array we must cast the output to a datetime64
     unbox_str = (
         "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
         if bodo.utils.utils.is_array_typ(arr)
         else ""
     )
-    scalar_text = ""
-    if normalize:
-        scalar_text += (
-            "ts = pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day)\n"
-        )
-    else:
-        scalar_text += "ts = arg0.tz_localize(None)\n"
+    scalar_text = "ts = arg0.tz_localize(None)\n"
     scalar_text += f"res[i] = {unbox_str}(ts)"
     out_dtype = types.Array(bodo.datetime64ns, 1, "C")
     return gen_vectorized(

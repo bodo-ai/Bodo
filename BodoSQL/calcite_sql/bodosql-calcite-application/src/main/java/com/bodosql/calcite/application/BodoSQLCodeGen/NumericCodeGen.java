@@ -1,11 +1,15 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
+
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.ir.Dataframe;
 import com.bodosql.calcite.ir.Expr;
-import com.bodosql.calcite.ir.ExprKt;
+import com.bodosql.calcite.ir.Expr.None;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import kotlin.Pair;
 
 // List defining all numeric functions which will be mapped to their corresponding array kernel in
 // Python.
@@ -38,23 +42,6 @@ public class NumericCodeGen {
           "TRUNC",
           "TRUNCATE");
 
-  // List defining all numeric functions to be mapped (from fnList) which will
-  // have two arguments.
-  static List<String> doubleArgFns =
-      Arrays.asList(
-          "BITAND",
-          "BITOR",
-          "BITXOR",
-          "BITSHIFTLEFT",
-          "BITSHIFTRIGHT",
-          "GETBIT",
-          "MOD",
-          "POW",
-          "POWER",
-          "ROUND",
-          "TRUNC",
-          "TRUNCATE");
-
   // HashMap of all numeric functions which maps to array kernels
   // which handle all combinations of scalars/arrays/nulls.
   static HashMap<String, String> equivalentFnMap = new HashMap<>();
@@ -72,132 +59,99 @@ public class NumericCodeGen {
   }
 
   /**
-   * Helper function that handles codegen for Single argument numeric functions
+   * Helper function that handles codegen for most numeric functions.
    *
    * @param fnName The name of the function
-   * @param arg1Expr The string expression of arg1
+   * @param args The input expressions
    * @return The Expr corresponding to the function call
    */
-  public static String getSingleArgNumericFnInfo(String fnName, String arg1Expr) {
+  public static Expr getNumericFnCode(String fnName, List<Expr> args) {
 
     if (equivalentFnMap.containsKey(fnName)) {
-      return equivalentFnMap.get(fnName) + "(" + arg1Expr + ")";
+      return new Expr.Call(equivalentFnMap.get(fnName), args);
     } else {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + " not supported");
     }
-  }
-
-  /**
-   * Helper function that handles codegen for double argument numeric functions
-   *
-   * @param fnName The name of the function
-   * @param arg1Expr The string expression of arg1
-   * @param arg2Expr The string expression of arg2
-   * @return The Expr corresponding to the function call
-   */
-  public static String getDoubleArgNumericFnInfo(String fnName, String arg1Expr, String arg2Expr) {
-
-    if (!doubleArgFns.contains(fnName)) {
-      throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + " not supported");
-    }
-    return equivalentFnMap.get(fnName) + "(" + arg1Expr + ", " + arg2Expr + ")";
-  }
-
-  /**
-   * Function that return the necessary generated code for a CONV Function Call.
-   *
-   * @param inputExpr The first argument of the CONV call, either a scalar, or a column
-   * @param curBaseExpr The second argument of the CONV call, the current base
-   * @param newBaseExpr The second argument of the CONV call, the base to convert to.
-   * @return The code generated that matches the CONV expression.
-   */
-  public static String generateConvCode(String inputExpr, String curBaseExpr, String newBaseExpr) {
-    StringBuilder strBuilder = new StringBuilder();
-    strBuilder
-        .append("bodo.libs.bodosql_array_kernels.conv(")
-        .append(inputExpr)
-        .append(", ")
-        .append(curBaseExpr)
-        .append(", ")
-        .append(newBaseExpr)
-        .append(")");
-    return strBuilder.toString();
   }
 
   /**
    * Function that returns the RexVisitorInfo for a LOG Function Call.
    *
-   * @param operandsInfo A list of the visitor info, containing the information for each operand
-   * @return The RexVisitorInfo that matches the LOG expression.
+   * @param args A list of the exprs for the arguments.
+   * @return The Expr that matches the LOG expression.
    */
-  public static Expr generateLogFnInfo(List<Expr> operandsInfo) {
-    StringBuilder exprStrBuilder = new StringBuilder();
-    if (operandsInfo.size() == 1) {
+  public static Expr generateLogFnInfo(List<Expr> args) {
+    String fnName;
+    if (args.size() == 1) {
       // One operand, we default to log10 as that is the default behavior in mySQL
-      exprStrBuilder.append(
-          "bodo.libs.bodosql_array_kernels.log10(" + operandsInfo.get(0).emit() + ")");
+      fnName = "log10";
     } else {
-      assert operandsInfo.size() == 2;
-
-      exprStrBuilder
-          .append("bodo.libs.bodosql_array_kernels.log(")
-          .append(operandsInfo.get(0).emit())
-          .append(",")
-          .append(operandsInfo.get(1).emit())
-          .append(")");
+      assert args.size() == 2;
+      fnName = "log";
     }
-    return new Expr.Raw(exprStrBuilder.toString());
+    return BodoSQLKernel(fnName, args, List.of());
   }
 
   /**
    * Helper function that handles the codegen for TO_NUMBER/TO_NUMERIC/TO_DECIMAL function
    *
-   * @param arg1Info The VisitorInfo for the first argument.
-   * @return the rexNodeVisitorInfo for the function call
+   * @param args The arguments to this call.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The Expr for the function call.
    */
-  public static Expr generateToNumberCode(Expr arg1Info, String fnName) {
-    String outputExpr = "bodo.libs.bodosql_array_kernels.to_number(" + arg1Info.emit() + ")";
-    return new Expr.Raw(outputExpr);
+  public static Expr generateToNumberCode(
+      List<Expr> args, List<Pair<String, Expr>> streamingNamedArgs) {
+    return BodoSQLKernel("to_number", args, streamingNamedArgs);
   }
 
   /**
    * Helper function that handles the codegen for TRY_TO_NUMBER/TRY_TO_NUMERIC/TRY_TO_DECIMAL
    * function
    *
-   * @param arg1Info The VisitorInfo for the first argument.
-   * @return the rexNodeVisitorInfo for the function call
+   * @param args The arguments to this call.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The Expr for the function call.
    */
-  public static Expr generateTryToNumberCode(Expr arg1Info) {
-    String outputExpr = "bodo.libs.bodosql_array_kernels.try_to_number(" + arg1Info.emit() + ")";
-    return new Expr.Raw(outputExpr);
+  public static Expr generateTryToNumberCode(
+      List<Expr> args, List<Pair<String, Expr>> streamingNamedArgs) {
+    return BodoSQLKernel("try_to_number", args, streamingNamedArgs);
   }
 
-  public static Expr generateLeastGreatestCode(String fnName, List<Expr> operands) {
-    String kernelName = "bodo.libs.bodosql_array_kernels." + fnName.toLowerCase();
-
+  /**
+   * Generate the code for least/greatest.
+   *
+   * @param fnName Name of the operation. least or greatest.
+   * @param operands Arguments to the function.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The Expr for the function call.
+   */
+  public static Expr generateLeastGreatestCode(
+      String fnName, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
     // LEAST and GREATEST take in a variable number of arguments,
     // so we wrap these arguments in a tuple as input
-    return new Expr.Call(kernelName, List.of(new Expr.Tuple(operands)));
+    return BodoSQLKernel(
+        fnName.toLowerCase(), List.of(new Expr.Tuple(operands)), streamingNamedArgs);
   }
 
   /**
    * Function that returns the RexVisitorInfo for a RANDOM Function Call.
    *
-   * @param inputName name of the DataFrame whose length the random output column must match (if not
-   *     a single row)
+   * @param input The Dataframe whose length the random output column must match (if not a single
+   *     row)
    * @param isSingleRow true if the output should be a scalar
    * @return The RexVisitorInfo that matches the RANDOM expression.
    */
-  public static Expr generateRandomFnInfo(String inputName, boolean isSingleRow) {
-    StringBuilder exprStrBuilder = new StringBuilder();
-    exprStrBuilder.append("bodo.libs.bodosql_array_kernels.random_seedless(");
+  public static Expr generateRandomFnInfo(Dataframe input, boolean isSingleRow) {
+    Expr arg;
     if (isSingleRow) {
-      exprStrBuilder.append("None");
+      arg = None.INSTANCE;
     } else {
-      exprStrBuilder.append(inputName);
+      arg = input;
     }
-    exprStrBuilder.append(")");
-    return new Expr.Raw(exprStrBuilder.toString());
+    return new Expr.Call("bodo.libs.bodosql_array_kernels.random_seedless", arg);
   }
 
   /**
@@ -207,6 +161,6 @@ public class NumericCodeGen {
    * @return The Expr corresponding to the function call
    */
   public static Expr generateUniformFnInfo(List<Expr> operands) {
-    return ExprKt.BodoSQLKernel("uniform", operands, List.of());
+    return BodoSQLKernel("uniform", operands, List.of());
   }
 }

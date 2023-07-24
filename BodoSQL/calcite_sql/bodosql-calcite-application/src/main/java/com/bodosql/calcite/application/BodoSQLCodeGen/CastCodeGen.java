@@ -1,14 +1,20 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateTruncCode;
 import static com.bodosql.calcite.application.Utils.Utils.sqlTypenameToPandasTypename;
-import static org.apache.calcite.sql.type.SqlTypeName.DATE;
+import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
 import static org.apache.calcite.sql.type.SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
 
-import com.bodosql.calcite.application.*;
+import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
-import org.apache.calcite.rel.type.*;
-import org.apache.calcite.sql.type.*;
+import com.bodosql.calcite.ir.Expr.False;
+import com.bodosql.calcite.ir.Expr.None;
+import com.bodosql.calcite.ir.Expr.True;
+import java.util.ArrayList;
+import java.util.List;
+import kotlin.Pair;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.TZAwareSqlType;
 
 /** Class that returns the generated code for Cast calls after all inputs have been visited. */
 public class CastCodeGen {
@@ -19,71 +25,62 @@ public class CastCodeGen {
    * @param inputType The original input data type that needs to be cast.
    * @param outputType The output data type that is the target of the case.
    * @param outputScalar Should the output generate scalar code.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
    * @return The code generated that matches the Cast call.
    */
-  public static String generateCastCode(
-      String arg,
+  public static Expr generateCastCode(
+      Expr arg,
       RelDataType inputType,
       RelDataType outputType,
-      boolean outputScalar) {
-    StringBuilder codeBuilder = new StringBuilder();
+      boolean outputScalar,
+      List<Pair<String, Expr>> streamingNamedArgs) {
     SqlTypeName inputTypeName = inputType.getSqlTypeName();
     SqlTypeName outputTypeName = outputType.getSqlTypeName();
+    String fnName;
+    // Create the args. Some function paths may have multiple args.
+    List<Expr> args = new ArrayList<>();
+    args.add(arg);
+    boolean appendStreamingArgs = false;
     switch (outputTypeName) {
       case CHAR:
       case VARCHAR:
-        codeBuilder.append("bodo.libs.bodosql_array_kernels.to_char(").append(arg).append(")");
+        fnName = "bodo.libs.bodosql_array_kernels.to_char";
         break;
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         String tzStr = ((TZAwareSqlType) outputType).getTZInfo().getPyZone();
+        // TODO(njriasan): Refactor/remove getPyZone, which contains the information to make a
+        // Python str
+        args.add(new Expr.Raw(tzStr));
         // TZ-Aware data needs special handling
         switch (inputTypeName) {
           case TIMESTAMP:
-            codeBuilder
-                .append("bodo.libs.bodosql_array_kernels.cast_tz_naive_to_tz_aware(")
-                .append(arg)
-                .append(", ")
-                .append(tzStr)
-                .append(")");
+            fnName = "bodo.libs.bodosql_array_kernels.cast_tz_naive_to_tz_aware";
             break;
           case DATE:
-            codeBuilder
-                .append("bodo.libs.bodosql_array_kernels.cast_date_to_tz_aware(")
-                .append(arg)
-                .append(", ")
-                .append(tzStr)
-                .append(")");
+            fnName = "bodo.libs.bodosql_array_kernels.cast_date_to_tz_aware";
             break;
           case CHAR:
           case VARCHAR:
-            // Strings cast as a normal timestamp but with tz-information.
-            codeBuilder
-                .append("bodo.libs.bodosql_array_kernels.cast_str_to_tz_aware(")
-                .append(arg)
-                .append(", ")
-                .append(tzStr)
-                .append(")");
+            fnName = "bodo.libs.bodosql_array_kernels.cast_str_to_tz_aware";
+            appendStreamingArgs = true;
             break;
           default:
             throw new BodoSQLCodegenException(
-                String.format("Unsupported cast: %s to %s", inputTypeName, outputTypeName));
+                java.lang.String.format(
+                    "Unsupported cast: %s to %s", inputTypeName, outputTypeName));
         }
         break;
       case DATE:
-        codeBuilder.append("bodo.libs.bodosql_array_kernels.to_date(").append(arg).append(", None)");
+        fnName = "bodo.libs.bodosql_array_kernels.to_date";
+        args.add(Expr.None.INSTANCE);
+        appendStreamingArgs = true;
         break;
       case TIMESTAMP:
         // If we cast from tz-aware to naive there is special handling. Otherwise, we
         // fall back to the default case.
         if (inputTypeName == TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
-          // Should we normalize the Timestamp to just the date contents?
-          String secondArg = outputTypeName == DATE ? "True" : "False";
-          codeBuilder
-              .append("bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(")
-              .append(arg)
-              .append(", ")
-              .append(secondArg)
-              .append(")");
+          fnName = "bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive";
           break;
         }
       default:
@@ -91,60 +88,83 @@ public class CastCodeGen {
         SqlTypeName typeName = outputType.getSqlTypeName();
         String dtype = sqlTypenameToPandasTypename(typeName, outputScalar);
         if (outputScalar) {
+          fnName = dtype;
           asTypeBuilder.append(dtype).append("(").append(arg).append(")");
         } else {
-          // TODO: replace Series.astype/dt with array operation
-          asTypeBuilder
-              .append("bodo.hiframes.pd_series_ext.get_series_data(")
-              .append("pd.Series(")
-              .append(arg)
-              .append(").astype(")
-              .append(dtype)
-              .append(", _bodo_nan_to_str=False))");
+          // TODO(njriasan): replace Series.astype/dt with array operation
+          fnName = "bodo.hiframes.pd_series_ext.get_series_data";
+          // Replace the arg with a call to pd.Series and an astype.
+          Expr newArg =
+              new Expr.Method(
+                  new Expr.Call("pd.Series", arg),
+                  "astype",
+                  List.of(new Expr.Raw(dtype)),
+                  List.of(new Pair<>("_bodo_nan_to_str", False.INSTANCE)));
+          args.set(0, newArg);
         }
-        codeBuilder.append(asTypeBuilder);
     }
-    return codeBuilder.toString();
+    return new Expr.Call(fnName, args, appendStreamingArgs ? streamingNamedArgs : List.of());
   }
 
-  public static String generateTryCastCode(
-      String arg,
-      RelDataType outputType) {
-    StringBuilder codeBuilder = new StringBuilder();
+  /**
+   * Function that return the necessary generated code for a tryCast call.
+   *
+   * @param arg The arg expr.
+   * @param outputType The output data type that is the target of the case.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The code generated that matches the tryCast call.
+   */
+  public static Expr generateTryCastCode(
+      Expr arg, RelDataType outputType, List<Pair<String, Expr>> streamingNamedArgs) {
     SqlTypeName outputTypeName = outputType.getSqlTypeName();
-    codeBuilder.append("bodo.libs.bodosql_array_kernels.");
+    String fnName;
+    List<Expr> args = new ArrayList<>();
+    args.add(arg);
     switch (outputTypeName) {
-    case BOOLEAN:
-      codeBuilder.append("try_to_boolean(").append(arg).append(")");
-      break;
-    case CHAR:
-    case VARCHAR:
-      return arg;
-    case DATE:
-      codeBuilder.append("try_to_date(").append(arg).append(", None)");
-      break;
-    case DECIMAL:
-    case INTEGER:
-      codeBuilder.append("try_to_number(").append(arg).append(")");
-      break;
-    case DOUBLE:
-    case FLOAT:
-      codeBuilder.append("try_to_double(").append(arg).append(", None)");
-      break;
-    case TIME:
-      codeBuilder.append("to_time(").append(arg).append(", format_str=None, _try=True)");
-      break;
-    case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
-      String tzStr = ((TZAwareSqlType) outputType).getTZInfo().getPyZone();
-      codeBuilder.append("try_to_timestamp(").append(arg).append(", None, ").append(tzStr).append(", 0)");
-      break;
-    case TIMESTAMP:
-      codeBuilder.append("try_to_timestamp(").append(arg).append(", None, None, 0)");
-      break;
-    default:
-      throw new BodoSQLCodegenException(
-          String.format("%s is not supported by TRY_CAST.", outputTypeName));
+      case CHAR:
+      case VARCHAR:
+        // Casting String -> String is a NO-OP
+        return arg;
+      case BOOLEAN:
+        fnName = "try_to_boolean";
+        break;
+      case DATE:
+        fnName = "try_to_date";
+        args.add(None.INSTANCE);
+        break;
+      case DECIMAL:
+      case INTEGER:
+        fnName = "try_to_number";
+        break;
+      case DOUBLE:
+      case FLOAT:
+        fnName = "try_to_double";
+        args.add(None.INSTANCE);
+        break;
+      case TIME:
+        fnName = "to_time";
+        args.add(None.INSTANCE);
+        args.add(True.INSTANCE);
+        break;
+      case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+        fnName = "try_to_timestamp";
+        args.add(None.INSTANCE);
+        // TODO(njriasan): Modify getPyZone to no longer output a Python string.
+        String tzStr = ((TZAwareSqlType) outputType).getTZInfo().getPyZone();
+        args.add(new Expr.Raw(tzStr));
+        args.add(new Expr.IntegerLiteral(0));
+        break;
+      case TIMESTAMP:
+        fnName = "try_to_timestamp";
+        args.add(None.INSTANCE);
+        args.add(None.INSTANCE);
+        args.add(new Expr.IntegerLiteral(0));
+        break;
+      default:
+        throw new BodoSQLCodegenException(
+            String.format("%s is not supported by TRY_CAST.", outputTypeName));
     }
-    return codeBuilder.toString();
+    return BodoSQLKernel(fnName, args, streamingNamedArgs);
   }
 }

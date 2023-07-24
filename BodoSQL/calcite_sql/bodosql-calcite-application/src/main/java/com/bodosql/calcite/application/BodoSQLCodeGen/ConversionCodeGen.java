@@ -1,78 +1,74 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.SQLToPython.FormatHelpers.SQLFormatToPandasToDatetimeFormat;
+import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
-import com.bodosql.calcite.ir.ExprKt;
+import com.bodosql.calcite.ir.Expr.Call;
+import com.bodosql.calcite.ir.Expr.None;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import kotlin.Pair;
 
 public class ConversionCodeGen {
   /**
    * Function that return the necessary generated code for a StrToDate Function Call.
    *
    * @param strExpr The string Expression to be converted to a timestamp.
+   * @param is_scalar Is the input/output a scalar or column?
    * @param SQLFormatStr A string literal SQL format string. Required to be a string literal by the
    *     function signature
    * @return The code generated that matches the StrToDate expression.
    */
-  public static String generateStrToDateCode(
-      String strExpr, boolean is_scalar, String SQLFormatStr) {
-    StringBuilder strBuilder = new StringBuilder();
+  public static Expr generateStrToDateCode(Expr strExpr, boolean is_scalar, String SQLFormatStr) {
+    List<Expr> args = List.of(strExpr);
+    List<Pair<String, Expr>> namedArgs =
+        List.of(new Pair<>("format", SQLFormatToPandasToDatetimeFormat(SQLFormatStr)));
+    Expr.Call conversion = new Call("pd.to_datetime", args, namedArgs);
     if (!is_scalar) {
-      strBuilder
-          .append("pd.to_datetime(")
-          .append(strExpr)
-          .append(", format=")
-          .append(SQLFormatToPandasToDatetimeFormat(SQLFormatStr))
-          .append(").date");
+      return new Expr.Attribute(conversion, "date");
     } else {
-      strBuilder
-          .append("pd.to_datetime(")
-          .append(strExpr)
-          .append(", format=")
-          .append(SQLFormatToPandasToDatetimeFormat(SQLFormatStr))
-          .append(").date()");
+      return new Expr.Method(conversion, "date", List.of(), List.of());
     }
-
-    return strBuilder.toString();
   }
 
   /**
    * Handles codegen for Snowflake TO_DATE/TRY_TO_DATE function.
    *
-   * @param operandsInfo List of operands
+   * @param operands List of operands
    * @param fnName The name of the function
-   * @return RexVisitorInfo for the TO_DATE/TRY_TO_DATE function
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Expr for the TO_DATE/TRY_TO_DATE function
    */
-  public static Expr generateToDateFnCode(List<Expr> operandsInfo, String fnName) {
-    StringBuilder exprCode = new StringBuilder();
-    exprCode
-        .append("bodo.libs.bodosql_array_kernels.")
-        .append(fnName.toLowerCase())
-        .append("(")
-        .append(operandsInfo.get(0).emit())
-        .append(", ");
-    if (operandsInfo.size() == 2) {
-      exprCode.append(operandsInfo.get(1).emit());
-    } else {
-      exprCode.append("None");
+  public static Expr generateToDateFnCode(
+      List<Expr> operands, String fnName, List<Pair<String, Expr>> streamingNamedArgs) {
+    List<Expr> args = new ArrayList<>();
+    args.addAll(operands);
+    if (operands.size() == 1) {
+      args.add(None.INSTANCE);
     }
-    exprCode.append(")");
-    return new Expr.Raw(exprCode.toString());
+    assert args.size() == 2;
+    return BodoSQLKernel(fnName.toLowerCase(Locale.ROOT), args, streamingNamedArgs);
   }
 
   /**
    * Handles codegen for Snowflake TO_TIMESTAMP/TRY_TO_TIMESTAMP function.
    *
-   * @param operandsInfo List of operands
-   * @param tzStr String representing the timezone of the output data
+   * @param operands List of operands
+   * @param tzExpr Expr representing the timezone of the output data
    * @param fnName The name of the function being called
-   * @return RexVisitorInfo for the TO_TIMESTAMP/TRY_TO_TIMESTAMP function
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Expr for the TO_TIMESTAMP/TRY_TO_TIMESTAMP function
    */
   public static Expr generateToTimestampFnCode(
-      List<Expr> operandsInfo, String tzStr, String fnName) {
+      List<Expr> operands,
+      Expr tzExpr,
+      String fnName,
+      List<Pair<String, Expr>> streamingNamedArgs) {
 
     String kernelName;
     if (fnName.startsWith("TRY_")) {
@@ -82,59 +78,49 @@ public class ConversionCodeGen {
     }
     List<Expr> args;
 
-    if (operandsInfo.size() == 2) {
+    if (operands.size() == 2) {
       // 2nd argument is a format string
-      if (operandsInfo.get(1) instanceof Expr.StringLiteral) {
+      if (operands.get(1) instanceof Expr.StringLiteral) {
         // kernel argument order: conversionVal, format_str, time_zone, scale
-        args =
-            List.of(
-                operandsInfo.get(0),
-                operandsInfo.get(1),
-                new Expr.Raw(tzStr),
-                new Expr.IntegerLiteral(0));
+        args = List.of(operands.get(0), operands.get(1), tzExpr, new Expr.IntegerLiteral(0));
       } else {
         // 2nd argument is a scale (integer)
-        args =
-            List.of(
-                operandsInfo.get(0), Expr.None.INSTANCE, new Expr.Raw(tzStr), operandsInfo.get(1));
+        args = List.of(operands.get(0), Expr.None.INSTANCE, tzExpr, operands.get(1));
       }
     } else {
-      args =
-          List.of(
-              operandsInfo.get(0),
-              Expr.None.INSTANCE,
-              new Expr.Raw(tzStr),
-              new Expr.IntegerLiteral(0));
+      args = List.of(operands.get(0), Expr.None.INSTANCE, tzExpr, new Expr.IntegerLiteral(0));
     }
-    return ExprKt.BodoSQLKernel(kernelName, args, List.of());
+    return BodoSQLKernel(kernelName, args, streamingNamedArgs);
   }
 
   /**
    * Handles codegen for Snowflake TO_DOUBLE function.
    *
-   * @param operandsInfo List of operands
+   * @param operands List of operands
    * @param fnName Name of the function (TO_DOUBLE or TRY_TO_DOUBLE)
-   * @return RexVisitorInfo for the TO_DOUBLE function
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Expr for the TO_DOUBLE function
    */
-  public static Expr generateToDoubleFnCode(List<Expr> operandsInfo, String fnName) {
-    if (operandsInfo.size() > 1) {
+  public static Expr generateToDoubleFnCode(
+      List<Expr> operands, String fnName, List<Pair<String, Expr>> streamingNamedArgs) {
+    if (operands.size() > 1) {
       throw new BodoSQLCodegenException(
           "Error, format string for " + fnName + " not yet supported");
     }
-    String exprCode =
-        "bodo.libs.bodosql_array_kernels."
-            + fnName.toLowerCase()
-            + "("
-            + operandsInfo.get(0).emit()
-            + ", None)";
-    return new Expr.Raw(exprCode);
+    List<Expr> args = new ArrayList<>();
+    args.addAll(operands);
+    // Append none for the format string.
+    // TODO(njriasan): Support format strings.
+    args.add(None.INSTANCE);
+    return BodoSQLKernel(fnName.toLowerCase(), args, streamingNamedArgs);
   }
 
   /**
    * Handles codegen for Snowflake TO_CHAR function.
    *
    * @param operandsInfo List of operands
-   * @return RexVisitorInfo for the TO_CHAR function
+   * @return Expr for the TO_CHAR function
    */
   public static Expr generateToCharFnCode(List<Expr> operandsInfo) {
     List<Expr> args = new ArrayList<>();
@@ -142,55 +128,52 @@ public class ConversionCodeGen {
     if (operandsInfo.size() == 1) {
       args.add(Expr.None.INSTANCE);
     }
-    return ExprKt.BodoSQLKernel("to_char", args, List.of());
+    return BodoSQLKernel("to_char", args, List.of());
   }
 
   /**
    * Handles codegen for Snowflake TO_BOOLEAN and TRY_TO_BOOLEAN function.
    *
-   * @param operandsInfo List of operands
-   * @param @param fnName Name of the function (TO_BOOLEAN or TRY_TO_BOOLEAN)
-   * @return RexVisitorInfo for the TO_BOOLEAN or TRY_TO_BOOLEAN function
+   * @param operands List of operands
+   * @param fnName Name of the function (TO_BOOLEAN or TRY_TO_BOOLEAN)
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Expr for the TO_BOOLEAN or TRY_TO_BOOLEAN function
    */
-  public static Expr generateToBooleanFnCode(List<Expr> operandsInfo, String fnName) {
-    assert operandsInfo.size() == 1 : "Error, " + fnName + " function takes 1 argument";
-    String exprCode =
-        "bodo.libs.bodosql_array_kernels."
-            + fnName.toLowerCase()
-            + "("
-            + operandsInfo.get(0).emit()
-            + ")";
-    return new Expr.Raw(exprCode);
+  public static Expr generateToBooleanFnCode(
+      List<Expr> operands, String fnName, List<Pair<String, Expr>> streamingNamedArgs) {
+    assert operands.size() == 1 : "Error, " + fnName + " function takes 1 argument";
+    return BodoSQLKernel(fnName.toLowerCase(), operands, streamingNamedArgs);
   }
 
   /**
    * Handles codegen for Snowflake TO_BINARY and TRY_TO_BINARY function.
    *
-   * @param operandsInfo List of operands
-   * @param @param fnName Name of the function (TO_BINARY or TRY_TO_BINARY)
-   * @return RexVisitorInfo for the TO_BINARY or TRY_TO_BINARY function
+   * @param operands List of operands
+   * @param fnName Name of the function (TO_BINARY or TRY_TO_BINARY)
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Expr for the TO_BINARY or TRY_TO_BINARY function
    */
-  public static Expr generateToBinaryFnCode(List<Expr> operandsInfo, String fnName) {
-    if (operandsInfo.size() > 1) {
+  public static Expr generateToBinaryFnCode(
+      List<Expr> operands, String fnName, List<Pair<String, Expr>> streamingNamedArgs) {
+    if (operands.size() > 1) {
       throw new BodoSQLCodegenException(
           fnName.toLowerCase() + ": format argument not yet supported");
     }
-    String exprCode =
-        "bodo.libs.bodosql_array_kernels."
-            + fnName.toLowerCase()
-            + "("
-            + operandsInfo.get(0).emit()
-            + ")";
-    return new Expr.Raw(exprCode);
+    return BodoSQLKernel(fnName.toLowerCase(), operands, streamingNamedArgs);
   }
 
   /**
    * Does the codegen for MySQL TIMESTAMP function
    *
-   * @param datetimeStr the datetime string to convert to a Timestamp
-   * @return RexVisitorInfo for the TIMESTAMP function
+   * @param args The input arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Expr for the TIMESTAMP function
    */
-  public static Expr generateTimestampFnCode(String datetimeStr) {
-    return new Expr.Raw("bodo.libs.bodosql_array_kernels.create_timestamp(" + datetimeStr + ")");
+  public static Expr generateTimestampFnCode(
+      List<Expr> args, List<Pair<String, Expr>> streamingNamedArgs) {
+    return BodoSQLKernel("create_timestamp", args, streamingNamedArgs);
   }
 }

@@ -102,6 +102,11 @@ interface PandasRel : RelNode {
         fun rexTranslator(input: Dataframe, localRefs: List<Expr>): RexToPandasTranslator
 
         /**
+         * Returns a PandasToRexTranslator that works in this a streaming context.
+         */
+        fun streamingRexTranslator(input: Dataframe, localRefs: List<Expr>, stateVar: StateVariable): StreamingRexToPandasTranslator
+
+        /**
          * Creates an assignment to the destination dataframe with the
          * result expression and returns the destination dataframe to
          * return from [emit].

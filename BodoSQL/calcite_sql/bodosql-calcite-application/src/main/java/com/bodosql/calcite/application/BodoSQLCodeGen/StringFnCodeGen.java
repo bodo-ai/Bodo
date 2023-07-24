@@ -1,13 +1,16 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
+import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Expr.Tuple;
 import com.bodosql.calcite.ir.ExprKt;
-
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import kotlin.Pair;
 
 public class StringFnCodeGen {
 
@@ -53,263 +56,159 @@ public class StringFnCodeGen {
     equivalentFnMapBroadcast.put("STRTOK", "bodo.libs.bodosql_array_kernels.strtok");
     equivalentFnMapBroadcast.put("STARTSWITH", "bodo.libs.bodosql_array_kernels.startswith");
     equivalentFnMapBroadcast.put("ENDSWITH", "bodo.libs.bodosql_array_kernels.endswith");
+    equivalentFnMapBroadcast.put("INSERT", "bodo.libs.bodosql_array_kernels.insert");
+    equivalentFnMapBroadcast.put("SPLIT", "bodo.libs.bodosql_array_kernels.split");
   }
 
   /**
-   * Helper function that handles codegen for Single argument string functions
+   * Helper function that handles codegen for most string functions with no special dictionary
+   * encoding support such as CHAR and FORMAT.
    *
    * @param fnName The name of the function
-   * @param arg1Expr The string expression of arg1
-   * @param fnName The name of arg1
+   * @param args The arguments for the expression.
    * @return The Expr corresponding to the function call
    */
-  public static Expr getSingleArgStringFnInfo(String fnName, String arg1Expr) {
-    // If the functions has a broadcasted array kernel, always use it
+  public static Expr getStringFnCode(String fnName, List<Expr> args) {
     if (equivalentFnMapBroadcast.containsKey(fnName)) {
-      String fn_expr = equivalentFnMapBroadcast.get(fnName);
-      return new Expr.Raw(fn_expr + "(" + arg1Expr + ")");
-      // Otherwise, either use the scalar implementation or the Series implementation
+      return new Expr.Call(equivalentFnMapBroadcast.get(fnName), args);
+    } else {
+      throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
-    // If we made it here, something has gone very wrong
-    throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
   }
 
   /**
-   * Helper function that handles codegen for Two argument string functions
+   * Helper function that handles codegen for most string functions with special dictionary encoding
+   * support.
    *
    * @param fnName The name of the function
-   * @param arg1Info The rexVisitorInfo of arg1
-   * @param arg2Info The rexVisitorInfo of arg2
+   * @param args The arguments for the expression.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
    * @return The Expr corresponding to the function call
    */
-  public static Expr getTwoArgStringFnInfo(String fnName, Expr arg1Info, Expr arg2Info) {
-
-    String arg1Expr = arg1Info.emit();
-    String arg2Expr = arg2Info.emit();
-
-    // All of these functions should have a broadcasted BodoSQL array kernel
+  public static Expr getOptimizedStringFnCode(
+      String fnName, List<Expr> args, List<Pair<String, Expr>> streamingNamedArgs) {
     if (equivalentFnMapBroadcast.containsKey(fnName)) {
-      String fn_expr = equivalentFnMapBroadcast.get(fnName);
-      return new Expr.Raw(fn_expr + "(" + arg1Expr + "," + arg2Expr + ")");
+      return new Expr.Call(equivalentFnMapBroadcast.get(fnName), args, streamingNamedArgs);
+    } else {
+      throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
-
-    // If we made it here, something has gone very wrong
-    throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
-  }
-
-  /**
-   * Helper function that handles codegen for three argument string functions
-   *
-   * @param fnName The name of the function
-   * @param arg1Expr The rexVisitorInfo of arg1
-   * @param arg2Expr The rexVisitorInfo of arg2
-   * @param arg3Expr The rexVisitorInfo of arg3
-   * @return The Expr corresponding to the function call
-   */
-  public static String getThreeArgStringFnInfo(
-      String fnName, String arg1Expr, String arg2Expr, String arg3Expr) {
-
-    // All of these functions should have a broadcasted BodoSQL array kernel
-    if (equivalentFnMapBroadcast.containsKey(fnName)) {
-      String fn_expr = equivalentFnMapBroadcast.get(fnName);
-      return fn_expr + "(" + arg1Expr + "," + arg2Expr + "," + arg3Expr + ")";
-    }
-
-    // If we made it here, something has gone very wrong
-    throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
   }
 
   /**
    * Function that returns the rexInfo for the Concat Function Call.
    *
-   * @param operandsInfo The rexInfo for all of the arguments to the Concat Call
+   * @param operands The Exprs for all the arguments to the Concat Call
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
    * @return The Expr generated that matches the Concat expression.
    */
-  public static Expr generateConcatFnInfo(List<Expr> operandsInfo) {
-    Expr separatorInfo = new Expr.Raw(makeQuoted(""));
-    return generateConcatWSFnInfo(separatorInfo, operandsInfo);
+  public static Expr generateConcatCode(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    Expr separatorInfo = new Expr.StringLiteral("");
+    return generateConcatWSCode(separatorInfo, operands, streamingNamedArgs);
   }
 
   /**
    * Function that returns the rexInfo for the Concat_ws Function Call.
    *
-   * @param separatorInfo the rexInfo for the string used for the separator
-   * @param operandsInfo The rexInfo for the list of string arguments to be concatenated
+   * @param separator the Expr for the string used for the separator
+   * @param operandsInfo The Exprs for the list of string arguments to be concatenated
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
    * @return The Expr generated that matches the Concat_ws expression.
    */
-  public static Expr generateConcatWSFnInfo(Expr separatorInfo, List<Expr> operandsInfo) {
-    StringBuilder concatCodeGen = new StringBuilder();
-    concatCodeGen.append("bodo.libs.bodosql_array_kernels.concat_ws((");
-
-    // Iterate through the list of input operands, building the name and the args/types list to pass
-    // to generateBinOpCode
-    for (int i = 0; i < operandsInfo.size(); i++) {
-      Expr curOpInfo = operandsInfo.get(i);
-      concatCodeGen.append(curOpInfo.emit()).append(", ");
-    }
-    concatCodeGen.append("), ").append(separatorInfo.emit()).append(")");
-    return new Expr.Raw(concatCodeGen.toString());
+  public static Expr generateConcatWSCode(
+      Expr separator, List<Expr> operandsInfo, List<Pair<String, Expr>> streamingNamedArgs) {
+    Expr.Tuple tupleArg = new Tuple(operandsInfo);
+    return new Expr.Call(
+        "bodo.libs.bodosql_array_kernels.concat_ws",
+        List.of(tupleArg, separator),
+        streamingNamedArgs);
   }
 
   /**
    * Function that returns the rexInfo for a INITCAP Function call
    *
-   * @param operandsInfo the information about the 1-2 arguments
+   * @param operands the information about the 1-2 arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
    * @return The Expr corresponding to the function call
    */
-  public static Expr generateInitcapInfo(List<Expr> operandsInfo) {
-    StringBuilder expr_code = new StringBuilder();
+  public static Expr generateInitcapInfo(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    List<Expr> args = new ArrayList<>(operands);
 
-    int argCount = operandsInfo.size();
-    if (!(1 <= argCount && argCount <= 2)) {
-      throw new BodoSQLCodegenException("Error, invalid number of arguments passed to INITCAP");
+    if (args.size() == 1) {
+      // If 1 arguments was provided, provide a default delimiter string.
+      // We don't use a string literal because of escape characters.
+      args.add(new Expr.Raw("' \\t\\n\\r\\f\\u000b!?@\\\"^#$&~_,.:;+-*%/|\\[](){}<>'"));
     }
-
-    expr_code.append("bodo.libs.bodosql_array_kernels.initcap(");
-    expr_code.append(operandsInfo.get(0).emit());
-    expr_code.append(", ");
-
-    // If 1 arguments was provided, provide a default delimeter string
-    if (argCount == 1) {
-      expr_code.append("' \\t\\n\\r\\f\\u000b!?@\\\"^#$&~_,.:;+-*%/|\\[](){}<>'");
-      // Otherwise, extract the delimeter string argument
-    } else {
-      expr_code.append(operandsInfo.get(1).emit());
-    }
-
-    expr_code.append(")");
-    return new Expr.Raw(expr_code.toString());
+    assert args.size() == 2;
+    return BodoSQLKernel("initcap", args, streamingNamedArgs);
   }
 
-  /*
+  /**
    * Function that returns the rexInfo for an STRTOK Function Call.
    *
-   * @param operandsInfo the information about the 1-3 arguments
+   * @param operands the information about the 1-3 arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
    * @return The Expr corresponding to the function call
    */
-  public static Expr generateStrtok(List<Expr> operandsInfo) {
-    int argCount = operandsInfo.size();
-
-    if (!(1 <= argCount && argCount <= 3)) {
-      throw new BodoSQLCodegenException("Error, invalid number of arguments passed to STRTOK");
+  public static Expr generateStrtok(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    List<Expr> args = new ArrayList<>(operands);
+    if (args.size() == 1) {
+      args.add(new Expr.StringLiteral(" "));
     }
-
-    StringBuilder expr_code = new StringBuilder();
-
-    expr_code.append("bodo.libs.bodosql_array_kernels.strtok(");
-    expr_code.append(operandsInfo.get(0).emit());
-
-    // If 1 argument is provided, use space as the delimeter
-    if (argCount == 1) {
-      expr_code.append(", ' '");
-      // Otherwise, extract the delimeter argument
-    } else {
-      expr_code.append(", ");
-      expr_code.append(operandsInfo.get(1).emit());
+    if (args.size() == 2) {
+      args.add(new Expr.IntegerLiteral(1));
     }
-
-    // If 1-2 arguments are provided, use 1 as the part
-    if (argCount < 3) {
-      expr_code.append(", 1");
-      // Otherwise, extract the part argument
-    } else {
-      expr_code.append(", ");
-      expr_code.append(operandsInfo.get(2).emit());
-    }
-
-    expr_code.append(")");
-    return new Expr.Raw(expr_code.toString());
+    assert args.size() == 3;
+    return ExprKt.BodoSQLKernel("strtok", args, streamingNamedArgs);
   }
 
   /**
    * Function that returns the rexInfo for an EDITDISTANCE Function Call.
    *
-   * @param operandsInfo the information about the two/three arguments
+   * @param operands The function arguments.
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
    * @return The Expr corresponding to the function call
    */
-  public static Expr generateEditdistance(List<Expr> operandsInfo) {
-
-    StringBuilder expr_code = new StringBuilder();
-
-    if (operandsInfo.size() == 2) {
-      expr_code.append("bodo.libs.bodosql_array_kernels.editdistance_no_max(");
-      expr_code.append(operandsInfo.get(0).emit());
-      expr_code.append(", ");
-      expr_code.append(operandsInfo.get(1).emit());
-    } else if (operandsInfo.size() == 3) {
-      expr_code.append("bodo.libs.bodosql_array_kernels.editdistance_with_max(");
-      expr_code.append(operandsInfo.get(0).emit());
-      expr_code.append(", ");
-      expr_code.append(operandsInfo.get(1).emit());
-      expr_code.append(", ");
-      expr_code.append(operandsInfo.get(2).emit());
+  public static Expr generateEditdistance(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    String fnName;
+    if (operands.size() == 2) {
+      fnName = "editdistance_no_max";
     } else {
-      throw new BodoSQLCodegenException(
-          "Error, invalid number of arguments passed to EDITDISTANCE");
+      assert operands.size() == 3;
+      fnName = "editdistance_with_max";
     }
-    expr_code.append(")");
-    return new Expr.Raw(expr_code.toString());
-  }
-
-  /*
-   * Function that returns the rexInfo for an INSERT Function Call.
-   *
-   * @param operandsInfo the information about the 4 arguments
-   * @return The Expr corresponding to the function call
-   */
-  public static Expr generateInsert(List<Expr> operandsInfo) {
-    int argCount = operandsInfo.size();
-
-    if (argCount != 4) {
-      throw new BodoSQLCodegenException("Error, invalid number of arguments passed to INSERT");
-    }
-
-    StringBuilder expr_code = new StringBuilder();
-
-    expr_code.append("bodo.libs.bodosql_array_kernels.insert(");
-
-    for (int i = 0; i < 4; i++) {
-      expr_code.append(operandsInfo.get(i).emit());
-      if (i < 3) {
-        expr_code.append(", ");
-      }
-    }
-
-    expr_code.append(")");
-    return new Expr.Raw(expr_code.toString());
+    return ExprKt.BodoSQLKernel(fnName, operands, streamingNamedArgs);
   }
 
   /**
    * Function that returns the rexInfo for a POSITION/CHARINDEX Function Call.
    *
-   * @param operandsInfo the information about the two/three arguments
+   * @param operands the information about the two/three arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
    * @return The Expr corresponding to the function call
    */
-  public static Expr generatePosition(List<Expr> operandsInfo) {
+  public static Expr generatePosition(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
 
-    if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 3)) {
+    if (!(2 <= operands.size() && operands.size() <= 3)) {
       throw new BodoSQLCodegenException("Error, invalid number of arguments passed to POSITION");
     }
-
-    StringBuilder expr_code = new StringBuilder();
-
-    expr_code.append("bodo.libs.bodosql_array_kernels.position(");
-    expr_code.append(operandsInfo.get(0).emit());
-    expr_code.append(", ");
-    expr_code.append(operandsInfo.get(1).emit());
-    expr_code.append(", ");
-
-    if (operandsInfo.size() == 3) {
-      expr_code.append(operandsInfo.get(2).emit());
-
-      // If 2 arguments are provided, the default value for the start position
-      // is 1
-    } else {
-      expr_code.append("1");
+    List<Expr> args = new ArrayList<>();
+    args.addAll(operands);
+    if (operands.size() == 2) {
+      args.add(new Expr.IntegerLiteral(1));
     }
-
-    expr_code.append(")");
-    return new Expr.Raw(expr_code.toString());
+    return BodoSQLKernel("position", args, streamingNamedArgs);
   }
 
   /**
@@ -319,74 +218,62 @@ public class StringFnCodeGen {
    * @param trimName The argument that determines from which sides we trim characters
    * @param stringToBeTrimmed The rexInfo of the string to be trimmed
    * @param charactersToBeTrimmed The characters to trimmed from the string
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
    * @return The rexVisitorInfo for the trim call
    */
-  public static Expr generateTrimFnInfo(
-      String trimName, Expr stringToBeTrimmed, Expr charactersToBeTrimmed) {
-
-    String outputExpr =
-        String.format(
-            "bodo.libs.bodosql_array_kernels.%s(%s, %s)",
-            trimName.toLowerCase(), stringToBeTrimmed.emit(), charactersToBeTrimmed.emit());
-    return new Expr.Raw(outputExpr);
+  public static Expr generateTrimFnCode(
+      String trimName,
+      Expr stringToBeTrimmed,
+      Expr charactersToBeTrimmed,
+      List<Pair<String, Expr>> streamingNamedArgs) {
+    return BodoSQLKernel(
+        trimName.toLowerCase(Locale.ROOT),
+        List.of(stringToBeTrimmed, charactersToBeTrimmed),
+        streamingNamedArgs);
   }
   /**
    * Function that returns the rexInfo for a SUBSTR/MID Function call
    *
-   * @param operandsInfo the information about the 2-3 arguments
+   * @param operands The arguments to Substring
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
    * @return The Expr corresponding to the function call
    */
-  public static Expr generateSubstringInfo(List<Expr> operandsInfo) {
-    StringBuilder expr_code = new StringBuilder();
-
-    int argCount = operandsInfo.size();
+  public static Expr generateSubstringCode(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    String fnName;
+    int argCount = operands.size();
     if (argCount == 3) {
-      // length argument is passed
-      expr_code.append("bodo.libs.bodosql_array_kernels.substring(");
-      expr_code.append(operandsInfo.get(0).emit());
-      expr_code.append(", ");
-      expr_code.append(operandsInfo.get(1).emit());
-      expr_code.append(", ");
-      expr_code.append(operandsInfo.get(2).emit());
-
+      fnName = "substring";
     } else if (argCount == 2) {
-      expr_code.append("bodo.libs.bodosql_array_kernels.substring_suffix(");
-      expr_code.append(operandsInfo.get(0).emit());
-      expr_code.append(", ");
-      expr_code.append(operandsInfo.get(1).emit());
-
+      fnName = "substring_suffix";
     } else {
       throw new BodoSQLCodegenException(
           "Error, invalid number of arguments passed to SUBSTR/SUBSTRING");
     }
-
-    expr_code.append(")");
-    return new Expr.Raw(expr_code.toString());
-  }
-
-  public static Expr generateSplit(List<Expr> operands) {
-    assert operands.size() == 2;
-    return new Expr.Call("bodo.libs.bodosql_array_kernels.split", operands);
+    return BodoSQLKernel(fnName, operands, streamingNamedArgs);
   }
 
   /**
    * Generate python code for REPLACE
    *
    * @param operands Input arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
    * @return Generated code
    */
-  public static Expr generateReplace(List<Expr> operands) {
+  public static Expr generateReplace(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
     if (operands.size() == 2) {
       return ExprKt.BodoSQLKernel(
           "replace",
           List.of(operands.get(0), operands.get(1), new Expr.Raw("\"\"")),
-          List.of());
-    }
-    else if (operands.size() == 3) {
-      return ExprKt.BodoSQLKernel("replace", operands, List.of());
+          streamingNamedArgs);
+    } else if (operands.size() == 3) {
+      return ExprKt.BodoSQLKernel("replace", operands, streamingNamedArgs);
     } else {
-      throw new BodoSQLCodegenException(
-          "Invalid number of arguments passed to REPLACE.");
+      throw new BodoSQLCodegenException("Invalid number of arguments passed to REPLACE.");
     }
   }
 }

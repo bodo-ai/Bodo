@@ -777,54 +777,32 @@ def test_cast_date_to_tz_aware_non_literal_tz_error_handling(memory_leak_check):
     ],
 )
 def test_cast_tz_aware_to_tz_naive(ts_val, memory_leak_check):
-    def impl1(ts_val):
+    def impl(ts_val):
         return pd.Series(
-            bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(ts_val, True)
-        )
-
-    def impl2(ts_val):
-        return pd.Series(
-            bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(ts_val, False)
+            bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(ts_val)
         )
 
     # avoid pd.Series() conversion for scalar output
     if isinstance(ts_val, pd.Timestamp):
-        impl1 = (
-            lambda ts_val: bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(
-                ts_val, True
-            )
-        )
-        impl2 = (
-            lambda ts_val: bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(
-                ts_val, False
-            )
+        impl = lambda ts_val: bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(
+            ts_val
         )
 
-    def generate_localize_scalar_fn(normalize):
+    def generate_localize_scalar_fn():
         def localize_scalar_fn(ts_val):
             if pd.isna(ts_val):
                 return None
             else:
                 ts = ts_val.tz_localize(None)
-                if normalize:
-                    ts = ts.normalize()
                 return ts
 
         return localize_scalar_fn
 
-    answer1 = vectorized_sol((ts_val,), generate_localize_scalar_fn(True), None)
+    answer = vectorized_sol((ts_val,), generate_localize_scalar_fn(), None)
     check_func(
-        impl1,
+        impl,
         (ts_val,),
-        py_output=answer1,
-        check_dtype=False,
-        reset_index=True,
-    )
-    answer2 = vectorized_sol((ts_val,), generate_localize_scalar_fn(False), None)
-    check_func(
-        impl2,
-        (ts_val,),
-        py_output=answer2,
+        py_output=answer,
         check_dtype=False,
         reset_index=True,
     )
@@ -1029,29 +1007,18 @@ def test_cast_tz_naive_to_tz_aware_opt(memory_leak_check):
 
 
 def test_cast_tz_aware_to_tz_naive_opt(memory_leak_check):
-    def impl1(a, flag):
+    def impl(a, flag):
         arg0 = a if flag else None
-        return bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(arg0, False)
-
-    def impl2(a, flag):
-        arg0 = a if flag else None
-        return bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(arg0, True)
+        return bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(arg0)
 
     ts = pd.Timestamp("2022-11-06 00:52:31", tz="US/Pacific")
     localized_ts = ts.tz_localize(None)
-    normalized_ts = localized_ts.normalize()
     for flag in [True, False]:
-        answer1 = localized_ts if flag else None
+        answer = localized_ts if flag else None
         check_func(
-            impl1,
+            impl,
             (ts, flag),
-            py_output=answer1,
-        )
-        answer2 = normalized_ts if flag else None
-        check_func(
-            impl2,
-            (ts, flag),
-            py_output=answer2,
+            py_output=answer,
         )
 
 
