@@ -14,6 +14,8 @@ import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.sql.validate.implicit.TypeCoercion;
 import org.apache.calcite.util.Optionality;
 
+import com.bodosql.calcite.sql.fun.SqlRandomOperator;
+
 public final class NumericOperatorTable implements SqlOperatorTable {
 
   private static @Nullable NumericOperatorTable instance;
@@ -439,14 +441,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
           SqlFunctionCategory.NUMERIC);
 
-  public static final SqlFunction RANDOM =
-      new SqlFunction(
-          "RANDOM",
-          SqlKind.RANDOM,
-          ReturnTypes.BIGINT,
-          null,
-          OperandTypes.NILADIC,
-          SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction RANDOM = new SqlRandomOperator();
 
   private List<SqlOperator> functionList =
       Arrays.asList(

@@ -18,6 +18,7 @@ package org.apache.calcite.sql2rel;
 
 import org.apache.calcite.avatica.util.Spaces;
 import org.apache.calcite.linq4j.Ord;
+import org.apache.calcite.plan.BodoRelOptUtil;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRowSamplingParameters;
@@ -144,7 +145,6 @@ import org.apache.calcite.sql.SqlWithItem;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.fun.SqlCase;
 import org.apache.calcite.sql.fun.SqlInOperator;
-import org.apache.calcite.sql.fun.SqlLibraryOperators;
 import org.apache.calcite.sql.fun.SqlQuantifyOperator;
 import org.apache.calcite.sql.fun.SqlRowOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
@@ -187,6 +187,7 @@ import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Util;
 import org.apache.calcite.util.trace.CalciteTrace;
 
+import com.bodosql.calcite.sql.fun.SqlBodoOperatorTable;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -1788,16 +1789,9 @@ public class SqlToRelConverter {
       SqlInOperator op) {
     final List<RexNode> comparisons = new ArrayList<>();
     final SqlOperator comparisonOp;
-
     if (op instanceof SqlQuantifyOperator) {
-      SqlQuantifyOperator quantifyOperator = (SqlQuantifyOperator) op;
-      if (quantifyOperator.comparisonKind == SqlKind.LIKE && !quantifyOperator.caseSensitive) {
-        // Special code for case insensitive like.
-        comparisonOp = SqlLibraryOperators.ILIKE;
-      } else {
-        comparisonOp = RelOptUtil.op(quantifyOperator.comparisonKind,
-            SqlStdOperatorTable.EQUALS);
-      }
+      comparisonOp = BodoRelOptUtil.op(((SqlQuantifyOperator) op).comparisonKind,
+          SqlStdOperatorTable.EQUALS);
     } else {
       comparisonOp = SqlStdOperatorTable.EQUALS;
     }
@@ -1830,38 +1824,13 @@ public class SqlToRelConverter {
     SqlQuantifyOperator quantifyOp;
     switch (op.kind) {
     case ALL:
-      quantifyOp = (SqlQuantifyOperator) op;
-      if (quantifyOp.isNegated) {
-        // rexBuilder.makeCall() requires that the second argument is not null
-        // So we have to do a manual check, and return NULL in the case that the disjunction is NULL
-        RexNode disjunction = RexUtil.composeDisjunction(rexBuilder, comparisons, true);
-        if (disjunction == null) {
-          return null;
-        } else {
-          return rexBuilder.makeCall(SqlStdOperatorTable.NOT, disjunction);
-        }
-      } else {
-        return RexUtil.composeConjunction(rexBuilder, comparisons, true);
-      }
+      return RexUtil.composeConjunction(rexBuilder, comparisons, true);
     case NOT_IN:
       return rexBuilder.makeCall(SqlStdOperatorTable.NOT,
           RexUtil.composeDisjunction(rexBuilder, comparisons));
     case IN:
-      return RexUtil.composeDisjunction(rexBuilder, comparisons, true);
     case SOME:
-      quantifyOp = (SqlQuantifyOperator) op;
-      if (quantifyOp.isNegated) {
-        // rexBuilder.makeCall() requires that the second argument is not null
-        // So we have to do a manual check, and return NULL in the case that the disjunction is NULL
-        RexNode conjunction = RexUtil.composeConjunction(rexBuilder, comparisons, true);
-        if (conjunction == null) {
-          return null;
-        } else {
-          return rexBuilder.makeCall(SqlStdOperatorTable.NOT, conjunction);
-        }
-      } else {
-        return RexUtil.composeDisjunction(rexBuilder, comparisons, true);
-      }
+      return RexUtil.composeDisjunction(rexBuilder, comparisons, true);
     default:
       throw new AssertionError();
     }
@@ -4232,7 +4201,12 @@ public class SqlToRelConverter {
   }
 
   public RelNode toRel(final RelOptTable table, final List<RelHint> hints, boolean isTargetTable) {
-    final RelNode scan = table.toRel(createToRelContext(hints), isTargetTable);
+    final RelNode scan;
+    if (isTargetTable) {
+      scan = table.toTargetTableRel(createToRelContext(hints));
+    } else {
+      scan = table.toRel(createToRelContext(hints));
+    }
 
     final InitializerExpressionFactory ief =
         table.maybeUnwrap(InitializerExpressionFactory.class)
@@ -6452,7 +6426,7 @@ public class SqlToRelConverter {
       if (rex instanceof RexCall) {
         RexCall call = (RexCall) rex;
         if (call.getOperator() == SqlStdOperatorTable.CAST
-            || call.getOperator() == SqlStdOperatorTable.TRY_CAST) {
+            || call.getOperator() == SqlBodoOperatorTable.TRY_CAST) {
           RexNode operand = call.getOperands().get(0);
           if (operand instanceof RexLiteral) {
             return true;

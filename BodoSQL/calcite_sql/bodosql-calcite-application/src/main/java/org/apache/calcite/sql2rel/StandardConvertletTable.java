@@ -122,7 +122,6 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
     // Register convertlets for specific objects.
     registerOp(SqlStdOperatorTable.CAST, this::convertCast);
     registerOp(SqlLibraryOperators.INFIX_CAST, this::convertCast);
-    registerOp(SqlStdOperatorTable.TRY_CAST, this::convertTryCast);
     registerOp(SqlStdOperatorTable.IS_DISTINCT_FROM,
         (cx, call) -> convertIsDistinctFrom(cx, call, false));
     registerOp(SqlStdOperatorTable.IS_NOT_DISTINCT_FROM,
@@ -637,31 +636,6 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
       }
     }
     return cx.getRexBuilder().makeCast(type, arg);
-  }
-
-  protected RexNode convertTryCast(
-      @UnknownInitialization StandardConvertletTable this,
-      SqlRexContext cx,
-      final SqlCall call) {
-    RelDataTypeFactory typeFactory = cx.getTypeFactory();
-    assert call.getKind() == SqlKind.TRY_CAST;
-    final SqlNode left = call.operand(0);
-    final SqlNode right = call.operand(1);
-    SqlDataTypeSpec dataType = (SqlDataTypeSpec) right;
-    RelDataType type = dataType.deriveType(cx.getValidator());
-    if (type == null) {
-      type = cx.getValidator().getValidatedNodeType(dataType.getTypeName());
-    }
-    RexNode arg = cx.convertExpression(left);
-    if (arg.getType().isNullable()) {
-      type = typeFactory.createTypeWithNullability(type, true);
-    }
-    if (SqlUtil.isNullLiteral(left, false)) {
-      final SqlValidatorImpl validator = (SqlValidatorImpl) cx.getValidator();
-      validator.setValidatedNodeType(left, type);
-      return cx.convertExpression(left);
-    }
-    return cx.getRexBuilder().makeTryCast(type, arg);
   }
 
   protected RexNode convertFloorCeil(SqlRexContext cx, SqlCall call) {
