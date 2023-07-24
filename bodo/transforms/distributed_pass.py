@@ -3242,6 +3242,23 @@ class DistributedPass:
                         )
                         new_size_var = out[-1].target
 
+            # k = bodo.utils.indexing.bitmap_size(n) is used for calculating
+            # bitmap sizes in pd_datetime_arr
+            if guard(find_callname, self.func_ir, size_def, self.typemap) == (
+                "bitmap_size",
+                "bodo.utils.indexing",
+            ):
+                size = self._get_1D_Var_size(
+                    size_def.args[0], equiv_set, avail_vars, out
+                )
+                out += compile_func_single_block(
+                    eval("lambda n: bodo.utils.indexing.bitmap_size(n)"),
+                    (size,),
+                    None,
+                    self,
+                )
+                new_size_var = out[-1].target
+
             # n_bytes = (n + 7) >> 3 pattern is used for calculating bitmap
             # size in int_arr_ext
             if (
