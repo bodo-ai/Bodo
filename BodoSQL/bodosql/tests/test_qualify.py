@@ -199,6 +199,68 @@ def non_numeric_agg_funcs_subset(request):
     return request.param
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(
+            ("CURRENT ROW", "UNBOUNDED FOLLOWING"),
+            id="suffix",
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+        ),
+        pytest.param(
+            ("UNBOUNDED PRECEDING", "1 PRECEDING"),
+            id="exclusive_prefix",
+        ),
+        pytest.param(
+            ("1 PRECEDING", "1 FOLLOWING"),
+            id="rolling_3",
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+        ),
+        pytest.param(
+            ("CURRENT ROW", "1 FOLLOWING"),
+            id="rolling2",
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+        ),
+        pytest.param(
+            ("CURRENT ROW", "CURRENT ROW"),
+            id="current_row",
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+        ),
+        pytest.param(
+            ("1 FOLLOWING", "2 FOLLOWING"),
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+            id="2_after",
+        ),
+        pytest.param(
+            ("UNBOUNDED PRECEDING", "2 FOLLOWING"),
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+            id="prefix_plus_2_after",
+        ),
+        pytest.param(
+            ("3 PRECEDING", "UNBOUNDED FOLLOWING"),
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+            id="suffix_plus_2_before",
+        ),
+    ]
+)
+def over_clause_bounds(request):
+    """fixture containing the upper/lower bounds for the SQL OVER clause"""
+    return request.param
+
+
 @pytest.mark.slow
 def test_QUALIFY_upper_lower_bound_timestamp(
     bodosql_datetime_types,
