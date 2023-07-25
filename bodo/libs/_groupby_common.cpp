@@ -653,11 +653,8 @@ void alloc_init_keys(
                 bool bit = key_indices->get_null_bit(key_row);
                 new_key_indices->set_null_bit(j, bit);
             }
-            new_key_col = create_dict_string_array(
-                key_col->child_arrays[0], new_key_indices,
-                key_col->has_global_dictionary,
-                key_col->has_unique_local_dictionary,
-                key_col->has_sorted_dictionary);
+            new_key_col = create_dict_string_array(key_col->child_arrays[0],
+                                                   new_key_indices);
         }
         if (key_col->arr_type == bodo_array_type::STRING) {
             // new key col will have num_groups rows containing the

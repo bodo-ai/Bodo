@@ -52,6 +52,8 @@ struct DictionaryBuilder {
      */
     DictionaryBuilder(std::shared_ptr<array_info> dict, bool is_key_)
         : is_key(is_key_) {
+        // Dictionary build dictionaries are always unique.
+        dict->is_locally_unique = true;
         this->dict_buff = std::make_shared<ArrayBuildBuffer>(dict);
         this->dict_hashes = std::make_shared<bodo::vector<uint32_t>>();
         this->dict_str_to_ind = std::make_shared<std::unordered_map<

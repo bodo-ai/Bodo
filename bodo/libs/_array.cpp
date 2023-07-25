@@ -99,27 +99,27 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
                                    int64_t dict_id) {
     // Update the id for the string array
     // TODO(njriasan): Should we move this to string_array_to_info?
+    str_arr->is_globally_replicated = has_global_dictionary;
+    str_arr->is_locally_unique = has_unique_local_dictionary;
     str_arr->array_id = dict_id;
-    // For now has_sorted_dictionary is only available and exposed in the C++
-    // struct, so we set it to false
+    // For now is_locally_sorted is only available and exposed in the C++
+    // struct, so its kept as false.
 
     // Python is responsible for deleting
     return new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
                           indices_arr->length, {},
                           {std::shared_ptr<array_info>(str_arr),
-                           std::shared_ptr<array_info>(indices_arr)},
-                          0, 0, 0, -1, bool(has_global_dictionary),
-                          bool(has_unique_local_dictionary), false);
+                           std::shared_ptr<array_info>(indices_arr)});
 }
 
 // Raw pointer since called from Python
 int32_t get_has_global_dictionary(array_info* dict_arr) {
-    return int32_t(dict_arr->has_global_dictionary);
+    return int32_t(dict_arr->child_arrays[0]->is_globally_replicated);
 }
 
 // Raw pointer since called from Python
 int32_t get_has_unique_local_dictionary(array_info* dict_arr) {
-    return int32_t(dict_arr->has_unique_local_dictionary);
+    return int32_t(dict_arr->child_arrays[0]->is_locally_unique);
 }
 
 // Raw pointer since called from Python

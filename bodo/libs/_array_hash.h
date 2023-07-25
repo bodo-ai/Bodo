@@ -134,12 +134,12 @@ struct multi_col_key {
                 }
                     continue;
                 case bodo_array_type::DICT: {
+                    std::shared_ptr<array_info>& dict1 = c1->child_arrays[0];
+                    std::shared_ptr<array_info>& dict2 = c2->child_arrays[0];
                     // Require the dictionary to always have unique values. If
                     // the data is distributed it must also be global.
-                    if (c1->has_unique_local_dictionary &&
-                        c2->has_unique_local_dictionary) {
-                        if (!is_matching_dictionary(c1->child_arrays[0],
-                                                    c2->child_arrays[0])) {
+                    if (dict1->is_locally_unique && dict2->is_locally_unique) {
+                        if (!is_matching_dictionary(dict1, dict2)) {
                             throw std::runtime_error(
                                 "multi-key-hashing dictionary the columns are "
                                 "not unified.");
@@ -405,13 +405,14 @@ class ElementComparator {
         // comparisons are not accurate).
         if (arr1_->arr_type == bodo_array_type::DICT &&
             arr2_->arr_type == bodo_array_type::DICT) {
-            if (!is_matching_dictionary(arr1_->child_arrays[0],
-                                        arr2_->child_arrays[0])) {
+            std::shared_ptr<array_info>& dict1 = arr1_->child_arrays[0];
+            std::shared_ptr<array_info>& dict2 = arr2_->child_arrays[0];
+            if (!is_matching_dictionary(dict1, dict2)) {
                 throw std::runtime_error(
                     "ElementComparator: don't know if arrays have "
                     "unified dictionary.");
             }
-            if (!(arr1_->has_unique_local_dictionary)) {
+            if (!(dict1->is_locally_unique && dict2->is_locally_unique)) {
                 throw std::runtime_error(
                     "ElementComparator: Dictionary is not deduplicated.");
             }

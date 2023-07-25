@@ -84,7 +84,7 @@ bool idx_compare_column(const std::shared_ptr<array_info>& out_arr,
             return false;
         }
         // If the index is sorted we can just compare the indices.
-        if (in_arr->has_sorted_dictionary) {
+        if (in_arr->child_arrays[0]->is_locally_sorted) {
             if (old_index > new_index) {
                 // asc = True means idxmin
                 if (asc) {

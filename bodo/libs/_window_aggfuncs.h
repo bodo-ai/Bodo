@@ -176,9 +176,8 @@ class WindowAggfunc {
               Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
         requires(dict_array<ArrayType> && any_value<ftype>)
     inline void cleanup() {
-        std::shared_ptr<array_info> new_out_arr = create_dict_string_array(
-            in_arr->child_arrays[0], out_indices, in_arr->has_global_dictionary,
-            in_arr->has_unique_local_dictionary, in_arr->has_sorted_dictionary);
+        std::shared_ptr<array_info> new_out_arr =
+            create_dict_string_array(in_arr->child_arrays[0], out_indices);
         *out_arr = std::move(*new_out_arr);
     }
 
@@ -396,7 +395,8 @@ class WindowAggfunc {
         } else {
             // Otherwise, set the entire partition equal to the first
             // value (for simplicity).
-            T val = get_arr_item_str<ArrayType, T, DType>(*in_arr, real_start_idx);
+            T val =
+                get_arr_item_str<ArrayType, T, DType>(*in_arr, real_start_idx);
             for (int64_t i = start_idx; i < end_idx; i++) {
                 int64_t idx = getv<int64_t>(sorted_idx, i);
                 (*string_vector)[idx] = val;
@@ -416,7 +416,7 @@ class WindowAggfunc {
             int64_t length = in_arr->length;
             out_indices =
                 alloc_array(length, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                            Bodo_CTypes::INT32, 0, 0);
+                            Bodo_CTypes::INT32);
         }
     }
 
