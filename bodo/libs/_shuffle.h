@@ -180,7 +180,7 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                                          bool is_parallel);
 
 /** Compute whether we need to do a reshuffling or not for performance reasons.
-    The dilemna is following:
+    The dilemma is following:
     ---If the workload is not well partitioned then the code becomes serialized
    and slower.
     ---Reshuffling itself is an expensive operation.

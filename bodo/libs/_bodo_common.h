@@ -426,6 +426,15 @@ inline void SetBitTo(std::vector<uint8_t, Alloc>& V, int64_t i,
  * --- data1 is for the characters
  * --- data2 is for the index offsets
  * --- null_bitmask is for the missing entries
+ * --- is_globally_replicated is true if the array
+ *     is replicated on all ranks. This is used when
+ *     the array is a dictionary for a DICT array.
+ * --- is_locally_unique is true if the array
+ *     is unique on the current rank. This is used when
+ *     the array is a dictionary for a DICT array.
+ * --- is_locally_sorted is true if the array
+ *     is sorted on the current rank. This is used when
+ *     the array is a dictionary for a DICT array.
  * Case of LIST_STRING:
  * --- The length is the number of rows.
  * --- data1 is the characters
@@ -436,14 +445,6 @@ inline void SetBitTo(std::vector<uint8_t, Alloc>& V, int64_t i,
  * --- child_array[0] is the string array for the dictionary.
  * --- child_array[1] is a Int32 array for the indices. This array and
  *     the main info share a bitmap.
- * --- has_global_dictionary is true if the dictionary has the same
- *     values in the same order for all ranks.
- * --- has_unique_local_dictionary is true if a dictionary doesn't have
- *     any duplicates on the current rank. This may be false if the values
- *     are unique but we couldn't safely determine this. There are no false
- *     positives.
- * --- has_sorted_dictionary is true if a dictionary is sorted on the current
- * rank.
  */
 struct array_info {
     bodo_array_type::arr_type_enum arr_type;
@@ -469,9 +470,18 @@ struct array_info {
     // array itself because dictionary builders just work with the string array
     // and we need data to be consistent.
     int64_t array_id;
-    bool has_global_dictionary;        // for dict-encoded arrays
-    bool has_unique_local_dictionary;  // for dict-encoded arrays
-    bool has_sorted_dictionary;        // for dict-encoded arrays
+    // Is this array globally shared on all ranks. This is currently only
+    // used to describe string arrays that function as dictionaries in
+    // dictionary encoded arrays.
+    bool is_globally_replicated;
+    // Is this array unique on the current rank. This is currently only
+    // used to describe string arrays that function as dictionaries in
+    // dictionary encoded arrays.
+    bool is_locally_unique;
+    // Is this array sorted on the current rank. This is currently only
+    // used to describe string arrays that function as dictionaries in
+    // dictionary encoded arrays.
+    bool is_locally_sorted;
 
     // Starting point into the physical data buffer (in bytes, not logical
     // values) for NUMPY, NULLABLE_INT_BOOL, CATEGORICAL arrays. This is needed
@@ -486,10 +496,9 @@ struct array_info {
                std::vector<std::shared_ptr<array_info>> _child_arrays = {},
                int32_t _precision = 0, int32_t _scale = 0,
                int64_t _num_categories = 0, int64_t _array_id = -1,
-               bool _has_global_dictionary = false,
-               bool _has_unique_local_dictionary = false,
-               bool _has_sorted_dictionary = false, int64_t _offset = 0,
-               std::vector<std::string> _field_names = {})
+               bool _is_globally_replicated = false,
+               bool _is_locally_unique = false, bool _is_locally_sorted = false,
+               int64_t _offset = 0, std::vector<std::string> _field_names = {})
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -497,9 +506,9 @@ struct array_info {
           scale(_scale),
           num_categories(_num_categories),
           array_id(_array_id),
-          has_global_dictionary(_has_global_dictionary),
-          has_unique_local_dictionary(_has_unique_local_dictionary),
-          has_sorted_dictionary(_has_sorted_dictionary),
+          is_globally_replicated(_is_globally_replicated),
+          is_locally_unique(_is_locally_unique),
+          is_locally_sorted(_is_locally_sorted),
           offset(_offset) {
         this->buffers = std::move(_buffers);
         this->child_arrays = std::move(_child_arrays);
@@ -816,7 +825,8 @@ std::unique_ptr<array_info> alloc_array(
     int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
     bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
     int64_t array_id = -1, int64_t extra_null_bytes = 0,
-    int64_t num_categories = 0,
+    int64_t num_categories = 0, bool is_globally_replicated = false,
+    bool is_locally_unique = false, bool is_locally_sorted = false,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -852,6 +862,8 @@ std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
 std::unique_ptr<array_info> alloc_string_array(
     Bodo_CTypes::CTypeEnum typ_enum, int64_t length, int64_t n_chars,
     int64_t array_id = -1, int64_t extra_null_bytes = 0,
+    bool is_globally_replicated = false, bool is_locally_unique = false,
+    bool is_locally_sorted = false,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -872,7 +884,6 @@ std::unique_ptr<array_info> alloc_list_string_array(
 
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
-    bool has_global_dictionary, bool has_unique_local_dictionary,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -916,17 +927,11 @@ std::unique_ptr<array_info> create_list_string_array(
  *
  * @param dict_arr: the underlying data array
  * @param indices_arr: the underlying indices array
- * @param has_global_dictionary: Is the dict_arr global?
- * @param has_unique_local_dictionary Can dict_arr contain
- * duplicates on this rank?
- * @param has_sorted_dictionary Is dict_arr sorted on this rank?
  * @return std::shared_ptr<array_info> The dictionary array.
  */
 std::unique_ptr<array_info> create_dict_string_array(
     std::shared_ptr<array_info> dict_arr,
-    std::shared_ptr<array_info> indices_arr, bool has_global_dictionary = false,
-    bool has_unique_local_dictionary = false,
-    bool has_sorted_dictionary = false);
+    std::shared_ptr<array_info> indices_arr);
 
 /* The "get-value" functionality for array_info.
    This is the equivalent of at functionality.

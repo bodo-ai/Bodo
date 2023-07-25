@@ -447,9 +447,12 @@ std::unique_ptr<array_info> lead_lag_seq(
         const uint64_t in_data_n_chars = in_data_offsets[in_data_len];
 
         // Allocate a new data array with room for one more string of the
-        // default_str's length
-        out_data = alloc_string_array(
-            DType, in_data_len + 1, in_data_n_chars + default_str.length(), 0);
+        // default_str's length. The default is present in all paths, so we
+        // maintain any global replication. However, we lose uniqueness and
+        // sort ordering.
+        out_data = alloc_string_array(DType, in_data_len + 1,
+                                      in_data_n_chars + default_str.length(), 0,
+                                      0, in_data->is_globally_replicated);
         char *out_data_chars = out_data->data1();
         offset_t *out_data_offsets = (offset_t *)out_data->data2();
 
@@ -480,8 +483,8 @@ std::unique_ptr<array_info> lead_lag_seq(
                      int32_t>(in_indices, shift_amt, default_index, 0);
 
     // Allocate our new dictionary array with new indices and possibly new data
-    std::unique_ptr<array_info> output_dict_array = create_dict_string_array(
-        out_data, out_indices, in_col->has_global_dictionary, false, false);
+    std::unique_ptr<array_info> output_dict_array =
+        create_dict_string_array(out_data, out_indices);
 
     return output_dict_array;
 }

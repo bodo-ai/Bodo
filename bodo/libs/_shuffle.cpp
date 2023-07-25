@@ -633,11 +633,12 @@ void update_local_dictionary_remove_duplicates(
     bool sort_dictionary) {
     std::shared_ptr<array_info> local_dictionary = dict_array->child_arrays[0];
     std::shared_ptr<array_info> global_dictionary;
-    // If we don't have the global dictionary with unique values
+    // If we don't have a global dictionary with unique values
     // then we need to drop duplicates on the local data and then
     // gather. If we already the global dictionary but there are duplicates
     // then we can just skip the gather step. Here we assume that
-    // has_global_dictionary will be synchronized across all ranks.
+    // is_globally_replicated will be synchronized across all ranks
+    // for the string array.
 
     // table containing a single column with the dictionary values (not
     // indices/codes)
@@ -671,21 +672,18 @@ void update_local_dictionary_remove_duplicates(
     if (sort_dictionary) {
         // sort_values_array_local decrefs the input array_info (but doesn't
         // delete it). It returns a new array_info.
-        std::shared_ptr<array_info> new_global_dictionary =
+        global_dictionary =
             sort_values_array_local(global_dictionary, false, 1, 1);
-
-        global_dictionary = new_global_dictionary;
-        dict_array->has_sorted_dictionary = true;
     }
 
     // XXX this doesn't propagate to Python
     dict_array->child_arrays[0] = global_dictionary;
     if (gather_global_dict) {
-        // If we didn't gather data, then the dictionary can remain
-        // global if it was already global.
-        dict_array->has_global_dictionary = true;
+        // If we didn't gather data, then the dictionary should propagate
+        // if it was already global.
+        global_dictionary->is_globally_replicated = true;
     }
-    dict_array->has_unique_local_dictionary = true;
+    global_dictionary->is_locally_unique = true;
 
     // -------------
     // calculate mapping from old (local) indices to global ones
@@ -778,7 +776,7 @@ void update_local_dictionary_remove_duplicates(
 
 void drop_duplicates_local_dictionary(std::shared_ptr<array_info> dict_array,
                                       bool sort_dictionary_if_modified) {
-    if (dict_array->has_unique_local_dictionary) {
+    if (dict_array->child_arrays[0]->is_locally_unique) {
         return;
     }
     update_local_dictionary_remove_duplicates(std::move(dict_array), false,
@@ -802,7 +800,7 @@ array_info* drop_duplicates_local_dictionary_py_entry(
 void convert_local_dictionary_to_global(std::shared_ptr<array_info> dict_array,
                                         bool is_parallel,
                                         bool sort_dictionary_if_modified) {
-    if (!is_parallel || dict_array->has_global_dictionary) {
+    if (!is_parallel || dict_array->child_arrays[0]->is_globally_replicated) {
         // If data is replicated we just return and rely on other kernels
         // to avoid checking for global. This is because some C++ functions
         // use is_parallel=False to implement certain steps of the
@@ -1509,7 +1507,7 @@ std::shared_ptr<table_info> shuffle_table_kernel(
     for (size_t i = 0; i < n_cols; i++) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i];
         if (in_arr->arr_type == bodo_array_type::DICT) {
-            if (!in_arr->has_global_dictionary)
+            if (!in_arr->child_arrays[0]->is_globally_replicated)
                 throw std::runtime_error(
                     "shuffle_array: input dictionary array doesn't have a "
                     "global dictionary");
@@ -1572,10 +1570,8 @@ std::shared_ptr<table_info> shuffle_table_kernel(
         // from Python.
         if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i];
-            std::shared_ptr<array_info> out_dict_arr = create_dict_string_array(
-                in_arr->child_arrays[0], out_arr, in_arr->has_global_dictionary,
-                in_arr->has_unique_local_dictionary,
-                in_arr->has_sorted_dictionary);
+            std::shared_ptr<array_info> out_dict_arr =
+                create_dict_string_array(in_arr->child_arrays[0], out_arr);
             out_arr = out_dict_arr;
         }
         in_arr.reset();
@@ -1986,7 +1982,7 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
             return nullptr;
 
         } else if (arr_type == bodo_array_type::DICT) {
-            if (!in_arr->has_global_dictionary) {
+            if (!in_arr->child_arrays[0]->is_globally_replicated) {
                 throw std::runtime_error(
                     "reverse_shuffle_table: input dictionary array doesn't "
                     "have a "
@@ -2019,10 +2015,8 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
         }
         if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i];
-            std::shared_ptr<array_info> out_dict_arr = create_dict_string_array(
-                in_arr->child_arrays[0], out_arr, in_arr->has_global_dictionary,
-                in_arr->has_unique_local_dictionary,
-                in_arr->has_sorted_dictionary);
+            std::shared_ptr<array_info> out_dict_arr =
+                create_dict_string_array(in_arr->child_arrays[0], out_arr);
             out_arr = out_dict_arr;
         }
         in_arr.reset();
@@ -2058,8 +2052,8 @@ std::shared_ptr<table_info> shuffle_table(std::shared_ptr<table_info> in_table,
         if (a->arr_type == bodo_array_type::DICT) {
             // XXX is the dictionary replaced in Python input array and
             // correctly replaced? Can it be done easily? (this includes
-            // has_global_dictionary attribute). We need dictionaries
-            // to be global and unique for hashing.
+            // is_globally_replicated attribute of underlying string array.
+            // We need dictionaries to be global and unique for hashing.
             make_dictionary_global_and_unique(a, is_parallel);
         }
     }
@@ -2471,7 +2465,7 @@ std::shared_ptr<table_info> broadcast_table(
         if (myrank == mpi_root) {
             in_arr = in_table->columns[i_col];
             if (in_arr->arr_type == bodo_array_type::DICT) {
-                if (!in_arr->has_global_dictionary) {
+                if (!in_arr->child_arrays[0]->is_globally_replicated) {
                     throw std::runtime_error(
                         "broadcast_table: Not supported for DICT arrays "
                         "without global dictionary.");
@@ -2600,10 +2594,7 @@ std::shared_ptr<table_info> broadcast_table(
             std::shared_ptr<array_info> ref_arr = ref_table->columns[i_col];
             std::shared_ptr<array_info> dict_arr = ref_arr->child_arrays[0];
             // Create a DICT out_arr
-            out_arr = create_dict_string_array(
-                dict_arr, out_arr, ref_arr->has_global_dictionary,
-                ref_arr->has_unique_local_dictionary,
-                ref_arr->has_sorted_dictionary);
+            out_arr = create_dict_string_array(dict_arr, out_arr);
         }
         in_arr.reset();
         out_arrs.push_back(out_arr);
@@ -3292,11 +3283,8 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
         if (in_table->columns[i_col]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i_col];
             if (all_gather || myrank == mpi_root) {
-                out_arr = create_dict_string_array(
-                    in_arr->child_arrays[0], out_arr,
-                    in_arr->has_global_dictionary,
-                    in_arr->has_unique_local_dictionary,
-                    in_arr->has_sorted_dictionary);
+                out_arr =
+                    create_dict_string_array(in_arr->child_arrays[0], out_arr);
             }  // else out_arr is already NULL, so doesn't need to be
                // handled
         }

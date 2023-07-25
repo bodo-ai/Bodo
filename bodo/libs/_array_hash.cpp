@@ -585,8 +585,8 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
             }
             return;
         }
-        if ((array->has_global_dictionary &&
-             array->has_unique_local_dictionary) ||
+        std::shared_ptr<array_info>& dict = array->child_arrays[0];
+        if ((dict->is_globally_replicated && dict->is_locally_unique) ||
             !is_parallel || !global_dict_needed) {
             // in this case we can just hash the indices since the dictionary is
             // synchronized across ranks or is only needed for a local
@@ -859,8 +859,8 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
             }
             return;
         }
-        if ((array->has_global_dictionary &&
-             array->has_unique_local_dictionary) ||
+        std::shared_ptr<array_info>& dict = array->child_arrays[0];
+        if ((dict->is_globally_replicated && dict->is_locally_unique) ||
             !global_dict_needed || !is_parallel) {
             // in this case we can just hash the indices since the dictionary is
             // synchronized across ranks or is only needed for a local
@@ -1078,7 +1078,7 @@ void coherent_hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
         // unify_dictionaries and is checked above.
         //
         // 3. The dictionary does not contain any duplicate values. This is
-        // enforced by the has_unique_local_dictionary check in
+        // enforced by the is_locally_unique check in
         // unify_dictionaries and is updated by
         // make_dictionary_global_and_unique. In particular,
         // make_dictionary_global_and_unique contains a drop duplicates step
@@ -1431,7 +1431,7 @@ std::unique_ptr<uint32_t[]> hash_keys(
 
 /**
  * @brief Verify that the dictionary arrays attempted to be unified have
- * satified the requirements for unification.
+ * satisfied the requirements for unification.
  *
  * @param arrs The arrays to unify.
  * @param is_parallels If each array is parallel.
@@ -1439,11 +1439,12 @@ std::unique_ptr<uint32_t[]> hash_keys(
 void ensure_dicts_can_unify(std::vector<std::shared_ptr<array_info>>& arrs,
                             std::vector<bool>& is_parallels) {
     for (size_t i = 0; i < arrs.size(); i++) {
-        if (is_parallels[i] && !arrs[i]->has_global_dictionary) {
+        std::shared_ptr<array_info>& dict = arrs[i]->child_arrays[0];
+        if (is_parallels[i] && !dict->is_globally_replicated) {
             throw std::runtime_error(
                 "unify_dictionaries: array does not have global dictionary");
         }
-        if (!arrs[i]->has_unique_local_dictionary) {
+        if (!dict->is_locally_unique) {
             throw std::runtime_error(
                 "unify_dictionaries: array's dictionary has duplicate "
                 "values");
@@ -1710,8 +1711,15 @@ void unify_several_dictionaries(std::vector<std::shared_ptr<array_info>>& arrs,
     // dictionary. The next_index is always num_strings + 1, so we can use that
     // to get the length of the dictionary.
     size_t n_strings = next_index - 1;
+    // ensure_dicts_can_unify requires each array be globally replicated.
+    // This is either because the whole array is replicated or the dictionary
+    // is.
+    bool is_globally_replicated = true;
+    // ensure_dicts_can_unify requires each array is unique.
+    bool is_locally_unique = true;
     std::shared_ptr<array_info> new_dict =
-        alloc_string_array(Bodo_CTypes::STRING, n_strings, n_chars);
+        alloc_string_array(Bodo_CTypes::STRING, n_strings, n_chars, -1, 0,
+                           is_globally_replicated, is_locally_unique);
     offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2();
 
     // Initialize the offset and string index to the end of the base dictionary
@@ -1834,8 +1842,15 @@ void unify_dictionaries(std::shared_ptr<array_info> arr1,
     arr1_hashes.reset();
     arr2_hashes.reset();
 
+    // ensure_dicts_can_unify requires each array be globally replicated.
+    // This is either because the whole array is replicated or the dictionary
+    // is.
+    bool is_globally_replicated = true;
+    // ensure_dicts_can_unify requires each array is unique.
+    bool is_locally_unique = true;
     std::shared_ptr<array_info> new_dict =
-        alloc_string_array(Bodo_CTypes::STRING, n_strings, n_chars);
+        alloc_string_array(Bodo_CTypes::STRING, n_strings, n_chars, -1, 0,
+                           is_globally_replicated, is_locally_unique);
     offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2();
 
     // Initialize the offset and string index to the end of arr1's dictionary

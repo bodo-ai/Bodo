@@ -560,9 +560,7 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         }
 
         if (length == 0) {
-            this->out_array = alloc_dict_string_array(
-                0, 0, 0, /*has_global_dictionary=*/false,
-                /*has_unique_local_dictionary=*/false);
+            this->out_array = alloc_dict_string_array(0, 0, 0);
             return this->out_array;
         }
 
@@ -681,14 +679,15 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         }
 
         if (length == 0) {
-            this->out_array = alloc_dict_string_array(
-                0, 0, 0, /*has_global_dictionary=*/false,
-                /*has_unique_local_dictionary=*/false);
+            this->out_array = alloc_dict_string_array(0, 0, 0);
             return this->out_array;
         }
+        // We set is_locally_unique=true since we constructed the
+        // dictionary ourselves and made sure not to put nulls in the
+        // dictionary.
         std::shared_ptr<array_info> dict_arr =
-            alloc_array(total_distinct_strings, total_distinct_chars, -1,
-                        bodo_array_type::STRING, dtype);
+            alloc_string_array(dtype, total_distinct_strings,
+                               total_distinct_chars, -1, 0, false, true);
         int64_t n_null_bytes = (total_distinct_strings + 7) >> 3;
         offset_t* out_offsets = (offset_t*)dict_arr->data2();
         // We know there's no nulls in the dictionary, so memset the
@@ -702,11 +701,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         }
         out_offsets[total_distinct_strings] =
             static_cast<offset_t>(total_distinct_chars);
-        // We set _has_unique_local_dictionary=true since we constructed the
-        // dictionary ourselves and made sure not to put nulls in the
-        // dictionary.
-        out_array =
-            create_dict_string_array(dict_arr, indices_arr, false, true);
+        out_array = create_dict_string_array(dict_arr, indices_arr);
         return out_array;
     }
 

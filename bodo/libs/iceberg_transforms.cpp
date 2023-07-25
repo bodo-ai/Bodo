@@ -335,8 +335,12 @@ std::shared_ptr<array_info> array_transform_truncate_W(
             str_len = in_offsets[i + 1] - in_offsets[i];
             n_chars += std::min(str_len, (offset_t)width);
         }
-        // Allocate output array
-        out_arr = alloc_string_array(in_arr->dtype, nRow, n_chars);
+        // Allocate output array. If this string array is a dictionary then
+        // it is still globally replicated and sorted, but the truncation
+        // may break uniqueness.
+        out_arr = alloc_string_array(in_arr->dtype, nRow, n_chars, -1, 0,
+                                     in_arr->is_globally_replicated, false,
+                                     in_arr->is_locally_sorted);
         // Copy over truncated strings to the new array
         offset_t* out_offsets = (offset_t*)out_arr->data2();
         out_offsets[0] = 0;
@@ -417,9 +421,7 @@ std::shared_ptr<array_info> array_transform_truncate_W(
         // transformed dictionary would be sorted too since
         // it's just a truncation. It might not have all
         // unique elements though.
-        out_arr = create_dict_string_array(trunc_dict_data_arr, indices_copy,
-                                           in_arr->has_global_dictionary, false,
-                                           in_arr->has_sorted_dictionary);
+        out_arr = create_dict_string_array(trunc_dict_data_arr, indices_copy);
         return out_arr;
     }
     // Throw an error if type is not supported (e.g. CATEGORICAL)
