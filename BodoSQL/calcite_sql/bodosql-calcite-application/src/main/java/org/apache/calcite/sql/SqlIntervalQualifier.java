@@ -92,6 +92,10 @@ public class SqlIntervalQualifier extends SqlNode {
   private static final BigDecimal INT_MAX_VALUE_PLUS_ONE =
       BigDecimal.valueOf(Integer.MAX_VALUE).add(BigDecimal.ONE);
 
+  private static final BigDecimal DAYS_IN_WEEK = BigDecimal.valueOf(7);
+
+  private static final BigDecimal MONTHS_IN_QUARTER = BigDecimal.valueOf(3);
+
   //~ Instance fields --------------------------------------------------------
 
   private final int startPrecision;
@@ -151,9 +155,8 @@ public class SqlIntervalQualifier extends SqlNode {
     case ISODOW:
     case DOY:
     case DAY:
-      return SqlTypeName.INTERVAL_DAY;
     case WEEK:
-      return SqlTypeName.INTERVAL_WEEK;
+      return SqlTypeName.INTERVAL_DAY;
     case DAY_TO_HOUR:
       return SqlTypeName.INTERVAL_DAY_HOUR;
     case DAY_TO_MINUTE:
@@ -586,6 +589,44 @@ public class SqlIntervalQualifier extends SqlNode {
   }
 
   /**
+   * Validates an INTERVAL literal against a QUARTER interval qualifier.
+   *
+   * @throws org.apache.calcite.runtime.CalciteContextException if the interval
+   * value is illegal
+   */
+  private int[] evaluateIntervalLiteralAsQuarter(
+      RelDataTypeSystem typeSystem, int sign,
+      String value,
+      String originalValue,
+      SqlParserPos pos) {
+    BigDecimal quarter;
+
+    // validate as QUARTER(startPrecision), e.g. 'MM'
+    String intervalPattern = "(\\d+)";
+
+    Matcher m = Pattern.compile(intervalPattern).matcher(value);
+    if (m.matches()) {
+      // Break out  field values
+      try {
+        quarter = parseField(m, 1);
+      } catch (NumberFormatException e) {
+        throw invalidValueException(pos, originalValue);
+      }
+
+      // Validate individual fields
+      checkLeadFieldInRange(typeSystem, sign, quarter, TimeUnit.QUARTER, pos);
+
+      // Convert into months
+      BigDecimal month = quarter.multiply(MONTHS_IN_QUARTER);
+
+      // package values up for return
+      return fillIntervalValueArray(sign, ZERO, month);
+    } else {
+      throw invalidValueException(pos, originalValue);
+    }
+  }
+
+  /**
    * Validates an INTERVAL literal against a WEEK interval qualifier.
    *
    * @throws org.apache.calcite.runtime.CalciteContextException if the interval
@@ -613,8 +654,11 @@ public class SqlIntervalQualifier extends SqlNode {
       // Validate individual fields
       checkLeadFieldInRange(typeSystem, sign, week, TimeUnit.WEEK, pos);
 
+      // Convert into days
+      BigDecimal day = week.multiply(DAYS_IN_WEEK);
+
       // package values up for return
-      return fillIntervalValueArray(sign, ZERO, week);
+      return fillIntervalValueArray(sign, day, ZERO, ZERO, ZERO, ZERO);
     } else {
       throw invalidValueException(pos, originalValue);
     }
@@ -1174,6 +1218,9 @@ public class SqlIntervalQualifier extends SqlNode {
           value0, pos);
     case MONTH:
       return evaluateIntervalLiteralAsMonth(typeSystem, sign, value, value0,
+          pos);
+    case QUARTER:
+      return evaluateIntervalLiteralAsQuarter(typeSystem, sign, value, value0,
           pos);
     case WEEK:
       return evaluateIntervalLiteralAsWeek(typeSystem, sign, value, value0,

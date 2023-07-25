@@ -5067,6 +5067,15 @@ TimeUnit Year() :
     <YEARS> { return warn(TimeUnit.YEAR); }
 }
 
+TimeUnit Quarter() :
+{
+}
+{
+    <QUARTER> { return TimeUnit.QUARTER; }
+|
+    <QUARTERS> { return warn(TimeUnit.QUARTER); }
+}
+
 TimeUnit Month() :
 {
 }
@@ -5136,6 +5145,8 @@ SqlIntervalQualifier IntervalQualifier() :
             LOOKAHEAD(2) <TO> end = Month()
         ]
     |
+        start = Quarter() { s = span(); } startPrec = PrecisionOpt()
+    |
         start = Month() { s = span(); } startPrec = PrecisionOpt()
     |
         start = Week() { s = span(); } startPrec = PrecisionOpt()
@@ -5194,6 +5205,7 @@ SqlIntervalQualifier IntervalQualifierStart() :
     (
         (
             start = Year()
+        |   start = Quarter()
         |   start = Month()
         |   start = Week()
         |   start = Day()
@@ -8253,6 +8265,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < PROCEDURE: "PROCEDURE" >
 |   < PUBLIC: "PUBLIC" >
 |   < QUARTER: "QUARTER" >
+|   < QUARTERS: "QUARTERS" >
 |   < RANGE: "RANGE" >
 |   < RANK: "RANK" >
 |   < READ: "READ" >

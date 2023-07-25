@@ -51,7 +51,6 @@ public class LiteralCodeGen {
           case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
           case TIME:
             // TODO: Support all remaining interval types.
-          case INTERVAL_WEEK:
           case INTERVAL_DAY_HOUR:
           case INTERVAL_DAY_MINUTE:
           case INTERVAL_DAY_SECOND:
@@ -162,7 +161,6 @@ public class LiteralCodeGen {
             /* according to https://calcite.apache.org/javadocAggregate/org/apache/calcite/rex/RexLiteral.html,
             INTERVAL_YEAR/YEAR_MONTH/MONTH are measured in months, and everything else is measured in miliseconds
              */
-          case INTERVAL_WEEK:
           case INTERVAL_DAY_HOUR:
           case INTERVAL_DAY_MINUTE:
           case INTERVAL_DAY_SECOND:

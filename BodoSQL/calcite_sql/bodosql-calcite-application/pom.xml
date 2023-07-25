@@ -300,88 +300,6 @@
 										<!-- List of all class files we overwrite from Calcite. -->
 										<!-- Ideally, this list is empty and classes should only be added here sparingly or removed. -->
 										<!-- The existence of this list is a maintenance nightmare. -->
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$1.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$2.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$3.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$AbstractRexCallImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$ArrayConcatImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$BinaryImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$BitOpImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$CastImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$ClassifierImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$CoalesceImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$CollectImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$CountImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$CountWinImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$DatetimeArithmeticImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$DefaultImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$DenseRankImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$ExtractImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$FirstLastValueImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$FirstValueImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$FloorImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$FusionImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$GroupingImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$HopImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$IntersectionImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$IsFalseImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$IsNotFalseImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$IsNotNullImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$IsNotTrueImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$IsNullImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$IsTrueImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$ItemImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$JsonArrayAggImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$JsonObjectAggImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$JsonValueImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$LagImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$LastImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$LastValueImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$LeadImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$LeadLagImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$ListaggImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$LogicalAndImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$LogicalNotImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$LogicalOrImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$MethodImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$MethodNameImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$MinMaxImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$ModeImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$NotImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$NthValueImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$NtileImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$NullAs.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$PeriodNameImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$PiImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$PosixRegexMethodImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$RandImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$RandIntegerImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$RankImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$ReflectiveImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$RegexpReplaceImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$ReinterpretImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$RexCallImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$RowNumberImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$SessionImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$SingleValueImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$SumImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$SystemFunctionImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$TrimImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$TumbleImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$UnaryImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$UserDefinedAggReflectiveImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable$ValueConstructorImplementor.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexImpTable.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator$1.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator$InputGetter.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator$InputGetterImpl.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator$Result.class</exclude>
-										<exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator.class</exclude>
-										<exclude>org/apache/calcite/jdbc/JavaTypeFactoryImpl$1.class</exclude>
-										<exclude>org/apache/calcite/jdbc/JavaTypeFactoryImpl$2.class</exclude>
-										<exclude>org/apache/calcite/jdbc/JavaTypeFactoryImpl$RecordFieldImpl.class</exclude>
-										<exclude>org/apache/calcite/jdbc/JavaTypeFactoryImpl$SyntheticRecordType.class</exclude>
-										<exclude>org/apache/calcite/jdbc/JavaTypeFactoryImpl.class</exclude>
 										<exclude>org/apache/calcite/plan/RelOptAbstractTable.class</exclude>
 										<exclude>org/apache/calcite/plan/RelOptMaterialization$1.class</exclude>
 										<exclude>org/apache/calcite/plan/RelOptMaterialization$ProjectFilterTable.class</exclude>
@@ -402,15 +320,9 @@
 										<exclude>org/apache/calcite/rel/core/TableModify$1.class</exclude>
 										<exclude>org/apache/calcite/rel/core/TableModify$Operation.class</exclude>
 										<exclude>org/apache/calcite/rel/core/TableModify.class</exclude>
-										<exclude>org/apache/calcite/rel/externalize/RelJson$1.class</exclude>
-										<exclude>org/apache/calcite/rel/externalize/RelJson$InputTranslator.class</exclude>
-										<exclude>org/apache/calcite/rel/externalize/RelJson$RelInputForCluster.class</exclude>
-										<exclude>org/apache/calcite/rel/externalize/RelJson.class</exclude>
 										<exclude>org/apache/calcite/rel/logical/LogicalTargetTableScan.class</exclude>
 										<exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness$1.class</exclude>
 										<exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness.class</exclude>
-										<exclude>org/apache/calcite/rel/metadata/RelMdSize$1.class</exclude>
-										<exclude>org/apache/calcite/rel/metadata/RelMdSize.class</exclude>
 										<exclude>org/apache/calcite/rel/mutable/MutableRelType.class</exclude>
 										<exclude>org/apache/calcite/rel/mutable/MutableRels$1.class</exclude>
 										<exclude>org/apache/calcite/rel/mutable/MutableRels$2.class</exclude>
@@ -428,10 +340,6 @@
 										<exclude>org/apache/calcite/rel/type/RelDataTypeSystem$1.class</exclude>
 										<exclude>org/apache/calcite/rel/type/RelDataTypeSystem$2.class</exclude>
 										<exclude>org/apache/calcite/rel/type/RelDataTypeSystem.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataTypeSystemImpl$1.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataTypeSystemImpl.class</exclude>
-										<exclude>org/apache/calcite/rex/RexBuilder$1.class</exclude>
-										<exclude>org/apache/calcite/rex/RexBuilder.class</exclude>
 										<exclude>org/apache/calcite/rex/RexCall$1.class</exclude>
 										<exclude>org/apache/calcite/rex/RexCall.class</exclude>
 										<exclude>org/apache/calcite/rex/RexLiteral$1.class</exclude>
@@ -499,15 +407,7 @@
 										<exclude>org/apache/calcite/sql/parser/SqlParserUtil$ToTreeListItem.class</exclude>
 										<exclude>org/apache/calcite/sql/parser/SqlParserUtil$TokenSequenceImpl.class</exclude>
 										<exclude>org/apache/calcite/sql/parser/SqlParserUtil.class</exclude>
-										<exclude>org/apache/calcite/sql/type/SqlTypeAssignmentRule.class</exclude>
-										<exclude>org/apache/calcite/sql/type/SqlTypeExplicitPrecedenceList.class</exclude>
 										<exclude>org/apache/calcite/sql/type/SqlTypeFactoryImpl.class</exclude>
-										<exclude>org/apache/calcite/sql/type/SqlTypeFamily$1.class</exclude>
-										<exclude>org/apache/calcite/sql/type/SqlTypeFamily.class</exclude>
-										<exclude>org/apache/calcite/sql/type/SqlTypeName$1.class</exclude>
-										<exclude>org/apache/calcite/sql/type/SqlTypeName$Limit.class</exclude>
-										<exclude>org/apache/calcite/sql/type/SqlTypeName$PrecScale.class</exclude>
-										<exclude>org/apache/calcite/sql/type/SqlTypeName.class</exclude>
 										<exclude>org/apache/calcite/sql/type/SqlTypeUtil$1.class</exclude>
 										<exclude>org/apache/calcite/sql/type/SqlTypeUtil$2.class</exclude>
 										<exclude>org/apache/calcite/sql/type/SqlTypeUtil.class</exclude>
