@@ -90,9 +90,6 @@ object RexCostEstimator : RexVisitor<Cost> {
     override fun visitDynamicParam(param: RexDynamicParam): Cost =
         Cost(mem = averageTypeValueSize(param.type) ?: 0.0)
 
-    override fun visitNamedParam(param: RexNamedParam): Cost =
-        Cost(mem = averageTypeValueSize(param.type) ?: 0.0)
-
     override fun visitRangeRef(rangeRef: RexRangeRef): Cost =
         throw UnsupportedOperationException()
 

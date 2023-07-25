@@ -409,7 +409,6 @@
 										<exclude>org/apache/calcite/rel/logical/LogicalTargetTableScan.class</exclude>
 										<exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness$1.class</exclude>
 										<exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness.class</exclude>
-										<exclude>org/apache/calcite/rel/metadata/RelMdRowCount.class</exclude>
 										<exclude>org/apache/calcite/rel/metadata/RelMdSize$1.class</exclude>
 										<exclude>org/apache/calcite/rel/metadata/RelMdSize.class</exclude>
 										<exclude>org/apache/calcite/rel/mutable/MutableRelType.class</exclude>
@@ -418,71 +417,6 @@
 										<exclude>org/apache/calcite/rel/mutable/MutableRels$3.class</exclude>
 										<exclude>org/apache/calcite/rel/mutable/MutableRels.class</exclude>
 										<exclude>org/apache/calcite/rel/mutable/MutableRowSample.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/CalcRelSplitter$1.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/CalcRelSplitter$CannotImplement.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/CalcRelSplitter$HighestUsageFinder.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/CalcRelSplitter$ImplementTester.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/CalcRelSplitter$InputToCommonExprConverter.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/CalcRelSplitter$MaxInputFinder.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/CalcRelSplitter$RelType.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/CalcRelSplitter.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableCalcReduceExpressionsRuleConfig$1.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableCalcReduceExpressionsRuleConfig$Builder.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableCalcReduceExpressionsRuleConfig$InitShim.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableCalcReduceExpressionsRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableCalcToWindowRuleConfig$1.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableCalcToWindowRuleConfig$Builder.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableCalcToWindowRuleConfig$InitShim.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableCalcToWindowRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableFilterReduceExpressionsRuleConfig$1.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableFilterReduceExpressionsRuleConfig$Builder.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableFilterReduceExpressionsRuleConfig$InitShim.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableFilterReduceExpressionsRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableJoinReduceExpressionsRuleConfig$1.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableJoinReduceExpressionsRuleConfig$Builder.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableJoinReduceExpressionsRuleConfig$InitShim.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableJoinReduceExpressionsRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableProjectReduceExpressionsRuleConfig$1.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableProjectReduceExpressionsRuleConfig$Builder.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableProjectReduceExpressionsRuleConfig$InitShim.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableProjectReduceExpressionsRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableProjectToLogicalProjectAndWindowRuleConfig$1.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableProjectToLogicalProjectAndWindowRuleConfig$Builder.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableProjectToLogicalProjectAndWindowRuleConfig$InitShim.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableProjectToLogicalProjectAndWindowRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableWindowReduceExpressionsRuleConfig$1.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableWindowReduceExpressionsRuleConfig$Builder.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableWindowReduceExpressionsRuleConfig$InitShim.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ImmutableWindowReduceExpressionsRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ProjectToWindowRule$CalcToWindowRule$CalcToWindowRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ProjectToWindowRule$CalcToWindowRule.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ProjectToWindowRule$Config.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ProjectToWindowRule$ProjectToLogicalProjectAndWindowRule$1.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ProjectToWindowRule$ProjectToLogicalProjectAndWindowRule$ProjectToLogicalProjectAndWindowRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ProjectToWindowRule$ProjectToLogicalProjectAndWindowRule.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ProjectToWindowRule$WindowedAggRelSplitter$1.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ProjectToWindowRule$WindowedAggRelSplitter$2.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ProjectToWindowRule$WindowedAggRelSplitter$3.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ProjectToWindowRule$WindowedAggRelSplitter.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ProjectToWindowRule.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$1.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$CalcReduceExpressionsRule$1.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$CalcReduceExpressionsRule$CalcReduceExpressionsRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$CalcReduceExpressionsRule.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$CaseShuttle.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$Config.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$FilterReduceExpressionsRule$FilterReduceExpressionsRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$FilterReduceExpressionsRule.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$JoinReduceExpressionsRule$JoinReduceExpressionsRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$JoinReduceExpressionsRule.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$ProjectReduceExpressionsRule$ProjectReduceExpressionsRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$ProjectReduceExpressionsRule.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$ReducibleExprLocator$Constancy.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$ReducibleExprLocator.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$RexReplacer.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$WindowReduceExpressionsRule$WindowReduceExpressionsRuleConfig.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule$WindowReduceExpressionsRule.class</exclude>
-										<exclude>org/apache/calcite/rel/rules/ReduceExpressionsRule.class</exclude>
 										<exclude>org/apache/calcite/rel/type/RelDataType.class</exclude>
 										<exclude>org/apache/calcite/rel/type/RelDataTypeFactory$Builder.class</exclude>
 										<exclude>org/apache/calcite/rel/type/RelDataTypeFactory$FieldInfo.class</exclude>
@@ -496,81 +430,14 @@
 										<exclude>org/apache/calcite/rel/type/RelDataTypeSystem.class</exclude>
 										<exclude>org/apache/calcite/rel/type/RelDataTypeSystemImpl$1.class</exclude>
 										<exclude>org/apache/calcite/rel/type/RelDataTypeSystemImpl.class</exclude>
-										<exclude>org/apache/calcite/rex/RexBiVisitor.class</exclude>
-										<exclude>org/apache/calcite/rex/RexBiVisitorImpl.class</exclude>
 										<exclude>org/apache/calcite/rex/RexBuilder$1.class</exclude>
 										<exclude>org/apache/calcite/rex/RexBuilder.class</exclude>
 										<exclude>org/apache/calcite/rex/RexCall$1.class</exclude>
 										<exclude>org/apache/calcite/rex/RexCall.class</exclude>
-										<exclude>org/apache/calcite/rex/RexCopier.class</exclude>
-										<exclude>org/apache/calcite/rex/RexInterpreter$1.class</exclude>
-										<exclude>org/apache/calcite/rex/RexInterpreter$Truthy.class</exclude>
-										<exclude>org/apache/calcite/rex/RexInterpreter.class</exclude>
 										<exclude>org/apache/calcite/rex/RexLiteral$1.class</exclude>
 										<exclude>org/apache/calcite/rex/RexLiteral.class</exclude>
-										<exclude>org/apache/calcite/rex/RexNamedParam.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgram$1.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgram$2.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgram$3.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgram$Checker.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgram$ConstantFinder.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgram$ExpansionShuttle.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgram$Marshaller.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgram$ReferenceCounter.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgram.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgramBuilder$1.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgramBuilder$RegisterInputShuttle.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgramBuilder$RegisterMidputShuttle.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgramBuilder$RegisterOutputShuttle.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgramBuilder$RegisterShuttle.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgramBuilder$UpdateRefShuttle.class</exclude>
-										<exclude>org/apache/calcite/rex/RexProgramBuilder.class</exclude>
-										<exclude>org/apache/calcite/rex/RexShuttle.class</exclude>
-										<exclude>org/apache/calcite/rex/RexSimplify$1.class</exclude>
-										<exclude>org/apache/calcite/rex/RexSimplify$CaseBranch.class</exclude>
-										<exclude>org/apache/calcite/rex/RexSimplify$Comparison.class</exclude>
-										<exclude>org/apache/calcite/rex/RexSimplify$IsPredicate.class</exclude>
-										<exclude>org/apache/calcite/rex/RexSimplify$Predicate.class</exclude>
-										<exclude>org/apache/calcite/rex/RexSimplify$RexSargBuilder.class</exclude>
-										<exclude>org/apache/calcite/rex/RexSimplify$SafeRexVisitor.class</exclude>
-										<exclude>org/apache/calcite/rex/RexSimplify$SargCollector.class</exclude>
-										<exclude>org/apache/calcite/rex/RexSimplify.class</exclude>
 										<exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable$EquivConvertlet.class</exclude>
 										<exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUnaryBiVisitor.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$1.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$10.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$11.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$12.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$13.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$2.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$3.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$4.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$5.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$6.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$7.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$8.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$9.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$CnfHelper$OverflowError.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$CnfHelper.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$ConstantFinder.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$CorrelationFinder.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$DnfHelper.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$ExprSimplifier.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$ExpressionNormalizer$SubExprExistsException.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$ExpressionNormalizer.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$FieldAccessFinder.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$FixNullabilityShuttle.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$ForwardRefFinder$IllegalForwardRefException.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$ForwardRefFinder.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$RangeToRex.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$RexFinder.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$RexShiftShuttle.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$SearchExpandingShuttle.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil$SubQueryFinder.class</exclude>
-										<exclude>org/apache/calcite/rex/RexUtil.class</exclude>
-										<exclude>org/apache/calcite/rex/RexVisitor.class</exclude>
-										<exclude>org/apache/calcite/rex/RexVisitorImpl.class</exclude>
 										<exclude>org/apache/calcite/runtime/CalciteResource.class</exclude>
 										<exclude>org/apache/calcite/runtime/CalciteResource.properties</exclude>
 										<exclude>org/apache/calcite/sql/SqlCall.class</exclude>
@@ -591,7 +458,6 @@
 										<exclude>org/apache/calcite/sql/SqlLiteral$SqlSymbol.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlLiteral.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlMerge.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlNamedParam.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlNode.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlNodeList.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlSampleSpec$1.class</exclude>
@@ -610,12 +476,6 @@
 										<exclude>org/apache/calcite/sql/SqlUtil$DatabaseMetaDataInvocationHandler.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlUtil$Genealogist.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlUtil.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlWriter$Frame.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlWriter$FrameType.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlWriter$FrameTypeEnum$1.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlWriter$FrameTypeEnum.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlWriter$SubQueryStyle.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlWriter.class</exclude>
 										<exclude>org/apache/calcite/sql/advise/SqlAdvisorValidator.class</exclude>
 										<exclude>org/apache/calcite/sql/ddl/SqlColumnDeclaration$1.class</exclude>
 										<exclude>org/apache/calcite/sql/ddl/SqlColumnDeclaration.class</exclude>
@@ -639,15 +499,6 @@
 										<exclude>org/apache/calcite/sql/parser/SqlParserUtil$ToTreeListItem.class</exclude>
 										<exclude>org/apache/calcite/sql/parser/SqlParserUtil$TokenSequenceImpl.class</exclude>
 										<exclude>org/apache/calcite/sql/parser/SqlParserUtil.class</exclude>
-										<exclude>org/apache/calcite/sql/pretty/SqlPrettyWriter$1.class</exclude>
-										<exclude>org/apache/calcite/sql/pretty/SqlPrettyWriter$2.class</exclude>
-										<exclude>org/apache/calcite/sql/pretty/SqlPrettyWriter$3.class</exclude>
-										<exclude>org/apache/calcite/sql/pretty/SqlPrettyWriter$4.class</exclude>
-										<exclude>org/apache/calcite/sql/pretty/SqlPrettyWriter$Bean.class</exclude>
-										<exclude>org/apache/calcite/sql/pretty/SqlPrettyWriter$FrameImpl$Save.class</exclude>
-										<exclude>org/apache/calcite/sql/pretty/SqlPrettyWriter$FrameImpl.class</exclude>
-										<exclude>org/apache/calcite/sql/pretty/SqlPrettyWriter.class</exclude>
-										<exclude>org/apache/calcite/sql/type/BodoTZInfo.class</exclude>
 										<exclude>org/apache/calcite/sql/type/SqlTypeAssignmentRule.class</exclude>
 										<exclude>org/apache/calcite/sql/type/SqlTypeExplicitPrecedenceList.class</exclude>
 										<exclude>org/apache/calcite/sql/type/SqlTypeFactoryImpl.class</exclude>

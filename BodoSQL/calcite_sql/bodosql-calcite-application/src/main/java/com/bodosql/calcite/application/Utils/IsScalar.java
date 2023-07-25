@@ -3,6 +3,8 @@ package com.bodosql.calcite.application.Utils;
 import static org.apache.calcite.rex.RexVisitorImpl.visitArrayAnd;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.rex.RexNamedParam;
+
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
 import org.apache.calcite.rex.RexDynamicParam;
@@ -10,7 +12,6 @@ import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexLocalRef;
-import org.apache.calcite.rex.RexNamedParam;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.rex.RexPatternFieldRef;
@@ -50,6 +51,8 @@ public class IsScalar implements RexVisitor<Boolean> {
   public Boolean visitCall(RexCall call) {
     if (call.getOperator().getName().equals("RANDOM")) {
       return false;
+    } else if (call instanceof RexNamedParam) {
+      return true;
     } else {
       return visitArrayAnd(this, call.operands);
     }
@@ -58,11 +61,6 @@ public class IsScalar implements RexVisitor<Boolean> {
   @Override
   public Boolean visitDynamicParam(RexDynamicParam dynamicParam) {
     throw unsupportedNode();
-  }
-
-  @Override
-  public Boolean visitNamedParam(RexNamedParam dynamicParam) {
-    return true;
   }
 
   @Override

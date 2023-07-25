@@ -33,6 +33,7 @@ package ${parser.package};
 import ${importStr};
 </#list>
 
+import com.bodosql.calcite.sql.fun.SqlNamedParameterOperator;
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.avatica.util.DateTimeUtils;
 import org.apache.calcite.avatica.util.TimeUnit;
@@ -79,7 +80,6 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlMatchRecognize;
 import org.apache.calcite.sql.SqlMerge;
-import org.apache.calcite.sql.SqlNamedParam;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlNumericLiteral;
@@ -114,7 +114,6 @@ import org.apache.calcite.sql.fun.SqlLibraryOperators;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.fun.SqlTrimFunction;
 import org.apache.calcite.sql.parser.Span;
-import org.apache.calcite.sql.parser.SqlAbstractParserImpl;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.parser.SqlParserImplFactory;
@@ -275,11 +274,6 @@ void debug_message1() {
 
 JAVACODE String unquotedIdentifier() {
     return SqlParserUtil.toCase(getToken(0).image, unquotedCasing);
-}
-
-JAVACODE String pythonUnquotedIdentifier() {
-    // Strip the @ from the name
-    return SqlParserUtil.toCase(getToken(0).image.substring(1), Casing.UNCHANGED);
 }
 
 /**
@@ -5291,29 +5285,19 @@ SqlDynamicParam DynamicParam() :
 /**
  * Parses a named parameter marker.
  */
-SqlNamedParam NamedParam() :
+SqlNode NamedParam() :
 {
-    final String name;
-    final SqlParserPos pos;
-    boolean prefixIsDollar = false;
+    final Span s;
+    final SqlLiteral name;
+    final SqlLiteral prefix;
 }
 {
 
-    (
-            <AT_PARAM_IDENTIFIER>
-        |
-            <DOLLAR_PARAM_IDENTIFIER> {
-                prefixIsDollar = true;
-            }
-    )
-    (
-      {
-        name = pythonUnquotedIdentifier();
-        pos = getPos();
-      }
-    )
+    (<AT_PARAM_IDENTIFIER> | <DOLLAR_PARAM_IDENTIFIER>) {
+        name = SqlLiteral.createCharString(token.image, getPos());
+    }
     {
-      return new SqlNamedParam(name, prefixIsDollar, getPos());
+      return SqlNamedParameterOperator.INSTANCE.createCall(getPos(), name);
     }
 }
 
