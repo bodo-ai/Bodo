@@ -10,7 +10,8 @@ probe times respectively.
 The test uses the "bodopartner.us-east-1" Snowflake account
 (re-uses the get_snowflake_connection_string infrastructure)
 and therefore requires setting the following environment variables:
-AGENT_NAME (to anything), SF_USERNAME and SF_PASSWORD.
+AGENT_NAME (to anything), SF_USERNAME, SF_PASSWORD, and
+BODO_RUN_REGRESSION_TESTS (to anything).
 After setting these, run using:
 pytest -s -v test_stream_join_regression.py
 We recommend running this on a single-node cluster on the
@@ -45,8 +46,12 @@ import bodo
 from bodo.tests.utils import (
     get_snowflake_connection_string,
     pytest_mark_snowflake,
+    pytest_perf_regression,
 )
 from bodo.utils.typing import ColNamesMetaType, MetaType
+
+# Skip for all CI
+pytestmark = pytest_perf_regression
 
 # Codegen change: turn verbose mode on
 bodo.set_verbose_level(2)
