@@ -142,7 +142,7 @@ void window_frame_sliding_computation(std::shared_ptr<array_info> in_arr,
         exiting++;
         entering++;
     }
-    if (group_end_idx == in_arr->length) {
+    if (static_cast<uint64_t>(group_end_idx) == in_arr->length) {
         // After the computation is complete for each partition, do any
         // necessary final operations (e.g. converting string vectors to proper
         // arrays)
@@ -214,7 +214,7 @@ void window_frame_prefix_computation(std::shared_ptr<array_info> in_arr,
         }
         entering++;
     }
-    if (group_end_idx == in_arr->length) {
+    if (static_cast<uint64_t>(group_end_idx) == in_arr->length) {
         // After the computation is complete for each partition, do any
         // necessary final operations (e.g. converting string vectors to proper
         // arrays)
@@ -285,7 +285,7 @@ void window_frame_suffix_computation(std::shared_ptr<array_info> in_arr,
                           window_frame_enum::CUMULATIVE>(entering);
         }
     }
-    if (group_end_idx == in_arr->length) {
+    if (static_cast<uint64_t>(group_end_idx) == in_arr->length) {
         // After the computation is complete for each partition, do any
         // necessary final operations (e.g. converting string vectors to proper
         // arrays)
