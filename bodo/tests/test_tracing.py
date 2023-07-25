@@ -142,8 +142,14 @@ def test_resumable_event():
         assert resumable["args"][
             "resumable"
         ], "No resumable attribute on resumable event"
+        if bodo.get_size() > 1:
+            # Add a suffix for events that occur on multiple ranks.
+            # By default tracing computes simple summary stats.
+            key_suffix = "_min"
+        else:
+            key_suffix = ""
         assert (
-            resumable["args"]["iteration_count"] == 2
+            resumable["args"]["iteration_count" + key_suffix] == 2
         ), "Resumable event iteration count is wrong"
 
         # the first and second simple event occur around the two iterations of resumable, thus they should take longer
