@@ -1626,6 +1626,8 @@ class DistributedPass:
             self._file_open_set_parallel(file_varname)
             return nodes
 
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef == (
             "get_split_view_index",
             "bodo.hiframes.split_impl",
@@ -1644,6 +1646,8 @@ class DistributedPass:
             out.append(assign)
             return out
 
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef == (
             "setitem_str_arr_ptr",
             "bodo.libs.str_arr_ext",
@@ -1662,7 +1666,8 @@ class DistributedPass:
             out.append(assign)
             return out
 
-        # adjust array index variable to be within current processor's data chunk
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef in (
             (
                 "inplace_eq",
@@ -1686,6 +1691,8 @@ class DistributedPass:
             out.append(assign)
             return out
 
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef == (
             "str_arr_item_to_numeric",
             "bodo.libs.str_arr_ext",
@@ -1720,6 +1727,8 @@ class DistributedPass:
             out.append(assign)
             return out
 
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef in (
             (
                 "get_str_arr_item_copy",
@@ -1759,6 +1768,8 @@ class DistributedPass:
             out.append(assign)
             return out
 
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef == ("setna", "bodo.libs.array_kernels") and self._dist_arr_needs_adjust(
             rhs.args[0].name, rhs.args[1].name
         ):
@@ -1776,11 +1787,14 @@ class DistributedPass:
             out.append(assign)
             return out
 
+        # Adjust array index variable to be within current processor's data chunk
+        # See docstring of _is_array_access_stmt
         if fdef in (
             ("isna", "bodo.libs.array_kernels"),
             ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
             ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
             ("get_str_arr_str_length", "bodo.libs.str_arr_ext"),
+            ("scalar_optional_getitem", "bodo.utils.indexing"),
         ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             # fix index in call to isna
             arr = rhs.args[0]
@@ -4612,6 +4626,27 @@ class DistributedPass:
                 avail_vars.add(stmt.target.name)
 
     def _is_array_access_stmt(self, stmt):
+        """Returns True if input statement is a form of array access, e.g. equivalent to
+        A[i].
+        This allows the compiler to handle 1D_Var parallelism properly without expensive
+        exscan calls.
+        NOTE: all internal array access nodes/functions have to be handled here.
+
+        Example without exscan:
+        for i in range(0, local_len):
+            isna(A, i)
+
+        Example with exscan:
+        prefix = exscan(local_len)
+        for i in range(prefix, prefix + local_len):
+            isna(A, i)
+
+        Args:
+            stmt (ir.Stmt): input statement
+
+        Returns:
+            bool: true if input is an array access statement
+        """
         if is_get_setitem(stmt):
             return True
 
@@ -4633,6 +4668,7 @@ class DistributedPass:
                 ("get_split_view_index", "bodo.hiframes.split_impl"),
                 ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
                 ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
+                ("scalar_optional_getitem", "bodo.utils.indexing"),
             ):
                 return True
 
