@@ -76,11 +76,11 @@ void min_row_number_filter_window_computation_no_sort(
         }
         // Allocate intermediate buffer to find the true element for
         // each group.
-        idx_col = alloc_array(num_groups, 1, 1, idx_arr_type,
-                              Bodo_CTypes::UINT64, 0, 0);
+        idx_col =
+            alloc_array(num_groups, 1, 1, idx_arr_type, Bodo_CTypes::UINT64);
         // create array to store min/max value
         std::shared_ptr<array_info> data_col = alloc_array(
-            num_groups, 1, 1, orderby_arr->arr_type, orderby_arr->dtype, 0, 0);
+            num_groups, 1, 1, orderby_arr->arr_type, orderby_arr->dtype);
         // Initialize the index column. This is 0 initialized and will
         // not initialize the null values.
         aggfunc_output_initialize(idx_col, Bodo_FTypes::count, use_sql_rules);
@@ -101,7 +101,7 @@ void min_row_number_filter_window_computation_no_sort(
         // We don't need null for indices
         // We only allocate an index column.
         idx_col = alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                              Bodo_CTypes::UINT64, 0, 0);
+                              Bodo_CTypes::UINT64);
         aggfunc_output_initialize(idx_col, Bodo_FTypes::count, use_sql_rules);
         // Call the idx_n_columns function path.
         idx_n_columns_apply(idx_col, orderby_arrs, asc_vect, na_pos_vect,
@@ -116,10 +116,10 @@ void min_row_number_filter_window_computation_no_sort(
 }
 
 /**
- * Alternative implementaiton for min_row_number_filter if another window
+ * Alternative implementation for min_row_number_filter if another window
  * computation already requires sorting the table: iterates through
  * the sorted groups and sets the corresponding row to true if the
- * current row belongs to a differnet group than the previous row.
+ * current row belongs to a different group than the previous row.
  *
  * @param[in,out] out_arr: output array where the row numbers are stored
  * @param[in] sorted_groups: sorted array of group numbers
@@ -131,7 +131,7 @@ void min_row_number_filter_window_computation_already_sorted(
     std::shared_ptr<array_info> sorted_groups,
     std::shared_ptr<array_info> sorted_idx) {
     int64_t prev_group = -1;
-    for (int64_t i = 0; i < out_arr->length; i++) {
+    for (uint64_t i = 0; i < out_arr->length; i++) {
         int64_t curr_group = getv<int64_t>(sorted_groups, i);
         // If the current group is differne from the group of the previous row,
         // then this row is the row where the row number is 1
@@ -164,7 +164,7 @@ void row_number_computation(std::shared_ptr<array_info> out_arr,
     // the counter to 1 when we reach a new group
     int64_t prev_group = -1;
     int64_t row_num = 1;
-    for (int64_t i = 0; i < out_arr->length; i++) {
+    for (uint64_t i = 0; i < out_arr->length; i++) {
         int64_t curr_group = getv<int64_t>(sorted_groups, i);
         if (curr_group != prev_group) {
             row_num = 1;
@@ -374,7 +374,7 @@ void percent_rank_computation(
     // Create an intermediary column to store the regular rank
     int64_t n = out_arr->length;
     std::shared_ptr<array_info> rank_arr =
-        alloc_array(n, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::INT64, 0, 0);
+        alloc_array(n, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::INT64);
     // Start the counter at 1, snap upward each we encounter a row
     // that is distinct from the previous row, and reset the counter
     // to 1 when we reach a new group. When a group ends, set
@@ -407,10 +407,10 @@ void percent_rank_computation(
 /**
  * Computes the BodoSQL window function CUME_DIST() on a subset of a table
  * containing complete partitions, where the rows are sorted first by group
- * (so each partition is clustered togeher) and then by the columns in the
+ * (so each partition is clustered together) and then by the columns in the
  * orderby clause.
  *
- * The computaiton works by calculating the tie-upward rank for each row. Then,
+ * The computation works by calculating the tie-upward rank for each row. Then,
  * after a group is finished, the percent rank for each row is calculated
  * via the formula r/n where r is the tie-upward rank and n is the group size.
  *
@@ -438,7 +438,7 @@ void cume_dist_computation(
     // Create an intermediary column to store the tie-up rank
     int64_t n = out_arr->length;
     std::shared_ptr<array_info> rank_arr =
-        alloc_array(n, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::INT64, 0, 0);
+        alloc_array(n, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::INT64);
     // Start the counter at 1, snap upward each we encounter a row
     // that is distinct from the previous row, and reset the counter
     // to 1 when we reach a new group. When a group ends, set
@@ -695,7 +695,7 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
     int64_t vect_ascending[n_keys];
     int64_t na_position[n_keys];
     // The sort table will be the same for every window function call that uses
-    // it, so the table will be unitialized until one of the calls specifies
+    // it, so the table will be uninitialized until one of the calls specifies
     // that we do need to sort
     bool needs_sort = false;
     bool sort_has_required_cols = false;

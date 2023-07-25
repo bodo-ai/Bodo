@@ -276,14 +276,6 @@ void ChunkedTableArrayBuilder::Reset() {
             // in the dict builder:
             this->data_array->child_arrays[0] =
                 this->dict_builder->dict_buff->data_array;
-            // Reset the flags:
-            this->data_array->has_global_dictionary =
-                false;  // by default, dictionary builders are not global.
-            this->data_array->has_unique_local_dictionary =
-                true;  // the dictionary builder guarantees deduplication by
-                       // design.
-            this->data_array->has_sorted_dictionary =
-                false;  // by default, dictionary builders are not sorted.
         } break;
         default: {
             throw std::runtime_error(

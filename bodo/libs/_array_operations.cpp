@@ -566,6 +566,7 @@ std::shared_ptr<array_info> sort_values_array_local(
     std::shared_ptr<table_info> sorted_table = sort_values_table_local(
         dummy_table, 1, &ascending, &na_position, &zero, is_parallel);
     std::shared_ptr<array_info> sorted_arr = sorted_table->columns[0];
+    sorted_arr->is_locally_sorted = true;
     return sorted_arr;
 }
 
@@ -2258,11 +2259,13 @@ std::shared_ptr<array_info> get_replace_regex_slice(
             }
         }
     }
-    // Allocate the output array. We add 1 because regex_replace
-    // may insert a null terminator
-    // TODO: Can this ever be Binary?
+    // Allocate the output array. If this was a used as the dictionary
+    // in a dict-encoded array, then being "global" is preserved, but
+    // uniqueness and sorting are lost.
+    // TODO(njriasan): Can this ever be Binary?
     std::shared_ptr<array_info> out_arr =
-        alloc_string_array(Bodo_CTypes::STRING, out_arr_len, num_chars);
+        alloc_string_array(Bodo_CTypes::STRING, out_arr_len, num_chars, -1, 0,
+                           in_arr->is_globally_replicated);
     offset_t* const out_data2 = reinterpret_cast<offset_t*>(out_arr->data2());
     // Initialize the first offset to 0
     out_data2[0] = 0;
@@ -2305,8 +2308,7 @@ array_info* get_replace_regex_py_entry(array_info* p_in_arr,
         std::shared_ptr<array_info> new_dict = get_replace_regex_slice(
             dict_arr, pat, replacement, 0, dict_arr->length);
         std::shared_ptr<array_info> new_indices = copy_array(indices_arr);
-        out_arr = create_dict_string_array(new_dict, new_indices,
-                                           in_arr->has_global_dictionary);
+        out_arr = create_dict_string_array(new_dict, new_indices);
     } else {
         Bodo_PyErr_SetString(
             PyExc_RuntimeError,
@@ -2349,7 +2351,7 @@ array_info* get_replace_regex_dict_state_py_entry(array_info* p_in_arr,
 
     std::shared_ptr<array_info> indices_arr = in_arr->child_arrays[1];
     std::shared_ptr<array_info> new_indices = copy_array(indices_arr);
-    std::shared_ptr<array_info> out_arr = create_dict_string_array(
-        new_dict, new_indices, in_arr->has_global_dictionary);
+    std::shared_ptr<array_info> out_arr =
+        create_dict_string_array(new_dict, new_indices);
     return new array_info(*out_arr);
 }

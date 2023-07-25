@@ -334,7 +334,7 @@ void window_frame_computation_with_frame(
         int64_t curr_group = getv<int64_t>(sorted_groups, i);
         if ((i > 0) && (curr_group != prev_group)) {
             if (frame_lo == nullptr) {
-                // Case 1: cumulative window frame from the begining of
+                // Case 1: cumulative window frame from the beginning of
                 // the partition to some row relative to the current row
                 window_frame_prefix_computation<window_func, ArrayType, T,
                                                 DType>(

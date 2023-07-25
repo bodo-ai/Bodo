@@ -543,10 +543,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
                 RetrieveArray_SingleColumn_F_nullable(in_indices, in_arr_idxs,
                                                       nRowOut);
             out_arr =
-                create_dict_string_array(in_arr->child_arrays[0], out_indices,
-                                         in_arr->has_global_dictionary,
-                                         in_arr->has_unique_local_dictionary,
-                                         in_arr->has_sorted_dictionary);
+                create_dict_string_array(in_arr->child_arrays[0], out_indices);
             break;
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
@@ -825,7 +822,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
     }
     if (arr_type == bodo_array_type::DICT) {
         // TODO refactor? this is mostly the same logic as NULLABLE_INT_BOOL
-        // if (is_parallel && !arr1->has_global_dictionary)
+        // if (is_parallel && !arr1->child_arrays[0]->is_globally_replicated)
         //    throw std::runtime_error("RetrieveArray_TwoColumns: reference
         //    column doesn't have a global dictionary");
         std::shared_ptr<array_info> out_indices =
@@ -850,9 +847,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             }
             out_indices->set_null_bit(iRow, bit);
         }
-        out_arr = create_dict_string_array(
-            arr1->child_arrays[0], out_indices, arr1->has_global_dictionary,
-            arr1->has_unique_local_dictionary, arr1->has_sorted_dictionary);
+        out_arr = create_dict_string_array(arr1->child_arrays[0], out_indices);
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // In the case of NULLABLE array, we do a single loop for
@@ -1602,7 +1597,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
         std::shared_ptr<array_info> arr1_indices = arr1->child_arrays[1];
         std::shared_ptr<array_info> arr2_indices = arr2->child_arrays[1];
 
-        if (arr1->has_sorted_dictionary) {
+        if (arr_dict->is_locally_sorted) {
             // In case of sorted dictionaries, we can simply compare the
             // indices
             return KeyComparisonAsPython_Column(na_position_bis, arr1_indices,
