@@ -2550,6 +2550,16 @@ pytest_pandas = [
 # (pytestmark = pytest_ml)
 pytest_ml = [pytest.mark.ml]
 
+# This is for marking an entire test file
+# (pytestmark = pytest_perf_regression)
+pytest_perf_regression = [
+    pytest.mark.skipif(
+        "BODO_RUN_REGRESSION_TESTS" not in os.environ,
+        reason="only runs per regression tests manually",
+    ),
+    pytest.mark.perf_regression,
+]
+
 
 @contextmanager
 def temp_env_override(env_vars):
