@@ -390,11 +390,13 @@ std::shared_ptr<table_info> create_out_table(
  * @param other_table_idxs indices in the other table used for output generation
  * @param needs_reduction : whether the bitmap needs a reduction (the
  * corresponding table is replicated, but the other table is distributed).
+ * @param offset number of bits from the start of bit_map that belongs to
+ * previous chunks. Default is 0
  */
 void add_unmatched_rows(bodo::vector<uint8_t>& bit_map, size_t n_rows,
                         bodo::vector<int64_t>& table_idxs,
                         bodo::vector<int64_t>& other_table_idxs,
-                        bool needs_reduction) {
+                        bool needs_reduction, int64_t offset) {
     if (needs_reduction) {
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -403,7 +405,7 @@ void add_unmatched_rows(bodo::vector<uint8_t>& bit_map, size_t n_rows,
         MPI_Allreduce_bool_or(bit_map);
         int pos = 0;
         for (size_t i = 0; i < n_rows; i++) {
-            bool bit = GetBit(bit_map.data(), i);
+            bool bit = GetBit(bit_map.data(), i + offset);
             // distribute the replicated input table rows across ranks
             // to load balance the output
             if (!bit) {
@@ -417,7 +419,7 @@ void add_unmatched_rows(bodo::vector<uint8_t>& bit_map, size_t n_rows,
         }
     } else {
         for (size_t i = 0; i < n_rows; i++) {
-            bool bit = GetBit(bit_map.data(), i);
+            bool bit = GetBit(bit_map.data(), i + offset);
             if (!bit) {
                 table_idxs.emplace_back(i);
                 other_table_idxs.emplace_back(-1);
