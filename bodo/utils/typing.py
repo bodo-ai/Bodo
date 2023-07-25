@@ -109,7 +109,7 @@ def type_has_unknown_cats(typ):
     )
 
 
-def unwrap_typeref(typ):
+def unwrap_typeref(typ: Union[types.Type, types.TypeRef]) -> types.Type:
     """return instance type if 'typ' is a TypeRef
 
     Args:

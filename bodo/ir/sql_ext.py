@@ -1248,7 +1248,7 @@ def _gen_sql_reader_chunked_py(
     See _gen_sql_reader_py for argument documentation
 
     Args:
-        chunksize(int): Number of rows in each batch
+        chunksize: Number of rows in each batch
     """
     assert (
         db_type == "snowflake"

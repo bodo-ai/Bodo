@@ -476,7 +476,7 @@ inline void handle_probe_input_for_partition(
  * for the `build_table_outer` case. Essentially finds
  * all the build records that didn't match, and adds them to the output (with
  * NULL on the probe side).
- * @Tparam requires_reduction Whether the build matches require a reduction
+ * @tparam requires_reduction Whether the build matches require a reduction
  * because the probe table is distributed but the build table is replicated.
  *
  * @param partition Join partition to produce the output for.
@@ -2012,6 +2012,7 @@ table_info* join_probe_consume_batch_py_entry(
                                 false, false, false)
 #undef CONSUME_PROBE_BATCH
         }
+
         auto [out_table, chunk_size] =
             join_state_->output_buffer->PopChunk(/*force_return*/ is_last);
         *total_rows = chunk_size;

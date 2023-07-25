@@ -131,8 +131,6 @@ class ArrowReader {
      *   dataset (starting from the beginning). Read all rows if is -1
      * @param selected_fields : Fields to select from the Arrow source,
      *   using the field ID of Arrow schema
-     *   NOTE: selected_fields must be sorted
-     * @param num_selected_fields : length of selected_fields array
      * @param is_nullable : array of bools that indicates which of the
      *   selected fields is nullable. Same length and order as selected_fields.
      * @param batch_size : Number of rows for Readers to output per iteration
@@ -199,9 +197,8 @@ class ArrowReader {
             is_last = true;
             total_rows_out = 0;
             ev.finalize();
-            TableBuilder builder(schema, selected_fields, 0, is_nullable,
-                                 str_as_dict_colnames, false);
-            return builder.get_table();
+
+            return this->empty_out_table();
         }
 
         auto [out_table, is_last_, total_rows_out_] = read_inner();
@@ -270,11 +267,11 @@ class ArrowReader {
 
     /// Total number of rows this process has to read (across pieces)
     int64_t count = 0;
-    int64_t rows_left;  // only used during ArrowReader::read()
+    int64_t rows_left;  // only used during ArrowReader::read_inner()
     int64_t batch_size;
 
     /// initialize reader
-    void init_arrow_reader(const std::vector<int32_t>& str_as_dict_cols = {},
+    void init_arrow_reader(std::span<int32_t> str_as_dict_cols = {},
                            bool create_dict_from_string = false);
 
     /**
@@ -306,6 +303,14 @@ class ArrowReader {
      * Depending on the reader, must handle batched and non-batched reads
      */
     virtual std::tuple<table_info*, bool, uint64_t> read_inner() = 0;
+
+    /**
+     * @brief Helper function to construct an empty Bodo table with the
+     * expected output columns, but zero rows
+     *
+     * @return table_info* Output table with correct format
+     */
+    virtual table_info* empty_out_table() = 0;
 
    private:
     // XXX needed to call into Python?

@@ -2376,12 +2376,14 @@ class UntypedPass:
     def _gen_parquet_read(
         self,
         fname,
-        lhs,
+        lhs: ir.Var,
         columns=None,
         storage_options=None,
         input_file_name_col=None,
         read_as_dict_cols=None,
         use_hive=True,
+        chunksize: Optional[int] = None,
+        use_index: bool = True,
     ):
         # make sure pyarrow is available
         if not bodo.utils.utils.has_pyarrow():
@@ -2402,10 +2404,18 @@ class UntypedPass:
             input_file_name_col=input_file_name_col,
             read_as_dict_cols=read_as_dict_cols,
             use_hive=use_hive,
+            chunksize=chunksize,
+            use_index=use_index,
         )
         n_cols = len(columns)
 
-        if index_col is None:
+        if chunksize is not None and use_index and index_col is not None:
+            raise BodoError(
+                "pd.read_parquet(): Bodo currently does not support batched reads "
+                "of Parquet files with an index column"
+            )
+
+        if not use_index or index_col is None:
             assert n_cols > 0
             index_arg = (
                 f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, None)"
@@ -2429,19 +2439,22 @@ class UntypedPass:
                 f"bodo.utils.conversion.convert_to_index(index_arr, {index_name!r})"
             )
 
-        func_text = "def _init_df(T, index_arr):\n"
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((T,), {index_arg}, __col_name_meta_value_pq_read)\n"
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        _init_df = loc_vars["_init_df"]
-        nodes += compile_func_single_block(
-            _init_df,
-            data_arrs,
-            lhs,
-            extra_globals={
-                "__col_name_meta_value_pq_read": ColNamesMetaType(tuple(columns))
-            },
-        )
+        if chunksize is not None:
+            nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
+        else:
+            func_text = "def _init_df(T, index_arr):\n"
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((T,), {index_arg}, __col_name_meta_value_pq_read)\n"
+            loc_vars = {}
+            exec(func_text, {}, loc_vars)
+            _init_df = loc_vars["_init_df"]
+            nodes += compile_func_single_block(
+                _init_df,
+                data_arrs,
+                lhs,
+                extra_globals={
+                    "__col_name_meta_value_pq_read": ColNamesMetaType(tuple(columns))
+                },
+            )
         return nodes
 
     def _handle_pd_read_parquet(self, assign, lhs, rhs):
@@ -2500,15 +2513,49 @@ class UntypedPass:
             default=True,
         )
 
+        # Mimicing the use_index arg from read_csv
+        use_index = self._get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            10e4,
+            "_bodo_use_index",
+            rhs.loc,
+            use_default=True,
+            default=True,
+        )
+
+        # If defined, perform batched reads on the dataset
+        # Note that we don't want to use Pandas chunksize, since it returns an iterator
+        chunksize: Optional[int] = self._get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            10e4,
+            "_bodo_chunksize",
+            rhs.loc,
+            use_default=True,
+            default=None,
+            typ="int",
+        )
+        if chunksize is not None and (
+            not isinstance(chunksize, int) or chunksize < 1
+        ):  # pragma: no cover
+            raise BodoError(
+                "pd.read_parquet() '_bodo_chunksize' must be a constant integer >= 1."
+            )
+
         # check unsupported arguments
         supported_args = (
             "path",
             "engine",
             "columns",
             "storage_options",
+            "_bodo_chunksize",
             "_bodo_input_file_name_col",
             "_bodo_read_as_dict",
             "_bodo_use_hive",
+            "_bodo_use_index",
         )
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
@@ -2531,6 +2578,8 @@ class UntypedPass:
             _bodo_input_file_name_col,
             _bodo_read_as_dict,
             use_hive=_bodo_use_hive,
+            chunksize=chunksize,
+            use_index=use_index,
         )
 
     def _handle_np_fromfile(self, assign, lhs, rhs):

@@ -571,9 +571,9 @@ def _generate_table_read(
             # TODO: Replace with runtime variable once we support specifying
             # the schema
             if read_dict_list:
-                read_line = f"pd.read_parquet('{file_path}', {read_dict_list}, %s)"
+                read_line = f"pd.read_parquet('{file_path}', {read_dict_list}, _bodo_use_index=False, %s)"
             else:
-                read_line = f"pd.read_parquet('{file_path}', %s)"
+                read_line = f"pd.read_parquet('{file_path}', _bodo_use_index=False, %s)"
         elif file_type == "sql":
             # TODO: Replace with runtime variable once we support specifying
             # the schema

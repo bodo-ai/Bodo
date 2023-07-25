@@ -62,6 +62,8 @@ algebra.log
 *.log
 bodo/io/pyfs.h
 bodo/io/pyfs.cpp
+bodo/io/arrow_ext.h
+bodo/io/arrow_ext.cpp
 bodo/io/_hdfs.cpp
 bodo/utils/tracing.c
 bodo/libs/memory.cpp

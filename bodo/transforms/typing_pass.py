@@ -2283,7 +2283,11 @@ class TypingTransforms:
         # is always supported.
         if not is_sql and not is_call(index_def):
             lhs_arr_typ = self._get_filter_col_type(
-                cond[0], read_node.original_out_types, read_node.original_df_colnames
+                cond[0],
+                read_node.original_out_types[0].col_types
+                if read_node.chunksize
+                else read_node.original_out_types,
+                read_node.original_df_colnames,
             )
             lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
             require(cond[2].name in self.typemap)

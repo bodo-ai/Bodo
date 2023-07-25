@@ -2255,6 +2255,14 @@ void DEBUG_PrintSetOfColumn(
         os << "number of columns nCol=" << nCol << " Nothing to print\n";
         return;
     }
+
+    for (int iCol = 0; iCol < nCol; iCol++) {
+        os << "Column " << iCol << " : "
+           << "arr_type=" << GetArrType_as_string(ListArr[iCol]->arr_type)
+           << " dtype=" << GetDtype_as_string(ListArr[iCol]->dtype)
+           << std::endl;
+    }
+
     std::vector<int> ListLen(nCol);
     int nRowMax = 0;
     os << "nCol=" << nCol << " List of number of rows:";
