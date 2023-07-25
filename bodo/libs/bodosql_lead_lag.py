@@ -2,6 +2,7 @@
 """
 Implements wrappers to call the C++ BodoSQL array kernels for LEAD/LAG.
 """
+import textwrap
 
 import llvmlite.binding as ll
 import numba
@@ -17,8 +18,12 @@ from bodo.libs.bodosql_array_kernel_utils import (
     is_valid_tz_naive_datetime_arg,
 )
 from bodo.libs.distributed_api import value_to_ptr
-from bodo.utils.templated_functext import generate_templated_function
-from bodo.utils.typing import dtype_to_array_type, is_nullable, to_nullable_type
+from bodo.utils.typing import (
+    dtype_to_array_type,
+    is_nullable,
+    raise_bodo_error,
+    to_nullable_type,
+)
 
 # lead_lag_seq
 
@@ -39,34 +44,6 @@ _lead_lag_seq_py_entry = types.ExternalFunction(
     ),
 )
 
-# fmt: off
-def _lead_lag_seq_impl(in_col, shift_amt, default_fill_val=None, ignore_nulls=False): # pragma: no cover
-    """
-        Templated implementation of lead_lag_seq
-    """
-    0,#$${array_conv}
-
-    if shift_amt == 0:
-        0,#$${return_in_col_nullable}
-
-
-    in_col_info = array_to_info(in_col)
-    0,#$${fill_val}
-    result_info = _lead_lag_seq_py_entry(
-        in_col_info,
-        shift_amt,
-        fill_val,
-        fill_val_len,
-        ignore_nulls,
-    )
-    result = info_to_array(
-        result_info,
-        result_type,
-    )
-    delete_info(result_info)
-    return result
-# fmt: on
-
 
 @numba.generated_jit
 def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
@@ -85,11 +62,13 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
         pd.series: a single column with the lead/lag operation performed on it.
     """
 
-    # Create substitutions dictionary for functext
+    # Create substitutions dictionary for func_text
     ctx = dict()
     if isinstance(in_col, bodo.SeriesType):  # pragma: no cover
         in_col = in_col.data
         ctx["array_conv"] = "in_col = bodo.utils.conversion.coerce_to_array(in_col)"
+    else:
+        ctx["array_conv"] = ""
 
     if in_col == bodo.dict_str_arr_type:
         result_type = in_col
@@ -127,17 +106,40 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
         ctx[
             "fill_val"
         ] = "(fill_val, fill_val_len) = (value_to_ptr(default_fill_val), 0)"
+    func_text = textwrap.dedent(
+        f"""
+    def _lead_lag_seq_impl(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
+        {ctx['array_conv']}
 
-    return generate_templated_function(
-        _lead_lag_seq_impl,
-        ctx,
-        {
-            "result_type": result_type,
-            "bodo": bodo,
-            "array_to_info": array_to_info,
-            "info_to_array": info_to_array,
-            "value_to_ptr": value_to_ptr,
-            "delete_info": delete_info,
-            "_lead_lag_seq_py_entry": _lead_lag_seq_py_entry,
-        },
+        if shift_amt == 0:
+            {ctx['return_in_col_nullable']}
+
+        in_col_info = array_to_info(in_col)
+        {ctx['fill_val']}
+        result_info = _lead_lag_seq_py_entry(
+            in_col_info,
+            shift_amt,
+            fill_val,
+            fill_val_len,
+            ignore_nulls,
+        )
+        result = info_to_array(
+            result_info,
+            result_type,
+        )
+        delete_info(result_info)
+        return result
+    """
     )
+    global_vars = {
+        "result_type": result_type,
+        "bodo": bodo,
+        "array_to_info": array_to_info,
+        "info_to_array": info_to_array,
+        "value_to_ptr": value_to_ptr,
+        "delete_info": delete_info,
+        "_lead_lag_seq_py_entry": _lead_lag_seq_py_entry,
+    }
+    local_vars = {}
+    exec(func_text, global_vars, local_vars)
+    return local_vars["_lead_lag_seq_impl"]
