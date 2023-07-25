@@ -113,7 +113,6 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
             Sets.immutableEnumSet(SqlTypeName.INTERVAL_YEAR_MONTH,
                 SqlTypeName.INTERVAL_YEAR,
                 SqlTypeName.INTERVAL_MONTH,
-                SqlTypeName.INTERVAL_WEEK,
                 SqlTypeName.INTERVAL_DAY);
         if (DATE_INTERVAL_TYPES.contains(operandTypes.get(1).getSqlTypeName()))
           returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);

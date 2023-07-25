@@ -1294,7 +1294,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                       SqlTypeName.INTERVAL_YEAR_MONTH,
                       SqlTypeName.INTERVAL_YEAR,
                       SqlTypeName.INTERVAL_MONTH,
-                      SqlTypeName.INTERVAL_WEEK,
                       SqlTypeName.INTERVAL_DAY);
               boolean is_date_interval =
                   DATE_INTERVAL_TYPES.contains(

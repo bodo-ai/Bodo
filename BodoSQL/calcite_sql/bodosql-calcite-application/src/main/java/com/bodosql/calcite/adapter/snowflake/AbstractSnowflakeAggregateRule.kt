@@ -12,6 +12,7 @@ import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.type.SqlTypeFamily
+import org.apache.calcite.sql.type.SqlTypeUtil
 import org.immutables.value.Value
 
 @BodoSQLStyleImmutable
@@ -122,24 +123,21 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
             // Not sure what things are ok to push, but we're going to be fairly conservative
             // and whitelist specific things rather than blacklist.
             return filter.condition.accept(object : RexVisitorImpl<Boolean?>(true) {
-                override fun visitLiteral(literal: RexLiteral?): Boolean {
-                    return when (literal?.typeName?.family) {
-                        // We can't yet write the rex literals for intervals back to sql.
-                        // See SnowflakeSqlDialect for the area where we need to implement this.
-                        SqlTypeFamily.INTERVAL_DAY_TIME, SqlTypeFamily.INTERVAL_WEEK, SqlTypeFamily.INTERVAL_YEAR_MONTH -> false
-                        else -> true
-                    }
+                override fun visitLiteral(literal: RexLiteral): Boolean {
+                    // We can't yet write the rex literals for intervals back to sql.
+                    // See SnowflakeSqlDialect for the area where we need to implement this.
+                    return !SqlTypeUtil.isInterval(literal.type)
                 }
-                override fun visitInputRef(inputRef: RexInputRef?): Boolean = true
 
-                override fun visitCall(call: RexCall?): Boolean {
+                override fun visitInputRef(inputRef: RexInputRef): Boolean = true
+
+                override fun visitCall(call: RexCall): Boolean {
                     // Allow select operators to be pushed down.
                     // This list is non-exhaustive, but are generally the functions we've seen
                     // and verified to work. Add more as appropriate.
-                    return if (call != null && SUPPORTED_CALLS.contains(call.kind)) {
-                        // Arguments also need to be pushable.
-                        call.operands.all { op -> op.accept(this) ?: false }
-                    } else false
+                    return SUPPORTED_CALLS.contains(call.kind) &&
+                            // Arguments also need to be pushable.
+                            call.operands.all { op -> op.accept(this) ?: false }
                 }
             }) ?: false
         }

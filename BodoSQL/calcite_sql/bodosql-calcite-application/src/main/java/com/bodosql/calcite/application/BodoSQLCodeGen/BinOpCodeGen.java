@@ -70,7 +70,6 @@ public class BinOpCodeGen {
               SqlTypeName.INTERVAL_YEAR_MONTH,
               SqlTypeName.INTERVAL_YEAR,
               SqlTypeName.INTERVAL_MONTH,
-              SqlTypeName.INTERVAL_WEEK,
               SqlTypeName.INTERVAL_DAY);
 
       boolean isArg0Interval = argDataTypes.get(0) instanceof IntervalSqlType;
