@@ -1,13 +1,14 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """IR node for the parquet data access"""
-from typing import List
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-from numba.core import ir, ir_utils, typeinfer, types
+from llvmlite import ir as lir
+from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
     compile_to_numba_ir,
     get_definition,
@@ -16,12 +17,20 @@ from numba.core.ir_utils import (
     next_label,
     replace_arg_nodes,
 )
-from numba.extending import NativeValue, models, register_model, unbox
+from numba.extending import (
+    NativeValue,
+    intrinsic,
+    models,
+    register_model,
+    unbox,
+)
 
 import bodo
 import bodo.ir.connector
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.table import Table, TableType  # noqa
+from bodo.io import arrow_cpp
+from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.fs_io import (
     get_storage_options_pyobject,
     storage_options_dict_type,
@@ -44,7 +53,6 @@ from bodo.libs.array import (
     table_type,
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
-from bodo.libs.str_ext import unicode_to_utf8
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.table_column_del_pass import (
     ir_extension_table_column_use,
@@ -54,9 +62,18 @@ from bodo.utils.transform import get_const_value
 from bodo.utils.typing import BodoError, FilenameType
 from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
+    inlined_check_and_propagate_cpp_exception,
     numba_to_c_type,
     sanitize_varname,
 )
+
+if TYPE_CHECKING:  # pragma: no cover
+    from llvmlite.ir.builder import IRBuilder
+    from numba.core.base import BaseContext
+
+
+ll.add_symbol("pq_read_py_entry", arrow_cpp.pq_read_py_entry)
+ll.add_symbol("pq_reader_init_py_entry", arrow_cpp.pq_reader_init_py_entry)
 
 
 class ReadParquetFilepathType(types.Opaque):
@@ -83,7 +100,7 @@ def unbox_read_parquet_fpath_type(typ, val, c):
 class ParquetHandler:
     """analyze and transform parquet IO calls"""
 
-    def __init__(self, func_ir, typingctx, args, _locals):
+    def __init__(self, func_ir: ir.FunctionIR, typingctx, args, _locals):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.args = args
@@ -92,12 +109,14 @@ class ParquetHandler:
     def gen_parquet_read(
         self,
         file_name,
-        lhs,
+        lhs: ir.Var,
         columns,
         storage_options=None,
         input_file_name_col=None,
         read_as_dict_cols=None,
         use_hive=True,
+        chunksize: Optional[int] = None,
+        use_index: bool = True,
     ):
         scope = lhs.scope
         loc = lhs.loc
@@ -214,10 +233,15 @@ class ParquetHandler:
             if c in convert_types:
                 col_types[i] = convert_types[c]
 
-        data_arrs = [
-            ir.Var(scope, mk_unique_var("pq_table"), loc),
-            ir.Var(scope, mk_unique_var("pq_index"), loc),
-        ]
+        if chunksize is None:
+            out_types = col_types
+            data_arrs = [
+                ir.Var(scope, mk_unique_var("pq_table"), loc),
+                ir.Var(scope, mk_unique_var("pq_index"), loc),
+            ]
+        else:
+            out_types = [ArrowReaderType(col_names, col_types)]
+            data_arrs = [ir.Var(lhs.scope, mk_unique_var("arrow_iterator"), lhs.loc)]
 
         nodes = [
             ParquetReader(
@@ -225,18 +249,19 @@ class ParquetHandler:
                 lhs.name,
                 col_names,
                 col_indices,
-                col_types,
+                out_types,
                 data_arrs,
                 loc,
                 partition_names,
                 storage_options,
-                index_column_index,
-                index_column_type,
+                index_column_index if use_index else None,
+                index_column_type if use_index else types.none,
                 input_file_name_col,
                 unsupported_columns,
                 unsupported_arrow_types,
                 arrow_schema,
                 use_hive,
+                chunksize,
             )
         ]
 
@@ -248,11 +273,11 @@ class ParquetReader(ir.Stmt):
         self,
         file_name,
         df_out,
-        col_names,
+        col_names: List[str],
         col_indices,
         out_types,
-        out_vars,
-        loc,
+        out_vars: List[ir.Var],
+        loc: ir.Loc,
         partition_names,
         # These are the same storage_options that would be passed to pandas
         storage_options,
@@ -261,8 +286,12 @@ class ParquetReader(ir.Stmt):
         input_file_name_col,
         unsupported_columns,
         unsupported_arrow_types,
-        arrow_schema,
-        use_hive,
+        arrow_schema: pa.Schema,
+        use_hive: bool,
+        # Batch size to read chunks in, or none, to read the entire table together
+        # Treated as compile-time constant for simplicity
+        # But not enforced that all chunks are this size
+        chunksize: Optional[int] = None,
     ):
         self.connector_typ = "parquet"
         self.file_name = file_name
@@ -307,10 +336,11 @@ class ParquetReader(ir.Stmt):
         # robust handling in connectors.
         self.is_live_table = True
         self.use_hive = use_hive
+        self.chunksize = chunksize
 
     def __repr__(self):  # pragma: no cover
         # TODO
-        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})".format(
+        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, chunksize={})".format(
             self.df_out,
             self.file_name.name,
             self.df_colnames,
@@ -329,16 +359,26 @@ class ParquetReader(ir.Stmt):
             self.unsupported_columns,
             self.unsupported_arrow_types,
             self.arrow_schema,
+            self.chunksize,
         )
 
 
 def remove_dead_pq(
-    pq_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
+    pq_node: ParquetReader,
+    lives_no_aliases,
+    lives,
+    arg_aliases,
+    alias_map,
+    func_ir,
+    typemap,
 ):
     """
     Function that eliminates parquet reader variables when they
     are no longer live.
     """
+    if pq_node.chunksize is not None:
+        return pq_node
+
     table_var = pq_node.out_vars[0].name
     index_var = pq_node.out_vars[1].name
     if table_var not in lives and index_var not in lives:
@@ -348,14 +388,17 @@ def remove_dead_pq(
         # If table isn't live we only want to load the index.
         # To do this we should mark the col_indices as empty
         pq_node.col_indices = []
+        pq_node.out_types = []
         pq_node.df_colnames = []
         pq_node.out_used_cols = []
         pq_node.is_live_table = False
+
     elif index_var not in lives:
         # If the index_var not in lives we don't load the index.
         # To do this we mark the index_column_index as None
         pq_node.index_column_index = None
         pq_node.index_column_type = types.none
+
     # TODO: Update the usecols if only 1 of the variables is live.
     return pq_node
 
@@ -383,13 +426,13 @@ def pq_remove_dead_column(pq_node, column_live_map, equiv_vars, typemap):
 
 
 def pq_distributed_run(
-    pq_node,
+    pq_node: ParquetReader,
     array_dists,
     typemap,
     calltypes,
     typingctx,
     targetctx,
-    is_independent=False,  # is_independent currently only used for sql_distributed_run for Snowflake
+    is_independent: bool = False,  # is_independent currently only used for sql_distributed_run for Snowflake
     meta_head_only_info=None,
 ):
     """lower ParquetReader into regular Numba nodes. Generates code for Parquet
@@ -407,7 +450,9 @@ def pq_distributed_run(
         filter_vars,
         pq_node.original_df_colnames,
         pq_node.partition_names,
-        pq_node.original_out_types,
+        pq_node.original_out_types
+        if pq_node.chunksize is None
+        else pq_node.original_out_types[0].col_types,
         typemap,
         "parquet",
         output_dnf=False,
@@ -415,9 +460,12 @@ def pq_distributed_run(
     arg_names = ", ".join(f"out{i}" for i in range(n_cols))
     func_text = f"def pq_impl(fname, {extra_args}):\n"
     # total_rows is used for setting total size variable below
-    func_text += (
-        f"    (total_rows, {arg_names},) = _pq_reader_py(fname, {extra_args})\n"
-    )
+    if pq_node.chunksize is None:
+        func_text += (
+            f"    (total_rows, {arg_names},) = _pq_reader_py(fname, {extra_args})\n"
+        )
+    else:
+        func_text += f"    pq_reader = _pq_reader_py(fname, {extra_args})\n"
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -425,6 +473,11 @@ def pq_distributed_run(
 
     # Add debug info about column pruning and dictionary encoded arrays.
     if bodo.user_logging.get_verbose_level() >= 1:
+        out_types = (
+            pq_node.out_types
+            if pq_node.chunksize is None
+            else pq_node.out_types[0].col_types
+        )
         # State which columns are pruned
         pq_source = pq_node.loc.strformat()
         pq_cols = []
@@ -432,9 +485,7 @@ def pq_distributed_run(
         for i in pq_node.out_used_cols:
             colname = pq_node.df_colnames[i]
             pq_cols.append(colname)
-            if isinstance(
-                pq_node.out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType
-            ):
+            if isinstance(out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType):
                 dict_encoded_cols.append(colname)
         pruning_msg = (
             "Finish column pruning on read_parquet node:\n%s\nColumns loaded %s\n"
@@ -455,10 +506,15 @@ def pq_distributed_run(
                 dict_encoded_cols,
             )
 
-    # parallel read flag
-    parallel = bodo.ir.connector.is_connector_table_parallel(
-        pq_node, array_dists, typemap, "ParquetReader"
-    )
+    # Parallel read flag
+    if pq_node.chunksize is not None:
+        parallel = bodo.ir.connector.is_chunked_connector_table_parallel(
+            pq_node, array_dists, "ParquetReader"
+        )
+    else:
+        parallel = bodo.ir.connector.is_connector_table_parallel(
+            pq_node, array_dists, typemap, "ParquetReader"
+        )
 
     # Check for any unsupported columns still remaining
     if pq_node.unsupported_columns:
@@ -485,11 +541,13 @@ def pq_distributed_run(
             total_msg = "\n".join(msg_list)
             raise BodoError(total_msg, loc=pq_node.loc)
 
-    pq_reader_py = _gen_pq_reader_py(
+    genargs = (
         pq_node.df_colnames,
         pq_node.col_indices,
         pq_node.out_used_cols,
-        pq_node.out_types,
+        pq_node.out_types
+        if pq_node.chunksize is None
+        else pq_node.out_types[0].col_types,
         pq_node.storage_options,
         pq_node.partition_names,
         dnf_filter_str,
@@ -504,6 +562,13 @@ def pq_distributed_run(
         pq_node.arrow_schema,
         pq_node.use_hive,
     )
+
+    if pq_node.chunksize is None:
+        pq_reader_py = _gen_pq_reader_py(*genargs)
+    else:
+        pq_reader_py = _gen_pq_reader_chunked_py(
+            *genargs, pq_node.chunksize, pq_node.out_types[0]
+        )
 
     # First arg is the path to the parquet dataset, and can be a string or a list
     # of strings
@@ -525,6 +590,13 @@ def pq_distributed_run(
     if meta_head_only_info:
         nodes[-3].target = meta_head_only_info[1]
 
+    # In the streaming case, ParquetReader only return an ArrowReader object
+    # Thus, we only need to pair 1 out_var to the last target node
+    # We don't need to pair any other elements
+    if pq_node.chunksize is not None:
+        nodes[-1].target = pq_node.out_vars[0]
+        return nodes
+
     # assign output table
     nodes[-2].target = pq_node.out_vars[0]
     # assign output index array
@@ -545,42 +617,17 @@ def pq_distributed_run(
     return nodes
 
 
-def _gen_pq_reader_py(
-    col_names,
+def pq_reader_params(
+    meta_head_only_info: Optional[Tuple],
+    col_names: List[str],
     col_indices,
-    out_used_cols,
-    out_types,
-    storage_options,
     partition_names,
-    dnf_filter_str,
-    expr_filter_str,
-    extra_args,
-    is_parallel,
-    meta_head_only_info,
+    input_file_name_col,
+    out_used_cols,
     index_column_index,
     index_column_type,
-    input_file_name_col,
-    is_dead_table,
-    pyarrow_schema: pa.Schema,
-    use_hive: bool,
+    out_types,
 ):
-    # a unique int used to create global variables with unique names
-    call_id = next_label()
-
-    comma = "," if extra_args else ""
-    func_text = f"def pq_reader_py(fname,{extra_args}):\n"
-    # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
-    func_text += f"    ev.add_attribute('g_fname', fname)\n"
-    func_text += f'    dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({extra_args}{comma}))\n'
-    # convert the filename, which could be a string or a list of strings, to a
-    # PyObject to pass to C++. C++ just passes it through to parquet_pio.py::get_parquet_dataset()
-    func_text += "    fname_py = get_fname_pyobject(fname)\n"
-
-    # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
-    storage_options["bodo_dummy"] = "dummy"
-    func_text += f"    storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
-
     # head-only optimization: we may need to read only the first few rows
     tot_rows_to_read = -1  # read all rows by default
     if meta_head_only_info and meta_head_only_info[0] is not None:
@@ -599,7 +646,7 @@ def _gen_pq_reader_py(
     # index instead of the name of the column to have slightly
     # cleaner code, although we need to make sure dead column elimination
     # works as expected.
-    input_file_name_col = (
+    input_file_name_col_out = (
         sanitize_varname(input_file_name_col)
         if (input_file_name_col is not None)
         and (col_names.index(input_file_name_col) in out_used_cols)
@@ -689,6 +736,87 @@ def _gen_pq_reader_py(
             part_col_type
         )
         partition_col_cat_dtypes.append(numba_to_c_type(cat_int_dtype))
+
+    return (
+        tot_rows_to_read,
+        col_indices_map,
+        sanitized_col_names_map,
+        input_file_name_col_out,
+        selected_cols,
+        selected_cols_map,
+        selected_partition_cols,
+        partition_col_cat_dtypes,
+        str_as_dict_cols,
+        nullable_cols,
+        sel_partition_names,
+        partition_indices,
+        sanitized_col_names,
+        sel_partition_names_map,
+    )
+
+
+def _gen_pq_reader_py(
+    col_names: List[str],
+    col_indices,
+    out_used_cols,
+    out_types,
+    storage_options,
+    partition_names,
+    dnf_filter_str: str,
+    expr_filter_str: str,
+    extra_args,
+    is_parallel,
+    meta_head_only_info,
+    index_column_index,
+    index_column_type,
+    input_file_name_col,
+    is_dead_table: bool,
+    pyarrow_schema: pa.Schema,
+    use_hive: bool,
+):
+    # a unique int used to create global variables with unique names
+    call_id = next_label()
+
+    comma = "," if extra_args else ""
+    func_text = f"def pq_reader_py(fname,{extra_args}):\n"
+    # if it's an s3 url, get the region and pass it into the c++ code
+    func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
+    func_text += f"    ev.add_attribute('g_fname', fname)\n"
+    func_text += f'    dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({extra_args}{comma}))\n'
+    # convert the filename, which could be a string or a list of strings, to a
+    # PyObject to pass to C++. C++ just passes it through to parquet_pio.py::get_parquet_dataset()
+    func_text += "    fname_py = get_fname_pyobject(fname)\n"
+
+    # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
+    storage_options["bodo_dummy"] = "dummy"
+    func_text += f"    storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
+
+    (
+        tot_rows_to_read,
+        col_indices_map,
+        sanitized_col_names_map,
+        input_file_name_col_out,
+        selected_cols,
+        selected_cols_map,
+        selected_partition_cols,
+        partition_col_cat_dtypes,
+        str_as_dict_cols,
+        nullable_cols,
+        sel_partition_names,
+        partition_indices,
+        sanitized_col_names,
+        sel_partition_names_map,
+    ) = pq_reader_params(
+        meta_head_only_info,
+        col_names,
+        col_indices,
+        partition_names,
+        input_file_name_col,
+        out_used_cols,
+        index_column_index,
+        index_column_type,
+        out_types,
+    )
 
     # Call pq_read_py_entry() in C++
     # single-element numpy array to return number of global rows from C++
@@ -811,7 +939,6 @@ def _gen_pq_reader_py(
         "delete_table": delete_table,
         "check_and_propagate_cpp_exception": check_and_propagate_cpp_exception,
         "pq_read_py_entry": pq_read_py_entry,
-        "unicode_to_utf8": unicode_to_utf8,
         "get_filters_pyobject": get_filters_pyobject,
         "get_storage_options_pyobject": get_storage_options_pyobject,
         "get_fname_pyobject": get_fname_pyobject,
@@ -827,6 +954,140 @@ def _gen_pq_reader_py(
 
     jit_func = numba.njit(pq_reader_py, no_cpython_wrapper=True)
     return jit_func
+
+
+def _gen_pq_reader_chunked_py(
+    col_names: List[str],
+    col_indices,
+    out_used_cols,
+    out_types,
+    storage_options,
+    partition_names,
+    dnf_filter_str: str,
+    expr_filter_str: str,
+    extra_args,
+    is_parallel,
+    meta_head_only_info,
+    index_column_index,
+    index_column_type,
+    input_file_name_col,
+    is_dead_table: bool,
+    pyarrow_schema: pa.Schema,
+    use_hive: bool,
+    chunksize: int,
+    arrow_reader_t: ArrowReaderType,
+):
+    """
+    Generate Python code for streaming Parquet initialization impl.
+
+    See _gen_pq_reader_py for base argument documentation
+
+    Args:
+        chunksize: Number of rows in each batch
+        arrow_reader_t: Typing of ArrowReader output
+    """
+
+    call_id = next_label()
+    comma = "," if extra_args else ""
+    storage_options["bodo_dummy"] = "dummy"
+
+    func_text = (
+        f"def pq_reader_chunked_py(fname, {extra_args}):\n"
+        f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
+        f"    ev.add_attribute('g_fname', fname)\n"
+        f'    dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({extra_args}{comma}))\n'
+        f"    fname_py = get_fname_pyobject(fname)\n"
+        # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
+        f"    storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
+    )
+
+    (
+        tot_rows_to_read,
+        _,
+        _,
+        _,
+        selected_cols,
+        _,
+        selected_partition_cols,
+        partition_col_cat_dtypes,
+        str_as_dict_cols,
+        nullable_cols,
+        _,
+        _,
+        _,
+        _,
+    ) = pq_reader_params(
+        meta_head_only_info,
+        col_names,
+        col_indices,
+        partition_names,
+        input_file_name_col,
+        out_used_cols,
+        index_column_index,
+        index_column_type,
+        out_types,
+    )
+
+    # Call pq_reader_init_py_entry() in C++
+    # single-element numpy array to return number of global rows from C++
+    func_text += "\n".join(
+        [
+            f"    pq_reader = pq_reader_init_py_entry(",
+            f"        fname_py,",
+            f"        {is_parallel},",
+            f"        dnf_filters,",
+            f"        expr_filters,",
+            f"        storage_options_py,",
+            f"        pyarrow_schema_{call_id},",
+            f"        {tot_rows_to_read},",
+            f"        selected_cols_arr_{call_id}.ctypes,",
+            f"        {len(selected_cols)},",
+            f"        nullable_cols_arr_{call_id}.ctypes,",
+        ]
+    )
+
+    if len(selected_partition_cols) > 0:
+        func_text += (
+            f"        np.array({selected_partition_cols}, dtype=np.int32).ctypes,\n"
+            f"        np.array({partition_col_cat_dtypes}, dtype=np.int32).ctypes,\n"
+            f"        {len(selected_partition_cols)},\n"
+        )
+    else:
+        func_text += f"        0, 0, 0,\n"
+
+    if len(str_as_dict_cols) > 0:
+        # TODO pass array as global to function instead?
+        func_text += f"        np.array({str_as_dict_cols}, dtype=np.int32).ctypes, {len(str_as_dict_cols)},\n"
+    else:
+        func_text += f"        0, 0,\n"
+
+    func_text += (
+        # The C++ code only needs a flag
+        f"        {input_file_name_col is not None},\n"
+        f"        {chunksize},\n"
+        f"        {use_hive},\n"
+        f"        arrow_reader_t,\n"
+        f"    )\n"
+        f"    return pq_reader\n"
+    )
+
+    glbls = {
+        f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),
+        f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
+        f"pyarrow_schema_{call_id}": pyarrow_schema.remove_metadata(),
+        "pq_reader_init_py_entry": pq_reader_init_py_entry,
+        "get_filters_pyobject": get_filters_pyobject,
+        "get_storage_options_pyobject": get_storage_options_pyobject,
+        "get_fname_pyobject": get_fname_pyobject,
+        "arrow_reader_t": arrow_reader_t,
+        "np": np,
+        "bodo": bodo,
+    }
+
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    pq_reader_py = loc_vars["pq_reader_chunked_py"]
+    return numba.njit(pq_reader_py, no_cpython_wrapper=True)
 
 
 @numba.njit
@@ -866,11 +1127,6 @@ ir_extension_table_column_use[
 distributed_pass.distributed_run_extensions[ParquetReader] = pq_distributed_run
 
 
-if bodo.utils.utils.has_pyarrow():
-    from bodo.io import arrow_cpp
-
-    ll.add_symbol("pq_read_py_entry", arrow_cpp.pq_read_py_entry)
-
 pq_read_py_entry = types.ExternalFunction(
     "pq_read_py_entry",
     table_type(
@@ -894,3 +1150,90 @@ pq_read_py_entry = types.ExternalFunction(
         types.boolean,  # use_hive
     ),
 )
+
+
+@intrinsic
+def pq_reader_init_py_entry(
+    typingctx,
+    path_t,
+    parallel_t,
+    dnf_filters_t,
+    expr_filters_t,
+    storage_options_t,
+    pyarrow_schema_t,
+    tot_rows_to_read_t,
+    selected_fields_t,
+    num_selected_fields,
+    is_nullable_t,
+    selected_part_cols_t,
+    part_cols_cat_dtype_t,
+    num_partition_cols_t,
+    str_as_dict_cols_t,
+    num_str_as_dict_cols_t,
+    input_file_name_col_t,
+    chunksize_t,
+    use_hive_t,
+    arrow_reader_t,
+):  # pragma: no cover
+    assert isinstance(arrow_reader_t, types.TypeRef) and isinstance(
+        arrow_reader_t.instance_type, ArrowReaderType
+    ), "pq_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
+    assert (
+        pyarrow_schema_t == pyarrow_schema_type
+    ), "pq_reader_init_py_entry(): The 5th argument pyarrow_schema must by a PyArrow schema"
+
+    def codegen(context: "BaseContext", builder: "IRBuilder", signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),  # path void*
+                lir.IntType(1),  # parallel bool
+                lir.IntType(8).as_pointer(),  # dnf_filters PyObject*
+                lir.IntType(8).as_pointer(),  # expr_filters PyObject*
+                lir.IntType(8).as_pointer(),  # storage_options PyObject*
+                lir.IntType(8).as_pointer(),  # pyarrow_schema PyObject*
+                lir.IntType(64),  # tot_rows_to_read int64*
+                lir.IntType(8).as_pointer(),  # _selected_fields void*
+                lir.IntType(32),  # num_selected_fields int32
+                lir.IntType(8).as_pointer(),  # _is_nullable void*
+                lir.IntType(8).as_pointer(),  # selected_part_cols void*
+                lir.IntType(8).as_pointer(),  # part_cols_cat_dtype void*
+                lir.IntType(32),  # num_partition_cols int32
+                lir.IntType(8).as_pointer(),  # str_as_dict_cols void*
+                lir.IntType(32),  # num_str_as_dict_cols int32
+                lir.IntType(1),  # input_file_name_col bool
+                lir.IntType(64),  # batch_size int64
+                lir.IntType(1),  # use_hive bool
+            ],
+        )
+
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="pq_reader_init_py_entry"
+        )
+
+        pq_reader = builder.call(fn_tp, args[:-1])
+        inlined_check_and_propagate_cpp_exception(context, builder)
+        return pq_reader
+
+    sig = arrow_reader_t.instance_type(
+        read_parquet_fpath_type,  # path
+        types.boolean,  # parallel
+        parquet_predicate_type,  # dnf_filters
+        parquet_predicate_type,  # expr_filters
+        storage_options_dict_type,  # storage_options
+        pyarrow_schema_type,  # pyarrow_schema
+        types.int64,  # tot_rows_to_read
+        types.voidptr,  # _selected_fields
+        types.int32,  # num_selected_fields
+        types.voidptr,  # _is_nullable
+        types.voidptr,  # selected_part_cols
+        types.voidptr,  # part_cols_cat_dtype
+        types.int32,  # num_partition_cols
+        types.voidptr,  # str_as_dict_cols
+        types.int32,  # num_str_as_dict_cols
+        types.boolean,  # input_file_name_col
+        types.int64,  # batch_size
+        types.boolean,  # use_hive
+        arrow_reader_t,  # typing only
+    )
+    return sig, codegen

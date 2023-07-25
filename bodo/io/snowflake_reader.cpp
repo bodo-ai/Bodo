@@ -164,6 +164,12 @@ class SnowflakeReader : public ArrowReader {
         return ds;
     }
 
+    virtual table_info* empty_out_table() {
+        TableBuilder builder(schema, selected_fields, 0, is_nullable,
+                             str_as_dict_colnames, false);
+        return builder.get_table();
+    }
+
     /**
      * @brief Convert a ResultBatch piece object the current rank should read
      * into an Arrow Table with Bodo's expected output schema

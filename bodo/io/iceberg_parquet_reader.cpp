@@ -20,11 +20,11 @@ class IcebergParquetReader : public ParquetReader {
                          PyObject* _expr_filters,
                          std::set<int> _selected_fields,
                          std::vector<bool> is_nullable,
-                         PyObject* pyarrow_schema)
+                         PyObject* pyarrow_schema, int64_t batch_size)
         : ParquetReader(/*path*/ nullptr, _parallel, _dnf_filters,
                         _expr_filters, /*storage_options*/ PyDict_New(),
                         pyarrow_schema, tot_rows_to_read, _selected_fields,
-                        is_nullable, /*input_file_name_col*/ false),
+                        is_nullable, /*input_file_name_col*/ false, batch_size),
           conn(_conn),
           database_schema(_database_schema),
           table_name(_table_name) {}
@@ -43,10 +43,8 @@ class IcebergParquetReader : public ParquetReader {
         Py_XDECREF(this->file_list);
     }
 
-    void init_iceberg_reader(int32_t* str_as_dict_cols,
-                             int32_t num_str_as_dict_cols) {
-        ParquetReader::init_pq_reader(str_as_dict_cols, num_str_as_dict_cols,
-                                      nullptr, nullptr, 0);
+    void init_iceberg_reader(std::span<int32_t> str_as_dict_cols) {
+        ParquetReader::init_pq_reader(str_as_dict_cols, nullptr, nullptr, 0);
     }
 
     // Return and incref the file list.
@@ -166,7 +164,7 @@ table_info* iceberg_pq_read_py_entry(
     bool parallel, int64_t tot_rows_to_read, PyObject* dnf_filters,
     PyObject* expr_filters, int32_t* _selected_fields,
     int32_t num_selected_fields, int32_t* _is_nullable,
-    PyObject* pyarrow_schema, int32_t* str_as_dict_cols,
+    PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
     int32_t num_str_as_dict_cols, bool is_merge_into_cow,
     int64_t* total_rows_out, PyObject** file_list_ptr,
     int64_t* snapshot_id_ptr) {
@@ -182,14 +180,16 @@ table_info* iceberg_pq_read_py_entry(
             {_selected_fields, _selected_fields + num_selected_fields});
         std::vector<bool> is_nullable(_is_nullable,
                                       _is_nullable + num_selected_fields);
+        std::span<int32_t> str_as_dict_cols(_str_as_dict_cols,
+                                            num_str_as_dict_cols);
 
         IcebergParquetReader reader(conn, database_schema, table_name, parallel,
                                     tot_rows_to_read, dnf_filters, expr_filters,
                                     selected_fields, is_nullable,
-                                    pyarrow_schema);
+                                    pyarrow_schema, -1);
 
         // Initialize reader
-        reader.init_iceberg_reader(str_as_dict_cols, num_str_as_dict_cols);
+        reader.init_iceberg_reader(str_as_dict_cols);
 
         // MERGE INTO COW Output Handling
         if (is_merge_into_cow) {

@@ -252,15 +252,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @return variable
    */
-  public Variable genReaderVar() {
-    return generatedCode.getSymbolTable().genReaderVar();
-  }
-
-  /**
-   * Generate the new temporary variable for step by step pandas codegen.
-   *
-   * @return variable
-   */
   public Variable genWriterVar() {
     return generatedCode.getSymbolTable().genWriterVar();
   }
@@ -380,7 +371,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   @Override
   public void visit(RelNode node, int ordinal, RelNode parent) {
-    if (node instanceof TableScan) {
+    if (node instanceof PandasTableScan) {
+      this.visitPandasTableScan((PandasTableScan) node, !(parent instanceof Filter));
+    } else if (node instanceof TableScan) {
       this.visitTableScan((TableScan) node, !(parent instanceof Filter));
     } else if (node instanceof PandasJoin) {
       this.visitPandasJoin((PandasJoin) node);
@@ -1563,6 +1556,30 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
+   * Visitor for Table Scan. It acts as a somewhat simple wrapper for PandasRel.emit with some
+   * special checks
+   *
+   * @param node TableScan node being visited
+   * @param canLoadFromCache Can we load the variable from cache? This is set to False if we have a
+   *     filter that wasn't previously cached to enable filter pushdown.
+   */
+  public void visitPandasTableScan(PandasTableScan node, boolean canLoadFromCache) {
+    // Determine if this node has already been cached.
+    // If it has, just return that immediately.
+    if (canLoadFromCache && node.canUseNodeCache() && isNodeCached(node)) {
+      varGenStack.push(varCache.get(node.getId()));
+      return;
+    }
+
+    // Note: All timer handling is done in emit
+    Dataframe out = node.emit(new Implementor(node));
+
+    // Place the output variable in the varCache and varGenStack.
+    varCache.put(node.getId(), out);
+    varGenStack.push(out);
+  }
+
+  /**
    * Visitor for Table Scan.
    *
    * @param node TableScan node being visited
@@ -1570,14 +1587,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *     filter that wasn't previously cached to enable filter pushdown.
    */
   public void visitTableScan(TableScan node, boolean canLoadFromCache) {
-
-    boolean supportedTableScan =
-        node instanceof PandasTableScan || node instanceof PandasTargetTableScan;
-    if (!supportedTableScan) {
+    boolean isTargetTableScan = node instanceof PandasTargetTableScan;
+    if (!isTargetTableScan) {
       throw new BodoSQLCodegenException(
           "Internal error: unsupported tableScan node generated:" + node.toString());
     }
-    boolean isTargetTableScan = node instanceof PandasTargetTableScan;
 
     singleBatchTimer(
         (PandasRel) node,

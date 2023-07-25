@@ -16,6 +16,7 @@ import pyarrow.parquet as pq
 import pytest
 
 import bodo
+from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -1019,8 +1020,14 @@ def test_read_partitions_to_datetime_format(memory_leak_check):
             check_dtype=False,
         )
         # make sure the ParquetReader node doesn't have filters parameter set
-        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
-        bodo_func("pq_data", "2018-01-02", "2019-10-02")
+        bodo_func = bodo.jit(
+            (
+                numba.types.literal("pq_data"),
+                numba.types.literal("2018-01-02"),
+                numba.types.literal("2019-10-02"),
+            ),
+            pipeline_class=SeriesOptTestPipeline,
+        )(impl1)
         try:
             _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
             # If we reach failed we have incorrectly performed filter pushdown
@@ -1063,8 +1070,14 @@ def test_read_partitions_large(memory_leak_check):
 
         check_func(impl1, ("pq_data", "2018-01-02", "2019-10-02"), reset_index=True)
         # make sure the ParquetReader node has filters parameter set
-        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
-        bodo_func("pq_data", "2018-01-02", "2019-10-02")
+        bodo_func = bodo.jit(
+            (
+                numba.types.literal("pq_data"),
+                numba.types.literal("2018-01-02"),
+                numba.types.literal("2019-10-02"),
+            ),
+            pipeline_class=SeriesOptTestPipeline,
+        )(impl1)
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
@@ -1119,10 +1132,9 @@ def test_read_predicates_pushdown_pandas_metadata(memory_leak_check):
         check_func(impl, ("pq_data",), reset_index=True)
         check_func(impl2, ("pq_data",), reset_index=True)
         # make sure the ParquetReader node has filters parameter set
-        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-        bodo_func(
-            "pq_data",
-        )
+        bodo_func = bodo.jit(
+            (numba.types.literal("pq_data"),), pipeline_class=SeriesOptTestPipeline
+        )(impl)
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
@@ -1153,10 +1165,9 @@ def test_read_predicates_isnull(memory_leak_check):
         # TODO: Fix index
         check_func(impl, ("pq_data",), reset_index=True)
         # make sure the ParquetReader node has filters parameter set
-        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-        bodo_func(
-            "pq_data",
-        )
+        bodo_func = bodo.jit(
+            (numba.types.literal("pq_data"),), pipeline_class=SeriesOptTestPipeline
+        )(impl)
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
@@ -1194,8 +1205,9 @@ def test_read_predicates_timestamp_date(memory_leak_check):
         # TODO: Fix index
         check_func(impl, (filepath,), reset_index=True)
         # make sure the ParquetReader node has filters parameter set
-        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-        bodo_func(filepath)
+        bodo_func = bodo.jit(
+            (numba.types.literal(filepath),), pipeline_class=SeriesOptTestPipeline
+        )(impl)
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
 
@@ -1222,10 +1234,9 @@ def test_read_predicates_isnull_alone(memory_leak_check):
         # TODO: Fix index
         check_func(impl, ("pq_data",), reset_index=True)
         # make sure the ParquetReader node has filters parameter set
-        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-        bodo_func(
-            "pq_data",
-        )
+        bodo_func = bodo.jit(
+            (numba.types.literal("pq_data"),), pipeline_class=SeriesOptTestPipeline
+        )(impl)
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
@@ -1401,10 +1412,9 @@ def test_read_predicates_and_or(memory_leak_check):
         # TODO: Fix index
         check_func(impl, ("pq_data",), reset_index=True)
         # make sure the ParquetReader node has filters parameter set
-        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-        bodo_func(
-            "pq_data",
-        )
+        bodo_func = bodo.jit(
+            (numba.types.literal("pq_data"),), pipeline_class=SeriesOptTestPipeline
+        )(impl)
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
@@ -1431,8 +1441,9 @@ def test_bodosql_pushdown_codegen(datapath, memory_leak_check):
 
     py_output = pd.Series(["baz", "foo", "bar", "baz", "foo"], name="two")
     check_func(impl1, (filename,), py_output=py_output, reset_index=True)
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
-    bodo_func(filename)
+    bodo_func = bodo.jit(
+        (numba.types.literal(filename),), pipeline_class=SeriesOptTestPipeline
+    )(impl1)
     _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
 
 
@@ -1550,17 +1561,21 @@ def test_read_pq_head_only(datapath, memory_leak_check):
     # small file with Index data
     check_func(impl1, (datapath("index_test2.pq"),), check_dtype=False)
     # make sure head-only read is recognized correctly
-    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl1)
-    bodo_func(fname)
+    bodo_func = bodo.jit(
+        (numba.types.literal(fname),), pipeline_class=DistTestPipeline
+    )(impl1)
     _check_for_pq_read_head_only(bodo_func)
-    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl2)
-    bodo_func(fname)
+    bodo_func = bodo.jit(
+        (numba.types.literal(fname),), pipeline_class=DistTestPipeline
+    )(impl2)
     _check_for_pq_read_head_only(bodo_func, has_read=False)
-    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl3)
-    bodo_func(fname)
+    bodo_func = bodo.jit(
+        (numba.types.literal(fname),), pipeline_class=DistTestPipeline
+    )(impl3)
     _check_for_pq_read_head_only(bodo_func)
-    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl4)
-    bodo_func(fname)
+    bodo_func = bodo.jit(
+        (numba.types.literal(fname),), pipeline_class=DistTestPipeline
+    )(impl4)
     _check_for_pq_read_head_only(bodo_func)
     # partitioned data
     try:
@@ -1576,8 +1591,9 @@ def test_read_pq_head_only(datapath, memory_leak_check):
         bodo.barrier()
 
         check_func(impl1, ("pq_data",), check_dtype=False)
-        bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl1)
-        bodo_func("pq_data")
+        bodo_func = bodo.jit(
+            (numba.types.literal("pq_data"),), pipeline_class=DistTestPipeline
+        )(impl1)
         _check_for_pq_read_head_only(bodo_func)
         bodo.barrier()
     finally:
@@ -2261,7 +2277,7 @@ def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_read_parquet_path_hive_partitions(datapath, memory_leak_check):
+def test_read_path_hive_partitions(datapath, memory_leak_check):
     filepath = datapath(os.path.join("hive-part-sample-pq", "data"))
 
     def test_impl():
@@ -2271,45 +2287,12 @@ def test_read_parquet_path_hive_partitions(datapath, memory_leak_check):
         {
             "unit_serial_number": 200,
             "product_code": 200,
-            "station_type": 200,
-            "uut_start": 200,
-            "test_case_key": 200,
-            "received_date": 200,
             "ingest_date": 0,
             "ingest_timestamp": 200,
-            "override": 0,
-            "test_result": 200,
-            "uut_stop": 200,
             "fixture_id": 0,
-            "head_id": 0,
-            "limits_version": 200,
-            "software_name": 200,
-            "software_version": 200,
-            "station_id": 200,
-            "site_name": 200,
-            "lower_limit": 200,
-            "message": 0,
-            "parametric_key": 200,
-            "priority": 200,
-            "result": 200,
-            "sub_sub_test": 0,
-            "sub_test": 200,
-            "test": 200,
-            "test_type": 0,
             "units": 200,
-            "upper_limit": 200,
-            "value": 200,
-            "audit_test": 200,
-            "config_code": 200,
-            "line_name": 200,
-            "wom": 200,
-            "uut_start_original": 200,
-            "uut_stop_original": 200,
             "effective_test_date": 200,
-            "effective_test_timestamp": 200,
             "test_date": 200,
-            "site_group": 200,
-            "station_group": 200,
         }
     )
 
@@ -2842,3 +2825,126 @@ def test_filter_pushdown_dictionary(datapath, memory_leak_check):
             stream,
             "(((ds.field('A') == ds.scalar(f0))) | ((ds.field('A') == ds.scalar(f1))))",
         )
+
+
+def test_batched_read_agg(datapath, memory_leak_check):
+    """
+    Test a simple use of batched Parquet reads by
+    getting the max of a column
+    """
+
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "L_ORDERKEY",
+            "L_PARTKEY",
+            "L_SUPPKEY",
+            "L_LINENUMBER",
+            "L_QUANTITY",
+            "L_EXTENDEDPRICE",
+            "L_DISCOUNT",
+            "L_TAX",
+            "L_RETURNFLAG",
+            "L_LINESTATUS",
+            "L_SHIPDATE",
+            "L_COMMITDATE",
+            "L_RECEIPTDATE",
+            "L_SHIPINSTRUCT",
+            "L_SHIPMODE",
+            "L_COMMENT",
+        )
+    )
+
+    def impl(path):
+        total_max = 0
+        is_last_global = False
+        reader = pd.read_parquet(path, _bodo_use_index=False, _bodo_chunksize=4096)  # type: ignore
+
+        while not is_last_global:
+            table, is_last = read_arrow_next(reader)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(table), 1, None
+            )
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (table,), index_var, col_meta
+            )
+            df = df[df["L_ORDERKEY"] > 10]
+            # Perform more compute in between to see caching speedup
+            local_max = df["L_PARTKEY"].max()
+            total_max = max(total_max, local_max)
+
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+
+        arrow_reader_del(reader)
+        return total_max
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl, (datapath("tpch-test_data/parquet/lineitem.parquet"),), py_output=4000
+        )
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+        check_logger_msg(stream, "Columns loaded ['L_PARTKEY']")
+
+
+def test_batched_read_only_len(datapath, memory_leak_check):
+    """
+    Test shape pushdown with batched Snowflake reads
+    """
+
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "L_ORDERKEY",
+            "L_PARTKEY",
+            "L_SUPPKEY",
+            "L_LINENUMBER",
+            "L_QUANTITY",
+            "L_EXTENDEDPRICE",
+            "L_DISCOUNT",
+            "L_TAX",
+            "L_RETURNFLAG",
+            "L_LINESTATUS",
+            "L_SHIPDATE",
+            "L_COMMITDATE",
+            "L_RECEIPTDATE",
+            "L_SHIPINSTRUCT",
+            "L_SHIPMODE",
+            "L_COMMENT",
+        )
+    )
+
+    def impl(path):
+        total_len = 0
+        is_last_global = False
+
+        reader = pd.read_parquet(path, _bodo_use_index=False, _bodo_chunksize=4096)  # type: ignore
+        while not is_last_global:
+            table, is_last = read_arrow_next(reader)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(table), 1, None
+            )
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (table,), index_var, col_meta
+            )
+            total_len += len(df)
+
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+
+        arrow_reader_del(reader)
+        return total_len
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (datapath("tpch-test_data/parquet/lineitem.parquet"),),
+            py_output=120515,
+        )
+        check_logger_msg(stream, "Columns loaded []")

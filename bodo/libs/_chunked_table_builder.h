@@ -759,7 +759,7 @@ struct ChunkedTableBuilder {
 
     // Total rows inserted into the table across its lifetime.
     size_t total_size = 0;
-    // Total rows that are in "unpopped" chunks (including the active chunk)
+    // Total rows that are in "un-popped" chunks (including the active chunk)
     size_t total_remaining = 0;
 
     // XXX In the future, we could keep track of the

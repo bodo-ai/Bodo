@@ -163,11 +163,11 @@ public class LocalTableImpl extends BodoSqlTable {
    */
   @Override
   public Expr generateReadCode(boolean useStreaming, StreamingOptions streamingOptions) {
+    String extraArg = "";
     if (useStreaming) {
-      throw new RuntimeException(
-          "Internal error: Streaming not supported for non-snowflake tables");
+      extraArg = String.format("_bodo_chunksize=%d", streamingOptions.getChunkSize());
     }
-    return new Expr.Raw(String.format(this.readCode, ""));
+    return new Expr.Raw(String.format(this.readCode, extraArg));
   }
 
   /**
