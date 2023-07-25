@@ -187,9 +187,10 @@ cdef generic_aggregate_func(object traces_all):
     if "args" in result:
         args = list(result["args"].keys())
         for arg in args:
-            if arg.startswith("g_") or isinstance(result["args"][arg], (str, list)):
+            if arg.startswith("g_") or isinstance(result["args"][arg], (str, list)) or arg == "resumable":
                 # attributes called g_xxx are global and don't need aggregation
                 # and we don't aggregate string or list values
+                # "resumable" identifies the type of event and doesn't need aggregation
                 continue
             # We use .get and default to 0 since it's possible that some ranks don't have
             # some attributes.
@@ -397,7 +398,7 @@ cdef class ResumableEvent(EventBase):
         if name not in self._child_events:
             self._child_events[name] = ResumableEvent(name, is_parallel, sync)
         return self._child_events[name]
-        
+
 
     def finalize(self, bint aggregate=True, bint autobatched=False):
         """Finalize an event, taking care to end any current iteration
