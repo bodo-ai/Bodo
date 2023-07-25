@@ -3,7 +3,7 @@ import os
 import warnings
 from collections import defaultdict
 from glob import has_magic
-from typing import Optional
+from typing import List, Optional
 from urllib.parse import urlparse
 
 import llvmlite.binding as ll
@@ -362,7 +362,6 @@ def get_parquet_dataset(
             and throw an error otherwise. Currently this is only used in runtime.
             https://bodo.atlassian.net/browse/BE-2787
     """
-
     if not use_hive:
         partitioning = None
 
@@ -834,10 +833,11 @@ def get_scanner_batches(
     is_parallel,
     filesystem,
     str_as_dict_cols,
-    start_offset,  # starting row offset in the pieces this process is going to read
+    start_offset: int,  # starting row offset in the pieces this process is going to read
     rows_to_read,  # total number of rows this process is going to read
     partitioning,
-    schema,
+    schema: pa.Schema,
+    batch_size: Optional[int] = None,
 ):
     """return RecordBatchReader for dataset of 'fpaths' that contain the rows
     that match expr_filters (or all rows if expr_filters is None). Only project the
@@ -940,10 +940,13 @@ def get_scanner_batches(
         # file, not the first row group, so we need to communicate this back to C++
         start_offset = start_row_first_rg
 
-    reader = dataset.scanner(
-        columns=selected_names, filter=expr_filters, use_threads=True
-    ).to_reader()
-    return dataset, reader, start_offset
+    scanner = dataset.scanner(
+        columns=selected_names,
+        filter=expr_filters,
+        batch_size=batch_size or 128 * 1024,
+        use_threads=True,
+    )
+    return scanner, start_offset
 
 
 # XXX Move this to ParquetDataset class?
@@ -1032,11 +1035,11 @@ def get_pandas_metadata(schema, num_pieces):
     return index_col, nullable_from_metadata
 
 
-def get_str_columns_from_pa_schema(pa_schema):
+def get_str_columns_from_pa_schema(pa_schema: pa.Schema) -> List[str]:
     """
     Get the list of string type columns in the schema.
     """
-    str_columns = []
+    str_columns: List[str] = []
     for col_name in pa_schema.names:
         field = pa_schema.field(col_name)
         if field.type in (pa.string(), pa.large_string()):
@@ -1044,7 +1047,7 @@ def get_str_columns_from_pa_schema(pa_schema):
     return str_columns
 
 
-def _pa_schemas_match(pa_schema1, pa_schema2):
+def _pa_schemas_match(pa_schema1: pa.Schema, pa_schema2: pa.Schema) -> bool:
     """check if Arrow schemas match or not"""
     # check column names
     if pa_schema1.names != pa_schema2.names:

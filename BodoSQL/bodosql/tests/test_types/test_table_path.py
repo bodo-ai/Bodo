@@ -43,16 +43,16 @@ def dummy_table_paths(request):
 
 @pytest.fixture(
     params=[
-        "bodosql/tests/data/sample-parquet-data/no_index.pq",
-        "bodosql/tests/data/sample-parquet-data/numeric_index.pq",
-        "bodosql/tests/data/sample-parquet-data/string_index.pq",
+        "sample-parquet-data/no_index.pq",
+        "sample-parquet-data/numeric_index.pq",
+        "sample-parquet-data/string_index.pq",
     ]
 )
-def parquet_filepaths(request):
+def parquet_filepaths(request, datapath):
     """
     List of files used to load data.
     """
-    return request.param
+    return datapath(request.param)
 
 
 @pytest.mark.slow
@@ -95,7 +95,7 @@ def test_table_path_pq_constructor(reorder_io, memory_leak_check):
 @pytest.mark.parametrize("reorder_io", [True, False, None])
 @pytest.mark.slow
 def test_table_path_pq_bodosqlContext_python(
-    reorder_io, parquet_filepaths, datapath, memory_leak_check
+    reorder_io, parquet_filepaths, memory_leak_check
 ):
     """
     Test using the table path constructor inside a BodoSQLContext that is in Python.
@@ -130,7 +130,7 @@ def test_table_path_pq_bodosqlContext_python(
 @pytest.mark.slow
 @pytest.mark.parametrize("reorder_io", [True, False, None])
 def test_table_path_pq_bodosqlContext_jit(
-    reorder_io, parquet_filepaths, datapath, memory_leak_check
+    reorder_io, parquet_filepaths, memory_leak_check
 ):
     """
     Test using the table path constructor inside a BodoSQLContext in JIT.
@@ -148,7 +148,9 @@ def test_table_path_pq_bodosqlContext_jit(
 
     filename = parquet_filepaths
 
-    py_output = pd.read_parquet(filename)
+    # Should SQL still produce index columns?
+    # Should it include an index column within the data?
+    py_output = pd.read_parquet(filename).reset_index(drop=True)
     check_func(impl, (filename,), py_output=py_output)
 
 
@@ -233,7 +235,7 @@ def test_table_path_avoid_unused_table_jit(
     f1 = parquet_filepaths
     f2 = datapath("tpcxbb-test-data") + "/web_sales"
 
-    py_output = pd.read_parquet(f1)
+    py_output = pd.read_parquet(f1).reset_index(drop=True)
     check_func(impl, (f1, f2), py_output=py_output)
     bodo_func = bodo.jit(impl, pipeline_class=TypeInferenceTestPipeline)
     bodo_func(f1, f2)

@@ -5,6 +5,8 @@
 
 #include "parquet_reader.h"
 #include <span>
+#include "../libs/_array_utils.h"
+#include "arrow_ext.cpp"
 
 using arrow::Type;
 using parquet::ParquetFileReader;
@@ -145,26 +147,11 @@ PyObject* ParquetReader::get_dataset() {
     return ds;
 }
 
-std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
-    if (batch_size != -1) {
-        throw std::runtime_error(
-            "ParquetReader::read does not support custom batch sizes");
-    }
-    TableBuilder builder(schema, selected_fields, count, is_nullable,
-                         str_as_dict_colnames,
-                         create_dict_encoding_from_strings);
-
+void ParquetReader::init_pq_scanner() {
+    tracing::Event ev_scanner("init_pq_scanner");
     if (get_num_pieces() == 0) {
-        // get_scanner_batches trace event has to be called by all ranks
-        // Adding call here to avoid hangs in tracing.
-        // This event is used to track load imbalance so we can't use
-        // trace(is_parallel=False) to be able to collect min/max/avg.
-        tracing::Event ev_get_scanner_batches("get_scanner_batches");
-        return std::make_tuple(builder.get_table(), true, 0);
+        return;
     }
-
-    size_t cur_piece = 0;
-    int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
 
     // Construct Python lists from C++ vectors for values used in
     // get_scanner_batches
@@ -187,7 +174,8 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
         PyList_SetItem(selected_fields_py, i++, PyLong_FromLong(field_num));
     }
 
-    int64_t rows_to_skip = start_row_first_piece;
+    PyObject* batch_size_py =
+        batch_size == -1 ? Py_None : PyLong_FromLong(batch_size);
     PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
     // This only loads record batches that match the filter.
     // get_scanner_batches returns a tuple with the dataset object
@@ -199,22 +187,24 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
     // Keeping a reference to the dataset and deleting it in the last place
     // seems to help, but the problem can still occur, so this needs
     // further investigation,
-    tracing::Event ev_get_scanner_batches("get_scanner_batches");
-    PyObject* dataset_batches_tup = PyObject_CallMethod(
-        pq_mod, "get_scanner_batches", "OOOdiOOllOO", fnames_list_py,
+    PyObject* scanner_batches_tup = PyObject_CallMethod(
+        pq_mod, "get_scanner_batches", "OOOdiOOllOOO", fnames_list_py,
         expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
         this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
-        this->count, this->ds_partitioning, pyarrow_schema);
-    if (dataset_batches_tup == NULL && PyErr_Occurred()) {
+        this->count, this->ds_partitioning, pyarrow_schema, batch_size_py);
+    if (scanner_batches_tup == NULL && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
 
-    ev_get_scanner_batches.finalize();
     // PyTuple_GetItem returns a borrowed reference
-    PyObject* dataset = PyTuple_GetItem(dataset_batches_tup, 0);
-    Py_INCREF(dataset);  // call incref to keep the reference
-    PyObject* batches_it = PyTuple_GetItem(dataset_batches_tup, 1);
-    rows_to_skip = PyLong_AsLong(PyTuple_GetItem(dataset_batches_tup, 2));
+    PyObject* scanner = PyTuple_GetItem(scanner_batches_tup, 0);
+    this->reader = pyarrow_unwrap_scanner_bodo((c_ScannerBodo*)scanner)
+                       ->ToRecordBatchReader()
+                       .ValueOrDie();
+
+    this->rows_to_skip = PyLong_AsLong(PyTuple_GetItem(scanner_batches_tup, 1));
+    this->rows_left_cur_piece = pieces_nrows[0];
+
     Py_DECREF(pq_mod);
     Py_DECREF(expr_filters);
     Py_DECREF(selected_fields_py);
@@ -224,12 +214,132 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
     Py_DECREF(str_as_dict_cols_py);
     Py_DECREF(pyarrow_schema);
     Py_DECREF(this->ds_partitioning);
-    PyObject* batch_py = NULL;
-    // while ((batch_py = PyIter_Next(batches_it))) {  // XXX Fails with
-    // batch reader returned by scanner
-    while (
-        (batch_py = PyObject_CallMethod(batches_it, "read_next_batch", NULL))) {
-        auto batch = arrow::py::unwrap_batch(batch_py).ValueOrDie();
+    Py_DECREF(batch_size_py);
+
+    Py_DECREF(scanner_batches_tup);
+}
+
+table_info* ParquetReader::empty_out_table() {
+    TableBuilder builder(schema, selected_fields, 0, is_nullable,
+                         str_as_dict_colnames,
+                         create_dict_encoding_from_strings);
+    table_info* out_table = builder.get_table();
+
+    if (part_cols.size() > 0) {
+        std::vector<std::shared_ptr<array_info>> batch_part_cols;
+        for (size_t i = 0; i < part_cols.size(); i++) {
+            batch_part_cols.push_back(alloc_array(
+                0, -1, -1, bodo_array_type::NUMPY,
+                Bodo_CTypes::CTypeEnum(this->part_cols_cat_dtype[i]), 0, -1));
+        }
+
+        out_table->columns.insert(out_table->columns.end(),
+                                  batch_part_cols.begin(),
+                                  batch_part_cols.end());
+    }
+
+    return out_table;
+}
+
+std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
+    // If batch_size is set, then we need to iteratively read a
+    // batch at a time. For now, ignore partitioning
+    if (batch_size != -1) {
+        // TODO: Consolidate behavior with SnowflakeReader
+        // Specifically, what does SnowflakeReader do in zero-col case?
+        if (rows_left == 0) {
+            return std::make_tuple(empty_out_table(), true, 0);
+        }
+
+        auto batch_res = this->reader->Next();
+        if (!batch_res.ok()) {
+            throw std::runtime_error(
+                "ParquetReader::read_batch(): Error reading the next batch: " +
+                batch_res.status().ToString());
+        }
+        auto batch = batch_res.ValueOrDie();
+        if (batch == nullptr) {
+            throw std::runtime_error(
+                "ParquetReader::read_batch(): The next batch is null");
+        }
+
+        int64_t batch_offset = std::min(rows_to_skip, batch->num_rows());
+        int64_t length = std::min(rows_left, batch->num_rows() - batch_offset);
+        auto table = arrow::Table::Make(
+            schema, batch->Slice(batch_offset, length)->columns());
+        rows_left -= length;
+        rows_to_skip -= batch_offset;
+
+        // TODO: Replace with arrow_table_to_bodo once available
+        TableBuilder builder(schema, selected_fields, length, is_nullable,
+                             str_as_dict_colnames,
+                             create_dict_encoding_from_strings);
+        builder.append(table);
+        table_info* out_table = builder.get_table();
+
+        if (part_cols.size() > 0) {
+            std::vector<std::shared_ptr<array_info>> batch_part_cols;
+            for (size_t i = 0; i < part_cols.size(); i++) {
+                batch_part_cols.push_back(alloc_array(
+                    length, -1, -1, bodo_array_type::NUMPY,
+                    Bodo_CTypes::CTypeEnum(this->part_cols_cat_dtype[i]), 0,
+                    -1));
+            }
+
+            // TODO: I believe the reader already makes sure
+            // every chunk belongs to 1 file. Can simplify
+            // or use the tagged RecordBatchReader
+            std::vector<int64_t> batch_offsets(part_cols.size(), 0);
+            int64_t unfilled_rows_left = length;
+            while (unfilled_rows_left > 0) {
+                int64_t rows_read_from_piece =
+                    std::min(rows_left_cur_piece, unfilled_rows_left);
+                rows_left_cur_piece -= rows_read_from_piece;
+                unfilled_rows_left -= rows_read_from_piece;
+
+                // fill partition cols
+                for (size_t i = 0; i < part_cols.size(); i++) {
+                    int64_t part_val =
+                        part_vals[cur_piece][selected_part_cols[i]];
+                    fill_partition_column(
+                        part_val, batch_part_cols[i]->data1(), batch_offsets[i],
+                        rows_read_from_piece, part_cols[i]->dtype);
+                    batch_offsets[i] += rows_read_from_piece;
+                }
+                if (rows_left_cur_piece == 0 &&
+                    cur_piece < get_num_pieces() - 1) {
+                    rows_left_cur_piece = pieces_nrows[++cur_piece];
+                }
+            }
+
+            // Insert Partition Columns
+            out_table->columns.insert(out_table->columns.end(),
+                                      batch_part_cols.begin(),
+                                      batch_part_cols.end());
+        }
+
+        bool is_last = rows_left <= 0;
+        return std::make_tuple(out_table, is_last, length);
+    }
+
+    TableBuilder builder(schema, selected_fields, count, is_nullable,
+                         str_as_dict_colnames,
+                         create_dict_encoding_from_strings);
+
+    if (get_num_pieces() == 0) {
+        table_info* table = builder.get_table();
+        // Insert Blank Partition Columns
+        table->columns.insert(table->columns.end(), part_cols.begin(),
+                              part_cols.end());
+        return std::make_tuple(table, true, 0);
+    }
+
+    size_t cur_piece = 0;
+    int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
+
+    for (auto batch_iter = this->reader->begin();
+         batch_iter != this->reader->end(); ++batch_iter) {
+        auto batch = (*batch_iter).ValueOrDie();
         int64_t batch_offset = std::min(rows_to_skip, batch->num_rows());
         int64_t length = std::min(rows_left, batch->num_rows() - batch_offset);
         if (length > 0) {
@@ -264,21 +374,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
             }
         }
         rows_to_skip -= batch_offset;
-        Py_DECREF(batch_py);
     }
-
-    if (batch_py == NULL && PyErr_Occurred() &&
-        PyErr_ExceptionMatches(PyExc_StopIteration)) {
-        // StopIteration is raised at the end of iteration.
-        // An iterator would clear this automatically, but we are
-        // not using an interator, so we have to clear it manually
-        PyErr_Clear();
-    } else if (batch_py == NULL && PyErr_Occurred()) {
-        throw std::runtime_error("python");
-    }
-
-    Py_DECREF(dataset_batches_tup);
-    Py_DECREF(dataset);  // delete dataset last
 
     if (this->input_file_name_col) {
         // allocate and fill the dictionary for the
@@ -303,6 +399,20 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
     }
 
     table_info* table = builder.get_table();
+
+    // Append the partition columns to the final output table
+    std::vector<std::shared_ptr<array_info>>& part_cols =
+        this->get_partition_cols();
+    table->columns.insert(table->columns.end(), part_cols.begin(),
+                          part_cols.end());
+
+    // Append the input_file_column to the output table
+    if (input_file_name_col) {
+        std::shared_ptr<array_info> input_file_name_col_arr =
+            this->get_input_file_name_col();
+        table->columns.push_back(input_file_name_col_arr);
+    }
+
     return std::make_tuple(table, true, table->nrows());
 }
 
@@ -366,7 +476,7 @@ table_info* pq_read_py_entry(
     int64_t tot_rows_to_read, int32_t* _selected_fields,
     int32_t num_selected_fields, int32_t* _is_nullable,
     int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
-    int32_t num_partition_cols, int32_t* str_as_dict_cols,
+    int32_t num_partition_cols, int32_t* _str_as_dict_cols,
     int32_t num_str_as_dict_cols, int64_t* total_rows_out,
     bool input_file_name_col, bool use_hive) {
     try {
@@ -374,31 +484,92 @@ table_info* pq_read_py_entry(
             {_selected_fields, _selected_fields + num_selected_fields});
         std::vector<bool> is_nullable(_is_nullable,
                                       _is_nullable + num_selected_fields);
+        std::span<int32_t> str_as_dict_cols(_str_as_dict_cols,
+                                            num_str_as_dict_cols);
+
         ParquetReader reader(path, parallel, dnf_filters, expr_filters,
                              storage_options, pyarrow_schema, tot_rows_to_read,
                              selected_fields, is_nullable, input_file_name_col,
-                             use_hive);
+                             -1, use_hive);
 
         // Initialize reader
-        reader.init_pq_reader(str_as_dict_cols, num_str_as_dict_cols,
-                              part_cols_cat_dtype, selected_part_cols,
-                              num_partition_cols);
+        reader.init_pq_reader(str_as_dict_cols, part_cols_cat_dtype,
+                              selected_part_cols, num_partition_cols);
         *total_rows_out = reader.get_total_rows();
         // Actually read contents
         table_info* out = reader.read_all();
-
-        // append the partition columns to the final output table
-        std::vector<std::shared_ptr<array_info>>& part_cols =
-            reader.get_partition_cols();
-        out->columns.insert(out->columns.end(), part_cols.begin(),
-                            part_cols.end());
-        // append the input_file_column to the output table
-        if (input_file_name_col) {
-            std::shared_ptr<array_info> input_file_name_col_arr =
-                reader.get_input_file_name_col();
-            out->columns.push_back(input_file_name_col_arr);
-        }
         return out;
+    } catch (const std::exception& e) {
+        // if the error string is "python" this means the C++ exception is
+        // a result of a Python exception, so we don't call PyErr_SetString
+        // because we don't want to replace the original Python error
+        if (std::string(e.what()) != "python")
+            PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
+}
+
+/**
+ * Read a parquet dataset.
+ *
+ * @param path : path to parquet dataset (can be a Python string -single path-
+ * or a Python list of strings -multiple files constituting a single dataset-).
+ * The PyObject is passed through to parquet_pio.py::get_parquet_dataset
+ * @param parallel: true if reading in parallel
+ * @param filters : PyObject passed to pyarrow.parquet.ParquetDataset filters
+ * argument to remove rows from scanned data
+ * @param storage_options : PyDict with extra read_parquet options. See
+ * https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.read_parquet.html
+ * @param tot_rows_to_read : total number of global rows to read from the
+ * dataset (starting from the beginning). Read all rows if is -1
+ * @param selected_fields : Fields to select from the parquet dataset,
+ * using the field ID of Arrow schema. Note that this doesn't include
+ * partition columns (which are not part of the parquet files)
+ * NOTE: selected_fields must be sorted
+ * @param num_selected_fields : length of selected_fields array
+ * @param is_nullable : array of booleans that indicates which of the
+ * selected fields is nullable. Same length and order as selected_fields.
+ * @param selected_part_cols : Partition columns to select, in the order
+ * and index used by pyarrow.parquet.ParquetDataset (e.g. 0 is the first
+ * partition col)
+ * @param part_cols_cat_dtype : Bodo_CTypes::CTypeEnum dtype of categorical
+ * codes array for each partition column.
+ * @param num_partition_cols : number of selected partition columns
+ * @param[out] total_rows_out : total number of global rows read
+ * @param input_file_name_col : boolean specifying whether a column with the
+ * the names of the files that each row belongs to should be created
+ * @return table containing all the arrays read (first the selected fields
+ * followed by selected partition columns, in same order as specified to this
+ * function).
+ */
+ArrowReader* pq_reader_init_py_entry(
+    PyObject* path, bool parallel, PyObject* dnf_filters,
+    PyObject* expr_filters, PyObject* storage_options, PyObject* pyarrow_schema,
+    int64_t tot_rows_to_read, int32_t* _selected_fields,
+    int32_t num_selected_fields, int32_t* _is_nullable,
+    int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
+    int32_t num_partition_cols, int32_t* _str_as_dict_cols,
+    int32_t num_str_as_dict_cols, bool input_file_name_col, int64_t batch_size,
+    bool use_hive) {
+    try {
+        std::set<int> selected_fields(
+            {_selected_fields, _selected_fields + num_selected_fields});
+        std::vector<bool> is_nullable(_is_nullable,
+                                      _is_nullable + num_selected_fields);
+        std::span<int32_t> str_as_dict_cols(_str_as_dict_cols,
+                                            num_str_as_dict_cols);
+
+        ParquetReader* reader = new ParquetReader(
+            path, parallel, dnf_filters, expr_filters, storage_options,
+            pyarrow_schema, tot_rows_to_read, selected_fields, is_nullable,
+            input_file_name_col, batch_size, use_hive);
+
+        // Initialize reader
+        reader->init_pq_reader(str_as_dict_cols, part_cols_cat_dtype,
+                               selected_part_cols, num_partition_cols);
+
+        return static_cast<ArrowReader*>(reader);
+
     } catch (const std::exception& e) {
         // if the error string is "python" this means the C++ exception is
         // a result of a Python exception, so we don't call PyErr_SetString

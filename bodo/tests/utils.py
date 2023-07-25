@@ -13,7 +13,16 @@ import warnings
 from contextlib import contextmanager
 from decimal import Decimal
 from enum import Enum
-from typing import Dict, Generator, List, Optional, Tuple, TypeVar, Union
+from typing import (
+    Callable,
+    Dict,
+    Generator,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -161,7 +170,7 @@ def check_func(
     use_table_format=True,
     use_dict_encoded_strings=None,
     convert_to_nullable_float=True,
-):
+) -> Dict[str, Callable]:
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
 
@@ -276,6 +285,9 @@ def check_func(
     if reorder_columns:
         py_output.sort_index(axis=1, inplace=True)
 
+    # List of Output Bodo Functions
+    bodo_funcs: Dict[str, Callable] = {}
+
     saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
     saved_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     try:
@@ -291,7 +303,7 @@ def check_func(
 
         # sequential
         if run_seq:
-            w = check_func_seq(
+            bodo_func, w = check_func_seq(
                 func,
                 args,
                 py_output,
@@ -309,10 +321,12 @@ def check_func(
                 atol,
                 rtol,
             )
+            bodo_funcs["seq"] = bodo_func
+
             # test string arguments as StringLiteral type also (since StringLiteral is
             # not a subtype of UnicodeType)
             if any(isinstance(a, str) for a in args):
-                check_func_seq(
+                bodo_func, _ = check_func_seq(
                     func,
                     args,
                     py_output,
@@ -331,10 +345,11 @@ def check_func(
                     rtol,
                     True,
                 )
+                bodo_funcs["seq-strlit"] = bodo_func
 
         # distributed test is not needed
         if not dist_test:
-            return
+            return bodo_funcs
 
         if is_out_distributed is None and py_output is not pd.NA:
             # assume all distributable output is distributed if not specified
@@ -356,10 +371,10 @@ def check_func(
                 for a in args
             )  # if none of the inputs is distributable
         ):
-            return  # no need for distributed checks
+            return bodo_funcs  # no need for distributed checks
 
         if run_1D:
-            check_func_1D(
+            bodo_func = check_func_1D(
                 func,
                 args,
                 py_output,
@@ -380,9 +395,10 @@ def check_func(
                 atol,
                 rtol,
             )
+            bodo_funcs["1D"] = bodo_func
 
         if run_1DVar:
-            check_func_1D_var(
+            bodo_func = check_func_1D_var(
                 func,
                 args,
                 py_output,
@@ -403,6 +419,8 @@ def check_func(
                 atol,
                 rtol,
             )
+            bodo_funcs["1D_var"] = bodo_func
+
     finally:
         bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
         bodo.hiframes.boxing._use_dict_str_type = saved_use_dict_str_type
@@ -411,7 +429,7 @@ def check_func(
     if use_table_format is None and any(
         isinstance(_typeof(a), bodo.DataFrameType) for a in args
     ):
-        check_func(
+        inner_funcs = check_func(
             func,
             args,
             is_out_distributed,
@@ -438,12 +456,15 @@ def check_func(
             use_dict_encoded_strings=use_dict_encoded_strings,
             convert_to_nullable_float=convert_to_nullable_float,
         )
+        bodo_funcs.update(
+            {f"table-format-{name}": func for name, func in inner_funcs.items()}
+        )
 
     # test dict-encoded string type if there is any string array in input
     if use_dict_encoded_strings is None and any(
         _type_has_str_array(_typeof(a)) for a in args
     ):
-        check_func(
+        inner_funcs = check_func(
             func,
             args,
             is_out_distributed,
@@ -472,6 +493,11 @@ def check_func(
             use_dict_encoded_strings=True,
             convert_to_nullable_float=convert_to_nullable_float,
         )
+        bodo_funcs.update(
+            {f"dict-encoding-{name}": func for name, func in inner_funcs.items()}
+        )
+
+    return bodo_funcs
 
 
 def _convert_float_to_nullable_float(arg):
@@ -541,7 +567,7 @@ def check_func_seq(
     atol,
     rtol,
     test_str_literal=False,
-):
+) -> Tuple[Callable, List[warnings.WarningMessage]]:
     """check function output against Python without manually setting inputs/outputs
     distributions (keep the function sequential)
     """
@@ -592,7 +618,7 @@ def check_func_seq(
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes, "Sequential test failed"
-    return w
+    return bodo_func, w
 
 
 def check_func_1D(
@@ -615,7 +641,7 @@ def check_func_1D(
     check_categorical,
     atol,
     rtol,
-):
+) -> Callable:
     """Check function output against Python while setting the inputs/outputs as
     1D distributed
     """
@@ -669,6 +695,7 @@ def check_func_1D(
 
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes, "Parallel 1D test failed"
+    return bodo_func
 
 
 def check_func_1D_var(
@@ -691,7 +718,7 @@ def check_func_1D_var(
     check_categorical,
     atol,
     rtol,
-):
+) -> Callable:
     """Check function output against Python while setting the inputs/outputs as
     1D distributed variable length
     """
@@ -742,6 +769,7 @@ def check_func_1D_var(
         )
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes, "Parallel 1D Var test failed"
+    return bodo_func
 
 
 def _get_arg(a, copy=False):

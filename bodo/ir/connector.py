@@ -47,7 +47,7 @@ def connector_array_analysis(node, equiv_set, typemap, array_analysis):
 
     # If we have a csv chunksize the variables don't refer to the data,
     # so we skip this step.
-    if node.connector_typ in ("csv", "sql") and node.chunksize is not None:
+    if node.connector_typ in ("csv", "parquet", "sql") and node.chunksize is not None:
         return [], []
 
     # create correlations for output arrays
@@ -97,6 +97,7 @@ def connector_distributed_analysis(node, array_dists):
     if isinstance(node, SqlReader) and not node.is_select_query:
         out_dist = Distribution.REP
     elif isinstance(node, SqlReader) and node.limit is not None:
+        # TODO: Don't use 1D_Var for Snowflake
         out_dist = Distribution.OneD_Var
     else:
         out_dist = Distribution.OneD
@@ -140,7 +141,7 @@ def connector_typeinfer(node, typeinferer: "TypeInferer"):
             )
         return
 
-    if node.connector_typ == "sql" and node.chunksize is not None:
+    if node.connector_typ in ("parquet", "sql") and node.chunksize is not None:
         typeinferer.lock_type(node.out_vars[0].name, node.out_types[0], loc=node.loc)
         return
 

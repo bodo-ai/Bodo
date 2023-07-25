@@ -1,7 +1,9 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
+import org.apache.calcite.prepare.RelOptTableImpl
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rel.logical.LogicalTableScan
@@ -17,8 +19,18 @@ class PandasTableScanRule private constructor(config: Config) : ConverterRule(co
     }
 
     override fun convert(rel: RelNode): RelNode {
+        val bodoSqlTable = (rel.table as? RelOptTableImpl)?.table() as? BodoSqlTable
+        val newStreamingProperty = if (
+            (bodoSqlTable != null) &&
+            (bodoSqlTable.dbType.equals("PARQUET") || bodoSqlTable.dbType.equals("ICEBERG"))
+        ) {
+            BatchingProperty.STREAMING
+        } else {
+            BatchingProperty.SINGLE_BATCH
+        }
+
         val scan = rel as LogicalTableScan
-        val traitSet = rel.traitSet.replace(PandasRel.CONVENTION).replace(BatchingProperty.SINGLE_BATCH)
+        val traitSet = rel.traitSet.replace(PandasRel.CONVENTION).replace(newStreamingProperty)
         return PandasTableScan(rel.cluster, traitSet, scan.table!!)
     }
 }

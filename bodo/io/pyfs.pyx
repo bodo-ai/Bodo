@@ -5,12 +5,13 @@ keyword. We need this to be able to get the shared_ptr<FileSystem> from
 PyFileSystem
 """
 cimport pyarrow.lib
+from libcpp.memory cimport shared_ptr
 from pyarrow._fs cimport PyFileSystem
-from pyarrow.includes.libarrow_fs cimport CFileSystem
 from pyarrow.includes.common cimport *
+from pyarrow.includes.libarrow_fs cimport CFileSystem
+
 
 cdef public class PyFileSystemBodo(PyFileSystem) [object c_PyFileSystemBodo, type c_PyFileSystemBodo_t]:
-
     def __init__(self, handler):
         PyFileSystem.__init__(self, handler)
 

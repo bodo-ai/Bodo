@@ -999,9 +999,8 @@ void TableBuilder::append(std::shared_ptr<::arrow::Table> table) {
 
 // -------------------- ArrowReader --------------------
 
-void ArrowReader::init_arrow_reader(
-    const std::vector<int32_t>& str_as_dict_cols,
-    const bool create_dict_from_string) {
+void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
+                                    const bool create_dict_from_string) {
     if (initialized) {
         throw std::runtime_error("ArrowReader already initialized");
     }

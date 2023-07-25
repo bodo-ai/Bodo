@@ -23,6 +23,16 @@ table_info* pq_read_py_entry(
     int32_t num_str_as_dict_cols, int64_t* total_rows_out,
     bool input_file_name_col, bool use_hive);
 
+ArrowReader* pq_reader_init_py_entry(
+    PyObject* path, bool parallel, PyObject* dnf_filters,
+    PyObject* expr_filters, PyObject* storage_options, PyObject* pyarrow_schema,
+    int64_t tot_rows_to_read, int32_t* _selected_fields,
+    int32_t num_selected_fields, int32_t* _is_nullable,
+    int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
+    int32_t num_partition_cols, int32_t* str_as_dict_cols,
+    int32_t num_str_as_dict_cols, bool input_file_name_col, int64_t batch_size,
+    bool use_hive);
+
 // --------- functions defined in iceberg_parquet_reader.cpp --------
 table_info* iceberg_pq_read_py_entry(
     const char* conn, const char* database_schema, const char* table_name,
@@ -84,6 +94,8 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     bodo_common_init();
 
     SetAttrStringFromVoidPtr(m, pq_read_py_entry);
+    SetAttrStringFromVoidPtr(m, pq_reader_init_py_entry);
+
     SetAttrStringFromVoidPtr(m, iceberg_pq_read_py_entry);
     SetAttrStringFromVoidPtr(m, pq_write_py_entry);
     SetAttrStringFromVoidPtr(m, iceberg_pq_write_py_entry);

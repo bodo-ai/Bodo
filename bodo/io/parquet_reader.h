@@ -17,9 +17,10 @@ class ParquetReader : public ArrowReader {
                   PyObject* _expr_filters, PyObject* _storage_options,
                   PyObject* pyarrow_schema, int64_t _tot_rows_to_read,
                   std::set<int> _selected_fields, std::vector<bool> is_nullable,
-                  bool _input_file_name_col, bool _use_hive = true)
+                  bool _input_file_name_col, int64_t batch_size,
+                  bool _use_hive = true)
         : ArrowReader(_parallel, pyarrow_schema, _tot_rows_to_read,
-                      _selected_fields, is_nullable),
+                      _selected_fields, is_nullable, batch_size),
           dnf_filters(_dnf_filters),
           expr_filters(_expr_filters),
           path(_path),
@@ -34,15 +35,12 @@ class ParquetReader : public ArrowReader {
      * Initialize the reader
      * See pq_read_py_entry function below for description of arguments.
      */
-    void init_pq_reader(int32_t* _str_as_dict_cols,
-                        int32_t num_str_as_dict_cols,
+    void init_pq_reader(std::span<int32_t> str_as_dict_cols,
                         int32_t* _part_cols_cat_dtype,
                         int32_t* _selected_part_cols,
                         int32_t num_partition_cols) {
         // initialize reader
-        ArrowReader::init_arrow_reader(
-            {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols},
-            false);
+        ArrowReader::init_arrow_reader(str_as_dict_cols, false);
 
         if (parallel) {
             // Get the average number of pieces per rank. This is used to
@@ -63,8 +61,11 @@ class ParquetReader : public ArrowReader {
                 alloc_array(count, -1, -1, bodo_array_type::NUMPY,
                             Bodo_CTypes::CTypeEnum(_part_cols_cat_dtype[i])));
             selected_part_cols.push_back(_selected_part_cols[i]);
+            this->part_cols_cat_dtype.push_back(_part_cols_cat_dtype[i]);
         }
         part_cols_offset.resize(num_partition_cols, 0);
+
+        this->init_pq_scanner();
     }
 
     virtual ~ParquetReader() {}
@@ -88,6 +89,8 @@ class ParquetReader : public ArrowReader {
     virtual PyObject* get_dataset() override;
 
     virtual std::tuple<table_info*, bool, uint64_t> read_inner() override;
+
+    virtual table_info* empty_out_table() override;
 
     // Prefix to add to each of the file paths (only used for input_file_name)
     std::string prefix;
@@ -139,4 +142,30 @@ class ParquetReader : public ArrowReader {
      * @param piece : ParquetDataset piece (a single parquet file)
      */
     void get_partition_info(PyObject* piece);
+
+    /**
+     * @brief Set up the Arrow Scanner to read the Parquet files
+     * (pieces) associated for the current rank
+     */
+    void init_pq_scanner();
+
+    // -------------- Streaming Specific Parameters --------------
+
+    // Arrow Batched Reader to get next table iteratively
+    std::shared_ptr<arrow::RecordBatchReader> reader;
+
+    // Number of remaining rows to skip outputting
+    int64_t rows_to_skip = -1;
+
+    // Index of the current piece (Parquet file) being read
+    // Needed for constructing partition columns
+    size_t cur_piece = 0;
+
+    // Number of Rows Left in the Current Piece
+    int64_t rows_left_cur_piece;
+
+    // Index Dtype for Partition Columns
+    // Streaming only needs this because we need to
+    // reconstruct the arrays at read time
+    std::vector<int32_t> part_cols_cat_dtype;
 };

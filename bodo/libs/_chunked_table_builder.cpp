@@ -557,6 +557,7 @@ void ChunkedTableBuilder::AppendBatch(
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
                                         Bodo_CTypes::_BOOL);
                         break;
+                    // TODO: Remove when nullable timestamp is supported
                     case Bodo_CTypes::DATETIME:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
                                         Bodo_CTypes::DATETIME);
@@ -859,6 +860,12 @@ void ChunkedTableBuilder::AppendJoinOutput(
                                         bodo_array_type::NUMPY,
                                         Bodo_CTypes::FLOAT64);
                         break;
+                    // TODO: Remove when nullable timestamp is supported
+                    case Bodo_CTypes::DATETIME:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::DATETIME);
+                        break;
                     default:
                         break;
                 }
@@ -922,6 +929,12 @@ void ChunkedTableBuilder::AppendJoinOutput(
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
                                         bodo_array_type::NUMPY,
                                         Bodo_CTypes::FLOAT64);
+                        break;
+                    // TODO: Remove when nullable timestamp is supported
+                    case Bodo_CTypes::DATETIME:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::DATETIME);
                         break;
                     case Bodo_CTypes::TIMEDELTA:
                         // TODO(njriasan): Support TIMEDELTA array as a

@@ -10,6 +10,7 @@ import pytest
 from bodosql.tests.utils import check_num_parquet_readers
 
 import bodo
+from bodo.ir.parquet_ext import ParquetReader
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,
@@ -68,23 +69,27 @@ def test_table_path_filter_pushdown(datapath, memory_leak_check):
     # Load the data once and then filter for each query.
     py_output = pd.read_parquet(filename)
     py_output["part"] = py_output["part"].astype(str)
-    py_output = py_output[py_output["part"] == "b"]
-
+    py_output = py_output[py_output["part"] == "b"].reset_index(drop=True)
     py_output1 = py_output
-    check_func(impl1, (filename,), py_output=py_output1, reset_index=True)
-    # make sure the ParquetReader node has filters parameter set and we have trimmed
+    bodo_funcs = check_func(
+        impl1,
+        (filename,),
+        py_output=py_output1,
+        reset_index=True,
+        additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+    )
+    # Make sure the ParquetReader node has filters parameter set and we have trimmed
     # any unused columns.
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
-    bodo_func(filename)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+    _check_for_io_reader_filters(bodo_funcs["seq"], ParquetReader)
     # TODO: Check which columns were actually loaded.
+
     py_output2 = pd.DataFrame({"A": py_output["A"]})
     check_func(impl2, (filename,), py_output=py_output2, reset_index=True)
     # make sure the ParquetReader node has filters parameter set and we have trimmed
     # any unused columns.
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl2)
     bodo_func(filename)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+    _check_for_io_reader_filters(bodo_func, ParquetReader)
     # TODO: Check which columns were actually loaded.
 
     # TODO: Update Name when the name changes
@@ -97,7 +102,7 @@ def test_table_path_filter_pushdown(datapath, memory_leak_check):
     # any unused columns.
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl3)
     bodo_func(filename)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+    _check_for_io_reader_filters(bodo_func, ParquetReader)
     # TODO: Check which columns were actually loaded.
 
     # TODO: Update Name when the name changes
@@ -110,7 +115,7 @@ def test_table_path_filter_pushdown(datapath, memory_leak_check):
     # any unused columns.
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl4)
     bodo_func(filename)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+    _check_for_io_reader_filters(bodo_func, ParquetReader)
     # TODO: Check which columns were actually loaded.
 
 
@@ -494,13 +499,16 @@ def test_table_path_filter_pushdown_multitable(datapath, memory_leak_check):
     # any unused columns.
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
     bodo_func(filename)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+    _check_for_io_reader_filters(bodo_func, ParquetReader)
     # TODO: Check which columns were actually loaded.
     # At this point BodoSQL is expected to load the table twice, once for each table.
     check_num_parquet_readers(bodo_func, 2)
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(
+    bodo.bodosql_use_streaming_plan, reason="Streaming doesn't Support Reusing Table"
+)
 def test_table_path_no_filter_pushdown(datapath, memory_leak_check):
     """
     Tests when filter pushdown should be rejected because a table is reused.
@@ -535,7 +543,7 @@ def test_table_path_no_filter_pushdown(datapath, memory_leak_check):
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
     bodo_func(filename)
     try:
-        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+        _check_for_io_reader_filters(bodo_func, ParquetReader)
         # If we reach this line the test is wrong.
         failed = True
     except AssertionError:
@@ -545,9 +553,8 @@ def test_table_path_no_filter_pushdown(datapath, memory_leak_check):
     assert not failed
 
 
-@pytest.mark.timeout(600)
 @pytest.mark.slow
-def test_table_path_col_pruning_and_filter_pushdown_implicit_casting(
+def test_col_pruning_and_filter_pushdown_implicit_casting(
     datapath,
     memory_leak_check,
 ):
@@ -557,8 +564,8 @@ def test_table_path_col_pruning_and_filter_pushdown_implicit_casting(
     """
 
     # This dataframe has 3 columns, A -> categorical datetime64,
-    # B -> categorial strings, C -> Datetype, D -> int E -> partition column of string
-    # A, B, and C will be implictly by bodosql in visitTableScan
+    # B -> categorical strings, C -> date, D -> int E -> partition column of string
+    # A, B and E will be implicitly by bodosql in visitTableScan
     # Note, that
     filename = datapath("sample-parquet-data/needs_implicit_typ_conversion.pq")
 
@@ -583,6 +590,72 @@ def test_table_path_col_pruning_and_filter_pushdown_implicit_casting(
         return bc.sql(
             "Select table1.A, table1.B, table1.C, table1.E from table1 where table1.D > 1"
         )
+
+    # Compare entirely to Pandas output to simplify the process.
+    # Load the data once and then filter for each query.
+    read_df = pd.read_parquet(filename)
+    # Cast the categorical and date dtypes to the bodosql dtypes
+    read_df["B"] = read_df["B"].astype(str)
+    read_df["C"] = read_df["C"].astype("datetime64[ns]")
+    read_df["E"] = read_df["E"].astype(str)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    with set_logging_stream(logger, 1):
+        py_output = read_df.loc[read_df["E"] == "a", ["A", "B", "C", "D"]]
+        # make sure the ParquetReader node has filters parameter set and we have trimmed
+        # any unused columns.
+        check_func(
+            impl_simple_no_join_filter_partition,
+            (filename,),
+            py_output=py_output,
+            reset_index=True,
+            sort_output=True,
+        )
+        # Unfortunately, we don't get information on which filters were pushed, as BodoSQL is loaded as a func text
+        # TODO: find an effective way to check which filters were pushed.
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['B', 'A', 'C', 'D']")
+        stream.truncate(0)
+        stream.seek(0)
+
+        py_output0 = read_df.loc[read_df["D"] > 1, ["A", "B", "C", "E"]]
+        # make sure the ParquetReader node has filters parameter set and we have trimmed
+        # any unused columns.
+        check_func(
+            impl_simple_no_join_filter_non_partition,
+            (filename,),
+            py_output=py_output0,
+            reset_index=True,
+            sort_output=True,
+        )
+        # Unfortunately, we don't get information on which filters were pushed, as BodoSQL is loaded as a func text
+        # TODO: find an effective way to check which filters were pushed.
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['B', 'A', 'C', 'E']")
+
+
+@pytest.mark.timeout(600)
+@pytest.mark.slow
+def test_col_pruning_and_filter_pushdown_implicit_casting_multi_table(
+    datapath,
+    memory_leak_check,
+):
+    """
+    Tests that filter pushdown is correctly applied in the case that we perform implicit casting of the
+    input dataframe types (done in visitTableScan)
+    """
+
+    # This dataframe has 3 columns, A -> categorical datetime64,
+    # B -> categorical strings, C -> date, D -> int E -> partition column of string
+    # A, B and E will be implicitly by bodosql in visitTableScan
+    # Note, that
+    filename = datapath("sample-parquet-data/needs_implicit_typ_conversion.pq")
 
     # tests filters/column pruning works when filtering on partitions, with a join
     def impl_should_load_B_C_D(f1, df):
@@ -628,44 +701,6 @@ def test_table_path_col_pruning_and_filter_pushdown_implicit_casting(
     logger = create_string_io_logger(stream)
 
     with set_logging_stream(logger, 1):
-        py_output = read_df.loc[read_df["E"] == "a", ["A", "B", "C", "D"]]
-        # make sure the ParquetReader node has filters parameter set and we have trimmed
-        # any unused columns.
-        check_func(
-            impl_simple_no_join_filter_partition,
-            (filename,),
-            py_output=py_output,
-            reset_index=True,
-            sort_output=True,
-        )
-        # Unfortunately, we don't get information on which filters were pushed, as BodoSQL is loaded as a functext
-        # TODO: find an effective way to check which filters were pushed.
-        check_logger_msg(
-            stream, "Filter pushdown successfully performed. Moving filter step:"
-        )
-        check_logger_msg(stream, "Columns loaded ['B', 'A', 'C', 'D']")
-        stream.truncate(0)
-        stream.seek(0)
-
-        py_output0 = read_df.loc[read_df["D"] > 1, ["A", "B", "C", "E"]]
-        # make sure the ParquetReader node has filters parameter set and we have trimmed
-        # any unused columns.
-        check_func(
-            impl_simple_no_join_filter_non_partition,
-            (filename,),
-            py_output=py_output0,
-            reset_index=True,
-            sort_output=True,
-        )
-        # Unfortunatly, we don't get information on which filters were pushed, as BodoSQL is loaded as a functext
-        # TODO: find an effective way to check which filters were pushed.
-        check_logger_msg(
-            stream, "Filter pushdown successfully performed. Moving filter step:"
-        )
-        check_logger_msg(stream, "Columns loaded ['B', 'A', 'C', 'E']")
-        stream.truncate(0)
-        stream.seek(0)
-
         py_output1 = read_df.copy()
         py_output1 = py_output1.merge(py_output1, on="D")
         py_output1 = py_output1.loc[py_output1["E_y"] == "a", ["B_x", "C_y"]].rename(
@@ -680,7 +715,7 @@ def test_table_path_col_pruning_and_filter_pushdown_implicit_casting(
             reset_index=True,
             sort_output=True,
         )
-        # Unfortunatly, we don't get information on which filters were pushed, as BodoSQL is loaded as a functext
+        # Unfortunately, we don't get information on which filters were pushed, as BodoSQL is loaded as a func text
         # TODO: find an effective way to check which filters were pushed.
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"
@@ -692,6 +727,7 @@ def test_table_path_col_pruning_and_filter_pushdown_implicit_casting(
         py_output2 = read_df.copy()
         py_output2 = py_output2.merge(py_output2, on="E")
         py_output2 = py_output2.loc[:, ["A_x"]].rename(columns={"A_x": "A"})
+
         check_func(
             impl_should_load_A_E,
             (filename, read_df),
@@ -730,8 +766,8 @@ def test_table_path_col_pruning_simple(datapath, memory_leak_check):
     """
 
     # This dataframe has 3 columns, A -> categorical datetime64,
-    # B -> categorial strings, C -> Datetype, D -> int E -> partition column of string
-    # A, B, and C will be implictly cast by bodosql in visitTableScan
+    # B -> categorical strings, C -> Datetype, D -> int E -> partition column of string
+    # A, B, and C will be implicitly cast by bodosql in visitTableScan
     filename = datapath("sample-parquet-data/needs_implicit_typ_conversion.pq")
 
     def impl_simple_only_A(f1):
@@ -792,6 +828,10 @@ def test_table_path_col_pruning_simple(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(
+    bodo.bodosql_use_streaming_plan,
+    reason="Parquet Streaming doesn't Support Limit Pushdown",
+)
 def test_table_path_limit_pushdown(datapath, memory_leak_check):
     """
     Test basic limit pushdown support.
@@ -890,6 +930,10 @@ def test_named_param_filter_pushdown(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(
+    bodo.bodosql_use_streaming_plan,
+    reason="Parquet Streaming doesn't Support Limit Pushdown",
+)
 def test_table_path_limit_pushdown_complex(datapath, memory_leak_check):
     """
     Tests that limit pushdown works with a possible complicated projection.
@@ -1031,14 +1075,11 @@ def test_in_filter_pushdown(datapath):
     py_output["part"] = py_output["part"].astype(str)
     py_output = py_output[(py_output["part"] == "a") | (py_output["part"] == "b")]
 
-    check_func(impl, (bc, test_in_query), py_output=py_output, reset_index=True)
-
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
 
     with set_logging_stream(logger, 1):
-        bodo_func = bodo.jit(impl)
-        out = bodo_func(bc, test_in_query)
+        check_func(impl, (bc, test_in_query), py_output=py_output, reset_index=True)
         check_logger_msg(stream, "Filter pushdown successfully performed.")
 
 
@@ -1156,9 +1197,12 @@ def test_in_filter_pushdown_e2e(datapath):
     def impl(bc, test_in_query):
         return bc.sql(test_in_query)
 
+    assert "bodo.libs.bodosql_array_kernels.is_in" in bc.convert_to_pandas(
+        test_in_query
+    )
+
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
-
     with set_logging_stream(logger, 1):
         check_func(
             impl,
@@ -1170,10 +1214,6 @@ def test_in_filter_pushdown_e2e(datapath):
             reset_index=True,
             sort_output=True,
         )
-        assert "bodo.libs.bodosql_array_kernels.is_in" in bc.convert_to_pandas(
-            test_in_query
-        )
-
         check_logger_msg(stream, "Filter pushdown successfully performed.")
 
 

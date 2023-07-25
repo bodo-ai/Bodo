@@ -221,8 +221,8 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
      * the dataframe with the column names and a fake index.
      *
      * @param ctx the pandas BuildContext for code generation.
-     * @param output the target output dataframe
      * @param input the input table with the underlying data
+     * @param rangeIndex Var for index to use in dataframe
      */
     private fun generateInitDataframeCode(ctx: PandasRel.BuildContext, input: Variable, rangeIndex: Variable): Dataframe {
         val globalVarName = ctx.lowerAsGlobal(

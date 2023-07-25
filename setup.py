@@ -364,6 +364,24 @@ bodo_ext = Extension(**ext_metadata)
 builtin_exts = []
 pyx_builtins = []
 
+ext_arrow = Extension(
+    name="bodo.io.arrow_ext",
+    sources=["bodo/io/arrow_ext.pyx"],
+    include_dirs=np_compile_args["include_dirs"]
+    + ind
+    + pa_compile_args["include_dirs"],
+    define_macros=[],
+    library_dirs=lid + pa_compile_args["library_dirs"],
+    libraries=["arrow", "arrow_python"],
+    # We cannot compile with -Werror yet because pyfs.cpp
+    # generates serveral warnings.
+    extra_compile_args=[x for x in eca if x != "-Werror"],
+    extra_link_args=ela,
+    language="c++",
+)
+builtin_exts.append(ext_arrow)
+pyx_builtins.append(os.path.join("bodo", "io", "arrow_ext.pyx"))
+
 ext_pyfs = Extension(
     name="bodo.io.pyfs",
     sources=["bodo/io/pyfs.pyx"],
@@ -372,10 +390,12 @@ ext_pyfs = Extension(
     + pa_compile_args["include_dirs"],
     define_macros=[],
     library_dirs=lid + pa_compile_args["library_dirs"],
+    libraries=["arrow", "arrow_python"],
     # We cannot compile with -Werror yet because pyfs.cpp
     # generates serveral warnings.
     extra_compile_args=[x for x in eca if x != "-Werror"],
     extra_link_args=ela,
+    language="c++",
 )
 builtin_exts.append(ext_pyfs)
 pyx_builtins.append(os.path.join("bodo", "io", "pyfs.pyx"))
