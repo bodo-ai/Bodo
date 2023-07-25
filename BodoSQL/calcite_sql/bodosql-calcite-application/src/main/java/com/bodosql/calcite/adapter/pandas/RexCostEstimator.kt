@@ -116,7 +116,7 @@ object RexCostEstimator : RexVisitor<Cost> {
             SqlTypeName.BOOLEAN, SqlTypeName.TINYINT -> 1.0
             SqlTypeName.SMALLINT -> 2.0
             SqlTypeName.INTEGER, SqlTypeName.REAL, SqlTypeName.DECIMAL, SqlTypeName.DATE, SqlTypeName.TIME, SqlTypeName.TIME_WITH_LOCAL_TIME_ZONE, SqlTypeName.INTERVAL_YEAR, SqlTypeName.INTERVAL_YEAR_MONTH, SqlTypeName.INTERVAL_MONTH -> 4.0
-            SqlTypeName.BIGINT, SqlTypeName.DOUBLE, SqlTypeName.FLOAT, SqlTypeName.TIMESTAMP, SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE, SqlTypeName.INTERVAL_WEEK, SqlTypeName.INTERVAL_DAY, SqlTypeName.INTERVAL_DAY_HOUR, SqlTypeName.INTERVAL_DAY_MINUTE, SqlTypeName.INTERVAL_DAY_SECOND, SqlTypeName.INTERVAL_HOUR, SqlTypeName.INTERVAL_HOUR_MINUTE, SqlTypeName.INTERVAL_HOUR_SECOND, SqlTypeName.INTERVAL_MINUTE, SqlTypeName.INTERVAL_MINUTE_SECOND, SqlTypeName.INTERVAL_SECOND -> 8.0
+            SqlTypeName.BIGINT, SqlTypeName.DOUBLE, SqlTypeName.FLOAT, SqlTypeName.TIMESTAMP, SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE, SqlTypeName.INTERVAL_DAY, SqlTypeName.INTERVAL_DAY_HOUR, SqlTypeName.INTERVAL_DAY_MINUTE, SqlTypeName.INTERVAL_DAY_SECOND, SqlTypeName.INTERVAL_HOUR, SqlTypeName.INTERVAL_HOUR_MINUTE, SqlTypeName.INTERVAL_HOUR_SECOND, SqlTypeName.INTERVAL_MINUTE, SqlTypeName.INTERVAL_MINUTE_SECOND, SqlTypeName.INTERVAL_SECOND -> 8.0
             SqlTypeName.BINARY -> type.precision.coerceAtLeast(1).toDouble()
             SqlTypeName.VARBINARY -> type.precision.coerceAtLeast(1).toDouble().coerceAtMost(100.0)
             SqlTypeName.CHAR -> type.precision.coerceAtLeast(1).toDouble() * RelMdSize.BYTES_PER_CHARACTER
