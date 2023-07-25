@@ -1738,7 +1738,8 @@ def test_batched_read_agg(memory_leak_check):
         total_max = 0
 
         reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000)  # type: ignore
-        while True:
+        is_last_global = False
+        while not is_last_global:
             table, is_last = read_arrow_next(reader)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(table), 1, None
@@ -1749,15 +1750,11 @@ def test_batched_read_agg(memory_leak_check):
             df = df[(df["l_orderkey"] > 10)]
             # Perform more compute in between to see caching speedup
             local_max = df["l_partkey"].max()
-            if local_max > total_max:
-                total_max = local_max
-
+            total_max = max(total_max, local_max)
             is_last_global = bodo.libs.distributed_api.dist_reduce(
                 is_last,
                 np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
             )
-            if is_last_global:
-                break
 
         arrow_reader_del(reader)
         return total_max
