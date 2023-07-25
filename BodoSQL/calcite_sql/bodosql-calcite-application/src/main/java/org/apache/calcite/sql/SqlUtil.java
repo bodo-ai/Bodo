@@ -1411,10 +1411,6 @@ public abstract class SqlUtil {
       return check(param);
     }
 
-    @Override public Void visit(SqlNamedParam param) {
-      return check(param);
-    }
-
     @Override public Void visit(SqlDataTypeSpec type) {
       return check(type);
     }

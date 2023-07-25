@@ -94,6 +94,8 @@ import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Op.Assign;
 import com.bodosql.calcite.ir.Op.If;
 import com.bodosql.calcite.ir.Variable;
+import com.bodosql.calcite.rex.RexNamedParam;
+import com.bodosql.calcite.sql.fun.SqlNamedParameterOperator;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -116,7 +118,6 @@ import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexLocalRef;
-import org.apache.calcite.rex.RexNamedParam;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.rex.RexPatternFieldRef;
@@ -222,7 +223,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   public Expr visitCall(RexCall call) {
     // TODO(jsternberg): Using instanceof here is problematic.
     // It would be better to use getKind(). Revisit this later.
-    if (call.getOperator() instanceof SqlNullTreatmentOperator) {
+    if (call instanceof RexNamedParam) {
+      return visitNamedParam((RexNamedParam) call);
+    } else if (call.getOperator() instanceof SqlNullTreatmentOperator) {
       return visitNullTreatmentOp(call);
     } else if (call.getOperator() instanceof SqlBinaryOperator
         || call.getOperator() instanceof SqlDatetimePlusOperator
@@ -586,9 +589,12 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
 
     @Override
-    public RexNode visitNamedParam(RexNamedParam namedParam) {
-      namedParams.add(namedParam.getName());
-      return namedParam;
+    public RexNode visitCall(RexCall call) {
+      if (call instanceof RexNamedParam) {
+        namedParams.add(((RexNamedParam) call).getName());
+        return call;
+      }
+      return super.visitCall(call);
     }
 
     private RexNode visitGenericRef(RexSlot ref) {
@@ -1721,8 +1727,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     throw unsupportedNode();
   }
 
-  @Override
-  public Expr visitNamedParam(RexNamedParam namedParam) {
+  private Expr visitNamedParam(RexNamedParam namedParam) {
     String paramName = namedParam.getName();
     // We just return the node name because that should match the input variable name
     ctx.getNamedParams().add(paramName);

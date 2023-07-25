@@ -37,7 +37,6 @@ import org.apache.calcite.sql.parser.SqlParser
 import org.apache.calcite.sql.validate.SqlConformanceEnum
 import org.apache.calcite.sql.validate.SqlValidator
 import org.apache.calcite.sql2rel.SqlToRelConverter
-import org.apache.calcite.sql2rel.StandardConvertletTable
 import org.apache.calcite.sql2rel.StandardConvertletTableConfig
 import org.apache.calcite.tools.FrameworkConfig
 import org.apache.calcite.tools.Frameworks
