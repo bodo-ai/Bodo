@@ -1401,10 +1401,15 @@ class TypingTransforms:
             read_found = False
             # read node is before the while loop so it's in a predecessor block
             cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+            new_target_block = []
+            new_target_label = -1
             for pred, _ in cfg.predecessors(label):
                 if pred == label:
                     # Ignore self-loops.
                     continue
+                # Simplify the filter pushdown requirements. There can
+                # only be one path we select.
+                require(new_target_label == -1)
                 body = func_ir.blocks[pred].body
                 pq_ind = self._find_target_node_location_for_filtering(
                     body,
@@ -1429,12 +1434,14 @@ class TypingTransforms:
                     changed or body[start_idx:end_idx] != new_body[start_idx:end_idx]
                 )
                 # Note: new_body already contains all nodes before the reader.
-                new_block_stmts = new_body + filter_nodes + non_filter_nodes
-                func_ir.blocks[pred].body = new_block_stmts
+                new_target_block = new_body + filter_nodes + non_filter_nodes
+                new_target_label = pred
                 read_found = True
             assert (
                 read_found
             ), "_reorder_filter_nodes: read node not found in streaming I/O"
+            require(new_target_label != -1)
+            func_ir.blocks[new_target_label].body = new_target_block
 
         return new_working_body, changed
 
