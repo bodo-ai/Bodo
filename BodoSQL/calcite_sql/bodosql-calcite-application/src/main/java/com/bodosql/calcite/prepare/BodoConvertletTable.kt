@@ -2,8 +2,10 @@ package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable
+import com.bodosql.calcite.rex.RexNamedParam
 import com.bodosql.calcite.sql.`fun`.SqlBodoOperatorTable
 import com.bodosql.calcite.sql.`fun`.SqlLikeQuantifyOperator
+import com.bodosql.calcite.sql.`fun`.SqlNamedParameterOperator
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexNode
@@ -24,6 +26,7 @@ import org.checkerframework.checker.initialization.qual.UnknownInitialization
 class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConvertletTable(config) {
     init {
         registerOp(SqlBodoOperatorTable.TRY_CAST, this::convertTryCast)
+        registerOp(SqlNamedParameterOperator.INSTANCE, this::convertNamedParam)
     }
 
     constructor() : this(StandardConvertletTableConfig(true, true))
@@ -48,6 +51,13 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
             return cx.convertExpression(left)
         }
         return cx.rexBuilder.makeCall(type, SqlBodoOperatorTable.TRY_CAST, ImmutableList.of(arg))
+    }
+
+    private fun convertNamedParam(cx: SqlRexContext, call: SqlCall): RexNode {
+        val name = call.operand<SqlLiteral>(0).getValueAs(String::class.java)
+            .trimStart('$', '@')
+        val returnType = cx.validator.getValidatedNodeType(call)
+        return RexNamedParam(returnType, name)
     }
 
     override fun get(call: SqlCall): SqlRexConvertlet? {

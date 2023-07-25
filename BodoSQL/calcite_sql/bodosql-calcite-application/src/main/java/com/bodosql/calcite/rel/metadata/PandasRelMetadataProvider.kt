@@ -5,6 +5,10 @@ import org.apache.calcite.rel.metadata.*
 class PandasRelMetadataProvider(ranks: Int) : RelMetadataProvider by
 ChainedRelMetadataProvider.of(
     listOf(
+        ReflectiveRelMetadataProvider.reflectiveSource(
+            PandasRelMdRowCount(),
+            BuiltInMetadata.RowCount.Handler::class.java
+        ),
         // Inject information about the number of ranks
         // for Pandas queries as the parallelism attribute.
         ReflectiveRelMetadataProvider.reflectiveSource(

@@ -22,7 +22,6 @@ import org.apache.calcite.sql.SqlDynamicParam;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.SqlLiteral;
-import org.apache.calcite.sql.SqlNamedParam;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlOperator;
@@ -101,14 +100,6 @@ public interface SqlVisitor<R> {
    * @see SqlDynamicParam#accept(SqlVisitor)
    */
   R visit(SqlDynamicParam param);
-
-  /**
-   * Visits a named parameter.
-   *
-   * @param param Named parameter
-   * @see SqlNamedParam#accept(SqlVisitor)
-   */
-  R visit(SqlNamedParam param);
 
   /**
    * Visits an interval qualifier.

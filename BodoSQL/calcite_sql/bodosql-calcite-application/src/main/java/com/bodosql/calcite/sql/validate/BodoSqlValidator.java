@@ -17,13 +17,18 @@
 package com.bodosql.calcite.sql.validate;
 
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate;
+
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorImpl;
+import org.apache.calcite.sql.validate.SqlValidatorScope;
+
+import static org.apache.calcite.util.Static.RESOURCE;
 
 /** Duplication of the CalciteSqlValidator class from Calcite. */
 public class BodoSqlValidator extends SqlValidatorImpl {
@@ -72,5 +77,37 @@ public class BodoSqlValidator extends SqlValidatorImpl {
       }
     }
     return select;
+  }
+
+  @Override
+  protected void validateSelect(SqlSelect select, RelDataType targetRowType) {
+    // Validate the select.
+    super.validateSelect(select, targetRowType);
+
+    // Handle fetch and offset directly. The super call only handles literals and dynamic parameters.
+    // It does not handle named parameters.
+    handleFetchOffset(select);
+  }
+
+  private void handleFetchOffset(SqlSelect select) {
+    SqlValidatorScope scope = getEmptyScope();
+
+    SqlNode fetchNode = select.getFetch();
+    if (fetchNode instanceof SqlCall) {
+      SqlCall fetch = (SqlCall) fetchNode;
+      RelDataType type = deriveType(scope, fetch);
+      if (!SqlTypeUtil.isIntType(type)) {
+        throw newValidationError(fetch, RESOURCE.typeNotSupported(type.getFullTypeString()));
+      }
+    }
+
+    SqlNode offsetNode = select.getOffset();
+    if (offsetNode instanceof SqlCall) {
+      SqlCall offset = (SqlCall) offsetNode;
+      RelDataType type = deriveType(scope, offset);
+      if (!SqlTypeUtil.isIntType(type)) {
+        throw newValidationError(offset, RESOURCE.typeNotSupported(type.getFullTypeString()));
+      }
+    }
   }
 }
