@@ -235,12 +235,13 @@ void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
                                   bodo::vector<int64_t>& left_idxs,
                                   bodo::vector<int64_t>& right_idxs,
                                   bodo::vector<uint8_t>& left_row_is_matched,
-                                  bodo::vector<uint8_t>& right_row_is_matched);
+                                  bodo::vector<uint8_t>& right_row_is_matched,
+                                  int64_t left_offset = 0);
 
 void add_unmatched_rows(bodo::vector<uint8_t>& bit_map, size_t n_rows,
                         bodo::vector<int64_t>& table_idxs,
                         bodo::vector<int64_t>& other_table_idxs,
-                        bool needs_reduction);
+                        bool needs_reduction, int64_t offset = 0);
 
 std::shared_ptr<table_info> create_out_table(
     std::shared_ptr<table_info> left_table,

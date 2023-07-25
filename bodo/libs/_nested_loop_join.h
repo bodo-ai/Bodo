@@ -21,6 +21,8 @@
  * join only)
  * @param right_row_is_matched bitmap of matched right table rows to fill (right
  * join only)
+ * @param left_offset the number of bits already used from the start of the
+ * left_row_is_matched. Default is 0
  */
 template <bool is_left_outer, bool is_right_outer, bool non_equi_condition>
 void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
@@ -30,7 +32,8 @@ void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
                                   bodo::vector<int64_t>& left_idxs,
                                   bodo::vector<int64_t>& right_idxs,
                                   bodo::vector<uint8_t>& left_row_is_matched,
-                                  bodo::vector<uint8_t>& right_row_is_matched) {
+                                  bodo::vector<uint8_t>& right_row_is_matched,
+                                  int64_t left_offset) {
     tracing::Event ev("nested_loop_join_table_local", parallel_trace);
     size_t n_rows_left = left_table->nrows();
     size_t n_rows_right = right_table->nrows();
@@ -102,7 +105,8 @@ void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
                         left_idxs.emplace_back(i);
                         right_idxs.emplace_back(j);
                         if (is_left_outer) {
-                            SetBitTo(left_row_is_matched.data(), i, true);
+                            SetBitTo(left_row_is_matched.data(),
+                                     i + left_offset, true);
                         }
                         if (is_right_outer) {
                             SetBitTo(right_row_is_matched.data(), j, true);
