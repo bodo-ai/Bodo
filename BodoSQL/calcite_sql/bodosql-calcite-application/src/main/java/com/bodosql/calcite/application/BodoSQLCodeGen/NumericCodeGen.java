@@ -59,6 +59,25 @@ public class NumericCodeGen {
   }
 
   /**
+   * Helper function that handles codegen for FLOOR / CEIL.
+   *
+   * @param func Either "FLOOR" or "CEIL"
+   * @param operands The inputs to the function
+   * @return The Expr corresponding to the function call
+   */
+  public static Expr genFloorCeilCode(String func, List<Expr> operands) {
+    if (operands.size() == 2) {
+      return BodoSQLKernel(func.toLowerCase(), operands, List.of());
+    } else if (operands.size() == 1) {
+      return BodoSQLKernel(
+          func.toLowerCase(), List.of(operands.get(0), new Expr.IntegerLiteral(0)), List.of());
+    } else {
+      throw new BodoSQLCodegenException(
+          func + " expects 1 or 2 arguments, received " + operands.size() + " arguments");
+    }
+  }
+
+  /**
    * Helper function that handles codegen for most numeric functions.
    *
    * @param fnName The name of the function

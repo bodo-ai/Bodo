@@ -29,6 +29,7 @@ data: {
     imports: [
       "java.util.HashMap"
       "com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable",
+      "com.bodosql.calcite.application.BodoSQLOperatorTables.NumericOperatorTable",
       "com.bodosql.calcite.sql.ddl.SqlCopyIntoTable",
       "com.bodosql.calcite.sql.ddl.SqlCopyIntoLocation",
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeFileFormat",
