@@ -1022,6 +1022,7 @@ def test_numeric_operators(dtype_str, memory_leak_check):
         def generate_numeric_scalar_fn(op, out_dtype):
             # Convert the output dtype string to a numpy function
             out_type_func = np.dtype(out_dtype.lower()).type
+
             # Generate the actual scalar function
             def impl(arg0, arg1):
                 if pd.isna(arg0) or pd.isna(arg1):
@@ -1305,10 +1306,8 @@ test_arrs = [
 single_arg_np_map = {
     "abs": "np.abs",
     "cbrt": "np.cbrt",
-    "ceil": "np.ceil",
     "exp": "np.exp",
     "factorial": "(lambda x: np.math.factorial(np.int64(x)) if np.abs(np.int64(x)) == x else None)",
-    "floor": "np.floor",
     "ln": "np.log",
     "log2": "np.log2",
     "log10": "np.log10",
@@ -1359,7 +1358,6 @@ def test_numeric_single_arg_funcs(arr, func):
 
 @pytest.mark.parametrize("func", single_arg_np_list)
 def test_numeric_single_arg_option(func):
-
     test_impl = "def impl(a, flag0):\n"
     test_impl += "  arg0 = a if flag0 else None\n"
     test_impl += f"  return bodo.libs.bodosql_array_kernels.{func}(arg0)"

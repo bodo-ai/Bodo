@@ -7387,31 +7387,17 @@ SqlNode StandardFloorCeilOptions(Span s, boolean floorFlag) :
     <LPAREN> e = Expression(ExprContext.ACCEPT_SUB_QUERY) {
         args = startList(e);
     }
-    (
-        <TO>
-        unit = TimeUnit() {
-            args.add(new SqlIntervalQualifier(unit, null, getPos()));
+    [
+        <COMMA> e = Expression(ExprContext.ACCEPT_SUB_QUERY) {
+            args.add(e);
         }
-    )?
+    ]
     <RPAREN> {
         SqlOperator op = floorFlag
-            ? SqlStdOperatorTable.FLOOR
-            : SqlStdOperatorTable.CEIL;
-        function =  op.createCall(s.end(this), args);
+            ? NumericOperatorTable.SNOWFLAKE_FLOOR
+            : NumericOperatorTable.SNOWFLAKE_CEIL;
+        return op.createCall(s.end(this), args);
     }
-    (
-        <OVER> { s1 = span(); }
-        (
-            e = SimpleIdentifier()
-        |
-            e = WindowSpecification()
-        )
-        {
-            return SqlStdOperatorTable.OVER.createCall(s1.end(this), function, e);
-        }
-    |
-        { return function; }
-    )
 }
 
 /**

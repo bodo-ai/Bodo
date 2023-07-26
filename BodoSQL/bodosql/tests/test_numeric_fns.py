@@ -78,13 +78,11 @@ def bodosql_conv_df(request):
     params=[
         pytest.param(("ABS", "ABS", "mixed_ints"), marks=pytest.mark.slow),
         ("ABS", "ABS", "mixed_floats"),
-        ("CEIL", "CEIL", "mixed_floats"),
         pytest.param(("CBRT", "CBRT", "mixed_floats"), marks=pytest.mark.slow),
         ("CBRT", "CBRT", "mixed_ints"),
         pytest.param(
             ("FACTORIAL", "FACTORIAL", "positive_ints"), marks=pytest.mark.slow
         ),
-        ("FLOOR", "FLOOR", "mixed_floats"),
         pytest.param(("SIGN", "SIGN", "mixed_floats"), marks=pytest.mark.slow),
         ("SIGN", "SIGN", "mixed_ints"),
         # the second argument to POW for SQUARE (2) is provided below
@@ -1028,6 +1026,36 @@ def test_round(round_data, use_case, spark_info, memory_leak_check):
         check_names=False,
         check_dtype=False,
         expected_output=pd.DataFrame({0: answer}),
+    )
+
+
+@pytest.mark.slow
+def test_floor_ceil(memory_leak_check):
+    """
+    Tests the rounding functions FLOOR and CEIL with 1 argument and with
+    2 arguments.
+    """
+    query = "SELECT FLOOR(X), CEIL(X), FLOOR(X, P), CEIL(X, P) FROM table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {"X": [2.71828] * 3 + [123.456] * 3, "P": [1, -1, 3] * 2}
+        )
+    }
+    expected_output = pd.DataFrame(
+        {
+            0: [2.0] * 3 + [123.0] * 3,
+            1: [3.0] * 3 + [124.0] * 3,
+            2: [2.7, 0.0, 2.718, 123.4, 120.0, 123.456],
+            3: [2.8, 10.0, 2.719, 123.5, 130.0, 123.456],
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
     )
 
 

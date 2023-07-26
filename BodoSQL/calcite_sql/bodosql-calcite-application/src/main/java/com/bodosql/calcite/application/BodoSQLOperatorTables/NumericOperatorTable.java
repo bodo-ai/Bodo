@@ -1,11 +1,13 @@
 package com.bodosql.calcite.application.BodoSQLOperatorTables;
 
+import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.argumentRange;
+
+import com.bodosql.calcite.sql.fun.SqlRandomOperator;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
@@ -13,8 +15,6 @@ import org.apache.calcite.sql.type.*;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.sql.validate.implicit.TypeCoercion;
 import org.apache.calcite.util.Optionality;
-
-import com.bodosql.calcite.sql.fun.SqlRandomOperator;
 
 public final class NumericOperatorTable implements SqlOperatorTable {
 
@@ -96,6 +96,26 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           ReturnTypes.ARG0_NULLABLE,
           null,
           OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction SNOWFLAKE_CEIL =
+      new SqlFunction(
+          "CEIL",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          argumentRange(1, SqlTypeFamily.NUMERIC, SqlTypeFamily.INTEGER),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction SNOWFLAKE_FLOOR =
+      new SqlFunction(
+          "FLOOR",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          argumentRange(1, SqlTypeFamily.NUMERIC, SqlTypeFamily.INTEGER),
+          // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction CEILING =
@@ -192,7 +212,6 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           (SqlOperandTypeInference) null,
           OperandTypes.NUMERIC_NUMERIC,
           SqlFunctionCategory.NUMERIC);
-
 
   public static final SqlFunction CONV =
       new SqlFunction(
@@ -463,6 +482,8 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           BITAND_AGG,
           BITXOR_AGG,
           CEILING,
+          SNOWFLAKE_CEIL,
+          SNOWFLAKE_FLOOR,
           DIV0,
           HAVERSINE,
           LOG,
