@@ -678,10 +678,13 @@ void update_local_dictionary_remove_duplicates(
 
     // XXX this doesn't propagate to Python
     dict_array->child_arrays[0] = global_dictionary;
+    // If we didn't gather data, then the dictionary should propagate
+    // if it was already global.
     if (gather_global_dict) {
-        // If we didn't gather data, then the dictionary should propagate
-        // if it was already global.
         global_dictionary->is_globally_replicated = true;
+    } else {
+        global_dictionary->is_globally_replicated =
+            local_dictionary->is_globally_replicated;
     }
     global_dictionary->is_locally_unique = true;
 
