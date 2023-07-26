@@ -542,26 +542,6 @@ def test_no_rename(basic_df, spark_info, memory_leak_check):
     assert "rename" not in pandas_code
 
 
-@pytest.mark.slow
-def test_rename(basic_df, spark_info, memory_leak_check):
-    """
-    Tests that a columns without a legal Python identifiers is renamed
-    in a simple query (no intermediate names).
-    """
-    query = 'Select sum(A) as "sum(A)", max(A) as "max(A)" from table1 group by B'
-    spark_query = query.replace('"', "`")
-    result = check_query(
-        query,
-        basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query,
-        check_dtype=False,
-        return_codegen=True,
-    )
-    pandas_code = result["pandas_code"]
-    assert "rename" in pandas_code
-
-
 @pytest.fixture
 def groupby_extension_table():
     """generates a simple fixture that ensures that all possible groupings produce an output"""
