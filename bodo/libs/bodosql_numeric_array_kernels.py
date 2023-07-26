@@ -17,15 +17,7 @@ def cbrt(arr):  # pragma: no cover
     return
 
 
-def ceil(arr):  # pragma: no cover
-    return
-
-
 def factorial(arr):  # pragma: no cover
-    return
-
-
-def floor(arr):  # pragma: no cover
     return
 
 
@@ -85,15 +77,7 @@ def cbrt_util(arr):  # pragma: no cover
     return
 
 
-def ceil_util(arr):  # pragma: no cover
-    return
-
-
 def factorial_util(arr):  # pragma: no cover
-    return
-
-
-def floor_util(arr):  # pragma: no cover
     return
 
 
@@ -144,9 +128,7 @@ def square_util(arr):  # pragma: no cover
 funcs_utils_names = (
     (abs, abs_util, "ABS"),
     (cbrt, cbrt_util, "CBRT"),
-    (ceil, ceil_util, "CEIL"),
     (factorial, factorial_util, "FACTORIAL"),
-    (floor, floor_util, "FLOOR"),
     (ln, ln_util, "LN"),
     (log2, log2_util, "LOG2"),
     (log10, log10_util, "LOG10"),
@@ -245,7 +227,7 @@ def _get_numeric_output_dtype(func_name, arr0, arr1=None):
                 out_dtype = _uint[min(64, arr0_dtype.bitwidth * 2)]
             else:
                 out_dtype = arr0_dtype
-    elif func_name == "ROUND":
+    elif func_name in ("ROUND", "FLOOR", "CEIL"):
         #
         # can use types.Number, but this would include types.Complex
         if isinstance(arr0_dtype, (types.Float, types.Integer)):
@@ -405,7 +387,11 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
             else:
                 raise ValueError(f"Unknown function name: {func_name}")
 
-            extra_globals = {"round_half_always_up": round_half_always_up}
+            extra_globals = {
+                "round_half_always_up": round_half_always_up,
+                "ceil": math.ceil,
+                "floor": math.floor,
+            }
 
             return gen_vectorized(
                 arg_names,
@@ -473,6 +459,126 @@ def round_half_always_up(x, places):
     )
     impl = loc_vars["impl"]
     return impl
+
+
+@numba.generated_jit(nopython=True)
+def floor(data, precision):  # pragma: no cover
+    """Handles cases where FLOOR receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [data, precision]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.floor",
+                ["data", "precision"],
+                i,
+            )
+
+    def impl(data, precision):  # pragma: no cover
+        return floor_util(data, precision)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def ceil(data, precision):  # pragma: no cover
+    """Handles cases where CEIL receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [data, precision]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.ceil",
+                ["data", "precision"],
+                i,
+            )
+
+    def impl(data, precision):  # pragma: no cover
+        return ceil_util(data, precision)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def floor_util(data, precision):  # pragma: no cover
+    """A dedicated kernel for the SQL function FLOOR which takes in
+    a numerical scalar/column and a number of places and rounds the
+    number to that number of places, always rounding down.
+    Args:
+        data (numerical array/series/scalar): the data to round.
+        precision (integer array/series/scalar): the number of places to round to.
+    Returns:
+        numerical series/scalar: the data rounded down.
+    """
+    verify_int_float_arg(data, "floor", "data")
+    verify_int_arg(precision, "floor", "precision")
+
+    arg_names = ["data", "precision"]
+    arg_types = [data, precision]
+    propagate_null = [True] * 2
+
+    if is_valid_int_arg(data):
+        data_dtype = data.dtype if is_array_typ(data) else data
+        cast_expr = ""
+        if data_dtype.signed:
+            cast_expr = f"np.int{data_dtype.bitwidth}"
+        else:
+            cast_expr = f"np.uint{data_dtype.bitwidth}"
+        scalar_text = (
+            f"res[i] = {cast_expr}(floor(arg0 * (10.0 ** arg1)) / (10.0 ** arg1))"
+        )
+    else:
+        scalar_text = "res[i] = floor(arg0 * (10.0 ** arg1)) / (10.0 ** arg1)"
+
+    out_dtype = _get_numeric_output_dtype("FLOOR", data)
+
+    extra_globals = {"floor": math.floor}
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        extra_globals=extra_globals,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def ceil_util(data, precision):  # pragma: no cover
+    """A dedicated kernel for the SQL function CEIL which takes in
+    a numerical scalar/column and a number of places and rounds the
+    number to that number of places, always rounding up.
+    Args:
+        data (numerical array/series/scalar): the data to round.
+        precision (integer array/series/scalar): the number of places to round to.
+    Returns:
+        numerical series/scalar: the data rounded up.
+    """
+    verify_int_float_arg(data, "ceil", "data")
+    verify_int_arg(precision, "ceil", "precision")
+
+    arg_names = ["data", "precision"]
+    arg_types = [data, precision]
+    propagate_null = [True] * 2
+
+    if is_valid_int_arg(data):
+        scalar_text = "res[i] = np.int64(ceil(arg0 * (10.0 ** arg1)) / (10.0 ** arg1))"
+    else:
+        scalar_text = "res[i] = ceil(arg0 * (10.0 ** arg1)) / (10.0 ** arg1)"
+
+    out_dtype = _get_numeric_output_dtype("CEIL", data)
+
+    extra_globals = {"ceil": math.ceil}
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        extra_globals=extra_globals,
+    )
 
 
 @numba.generated_jit(nopython=True)

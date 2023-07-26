@@ -42,6 +42,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.gene
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.generateJsonTwoArgsInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NestedDataCodeGen.generateToArrayFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.genFloorCeilCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLeastGreatestCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLogFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateRandomFnInfo;
@@ -95,7 +96,7 @@ import com.bodosql.calcite.ir.Op.Assign;
 import com.bodosql.calcite.ir.Op.If;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.rex.RexNamedParam;
-import com.bodosql.calcite.sql.fun.SqlNamedParameterOperator;
+import com.bodosql.calcite.sql.fun.BodoSqlTryCastFunction;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -136,7 +137,6 @@ import org.apache.calcite.sql.SqlNullTreatmentOperator;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlPostfixOperator;
 import org.apache.calcite.sql.SqlPrefixOperator;
-import com.bodosql.calcite.sql.fun.BodoSqlTryCastFunction;
 import org.apache.calcite.sql.fun.SqlCaseOperator;
 import org.apache.calcite.sql.fun.SqlCastFunction;
 import org.apache.calcite.sql.fun.SqlDatetimePlusOperator;
@@ -1176,8 +1176,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     String unit;
     String tzStr;
     switch (fnOperation.getOperator().kind) {
-      case CEIL:
-      case FLOOR:
       case MOD:
         return getNumericFnCode(fnName, operands);
       case GREATEST:
@@ -1230,6 +1228,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case OTHER_FUNCTION:
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
         switch (fnName) {
+          case "CEIL":
+          case "FLOOR":
+            return genFloorCeilCode(fnName, operands);
             // TODO (allai5): update this in a future PR for clean-up so it re-uses the
             // SQLLibraryOperator definition.
           case "LTRIM":
