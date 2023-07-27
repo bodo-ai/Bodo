@@ -24,8 +24,6 @@ string_funcs_no_arg_map = {
 numeric_funcs_no_arg_map = {
     "abs": "ABS",
     "sign": "SIGN",
-    "ceil": "CEIL",
-    "floor": "FLOOR",
 }
 
 date_funcs_no_arg_map = {
@@ -82,6 +80,8 @@ numeric_funcs_map = {
     "round": "ROUND",
     "trunc": "TRUNC",
     "truncate": "TRUNCATE",
+    "ceil": "CEIL",
+    "floor": "FLOOR",
 }
 
 cond_funcs_map = {
