@@ -1757,8 +1757,6 @@ num_to_pd_func = {
         pytest.param(("abs", "float_col", 3.2), id="abs_float"),
         pytest.param(("sign", "int_col", 0), id="sign_int"),
         pytest.param(("sign", "float_col", -1), id="sign_float"),
-        pytest.param(("ceil", "float_col", -4), id="ceil_float"),
-        pytest.param(("floor", "float_col", 3), id="floor_float"),
     ],
 )
 @pytest.mark.skipif(
@@ -1807,6 +1805,63 @@ def test_no_arg_numeric_functions(
         check_logger_msg(
             stream,
             rf"WHERE  ( ( {sql_func.upper()}(\"{num_col.upper()}\") = {{f1}} ) )",
+        )
+
+
+@pytest.mark.parametrize(
+    "func_args",
+    [
+        pytest.param(("ceil", "float_col", -4), id="ceil_float"),
+        pytest.param(("floor", "float_col", 3), id="floor_float"),
+    ],
+)
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_optional_arg_numeric_functions(
+    test_db_snowflake_catalog, func_args, memory_leak_check
+):
+    """
+    Test numeric function support in Snowflake filter pushdown
+    that take an optional argument but the argument isn't provided.
+    """
+    sql_func, num_col, test_val = func_args
+    pd_func = num_to_pd_func[sql_func]
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    table_name = "NUMERIC_DATA"
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    conn_str = get_snowflake_connection_string(db, schema)
+    df = pd.read_sql(f"select {num_col} from {table_name}", conn_str)
+    expected_output = df[pd_func(df[num_col]) == test_val]
+    query = (
+        f"select {num_col} from {table_name} where {sql_func}({num_col}) = '{test_val}'"
+    )
+
+    # make sure filter pushdown worked
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=expected_output,
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+        )
+
+        check_logger_msg(stream, f"Columns loaded ['{num_col}']")
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+        check_logger_msg(
+            stream,
+            rf"WHERE  ( ( {sql_func.upper()}(\"{num_col.upper()}\", {{f0}}) = {{f1}} ) )",
         )
 
 
