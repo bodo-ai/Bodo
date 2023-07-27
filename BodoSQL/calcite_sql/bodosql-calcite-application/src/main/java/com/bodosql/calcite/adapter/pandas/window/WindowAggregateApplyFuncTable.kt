@@ -166,8 +166,8 @@ internal object WindowAggregateApplyFuncTable {
     private fun rowNumber(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr =
         Expr.Call(
             "np.arange",
-            Expr.IntegerLiteral(1),
-            Expr.Binary("+", ctx.len, Expr.IntegerLiteral(1))
+            Expr.One,
+            Expr.Binary("+", ctx.len, Expr.One)
         )
 
     private fun rank(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr {
@@ -253,7 +253,7 @@ internal object WindowAggregateApplyFuncTable {
 
     private fun lag(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr {
         val column = operands[0]
-        val shift = operands.getOrElse(1) { Expr.IntegerLiteral(1) }
+        val shift = operands.getOrElse(1) { Expr.One }
         val fill = operands.getOrElse(2) { Expr.None }
         return if (call.ignoreNulls()) {
             Expr.Call(
@@ -261,11 +261,14 @@ internal object WindowAggregateApplyFuncTable {
                 column, shift, fill,
             )
         } else {
+            Expr.Call(
+                "bodo.hiframes.pd_series_ext.get_series_data",
             Expr.Method(
                 column,
                 "shift",
                 args = listOf(shift),
                 namedArgs = listOf("fill_value" to fill),
+            ),
             )
         }
     }
@@ -302,6 +305,8 @@ internal object WindowAggregateApplyFuncTable {
 
     private fun conditionalTrueEvent(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr =
         Expr.Call(
+            "bodo.hiframes.pd_series_ext.get_series_data",
+        Expr.Call(
             Expr.Attribute(
                 Expr.Call(
                     Expr.Attribute(
@@ -311,6 +316,7 @@ internal object WindowAggregateApplyFuncTable {
                 ),
                 "cumsum",
             ),
+        ),
         )
 
     // TODO(jsternberg): This entire function should be refactored into a kernel.
@@ -326,20 +332,20 @@ internal object WindowAggregateApplyFuncTable {
             SqlKind.LAST_VALUE -> Expr.Binary("-", Expr.Raw("cur_upper_bound"), Expr.IntegerLiteral(1))
             SqlKind.NTH_VALUE -> {
                 val n = Variable("n")
-                ctx.builder.add(Op.Assign(n, Expr.Call("max", Expr.IntegerLiteral(1), operands[1])))
+                ctx.builder.add(Op.Assign(n, Expr.Call("max", Expr.One, operands[1])))
                 Expr.Raw("cur_lower_bound + ${n.emit()} - 1")
             }
             else -> throw AssertionError("invalid nthValue kind")
         }
 
-        val outputArray = ctx.builder.symbolTable.genSeriesVar()
+        val outputArray = ctx.builder.symbolTable.genArrayVar()
         ctx.builder.add(
             Op.Assign(
                 outputArray, Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type))
             )
         )
 
-        val inputArray = ctx.builder.symbolTable.genSeriesVar()
+        val inputArray = ctx.builder.symbolTable.genArrayVar()
         ctx.builder.add(Op.Assign(inputArray, Expr.Call("bodo.hiframes.pd_series_ext.get_series_data", operands[0])))
 
         val loop = Op.For("i", Expr.Call("range", ctx.len)) { index, body ->
@@ -349,12 +355,12 @@ internal object WindowAggregateApplyFuncTable {
                     ctx.len,
                     Expr.Call(
                         "max",
-                        Expr.IntegerLiteral(0),
+                        Expr.Zero,
                         Expr.Binary("+", index, ctx.bounds.lower)
                     ),
                 )
             } else {
-                Expr.IntegerLiteral(0)
+                Expr.Zero
             }
             val lowerBoundVar = Variable("cur_lower_bound")
             body.add(Op.Assign(lowerBoundVar, lowerBound))
@@ -365,11 +371,11 @@ internal object WindowAggregateApplyFuncTable {
                     ctx.len,
                     Expr.Call(
                         "max",
-                        Expr.IntegerLiteral(0),
+                        Expr.Zero,
                         Expr.Binary(
                             "+",
                             Expr.Binary("+", index, ctx.bounds.upper),
-                            Expr.IntegerLiteral(1),
+                            Expr.One,
                         )
                     ),
                 )
@@ -418,16 +424,16 @@ internal object WindowAggregateApplyFuncTable {
         val targetIndex = if (call.kind == SqlKind.LAST_VALUE) {
             Expr.Binary("-", ctx.len, Expr.IntegerLiteral(1))
         } else {
-            Expr.IntegerLiteral(0)
+            Expr.Zero
         }
 
         // Generate the logic that extracts the first/last value.
         // Checks if it is null and then executes one of the two branches.
-        val inputArray = ctx.builder.symbolTable.genSeriesVar()
+        val inputArray = ctx.builder.symbolTable.genArrayVar()
         ctx.builder.add(Op.Assign(inputArray, Expr.Call("bodo.hiframes.pd_series_ext.get_series_data", operands[0])))
 
         // Generate the output series variable that we will assign to.
-        val outputArray = ctx.builder.symbolTable.genSeriesVar()
+        val outputArray = ctx.builder.symbolTable.genArrayVar()
 
         // Branch to use if the value is null.
         val typeName = call.type.sqlTypeName
@@ -438,15 +444,15 @@ internal object WindowAggregateApplyFuncTable {
                         Expr.Call(
                             "bodo.libs.str_arr_ext.gen_na_str_array_lens",
                             ctx.len,
-                            Expr.IntegerLiteral(0),
-                            Expr.Call("np.empty", Expr.IntegerLiteral(1), Expr.Raw("np.int64")),
+                            Expr.Zero,
+                            Expr.Call("np.empty", Expr.One, Expr.Raw("np.int64")),
                         )
 
                     SqlTypeName.BINARY_TYPES.contains(typeName) ->
                         Expr.Call(
                             "bodo.libs.str_arr_ext.pre_alloc_binary_array",
                             ctx.len,
-                            Expr.IntegerLiteral(0),
+                            Expr.Zero,
                         )
 
                     else -> Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type))

@@ -21,47 +21,50 @@ from bodo.utils.typing import (
     raise_bodo_error,
 )
 
+
 @numba.generated_jit(nopython=True)
 def null_ignoring_shift(input_arr, shift_amount, default_value):
     """Performs the the equivalent of the following operation but skipping over
-       any rows that are NULL:
-       
-       input_arr.shift(shift_amount, fill_value=default_value)
+    any rows that are NULL:
 
-        Args:
-            input_arr (any array): the values that are being shifted
-            shift_amount (int): the number of rows to shift by (ignoring nulls)
-            default_value (optional any): the value to use by default when the
-            shift amount goes out of the array
-        
-        Returns:
-            input_arr (any array): an array identical to input_arr but where
-            all the values are shifted by shift_amount (ignoring nulls)
+    input_arr.shift(shift_amount, fill_value=default_value)
 
-        For example, consider the following input array:
-            [10, NA, NA, 20, 30, 40, NA, 50, NA]
+     Args:
+         input_arr (any array): the values that are being shifted
+         shift_amount (int): the number of rows to shift by (ignoring nulls)
+         default_value (optional any): the value to use by default when the
+         shift amount goes out of the array
 
-        Using .shift() on this array with a shift of 1 and a default of 0
-        would return the following:
-            [NA, NA, 20, 30, 40, NA, 50, NA, 0]
+     Returns:
+         input_arr (any array): an array identical to input_arr but where
+         all the values are shifted by shift_amount (ignoring nulls)
 
-        Using null_ignoring_shift with the same arguments would return
-        the following:
-            [20, 20, 20, 30, 40, 50, 50, 0, 0]
+     For example, consider the following input array:
+         [10, NA, NA, 20, 30, 40, NA, 50, NA]
 
-        See the design for IGNORE NULLS here:
-        https://bodo.atlassian.net/wiki/spaces/~62c43badfa577c57c3b685b2/pages/1322745956/Ignore+Nulls+in+LEAD+LAG+design
+     Using .shift() on this array with a shift of 1 and a default of 0
+     would return the following:
+         [NA, NA, 20, 30, 40, NA, 50, NA, 0]
+
+     Using null_ignoring_shift with the same arguments would return
+     the following:
+         [20, 20, 20, 30, 40, 50, 50, 0, 0]
+
+     See the design for IGNORE NULLS here:
+     https://bodo.atlassian.net/wiki/spaces/~62c43badfa577c57c3b685b2/pages/1322745956/Ignore+Nulls+in+LEAD+LAG+design
     """
     if not bodo.utils.utils.is_array_typ(input_arr, True):  # pragma: no cover
         raise_bodo_error("Input must be an array type")
-    if not isinstance(shift_amount, types.Integer): # pragma: no cover
+    if not isinstance(shift_amount, types.Integer):  # pragma: no cover
         raise_bodo_error("Shift amount must be an integer type")
 
     no_default = default_value == bodo.none
 
     func_text = "def impl(input_arr, shift_amount, default_value):\n"
     if isinstance(input_arr, bodo.SeriesType):
-        func_text += "    input_arr = bodo.utils.conversion.coerce_to_array(input_arr)\n"
+        func_text += (
+            "    input_arr = bodo.utils.conversion.coerce_to_array(input_arr)\n"
+        )
     func_text += "    input_length = len(input_arr)\n"
 
     # Edge case: shifting by zero means that the output is identical to the input
@@ -70,7 +73,9 @@ def null_ignoring_shift(input_arr, shift_amount, default_value):
     func_text += "    else:\n"
     func_text += "        start_index = 0\n"
     func_text += "        value_count = 0\n"
-    func_text += "        arr = bodo.utils.utils.alloc_type(input_length, input_arr, (-1,))\n"
+    func_text += (
+        "        arr = bodo.utils.utils.alloc_type(input_length, input_arr, (-1,))\n"
+    )
 
     # Shifting values from later in the array backward
     func_text += "        if (shift_amount < 0):\n"
@@ -78,7 +83,9 @@ def null_ignoring_shift(input_arr, shift_amount, default_value):
     func_text += "            end_index = 0\n"
     # Find K Valid
     func_text += "            while ((end_index < input_length) and (value_count < shift_amount)):\n"
-    func_text += "                if not(bodo.libs.array_kernels.isna(input_arr, end_index)):\n"
+    func_text += (
+        "                if not(bodo.libs.array_kernels.isna(input_arr, end_index)):\n"
+    )
     func_text += "                    value_count += 1\n"
     func_text += "                if (value_count < shift_amount):\n"
     func_text += "                    end_index += 1\n"
@@ -117,7 +124,9 @@ def null_ignoring_shift(input_arr, shift_amount, default_value):
     # Iterate Forward
     func_text += "            for idx_var in range(start_index, input_length):\n"
     func_text += "                arr[idx_var] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(input_arr[end_index])\n"
-    func_text += "                if not(bodo.libs.array_kernels.isna(input_arr, idx_var)):\n"
+    func_text += (
+        "                if not(bodo.libs.array_kernels.isna(input_arr, idx_var)):\n"
+    )
     # If the next shifted value is required, hunt for the next non-null value after end_index
     func_text += "                    end_index += 1\n"
     func_text += "                    while bodo.libs.array_kernels.isna(input_arr, end_index):\n"
@@ -197,20 +206,20 @@ def overload_rank_sql(arr_tup, method="average", pct=False):  # pragma: no cover
 
 @numba.generated_jit(nopython=True)
 def change_event(S):
-    """Takes in a Series and outputs a counter that starts at zero and increases
-    by one each time the input data changes (nulls do not count as new or
-    changed values)
+    """Takes in a Series (or array) and outputs a counter that starts at zero
+    and increases by one each time the input data changes (nulls do not count
+    as new or changed values)
 
     Args:
-        S (any Series): the values whose changes are being noted
+        S (any Series/array): the values whose changes are being noted
 
     Returns:
-        integer Series: a counter that starts at zero and increases by 1 each
+        integer array: a counter that starts at zero and increases by 1 each
         time the values of the input change
     """
 
     def impl(S):  # pragma: no cover
-        data = bodo.hiframes.pd_series_ext.get_series_data(S)
+        data = bodo.utils.conversion.coerce_to_array(S)
         n = len(data)
         result = bodo.utils.utils.alloc_type(n, types.uint64, -1)
         # Find the first non-null location
@@ -230,9 +239,7 @@ def change_event(S):
                 else:
                     most_recent = data[i]
                     result[i] = result[i - 1] + 1
-        return bodo.hiframes.pd_series_ext.init_series(
-            result, bodo.hiframes.pd_index_ext.init_range_index(0, n, 1), None
-        )
+        return result
 
     return impl
 
@@ -374,7 +381,7 @@ def overload_windowed_count_star(n, lower_bound, upper_bound):
         if upper_bound < lower_bound:
             result[:] = np.uint32(0)
             return result
-        elif lower_bound <= -n+1 and n-1 <= upper_bound:
+        elif lower_bound <= -n + 1 and n - 1 <= upper_bound:
             result[:] = np.uint32(n)
             return result
 

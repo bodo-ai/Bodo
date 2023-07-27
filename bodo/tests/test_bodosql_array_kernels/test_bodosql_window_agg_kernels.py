@@ -370,7 +370,7 @@ def test_null_ignoring_shift(
 )
 def test_change_event(args):
     def impl(S):
-        return bodo.libs.bodosql_window_agg_array_kernels.change_event(S)
+        return pd.Series(bodo.libs.bodosql_window_agg_array_kernels.change_event(S))
 
     S, answer = args
     check_func(

@@ -3,7 +3,7 @@ package com.bodosql.calcite.adapter.pandas
 import com.bodosql.calcite.application.Utils.IsScalar.isScalar
 import com.bodosql.calcite.ir.*
 import com.bodosql.calcite.ir.BodoSQLKernel
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.core.FilterBase
@@ -32,7 +32,7 @@ class PandasFilter(
         return PandasFilter(cluster, traitSet, input, condition)
     }
 
-    override fun emit(implementor: PandasRel.Implementor): Dataframe {
+    override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
         val inputVar = implementor.visitChild(input, 0)
         // Choose the build implementation.
         // TODO(jsternberg): Go over this interface again. It feels to me
@@ -45,7 +45,7 @@ class PandasFilter(
         }
     }
 
-    private fun emitStreaming(implementor: PandasRel.Implementor, inputVar: Dataframe): Dataframe {
+    private fun emitStreaming(implementor: PandasRel.Implementor, inputVar: BodoEngineTable): BodoEngineTable {
         return implementor.buildStreaming (
             {ctx -> initStateVariable(ctx)},
             {ctx, stateVar ->
@@ -58,7 +58,7 @@ class PandasFilter(
         )
     }
 
-    private fun emitSingleBatch(implementor: PandasRel.Implementor, inputVar: Dataframe): Dataframe {
+    private fun emitSingleBatch(implementor: PandasRel.Implementor, inputVar: BodoEngineTable): BodoEngineTable {
         return implementor::build {
                 ctx ->
             // Extract window aggregates and update the nodes.
@@ -72,7 +72,7 @@ class PandasFilter(
      * Generate the additional inputs to generateDataFrame after handling the Window
      * Functions.
      */
-    private fun genDataFrameWindowInputs(ctx: PandasRel.BuildContext, inputVar: Dataframe): Pair<RexNode, List<Variable>> {
+    private fun genDataFrameWindowInputs(ctx: PandasRel.BuildContext, inputVar: BodoEngineTable): Pair<RexNode, List<Variable>> {
         val (windowAggregate, condition) = extractWindows(cluster, inputVar, this.condition)
         val localRefs = windowAggregate.emit(ctx)
         return Pair(condition, localRefs)
@@ -102,7 +102,7 @@ class PandasFilter(
         currentPipeline.addTermination(deleteState)
     }
 
-    private fun emit(ctx: PandasRel.BuildContext, translator: RexToPandasTranslator, input: Dataframe, condition: RexNode): Dataframe {
+    private fun emit(ctx: PandasRel.BuildContext, translator: RexToPandasTranslator, input: BodoEngineTable, condition: RexNode): BodoEngineTable {
         val conditionExpr = condition.accept(translator).let { filter ->
             if (isScalarCondition()) {
                 // If the output of this filter is a scalar, we need to
@@ -124,7 +124,7 @@ class PandasFilter(
     /**
      * Coerces a scalar value to a boolean array.
      */
-    private fun coerceScalar(input: Dataframe, filter: Expr): Expr =
+    private fun coerceScalar(input: BodoEngineTable, filter: Expr): Expr =
         Expr.Call("bodo.utils.utils.full_type",
             Expr.Len(input),
             BodoSQLKernel("is_true", listOf(filter)),

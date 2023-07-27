@@ -1,6 +1,6 @@
 package com.bodosql.calcite.adapter.pandas.window
 
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Variable
 
 /**
@@ -10,7 +10,7 @@ internal data class WindowApplyFuncHeader(
     /**
      * Input dataframe passed into the function.
      */
-    val input: Dataframe,
+    val input: BodoEngineTable,
 
     /**
      * A variable that references the original index.
@@ -23,7 +23,7 @@ internal data class WindowApplyFuncHeader(
     val len: Variable,
 
     /**
-     * Column name for the column with the original positioning information.
+     * Column index for the column with the original positioning information.
      */
-    val position: String,
+    val position: Int,
 )

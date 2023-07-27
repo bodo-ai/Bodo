@@ -385,6 +385,11 @@ abstract class Expr {
     object None : Expr() {
         override fun emit(): String = "None"
     }
+
+    companion object {
+        val Zero = IntegerLiteral(0)
+        val One = IntegerLiteral(1)
+    }
 }
 
 

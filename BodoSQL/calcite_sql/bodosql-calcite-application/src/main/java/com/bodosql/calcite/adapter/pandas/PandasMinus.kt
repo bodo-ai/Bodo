@@ -1,6 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -22,7 +22,7 @@ class PandasMinus(
         return PandasMinus(cluster, traitSet, inputs, all)
     }
 
-    override fun emit(implementor: PandasRel.Implementor): Dataframe {
+    override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")
     }
 

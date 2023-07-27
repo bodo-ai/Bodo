@@ -1,13 +1,13 @@
 package com.bodosql.calcite.adapter.pandas.window
 
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.rex.RexWindow
 
 internal class GroupBuilder(
     private val cluster: RelOptCluster,
-    private val input: Dataframe,
+    private val input: BodoEngineTable,
     expr: RexOver,
     private val window: RexWindow,
 ) {

@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.pandas.window
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexLocalRef
@@ -9,7 +9,7 @@ import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexWindowBound
 import java.math.BigDecimal
 
-internal class OperandResolverImpl(ctx: PandasRel.BuildContext, input: Dataframe, val fields: List<Field>) :
+internal class OperandResolverImpl(ctx: PandasRel.BuildContext, input: BodoEngineTable, val fields: List<Field>) :
     OperandResolver {
     private val rexTranslator = ctx.rexTranslator(input)
     private val _extraFields: MutableList<Pair<String, Expr>> = mutableListOf()
@@ -33,7 +33,7 @@ internal class OperandResolverImpl(ctx: PandasRel.BuildContext, input: Dataframe
         val argExpr = node.accept(rexTranslator)
 
         // Store this expression with a generated name so it
-        // can be embedded within the passed in Dataframe.
+        // can be embedded within the passed in Table.
         val name = "ARG_COL_${extraFields.size}"
         _extraFields.add(Pair(name, argExpr))
         return Expr.StringLiteral(name)
@@ -52,7 +52,7 @@ internal class OperandResolverImpl(ctx: PandasRel.BuildContext, input: Dataframe
                 node.isUnbounded -> Expr.StringLiteral("None")
                 node.isPreceding -> Expr.Unary("-", Expr.IntegerLiteral((node.offset as RexLiteral)!!.getValueAs(BigDecimal::class.java)!!.intValueExact()))
                 node.isFollowing -> Expr.IntegerLiteral((node.offset as RexLiteral)!!.getValueAs(BigDecimal::class.java)!!.intValueExact())
-                node.isCurrentRow -> Expr.IntegerLiteral(0)
+                node.isCurrentRow -> Expr.Zero
                 else -> throw AssertionError("invalid window bound")
                 }
             } ?: Expr.StringLiteral("None")

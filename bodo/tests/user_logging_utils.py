@@ -12,6 +12,7 @@ from bodo.tests.utils import reduce_sum
 
 @contextmanager
 def set_logging_stream(logger, verbose_level):
+    error_msg = ""
     try:
         passed = 1
         bodo.set_verbose_level(verbose_level)
@@ -20,12 +21,15 @@ def set_logging_stream(logger, verbose_level):
     except Exception as e:
         # Print the error message
         print(e, flush=True)
+        error_msg = e
         passed = 0
     finally:
         bodo.user_logging.restore_default_bodo_verbose_level()
         bodo.user_logging.restore_default_bodo_verbose_logger()
         n_passed = reduce_sum(passed)
-        assert n_passed == bodo.get_size(), "Error while testing logging stream"
+        assert (
+            n_passed == bodo.get_size()
+        ), f"Error while testing logging stream ({error_msg})"
 
 
 def create_string_io_logger(stream):
@@ -58,9 +62,13 @@ def check_logger_msg(stream, msg, check_case=True):
     """
     if bodo.get_rank() == 0:
         if check_case:
-            assert msg in stream.getvalue()
+            assert (
+                msg in stream.getvalue()
+            ), f"Cannot find message in logging stream: '{msg}'"
         else:
-            assert msg.lower() in stream.getvalue().lower()
+            assert (
+                msg.lower() in stream.getvalue().lower()
+            ), f"Cannot find message in logging stream: '{msg}'"
 
 
 def check_logger_no_msg(stream, msg):
@@ -73,4 +81,6 @@ def check_logger_no_msg(stream, msg):
     write on rank 0.
     """
     if bodo.get_rank() == 0:
-        assert msg not in stream.getvalue()
+        assert (
+            msg not in stream.getvalue()
+        ), f"Found find message in logging stream that should have been absent: '{msg}'"

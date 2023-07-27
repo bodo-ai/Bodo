@@ -1263,29 +1263,41 @@ def test_snowflake_na_pushdown(memory_leak_check):
     """
 
     def impl_or_isna(query, conn):
-        df = pd.read_sql(query, conn)
-        df = df[(df["l_orderkey"] > 10) | (df["l_linenumber"].isna())]
-        return df["l_suppkey"]
+        T = pd.read_sql(query, conn, _bodo_read_as_table=True)
+        T = T[
+            (pd.Series(bodo.hiframes.table.get_table_data(T, 0)) > 10)
+            | (pd.Series(bodo.hiframes.table.get_table_data(T, 3)).isna())
+        ]
+        return pd.Series(bodo.hiframes.table.get_table_data(T, 2))
 
     def impl_and_notna(query, conn):
-        df = pd.read_sql(query, conn)
-        df = df[(df["l_orderkey"] > 10) & (df["l_linenumber"].notna())]
-        return df["l_suppkey"]
+        T = pd.read_sql(query, conn, _bodo_read_as_table=True)
+        T = T[
+            (pd.Series(bodo.hiframes.table.get_table_data(T, 0)) > 10)
+            & (pd.Series(bodo.hiframes.table.get_table_data(T, 3)).notna())
+        ]
+        return pd.Series(bodo.hiframes.table.get_table_data(T, 2))
 
     def impl_or_isnull(query, conn):
-        df = pd.read_sql(query, conn)
-        df = df[(df["l_orderkey"] > 10) | (df["l_linenumber"].isnull())]
-        return df["l_suppkey"]
+        T = pd.read_sql(query, conn, _bodo_read_as_table=True)
+        T = T[
+            (pd.Series(bodo.hiframes.table.get_table_data(T, 0)) > 10)
+            | (pd.Series(bodo.hiframes.table.get_table_data(T, 3)).isnull())
+        ]
+        return pd.Series(bodo.hiframes.table.get_table_data(T, 2))
 
     def impl_and_notnull(query, conn):
-        df = pd.read_sql(query, conn)
-        df = df[(df["l_orderkey"] > 10) & (df["l_linenumber"].notnull())]
-        return df["l_suppkey"]
+        T = pd.read_sql(query, conn, _bodo_read_as_table=True)
+        T = T[
+            (pd.Series(bodo.hiframes.table.get_table_data(T, 0)) > 10)
+            & (pd.Series(bodo.hiframes.table.get_table_data(T, 3)).notnull())
+        ]
+        return pd.Series(bodo.hiframes.table.get_table_data(T, 2))
 
     def impl_just_nona(query, conn):
-        df = pd.read_sql(query, conn)
-        df = df[(df["l_linenumber"].notna())]
-        return df["l_suppkey"]
+        T = pd.read_sql(query, conn, _bodo_read_as_table=True)
+        T = T[(pd.Series(bodo.hiframes.table.get_table_data(T, 3)).notna())]
+        return pd.Series(bodo.hiframes.table.get_table_data(T, 2))
 
     db = "SNOWFLAKE_SAMPLE_DATA"
     schema = "TPCH_SF1"
@@ -1293,7 +1305,62 @@ def test_snowflake_na_pushdown(memory_leak_check):
     # need to sort the output to make sure pandas and Bodo get the same rows
     query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
 
-    check_func(impl_or_isna, (query, conn), check_dtype=False, reset_index=True)
+    na_output = pd.Series(
+        [
+            7744,
+            4117,
+            6666,
+            7721,
+            8320,
+            441,
+            3919,
+            5532,
+            8855,
+            9983,
+            871,
+            1923,
+            4577,
+            2951,
+            3266,
+            7684,
+            4940,
+            8433,
+            4457,
+            9768,
+            5405,
+            5133,
+            1807,
+            874,
+            9821,
+            3093,
+            9530,
+            5350,
+            6878,
+            4137,
+            5952,
+            3889,
+            4705,
+            8830,
+            7630,
+            3490,
+            5198,
+            9143,
+            8126,
+            7515,
+            6118,
+            824,
+            9569,
+            7484,
+            5267,
+        ]
+    )
+    check_func(
+        impl_or_isna,
+        (query, conn),
+        py_output=na_output,
+        check_dtype=False,
+        reset_index=True,
+    )
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -1303,7 +1370,13 @@ def test_snowflake_na_pushdown(memory_leak_check):
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
-    check_func(impl_and_notna, (query, conn), check_dtype=False, reset_index=True)
+    check_func(
+        impl_and_notna,
+        (query, conn),
+        py_output=na_output,
+        check_dtype=False,
+        reset_index=True,
+    )
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -1313,7 +1386,13 @@ def test_snowflake_na_pushdown(memory_leak_check):
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
-    check_func(impl_or_isnull, (query, conn), check_dtype=False, reset_index=True)
+    check_func(
+        impl_or_isnull,
+        (query, conn),
+        py_output=na_output,
+        check_dtype=False,
+        reset_index=True,
+    )
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -1323,7 +1402,13 @@ def test_snowflake_na_pushdown(memory_leak_check):
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
-    check_func(impl_and_notnull, (query, conn), check_dtype=False, reset_index=True)
+    check_func(
+        impl_and_notnull,
+        (query, conn),
+        py_output=na_output,
+        check_dtype=False,
+        reset_index=True,
+    )
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -1333,7 +1418,87 @@ def test_snowflake_na_pushdown(memory_leak_check):
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
-    check_func(impl_just_nona, (query, conn), check_dtype=False, reset_index=True)
+    only_na_output = pd.Series(
+        [
+            4633,
+            638,
+            1534,
+            3701,
+            7311,
+            7706,
+            1191,
+            1798,
+            6540,
+            1883,
+            9662,
+            3474,
+            650,
+            5560,
+            35,
+            8571,
+            3928,
+            2150,
+            1759,
+            9799,
+            7758,
+            9440,
+            2269,
+            3074,
+            9607,
+            7744,
+            4117,
+            6666,
+            7721,
+            8320,
+            441,
+            3919,
+            5532,
+            8855,
+            9983,
+            871,
+            1923,
+            4577,
+            2951,
+            3266,
+            7684,
+            4940,
+            8433,
+            4457,
+            9768,
+            5405,
+            5133,
+            1807,
+            874,
+            9821,
+            3093,
+            9530,
+            5350,
+            6878,
+            4137,
+            5952,
+            3889,
+            4705,
+            8830,
+            7630,
+            3490,
+            5198,
+            9143,
+            8126,
+            7515,
+            6118,
+            824,
+            9569,
+            7484,
+            5267,
+        ]
+    )
+    check_func(
+        impl_just_nona,
+        (query, conn),
+        py_output=only_na_output,
+        check_dtype=False,
+        reset_index=True,
+    )
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -1707,49 +1872,62 @@ def test_dict_encoded_small_table(memory_leak_check):
             check_logger_msg(stream, f"Columns ['a'] using dictionary encoding")
 
 
-def test_batched_read_agg(memory_leak_check):
+def test_streaming_read_filter(memory_leak_check):
+    """
+    Tests batched Snowflake reads with filter pushdown
+    """
+
+    def impl(conn):
+        total_len = 0
+
+        reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000, _bodo_read_as_table=True)  # type: ignore
+        is_last_global = False
+        while not is_last_global:
+            T1, is_last = read_arrow_next(reader)
+            T2 = T1[
+                bodo.libs.bodosql_array_kernels.equal(
+                    bodo.hiframes.table.get_table_data(T1, 14), "AIR"
+                )
+            ]
+            total_len += len(T2)
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+
+        arrow_reader_del(reader)
+        return total_len
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(impl, (conn,), py_output=858104)
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+        check_logger_msg(stream, "Columns loaded []")
+
+
+def test_streaming_read_agg(memory_leak_check):
     """
     Test a simple use of batched Snowflake reads by
     getting the max of a column
     """
 
-    col_meta = bodo.utils.typing.ColNamesMetaType(
-        (
-            "l_orderkey",
-            "l_partkey",
-            "l_suppkey",
-            "l_linenumber",
-            "l_quantity",
-            "l_extendedprice",
-            "l_discount",
-            "l_tax",
-            "l_returnflag",
-            "l_linestatus",
-            "l_shipdate",
-            "l_commitdate",
-            "l_receiptdate",
-            "l_shipinstruct",
-            "l_shipmode",
-            "l_comment",
-        )
-    )
-
     def impl(conn):
         total_max = 0
 
-        reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000)  # type: ignore
+        reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000, _bodo_read_as_table=True)  # type: ignore
         is_last_global = False
         while not is_last_global:
             table, is_last = read_arrow_next(reader)
-            index_var = bodo.hiframes.pd_index_ext.init_range_index(
-                0, len(table), 1, None
-            )
-            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-                (table,), index_var, col_meta
-            )
-            df = df[(df["l_orderkey"] > 10)]
+            filtered_table = table[(bodo.hiframes.table.get_table_data(table, 0) > 10)]
             # Perform more compute in between to see caching speedup
-            local_max = df["l_partkey"].max()
+            local_max = pd.Series(
+                bodo.hiframes.table.get_table_data(filtered_table, 1)
+            ).max()
             total_max = max(total_max, local_max)
             is_last_global = bodo.libs.distributed_api.dist_reduce(
                 is_last,
@@ -1776,40 +1954,13 @@ def test_batched_read_only_len(memory_leak_check):
     Test shape pushdown with batched Snowflake reads
     """
 
-    col_meta = bodo.utils.typing.ColNamesMetaType(
-        (
-            "l_orderkey",
-            "l_partkey",
-            "l_suppkey",
-            "l_linenumber",
-            "l_quantity",
-            "l_extendedprice",
-            "l_discount",
-            "l_tax",
-            "l_returnflag",
-            "l_linestatus",
-            "l_shipdate",
-            "l_commitdate",
-            "l_receiptdate",
-            "l_shipinstruct",
-            "l_shipmode",
-            "l_comment",
-        )
-    )
-
     def impl(conn):
         total_len = 0
 
         reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000)  # type: ignore
         while True:
             table, is_last = read_arrow_next(reader)
-            index_var = bodo.hiframes.pd_index_ext.init_range_index(
-                0, len(table), 1, None
-            )
-            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-                (table,), index_var, col_meta
-            )
-            total_len += len(df)
+            total_len += len(table)
 
             is_last_global = bodo.libs.distributed_api.dist_reduce(
                 is_last,
@@ -1837,40 +1988,13 @@ def test_batched_read_limit_pushdown_query(memory_leak_check):
     Test shape pushdown with batched Snowflake reads
     """
 
-    col_meta = bodo.utils.typing.ColNamesMetaType(
-        (
-            "l_orderkey",
-            "l_partkey",
-            "l_suppkey",
-            "l_linenumber",
-            "l_quantity",
-            "l_extendedprice",
-            "l_discount",
-            "l_tax",
-            "l_returnflag",
-            "l_linestatus",
-            "l_shipdate",
-            "l_commitdate",
-            "l_receiptdate",
-            "l_shipinstruct",
-            "l_shipmode",
-            "l_comment",
-        )
-    )
-
     def impl(conn):
         total_sum = 0
 
         reader = pd.read_sql("SELECT * FROM LINEITEM ORDER BY L_PARTKEY LIMIT 100", conn, _bodo_chunksize=4000)  # type: ignore
         while True:
             table, is_last = read_arrow_next(reader)
-            index_var = bodo.hiframes.pd_index_ext.init_range_index(
-                0, len(table), 1, None
-            )
-            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-                (table,), index_var, col_meta
-            )
-            total_sum += df["l_partkey"].sum()
+            total_sum += pd.Series(bodo.hiframes.table.get_table_data(table, 1)).sum()
 
             is_last_global = bodo.libs.distributed_api.dist_reduce(
                 is_last,
@@ -2022,8 +2146,6 @@ def test_batched_read_dict_encoding(memory_leak_check):
     Test that batched SF read works with dictionary encoding.
     """
 
-    col_meta = bodo.utils.typing.ColNamesMetaType(("l_shipmode",))
-
     def impl(conn):
         total_length = 0
         is_last_global = False
@@ -2031,13 +2153,9 @@ def test_batched_read_dict_encoding(memory_leak_check):
         reader = pd.read_sql("SELECT l_shipmode FROM LINEITEM", conn, _bodo_chunksize=4000)  # type: ignore
         while not is_last_global:
             table, is_last = read_arrow_next(reader)
-            index_var = bodo.hiframes.pd_index_ext.init_range_index(
-                0, len(table), 1, None
+            total_length += (
+                pd.Series(bodo.hiframes.table.get_table_data(table, 0)).str.len().sum()
             )
-            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-                (table,), index_var, col_meta
-            )
-            total_length += df["l_shipmode"].str.len().sum()
             is_last_global = bodo.libs.distributed_api.dist_reduce(
                 is_last,
                 np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),

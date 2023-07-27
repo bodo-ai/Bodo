@@ -1,7 +1,7 @@
 package com.bodosql.calcite.traits
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -23,7 +23,7 @@ class SeparateStreamExchange(cluster: RelOptCluster, traits: RelTraitSet, input:
         return true
     }
 
-    override fun emit(implementor: PandasRel.Implementor): Dataframe {
+    override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
         // This should never be called, we need to handle SeparateStreamExchange
         // in the visitor itself due to needing to mess with the visitor state slightly
         TODO("Not yet implemented")

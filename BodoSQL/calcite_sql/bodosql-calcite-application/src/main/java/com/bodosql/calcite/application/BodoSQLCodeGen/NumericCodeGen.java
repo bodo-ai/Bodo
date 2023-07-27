@@ -3,7 +3,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.ir.Dataframe;
+import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.None;
 import java.util.Arrays;
@@ -158,12 +158,11 @@ public class NumericCodeGen {
   /**
    * Function that returns the RexVisitorInfo for a RANDOM Function Call.
    *
-   * @param input The Dataframe whose length the random output column must match (if not a single
-   *     row)
+   * @param input The Table whose length the random output column must match (if not a single row)
    * @param isSingleRow true if the output should be a scalar
    * @return The RexVisitorInfo that matches the RANDOM expression.
    */
-  public static Expr generateRandomFnInfo(Dataframe input, boolean isSingleRow) {
+  public static Expr generateRandomFnInfo(BodoEngineTable input, boolean isSingleRow) {
     Expr arg;
     if (isSingleRow) {
       arg = None.INSTANCE;

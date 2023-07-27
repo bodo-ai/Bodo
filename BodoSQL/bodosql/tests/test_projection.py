@@ -351,24 +351,3 @@ def test_heavily_nested_select_from(join_dataframes, spark_info, memory_leak_che
         check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
-
-
-@pytest.mark.slow
-def test_simple_df_loc(basic_df, spark_info, memory_leak_check):
-    """
-    Checks that a simple projection that just selects columns
-    from a data frame uses df.loc[:, colnames]
-    """
-    # Check subset of columns
-    query1 = "SELECT A, B from table1"
-    result = check_query(query1, basic_df, spark_info, return_codegen=True)
-    pandas_code = result["pandas_code"]
-    # Check for df.loc
-    assert ".loc" in pandas_code
-
-    # Check a single column
-    query2 = "SELECT A from table1"
-    result = check_query(query2, basic_df, spark_info, return_codegen=True)
-    pandas_code = result["pandas_code"]
-    # Check for df.loc
-    assert ".loc" in pandas_code
