@@ -49,13 +49,10 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer;
 import com.bodosql.calcite.application.timers.StreamingRelNodeTimer;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
-import com.bodosql.calcite.ir.Dataframe;
+import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
-import com.bodosql.calcite.ir.Expr.IntegerLiteral;
-import com.bodosql.calcite.ir.Expr.StringLiteral;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
-import com.bodosql.calcite.ir.Op.Assign;
 import com.bodosql.calcite.ir.StateVariable;
 import com.bodosql.calcite.ir.StreamingPipelineFrame;
 import com.bodosql.calcite.ir.Variable;
@@ -84,6 +81,7 @@ import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.core.TableScan;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
@@ -98,8 +96,8 @@ import org.jetbrains.annotations.NotNull;
 /** Visitor class for parsed SQL nodes to generate Pandas code from SQL code. */
 public class PandasCodeGenVisitor extends RelVisitor {
 
-  /** Stack of generated variables df1, df2 , etc. */
-  private final Stack<Variable> varGenStack = new Stack<>();
+  /** Stack of generated tabkes T1, T2, etc. */
+  private final Stack<BodoEngineTable> tableGenStack = new Stack<>();
 
   /* Reserved column name for generating dummy columns. */
   // TODO: Add this to the docs as banned
@@ -117,7 +115,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private static final String ROW_ID_COL_NAME = "_bodo_row_id";
   private static final String MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change";
 
-  // Map of RelNode ID -> <DataFrame variable name>
+  // Map of RelNode ID -> <Table variable name>
   // Because the logical plan is a tree, Nodes that are at the bottom of
   // the tree must be repeated, even if they are identical. However, when
   // calcite produces identical nodes, it gives them the same node ID. As a
@@ -125,7 +123,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // map and load them inplace of segments of generated code.
   // This is currently only implemented for a subset of nodes.
 
-  private final HashMap<Integer, Variable> varCache;
+  private final HashMap<Integer, BodoEngineTable> tableCache;
 
   /*
   Hashmap containing globals that need to be lowered into the output func_text. Used for lowering
@@ -164,7 +162,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private final int verboseLevel;
 
   // These Variables track the target table for merge into
-  private @Nullable Variable targetTableDf;
+  private @Nullable Variable mergeIntoTargetTable;
+  private @Nullable TableScan mergeIntoTargetNode;
   // Extra arguments to pass to the write code for the fileList and Snapshot
   // id in the form of "argName1=varName1, argName2=varName2"
   private @Nullable String fileListAndSnapshotIdArgs;
@@ -177,12 +176,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
       int verboseLevel,
       int batchSize) {
     super();
-    this.varCache = new HashMap<>();
+    this.tableCache = new HashMap<>();
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
     this.typeSystem = typeSystem;
     this.debuggingDeltaTable = debuggingDeltaTable;
-    this.targetTableDf = null;
+    this.mergeIntoTargetTable = null;
+    this.mergeIntoTargetNode = null;
     this.fileListAndSnapshotIdArgs = null;
     this.verboseLevel = verboseLevel;
     this.generatedCode = new Module.Builder();
@@ -214,6 +214,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   public Variable genSeriesVar() {
     return generatedCode.getSymbolTable().genSeriesVar();
+  }
+
+  /**
+   * Generate the new Series variable for step by step pandas codegen
+   *
+   * @return variable
+   */
+  public Variable genArrayVar() {
+    return generatedCode.getSymbolTable().genArrayVar();
   }
 
   /**
@@ -318,8 +327,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @return Variable for the global.
    */
   public Variable lowerAsGlobal(Expr expression) {
+    String exprString = expression.emit();
     Variable globalVar = generatedCode.getSymbolTable().genGlobalVar();
-    this.loweredGlobals.put(globalVar.getName(), expression.emit());
+    this.loweredGlobals.put(globalVar.getName(), exprString);
     return globalVar;
   }
 
@@ -346,17 +356,53 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * return the final code after step by step pandas codegen
+   * Modifies the codegen so that an expression representing an array is stored in a new variable
+   * that can be used later, to help avoid excessively long lines in the codegen.
+   *
+   * @param expression the expression that is to be stored in a local variable
+   * @return the newly created variable that the expression was stored in
+   */
+  public Variable storeAsArrayVariable(Expr expression) {
+    Variable var = genArrayVar();
+    this.generatedCode.add(new Op.Assign(var, expression));
+    return var;
+  }
+
+  /**
+   * Return the final code after step by step pandas codegen. Coerces the final answer to a
+   * DataFrame if it is a Table, lowering a new global in the process.
    *
    * @return generated code
    */
   public String getGeneratedCode() {
     // If the stack is size 0 we don't return a DataFrame (e.g. to_sql)
-    if (this.varGenStack.size() == 1) {
-      this.generatedCode.add(new Op.ReturnStatement(this.varGenStack.pop()));
+    if (this.tableGenStack.size() == 1) {
+      BodoEngineTable returnTable = this.tableGenStack.pop();
+      Variable outVar = generatedCode.getSymbolTable().genDfVar();
+      // Generate an index.
+      Variable indexVar = genIndexVar();
+      Expr.Call lenCall = new Expr.Call("len", returnTable);
+      Expr.Call indexCall =
+          new Expr.Call(
+              "bodo.hiframes.pd_index_ext.init_range_index",
+              List.of(
+                  Expr.Companion.getZero(), lenCall, Expr.Companion.getOne(), Expr.None.INSTANCE));
+      generatedCode.add(new Op.Assign(indexVar, indexCall));
+      Expr.Tuple tableTuple = new Expr.Tuple(returnTable);
+      // Generate the column names global
+      List<Expr.StringLiteral> colNamesLiteral =
+          stringsToStringLiterals(returnTable.getRowType().getFieldNames());
+      Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
+      Variable colNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
+      Expr dfExpr =
+          new Expr.Call(
+              "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+              List.of(tableTuple, indexVar, colNamesMeta));
+      generatedCode.add(new Op.Assign(outVar, dfExpr));
+      this.generatedCode.add(new Op.ReturnStatement(outVar));
     }
-    assert this.varGenStack.size() == 0
-        : "Internal error: varGenStack should contain 1 or 0 values";
+    assert this.tableGenStack.size() == 0
+        : "Internal error: tableGenStack should contain 1 or 0 values";
 
     Module m = this.generatedCode.build();
     return m.emit(1);
@@ -420,32 +466,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // and a flag that indicates if it's run out of output.
     this.visit(node.getInput(0), 0, node);
 
-    Variable inputDFVar = varGenStack.pop();
+    Variable inputTableVar = tableGenStack.pop();
     // Generate the list we are accumulating into.
     Variable batchAccumulatorVariable = this.genBatchAccumulatorVar();
     StreamingPipelineFrame activePipeline = this.generatedCode.getCurrentStreamingPipeline();
     activePipeline.addInitialization(
         new Op.Assign(batchAccumulatorVariable, new Expr.List(List.of())));
 
-    // Fetch the underlying table
-    Variable inputTable = genTableVar();
-    Expr.Call dfData =
-        new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(inputDFVar));
-    int numInputCols = node.getRowType().getFieldCount();
-    List<Expr.IntegerLiteral> inputIndices = integerLiteralArange(numInputCols);
-    Variable colNums = lowerAsMetaType(new Expr.Tuple(inputIndices));
-    Expr.Call inputTableCall =
-        new Expr.Call(
-            "bodo.hiframes.table.logical_table_to_table",
-            dfData,
-            new Expr.Tuple(List.of()),
-            colNums,
-            new Expr.IntegerLiteral(numInputCols));
-    generatedCode.add(new Assign(inputTable, inputTableCall));
-
     // Append to the list at the end of the loop.
     List<Expr> args = new ArrayList<>();
-    args.add(inputTable);
+    args.add(inputTableVar);
     Op appendStatement =
         new Op.Stmt(new Expr.Call.Method(batchAccumulatorVariable, "append", args, List.of()));
     generatedCode.add(appendStatement);
@@ -461,31 +491,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Expr concatenatedTable =
         new Expr.Call("bodo.utils.table_utils.concat_tables", List.of(batchAccumulatorVariable));
     generatedCode.add(new Op.Assign(accumulatedTable, concatenatedTable));
-
-    Variable accumulatedDfVar = this.genDfVar();
-    // Generate an index.
-    Variable indexVar = genIndexVar();
-    Expr.Call lenCall = new Expr.Call("len", List.of(accumulatedTable));
-    Expr.IntegerLiteral zero = new IntegerLiteral(0);
-    Expr.IntegerLiteral one = new IntegerLiteral(1);
-    Expr.Call indexCall =
-        new Expr.Call(
-            "bodo.hiframes.pd_index_ext.init_range_index",
-            List.of(zero, lenCall, one, Expr.None.INSTANCE));
-    generatedCode.add(new Op.Assign(indexVar, indexCall));
-    // Generate a DataFrame
-    Expr.Tuple tableTuple = new Expr.Tuple(List.of(accumulatedTable));
-    // Generate the column names global
-    List<Expr.StringLiteral> colNamesLiteral =
-        stringsToStringLiterals(node.getRowType().getFieldNames());
-    Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
-    Variable colNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
-    Expr.Call initDfCall =
-        new Expr.Call(
-            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
-            List.of(tableTuple, indexVar, colNamesMeta));
-    generatedCode.add(new Op.Assign(accumulatedDfVar, initDfCall));
-    this.varGenStack.push(accumulatedDfVar);
+    tableGenStack.push(new BodoEngineTable(accumulatedTable.getName(), node));
   }
 
   private void visitSeparateStreamExchange(SeparateStreamExchange node) {
@@ -494,7 +500,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     this.visit(node.getInput(0), 0, node);
     // Since input is single-batch, we know the RHS of the pair must be null
-    Variable nonStreamingInput = this.varGenStack.pop();
+    Variable inTable = tableGenStack.pop();
 
     // Create the variable that "drives" the loop / loop exits when flag is false
     Variable exitCond = genFinishedStreamingFlag();
@@ -503,30 +509,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
     generatedCode.startStreamingPipelineFrame(exitCond, iterVar);
     StreamingPipelineFrame streamingInfo = generatedCode.getCurrentStreamingPipeline();
 
-    // Convert input DF to table before slicing
-    Variable unwrapTable = genTableVar();
-    int numInputCols = node.getRowType().getFieldCount();
-    List<Expr.IntegerLiteral> inputIndices = integerLiteralArange(numInputCols);
-    Variable colNums = lowerAsMetaType(new Expr.Tuple(inputIndices));
-    Op.Assign unwrapTableAssn =
-        new Op.Assign(
-            unwrapTable,
-            new Expr.Call(
-                "bodo.hiframes.table.logical_table_to_table",
-                new Expr.Call(
-                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", nonStreamingInput),
-                new Expr.Tuple(List.of()),
-                colNums,
-                new Expr.IntegerLiteral(numInputCols)));
-    streamingInfo.addInitialization(unwrapTableAssn);
     // Precompute and save local table length
     Variable localLen = genGenericTempVar();
     Op.Assign localLenAssn =
-        new Op.Assign(localLen, new Expr.Call("bodo.hiframes.table.local_len", unwrapTable));
+        new Op.Assign(localLen, new Expr.Call("bodo.hiframes.table.local_len", inTable));
     streamingInfo.addInitialization(localLenAssn);
 
     Variable outTableVar = genTableVar();
-    Variable outDFVar = genDfVar();
 
     // Slice the table locally
     Expr sliceStart =
@@ -541,35 +530,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
             outTableVar,
             new Expr.Call(
                 "bodo.hiframes.table.table_local_filter",
-                unwrapTable,
+                inTable,
                 new Expr.Call("slice", sliceStart, sliceEnd))));
-    // Wrap the table slice into a DataFrame
-    Variable indexVar = genIndexVar();
-    generatedCode.add(
-        new Op.Assign(
-            indexVar,
-            new Expr.Call(
-                "bodo.hiframes.pd_index_ext.init_range_index",
-                new IntegerLiteral(0),
-                new Expr.Call("len", outTableVar),
-                new IntegerLiteral(1),
-                Expr.None.INSTANCE)));
-    List<Expr.StringLiteral> colNamesLiteral =
-        stringsToStringLiterals(node.getRowType().getFieldNames());
-    generatedCode.add(
-        new Op.Assign(
-            outDFVar,
-            new Expr.Call(
-                "bodo.hiframes.pd_dataframe_ext.init_dataframe",
-                new Expr.Tuple(List.of(outTableVar)),
-                indexVar,
-                lowerAsColNamesMetaType(new Expr.Tuple(colNamesLiteral)))));
 
     // Check if we're at the end of the local piece
     Expr done = new Expr.Binary(">=", sliceStart, localLen);
     generatedCode.add(new Op.Assign(exitCond, done));
 
-    this.varGenStack.push(outDFVar);
+    this.tableGenStack.push(new BodoEngineTable(outTableVar.getName(), node));
   }
 
   /**
@@ -578,7 +546,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * <p>This method handles node caching, visiting inputs, passing those inputs to the node itself
    * to emit code into the Module.Builder, and generating timers when requested.
    *
-   * <p>The resulting variable that is generated for this RelNode is placed on the varGenStack.
+   * <p>The resulting variable that is generated for this RelNode is placed on the tableGenStack.
    *
    * @param node the node to emit code for.
    */
@@ -586,16 +554,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Determine if this node has already been cached.
     // If it has, just return that immediately.
     if (node.canUseNodeCache() && isNodeCached(node)) {
-      varGenStack.push(varCache.get(node.getId()));
+      tableGenStack.push(tableCache.get(node.getId()));
       return;
     }
 
     // Note: All timer handling is done in emit
-    Dataframe out = node.emit(new Implementor(node));
+    BodoEngineTable out = node.emit(new Implementor(node));
 
-    // Place the output variable in the varCache and varGenStack.
-    varCache.put(node.getId(), out);
-    varGenStack.push(out);
+    // Place the output variable in the tableCache and tableGenStack.
+    tableCache.put(node.getId(), out);
+    tableGenStack.push(out);
   }
 
   /**
@@ -604,7 +572,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node RelNode to be visited
    */
   private void visitLogicalValues(PandasValues node) {
-    Variable outVar = this.genDfVar();
+    BuildContext ctx = new BuildContext(node);
     List<String> exprCodes = new ArrayList<>();
     if (node.getTuples().size() != 0) {
       for (RexLiteral colLiteral : node.getTuples().get(0)) {
@@ -618,8 +586,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
         node,
         () -> {
           Expr logicalValuesExpr = generateLogicalValuesCode(exprCodes, node.getRowType(), this);
+          Variable outVar = this.genDfVar();
           this.generatedCode.add(new Op.Assign(outVar, logicalValuesExpr));
-          this.varGenStack.push(outVar);
+          tableGenStack.push(ctx.convertDfToTable(outVar, node));
         });
   }
 
@@ -631,11 +600,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void visitLogicalUnion(PandasUnion node) {
     List<Variable> childExprs = new ArrayList<>();
     List<List<String>> childExprsColumns = new ArrayList<>();
+    BuildContext ctx = new BuildContext(node);
     // Visit all of the inputs
     for (int i = 0; i < node.getInputs().size(); i++) {
       RelNode input = node.getInput(i);
       this.visit(input, i, node);
-      childExprs.add(varGenStack.pop());
+      BodoEngineTable inputTable = tableGenStack.pop();
+      childExprs.add(ctx.convertTableToDf(inputTable));
       childExprsColumns.add(input.getRowType().getFieldNames());
     }
     singleBatchTimer(
@@ -645,7 +616,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           List<String> columnNames = node.getRowType().getFieldNames();
           Expr unionExpr = generateUnionCode(columnNames, childExprs, node.all, this);
           this.generatedCode.add(new Op.Assign(outVar, unionExpr));
-          varGenStack.push(outVar);
+          tableGenStack.push(ctx.convertDfToTable(outVar, node));
         });
   }
 
@@ -660,16 +631,19 @@ public class PandasCodeGenVisitor extends RelVisitor {
       throw new BodoSQLCodegenException(
           "Internal Error: Intersect should be between exactly two inputs");
     }
+    BuildContext ctx = new BuildContext(node);
 
     // Visit the two inputs
     RelNode lhs = node.getInput(0);
     this.visit(lhs, 0, node);
-    Variable lhsExpr = varGenStack.pop();
+    BodoEngineTable lhsTable = tableGenStack.pop();
+    Variable lhsExpr = ctx.convertTableToDf(lhsTable);
     List<String> lhsColNames = lhs.getRowType().getFieldNames();
 
     RelNode rhs = node.getInput(1);
     this.visit(rhs, 1, node);
-    Variable rhsExpr = varGenStack.pop();
+    BodoEngineTable rhsTable = tableGenStack.pop();
+    Variable rhsExpr = ctx.convertTableToDf(rhsTable);
     List<String> rhsColNames = rhs.getRowType().getFieldNames();
 
     Variable outVar = this.genDfVar();
@@ -680,7 +654,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           this.generatedCode.addAll(
               generateIntersectCode(
                   outVar, lhsExpr, lhsColNames, rhsExpr, rhsColNames, colNames, node.all, this));
-          varGenStack.push(outVar);
+          tableGenStack.push(ctx.convertDfToTable(outVar, node));
         });
   }
 
@@ -695,16 +669,19 @@ public class PandasCodeGenVisitor extends RelVisitor {
       throw new BodoSQLCodegenException(
           "Internal Error: Except should be between exactly two inputs");
     }
+    BuildContext ctx = new BuildContext(node);
 
     // Visit the two inputs
     RelNode lhs = node.getInput(0);
     this.visit(lhs, 0, node);
-    Variable lhsVar = varGenStack.pop();
+    BodoEngineTable lhsTable = tableGenStack.pop();
+    Variable lhsVar = ctx.convertTableToDf(lhsTable);
     List<String> lhsColNames = lhs.getRowType().getFieldNames();
 
     RelNode rhs = node.getInput(1);
     this.visit(rhs, 1, node);
-    Variable rhsVar = varGenStack.pop();
+    BodoEngineTable rhsTable = tableGenStack.pop();
+    Variable rhsVar = ctx.convertTableToDf(rhsTable);
     List<String> rhsColNames = rhs.getRowType().getFieldNames();
 
     assert lhsColNames.size() == rhsColNames.size();
@@ -718,7 +695,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           this.generatedCode.addAll(
               generateExceptCode(
                   outVar, lhsVar, lhsColNames, rhsVar, rhsColNames, colNames, node.all, this));
-          varGenStack.push(outVar);
+          tableGenStack.push(ctx.convertDfToTable(outVar, node));
         });
   }
 
@@ -730,14 +707,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitPandasSort(PandasSort node) {
     RelNode input = node.getInput();
     this.visit(input, 0, node);
+    BuildContext ctx = new BuildContext(node);
     singleBatchTimer(
         node,
         () -> {
-          Variable inVar = varGenStack.pop();
           List<String> colNames = input.getRowType().getFieldNames();
           /* handle case for queries with "ORDER BY" clause */
           List<RelFieldCollation> sortOrders = node.getCollation().getFieldCollations();
-          Variable outVar = this.genDfVar();
+          BodoEngineTable inTable = tableGenStack.pop();
+          Variable inVar = ctx.convertTableToDf(inTable);
           String limitStr = "";
           String offsetStr = "";
           /* handle case for queries with "LIMIT" clause */
@@ -784,8 +762,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
           }
 
           Expr sortExpr = generateSortCode(inVar, colNames, sortOrders, limitStr, offsetStr);
-          this.generatedCode.add(new Op.Assign(outVar, sortExpr));
-          varGenStack.push(outVar);
+          Variable sortVar = this.genDfVar();
+          this.generatedCode.add(new Op.Assign(sortVar, sortExpr));
+          tableGenStack.push(ctx.convertDfToTable(sortVar, node));
         });
   }
 
@@ -802,13 +781,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
       CatalogSchemaImpl outputSchemaAsCatalog,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
+    BuildContext ctx = new BuildContext(node);
     singleBatchTimer(
         node,
         () -> {
+          BodoEngineTable inTable = tableGenStack.pop();
+          Variable inDf = ctx.convertTableToDf(inTable);
           this.generatedCode.add(
               new Op.Stmt(
                   outputSchemaAsCatalog.generateWriteCode(
-                      this.varGenStack.pop(), node.getTableName(), ifExists, createTableType)));
+                      inDf, node.getTableName(), ifExists, createTableType)));
         });
   }
 
@@ -825,6 +807,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       CatalogSchemaImpl outputSchemaAsCatalog,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
+    BuildContext ctx = new BuildContext(node);
     // Generate Streaming Code in this case
     // Get or create current streaming pipeline
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
@@ -853,11 +836,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
     currentPipeline.addInitialization((new Op.Assign(writerVar, writeInitCode)));
     timerInfo.insertStateEndTimer();
 
-    // Second, append the Dataframe to the writer
+    // Second, append the Table to the writer
     timerInfo.insertLoopOperationStartTimer();
+    BodoEngineTable inTable = tableGenStack.pop();
+    Variable inDf = ctx.convertTableToDf(inTable);
     Expr writerAppendCall =
         outputSchemaAsCatalog.generateStreamingWriteAppendCode(
-            writerVar, this.varGenStack.pop(), currentPipeline.getExitCond());
+            writerVar, inDf, currentPipeline.getExitCond());
     this.generatedCode.add(new Op.Stmt(writerAppendCall));
     timerInfo.insertLoopOperationEndTimer();
 
@@ -929,13 +914,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   public void visitMergeInto(PandasTableModify node) {
     assert node.getOperation() == TableModify.Operation.MERGE;
+    BuildContext ctx = new BuildContext(node);
 
     RelNode input = node.getInput();
     this.visit(input, 0, node);
     singleBatchTimer(
         node,
         () -> {
-          Variable deltaDfVar = this.varGenStack.pop();
+          BodoEngineTable deltaTableVar = tableGenStack.pop();
           List<String> currentDeltaDfColNames = input.getRowType().getFieldNames();
 
           if (this.debuggingDeltaTable) {
@@ -957,7 +943,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                             .append(getBodoIndent())
                             .append(outputVar.emit())
                             .append(" = ")
-                            .append(deltaDfVar.emit())
+                            .append(deltaTableVar.emit())
                             .append(".dropna(subset=[")
                             .append(
                                 makeQuoted(
@@ -969,7 +955,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           } else {
             // Assert that we've encountered a PandasTargetTableScan in the codegen, and
             // set the appropriate variables
-            assert targetTableDf != null;
+            assert mergeIntoTargetTable != null;
             assert fileListAndSnapshotIdArgs != null;
 
             RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
@@ -981,9 +967,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             }
 
             // note table.getColumnNames does NOT include ROW_ID or MERGE_ACTION_ENUM_COL_NAME
-            // column
-            // names,
-            // because of the way they are added plan in calcite (extension fields)
+            // column names,  because of the way they are added plan in calcite (extension fields)
             // We know that the row ID and merge columns exist in the input table due to our code
             // invariants
             List<String> targetTableFinalColumnNames = bodoSqlTable.getColumnNames();
@@ -993,20 +977,40 @@ public class PandasCodeGenVisitor extends RelVisitor {
             deltaTableExpectedColumnNames.add(MERGE_ACTION_ENUM_COL_NAME);
 
             Variable writebackDf = genDfVar();
+            Variable targetDf = genDfVar();
+            Variable deltaDf = genDfVar();
 
-            Expr renamedDeltaDfVar =
-                handleRename(deltaDfVar, currentDeltaDfColNames, deltaTableExpectedColumnNames);
+            List<Expr.StringLiteral> colNamesLiteral =
+                stringsToStringLiterals(this.mergeIntoTargetNode.getRowType().getFieldNames());
+            Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
+            Variable targetColNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
+
+            colNamesLiteral = stringsToStringLiterals(deltaTableExpectedColumnNames);
+            colNamesTuple = new Expr.Tuple(colNamesLiteral);
+            Expr deltaColNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
+
+            this.generatedCode.add(
+                new Op.Assign(
+                    targetDf,
+                    new Expr.Call(
+                        "bodo.hiframes.pd_dataframe_ext.pushdown_safe_init_df",
+                        this.mergeIntoTargetTable,
+                        targetColNamesMeta)));
+            this.generatedCode.add(
+                new Op.Assign(
+                    deltaDf,
+                    new Expr.Call(
+                        "bodo.hiframes.pd_dataframe_ext.pushdown_safe_init_df",
+                        deltaTableVar,
+                        deltaColNamesMeta)));
+
             this.generatedCode.add(
                 new Op.Assign(
                     writebackDf,
-                    new Expr.Raw(
-                        new StringBuilder()
-                            .append("bodosql.libs.iceberg_merge_into.do_delta_merge_with_target(")
-                            .append(this.targetTableDf.emit())
-                            .append(", ")
-                            .append(renamedDeltaDfVar.emit())
-                            .append(")")
-                            .toString())));
+                    new Expr.Call(
+                        "bodosql.libs.iceberg_merge_into.do_delta_merge_with_target",
+                        targetDf,
+                        deltaDf)));
 
             // TODO: this can just be cast, since we handled rename
             Expr castedAndRenamedWriteBackDfExpr =
@@ -1086,7 +1090,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     currentPipeline.addInitialization((new Op.Assign(writerVar, writeInitCode)));
     timerInfo.insertStateEndTimer();
 
-    // Second, append the Dataframe to the writer
+    // Second, append the Table to the writer
     timerInfo.insertLoopOperationStartTimer();
     Expr writerAppendCall =
         bodoSqlTable.generateStreamingWriteAppendCode(
@@ -1119,12 +1123,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
     //
     // At this time we don't make any additional optimizations, such as omitting
     // NULL columns.
+    BuildContext ctx = new BuildContext(node);
 
     // Generate code for a projection.
     this.visit(node.getInput(), 0, node);
     // Generate the to_sql code
     List<String> colNames = node.getInput().getRowType().getFieldNames();
-    Variable inVar = this.varGenStack.pop();
+    BodoEngineTable inTable = tableGenStack.pop();
+    Variable inDf = ctx.convertTableToDf(inTable);
     RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
     BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
     if (!bodoSqlTable.isWriteable()) {
@@ -1134,9 +1140,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
 
     if (node.getInput().getTraitSet().containsIfApplicable(BatchingProperty.SINGLE_BATCH)) {
-      genSingleBatchInsertInto(node, inVar, colNames, bodoSqlTable);
+      genSingleBatchInsertInto(node, inDf, colNames, bodoSqlTable);
     } else {
-      genStreamingInsertInto(node, inVar, colNames, bodoSqlTable);
+      genStreamingInsertInto(node, inDf, colNames, bodoSqlTable);
     }
   }
 
@@ -1211,11 +1217,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitDelete(PandasTableModify node) {
     RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
     BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
-    Variable outputVar = this.genDfVar();
-    List<String> outputColumns = node.getRowType().getFieldNames();
     singleBatchTimer(
         node,
         () -> {
+          Variable outputVar = this.genDfVar();
           if (isSnowflakeCatalogTable(bodoSqlTable)) {
             // Note: Using the generic timer since we don't do the actual delete.
             // In the future we should move this to the IO timer.
@@ -1238,22 +1243,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
                       + e.getMessage();
               throw new RuntimeException(errorMsg);
             }
-            // Update the column names to ensure they match as we don't know the
-            // Snowflake names right now
-            // TODO: FIX the LHS here in the IR
-            Variable columnsVar = new Variable(outputVar.getName() + ".columns");
-            List<Expr.StringLiteral> colNames = new ArrayList<>();
-            for (String colName : outputColumns) {
-              colNames.add(new StringLiteral(colName));
-            }
-            Expr.List colNamesExpr = new Expr.List(colNames);
-            this.generatedCode.add(new Op.Assign(columnsVar, colNamesExpr));
+            tableGenStack.push(new BodoEngineTable(outputVar.getName(), node));
           } else {
             throw new BodoSQLCodegenException(
                 "Delete only supported when all source tables are found within a user's Snowflake"
                     + " account and are provided via the Snowflake catalog.");
           }
-          this.varGenStack.push(outputVar);
         });
   }
 
@@ -1276,6 +1271,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node aggregate node being visited
    */
   private void visitSingleBatchedPandasAggregate(PandasAggregate node) {
+    BuildContext ctx = new BuildContext(node);
     final List<Integer> groupingVariables = node.getGroupSet().asList();
     final List<ImmutableBitSet> groups = node.getGroupSets();
 
@@ -1289,9 +1285,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     int nodeId = node.getId();
     Variable outVar = this.genDfVar();
     if (isNodeCached(node)) {
-      Variable cacheKey = this.varCache.get(nodeId);
+      BodoEngineTable cacheKey = tableCache.get(nodeId);
       this.generatedCode.add(new Op.Assign(outVar, cacheKey));
-      varGenStack.push(outVar);
+
+      tableGenStack.push(new BodoEngineTable(outVar.getName(), node));
     } else {
       final List<AggregateCall> aggCallList = node.getAggCallList();
 
@@ -1317,7 +1314,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
           () -> {
             Variable finalOutVar = outVar;
             List<String> inputColumnNames = inputNode.getRowType().getFieldNames();
-            Variable inVar = varGenStack.pop();
+            BodoEngineTable inTable = tableGenStack.pop();
+            Variable inVar = ctx.convertTableToDf(inTable);
             List<String> outputDfNames = new ArrayList<>();
 
             // If any group is missing a column we may need to do a concat.
@@ -1326,9 +1324,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             boolean distIfNoGroup = groups.size() > 1;
 
             // Naive implementation for handling multiple aggregation groups, where we repeatedly
-            // call
-            // group
-            // by, and append the dataframes together
+            // call group by, and append the dataframes together
             for (int i = 0; i < groups.size(); i++) {
               List<Integer> curGroup = groups.get(i).toList();
 
@@ -1345,7 +1341,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               else if (curGroup.isEmpty()) {
                 curGroupAggExpr =
                     generateAggCodeNoGroupBy(
-                        inVar, inputColumnNames, aggCallList, aggCallNames, distIfNoGroup);
+                        inVar, inputColumnNames, aggCallList, aggCallNames, distIfNoGroup, this);
               }
               /* group with aggregation : e.g. select sum(B) from table1 groupby A */
               else {
@@ -1379,10 +1375,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               // a length of 0. The ordering is handled by a loc after the concat
 
               // We initialize the dummy column like this, as Bodo will default these columns to
-              // string
-              // type
-              // if we
-              // initialize empty columns.
+              // string type if we initialize empty columns.
               List<String> concatDfs = new ArrayList<>();
               if (hasMissingColsGroup) {
                 Variable dummyDfVar = genDfVar();
@@ -1415,8 +1408,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
             } else {
               finalOutVar = new Variable(outputDfNames.get(0));
             }
-            this.varCache.put(nodeId, finalOutVar);
-            varGenStack.push(finalOutVar);
+            BodoEngineTable outTable = ctx.convertDfToTable(finalOutVar, node);
+            tableCache.put(nodeId, outTable);
+            tableGenStack.push(outTable);
           });
     }
   }
@@ -1429,7 +1423,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void visitStreamingPandasAggregate(PandasAggregate node) {
     // Visit the input node
     this.visit(node.getInput(), 0, node);
-    Variable buildDf = varGenStack.pop();
+    Variable buildTable = tableGenStack.pop();
     // Create the state var.
     // TODO: Add streaming timer support
     StateVariable groupbyStateVar = genStateVar();
@@ -1452,11 +1446,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Groupby needs the isLast to be global before calling the build side change.
     inputPipeline.ensureExitCondSynchronized();
     Variable batchExitCond = inputPipeline.getExitCond();
-    Variable buildTable = genTableVar();
-    Expr.Call buildDfData = getDfData(buildDf);
-    int numBuildCols = node.getInput().getRowType().getFieldCount();
-    List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numBuildCols);
-    generateStreamingTableCode(buildIndices, buildDfData, numBuildCols, buildTable);
     Expr.Call batchCall =
         new Expr.Call(
             "bodo.libs.stream_groupby.groupby_build_consume_batch",
@@ -1476,16 +1465,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
         new Expr.Call(
             "bodo.libs.stream_groupby.groupby_produce_output_batch", List.of(groupbyStateVar));
     generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), outputCall));
-    // Generate an index.
-    Variable indexVar = genIndexVar();
-    Expr.Call lenCall = new Expr.Call("len", List.of(outTable));
-    generateRangeIndexCode(lenCall, indexVar);
-    // Generate a DataFrame
-    Variable outDf = genDfVar();
-    // Generate the column names global
-    List<Expr.StringLiteral> colNamesLiteral =
-        stringsToStringLiterals(node.getRowType().getFieldNames());
-    generateInitOutputDfCode(colNamesLiteral, outTable, indexVar, outDf);
 
     // Append the code to delete the state
     Op.Stmt deleteState =
@@ -1494,7 +1473,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 "bodo.libs.stream_groupby.delete_groupby_state", List.of(groupbyStateVar)));
     outputPipeline.addTermination(deleteState);
     // Add the DF to the stack
-    this.varGenStack.push(outDf);
+    tableGenStack.push(new BodoEngineTable(outTable.getName(), node));
   }
 
   /**
@@ -1528,7 +1507,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
               group,
               aggCallList,
               aggCallNames,
-              this.genGroupbyApplyAggFnVar());
+              this.genGroupbyApplyAggFnVar(),
+              this);
 
     } else {
 
@@ -1567,16 +1547,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Determine if this node has already been cached.
     // If it has, just return that immediately.
     if (canLoadFromCache && node.canUseNodeCache() && isNodeCached(node)) {
-      varGenStack.push(varCache.get(node.getId()));
+      tableGenStack.push(tableCache.get(node.getId()));
       return;
     }
 
     // Note: All timer handling is done in emit
-    Dataframe out = node.emit(new Implementor(node));
+    BodoEngineTable out = node.emit(new Implementor(node));
 
-    // Place the output variable in the varCache and varGenStack.
-    varCache.put(node.getId(), out);
-    varGenStack.push(out);
+    // Place the output variable in the tableCache and tableGenStack.
+    tableCache.put(node.getId(), out);
+    tableGenStack.push(out);
   }
 
   /**
@@ -1596,12 +1576,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     singleBatchTimer(
         (PandasRel) node,
         () -> {
-          Variable outVar;
+          BodoEngineTable outTable;
           int nodeId = node.getId();
           if (canLoadFromCache && this.isNodeCached(node)) {
-            outVar = this.genDfVar();
-            Variable cacheKey = this.varCache.get(nodeId);
-            this.generatedCode.add(new Op.Assign(outVar, cacheKey));
+            outTable = tableCache.get(nodeId);
           } else {
             BodoSqlTable table;
 
@@ -1612,27 +1590,27 @@ public class PandasCodeGenVisitor extends RelVisitor {
             RelOptTableImpl relTable = (RelOptTableImpl) node.getTable();
             table = (BodoSqlTable) relTable.table();
 
-            outVar = visitSingleBatchTableScanCommon(table, isTargetTableScan, nodeId);
+            outTable = visitSingleBatchTableScanCommon(node, table, isTargetTableScan, nodeId);
           }
-
-          varGenStack.push(outVar);
+          tableGenStack.push(outTable);
         });
   }
 
   /**
    * Helper function that contains the code needed to perform a read of the specified
    *
+   * @param node The rel node for the scan
    * @param table The BodoSqlTable to read
    * @param isTargetTableScan Is the read a TargetTableScan (used in MERGE INTO)
    * @param nodeId node id
    * @return outVar The returned dataframe variable
    */
-  public Variable visitSingleBatchTableScanCommon(
-      BodoSqlTable table, boolean isTargetTableScan, int nodeId) {
+  public BodoEngineTable visitSingleBatchTableScanCommon(
+      TableScan node, BodoSqlTable table, boolean isTargetTableScan, int nodeId) {
     Expr readCode;
     Op readAssign;
 
-    Variable readVar = this.genDfVar();
+    Variable readVar = this.genTableVar();
     // Add the table to cached values
     if (isTargetTableScan) {
       // TODO: Properly restrict to Iceberg.
@@ -1652,31 +1630,35 @@ public class PandasCodeGenVisitor extends RelVisitor {
               String.format(
                   "%s, %s, %s = %s\n",
                   readVar.emit(), icebergFileListVarName, icebergSnapshotIDName, readCode.emit()));
-      targetTableDf = readVar;
+      this.generatedCode.add(readAssign);
+      mergeIntoTargetNode = node;
+      mergeIntoTargetTable = readVar;
     } else {
       readCode = table.generateReadCode(false, streamingOptions);
       readAssign = new Op.Assign(readVar, readCode);
+      this.generatedCode.add(readAssign);
     }
-    this.generatedCode.add(readAssign);
 
-    Variable outVar;
+    BodoEngineTable outTable;
+    BuildContext ctx = new BuildContext((PandasRel) node);
 
     Expr castExpr = table.generateReadCastCode(readVar);
     if (!castExpr.equals(readVar)) {
       // Generate a new outVar to avoid shadowing
-      outVar = this.genDfVar();
+      Variable outVar = this.genDfVar();
       this.generatedCode.add(new Op.Assign(outVar, castExpr));
+      outTable = ctx.convertDfToTable(outVar, node);
     } else {
-      outVar = readVar;
+      outTable = new BodoEngineTable(readVar.getName(), node);
     }
 
     if (!isTargetTableScan) {
       // Add the table to cached values. We only support this for regular
       // tables and not the target table in merge into.
-      this.varCache.put(nodeId, outVar);
+      tableCache.put(nodeId, new BodoEngineTable(outTable.getName(), node));
     }
 
-    return outVar;
+    return outTable;
   }
 
   /**
@@ -1698,20 +1680,21 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node join node being visited
    */
   private void visitBatchedPandasJoin(PandasJoin node) {
+    BuildContext ctx = new BuildContext(node);
     /* get left/right tables */
     Variable outVar = this.genDfVar();
     int nodeId = node.getId();
     List<String> outputColNames = node.getRowType().getFieldNames();
     if (this.isNodeCached(node)) {
-      Variable cacheKey = this.varCache.get(nodeId);
+      Variable cacheKey = tableCache.get(nodeId);
       this.generatedCode.add(new Op.Assign(outVar, cacheKey));
     } else {
       this.visit(node.getLeft(), 0, node);
       List<String> leftColNames = node.getLeft().getRowType().getFieldNames();
-      Variable leftTable = varGenStack.pop();
+      Variable leftTable = ctx.convertTableToDf(tableGenStack.pop());
       this.visit(node.getRight(), 1, node);
       List<String> rightColNames = node.getRight().getRowType().getFieldNames();
-      Variable rightTable = varGenStack.pop();
+      Variable rightTable = ctx.convertTableToDf(tableGenStack.pop());
       singleBatchTimer(
           node,
           () -> {
@@ -1744,10 +1727,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
                     mergeCols,
                     tryRebalanceOutput);
             this.generatedCode.add(joinCode);
-            this.varCache.put(nodeId, outVar);
+            BodoEngineTable outTable = ctx.convertDfToTable(outVar, node);
+            tableCache.put(nodeId, outTable);
+            tableGenStack.push(outTable);
           });
     }
-    varGenStack.push(outVar);
   }
 
   /**
@@ -1832,7 +1816,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       PandasJoin node, StreamingRelNodeTimer timerInfo) {
     // Visit the batch side
     this.visit(node.getLeft(), 0, node);
-    Variable buildDf = varGenStack.pop();
+    BodoEngineTable buildTable = tableGenStack.pop();
     StateVariable joinStateVar = visitStreamingPandasJoinState(node, timerInfo);
     timerInfo.insertLoopOperationStartTimer();
     // Fetch the batch state
@@ -1840,12 +1824,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Join needs the isLast to be global before calling the build side change.
     batchPipeline.ensureExitCondSynchronized();
     Variable batchExitCond = batchPipeline.getExitCond();
-    // Fetch the underlying table for the join.
-    Variable buildTable = genTableVar();
-    Expr.Call buildDfData = getDfData(buildDf);
-    int numBuildCols = node.getLeft().getRowType().getFieldCount();
-    List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numBuildCols);
-    generateStreamingTableCode(buildIndices, buildDfData, numBuildCols, buildTable);
     Expr.Call batchCall =
         new Expr.Call(
             "bodo.libs.stream_join.join_build_consume_batch",
@@ -1862,19 +1840,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Visit the probe side
     this.visit(node.getRight(), 1, node);
     timerInfo.insertLoopOperationStartTimer();
-    Variable probeDf = varGenStack.pop();
+    BodoEngineTable probeTable = tableGenStack.pop();
     StreamingPipelineFrame probePipeline = generatedCode.getCurrentStreamingPipeline();
 
     Variable oldFlag = probePipeline.getExitCond();
     // Change the probe condition
     Variable newFlag = genGenericTempVar();
     probePipeline.endSection(newFlag);
-    // Fetch the underlying table for the join.
-    Variable probeTable = genTableVar();
-    Expr.Call probeDfData = getDfData(probeDf);
-    int numProbeCols = node.getRight().getRowType().getFieldCount();
-    List<Expr.IntegerLiteral> probeIndices = integerLiteralArange(numProbeCols);
-    generateStreamingTableCode(probeIndices, probeDfData, numProbeCols, probeTable);
     // Add the probe side
     Variable outTable = genTableVar();
     Expr.Call probeCall =
@@ -1882,24 +1854,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
             "bodo.libs.stream_join.join_probe_consume_batch",
             List.of(joinStateVar, probeTable, oldFlag));
     generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), probeCall));
-    // Generate an index.
-    Expr.Call lenCall = new Expr.Call("len", List.of(outTable));
-    Variable indexVar = genIndexVar();
-    generateRangeIndexCode(lenCall, indexVar);
-    // Generate a DataFrame
-    Variable outDf = genDfVar();
-    // Generate the column names global
-    List<Expr.StringLiteral> colNamesLiteral =
-        stringsToStringLiterals(node.getRowType().getFieldNames());
-    generateInitOutputDfCode(colNamesLiteral, outTable, indexVar, outDf);
     timerInfo.insertLoopOperationEndTimer();
     // Append the code to delete the state
     Op.Stmt deleteState =
         new Op.Stmt(
             new Expr.Call("bodo.libs.stream_join.delete_join_state", List.of(joinStateVar)));
     probePipeline.addTermination(deleteState);
-    // Add the DF to the stack
-    this.varGenStack.push(outDf);
+    // Add the table to the stack
+    tableGenStack.push(new BodoEngineTable(outTable.getName(), node));
   }
 
   /**
@@ -1913,66 +1875,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Helper function for generating table code for streaming
-   *
-   * @param indices indices of table
-   * @param dfData dataframe data
-   * @param tableCols number of logical input columns in input table
-   * @param table variable of the table
-   */
-  private void generateStreamingTableCode(
-      List<Expr.IntegerLiteral> indices, Expr.Call dfData, int tableCols, Variable table) {
-    Variable colNums = lowerAsMetaType(new Expr.Tuple(indices));
-    Expr.Call probeTableCall =
-        new Expr.Call(
-            "bodo.hiframes.table.logical_table_to_table",
-            dfData,
-            new Expr.Tuple(List.of()),
-            colNums,
-            new Expr.IntegerLiteral(tableCols));
-    generatedCode.add(new Assign(table, probeTableCall));
-  }
-
-  /**
-   * Helper function for generating range index code for streaming
-   *
-   * @param lenCall length of the range
-   * @param indexVar index variable
-   */
-  private void generateRangeIndexCode(Expr.Call lenCall, Variable indexVar) {
-    Expr.IntegerLiteral zero = new IntegerLiteral(0);
-    Expr.IntegerLiteral one = new IntegerLiteral(1);
-    Expr.Call indexCall =
-        new Expr.Call(
-            "bodo.hiframes.pd_index_ext.init_range_index",
-            List.of(zero, lenCall, one, Expr.None.INSTANCE));
-    generatedCode.add(new Op.Assign(indexVar, indexCall));
-  }
-
-  /**
-   * Helper function for generating output dataframe code for streaming
-   *
-   * @param colNamesLiteral A list of column name strings
-   * @param outTable output table
-   * @param indexVar index variable
-   * @param outDf output dataframe
-   */
-  private void generateInitOutputDfCode(
-      List<Expr.StringLiteral> colNamesLiteral,
-      Variable outTable,
-      Variable indexVar,
-      Variable outDf) {
-    Expr.Tuple tableTuple = new Expr.Tuple(List.of(outTable));
-    Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
-    Variable colNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
-    Expr.Call initDfCall =
-        new Expr.Call(
-            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
-            List.of(tableTuple, indexVar, colNamesMeta));
-    generatedCode.add(new Op.Assign(outDf, initDfCall));
-  }
-
-  /**
    * Visitor for RowSample: Supports SAMPLE clause in SQL with a fixed number of rows.
    *
    * @param node rowSample node being visited
@@ -1980,19 +1882,21 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitRowSample(PandasRowSample node) {
     // We always assume row sample has exactly one input
     assert node.getInputs().size() == 1;
+    BuildContext ctx = new BuildContext(node);
 
     // Visit the input
     RelNode inp = node.getInput(0);
     this.visit(inp, 0, node);
-    Variable inpExpr = varGenStack.pop();
-
-    Variable outVar = this.genDfVar();
     singleBatchTimer(
         node,
         () -> {
-          this.generatedCode.add(
-              new Op.Assign(outVar, generateRowSampleCode(inpExpr, node.getParams())));
-          varGenStack.push(outVar);
+          BodoEngineTable inTable = tableGenStack.pop();
+          Variable inDf = ctx.convertTableToDf(inTable);
+          Expr rowSampleExpr = generateRowSampleCode(inDf, node.getParams());
+          Variable outVar = this.genDfVar();
+          this.generatedCode.add(new Op.Assign(outVar, rowSampleExpr));
+          BodoEngineTable outTable = ctx.convertDfToTable(outVar, node);
+          tableGenStack.push(outTable);
         });
   }
 
@@ -2004,19 +1908,21 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitSample(PandasSample node) {
     // We always assume sample has exactly one input
     assert node.getInputs().size() == 1;
+    BuildContext ctx = new BuildContext(node);
 
     // Visit the input
     RelNode inp = node.getInput(0);
     this.visit(inp, 0, node);
-    Variable inpExpr = varGenStack.pop();
+    BodoEngineTable inTable = tableGenStack.pop();
+    Variable inDf = ctx.convertTableToDf(inTable);
 
     Variable outVar = this.genDfVar();
     singleBatchTimer(
         node,
         () -> {
-          this.generatedCode.add(
-              new Op.Assign(outVar, generateSampleCode(inpExpr, node.getParams())));
-          varGenStack.push(outVar);
+          this.generatedCode.add(new Op.Assign(outVar, generateSampleCode(inDf, node.getParams())));
+          BodoEngineTable outTable = ctx.convertDfToTable(outVar, node);
+          tableGenStack.push(outTable);
         });
   }
 
@@ -2036,7 +1942,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // shouldn't be necessary.
     while (!nodeStack.isEmpty()) {
       RelNode n = nodeStack.pop();
-      if (!this.varCache.containsKey(n.getId())) {
+      if (!tableCache.containsKey(n.getId())) {
         return false;
       }
       if (n instanceof SnowflakeToPandasConverter) {
@@ -2066,7 +1972,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   // TODO: Fuse with above so everything returns a DataFrame
-  private Dataframe singleBatchTimer(PandasRel node, Supplier<Dataframe> fn) {
+  private BodoEngineTable singleBatchTimer(PandasRel node, Supplier<BodoEngineTable> fn) {
     SingleBatchRelNodeTimer timerInfo =
         SingleBatchRelNodeTimer.createSingleBatchTimer(
             this.generatedCode,
@@ -2076,32 +1982,32 @@ public class PandasCodeGenVisitor extends RelVisitor {
             node.nodeDetails(),
             node.getTimerType());
     timerInfo.insertStartTimer();
-    Dataframe res = fn.get();
+    BodoEngineTable res = fn.get();
     timerInfo.insertEndTimer();
     return res;
   }
 
   private RexToPandasTranslator getRexTranslator(RelNode self, String inVar, RelNode input) {
-    return getRexTranslator(self, new Dataframe(inVar, input));
+    return getRexTranslator(self, new BodoEngineTable(inVar, input));
   }
 
-  private RexToPandasTranslator getRexTranslator(RelNode self, Dataframe input) {
+  private RexToPandasTranslator getRexTranslator(RelNode self, BodoEngineTable input) {
     return getRexTranslator(self.getId(), input);
   }
 
-  private RexToPandasTranslator getRexTranslator(int nodeId, Dataframe input) {
+  private RexToPandasTranslator getRexTranslator(int nodeId, BodoEngineTable input) {
     return new RexToPandasTranslator(this, this.generatedCode, this.typeSystem, nodeId, input);
   }
 
   private RexToPandasTranslator getRexTranslator(
-      int nodeId, Dataframe input, List<? extends Expr> localRefs) {
+      int nodeId, BodoEngineTable input, List<? extends Expr> localRefs) {
     return new RexToPandasTranslator(
         this, this.generatedCode, this.typeSystem, nodeId, input, localRefs);
   }
 
   private StreamingRexToPandasTranslator getStreamingRexTranslator(
       int nodeId,
-      Dataframe input,
+      BodoEngineTable input,
       List<? extends Expr> localRefs,
       @NotNull StateVariable stateVar) {
     return new StreamingRexToPandasTranslator(
@@ -2117,36 +2023,31 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     @NotNull
     @Override
-    public Dataframe visitChild(@NotNull final RelNode input, final int ordinal) {
+    public BodoEngineTable visitChild(@NotNull final RelNode input, final int ordinal) {
       visit(input, ordinal, node);
-      Variable dfVar = varGenStack.pop();
-      if (dfVar instanceof Dataframe) {
-        return (Dataframe) dfVar;
-      } else {
-        // Ideally, all parts of code generation return dataframes
-        // and this isn't needed. That is not true so fabricate the proper
-        // dataframe value.
-        return new Dataframe(dfVar.getName(), input.getRowType());
-      }
+      return tableGenStack.pop();
     }
 
     @NotNull
     @Override
-    public List<Dataframe> visitChildren(@NotNull final List<? extends RelNode> inputs) {
+    public List<BodoEngineTable> visitChildren(@NotNull final List<? extends RelNode> inputs) {
       return DefaultImpls.visitChildren(this, inputs);
     }
 
     @NotNull
     @Override
-    public Dataframe build(@NotNull final Function1<? super PandasRel.BuildContext, Dataframe> fn) {
+    public BodoEngineTable build(
+        @NotNull final Function1<? super PandasRel.BuildContext, BodoEngineTable> fn) {
       return singleBatchTimer(node, () -> fn.invoke(new PandasCodeGenVisitor.BuildContext(node)));
     }
 
     @NotNull
     @Override
-    public Dataframe buildStreaming(
+    public BodoEngineTable buildStreaming(
         @NotNull Function1<? super PandasRel.BuildContext, StateVariable> initFn,
-        @NotNull Function2<? super PandasRel.BuildContext, ? super StateVariable, Dataframe> bodyFn,
+        @NotNull
+            Function2<? super PandasRel.BuildContext, ? super StateVariable, BodoEngineTable>
+                bodyFn,
         @NotNull Function2<? super PandasRel.BuildContext, ? super StateVariable, Unit> deleteFn) {
       // TODO: Move to a wrapper function to avoid the timerInfo calls.
       // This requires more information about the high level design of the streaming
@@ -2170,7 +2071,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       timerInfo.insertStateEndTimer();
       // Handle the loop body
       timerInfo.insertLoopOperationStartTimer();
-      Dataframe res = bodyFn.invoke(buildContext, stateVar);
+      BodoEngineTable res = bodyFn.invoke(buildContext, stateVar);
       timerInfo.insertLoopOperationEndTimer();
       // Delete the state
       deleteFn.invoke(buildContext, stateVar);
@@ -2207,23 +2108,112 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     @NotNull
     @Override
-    public RexToPandasTranslator rexTranslator(@NotNull final Dataframe input) {
+    public RexToPandasTranslator rexTranslator(@NotNull final BodoEngineTable input) {
       return getRexTranslator(node.getId(), input);
     }
 
     @NotNull
     @Override
     public RexToPandasTranslator rexTranslator(
-        @NotNull final Dataframe input, @NotNull final List<? extends Expr> localRefs) {
+        @NotNull final BodoEngineTable input, @NotNull final List<? extends Expr> localRefs) {
       return getRexTranslator(node.getId(), input, localRefs);
     }
 
     @NotNull
     @Override
-    public Dataframe returns(@NotNull final Expr result) {
-      Dataframe destination = generatedCode.genDataframe(node);
+    public BodoEngineTable returns(@NotNull final Expr result) {
+      Variable destination = generatedCode.getSymbolTable().genTableVar();
       generatedCode.add(new Op.Assign(destination, result));
-      return destination;
+      return new BodoEngineTable(destination.getName(), node);
+    }
+
+    /**
+     * Converts a DataFrame into a Table using an input rel node to infer the number of columns in
+     * the DataFrame.
+     *
+     * @param df The DataFrame that is being converted into a Table.
+     * @param node The rel node whose output schema is used to infer the number of columns in the
+     *     DataFrame.
+     * @return The BodoEngineTable that the DataFrame has been converted into.
+     */
+    @NotNull
+    @Override
+    public BodoEngineTable convertDfToTable(Variable df, RelNode node) {
+      Variable outVar = generatedCode.getSymbolTable().genTableVar();
+      int numBuildCols = node.getRowType().getFieldCount();
+      List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numBuildCols);
+      Variable buildColNums = lowerAsMetaType(new Expr.Tuple(buildIndices));
+      Expr dfData = new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", df);
+      Expr tablExpr =
+          new Expr.Call(
+              "bodo.hiframes.table.logical_table_to_table",
+              dfData,
+              new Expr.Tuple(),
+              buildColNums,
+              new Expr.IntegerLiteral(numBuildCols));
+      generatedCode.add(new Op.Assign(outVar, tablExpr));
+      return new BodoEngineTable(outVar.getName(), node);
+    }
+
+    /**
+     * Converts a DataFrame into a Table using an input row type to infer the number of columns in
+     * the DataFrame.
+     *
+     * @param df The DataFrame that is being converted into a Table.
+     * @param rowType The output schema that is used to infer the number of columns in the
+     *     DataFrame.
+     * @return The BodoEngineTable that the DataFrame has been converted into.
+     */
+    @NotNull
+    @Override
+    public BodoEngineTable convertDfToTable(Variable df, RelDataType rowType) {
+      Variable outVar = generatedCode.getSymbolTable().genTableVar();
+      int numBuildCols = rowType.getFieldCount();
+      List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numBuildCols);
+      Variable buildColNums = lowerAsMetaType(new Expr.Tuple(buildIndices));
+      Expr dfData = new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", df);
+      Expr tablExpr =
+          new Expr.Call(
+              "bodo.hiframes.table.logical_table_to_table",
+              dfData,
+              new Expr.Tuple(),
+              buildColNums,
+              new Expr.IntegerLiteral(numBuildCols));
+      generatedCode.add(new Op.Assign(outVar, tablExpr));
+      return new BodoEngineTable(outVar.getName(), node);
+    }
+
+    /**
+     * Converts a Table into a DataFrame.
+     *
+     * @param table The table that is being converted into a DataFrame.
+     * @return The variable used to store the new DataFrame.
+     */
+    @NotNull
+    @Override
+    public Variable convertTableToDf(BodoEngineTable table) {
+      Variable outVar = generatedCode.getSymbolTable().genDfVar();
+      // Generate an index.
+      Variable indexVar = genIndexVar();
+      Expr.Call lenCall = new Expr.Call("len", table);
+      Expr.Call indexCall =
+          new Expr.Call(
+              "bodo.hiframes.pd_index_ext.init_range_index",
+              List.of(
+                  Expr.Companion.getZero(), lenCall, Expr.Companion.getOne(), Expr.None.INSTANCE));
+      generatedCode.add(new Op.Assign(indexVar, indexCall));
+      Expr.Tuple tableTuple = new Expr.Tuple(table);
+      // Generate the column names global
+      List<Expr.StringLiteral> colNamesLiteral =
+          stringsToStringLiterals(table.getRowType().getFieldNames());
+      Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
+      Variable colNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
+      Expr dfExpr =
+          new Expr.Call(
+              "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+              List.of(tableTuple, indexVar, colNamesMeta));
+      generatedCode.add(new Op.Assign(outVar, dfExpr));
+      return outVar;
     }
 
     @NotNull
@@ -2235,7 +2225,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     @NotNull
     @Override
     public StreamingRexToPandasTranslator streamingRexTranslator(
-        @NotNull Dataframe input,
+        @NotNull BodoEngineTable input,
         @NotNull List<? extends Expr> localRefs,
         @NotNull StateVariable stateVar) {
       return getStreamingRexTranslator(node.getId(), input, localRefs, stateVar);

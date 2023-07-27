@@ -1,12 +1,12 @@
 package com.bodosql.calcite.adapter.pandas.window
 
 import com.bodosql.calcite.application.Utils.Utils
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.rex.*
 import org.apache.calcite.sql.SqlKind
 
-internal class Builder(val cluster: RelOptCluster, val input: Dataframe) : RexShuttle() {
+internal class Builder(val cluster: RelOptCluster, val input: BodoEngineTable) : RexShuttle() {
     private val overExprs = mutableListOf<RexOver>()
     private var index = 0
 

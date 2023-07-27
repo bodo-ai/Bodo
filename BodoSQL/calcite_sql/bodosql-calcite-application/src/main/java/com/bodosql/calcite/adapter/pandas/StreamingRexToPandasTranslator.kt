@@ -2,7 +2,7 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.application.Utils.IsScalar
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Module
 import com.bodosql.calcite.ir.StateVariable
@@ -19,7 +19,7 @@ class StreamingRexToPandasTranslator(
     builder: Module.Builder,
     typeSystem: RelDataTypeSystem,
     nodeId: Int,
-    input: Dataframe,
+    input: BodoEngineTable,
     localRefs: List<Expr>,
     // State information for the streaming operator that uses
     // this translator. This is used for optimizations with

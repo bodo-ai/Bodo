@@ -682,7 +682,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     }
     return new Expr.Raw(
         String.format(
-            "pd.read_sql('%s', '%s', _bodo_is_table_input=True, %s)",
+            "pd.read_sql('%s', '%s', _bodo_is_table_input=True, _bodo_read_as_table=True, %s)",
             tableName, generatePythonConnStr(schemaName), streamingArg));
   }
 
@@ -726,7 +726,9 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       schemaName = schemaList.get(0);
     }
     return new Expr.Raw(
-        String.format("pd.read_sql('%s', '%s')", query, generatePythonConnStr(schemaName)));
+        String.format(
+            "pd.read_sql('%s', '%s', _bodo_read_as_table=True)",
+            query, generatePythonConnStr(schemaName)));
   }
 
   /**

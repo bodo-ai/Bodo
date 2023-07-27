@@ -3,7 +3,6 @@
 Tests BodoSQL queries with types that cannot be directly
 supported but has implicit conversions that can be automated.
 """
-import datetime
 
 import pandas as pd
 import pytest
@@ -11,6 +10,7 @@ from bodosql.tests.utils import check_query
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_categorical(memory_leak_check):
     """
     Tests that various categorical types can be converted

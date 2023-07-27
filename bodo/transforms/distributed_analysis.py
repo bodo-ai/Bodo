@@ -2126,6 +2126,11 @@ class DistributedAnalysis:
                 self._set_var_dist(rhs.args[1].name, array_dists, out_dist)
             return
 
+        if fdef == ("make_replicated_array", "bodo.utils.conversion"):
+            # output must be replicated
+            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            return
+
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels"):
             # output of drop_duplicates is variable-length even if input is 1D
             if lhs not in array_dists:
@@ -2626,6 +2631,14 @@ class DistributedAnalysis:
             self._set_var_dist(data_varname, array_dists, new_dist)
             self._set_var_dist(ind_varname, array_dists, new_dist)
             self._set_var_dist(lhs, array_dists, new_dist)
+            return
+
+        if fdef == ("pushdown_safe_init_df", "bodo.hiframes.pd_dataframe_ext"):
+            new_dist_val = array_dists[rhs.args[0].name].value
+            if lhs in array_dists:
+                new_dist_val = min(new_dist_val, array_dists[lhs].value)
+            new_dist = Distribution(new_dist_val)
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("init_dict_arr", "bodo.libs.dict_arr_ext"):

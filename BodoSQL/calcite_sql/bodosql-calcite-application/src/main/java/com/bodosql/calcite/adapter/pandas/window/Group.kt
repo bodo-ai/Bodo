@@ -3,6 +3,7 @@ package com.bodosql.calcite.adapter.pandas.window
 import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator
 import com.bodosql.calcite.application.BodoSQLCodegenException
+import com.bodosql.calcite.application.Utils.Utils
 import com.bodosql.calcite.ir.*
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
@@ -13,7 +14,7 @@ import org.apache.calcite.sql.SqlKind
 
 internal class Group(
     val cluster: RelOptCluster,
-    val input: Dataframe,
+    val input: BodoEngineTable,
     aggregates: List<RexOver>,
     val window: RexWindow,
 ) {
@@ -44,16 +45,16 @@ internal class Group(
         builder.add(Op.Assign(windowDf, windowExpr))
 
         // Extract the series data from the returned dataframe into corresponding
-        // variables that match 1:1 with the aggregates in this group.
-        return windowFnOutputs.map { aggOutputName ->
+        // variables that match 1:1 with the aggregates in this group, which are
+        // placed in the generated dataframe in the same order as the desired
+        // answer aggregates.
+        return windowFnOutputs.map { i ->
             val expr = Expr.Call(
-                "bodo.hiframes.pd_series_ext.get_series_data",
-                Expr.Index(
+                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data",
                     windowDf,
-                    Expr.StringLiteral(aggOutputName),
-                )
+                    Expr.IntegerLiteral(i)
             )
-            val seriesVar = builder.symbolTable.genSeriesVar()
+            val seriesVar = builder.symbolTable.genArrayVar()
             builder.add(Op.Assign(seriesVar, expr))
             seriesVar
         }
@@ -72,12 +73,12 @@ internal class Group(
      * One of these three will be used. Versions 2 and 3 require a partition key because
      * the resulting code only works if there is at least one group.
      */
-    private fun emit(ctx: PandasRel.BuildContext, partitionKeys: List<PartitionKey>, orderKeys: List<OrderKey>, fields: List<Field>): Pair<Expr, List<String>> {
+    private fun emit(ctx: PandasRel.BuildContext, partitionKeys: List<PartitionKey>, orderKeys: List<OrderKey>, fields: List<Field>): Pair<Expr, List<Int>> {
         // TODO(jsternberg): Refactor this into something more generic.
         // Row number is supported without a partition which means it doesn't have to go
         // through the groupby pipeline. More aggregations may be included in the future.
         if (aggregates.size == 1 && partitionKeys.isEmpty() && aggregates.first().kind == SqlKind.ROW_NUMBER) {
-            return emitRowNumber(partitionKeys, orderKeys, fields)
+            return emitRowNumber(ctx, partitionKeys, orderKeys, fields)
         }
 
         // Following the above, we require partition key.
@@ -107,7 +108,7 @@ internal class Group(
 
         // Generate the windowed dataframe and then process the window
         // function arguments.
-        val input = emitGeneratedWindowDataframe(partitionKeys, orderKeys, fields, resolver.extraFields)
+        val input = emitGeneratedWindowDataframe(ctx, partitionKeys, orderKeys, fields, resolver.extraFields)
         val windowCall = Expr.Call(
             Expr.Attribute(input, "window"),
             Expr.Tuple(windowFuncArgs),
@@ -116,19 +117,15 @@ internal class Group(
             orderKeys.nullPositionList(Expr::Tuple),
         )
 
-        // Output fields are hard-coded by the window function.
-        val outputFields = windowFuncs.indices.map {
-                i -> "AGG_OUTPUT_$i"
-        }
-        return Pair(windowCall, outputFields)
+        return Pair(windowCall, windowFuncs.mapIndexed { i, _ -> i })
     }
 
     /**
      * Emits the specialized code for row_number when it is used by itself in a group.
      */
-    private fun emitRowNumber(partitionKeys: List<PartitionKey>, orderKeys: List<OrderKey>, fields: List<Field>): Pair<Expr, List<String>> {
+    private fun emitRowNumber(ctx: PandasRel.BuildContext, partitionKeys: List<PartitionKey>, orderKeys: List<OrderKey>, fields: List<Field>): Pair<Expr, List<Int>> {
         // TODO(jsternberg): Unsafe index access, but this has been checked before invoking this function.
-        val input = emitGeneratedWindowDataframe(partitionKeys, orderKeys, fields)
+        val input = emitGeneratedWindowDataframe(ctx, partitionKeys, orderKeys, fields)
         return Pair(
             Expr.Call(
                 "bodo.libs.bodosql_array_kernels.row_number",
@@ -137,7 +134,9 @@ internal class Group(
                 orderKeys.ascendingList(),
                 orderKeys.nullPositionList(),
             ),
-            listOf("ROW_NUMBER"),
+            // Currently, the row_number kernel will emit a DataFrame with a single column
+            // containing the row numbers.
+            listOf(0),
         )
     }
 
@@ -192,7 +191,7 @@ internal class Group(
      * This dataframe will be grouped by the partition key and then will invoke
      * apply on that grouping using the generated window function.
      */
-    private fun emitWindowApply(ctx: PandasRel.BuildContext, partitionKeys: List<PartitionKey>, orderKeys: List<OrderKey>, fields: List<Field>): Pair<Expr, List<String>> {
+    private fun emitWindowApply(ctx: PandasRel.BuildContext, partitionKeys: List<PartitionKey>, orderKeys: List<OrderKey>, fields: List<Field>): Pair<Expr, List<Int>> {
         val (windowFnName, windowFnOutputs) = emitWindowApplyFunc(ctx, orderKeys, fields)
 
         // Keep track of the original position of each column.
@@ -200,7 +199,7 @@ internal class Group(
             "ORIG_POSITION_COL",
             Expr.Call("np.arange", Expr.Len(input))
         ))
-        val input = emitGeneratedWindowDataframe(partitionKeys, orderKeys, fields, extraFields)
+        val input = emitGeneratedWindowDataframe(ctx, partitionKeys, orderKeys, fields, extraFields)
 
         // Construct the apply call.
         val applyCall = Expr.Call(
@@ -210,7 +209,7 @@ internal class Group(
         return Pair(applyCall, windowFnOutputs)
     }
 
-    private data class WindowApplyFunc(val name: Variable, val outputFields: List<String>)
+    private data class WindowApplyFunc(val name: Variable, val outputFields: List<Int>)
 
     /**
      * Generates the window function to be invoked with apply for [emitWindowApply].
@@ -226,7 +225,7 @@ internal class Group(
         // emit header
         // emit sorting? maybe only if order keys is not empty
         val builder = Module.Builder()
-        val argumentDf = Dataframe("argument_df", getTypeFromFields(fields))
+        val argumentDf = BodoEngineTable("argument_df", getTypeFromFields(fields))
         val header = emitWindowApplyFuncHeader(builder, argumentDf, orderKeys, fields)
 
         // perform rex over operation on each
@@ -247,8 +246,10 @@ internal class Group(
         )
         val arrs = emitWindowApplyFuncAggregates(windowContext, aggregates, rexTranslator)
         val outputFields = emitWindowApplyFuncFooter(
+            ctx,
             builder,
             revertSortIfNeeded(
+                ctx,
                 builder,
                 arrs,
                 header,
@@ -321,12 +322,14 @@ internal class Group(
     /**
      * Emit the initialization code for the generated window apply function.
      */
-    private fun emitWindowApplyFuncHeader(builder: Module.Builder, argumentDf: Dataframe, orderKeys: List<OrderKey>, fields: List<Field>): WindowApplyFuncHeader {
+    private fun emitWindowApplyFuncHeader(builder: Module.Builder, argumentDf: BodoEngineTable, orderKeys: List<OrderKey>, fields: List<Field>): WindowApplyFuncHeader {
         // Name each of the columns that come in from the function argument.
         // Use the same variable from the input.
         val locNames = fields.map { Expr.StringLiteral(it.name) } +
                 orderKeys.map { Expr.StringLiteral(it.field) } +
                 Expr.StringLiteral("ORIG_POSITION_COL")
+        // If locNames has n column names in it, then column n-1 is the position column
+        val position = fields.size + orderKeys.size
         // TODO(jsternberg): I think this doesn't translate the logic correctly.
         // Come back to this and look at [pruneColumns] to get the logic right.
         builder.add(
@@ -349,7 +352,7 @@ internal class Group(
         builder.add(Op.Assign(len, Expr.Len(argumentDf)))
 
         val output = sortDataframeIfNeeded(builder, argumentDf, orderKeys)
-        return WindowApplyFuncHeader(output, index, len, "ORIG_POSITION_COL")
+        return WindowApplyFuncHeader(output, index, len, position)
     }
 
     /**
@@ -358,7 +361,7 @@ internal class Group(
      *
      * This will do nothing if the order keys are empty.
      */
-    private fun sortDataframeIfNeeded(builder: Module.Builder, input: Dataframe, orderKeys: List<OrderKey>): Dataframe {
+    private fun sortDataframeIfNeeded(builder: Module.Builder, input: BodoEngineTable, orderKeys: List<OrderKey>): BodoEngineTable {
         if (orderKeys.isEmpty()) {
             // No sort is needed.
             return input
@@ -377,32 +380,41 @@ internal class Group(
             ),
         )
 
-        val target = Dataframe("sorted_df", input.rowType)
+        val target = BodoEngineTable("sorted_df", input.rowType)
         builder.add(Op.Assign(target, sortedDataframe))
         return target
     }
 
     /**
-     * Emits the return code for the window apply function. This code is generated
+     * Builds the return code for the window apply function. This code is generated
      * after the aggregations have been performed and is used to store the results
-     * in a new dataframe.
+     * in a new dataframe. Returns the indices of the columns in the output
+     * DataFrame as they are associated with the window functions being calculated.
      */
-    private fun emitWindowApplyFuncFooter(builder: Module.Builder, arrs: List<Expr>, header: WindowApplyFuncHeader): List<String> {
-        val outputFields = arrs.mapIndexed { i, arr -> Expr.StringLiteral("AGG_OUTPUT_$i") to arr }
+    private fun emitWindowApplyFuncFooter(
+        ctx: PandasRel.BuildContext,
+        builder: Module.Builder,
+        arrs: List<Expr>,
+        header: WindowApplyFuncHeader
+    ): List<Int> {
+        val outputFields = arrs.mapIndexed { i, _ -> "AGG_OUTPUT_$i" }
+        // Generate the column names global
+        val colNamesLiteral =
+            Utils.stringsToStringLiterals(outputFields)
+        val colNamesTuple = Expr.Tuple(colNamesLiteral)
+        val colNamesMeta: Variable = ctx.lowerAsGlobal(Expr.Call("ColNamesMetaType", colNamesTuple))
         val retval = Variable("retval")
         builder.add(
             Op.Assign(
                 retval, Expr.Call(
-                    "pd.DataFrame",
-                    args = listOf(Expr.Dict(outputFields)),
-                    namedArgs = listOf(
-                        "index" to header.index
-                    )
+                    "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+                    java.util.List.of<Expr>(Expr.Tuple(arrs), header.index, colNamesMeta)
                 )
             )
         )
+
         builder.add(Op.ReturnStatement(retval))
-        return outputFields.map { it.first.arg }
+        return  arrs.mapIndexed { i, _ -> i }
     }
 
     /**
@@ -415,23 +427,29 @@ internal class Group(
      * If no ordering was specified or if the result of the aggregate operation doesn't
      * have an ordering, we can save time by not reverting the sort.
      *
+     * Returns the list of expressions required to access each of the answers in order
+     * to build the final output table.
+     *
      * @see [WindowAggregateApplyFuncTable.isUnorderedResult]
      */
-    private fun revertSortIfNeeded(builder: Module.Builder, arrs: List<Variable>, header: WindowApplyFuncHeader, orderKeys: List<OrderKey>): List<Expr> {
+    private fun revertSortIfNeeded(ctx: PandasRel.BuildContext, builder: Module.Builder, arrs: List<Variable>, header: WindowApplyFuncHeader, orderKeys: List<OrderKey>): List<Expr> {
         if (orderKeys.isEmpty() || aggregates.all { WindowAggregateApplyFuncTable.isUnorderedResult(it.over) }) {
             return arrs
         }
-
-        val target = Variable("_tmp_sorted_df")
-        val args = arrs.mapIndexed { i, arr -> Expr.StringLiteral("AGG_OUTPUT_$i") to arr }
-        val positionArg = Expr.StringLiteral(header.position) to
-                Expr.Index(header.input, Expr.StringLiteral(header.position))
-        val sortedDf = Expr.Call(
+        // Generate the column names global
+        val outputFields = arrs.mapIndexed { i, _ -> "AGG_OUTPUT_$i" } + listOf("ORIG_POSITION_COL")
+        val colNamesLiteral =
+            Utils.stringsToStringLiterals(outputFields)
+        val colNamesTuple = Expr.Tuple(colNamesLiteral)
+        val colNamesMeta: Variable = ctx.lowerAsGlobal(Expr.Call("ColNamesMetaType", colNamesTuple))
+        val originalPosition = Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_data", header.input, Expr.IntegerLiteral(header.position))
+        val dfExpr = Expr.Call(
+            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+            java.util.List.of<Expr>(Expr.Tuple(arrs + listOf(originalPosition)), header.index, colNamesMeta)
+        )
+        val sortedExpr = Expr.Call(
             Expr.Attribute(
-                Expr.Call(
-                    "pd.DataFrame",
-                    Expr.Dict(args + positionArg)
-                ),
+                dfExpr,
                 "sort_values",
             ),
             namedArgs = listOf(
@@ -439,37 +457,58 @@ internal class Group(
                 "ascending" to Expr.List(Expr.BooleanLiteral(true)),
             )
         )
-        builder.add(Op.Assign(target, sortedDf))
-
+        val retval = Variable("_tmp_sorted_df")
+        builder.add(
+            Op.Assign(
+                retval, sortedExpr
+            )
+        )
         // Need to return a new way of accessing the columns.
-        return args.map { Expr.Index(target, it.first) }
+        return arrs.mapIndexed { i, _ -> Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_data", retval, Expr.IntegerLiteral(i)) }
     }
 
     /**
      * Emits the dataframe that results from applying the windowing function.
      */
     private fun emitGeneratedWindowDataframe(
+        ctx: PandasRel.BuildContext,
         partitionKeys: List<PartitionKey>,
         orderKeys: List<OrderKey>,
         fields: List<Field>,
         extraFields: List<Pair<String, Expr>> = listOf(),
     ): Expr {
-        // Build a list of parameters for the dataframe
-        // initialization using the combination of partition keys,
+        // Initialize arguments using the combination of partition keys,
         // order keys, and fields that will be needed in the body.
-        val params = ImmutableList.builder<Pair<Expr, Expr>>()
-        params.addAll(partitionKeys.map(::dictParam))
-        params.addAll(orderKeys.map(::dictParam))
-        params.addAll(fields.map(::dictParam))
+        val values = ImmutableList.builder<Expr>()
+        values.addAll(partitionKeys.map { p -> p.expr } )
+        values.addAll(orderKeys.map { o -> o.expr } )
+        values.addAll(fields.map { f -> f.expr } )
+        values.addAll(extraFields.map { (_, v) -> v } )
+        val valueList = values.build()
+        val tableTuple = Expr.Tuple(valueList)
 
-        // Add any requested additional fields.
-        params.addAll(extraFields.map { (k, v) -> Expr.StringLiteral(k) to v })
 
-        // Construct a new dataframe from the partitions, orderings, and any referenced
-        // columns.
-        val windowDataframe = Expr.Call(
-            "pd.DataFrame",
-            Expr.Dict(params.build())
+        // Generate the column names global
+        val names = ImmutableList.builder<String>()
+        names.addAll(partitionKeys.map { p -> p.field } )
+        names.addAll(orderKeys.map { o -> o.field } )
+        names.addAll(fields.map { f -> f.name } )
+        names.addAll(extraFields.map { (k, _) -> k } )
+        val colNamesLiteral = Utils.stringsToStringLiterals(names.build())
+        val colNamesTuple = Expr.Tuple(colNamesLiteral)
+        val colNamesMeta = ctx.lowerAsGlobal(Expr.Call("ColNamesMetaType", colNamesTuple))
+
+        // Generate an index (use an arbitrary column in the new DataFrame
+        // to obtain the desired length).
+        val lenCall: Expr.Call = Expr.Call("len", valueList[0])
+        val indexCall = Expr.Call(
+            "bodo.hiframes.pd_index_ext.init_range_index",
+            listOf(Expr.Zero, lenCall, Expr.One, Expr.None)
+        )
+
+        val windowDataframe: Expr = Expr.Call(
+            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+            listOf(tableTuple, indexCall, colNamesMeta)
         )
 
         if (partitionKeys.isEmpty()) {
@@ -484,13 +523,6 @@ internal class Group(
             dropna = false
         )
     }
-
-    private fun dictParam(partitionKey: PartitionKey): Pair<Expr, Expr> =
-        Expr.StringLiteral(partitionKey.field) to partitionKey.expr
-    private fun dictParam(orderKey: OrderKey): Pair<Expr, Expr> =
-        Expr.StringLiteral(orderKey.field) to orderKey.expr
-    private fun dictParam(field: Field): Pair<Expr, Expr> =
-        Expr.StringLiteral(field.name) to field.expr
 
     /**
      * Computes the partition column names along with the accessor expression for constructing the column.

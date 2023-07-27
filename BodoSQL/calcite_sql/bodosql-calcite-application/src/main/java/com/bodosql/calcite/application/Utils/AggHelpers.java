@@ -1,6 +1,5 @@
 package com.bodosql.calcite.application.Utils;
 
-import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import java.util.ArrayList;
@@ -31,87 +30,6 @@ public class AggHelpers {
   }
 
   /**
-   * function to get the renamed aggregation
-   *
-   * @param kind Kind of aggregation
-   * @param isDistinct Is the Function called on Distinct data. Currently only used for count, but
-   *     is provided for all AggregateCalls.
-   * @param fieldName name of the field being aggregated
-   * @return string corresponding to aggregation
-   */
-  public static String renameAgg(SqlKind kind, boolean isDistinct, String fieldName) {
-    String aggColName;
-    if (simpleColnameMap.containsKey(kind)) {
-      aggColName = simpleColnameMap.get(kind);
-    } else {
-      switch (kind) {
-        case COUNT:
-          if (isDistinct) {
-            aggColName = "count(distinct " + fieldName + ")";
-          } else {
-            aggColName = "count(" + fieldName + ")";
-          }
-          break;
-        default:
-          throw new BodoSQLCodegenException(
-              "Unsupported Aggregate Function, " + kind.toString() + " specified in query.");
-      }
-    }
-
-    return aggColName;
-  }
-
-  /**
-   * @param colExpr the string column expression
-   * @param kind The SqlKind of the aggregation
-   * @param name The name of the aggregation
-   * @return The string expression of the aggregated column
-   */
-  public static String getColumnAggCall(String colExpr, SqlKind kind, String name) {
-    switch (kind) {
-      case MAX:
-        return colExpr + ".max()";
-      case MIN:
-        return colExpr + ".min()";
-      case SUM0:
-        return colExpr + ".sum()";
-      case COUNT:
-        return colExpr + ".count()";
-      case AVG:
-        return colExpr + ".mean()";
-      case MEDIAN:
-        return colExpr + ".median()";
-      case STDDEV_SAMP:
-        return colExpr + ".std()";
-      case STDDEV_POP:
-        return colExpr + ".std(ddof=0)";
-      case VAR_SAMP:
-        return colExpr + ".var()";
-      case VAR_POP:
-        return colExpr + ".var(ddof=0)";
-        // Currently, the empty slice case is being handled in the calling
-        // function, generateWindowedAggFn
-      case LAST_VALUE:
-        return colExpr + ".iloc[-1]";
-      case ANY_VALUE:
-      case FIRST_VALUE:
-        return colExpr + ".iloc[0]";
-      case OTHER_FUNCTION:
-        switch (name) {
-          case "COUNT_IF":
-            return colExpr + ".sum()";
-          case "VARIANCE_SAMP":
-            return colExpr + ".var()";
-          case "VARIANCE_POP":
-            return colExpr + ".var(ddof=0)";
-        }
-      default:
-        throw new BodoSQLCodegenException(
-            "Error, column aggregation function " + kind.toString() + " not supported");
-    }
-  }
-
-  /**
    * Helper function to generated dummy names for a column. This is used by NamedAggregation when a
    * generated columnName is not valid Python.
    *
@@ -120,16 +38,6 @@ public class AggHelpers {
    */
   public static String getDummyColName(int colNum) {
     return Utils.getDummyColNameBase() + colNum;
-  }
-
-  /**
-   * Function to enclose string in square brackets
-   *
-   * @param s string to be enclosed
-   * @return single enclosed string
-   */
-  public static String encloseInBrackets(String s) {
-    return '[' + s + ']';
   }
 
   /**
@@ -143,20 +51,6 @@ public class AggHelpers {
     for (int i = 0; i < aggCallList.size(); i++) {
       AggregateCall a = aggCallList.get(i);
       if (a.filterArg != -1) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * @param aggCallList List of aggregations
-   * @return Is any column contain a call to listagg
-   */
-  public static boolean aggContainsListagg(List<AggregateCall> aggCallList) {
-
-    for (int i = 0; i < aggCallList.size(); i++) {
-      if (aggCallList.get(i).getAggregation().kind == SqlKind.LISTAGG) {
         return true;
       }
     }

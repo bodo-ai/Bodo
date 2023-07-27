@@ -2,7 +2,7 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.Utils.AggHelpers.aggContainsFilter
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.traits.BatchingProperty
 import com.google.common.collect.ImmutableList
@@ -57,7 +57,7 @@ class PandasAggregate(
         return PandasAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls)
     }
 
-    override fun emit(implementor: PandasRel.Implementor): Dataframe {
+    override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")
     }
 

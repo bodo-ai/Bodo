@@ -2590,7 +2590,10 @@ class SeriesPass:
                 )
 
         # inline conversion functions to enable optimization
-        if func_mod == "bodo.utils.conversion" and func_name != "flatten_array":
+        if func_mod == "bodo.utils.conversion" and func_name not in (
+            "flatten_array",
+            "make_replicated_array",
+        ):
             # TODO: use overload IR inlining when available
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}

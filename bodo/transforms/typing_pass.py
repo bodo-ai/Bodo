@@ -718,18 +718,20 @@ class TypingTransforms:
             and index_typ.dtype == types.boolean
         ):
             pushdown_results = guard(
-                self._follow_patterns_to_init_dataframe, assign, self.func_ir
+                self._follow_patterns_to_table_def, assign, self.func_ir
             )
             if pushdown_results is not None:
                 value_def, used_dfs, skipped_vars = pushdown_results
-                call_name = guard(find_callname, self.func_ir, value_def)
-                if call_name == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
+                node_res = guard(self._get_filter_read_and_def_nodes, value_def)
+                if node_res is not None:
+                    table_def_node, read_node = node_res
                     working_body = guard(
                         self._try_filter_pushdown,
                         assign,
                         self._working_body,
                         self.func_ir,
-                        value_def,
+                        table_def_node,
+                        read_node,
                         used_dfs,
                         skipped_vars,
                         index_def,
@@ -744,13 +746,16 @@ class TypingTransforms:
         nodes.append(assign)
         return nodes
 
-    def _follow_patterns_to_init_dataframe(
+    def _follow_patterns_to_table_def(
         self, assign: ir.Assign, func_ir: ir.FunctionIR
     ) -> Tuple[ir.Inst, Dict[str, ir.Inst], Set[str]]:
         """
-        Takes an ir.Assign that creates a DataFrame used in filter pushdown and converts it to the
-        "Expression" that defined the DataFrame. A DataFrame that can be used in filter pushdown is required
-        to be an ir.Expr that is a call to "init_dataframe".
+        Takes an ir.Assign that creates a DataFrame/Table used in filter pushdown and
+        converts it to the "Expression" that defined the DataFrame/Table.
+        A DataFrame that can be used in filter pushdown is required
+        to be an ir.Expr that is a call to "init_dataframe". A Table is not
+        subject to these constraints so long as the table can be traced back to
+        a SqlReader or ParquetReader node.
 
         However, in some code patterns BodoSQL may generate additional code beyond the init_dataframe that
         is otherwise unused. For example, BodoSQL handles unsupported types that can be cast to supported
@@ -818,8 +823,11 @@ class TypingTransforms:
             # Add this to the intermediate DataFrames
             used_dfs[used_name] = value_def
 
-        # Passing _bodo_merge_into=True with Iceberg generates a tuple. As a result
-        # we will need to traverse this tuple to the original SQLNode if it exists.
+        # Iceberg read with _bodo_merge_into=True generates a tuple. As a result
+        # we will need to traverse this tuple to the original init_dataframe if it
+        # exists and track intermediate values generated (which need to be handled).
+        # SQL streaming Snowflake read also creates static_getitem but we just need to
+        # match the specific codegen pattern generated.
         if is_expr(value_def, "static_getitem"):
             # at this stage the IR looks like:
             # $actual_val = call init_dataframe ...
@@ -839,14 +847,19 @@ class TypingTransforms:
             skipped_vars.add(used_name)
             # Find the build tuple
             tuple_def = get_definition(func_ir, exhaust_iter_def.value)
-            require(is_expr(tuple_def, "build_tuple"))
-            # Add the build tuple to tracking
-            used_name = exhaust_iter_def.value.name
-            used_dfs[used_name] = tuple_def
-            value_def = get_definition(func_ir, tuple_def.items[tuple_index])
-            # Add the original DF to tracking
-            used_name = tuple_def.items[tuple_index].name
-            used_dfs[used_name] = value_def
+            if is_expr(tuple_def, "build_tuple"):
+                # Add the build tuple to tracking
+                used_name = exhaust_iter_def.value.name
+                used_dfs[used_name] = tuple_def
+                value_def = get_definition(func_ir, tuple_def.items[tuple_index])
+                # Add the original DF to tracking
+                used_name = tuple_def.items[tuple_index].name
+                used_dfs[used_name] = value_def
+            else:
+                require(
+                    find_callname(self.func_ir, tuple_def)
+                    == ("read_arrow_next", "bodo.io.arrow_reader")
+                )
 
         if is_call(value_def) and guard(find_callname, func_ir, value_def) == (
             "__bodosql_replace_columns_dummy",
@@ -866,12 +879,66 @@ class TypingTransforms:
 
         return value_def, used_dfs, skipped_vars
 
+    def _get_filter_read_and_def_nodes(self, value_def):
+        """Find table definition node and read node for filter pushdown. value_def is
+        the definition of the DataFrame/Table being filtered and could be
+        init_dataframe, reader, or static_getitem node.
+        Performs several checks to make sure a valid filter pushdown is happening.
+
+        Args:
+            value_def (ir.Expr): definition of the DataFrame/Table that is filtered
+
+        Returns:
+            tuple(ir.Expr, ir.Expr): table definition node and reader node
+        """
+        call_name = guard(find_callname, self.func_ir, value_def)
+        if call_name == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
+            # avoid empty dataframe
+            require(len(value_def.args) > 0)
+            data_def = get_definition(self.func_ir, value_def.args[0])
+            assert is_expr(
+                data_def, "build_tuple"
+            ), "invalid data tuple in init_dataframe"
+
+            # table_def_node is the IR node that creates the input table, which is
+            # read_arrow_next() in the streaming read case but otherwise same as read node.
+            table_def_node = read_node = get_definition(self.func_ir, data_def.items[0])
+            # TODO: Change to Walrus Operator once Cython 3 is supported
+            arrow_iter_name = guard(get_table_iterator, read_node, self.func_ir)
+            if arrow_iter_name:
+                read_node = get_definition(self.func_ir, arrow_iter_name)
+            require(
+                all(
+                    get_definition(self.func_ir, v) == table_def_node
+                    for v in data_def.items
+                )
+            )
+        else:
+            table_def_node = read_node = value_def
+            arrow_iter_name = guard(get_table_iterator, read_node, self.func_ir)
+            if arrow_iter_name:
+                read_node = get_definition(self.func_ir, arrow_iter_name)
+
+        require(
+            isinstance(
+                read_node,
+                (bodo.ir.parquet_ext.ParquetReader, bodo.ir.sql_ext.SqlReader),
+            )
+        )
+        if isinstance(read_node, bodo.ir.sql_ext.SqlReader):
+            # Filter pushdown is only supported for snowflake and iceberg
+            # right now.
+            require(read_node.db_type in ("snowflake", "iceberg"))
+
+        return table_def_node, read_node
+
     def _try_filter_pushdown(
         self,
         assign,
         working_body,
         func_ir,
-        value_def,
+        table_def_node,
+        read_node,
         used_dfs: Dict[str, ir.Inst],
         skipped_vars: Set[str],
         index_def,
@@ -890,31 +957,7 @@ class TypingTransforms:
 
         Throws GuardException if not possible.
         """
-        # avoid empty dataframe
-        require(len(value_def.args) > 0)
-        data_def = get_definition(func_ir, value_def.args[0])
-        assert is_expr(data_def, "build_tuple"), "invalid data tuple in init_dataframe"
 
-        # table_def_node is the IR node that creates the input table, which is
-        # read_arrow_next() in the streaming read case but otherwise same as read node.
-        table_def_node = read_node = get_definition(func_ir, data_def.items[0])
-        # TODO: Change to Walrus Operator once Cython 3 is supported
-        arrow_iter_name = guard(get_table_iterator, read_node, func_ir)
-        if arrow_iter_name:
-            read_node = get_definition(func_ir, arrow_iter_name)
-        require(
-            isinstance(
-                read_node,
-                (bodo.ir.parquet_ext.ParquetReader, bodo.ir.sql_ext.SqlReader),
-            )
-        )
-        require(
-            all(get_definition(func_ir, v) == table_def_node for v in data_def.items)
-        )
-        if isinstance(read_node, bodo.ir.sql_ext.SqlReader):
-            # Filter pushdown is only supported for snowflake and iceberg
-            # right now.
-            require(read_node.db_type in ("snowflake", "iceberg"))
         # make sure all filters have the right form
         # If we don't have a binary operation, then we just pass
         # the single def as the index_def and set the lhs_def
@@ -1063,7 +1106,6 @@ class TypingTransforms:
                 # ignore code before the filtering node in the same basic block
                 if stmt is assign:
                     break
-
                 require(self._is_not_filter_df_use(df_names, stmt))
 
     def _is_not_filter_df_use(self, df_names, stmt):
@@ -1099,9 +1141,12 @@ class TypingTransforms:
         (no columns should be pruned, as we'll need to write back every column)"""
         if isinstance(stmt, ir.Assign):
             call_name = guard(find_callname, self.func_ir, stmt.value, self.typemap)
-            if call_name == (
-                "do_delta_merge_with_target",
-                "bodosql.libs.iceberg_merge_into",
+            if call_name in (
+                (
+                    "do_delta_merge_with_target",
+                    "bodosql.libs.iceberg_merge_into",
+                ),
+                ("pushdown_safe_init_df", "bodo.hiframes.pd_dataframe_ext"),
             ):
                 # Only need to check if the delta table is in df names.
                 # To be totally correct, we could check for uses of the delta table argument,
@@ -1610,8 +1655,12 @@ class TypingTransforms:
             raise GuardException
         # Verify that the column has a boolean type.
         df_typ = self.typemap[df_var.name]
-        col_num = df_typ.column_index[colname]
-        col_typ = df_typ.data[col_num]
+        if isinstance(df_typ, bodo.hiframes.table.TableType):
+            col_num = df_col_names.index(colname)
+            col_typ = df_typ.arr_types[col_num]
+        else:
+            col_num = df_typ.column_index[colname]
+            col_typ = df_typ.data[col_num]
         require(
             bodo.utils.utils.is_array_typ(col_typ, False)
             and col_typ.dtype == types.boolean
@@ -2362,6 +2411,14 @@ class TypingTransforms:
 
         if is_expr(var_def, "static_getitem") and var_def.value.name == df_var.name:
             return var_def.index
+
+        if (
+            is_expr(var_def, "call")
+            and find_callname(self.func_ir, var_def)
+            == ("get_table_data", "bodo.hiframes.table")
+            and var_def.args[0].name == df_var.name
+        ):
+            return df_col_names[find_const(func_ir, var_def.args[1])]
 
         # handle case with calls like df["A"].astype(int) > 2
         if is_call(var_def):
@@ -3845,6 +3902,18 @@ class TypingTransforms:
             else False
         )
 
+        # _bodo_read_as_table allows specifying that the output should be a Table rather than
+        # be wrapped in a DataFrame
+        _bodo_read_as_table = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_read_as_table",
+            default=None,
+            use_default=True,
+        )
+
         # _bodo_read_as_dict allows users to specify columns as dictionary-encoded
         # string arrays manually. This is in addition to whatever columns bodo
         # determines should be read in with dictionary encoding.
@@ -4004,10 +4073,14 @@ class TypingTransforms:
             )
         ]
         data_args = ["table_val", "idx_arr_val", "file_list_val", "snapshot_id_val"]
-        # Create the index + dataframe
-        index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
         func_text = f"def _init_df({data_args[0]}, {data_args[1]}, {data_args[2]}, {data_args[3]}):\n"
-        df_value = f"bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_read_sql_table)"
+        # If using BodoSQL, output the answer as a Table, oherwise, output the answer as a DataFrame
+        if _bodo_read_as_table:
+            df_value = data_args[0]
+        else:
+            # Create the index + dataframe
+            index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
+            df_value = f"bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_read_sql_table)"
         if _bodo_merge_into:
             # If merge_into we return a tuple of values
             func_text += f"  return ({df_value}, {data_args[2]}, {data_args[3]})\n"

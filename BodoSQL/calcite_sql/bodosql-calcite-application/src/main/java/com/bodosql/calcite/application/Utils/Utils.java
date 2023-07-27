@@ -360,13 +360,11 @@ public class Utils {
     builder.add(new Op.Assign(tableVar, tableCall));
     // Generate the index
     Variable indexVar = visitor.genIndexVar();
-    Expr.IntegerLiteral zero = new Expr.IntegerLiteral(0);
-    Expr.IntegerLiteral one = new Expr.IntegerLiteral(1);
     Expr.Len lenExpr = new Expr.Len(inputVar);
     Expr.Call indexCall =
         new Expr.Call(
             "bodo.hiframes.pd_index_ext.init_range_index",
-            List.of(zero, lenExpr, one, None.INSTANCE));
+            List.of(Expr.Companion.getZero(), lenExpr, Expr.Companion.getOne(), None.INSTANCE));
     builder.add(new Op.Assign(indexVar, indexCall));
     // Generate the DataFrame
     Variable dfVar = visitor.genDfVar();

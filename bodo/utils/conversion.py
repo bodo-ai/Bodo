@@ -839,6 +839,27 @@ def overload_coerce_to_array(
     )  # pragma: no cover
 
 
+@numba.generated_jit
+def make_replicated_array(scalar, len):
+    """
+    A special wrapper for coerce_to_array that takes in a scalar of any type and coerces it to an
+    array of specified length. This wrapper is recognized in distributed_analysis as a signal to force
+    the output to be replicated (e.g. for the output of a no-groupby aggregation).
+
+    Args:
+        scalar (any): a scalar value that needs to be coerced to an array.
+        len (integer): the number of rows the array should have.
+
+    Returns:
+        (any array): a replicated array containing the scalar input with the desired length.
+    """
+
+    def impl(scalar, len):
+        return coerce_to_array(scalar, scalar_to_arr_len=len)
+
+    return impl
+
+
 def _is_str_dtype(dtype):
     """return True if 'dtype' specifies a string data type."""
     return (

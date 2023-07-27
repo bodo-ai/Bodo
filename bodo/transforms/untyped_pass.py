@@ -950,6 +950,15 @@ class UntypedPass:
             rhs.loc,
             default=False,
         )
+        _bodo_read_as_table: bool = self._get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            10e5,
+            "_bodo_read_as_table",
+            rhs.loc,
+            default=False,
+        )
         # coerce_float = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 3, "coerce_float", default=True
         # )
@@ -981,6 +990,7 @@ class UntypedPass:
             "_bodo_read_as_dict",
             "_bodo_is_table_input",
             "_bodo_downcast_decimal_to_double",
+            "_bodo_read_as_table",
         )
 
         unsupported_args = set(kws.keys()) - set(supported_args)
@@ -1088,7 +1098,8 @@ class UntypedPass:
             )
         ]
 
-        if chunksize is not None:  # pragma: no cover
+        # _bodo_read_as_table = do not wrap the table in a DataFrame
+        if chunksize is not None or _bodo_read_as_table:  # pragma: no cover
             nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
         else:
             # TODO: Pull out to helper function for most IO functions (except Iceberg)
@@ -2382,6 +2393,7 @@ class UntypedPass:
         input_file_name_col=None,
         read_as_dict_cols=None,
         use_hive=True,
+        _bodo_read_as_table=False,
         chunksize: Optional[int] = None,
         use_index: bool = True,
     ):
@@ -2430,7 +2442,6 @@ class UntypedPass:
                 index_col_name_str = f"'{index_col_name}'"
             # ignore range index information in pandas metadata
             index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, {index_col_name_str})"
-
         else:
             # if the index_col is __index_level_0_, it means it has no name.
             # Thus we do not write the name instead of writing '__index_level_0_' as the name
@@ -2439,7 +2450,8 @@ class UntypedPass:
                 f"bodo.utils.conversion.convert_to_index(index_arr, {index_name!r})"
             )
 
-        if chunksize is not None:
+        # _bodo_read_as_table = do not wrap the output table in a DataFrame
+        if _bodo_read_as_table or chunksize is not None:  # pragma: no cover
             nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
         else:
             func_text = "def _init_df(T, index_arr):\n"
@@ -2513,6 +2525,16 @@ class UntypedPass:
             default=True,
         )
 
+        _bodo_read_as_table: bool = self._get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            10e5,
+            "_bodo_read_as_table",
+            rhs.loc,
+            default=False,
+        )
+
         # Mimicing the use_index arg from read_csv
         use_index = self._get_const_arg(
             "read_parquet",
@@ -2555,6 +2577,7 @@ class UntypedPass:
             "_bodo_input_file_name_col",
             "_bodo_read_as_dict",
             "_bodo_use_hive",
+            "_bodo_read_as_table",
             "_bodo_use_index",
         )
         unsupported_args = set(kws.keys()) - set(supported_args)
@@ -2578,6 +2601,7 @@ class UntypedPass:
             _bodo_input_file_name_col,
             _bodo_read_as_dict,
             use_hive=_bodo_use_hive,
+            _bodo_read_as_table=_bodo_read_as_table,
             chunksize=chunksize,
             use_index=use_index,
         )
@@ -3378,7 +3402,6 @@ def _get_sql_df_type_from_db(
     unsupported_columns = None
     unsupported_arrow_types = None
     pyarrow_table_schema = None
-
     if bodo.get_rank() == 0 or is_independent:
         try:
             if db_type == "snowflake":  # pragma: no cover

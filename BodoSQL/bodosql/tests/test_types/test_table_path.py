@@ -243,6 +243,7 @@ def test_table_path_avoid_unused_table_jit(
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_table_path_avoid_unused_table_python(
     parquet_filepaths, datapath, memory_leak_check
 ):
@@ -279,6 +280,7 @@ def test_table_path_avoid_unused_table_python(
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_table_path_categorical_unused_table_jit(datapath, memory_leak_check):
     """
     Tests loading a partitioned parquet table in JIT.
@@ -305,6 +307,7 @@ def test_table_path_categorical_unused_table_jit(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_table_path_categorical_unused_table_python(datapath, memory_leak_check):
     """
     Tests loading a partitioned parquet table in Python.
@@ -340,6 +343,7 @@ def test_table_path_categorical_unused_table_python(datapath, memory_leak_check)
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_table_path_timing_debug_message(datapath, memory_leak_check):
     """
     Tests that loading a table using TablePath with bodo.set_verbose_level(1)

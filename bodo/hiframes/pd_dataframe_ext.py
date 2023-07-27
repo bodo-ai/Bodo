@@ -1201,6 +1201,33 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     return sig, codegen
 
 
+def pushdown_safe_init_df(table, colNames):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(pushdown_safe_init_df, inline="never")
+def overload_pushdown_safe_init_df(table, colNames):
+    """
+    A wrapper for init_dataframe to coerce a table to a DataFrame while preventing filter pushdown
+    from tracking this function call as a "use" of the table variable. This is not to be used
+    outside of merge into.
+
+    Args:
+        table [TableType]: the table that is to be coerced to a DataFrame
+        colNames [ColNamesMetaType]: the names of the columns of the DataFrame
+
+    Returns:
+        [DataFrame] the data from the table wrapped in a DataFrame.
+    """
+
+    def impl(table, colNames):
+        index = bodo.hiframes.pd_index_ext.init_range_index(0, len(table), 1, None)
+        return bodo.hiframes.pd_dataframe_ext.init_dataframe((table,), index, colNames)
+
+    return impl
+
+
 @intrinsic
 def has_parent(typingctx, df=None):
     check_runtime_cols_unsupported(df, "has_parent")

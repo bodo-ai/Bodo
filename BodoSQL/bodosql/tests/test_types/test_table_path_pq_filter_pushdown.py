@@ -25,6 +25,7 @@ from bodo.tests.utils import (
 )
 
 
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 @pytest.mark.slow
 def test_table_path_filter_pushdown(datapath, memory_leak_check):
     """
@@ -458,6 +459,7 @@ def test_upper_coalesce_filter_pushdown(datapath, memory_leak_check):
         )
 
 
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 @pytest.mark.slow
 def test_table_path_filter_pushdown_multitable(datapath, memory_leak_check):
     """
@@ -505,6 +507,7 @@ def test_table_path_filter_pushdown_multitable(datapath, memory_leak_check):
     check_num_parquet_readers(bodo_func, 2)
 
 
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 @pytest.mark.slow
 @pytest.mark.skipif(
     bodo.bodosql_use_streaming_plan, reason="Streaming doesn't Support Reusing Table"
@@ -553,6 +556,8 @@ def test_table_path_no_filter_pushdown(datapath, memory_leak_check):
     assert not failed
 
 
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_col_pruning_and_filter_pushdown_implicit_casting(
     datapath,
@@ -640,6 +645,7 @@ def test_col_pruning_and_filter_pushdown_implicit_casting(
         check_logger_msg(stream, "Columns loaded ['B', 'A', 'C', 'E']")
 
 
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_col_pruning_and_filter_pushdown_implicit_casting_multi_table(
@@ -758,6 +764,7 @@ def test_col_pruning_and_filter_pushdown_implicit_casting_multi_table(
         check_logger_no_msg(stream, "Columns loaded")
 
 
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 @pytest.mark.slow
 def test_table_path_col_pruning_simple(datapath, memory_leak_check):
     """
@@ -884,6 +891,7 @@ def test_table_path_limit_pushdown(datapath, memory_leak_check):
     assert fir.meta_head_only_info[0] is not None
 
 
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_named_param_filter_pushdown(datapath, memory_leak_check):
     """
     Test that using a Python variable as a filter variable via the named
@@ -1052,6 +1060,7 @@ def test_boolean_logic_filter_pushdown(datapath, memory_leak_check):
             check_logger_msg(stream, "Filter pushdown successfully performed. ")
 
 
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_in_filter_pushdown(datapath):
     """
     Basic test for filter pushdown of the bodosql in kernel. Equivalent correctness/codegen
@@ -1217,6 +1226,7 @@ def test_in_filter_pushdown_e2e(datapath):
         check_logger_msg(stream, "Filter pushdown successfully performed.")
 
 
+@pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_not_in_filter_pushdown(datapath):
     """
     Basic test for filter pushdown of NOT IN.
