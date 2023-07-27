@@ -57,7 +57,7 @@ class Table:
     Python definition needed since CSV reader passes arrays from objmode
     """
 
-    def __init__(self, arrs, usecols=None, num_arrs=-1):
+    def __init__(self, arrs, usecols=None, num_arrs=-1, dist=None):
         """
         Constructor for a Python Table.
         arrs is a list of arrays to store in the table.
@@ -82,6 +82,8 @@ class Table:
         For a more complete discussion on why these changes are needed, see:
         https://bodo.atlassian.net/wiki/spaces/B/pages/921042953/Table+Structure+with+Dead+Columns
         """
+        from bodo.transforms.distributed_analysis import Distribution
+
         if usecols is not None:
             assert num_arrs != -1, "num_arrs must be provided if usecols is not None"
             # If usecols is provided we need to place everything in the
@@ -104,6 +106,7 @@ class Table:
         # for debugging purposes (enables adding print(t_arg.block_0) in unittests
         # which are called in python too)
         self.block_0 = arrs
+        self.dist = Distribution.REP.value if dist is None else dist
 
     def __eq__(self, other):
         return (
@@ -133,7 +136,9 @@ class TableType(types.ArrayCompatible):
     for each column (important for dataframes with many columns).
     """
 
-    def __init__(self, arr_types, has_runtime_cols=False):
+    def __init__(self, arr_types, has_runtime_cols=False, dist=None):
+        from bodo.transforms.distributed_analysis import Distribution
+
         self.arr_types = arr_types
         self.has_runtime_cols = has_runtime_cols
 
@@ -170,8 +175,11 @@ class TableType(types.ArrayCompatible):
         self.type_to_blk = type_to_blk
         self.blk_to_type = blk_to_type
         self.block_to_arr_ind = block_to_arr_ind
+
+        dist = Distribution.OneD_Var if dist is None else dist
+        self.dist = dist
         super(TableType, self).__init__(
-            name=f"TableType({arr_types}, {has_runtime_cols})"
+            name=f"TableType({arr_types}, {has_runtime_cols}, {dist})"
         )
 
     @property
@@ -193,10 +201,19 @@ class TableType(types.ArrayCompatible):
         """
         return self.__class__.__name__, (self._code,)
 
+    def copy(self, dist=None):
+        if dist is None:
+            dist = self.dist
+        return TableType(self.arr_types, self.has_runtime_cols, dist)
+
 
 @typeof_impl.register(Table)
 def typeof_table(val, c):
-    return TableType(tuple(numba.typeof(arr) for arr in val.arrays))
+    from bodo.transforms.distributed_analysis import Distribution
+
+    return TableType(
+        tuple(numba.typeof(arr) for arr in val.arrays), dist=Distribution(val.dist)
+    )
 
 
 @register_model(TableType)
@@ -431,6 +448,11 @@ def box_table(typ, val, c, ensure_unboxed=None):
                     )
     cls_obj = c.pyapi.unserialize(c.pyapi.serialize_object(Table))
     out_table_obj = c.pyapi.call_function_objargs(cls_obj, (table_arr_list_obj,))
+
+    dist_val_obj = c.pyapi.long_from_longlong(
+        lir.Constant(lir.IntType(64), typ.dist.value)
+    )
+    c.pyapi.object_setattr_string(out_table_obj, "dist", dist_val_obj)
 
     c.pyapi.decref(cls_obj)
     c.pyapi.decref(table_arr_list_obj)

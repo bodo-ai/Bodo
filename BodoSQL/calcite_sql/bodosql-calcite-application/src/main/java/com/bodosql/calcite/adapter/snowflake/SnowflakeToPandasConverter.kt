@@ -86,28 +86,27 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         })
     }
 
-    override fun emit(implementor: PandasRel.Implementor): Dataframe =
+    override fun emit(implementor: PandasRel.Implementor): BodoEngineTable =
         if (isStreaming()) {
             implementor.createStreamingPipeline()
             implementor.buildStreaming (
                 {ctx -> initStateVariable(ctx)},
-                {ctx, stateVar -> generateStreamingDataFrame(ctx, stateVar)},
+                {ctx, stateVar -> generateStreamingTable(ctx, stateVar)},
                 {ctx, stateVar -> deleteStateVariable(ctx, stateVar)}
             )
         } else {
-            implementor.build { ctx -> generateNonStreamingDataFrame(ctx)}
+            implementor.build { ctx -> generateNonStreamingTable(ctx)}
         }
 
     /**
      * Generate the required read expression for processing the P
      */
     private fun generateReadExpr(ctx: PandasRel.BuildContext): Expr.Call {
-        if (input is SnowflakeTableScan) {
-            // The input is a table.
-            return sqlReadTable(input as SnowflakeTableScan, ctx)
-        } else {
-            return readSql(ctx)
+        val readExpr = when {
+            (input is SnowflakeTableScan) -> sqlReadTable(input as SnowflakeTableScan, ctx)
+            else -> readSql(ctx)
         }
+        return readExpr
     }
 
     private fun getTableName()  = (input as SnowflakeTableScan).catalogTable.name
@@ -161,6 +160,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         return listOf(
             "_bodo_is_table_input" to Expr.BooleanLiteral(isTable),
             "_bodo_chunksize" to getStreamingBatchArg(ctx),
+            "_bodo_read_as_table" to Expr.BooleanLiteral(true),
         )
     }
 
@@ -176,65 +176,23 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         }
 
     /**
-     * Generate the DataFrame for the body of the streaming code.
+     * Generate the Table for the body of the streaming code.
      */
-    private fun generateStreamingDataFrame(ctx: PandasRel.BuildContext, stateVar: StateVariable): Dataframe {
+    private fun generateStreamingTable(ctx: PandasRel.BuildContext, stateVar: StateVariable): BodoEngineTable {
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
-        val dfChunkVar = builder.genDataFrameAsTable(this)
+        val tableChunkVar = builder.symbolTable.genTableVar()
         val isLastVar = currentPipeline.exitCond
         val readArrowNextCall = Expr.Call("bodo.io.arrow_reader.read_arrow_next", listOf(stateVar))
-        builder.add(Op.TupleAssign(listOf(dfChunkVar, isLastVar), readArrowNextCall))
-        // Convert the output to a DataFrame (TODO(kian): Remove)
-        val idxVar = generateRangeIndex(ctx, dfChunkVar)
-        return generateInitDataframeCode(ctx, dfChunkVar, idxVar)
+        builder.add(Op.TupleAssign(listOf(tableChunkVar, isLastVar), readArrowNextCall))
+        return BodoEngineTable(tableChunkVar.name, this)
     }
 
     /**
-     * Generate the DataFrame for the non-streaming code.
+     * Generate the Table for the non-streaming code.
      */
-    private fun generateNonStreamingDataFrame(ctx: PandasRel.BuildContext): Dataframe {
+    private fun generateNonStreamingTable(ctx: PandasRel.BuildContext): BodoEngineTable {
         val readExpr = generateReadExpr(ctx)
         return ctx.returns(readExpr)
-    }
-
-    /**
-     * Produces a dummy index that can be used for the created table.
-     *
-     * BodoSQL never uses Index values and doing this avoid a MultiIndex issue
-     * and allows Bodo to optimize more.
-     */
-    private fun generateRangeIndex(ctx: PandasRel.BuildContext, input: Dataframe): Variable {
-        val builder = ctx.builder()
-        val indexVar = builder.symbolTable.genIndexVar()
-        builder.add(Op.Assign(indexVar, Expr.Call("bodo.hiframes.pd_index_ext.init_range_index",
-            Expr.IntegerLiteral(0),
-            Expr.Call("len", input),
-            Expr.IntegerLiteral(1),
-            Expr.None,
-        )))
-        return indexVar
-    }
-
-    /**
-     * This method takes a table from streaming and initializes
-     * the dataframe with the column names and a fake index.
-     *
-     * @param ctx the pandas BuildContext for code generation.
-     * @param input the input table with the underlying data
-     * @param rangeIndex Var for index to use in dataframe
-     */
-    private fun generateInitDataframeCode(ctx: PandasRel.BuildContext, input: Variable, rangeIndex: Variable): Dataframe {
-        val globalVarName = ctx.lowerAsGlobal(
-            Expr.Call("ColNamesMetaType",
-                Expr.Tuple(rowType.fieldNames.map { Expr.StringLiteral(it) })
-            )
-        )
-        val initDataframeExpr = Expr.Call("bodo.hiframes.pd_dataframe_ext.init_dataframe",
-            Expr.Tuple(input),
-            rangeIndex,
-            globalVarName,
-        )
-        return ctx.returns(initDataframeExpr)
     }
 }

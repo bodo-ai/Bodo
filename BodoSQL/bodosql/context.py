@@ -565,26 +565,27 @@ def _generate_table_read(
         read_dict_list = (
             ""
             if bodo_type._bodo_read_as_dict is None
-            else f"_bodo_read_as_dict={bodo_type._bodo_read_as_dict},"
+            else f"_bodo_read_as_dict={bodo_type._bodo_read_as_dict}"
         )
         if file_type == "pq":
             # TODO: Replace with runtime variable once we support specifying
             # the schema
             if read_dict_list:
-                read_line = f"pd.read_parquet('{file_path}', {read_dict_list}, _bodo_use_index=False, %s)"
+                read_line = f"pd.read_parquet('{file_path}', {read_dict_list}, _bodo_use_index=False, _bodo_read_as_table=True, %s)"
             else:
-                read_line = f"pd.read_parquet('{file_path}', _bodo_use_index=False, %s)"
+                read_line = f"pd.read_parquet('{file_path}', _bodo_use_index=False, _bodo_read_as_table=True, %s)"
         elif file_type == "sql":
             # TODO: Replace with runtime variable once we support specifying
             # the schema
             conn_str = bodo_type._conn_str
             db_type, _ = parse_dbtype(conn_str)
             if db_type == "iceberg":
-                read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list} %s)"
+                if read_dict_list:
+                    read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list}, _bodo_read_as_table=True, %s)"
+                else:
+                    read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', _bodo_read_as_table=True, %s)"
             else:
-                read_line = (
-                    f"pd.read_sql('select * from {file_path}', '{conn_str}', %s)"
-                )
+                read_line = f"pd.read_sql('select * from {file_path}', '{conn_str}', _bodo_read_as_table=True, %s)"
         else:
             raise BodoError(
                 f"Internal Error: Unsupported TablePathType for type: '{file_type}'"

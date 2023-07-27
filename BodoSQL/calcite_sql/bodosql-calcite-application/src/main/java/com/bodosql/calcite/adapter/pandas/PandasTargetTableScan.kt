@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.table.BodoSqlTable
 import com.google.common.collect.ImmutableList
@@ -21,7 +21,7 @@ class PandasTargetTableScan(
         assert(convention == PandasRel.CONVENTION)
     }
 
-    override fun emit(implementor: PandasRel.Implementor): Dataframe {
+    override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")
     }
 

@@ -31,7 +31,7 @@ class PandasProject(
         return PandasProject(cluster, traitSet, input, projects, rowType)
     }
 
-    override fun emit(implementor: PandasRel.Implementor): Dataframe {
+    override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
         val inputVar = implementor.visitChild(this.input, 0)
         // Choose the build implementation.
         // TODO(jsternberg): Go over this interface again. It feels to me
@@ -44,7 +44,7 @@ class PandasProject(
         }
     }
 
-    private fun emitStreaming(implementor: PandasRel.Implementor, inputVar: Dataframe): Dataframe {
+    private fun emitStreaming(implementor: PandasRel.Implementor, inputVar: BodoEngineTable): BodoEngineTable {
         return implementor.buildStreaming (
             {ctx -> initStateVariable(ctx)},
             {
@@ -56,7 +56,7 @@ class PandasProject(
         )
     }
 
-    private fun emitSingleBatch(implementor: PandasRel.Implementor, inputVar: Dataframe): Dataframe {
+    private fun emitSingleBatch(implementor: PandasRel.Implementor, inputVar: BodoEngineTable): BodoEngineTable {
         return implementor::build {
                 ctx ->
             // Extract window aggregates and update the nodes.
@@ -70,7 +70,7 @@ class PandasProject(
      * Generate the additional inputs to generateDataFrame after handling the Window
      * Functions.
      */
-    private fun genDataFrameWindowInputs(ctx: PandasRel.BuildContext, inputVar: Dataframe): Pair<List<RexNode>, MutableList<Variable>> {
+    private fun genDataFrameWindowInputs(ctx: PandasRel.BuildContext, inputVar: BodoEngineTable): Pair<List<RexNode>, MutableList<Variable>> {
         val (windowAggregate, projectExprs) = extractWindows(cluster, inputVar, projects)
         // Emit the windows and turn this into a mutable list.
         // This is a bit strange, but we're going to add to this list
@@ -80,7 +80,7 @@ class PandasProject(
         return Pair(projectExprs, localRefs)
     }
 
-    private fun generateDataFrame(ctx: PandasRel.BuildContext, inputVar: Dataframe, translator: RexToPandasTranslator, projectExprs: List<RexNode>, localRefs: MutableList<Variable>): Dataframe {
+    private fun generateDataFrame(ctx: PandasRel.BuildContext, inputVar: BodoEngineTable, translator: RexToPandasTranslator, projectExprs: List<RexNode>, localRefs: MutableList<Variable>): BodoEngineTable {
         try {
             if (canUseLoc()) {
                 return generateLocCode(ctx, inputVar)
@@ -131,27 +131,17 @@ class PandasProject(
     }
 
     /**
-     * Uses the .loc call to create a projection from [RexInputRef] values.
+     * Uses table_subset to create a projection from [RexInputRef] values.
      *
      * This function assumes the projection only contains [RexInputRef] values
      * and those values do not have duplicates. The method [canUseLoc]
      * should be invoked before calling this function.
      */
-    private fun generateLocCode(ctx: PandasRel.BuildContext, input: Dataframe): Dataframe {
-        val colNames = namedProjects.asSequence()
-            // Retrieve the input column names we are going to reference.
-            // TODO(jsternberg): Can we just reference these by index? It would make
-            // the generated code a bit harder to follow, but the reliability of the generated
-            // code would probably go up.
-            .map { (r, _) -> input.rowType.fieldNames[(r as RexInputRef).index] }
-            .map { name -> Expr.StringLiteral(name) }
-        val locExpr = Expr.Index(
-            Expr.Attribute(input, "loc"),
-            Expr.Slice(),
-            Expr.List(colNames.toList())
-        )
-
-        val resultExpr = generateRenameIfNeeded(locExpr, input.rowType)
+    private fun generateLocCode(ctx: PandasRel.BuildContext, input: BodoEngineTable): BodoEngineTable {
+        val colIndices = getProjects().map { r -> Expr.IntegerLiteral((r as RexInputRef).index) }
+        val typeCall = Expr.Call("MetaType", Expr.Tuple(colIndices))
+        val colNamesMeta = ctx.lowerAsGlobal(typeCall);
+        val resultExpr = Expr.Call("bodo.hiframes.table.table_subset", input, colNamesMeta, Expr.False)
         return ctx.returns(resultExpr)
     }
 
@@ -189,7 +179,7 @@ class PandasProject(
      *
      * This is the general catch-all for most projections.
      */
-    private fun generateProject(ctx: PandasRel.BuildContext, inputVar: Dataframe, translator: RexToPandasTranslator, projectExprs: List<RexNode>, localRefs: MutableList<Variable>): Dataframe {
+    private fun generateProject(ctx: PandasRel.BuildContext, inputVar: BodoEngineTable, translator: RexToPandasTranslator, projectExprs: List<RexNode>, localRefs: MutableList<Variable>): BodoEngineTable {
         // Evaluate projections into new series.
         // In order to optimize this, we only generate new series
         // for projections that are non-trivial (aka not a RexInputRef)
@@ -211,9 +201,9 @@ class PandasProject(
                     it
                 }
             }
-            val series = builder.symbolTable.genSeriesVar()
-            builder.add(Op.Assign(series, expr))
-            localRefs.add(series)
+            val arr = builder.symbolTable.genArrayVar()
+            builder.add(Op.Assign(arr, expr))
+            localRefs.add(arr)
             RexLocalRef(localRefs.lastIndex, proj.type)
         }
 
@@ -225,10 +215,8 @@ class PandasProject(
                 else -> throw AssertionError("Internal Error: Projection must be InputRef or LocalRef")
             }
         }
-
-        val rangeIndex = generateRangeIndex(ctx, inputVar)
-        val logicalTableVar = generateLogicalTableCode(ctx, inputVar, indices, localRefs)
-        return generateInitDataframeCode(ctx, logicalTableVar, rangeIndex)
+        val logicalTableVar = generateLogicalTableCode(ctx, inputVar, indices, localRefs, input.rowType.fieldCount)
+        return ctx.returns(logicalTableVar);
     }
 
     /**
@@ -246,30 +234,12 @@ class PandasProject(
      * @param scalar the expression that refers to the scalar value.
      * @param input the input dataframe.
      */
-    private fun coerceScalarToArray(ctx: PandasRel.BuildContext, dataType: RelDataType, scalar: Expr, input: Dataframe): Expr {
+    private fun coerceScalarToArray(ctx: PandasRel.BuildContext, dataType: RelDataType, scalar: Expr, input: BodoEngineTable): Expr {
         val global = ctx.lowerAsGlobal(BodoArrayHelpers.sqlTypeToBodoArrayType(dataType, true))
         return Expr.Call("bodo.utils.conversion.coerce_scalar_to_array",
             scalar,
             Expr.Call("len", input),
             global)
-    }
-
-    /**
-     * Produces a dummy index that can be used for the created table.
-     *
-     * BodoSQL never uses Index values and doing this avoid a MultiIndex issue
-     * and allows Bodo to optimize more.
-     */
-    private fun generateRangeIndex(ctx: PandasRel.BuildContext, input: Dataframe): Variable {
-        val builder = ctx.builder()
-        val indexVar = builder.symbolTable.genIndexVar()
-        builder.add(Op.Assign(indexVar, Expr.Call("bodo.hiframes.pd_index_ext.init_range_index",
-            Expr.IntegerLiteral(0),
-            Expr.Call("len", input),
-            Expr.IntegerLiteral(1),
-            Expr.None,
-        )))
-        return indexVar
     }
 
     /**
@@ -279,12 +249,13 @@ class PandasProject(
      * either the input dataframe or one of the additional series provided in the series list.
      *
      * @param implementor the pandas implementor for code generation.
-     * @param input input dataframe.
+     * @param input input table.
      * @param indices list of indices to initialize the table with.
      * @param seriesList additional series that should be included in the list of indices.
+     * @param colsBeforeProject number of columns in the input table before any projection occurs.
      */
-    private fun generateLogicalTableCode(ctx: PandasRel.BuildContext, input: Dataframe,
-                                         indices: List<Int>, seriesList: List<Variable>): Variable {
+    private fun generateLogicalTableCode(ctx: PandasRel.BuildContext, input: BodoEngineTable,
+                                         indices: List<Int>, seriesList: List<Variable>, colsBeforeProject: Int): Variable {
         // Use the list of indices to generate a meta type with the column numbers.
         val metaType = ctx.lowerAsGlobal(
             Expr.Call("MetaType",
@@ -294,40 +265,15 @@ class PandasProject(
 
         // Generate the output table with logical_table_to_table.
         val logicalTableExpr = Expr.Call("bodo.hiframes.table.logical_table_to_table",
-            Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", input),
+            input,
             Expr.Tuple(seriesList),
             metaType,
-            Expr.Index(
-                Expr.Attribute(input, "shape"),
-                Expr.IntegerLiteral(1),
-            )
+            Expr.IntegerLiteral(colsBeforeProject)
         )
         val builder = ctx.builder()
         val logicalTableVar = builder.symbolTable.genTableVar()
         builder.add(Op.Assign(logicalTableVar, logicalTableExpr))
         return logicalTableVar
-    }
-
-    /**
-     * This method takes a logical table created from [generateLogicalTableCode] and initializes
-     * the dataframe with the column names and a fake index.
-     *
-     * @param implementor the pandas implementor for code generation.
-     * @param output the target output dataframe
-     * @param input the input table with the underlying data
-     */
-    private fun generateInitDataframeCode(ctx: PandasRel.BuildContext, input: Variable, rangeIndex: Variable): Dataframe {
-        val globalVarName = ctx.lowerAsGlobal(
-            Expr.Call("ColNamesMetaType",
-                Expr.Tuple(rowType.fieldNames.map { Expr.StringLiteral(it) })
-            )
-        )
-        val initDataframeExpr = Expr.Call("bodo.hiframes.pd_dataframe_ext.init_dataframe",
-            Expr.Tuple(input),
-            rangeIndex,
-            globalVarName,
-        )
-        return ctx.returns(initDataframeExpr)
     }
 
     companion object {

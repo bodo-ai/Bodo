@@ -3,7 +3,7 @@ package com.bodosql.calcite.adapter.pandas
 import com.bodosql.calcite.adapter.pandas.window.Builder
 import com.bodosql.calcite.adapter.pandas.window.MultiResult
 import com.bodosql.calcite.adapter.pandas.window.Result
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.rex.RexLocalRef
 import org.apache.calcite.rex.RexNode
@@ -18,7 +18,7 @@ import org.apache.calcite.rex.RexOver
  * [RexOver] calls that have the same partition key will be organized together
  * to reduce the number of windowed aggregate invocations.
  */
-fun extractWindows(cluster: RelOptCluster, input: Dataframe, exprs: List<RexNode>): MultiResult {
+fun extractWindows(cluster: RelOptCluster, input: BodoEngineTable, exprs: List<RexNode>): MultiResult {
     val windowBuilder = Builder(cluster, input)
     val newExprs = exprs.map { exp -> exp.accept(windowBuilder) }
     return MultiResult(windowBuilder.build(), newExprs)
@@ -32,7 +32,7 @@ fun extractWindows(cluster: RelOptCluster, input: Dataframe, exprs: List<RexNode
  *
  * @see [extract]
  */
-fun extractWindows(cluster: RelOptCluster, input: Dataframe, expr: RexNode): Result {
+fun extractWindows(cluster: RelOptCluster, input: BodoEngineTable, expr: RexNode): Result {
     val (aggregate, exprs) = extractWindows(cluster, input, listOf(expr))
     return Result(aggregate, exprs[0])
 }

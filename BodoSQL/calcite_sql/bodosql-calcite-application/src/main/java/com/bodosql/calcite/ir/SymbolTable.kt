@@ -12,8 +12,12 @@ package com.bodosql.calcite.ir
  */
 class SymbolTable {
     private var dfVarId: Int = 1
+    private var tableVarId: Int = 1
+    private var seriesVarId: Int = 1
+    private var arrVarId: Int = 1
     private var colVarId: Int = 1
     private var accVarId: Int = 1
+    private var tempVarId: Int = 1
     private var streamingFlagId: Int = 1
     private var streamingReaderId: Int = 1
     private var streamingWriterId: Int = 1
@@ -33,12 +37,17 @@ class SymbolTable {
     }
 
     fun genTableVar(): Variable {
-        return Variable("T${dfVarId++}")
+        return Variable("T${tableVarId++}")
     }
 
     fun genSeriesVar(): Variable {
-        return Variable("S${dfVarId++}")
+        return Variable("S${seriesVarId++}")
     }
+
+    fun genArrayVar(): Variable {
+        return Variable("A${arrVarId++}")
+    }
+    
     fun genIndexVar(): Variable {
         return Variable("index_${idxVarId++}")
     }
@@ -56,7 +65,7 @@ class SymbolTable {
     }
 
     fun genGenericTempVar(): Variable {
-        return Variable("_temp${dfVarId++}")
+        return Variable("_temp${tempVarId++}")
     }
 
     fun genTempColumnVar(): Variable {

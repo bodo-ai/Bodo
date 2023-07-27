@@ -1,11 +1,11 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
+import static com.bodosql.calcite.application.Utils.Utils.integerLiteralArange;
 
 import com.bodosql.calcite.application.*;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
-import com.bodosql.calcite.ir.ExprKt;
 import com.bodosql.calcite.ir.Variable;
 import java.util.*;
 import java.util.Collections;
@@ -30,7 +30,6 @@ public class LogicalValuesCodeGen {
 
     List<String> columnNames = rowType.getFieldNames();
     List<RelDataTypeField> sqlTypes = rowType.getFieldList();
-    List<kotlin.Pair<Expr, Expr>> dfItems = new ArrayList<>();
 
     final int columnLength;
     if (argExprs.size() == 0) {
@@ -40,29 +39,37 @@ public class LogicalValuesCodeGen {
     } else {
       columnLength = 1;
     }
+
+    List<Expr> valuesList = new ArrayList<Expr>();
+
     // Logical Values contain a tuple of entries to fill one row
     for (int i = 0; i < columnNames.size(); i++) {
       // Scalars require separate code path to handle null.
       Variable global =
           pdVisitorClass.lowerAsGlobal(sqlTypeToBodoArrayType(sqlTypes.get(i).getType(), true));
-      String colName = columnNames.get(i);
-
-      // TODO (allai5): need to refactor this
       Expr expression = new Expr.Raw(argExprs.get(i));
       Expr length = new Expr.IntegerLiteral(columnLength);
 
       List<Expr> scalarToArrayArgs = List.of(expression, length, global);
       Expr.Call value =
           new Expr.Call("bodo.utils.conversion.coerce_scalar_to_array", scalarToArrayArgs);
-      dfItems.add(new kotlin.Pair<>(new Expr.StringLiteral(colName), value));
+      valuesList.add(value);
     }
-
-    Expr length = new Expr.IntegerLiteral(columnLength);
-    List<Expr> indexArgs =
-        List.of(new Expr.IntegerLiteral(0), length, new Expr.IntegerLiteral(1), Expr.None.INSTANCE);
-    Expr index = ExprKt.initRangeIndex(indexArgs, List.of());
-    return new Expr.Call("pd.DataFrame",
-        List.of(new Expr.Dict(dfItems)),
-        List.of(new kotlin.Pair<String, Expr>("index", index)));
+    Expr.Call indexCall =
+        new Expr.Call(
+            "bodo.hiframes.pd_index_ext.init_range_index",
+            List.of(
+                Expr.Companion.getZero(),
+                Expr.Companion.getOne(),
+                Expr.Companion.getOne(),
+                Expr.None.INSTANCE));
+    int numBuildCols = rowType.getFieldCount();
+    List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numBuildCols);
+    Variable buildColNums = pdVisitorClass.lowerAsColNamesMetaType(new Expr.Tuple(buildIndices));
+    return new Expr.Call(
+        "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+        new Expr.Tuple(valuesList),
+        indexCall,
+        buildColNums);
   }
 }

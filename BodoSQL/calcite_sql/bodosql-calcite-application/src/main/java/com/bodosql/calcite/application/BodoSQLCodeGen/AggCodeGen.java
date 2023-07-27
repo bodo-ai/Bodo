@@ -5,12 +5,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getNAPo
 import static com.bodosql.calcite.application.Utils.AggHelpers.generateGroupByCall;
 import static com.bodosql.calcite.application.Utils.AggHelpers.getCountCall;
 import static com.bodosql.calcite.application.Utils.AggHelpers.getDummyColName;
-import static com.bodosql.calcite.application.Utils.Utils.assertWithErrMsg;
-import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
-import static com.bodosql.calcite.application.Utils.Utils.getInputColumn;
-import static com.bodosql.calcite.application.Utils.Utils.isValidPythonIdentifier;
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
-import static com.bodosql.calcite.application.Utils.Utils.renameColumns;
+import static com.bodosql.calcite.application.Utils.Utils.*;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
@@ -18,7 +13,6 @@ import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Variable;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import org.apache.calcite.rel.RelFieldCollation;
@@ -122,7 +116,7 @@ public class AggCodeGen {
    *
    * @param inVar Input dataframe
    * @param inputColumnNames Column names of the input dataframe
-   * @param aggregateCall the listagg aggregate call
+   * @param aggregateCall The listagg aggregate call
    * @return
    */
   private static Expr genNonGroupedListaggCall(
@@ -130,8 +124,6 @@ public class AggCodeGen {
     assert aggregateCall.getAggregation().getKind() == SqlKind.LISTAGG
         : "Internal error in genNonGroupedListaggCall: input aggregation is not listagg";
     String fn_name = "bodo.libs.bodosql_listagg.bodosql_listagg";
-    Expr.StringLiteral aggColString =
-        new Expr.StringLiteral(inputColumnNames.get(aggregateCall.getArgList().get(0)));
 
     List<Expr.StringLiteral> orderbyList = new ArrayList<>();
     List<Expr.BooleanLiteral> ascendingList = new ArrayList<>();
@@ -156,15 +148,18 @@ public class AggCodeGen {
     // We convert it back to scalar by simply taking the 0'th element of the array.
     Expr sepExpr =
         new Expr.Index(
-            new Expr.Index(
+            new Expr.Call(
+                "bodo.hiframes.pd_dataframe_ext.get_dataframe_data",
                 inVar,
-                new Expr.StringLiteral(inputColumnNames.get(aggregateCall.getArgList().get(1)))),
+                new Expr.IntegerLiteral(aggregateCall.getArgList().get(1))),
             new Expr.IntegerLiteral(0));
+
+    String aggCol = inputColumnNames.get(aggregateCall.getArgList().get(0));
 
     List<Expr> argsList =
         List.of(
             inVar,
-            aggColString,
+            new Expr.StringLiteral(aggCol),
             new Expr.Tuple(orderbyList),
             new Expr.Tuple(ascendingList),
             new Expr.Tuple(nullDirList),
@@ -184,6 +179,7 @@ public class AggCodeGen {
    *     is used as 1 step in an aggregation (e.g. group by cube), then the output is distributed.
    *     When it is the only aggregation group across the entire output (e.g. select SUM(A) from
    *     table1), then it is replicated.
+   * @param pdVisitorClass The PandasCodeGenVisitor used to lower globals.
    * @return The code generated for the aggregation.
    */
   public static Expr generateAggCodeNoGroupBy(
@@ -191,151 +187,156 @@ public class AggCodeGen {
       List<String> inputColumnNames,
       List<AggregateCall> aggCallList,
       List<String> aggCallNames,
-      boolean distOutput) {
+      boolean distOutput,
+      PandasCodeGenVisitor pdVisitorClass) {
     // Generates code like: pd.DataFrame({"sum(A)": [test_df1["A"].sum()], "mean(B)":
     // [test_df1["A"].mean()]})
     // Generate any filters. This is done on a separate line for simpler
     // code in case the series is empty.
 
-    StringBuilder aggString = new StringBuilder();
+    List<Expr> aggVars = new ArrayList<Expr>();
 
-    aggString.append("pd.DataFrame({");
     for (int i = 0; i < aggCallList.size(); i++) {
-      // Generate the filter. This is done on a separate line for simpler
-      // code in case the series is empty.
-      // TODO: Avoid conflict with other Relnodes? Not necessary for correctness
-      // because these values are use once
+
       AggregateCall a = aggCallList.get(i);
-      String outColName;
-      // Determine if we need to apply a filter
-      String filterCol = "";
-      if (a.filterArg != -1) {
-        filterCol = inputColumnNames.get(a.filterArg);
-      }
 
-      StringBuilder seriesBuilder = new StringBuilder();
-      seriesBuilder.append(inVar.emit());
+      Expr aggExpr = inVar;
+
+      // If doing an aggregation besides COUNT(*), extract the desired aggregation column
       if (!(a.getAggregation().getKind() == SqlKind.COUNT && a.getArgList().isEmpty())) {
-        // If we are performing a COUNT(*) then we avoid selecting a single series since
-        // we may be able to compute a length without a particular column.
-        // Get the input column.
-        String aggCol = getInputColumn(inputColumnNames, a, new ArrayList());
-
-        // First, construct the filtered series
-        // TODO: Refactor the series to only produce unique column + filter pairs
-        seriesBuilder.append("[").append(makeQuoted(aggCol)).append("]");
-      }
-      if (filterCol.length() > 0) {
-        seriesBuilder
-            .append("[")
-            .append(inVar.emit())
-            .append("[")
-            .append(makeQuoted(filterCol))
-            .append("]]");
+        Expr aggCol = new Expr.IntegerLiteral(a.getArgList().get(0));
+        aggExpr =
+            new Expr.Call(
+                "bodo.hiframes.pd_dataframe_ext.get_dataframe_data", List.of(aggExpr, aggCol));
       }
 
-      // Get the output column name
-      outColName = aggCallNames.get(i);
-      aggString.append(makeQuoted(outColName)).append(": ");
+      // If necessary, apply a filter to the input
+      if (a.filterArg != -1) {
+        Expr filterCol =
+            new Expr.Call(
+                "bodo.hiframes.pd_dataframe_ext.get_dataframe_data",
+                List.of(inVar, new Expr.IntegerLiteral(a.filterArg)));
+        aggExpr = new Expr.Index(aggExpr, filterCol);
+      }
+
+      // Keep a copy of the expression at this point to use for length checking
+      Expr filteredExpr = aggExpr;
 
       Pair<String, Boolean> funcInfo = getAggFuncInfo(a, false);
       String aggFunc = funcInfo.getKey();
       boolean isMethod = funcInfo.getValue();
 
-      // We need an optional type in case the series is empty.
-      if (a.getAggregation().getKind() != SqlKind.COUNT
-          && a.getAggregation().getKind() != SqlKind.SUM0
-          && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE
-          && !aggFunc.equals("count_if")) {
-        aggString.append("bodosql.libs.null_handling.null_if_not_flag(");
-      }
-
       // If the aggregation function is ANY_VALUE, manually alter syntax
       // to use brackets
       if (aggFunc.equals("iloc")) {
-        aggString.append(seriesBuilder).append(".iloc[0]");
+        aggExpr = new Expr.Index(aggExpr, Expr.Companion.getZero());
       } else if (aggFunc.equals("np.var")) {
-        aggString.append(seriesBuilder).append(".var(ddof=0)");
+        kotlin.Pair<String, Expr> ddofKwarg = new kotlin.Pair("ddof", Expr.Companion.getZero());
+        aggExpr = new Expr.Call("pd.Series", aggExpr);
+        aggExpr = new Expr.Method(aggExpr, "var", List.of(), List.of(ddofKwarg));
       } else if (aggFunc.equals("np.std")) {
-        aggString.append(seriesBuilder).append(".std(ddof=0)");
+        kotlin.Pair<String, Expr> ddofKwarg = new kotlin.Pair("ddof", Expr.Companion.getZero());
+        aggExpr = new Expr.Call("pd.Series", aggExpr);
+        aggExpr = new Expr.Method(aggExpr, "std", List.of(), List.of(ddofKwarg));
       } else if (aggFunc.equals("count_if")) {
-        aggString.append(seriesBuilder).append(".sum()");
+        aggExpr = new Expr.Call("pd.Series", aggExpr);
+        aggExpr = new Expr.Method(aggExpr, "sum", List.of(), List.of());
       } else if (aggFunc.equals("boolor_agg")
           || aggFunc.equals("booland_agg")
           || aggFunc.equals("boolxor_agg")
           || aggFunc.equals("bitor_agg")
           || aggFunc.equals("bitand_agg")
           || aggFunc.equals("bitxor_agg")) {
-        aggString
-            .append("bodo.libs.array_kernels.")
-            .append(aggFunc)
-            .append("(")
-            .append(seriesBuilder)
-            .append(".values)");
+        aggExpr = new Expr.Call("bodo.libs.array_kernels." + aggFunc, aggExpr);
       } else if (aggFunc.equals("approx_percentile")) {
         assertWithErrMsg(a.getArgList().size() == 2, "APPROX_PERCENTILE requires two arguments");
         // Currently, the scalar float argument is converted into a column. To
         // access the quantile value, extract the first row.
-        String quantile_str =
-            inVar.emit()
-                + "["
-                + makeQuoted(inputColumnNames.get(a.getArgList().get(1)))
-                + "].iloc[0]";
+        Expr quantileColumn =
+            new Expr.Call(
+                "bodo.hiframes.pd_dataframe_ext.get_dataframe_data",
+                List.of(inVar, new Expr.IntegerLiteral(a.getArgList().get(1))));
+        Expr quantileScalar = new Expr.Index(quantileColumn, Expr.Companion.getZero());
         // TODO: confirm that the second argument is a float
         assertWithErrMsg(true, "The second argument to APPROX_PERCENTILE must be a scalar float");
         // TODO: confirm that the second argument is between zero and one
         assertWithErrMsg(
             true, "The second argument to APPROX_PERCENTILE must be between 0.0 and 1.0");
-        aggString
-            .append("bodo.libs.array_kernels.approx_percentile")
-            .append("(")
-            .append(seriesBuilder)
-            .append(".values")
-            .append(", ")
-            .append(quantile_str)
-            .append(")");
-
+        aggExpr =
+            new Expr.Call("bodo.libs.array_kernels.approx_percentile", aggExpr, quantileScalar);
+      } else if (isMethod) {
+        aggExpr = new Expr.Call("pd.Series", aggExpr);
+        aggExpr = new Expr.Method(aggExpr, aggFunc, List.of(), List.of());
       } else if (aggFunc.equals("listagg")) {
-
-        aggString.append(genNonGroupedListaggCall(inVar, inputColumnNames, a).emit());
+        aggExpr = genNonGroupedListaggCall(inVar, inputColumnNames, a);
       } else {
-        if (!isMethod) {
-          // If we have a function surround the column
-          aggString.append(aggFunc).append("(");
-        }
-        // append the column and if necessary filter
-        aggString.append(seriesBuilder);
-        if (isMethod) {
-          // If we have a method do the method call instead.
-          // We currently don't support any extra arguments
-          aggString.append(".").append(aggFunc).append("(");
-        }
-        // Both func and method need a closing )
-        aggString.append(")");
+        aggExpr = new Expr.Call(aggFunc, aggExpr);
       }
 
+      // If doing an aggregation besides one of the count families, coerce the output to null
+      // if the input is empty.
+      // We need an optional type in case the series is empty.
       if (a.getAggregation().getKind() != SqlKind.COUNT
           && a.getAggregation().getKind() != SqlKind.SUM0
           && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE
           && !aggFunc.equals("count_if")) {
-        // We need an optional type in case the series is empty
-        aggString.append(", len(").append(seriesBuilder).append(") > 0)");
+        Expr lengthFlag =
+            new Expr.Binary(">", new Expr.Call("len", filteredExpr), Expr.Companion.getZero());
+        aggExpr = new Expr.Call("bodosql.libs.null_handling.null_if_not_flag", aggExpr, lengthFlag);
       }
 
-      aggString.append(", ");
+      // Force the result to be an array that is replicated unless the output can be distributed
+      // (e.g. if it is inside a grouping set). Each path will always take exactly one of the
+      // routes.
+      if (distOutput) {
+        List<kotlin.Pair<String, Expr>> namedParams =
+            List.of(new kotlin.Pair<String, Expr>("scalar_to_arr_len", new Expr.IntegerLiteral(1)));
+        aggExpr =
+            new Expr.Call("bodo.utils.conversion.coerce_to_array", List.of(aggExpr), namedParams);
+      } else {
+        aggExpr =
+            new Expr.Call(
+                "bodo.utils.conversion.make_replicated_array", aggExpr, Expr.Companion.getOne());
+      }
+
+      // Store the result in a variable
+      Variable arrayVar = pdVisitorClass.storeAsArrayVariable(aggExpr);
+      aggVars.add(arrayVar);
     }
-    // Aggregation without groupby should always have one element.
-    // To force this value to be replicated (the correct output),
-    // we use coerce to array.
-    aggString.append("}, index=");
+
+    Expr.Tuple valuesTuple = new Expr.Tuple(aggVars);
+
+    // Generate the index
+    Expr.Call indexCall;
     if (distOutput) {
-      aggString.append("bodo.hiframes.pd_index_ext.init_range_index(0, 1, 1, None)");
+      indexCall =
+          new Expr.Call(
+              "bodo.hiframes.pd_index_ext.init_range_index",
+              List.of(
+                  Expr.Companion.getZero(),
+                  Expr.Companion.getOne(),
+                  Expr.Companion.getOne(),
+                  Expr.None.INSTANCE));
     } else {
-      aggString.append(
-          "bodo.hiframes.pd_index_ext.init_numeric_index(bodo.utils.conversion.coerce_to_array([0]))");
+      // Aggregation without groupby should always have one element.
+      // To force this value to be replicated (the correct output),
+      // we use coerce to array.
+      indexCall =
+          new Expr.Call(
+              "bodo.hiframes.pd_index_ext.init_numeric_index",
+              new Expr.Call(
+                  "bodo.utils.conversion.coerce_to_array",
+                  new Expr.List(Expr.Companion.getZero())));
     }
-    aggString.append(")");
-    return new Expr.Raw(aggString.toString());
+    // Generate the column names global
+    List<Expr.StringLiteral> colNamesLiteral = stringsToStringLiterals(aggCallNames);
+    Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
+    Variable colNamesMeta = pdVisitorClass.lowerAsColNamesMetaType(colNamesTuple);
+    Expr dfExpr =
+        new Expr.Call(
+            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+            List.of(valuesTuple, indexCall, colNamesMeta));
+    return dfExpr;
   }
 
   /**
@@ -543,6 +544,7 @@ public class AggCodeGen {
    * @param aggCallList The list of aggregations to be performed.
    * @param aggCallNames The column names into which to store the outputs of the aggregation
    * @param funcVar Variable for the function generated for df.apply.
+   * @param pdVisitorClass The PandasCodeGenVisitor used to lower globals.
    * @return A pair of the code expression generated for the aggregation, and the function
    *     definition that is used in the groupby apply.
    */
@@ -552,22 +554,29 @@ public class AggCodeGen {
       List<Integer> group,
       List<AggregateCall> aggCallList,
       List<String> aggCallNames,
-      Variable funcVar) {
-
+      Variable funcVar,
+      PandasCodeGenVisitor pdVisitorClass) {
     StringBuilder fnString = new StringBuilder();
 
     final String indent = getBodoIndent();
     final String funcIndent = indent + indent;
 
     /*
-     * First we generate the closure that will be used in the apply. This
-     * will compute each operation on a line and return a series, using
-     * pd.Index to name the output.
+     * First we generate the closure that will be used in the apply.
      */
     fnString.append(indent).append("def ").append(funcVar.getName()).append("(df):\n");
 
     ArrayList<String> seriesArgs = new ArrayList<>();
     ArrayList<String> indexNames = new ArrayList<>();
+
+    for (int i : group) {
+      Expr columnName = new Expr.StringLiteral(inputColumnNames.get(i));
+      Expr groupCol = new Expr.Index(new Expr.Raw("df"), columnName);
+      Expr groupValScalar =
+          new Expr.Index(new Expr.Attribute(groupCol, "iloc"), Expr.Companion.getZero());
+      seriesArgs.add(groupValScalar.emit());
+    }
+
     for (int i = 0; i < aggCallList.size(); i++) {
       AggregateCall a = aggCallList.get(i);
       // Get the input column
@@ -626,7 +635,8 @@ public class AggCodeGen {
         fnString.append(seriesVar);
         fnString.append(".sum()");
       } else if (aggFunc.equals("listagg")) {
-        fnString.append(genNonGroupedListaggCall(new Variable("df"), inputColumnNames, a).emit());
+        Variable dfVar = new Variable("df");
+        fnString.append(genNonGroupedListaggCall(dfVar, inputColumnNames, a).emit());
       } else {
         if (!isMethod) {
           // If we have a function surround the column
@@ -654,16 +664,41 @@ public class AggCodeGen {
       // Both func and method need a closing )
       fnString.append("\n");
     }
-    // Generate the output Series
-    fnString.append(funcIndent).append("return pd.Series((");
+    // Generate the output
+
+    List<Expr> aggVars = new ArrayList<Expr>();
     for (String arg : seriesArgs) {
-      fnString.append(arg).append(", ");
+      Expr varSingletonList = new Expr.List(new Expr.Raw(arg));
+      aggVars.add(new Expr.Call("bodo.utils.conversion.coerce_to_array", varSingletonList));
     }
-    fnString.append("), index=pd.Index((");
-    for (String name : indexNames) {
-      fnString.append(makeQuoted(name)).append(", ");
+
+    Expr.Tuple valuesTuple = new Expr.Tuple(aggVars);
+
+    // Generate the index
+    Expr.Call indexCall =
+        new Expr.Call(
+            "bodo.hiframes.pd_index_ext.init_range_index",
+            List.of(
+                Expr.Companion.getZero(),
+                Expr.Companion.getOne(),
+                Expr.Companion.getOne(),
+                Expr.None.INSTANCE));
+    // Generate the column names global
+    List<Expr> colNamesLiteral = new ArrayList<Expr>();
+    for (int i : group) {
+      String columnName = inputColumnNames.get(i);
+      colNamesLiteral.add(new Expr.StringLiteral(columnName));
     }
-    fnString.append(")))\n");
+    for (String aggCallName : aggCallNames) {
+      colNamesLiteral.add(new Expr.StringLiteral(aggCallName));
+    }
+    Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
+    Variable colNamesMeta = pdVisitorClass.lowerAsColNamesMetaType(colNamesTuple);
+    Expr dfExpr =
+        new Expr.Call(
+            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+            List.of(valuesTuple, indexCall, colNamesMeta));
+    fnString.append(funcIndent).append("return ").append(dfExpr.emit()).append("\n");
 
     StringBuilder applyString = new StringBuilder();
 

@@ -1,10 +1,9 @@
 package com.bodosql.calcite.traits
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.ir.StateVariable
-import com.bodosql.calcite.plan.Cost
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner
@@ -28,7 +27,7 @@ class CombineStreamsExchange(cluster: RelOptCluster, traits: RelTraitSet, input:
         return true
     }
 
-    override fun emit(implementor: PandasRel.Implementor): Dataframe {
+    override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
         // This should never be called, we need to handle CombineStreamsExchange
         // in the visitor itself due to needing to mess with the visitor state slightly
         TODO("Not yet implemented")

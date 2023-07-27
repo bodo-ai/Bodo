@@ -1,6 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.RelOptCluster
@@ -33,7 +33,7 @@ class PandasSort(
         return PandasSort(cluster, traitSet, newInput, newCollation, offset, fetch)
     }
 
-    override fun emit(implementor: PandasRel.Implementor): Dataframe {
+    override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")
     }
 

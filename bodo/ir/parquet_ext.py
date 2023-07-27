@@ -115,6 +115,7 @@ class ParquetHandler:
         input_file_name_col=None,
         read_as_dict_cols=None,
         use_hive=True,
+        _bodo_read_as_table=False,
         chunksize: Optional[int] = None,
         use_index: bool = True,
     ):

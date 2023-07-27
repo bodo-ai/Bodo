@@ -84,7 +84,7 @@ import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.Utils.BodoCtx;
-import com.bodosql.calcite.ir.Dataframe;
+import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.FrameTripleQuotedString;
 import com.bodosql.calcite.ir.Expr.None;
@@ -158,7 +158,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   @NotNull protected final Module.Builder builder;
   @NotNull protected final RelDataTypeSystem typeSystem;
   protected final int nodeId;
-  @NotNull protected final Dataframe input;
+  @NotNull protected final BodoEngineTable input;
   protected final List<? extends Expr> localRefs;
 
   @NotNull public final BodoCtx ctx;
@@ -171,7 +171,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       @NotNull Module.Builder builder,
       @NotNull RelDataTypeSystem typeSystem,
       int nodeId,
-      @NotNull Dataframe input,
+      @NotNull BodoEngineTable input,
       @NotNull List<? extends Expr> localRefs) {
     this.visitor = visitor;
     this.builder = builder;
@@ -194,18 +194,18 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       @NotNull Module.Builder builder,
       @NotNull RelDataTypeSystem typeSystem,
       int nodeId,
-      @NotNull Dataframe input) {
+      @NotNull BodoEngineTable input) {
     this(visitor, builder, typeSystem, nodeId, input, List.of());
   }
 
-  public @NotNull Dataframe getInput() {
+  public @NotNull BodoEngineTable getInput() {
     return input;
   }
 
   @Override
   public Expr visitInputRef(RexInputRef inputRef) {
     return new Expr.Call(
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data",
+        "bodo.hiframes.table.get_table_data",
         List.of(input, new Expr.IntegerLiteral(inputRef.getIndex())));
   }
 
@@ -1769,7 +1769,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         @NotNull Module.Builder builder,
         @NotNull RelDataTypeSystem typeSystem,
         int nodeId,
-        @NotNull Dataframe input,
+        @NotNull BodoEngineTable input,
         @NotNull List<? extends Expr> localRefs) {
       super(visitor, builder, typeSystem, nodeId, input, localRefs);
     }

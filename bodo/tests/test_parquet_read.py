@@ -2833,43 +2833,16 @@ def test_batched_read_agg(datapath, memory_leak_check):
     getting the max of a column
     """
 
-    col_meta = bodo.utils.typing.ColNamesMetaType(
-        (
-            "L_ORDERKEY",
-            "L_PARTKEY",
-            "L_SUPPKEY",
-            "L_LINENUMBER",
-            "L_QUANTITY",
-            "L_EXTENDEDPRICE",
-            "L_DISCOUNT",
-            "L_TAX",
-            "L_RETURNFLAG",
-            "L_LINESTATUS",
-            "L_SHIPDATE",
-            "L_COMMITDATE",
-            "L_RECEIPTDATE",
-            "L_SHIPINSTRUCT",
-            "L_SHIPMODE",
-            "L_COMMENT",
-        )
-    )
-
     def impl(path):
         total_max = 0
         is_last_global = False
         reader = pd.read_parquet(path, _bodo_use_index=False, _bodo_chunksize=4096)  # type: ignore
 
         while not is_last_global:
-            table, is_last = read_arrow_next(reader)
-            index_var = bodo.hiframes.pd_index_ext.init_range_index(
-                0, len(table), 1, None
-            )
-            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-                (table,), index_var, col_meta
-            )
-            df = df[df["L_ORDERKEY"] > 10]
+            T1, is_last = read_arrow_next(reader)
+            T2 = T1[pd.Series(bodo.hiframes.table.get_table_data(T1, 0)) > 10]
             # Perform more compute in between to see caching speedup
-            local_max = df["L_PARTKEY"].max()
+            local_max = pd.Series(bodo.hiframes.table.get_table_data(T2, 1)).max()
             total_max = max(total_max, local_max)
 
             is_last_global = bodo.libs.distributed_api.dist_reduce(
@@ -2895,41 +2868,14 @@ def test_batched_read_only_len(datapath, memory_leak_check):
     Test shape pushdown with batched Snowflake reads
     """
 
-    col_meta = bodo.utils.typing.ColNamesMetaType(
-        (
-            "L_ORDERKEY",
-            "L_PARTKEY",
-            "L_SUPPKEY",
-            "L_LINENUMBER",
-            "L_QUANTITY",
-            "L_EXTENDEDPRICE",
-            "L_DISCOUNT",
-            "L_TAX",
-            "L_RETURNFLAG",
-            "L_LINESTATUS",
-            "L_SHIPDATE",
-            "L_COMMITDATE",
-            "L_RECEIPTDATE",
-            "L_SHIPINSTRUCT",
-            "L_SHIPMODE",
-            "L_COMMENT",
-        )
-    )
-
     def impl(path):
         total_len = 0
         is_last_global = False
 
         reader = pd.read_parquet(path, _bodo_use_index=False, _bodo_chunksize=4096)  # type: ignore
         while not is_last_global:
-            table, is_last = read_arrow_next(reader)
-            index_var = bodo.hiframes.pd_index_ext.init_range_index(
-                0, len(table), 1, None
-            )
-            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-                (table,), index_var, col_meta
-            )
-            total_len += len(df)
+            T1, is_last = read_arrow_next(reader)
+            total_len += len(T1)
 
             is_last_global = bodo.libs.distributed_api.dist_reduce(
                 is_last,

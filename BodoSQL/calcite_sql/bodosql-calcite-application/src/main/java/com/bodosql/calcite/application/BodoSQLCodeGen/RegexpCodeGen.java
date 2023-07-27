@@ -54,7 +54,7 @@ public class RegexpCodeGen {
     List<Expr> args = new ArrayList<>();
     args.add(operands.get(0));
     args.add(operands.get(1));
-    args.add(getCodeWithDefault(operands, 2, new Expr.IntegerLiteral(1)));
+    args.add(getCodeWithDefault(operands, 2, Expr.Companion.getOne()));
     args.add(getCodeWithDefault(operands, 3, new Expr.StringLiteral("")));
     return ExprKt.BodoSQLKernel("regexp_count", args, streamingNamedArgs);
   }
@@ -73,8 +73,8 @@ public class RegexpCodeGen {
     args.add(operands.get(0));
     args.add(operands.get(1));
     args.add(getCodeWithDefault(operands, 2, new Expr.StringLiteral("")));
-    args.add(getCodeWithDefault(operands, 3, new Expr.IntegerLiteral(1)));
-    args.add(getCodeWithDefault(operands, 4, new Expr.IntegerLiteral(0)));
+    args.add(getCodeWithDefault(operands, 3, Expr.Companion.getOne()));
+    args.add(getCodeWithDefault(operands, 4, Expr.Companion.getZero()));
     args.add(getCodeWithDefault(operands, 5, new Expr.StringLiteral("")));
     return ExprKt.BodoSQLKernel("regexp_replace", args, streamingNamedArgs);
   }
@@ -89,14 +89,13 @@ public class RegexpCodeGen {
    */
   public static Expr generateRegexpSubstrInfo(
       List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
-    Expr.IntegerLiteral one = new Expr.IntegerLiteral(1);
     List<Expr> args = new ArrayList<>();
     args.add(operands.get(0));
     args.add(operands.get(1));
-    args.add(getCodeWithDefault(operands, 2, one));
-    args.add(getCodeWithDefault(operands, 3, one));
+    args.add(getCodeWithDefault(operands, 2, Expr.Companion.getOne()));
+    args.add(getCodeWithDefault(operands, 3, Expr.Companion.getOne()));
     args.add(getCodeWithDefault(operands, 4, new Expr.StringLiteral("c")));
-    args.add(getCodeWithDefault(operands, 5, new Expr.IntegerLiteral(0)));
+    args.add(getCodeWithDefault(operands, 5, Expr.Companion.getZero()));
 
     int regexpParamsIndex = 4;
     int groupNumIndex = 5;
@@ -107,7 +106,7 @@ public class RegexpCodeGen {
     // Edge case: if regex parameters exist and the group
     // number is unspecified, <group_num> defaults to 1
     if (regexpParams.contains("e") && groupNum.equals("0")) {
-      args.set(groupNumIndex, one);
+      args.set(groupNumIndex, Expr.Companion.getOne());
     }
 
     // Edge case: if <group_num> is specified, Snowflake
@@ -131,17 +130,15 @@ public class RegexpCodeGen {
    */
   public static Expr generateRegexpInstrInfo(
       List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
-    Expr.IntegerLiteral zero = new Expr.IntegerLiteral(0);
-    Expr.IntegerLiteral one = new Expr.IntegerLiteral(1);
 
     List<Expr> args = new ArrayList<>();
     args.add(operands.get(0)); // source
     args.add(operands.get(1)); // pattern
-    args.add(getCodeWithDefault(operands, 2, one)); // position
-    args.add(getCodeWithDefault(operands, 3, one)); // occurrence
-    args.add(getCodeWithDefault(operands, 4, zero)); // option
+    args.add(getCodeWithDefault(operands, 2, Expr.Companion.getOne())); // position
+    args.add(getCodeWithDefault(operands, 3, Expr.Companion.getOne())); // occurrence
+    args.add(getCodeWithDefault(operands, 4, Expr.Companion.getZero())); // option
     args.add(getCodeWithDefault(operands, 5, new Expr.StringLiteral("c"))); // Regex parameters
-    args.add(getCodeWithDefault(operands, 6, zero)); // group number
+    args.add(getCodeWithDefault(operands, 6, Expr.Companion.getZero())); // group number
 
     int regexpParamsIndex = 5;
     int groupNumIndex = 6;
@@ -152,7 +149,7 @@ public class RegexpCodeGen {
     // Edge case: if regex parameters exist and the group
     // number is unspecified, <group_num> defaults to 1
     if (regexpParams.contains("e") && groupNum.equals("0")) {
-      args.set(groupNumIndex, one);
+      args.set(groupNumIndex, Expr.Companion.getOne());
     }
 
     // Edge case: if <group_num> is specified, Snowflake
