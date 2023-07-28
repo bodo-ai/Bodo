@@ -250,7 +250,10 @@ public abstract class BodoSqlTable implements ExtensibleTable {
   public abstract Expr generateStreamingWriteInitCode();
 
   public abstract Expr generateStreamingWriteAppendCode(
-      Variable stateVarName, Variable dfVarName, Variable isLastVarName);
+      Variable stateVarName,
+      Variable tableVarName,
+      Variable colNamesGlobal,
+      Variable isLastVarName);
 
   /**
    * Return the location from which the table is generated. The return value is always entirely

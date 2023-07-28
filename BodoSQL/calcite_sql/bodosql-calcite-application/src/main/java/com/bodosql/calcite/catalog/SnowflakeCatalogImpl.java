@@ -653,10 +653,13 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
 
   @Override
   public Expr generateStreamingWriteAppendCode(
-      Variable stateVarName, Variable tableVarName, Variable isLastVarName) {
+      Variable stateVarName,
+      Variable tableVarName,
+      Variable colNamesGlobal,
+      Variable isLastVarName) {
     return new Expr.Call(
-        "bodo.io.snowflake_write.snowflake_writer_append_df",
-        List.of(stateVarName, tableVarName, isLastVarName));
+        "bodo.io.snowflake_write.snowflake_writer_append_table",
+        List.of(stateVarName, tableVarName, colNamesGlobal, isLastVarName));
   }
 
   /**

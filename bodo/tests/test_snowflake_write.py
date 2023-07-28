@@ -18,9 +18,10 @@ from mpi4py import MPI
 
 import bodo
 import bodo.io.snowflake
+from bodo.hiframes.table import get_table_data
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.io.snowflake_write import (
-    snowflake_writer_append_df,
+    snowflake_writer_append_table,
     snowflake_writer_init,
 )
 from bodo.tests.utils import (
@@ -1558,11 +1559,17 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
 
 @pytest.mark.parametrize(
     "sf_write_overlap",
-    [pytest.param(True, id="with-overlap"), pytest.param(False, id="no-overlap")],
+    [
+        pytest.param(True, id="with-overlap"),
+        pytest.param(False, id="no-overlap"),
+    ],
 )
 @pytest.mark.parametrize(
     "sf_write_use_put",
-    [pytest.param(True, id="with-put"), pytest.param(False, id="no-put")],
+    [
+        pytest.param(True, id="with-put"),
+        pytest.param(False, id="no-put"),
+    ],
 )
 @pytest.mark.parametrize(
     "sf_write_streaming_num_files",
@@ -1581,7 +1588,10 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
 )
 @pytest.mark.parametrize(
     "snowflake_user",
-    [pytest.param(1, id="s3"), pytest.param(3, id="adls", marks=pytest.mark.slow)],
+    [
+        pytest.param(1, id="s3"),
+        pytest.param(3, id="adls", marks=pytest.mark.slow),
+    ],
 )
 # TODO fix memory leak for ADLS test with `sf_write_use_put`
 def test_batched_write_agg(
@@ -1665,15 +1675,8 @@ def test_batched_write_agg(
             while not all_is_last:
                 table, is_last = read_arrow_next(reader0)
                 all_is_last = bodo.libs.distributed_api.dist_reduce(is_last, and_op)
-
-                index_var = bodo.hiframes.pd_index_ext.init_range_index(
-                    0, len(table), 1, None
-                )
-                df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-                    (table,), index_var, col_meta
-                )
-                total0 += df["l_partkey"].sum()
-                snowflake_writer_append_df(writer, df, all_is_last)
+                total0 += get_table_data(table, 1).sum()
+                snowflake_writer_append_table(writer, table, col_meta, all_is_last)
 
             return total0
 
@@ -1689,13 +1692,7 @@ def test_batched_write_agg(
                 table, is_last = read_arrow_next(reader1)
                 all_is_last = bodo.libs.distributed_api.dist_reduce(is_last, and_op)
 
-                index_var = bodo.hiframes.pd_index_ext.init_range_index(
-                    0, len(table), 1, None
-                )
-                df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-                    (table,), index_var, col_meta
-                )
-                total1 += df["l_partkey"].sum()
+                total1 += get_table_data(table, 1).sum()  # column 1: "l_partkey"
 
             arrow_reader_del(reader1)
             return total1

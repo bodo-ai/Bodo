@@ -6,12 +6,11 @@ import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import java.util.List;
 import java.util.Set;
+import javax.annotation.Nullable;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
-
-import javax.annotation.Nullable;
 
 public interface BodoSQLCatalog {
   /**
@@ -119,11 +118,15 @@ public interface BodoSQLCatalog {
    *
    * @param stateVarName Name of the variable of the write state
    * @param tableVarName Name of the variable storing the table to append
+   * @param colNamesGlobal Column names of table to append
    * @param isLastVarName Name of the variable indicating the is_last flag
    * @return The generated code to produce the write-appending code
    */
   Expr generateStreamingWriteAppendCode(
-      Variable stateVarName, Variable tableVarName, Variable isLastVarName);
+      Variable stateVarName,
+      Variable tableVarName,
+      Variable colNamesGlobal,
+      Variable isLastVarName);
 
   /**
    * Generates the code necessary to produce a read expression from the given catalog.
@@ -170,16 +173,17 @@ public interface BodoSQLCatalog {
   BodoTZInfo getDefaultTimezone();
 
   /**
-   * Fetch the WEEK_START session parameter for this catalog. If not specified it should return 0 as default.
+   * Fetch the WEEK_START session parameter for this catalog. If not specified it should return 0 as
+   * default.
    *
    * @return Integer for the WEEK_START session parameter.
    */
   @Nullable
   Integer getWeekStart();
 
-
   /**
-   * Fetch the WEEK_OF_YEAR_POLICY session parameter for this catalog. If not specified it should return 0 as default.
+   * Fetch the WEEK_OF_YEAR_POLICY session parameter for this catalog. If not specified it should
+   * return 0 as default.
    *
    * @return Integer for the WEEK_OF_YEAR_POLICY session parameter.
    */

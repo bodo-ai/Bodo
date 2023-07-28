@@ -19,8 +19,7 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.hiframes.pd_dataframe_ext import DataFrameType, get_dataframe_all_data
-from bodo.hiframes.table import logical_table_to_table
+from bodo.hiframes.pd_dataframe_ext import DataFrameType, TableType
 from bodo.io.helpers import exception_propagating_thread_type
 from bodo.io.parquet_pio import parquet_write_table_cpp
 from bodo.io.snowflake import (
@@ -38,6 +37,7 @@ from bodo.libs.str_ext import unicode_to_utf8
 from bodo.utils import tracing
 from bodo.utils.typing import (
     BodoError,
+    ColNamesMetaType,
     get_overload_const_str,
     is_overload_bool,
     is_overload_constant_str,
@@ -430,48 +430,60 @@ def snowflake_writer_init(
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def snowflake_writer_append_df(writer, df, is_last):  # pragma: no cover
+def snowflake_writer_append_table(writer, table, col_names_meta, is_last):  # pragma: no cover
     if not isinstance(writer, SnowflakeWriterType):  # pragma: no cover
         raise BodoError(
-            f"snowflake_writer_append_df: Expected type SnowflakeWriterType "
+            f"snowflake_writer_append_table: Expected type SnowflakeWriterType "
             f"for `writer`, found {writer}"
         )
-    if not isinstance(df, DataFrameType):  # pragma: no cover
+    if not isinstance(table, TableType):  # pragma: no cover
         raise BodoError(
-            f"snowflake_writer_append_df: Expected type DataFrameType "
-            f"for `df`, found {df}"
+            f"snowflake_writer_append_table: Expected type TableType "
+            f"for `table`, found {table}"
         )
     if not is_overload_bool(is_last):  # pragma: no cover
         raise BodoError(
-            f"snowflake_writer_append_df: Expected type boolean "
+            f"snowflake_writer_append_table: Expected type boolean "
             f"for `is_last`, found {is_last}"
         )
 
-    col_names_arr = pd.array(df.columns)
-    col_types_arr = df.data
-    sf_schema = bodo.io.snowflake.gen_snowflake_schema(df.columns, df.data)
+    col_names_meta = (
+        col_names_meta.instance_type
+        if isinstance(col_names_meta, types.TypeRef)
+        else col_names_meta
+    )
+    if not isinstance(col_names_meta, ColNamesMetaType):  # pragma: no cover
+        raise BodoError(
+            f"snowflake_writer_append_table: Expected type ColNamesMetaType "
+            f"for `col_names_meta`, found {col_names_meta}"
+        )
+    if not isinstance(col_names_meta.meta, tuple):  # pragma: no cover
+        raise BodoError(
+            f"snowflake_writer_append_table: Expected col_names_meta "
+            f"to contain a tuple of column names"
+        )
 
-    # Create consistent table information for table format and tuple array format.
-    num_table_cols = len(df.columns)
-    py_table_typ = df.table_type if df.is_table_format else bodo.TableType(df.data)
-    in_col_inds = bodo.utils.typing.MetaType(tuple(range(len(df.columns))))
+    col_names_arr = pd.array(col_names_meta.meta)
+    col_types_arr = table.arr_types
+    sf_schema = bodo.io.snowflake.gen_snowflake_schema(col_names_meta.meta, table.arr_types)
+
+    py_table_typ = table
 
     func_text = (
-        "def impl(writer, df, is_last):\n"
+        "def impl(writer, table, col_names_meta, is_last):\n"
         "    if writer['finished']:\n"
         "        return\n"
-        "    ev = tracing.Event('snowflake_writer_append_df', is_parallel=writer['parallel'])\n"
+        "    ev = tracing.Event('snowflake_writer_append_table', is_parallel=writer['parallel'])\n"
         # ===== Part 1: Accumulate batch in writer and compute total size
         "    ev_append_batch = tracing.Event(f'append_batch', is_parallel=True)\n"
-        f"    py_table = logical_table_to_table(get_dataframe_all_data(df), (), in_col_inds, {num_table_cols})\n"
-        "    cpp_table = py_table_to_cpp_table(py_table, py_table_typ)\n"
+        "    cpp_table = py_table_to_cpp_table(table, py_table_typ)\n"
         "    if writer['batches_exists']:\n"
         "        writer['batches'].append(cpp_table)\n"
         "    else:\n"
         "        writer['batches_exists'] = True\n"
         "        writer['batches'] = [cpp_table]\n"
-        f"    nbytes_arr = np.empty({len(df.columns)}, np.int64)\n"
-        "    bodo.utils.table_utils.generate_table_nbytes(py_table, nbytes_arr, 0)\n"
+        f"    nbytes_arr = np.empty({len(col_names_meta)}, np.int64)\n"
+        "    bodo.utils.table_utils.generate_table_nbytes(table, nbytes_arr, 0)\n"
         "    nbytes = np.sum(nbytes_arr)\n"
         "    writer['curr_mem_size'] += nbytes\n"
         "    ev_append_batch.add_attribute('nbytes', nbytes)\n"
@@ -490,7 +502,7 @@ def snowflake_writer_append_df(writer, df, is_last):  # pragma: no cover
         "        if out_table_len <= 0:\n"
         "            delete_table(out_table)\n"
         "        else:\n"
-        "            ev_upload_df = tracing.Event('upload_df', is_parallel=False)\n"
+        "            ev_upload_table = tracing.Event('upload_table', is_parallel=False)\n"
         # Note: writer['stage_path'] already has trailing slash
         '            chunk_path = f\'{writer["stage_path"]}{writer["copy_into_dir"]}/file{writer["chunk_count"]}_rank{bodo.get_rank()}_{bodo.io.helpers.uuid4_helper()}.parquet\'\n'
         # To escape backslashes, we want to replace ( \ ) with ( \\ ), so the func_text
@@ -548,7 +560,7 @@ def snowflake_writer_append_df(writer, df, is_last):  # pragma: no cover
         "                            cursor, chunk_count, chunk_path, stage_name, copy_into_dir\n"
         "                        )\n"
         "            writer['chunk_count'] += 1\n"
-        "            ev_upload_df.finalize()\n"
+        "            ev_upload_table.finalize()\n"
         "        writer['batches'].clear()\n"
         "        writer['curr_mem_size'] = 0\n"
         # Count number of newly written files. This is also an implicit barrier
@@ -630,7 +642,7 @@ def snowflake_writer_append_df(writer, df, is_last):  # pragma: no cover
         "                    cursor, copy_into_prev_sfqid, file_count_prev\n"
         "                )\n"
         "                bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)\n"
-        "                cursor.execute('COMMIT /* io.snowflake_write.snowflake_writer_append_df() */')\n"
+        "                cursor.execute('COMMIT /* io.snowflake_write.snowflake_writer_append_table() */')\n"
         "        else:\n"
         "            with bodo.objmode():\n"
         "                bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)\n"
@@ -676,9 +688,6 @@ def snowflake_writer_append_df(writer, df, is_last):  # pragma: no cover
         "col_names_arr": col_names_arr,
         "col_types_arr": col_types_arr,
         "concat_tables_cpp": concat_tables_cpp,
-        "in_col_inds": in_col_inds,
-        "logical_table_to_table": logical_table_to_table,
-        "get_dataframe_all_data": get_dataframe_all_data,
         "make_new_copy_into_dir": make_new_copy_into_dir,
         "np": np,
         "parquet_write_table_cpp": parquet_write_table_cpp,
