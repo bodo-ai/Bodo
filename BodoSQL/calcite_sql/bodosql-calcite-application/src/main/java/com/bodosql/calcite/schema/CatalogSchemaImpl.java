@@ -152,8 +152,12 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
   }
 
   public Expr generateStreamingWriteAppendCode(
-      Variable stateVarName, Variable tableVarName, Variable isLastVarName) {
-    return this.catalog.generateStreamingWriteAppendCode(stateVarName, tableVarName, isLastVarName);
+      Variable stateVarName,
+      Variable tableVarName,
+      Variable colNamesGlobal,
+      Variable isLastVarName) {
+    return this.catalog.generateStreamingWriteAppendCode(
+        stateVarName, tableVarName, colNamesGlobal, isLastVarName);
   }
 
   /**

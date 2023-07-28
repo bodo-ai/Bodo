@@ -140,9 +140,9 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
   }
 
   public Expr generateStreamingWriteAppendCode(
-      Variable stateVarName, Variable dfVarName, Variable isLastVarName) {
+      Variable stateVarName, Variable dfVarName, Variable colNamesGlobal, Variable isLastVarName) {
     return this.getCatalogSchema()
-        .generateStreamingWriteAppendCode(stateVarName, dfVarName, isLastVarName);
+        .generateStreamingWriteAppendCode(stateVarName, dfVarName, colNamesGlobal, isLastVarName);
   }
 
   /**

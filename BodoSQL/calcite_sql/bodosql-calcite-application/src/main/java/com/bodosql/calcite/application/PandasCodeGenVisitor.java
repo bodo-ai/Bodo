@@ -839,10 +839,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Second, append the Table to the writer
     timerInfo.insertLoopOperationStartTimer();
     BodoEngineTable inTable = tableGenStack.pop();
-    Variable inDf = ctx.convertTableToDf(inTable);
+    
+    // Get column names for write append call
+    List<String> colNames = node.getRowType().getFieldNames();
+    List<Expr.StringLiteral> colNamesList = stringsToStringLiterals(colNames);
+    Variable colNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(colNamesList));
+
+    // Generate append call
     Expr writerAppendCall =
         outputSchemaAsCatalog.generateStreamingWriteAppendCode(
-            writerVar, inDf, currentPipeline.getExitCond());
+            writerVar, inTable, colNamesGlobal, currentPipeline.getExitCond());
     this.generatedCode.add(new Op.Stmt(writerAppendCall));
     timerInfo.insertLoopOperationEndTimer();
 
@@ -1059,6 +1065,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   void genStreamingInsertInto(
       PandasTableModify node, Variable inVar, List<String> colNames, BodoSqlTable bodoSqlTable) {
+    BuildContext ctx = new BuildContext(node);
+
     Expr castedAndRenamedDfExpr = handleCastAndRenameBeforeWrite(inVar, colNames, bodoSqlTable);
     Variable castedAndRenamedDfVar = this.genDfVar();
     this.generatedCode.add(new Op.Assign(castedAndRenamedDfVar, castedAndRenamedDfExpr));
@@ -1092,9 +1100,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Second, append the Table to the writer
     timerInfo.insertLoopOperationStartTimer();
+    BodoEngineTable tableVar = ctx.convertDfToTable(castedAndRenamedDfVar, node);
+
+    // Get column names for write append call
+    Variable colNamesGlobal =
+        lowerAsColNamesMetaType(new Expr.Tuple(stringsToStringLiterals(colNames)));
+
+    // Generate append call
     Expr writerAppendCall =
         bodoSqlTable.generateStreamingWriteAppendCode(
-            writerVar, castedAndRenamedDfVar, currentPipeline.getExitCond());
+            writerVar, tableVar, colNamesGlobal, currentPipeline.getExitCond());
     this.generatedCode.add(new Op.Stmt(writerAppendCall));
     timerInfo.insertLoopOperationEndTimer();
 
