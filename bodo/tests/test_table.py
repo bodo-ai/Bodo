@@ -222,3 +222,34 @@ def test_table_shape_opt(datapath, table_value, memory_leak_check):
     bodo_func(table_value)
     f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     assert not dist_IR_contains(f_ir, "shape")
+
+
+def test_table_astype_copy_false_bug(memory_leak_check):
+    """
+    Make sure table.astype(copy=False) works correctly with column elimination.
+    See [BSE-840]
+    """
+    from bodo.utils.typing import ColNamesMetaType
+
+    global_9 = ColNamesMetaType(("A", "B"))
+
+    @bodo.jit
+    def inner(delta_table, delta_col_names):
+        delta_index = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(delta_table), 1, None
+        )
+        delta_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (delta_table,), delta_index, delta_col_names
+        )
+        delta_df_casted = delta_df.astype(
+            delta_df.dtypes, copy=False, _bodo_nan_to_str=False
+        )
+        return delta_df_casted
+
+    def impl(T9):
+        return inner(T9, global_9)
+
+    arrs = [np.array([1], np.int64), np.array([1], np.int8)]
+    T9 = bodo.hiframes.table.Table(arrs)
+    py_output = pd.DataFrame({"A": [1], "B": np.array([1], np.int8)})
+    check_func(impl, (T9,), py_output=py_output, only_seq=True)
