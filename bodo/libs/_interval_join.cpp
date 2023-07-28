@@ -133,7 +133,7 @@ std::pair<bodo::vector<int64_t>, bodo::vector<int64_t>> interval_merge(
 
     // Set 500K batch size to make sure batch data of all cores fits in L3
     // cache.
-    int64_t batch_size_bytes = 500 * 1024;
+    int64_t batch_size_bytes = DEFAULT_BLOCK_SIZE_BYTES;
     char* batch_size = std::getenv("BODO_INTERVAL_JOIN_BATCH_SIZE");
     if (batch_size) {
         batch_size_bytes = std::stoi(batch_size);

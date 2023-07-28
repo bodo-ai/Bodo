@@ -50,7 +50,7 @@ void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
         get_gen_cond_data_ptrs(right_table);
 
     // set 500K block size to make sure block data of all cores fits in L3 cache
-    int64_t block_size_bytes = 500 * 1024;
+    int64_t block_size_bytes = DEFAULT_BLOCK_SIZE_BYTES;
     char* block_size = std::getenv("BODO_CROSS_JOIN_BLOCK_SIZE");
     if (block_size) {
         block_size_bytes = std::stoi(block_size);

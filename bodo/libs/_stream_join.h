@@ -660,16 +660,21 @@ class NestedLoopJoinState : public JoinState {
                         const std::vector<int8_t>& probe_arr_array_types,
                         bool build_table_outer_, bool probe_table_outer_,
                         cond_expr_fn_t cond_func_, bool build_parallel_,
-                        bool probe_parallel_, int64_t batch_size_)
+                        bool probe_parallel_, int64_t output_batch_size_)
         : JoinState(build_arr_c_types, build_arr_array_types, probe_arr_c_types,
                     probe_arr_array_types, 0, build_table_outer_,
                     probe_table_outer_, cond_func_, build_parallel_,
                     probe_parallel_,
-                    batch_size_),  // NestedLoopJoin is only used when
-                                   // n_keys is 0
-          build_table_buffer(build_arr_c_types, build_arr_array_types,
-                             build_table_dict_builders, batch_size_,
-                             DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
+                    output_batch_size_),  // NestedLoopJoin is only used when
+                                          // n_keys is 0
+          build_table_buffer(
+              build_arr_c_types, build_arr_array_types,
+              build_table_dict_builders,
+              DEFAULT_BLOCK_SIZE_BYTES /
+                  get_row_bytes(
+                      build_arr_array_types,
+                      build_arr_c_types),  // each chunk has a single block
+              DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
           join_event("NestedLoopJoin") {
         // TODO: Integrate dict_builders for nested loop join.
     }
