@@ -1614,7 +1614,7 @@ class DistributedAnalysis:
             return
 
         if fdef == (
-            "snowflake_writer_append_df",
+            "snowflake_writer_append_table",
             "bodo.io.snowflake_write",
         ):  # pragma: no cover
             self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
