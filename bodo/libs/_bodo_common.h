@@ -1102,6 +1102,14 @@ void bodo_common_init();
 
 std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> arr);
 
+/* Calculate the size of one row
+ *
+ * @param arr_c_types : the array of types for the row
+ * @return the total size of the row
+ */
+size_t get_row_bytes(const std::vector<int8_t>& arr_array_types,
+                     const std::vector<int8_t>& arr_c_types);
+
 /**
  * Free underlying array of array_info pointer and delete the pointer
  */
