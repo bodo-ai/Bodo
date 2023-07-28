@@ -781,6 +781,72 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr) {
     return farr;
 }
 
+size_t get_expected_bits_per_entry(int8_t arr_type, int8_t c_type) {
+    // TODO: Handle nested data structure and categorical data types seperately
+    size_t nullable;
+    switch (arr_type) {
+        case bodo_array_type::DICT:
+            return 33;  // Dictionaries are fixed 32 bits + 1 null bit
+        case bodo_array_type::NUMPY:
+        case bodo_array_type::INTERVAL:
+        case bodo_array_type::CATEGORICAL:
+            nullable = 0;
+            break;
+        case bodo_array_type::STRING:
+        case bodo_array_type::NULLABLE_INT_BOOL:
+        case bodo_array_type::LIST_STRING:
+        case bodo_array_type::STRUCT:
+        case bodo_array_type::ARRAY_ITEM:
+            nullable = 1;
+            break;
+        default:
+            throw std::runtime_error(
+                "get_expected_bits_per_entry: Invalid array type!");
+    }
+    switch (c_type) {
+        case Bodo_CTypes::_BOOL:
+            return arr_type == bodo_array_type::NUMPY ? 8 : nullable + 1;
+        case Bodo_CTypes::INT8:
+        case Bodo_CTypes::UINT8:
+        case Bodo_CTypes::INT16:
+        case Bodo_CTypes::UINT16:
+        case Bodo_CTypes::INT32:
+        case Bodo_CTypes::UINT32:
+        case Bodo_CTypes::INT64:
+        case Bodo_CTypes::UINT64:
+        case Bodo_CTypes::INT128:
+        case Bodo_CTypes::FLOAT32:
+        case Bodo_CTypes::FLOAT64:
+        case Bodo_CTypes::DECIMAL:
+        case Bodo_CTypes::DATE:
+        case Bodo_CTypes::TIME:
+        case Bodo_CTypes::DATETIME:
+        case Bodo_CTypes::TIMEDELTA:
+            return (nullable + numpy_item_size[c_type]) << 3;
+        case Bodo_CTypes::STRING:
+        case Bodo_CTypes::LIST_STRING:
+        case Bodo_CTypes::LIST:
+        case Bodo_CTypes::STRUCT:
+        case Bodo_CTypes::BINARY:
+            return nullable +
+                   256;  // 32 bytes estimate for unknown or variable size types
+        default:
+            throw std::runtime_error(
+                "get_expected_bits_per_entry: Invalid C type!");
+    }
+}
+
+size_t get_row_bytes(const std::vector<int8_t>& arr_array_types,
+                     const std::vector<int8_t>& arr_c_types) {
+    assert(arr_array_types.size() == arr_c_types.size());
+    size_t row_bits = 0;
+    for (size_t i = 0; i < arr_array_types.size(); i++) {
+        row_bits +=
+            get_expected_bits_per_entry(arr_array_types[i], arr_c_types[i]);
+    }
+    return (row_bits + 7) >> 3;
+}
+
 /**
  * Free underlying array of array_info pointer and delete the pointer.
  * Called from Python.

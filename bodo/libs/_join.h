@@ -3,6 +3,9 @@
 
 #include "_bodo_common.h"
 
+// Default block size to 500K to make sure block data fits in L3 cache
+const int64_t DEFAULT_BLOCK_SIZE_BYTES = 500 * 1024;
+
 /**
  * @brief Function type for general join condition functions generated in
  * Python. Takes data pointers for left and right tables and row indices, and
