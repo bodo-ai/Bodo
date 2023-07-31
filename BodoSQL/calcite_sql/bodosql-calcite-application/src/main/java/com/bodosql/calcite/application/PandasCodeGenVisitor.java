@@ -320,6 +320,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     return generatedCode.getSymbolTable().genFinishedStreamingFlag();
   }
 
+  public HashMap<String, Variable> globalVarCache = new HashMap<String, Variable>();
+
   /**
    * Modifies the codegen such that the specified expression will be lowered into the func_text as a
    * global. This is currently only used for lowering metaDataType's and array types.
@@ -328,8 +330,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   public Variable lowerAsGlobal(Expr expression) {
     String exprString = expression.emit();
+    if (globalVarCache.containsKey(exprString)) {
+      return globalVarCache.get(exprString);
+    }
     Variable globalVar = generatedCode.getSymbolTable().genGlobalVar();
     this.loweredGlobals.put(globalVar.getName(), exprString);
+    globalVarCache.put(exprString, globalVar);
     return globalVar;
   }
 
@@ -839,7 +845,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Second, append the Table to the writer
     timerInfo.insertLoopOperationStartTimer();
     BodoEngineTable inTable = tableGenStack.pop();
-    
+
     // Get column names for write append call
     List<String> colNames = node.getRowType().getFieldNames();
     List<Expr.StringLiteral> colNamesList = stringsToStringLiterals(colNames);
