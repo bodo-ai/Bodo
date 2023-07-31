@@ -1,0 +1,608 @@
+name: Publish images
+
+on:
+  pull_request:
+    branches:
+      - master
+
+  workflow_dispatch:
+    inputs:
+      pythonVersion:
+        description: Python Version (e.g. 3.10)
+        required: false
+
+      bodoVersion:
+        description: Bodo Version (e.g. 2022.8)
+        required: true
+
+      bodoSQLVersion:
+        description: BodoSQL Version (e.g. 2022.8)
+        required: true
+
+      bodoSQLCondaChannel:
+        description: Conda Channel to install bodosql from, for major releases specify bodo.ai and for minor release and RCs specify bodo.ai/label/dev
+        required: true
+        default: "bodo.ai"
+
+      icebergConnectorVersion:
+        description: Iceberg Connector Version (e.g. 2022.8alpha). Iceberg connector will not be installed if not provided.
+        required: false
+
+      bodoIcebergCondaChannel:
+        description: Conda Channel to install bodo-iceberg-connector from, for major releases specify bodo.ai and for minor release and RCs specify bodo.ai/label/dev
+        required: false
+        default: "bodo.ai"
+
+      addToBodoVersionsTable:
+        description: First add to the bodo versions table in the backend (with supported=true)
+        type: boolean
+        default: false
+
+      publishDev:
+        description: Share with the Dev/Testing platform.
+        type: boolean
+        default: true
+
+      publishStaging:
+        description: Share with the Staging platform.
+        type: boolean
+        default: false
+
+      publishProduction:
+        description: Share with the Production platform.
+        type: boolean
+        default: false
+
+jobs:
+  get-bodo-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: "Install dependencies"
+        run: |
+          set -xe
+          python -VV
+          python -m site
+          python -m pip install requests
+
+      # Get the versions from the prod environment, since that'll be the release versions
+      - name: Get Bodo Versions from Prod Backend
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          AUTH_SERVICE_URL: "https://bodo-prod.frontegg.com"
+          BOT_PLATFORM_USERNAME: ${{ secrets.BOT_PROD_PLATFORM_USERNAME }}
+          BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_PROD_PLATFORM_PASSWORD }}
+          BACKEND_SERVICE_URL: "https://api.bodo.ai"
+          ORGANIZATION_UUID: ${{ secrets.PROD_ORGANIZATION_UUID }}
+          CI_EVENT: ${{ github.event_name }}
+        run: |
+          cd bodo-platform-images
+          python get_bodo_versions.py
+
+      - name: Get Bodo Version from Workflow Dispatch Inputs
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          BODO_VERSION: ${{ github.event.inputs.bodoVersion }}
+        run: |
+          echo "$BODO_VERSION" > bodo_versions.txt
+
+      - name: Upload Bodo Versions Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: bodo-versions-artifact
+          path: bodo_versions.txt
+
+  build-worker:
+    needs: [get-bodo-versions]
+    runs-on: ubuntu-latest
+    steps:
+      # TODO: make git_sha available everywhere needed instead of duplicating steps
+      - name: get git_sha
+        env:
+          GIT_SHA: ${{ github.sha }}
+          GITHUB_REF: ${{ github.ref }}
+        run: |
+          git_sha=$(if [ "$GITHUB_REF" == "refs/heads/master" ]; then echo "master-${GIT_SHA:0:7}"; elif [[ "$GITHUB_REF" =~ refs/tags/v* ]]; then tag=`echo $GITHUB_REF | cut -f3 -d/`; echo "$tag"; else echo "${GIT_SHA:0:7}"; fi)
+          echo "SHA=${git_sha}" >> $GITHUB_ENV
+
+      - name: Configure Azure Credentials
+        uses: azure/login@v1
+        with:
+          creds: ${{  secrets.AZURE_CREDENTIALS  }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Download Artifact Bodo Versions
+        uses: actions/download-artifact@v2
+        with:
+          name: bodo-versions-artifact
+
+      - name: Create Azure Image definition
+        # For event that is not workflow, we skip the image creation in the build step,
+        # and therefore this step is not required.
+        if: github.event_name == 'workflow_dispatch'
+        uses: azure/CLI@v1.0.6
+        env:
+          GIT_SHA: ${{ env.SHA }}
+        with:
+          azcliversion: 2.30.0
+          inlineScript: |
+            $GITHUB_WORKSPACE/scripts/azure/create_image_definition.sh \
+              --image-sha ${GIT_SHA} \
+              --node-role worker
+
+      - name: Build Images
+        id: build
+        env:
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_EVENT: ${{ github.event_name }}
+          BOT_GITHUB_USERNAME: ${{ secrets.BOT_GITHUB_USERNAME }}
+          BOT_GITHUB_TOKEN: ${{ secrets.BOT_GITHUB_TOKEN }}
+          CONDA_USERNAME: ${{ secrets.CONDA_USERNAME }}
+          CONDA_TOKEN: ${{ secrets.CONDA_TOKEN }}
+          CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          GIT_SHA: ${{ env.SHA }}
+          PYTHON_VERSION: ${{ github.event.inputs.pythonVersion }}
+          BODOSQL_VERSION: ${{ github.event.inputs.bodoSQLVersion }}
+          BODOSQL_CHANNEL: ${{ github.event.inputs.bodoSQLCondaChannel }}
+          ICEBERG_CONNECTOR_VERSION: ${{ github.event.inputs.icebergConnectorVersion }}
+          ICEBERG_CONNECTOR_CHANNEL: ${{ github.event.inputs.bodoIcebergCondaChannel }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          cd bodo-platform-images
+          cd packer
+          arguments=$(if [ "$GITHUB_EVENT" != 'workflow_dispatch' ]; then echo "--skip-create-images"; fi)
+          bash build_images_and_gen_manifests.sh \
+            $arguments \
+            --image-sha $GIT_SHA \
+            --node-role worker \
+            --playbook-file worker_playbook.yaml
+
+      - name: Upload Packer Manifest
+        uses: actions/upload-artifact@v2
+        with:
+          name: worker-manifest
+          path: packer/worker_manifest_*.json
+
+  build-jupyter:
+    needs: [get-bodo-versions]
+    runs-on: ubuntu-latest
+    steps:
+      - name: get git_sha
+        env:
+          GIT_SHA: ${{ github.sha }}
+          GITHUB_REF: ${{ github.ref }}
+        run: |
+          git_sha=$(if [ "$GITHUB_REF" == "refs/heads/master" ]; then echo "master-${GIT_SHA:0:7}"; elif [[ "$GITHUB_REF" =~ refs/tags/v* ]]; then tag=`echo $GITHUB_REF | cut -f3 -d/`; echo "$tag"; else echo "${GIT_SHA:0:7}"; fi)
+          echo "SHA=${git_sha}" >> $GITHUB_ENV
+
+      - name: Configure Azure Credentials
+        uses: azure/login@v1
+        with:
+          creds: ${{secrets.AZURE_CREDENTIALS}}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Download Artifact Bodo Versions
+        uses: actions/download-artifact@v2
+        with:
+          name: bodo-versions-artifact
+
+      - name: Create Azure image definition
+        uses: azure/CLI@v1.0.6
+        # For event that is not workflow, we skip the image creation in the build step,
+        # and therefore this step is not required.
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GIT_SHA: ${{ env.SHA }}
+        with:
+          azcliversion: 2.30.0
+          inlineScript: |
+            $GITHUB_WORKSPACE/scripts/azure/create_image_definition.sh \
+              --image-sha ${GIT_SHA} \
+              --node-role jupyter
+
+      - name: Build Images
+        id: build
+        env:
+          GITHUB_EVENT: ${{ github.event_name }}
+          BOT_GITHUB_USERNAME: ${{ secrets.BOT_GITHUB_USERNAME }}
+          BOT_GITHUB_TOKEN: ${{ secrets.BOT_GITHUB_TOKEN }}
+          CONDA_USERNAME: ${{ secrets.CONDA_USERNAME }}
+          CONDA_TOKEN: ${{ secrets.CONDA_TOKEN }}
+          CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          GIT_SHA: ${{ env.SHA }}
+        run: |
+          cd bodo-platform-images
+          cd packer
+          arguments=$(if [ "$GITHUB_EVENT" != 'workflow_dispatch' ]; then echo "--skip-create-images"; fi)
+          bash build_images_and_gen_manifests.sh \
+            $arguments \
+            --image-sha $GIT_SHA \
+            --node-role jupyter \
+            --playbook-file jupyter_playbook.yaml
+
+      - name: Upload Packer Manifest
+        uses: actions/upload-artifact@v2
+        with:
+          name: jupyter-manifest
+          path: packer/jupyter_manifest_*.json
+
+  combine-manifest-gen-ami-entries:
+    needs: [build-worker, build-jupyter]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Download Worker Packer Manifest
+        uses: actions/download-artifact@v2
+        with:
+          name: worker-manifest
+
+      - name: Download Jupyter Packer Manifest
+        uses: actions/download-artifact@v2
+        with:
+          name: jupyter-manifest
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: Combine manifests and create AMI Add and Share JSON
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          cd bodo-platform-images
+          python gen_images_entries_from_manifests.py
+
+      - name: Upload Image Entries Request JSON
+        uses: actions/upload-artifact@v2
+        with:
+          name: img-entries-request-json
+          path: img_share_requests.json
+  # TESTING
+  share-images-with-testing-platform:
+    needs: [combine-manifest-gen-ami-entries]
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.publishDev == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: "Install dependencies"
+        run: |
+          set -xe
+          python -VV
+          python -m site
+          python -m pip install requests
+
+      - name: Download Image Entries Request JSON
+        uses: actions/download-artifact@v2
+        with:
+          name: img-entries-request-json
+
+      - name: Share Images with Testing Platform
+        id: share
+        env:
+          AUTH_SERVICE_URL: "https://bodo-test.frontegg.com"
+          BOT_PLATFORM_USERNAME: ${{ secrets.BOT_TESTING_PLATFORM_USERNAME }}
+          BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_TESTING_PLATFORM_PASSWORD }}
+          BACKEND_SERVICE_URL: "https://api-testing.bodo.ai"
+          ORGANIZATION_UUID: ${{ secrets.TESTING_ORGANIZATION_UUID }}
+        run: |
+          sleep 120
+          cd bodo-platform-images
+          python manage_images.py
+
+  add-bodo-version-to-testing-backend:
+    runs-on: ubuntu-latest
+    needs: [combine-manifest-gen-ami-entries]
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.addToBodoVersionsTable == 'true' &&
+      github.event.inputs.publishDev == 'true'
+    env:
+      AUTH_SERVICE_URL: "https://bodo-test.frontegg.com"
+      BOT_PLATFORM_USERNAME: ${{ secrets.BOT_TESTING_PLATFORM_USERNAME }}
+      BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_TESTING_PLATFORM_PASSWORD }}
+      BACKEND_SERVICE_URL: "https://api-testing.bodo.ai"
+      BODO_VERSION: ${{ github.event.inputs.bodoVersion }}
+      BODO_CONDA_INSTALL_LINK: "bodo.jfrog.io/artifactory/api/conda/bodo.ai-platform"
+      ORGANIZATION_UUID: ${{ secrets.TESTING_ORGANIZATION_UUID }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: "Install dependencies"
+        run: |
+          set -xe
+          python -VV
+          python -m site
+          python -m pip install requests
+
+      - name: Add Bodo Version to Testing Platform Backend
+        id: add-bodo-version
+        run: |
+          cd bodo-platform-images
+          python add_bodo_version.py
+
+
+  # DEVELOPMENT
+  share-images-with-dev-platform:
+    needs: [combine-manifest-gen-ami-entries]
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.publishDev == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: "Install dependencies"
+        run: |
+          set -xe
+          python -VV
+          python -m site
+          python -m pip install requests
+
+      - name: Download Image Entries Request JSON
+        uses: actions/download-artifact@v2
+        with:
+          name: img-entries-request-json
+
+      - name: Share Images with Dev Platform
+        id: share
+        env:
+          AUTH_SERVICE_URL: "https://bodo-dev.frontegg.com"
+          BOT_PLATFORM_USERNAME: ${{ secrets.BOT_DEV_PLATFORM_USERNAME }}
+          BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_DEV_PLATFORM_PASSWORD }}
+          BACKEND_SERVICE_URL: "https://api-dev.bodo.ai"
+          ORGANIZATION_UUID: ${{ secrets.DEV_ORGANIZATION_UUID }}
+        run: |
+          sleep 120
+          cd bodo-platform-images
+          python manage_images.py
+
+  add-bodo-version-to-staging-backend:
+    needs: [combine-manifest-gen-ami-entries]
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.addToBodoVersionsTable == 'true' &&
+      github.event.inputs.publishDev == 'true'
+    env:
+      AUTH_SERVICE_URL: "https://bodo-staging.frontegg.com"
+      BOT_PLATFORM_USERNAME: ${{ secrets.BOT_STAGING_PLATFORM_USERNAME }}
+      BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_STAGING_PLATFORM_PASSWORD }}
+      BACKEND_SERVICE_URL: "https://api-staging.bodo.ai"
+      BODO_VERSION: ${{ github.event.inputs.bodoVersion }}
+      BODO_CONDA_INSTALL_LINK: "bodo.jfrog.io/artifactory/api/conda/bodo.ai-platform"
+      ORGANIZATION_UUID: ${{ secrets.STAGING_ORGANIZATION_UUID }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: "Install dependencies"
+        run: |
+          set -xe
+          python -VV
+          python -m site
+          python -m pip install requests
+
+      - name: Add Bodo Version to Staging Platform Backend
+        id: add-bodo-version
+        run: |
+          cd bodo-platform-images
+          python add_bodo_version.py
+
+
+  # STAGING
+  share-images-with-staging-platform:
+    needs: [combine-manifest-gen-ami-entries]
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.publishStaging == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: "Install dependencies"
+        run: |
+          set -xe
+          python -VV
+          python -m site
+          python -m pip install requests
+
+      - name: Download Image Entries Request JSON
+        uses: actions/download-artifact@v2
+        with:
+          name: img-entries-request-json
+
+      - name: Share Images with Staging Platform
+        id: share
+        env:
+          AUTH_SERVICE_URL: "https://bodo-staging.frontegg.com"
+          BOT_PLATFORM_USERNAME: ${{ secrets.BOT_STAGING_PLATFORM_USERNAME }}
+          BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_STAGING_PLATFORM_PASSWORD }}
+          BACKEND_SERVICE_URL: "https://api-staging.bodo.ai"
+          ORGANIZATION_UUID: ${{ secrets.STAGING_ORGANIZATION_UUID }}
+        run: |
+          sleep 120
+          cd bodo-platform-images
+          python manage_images.py
+
+  add-bodo-version-to-dev-backend:
+    runs-on: ubuntu-latest
+    needs: [combine-manifest-gen-ami-entries]
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.addToBodoVersionsTable == 'true' &&
+      github.event.inputs.publishStaging == 'true'
+    env:
+      AUTH_SERVICE_URL: "https://bodo-dev.frontegg.com"
+      BOT_PLATFORM_USERNAME: ${{ secrets.BOT_DEV_PLATFORM_USERNAME }}
+      BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_DEV_PLATFORM_PASSWORD }}
+      BACKEND_SERVICE_URL: "https://api-dev.bodo.ai"
+      BODO_VERSION: ${{ github.event.inputs.bodoVersion }}
+      BODO_CONDA_INSTALL_LINK: "bodo.jfrog.io/artifactory/api/conda/bodo.ai-platform"
+      ORGANIZATION_UUID: ${{ secrets.DEV_ORGANIZATION_UUID }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: "Install dependencies"
+        run: |
+          set -xe
+          python -VV
+          python -m site
+          python -m pip install requests
+
+      - name: Add Bodo Version to Dev Platform Backend
+        id: add-bodo-version
+        run: |
+          cd bodo-platform-images
+          python add_bodo_version.py
+
+
+
+  # PRODUCTION
+  share-images-with-prod-platform:
+    needs: [combine-manifest-gen-ami-entries]
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.publishProduction == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: "Install dependencies"
+        run: |
+          set -xe
+          python -VV
+          python -m site
+          python -m pip install requests
+
+      - name: Download Image Entries Request JSON
+        uses: actions/download-artifact@v2
+        with:
+          name: img-entries-request-json
+
+      - name: Share Images with Prod Platform
+        id: share
+        env:
+          AUTH_SERVICE_URL: "https://bodo-prod.frontegg.com"
+          BOT_PLATFORM_USERNAME: ${{ secrets.BOT_PROD_PLATFORM_USERNAME }}
+          BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_PROD_PLATFORM_PASSWORD }}
+          BACKEND_SERVICE_URL: "https://api.bodo.ai"
+          ORGANIZATION_UUID: ${{ secrets.PROD_ORGANIZATION_UUID }}
+        run: |
+          sleep 120
+          cd bodo-platform-images
+          python manage_images.py
+
+  add-bodo-version-to-prod-backend:
+    needs: [combine-manifest-gen-ami-entries]
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.addToBodoVersionsTable == 'true' &&
+      github.event.inputs.publishProduction == 'true'
+    env:
+      AUTH_SERVICE_URL: "https://bodo-prod.frontegg.com"
+      BOT_PLATFORM_USERNAME: ${{ secrets.BOT_PROD_PLATFORM_USERNAME }}
+      BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_PROD_PLATFORM_PASSWORD }}
+      BACKEND_SERVICE_URL: "https://api.bodo.ai"
+      BODO_VERSION: ${{ github.event.inputs.bodoVersion }}
+      BODO_CONDA_INSTALL_LINK: "bodo.jfrog.io/artifactory/api/conda/bodo.ai-platform"
+      ORGANIZATION_UUID: ${{ secrets.PROD_ORGANIZATION_UUID }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: "Install dependencies"
+        run: |
+          set -xe
+          python -VV
+          python -m site
+          python -m pip install requests
+
+      - name: Add Bodo Version to Prod Platform Backend
+        id: add-bodo-version
+        run: |
+          cd bodo-platform-images
+          python add_bodo_version.py
