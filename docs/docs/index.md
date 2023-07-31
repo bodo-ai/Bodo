@@ -6,25 +6,19 @@ hide:
 
 # About Bodo
 
-Bodo is a new just-in-time (JIT) inferential compiler that brings
-supercomputing-style performance and scalability to native Python
-analytics code automatically. Bodo has several advantages over other big
-data analytics systems (which are usually distributed scheduler
-libraries):
+Bodo is the first HPC-based compute engine for SQL and Python data processing. 
+With its new just-in-time (JIT) inferential compiler, Bodo brings
+supercomputing-style performance and scalability to native SQL and Python
+code automatically. Bodo significantly improves the performance of long-running
+data engineering workloads on popular data warehouses by typically saving more than 60% of the infrastructure cost. 
 
--   Simple programming with native Python APIs 
-    such as Pandas and Numpy (no "Pandas-like" API layers)
-    
--   Extreme performance and scalability using true parallelism
-    and advanced compiler technology
-    
--   Very high reliability due to binary code generation,
-    which avoids distributed library failures
-    
--   Simple deployment using standard Python workflows
+Bodo’s compiler optimization and parallel runtime system technologies bring HPC levels of performance and efficiency to 
+large-scale data processing for the first time. Data warehouses focus on decades-old database techniques such as 
+indexing—ensuring that a minimal amount of rows is scanned to match query filters that target small portions of the data.
+However, modern queries that require heavy computation on large data also need MPI parallelization and low-level code 
+optimization techniques to run efficiently. The Bodo Compute Engine brings these optimization techniques to data
+engineering without requiring any code change or tuning.
 
--   Flexible integration with other systems such as
-    cloud storage, data warehouses, and visualization tools
 
 <center>
 <div class="video-wrapper">
@@ -44,27 +38,14 @@ libraries):
 </div>
 </center>
 
+
+Bodo operates on the data in your data warehouse or data lake without copy.
+Data always stays in your own VPC, so you can comply with the security standards that your organization may require.
+The Bodo Platform provides a simple, interactive workflow for development, deployment, and monitoring.
+Quickly get up and running with the most challenging workloads in your existing cloud account.
+
 This documentation covers the basics of using Bodo and provides a
-reference of supported Python features and APIs. In a nutshell, Bodo
-provides a JIT compilation workflow using the [`@bodo.jit` decorator][jit]. 
-It replaces the decorated Python functions with an optimized and 
-parallelized binary version automatically. For example, the program 
-below can perform data transformation on large datasets:
+reference of supported SQL and Python features and APIs.
+To get started with Bodo using the Bodo Platform, refer to our [Quick Start Guide][bodoplatformquickstart]. 
 
-```py
-
-@bodo.jit
-def data_transform(file_name):
-    df = pd.read_parquet(file_name)
-    df = df[df.C.dt.month == 1]
-    df2 = df.groupby("A")["B", "D"].agg(
-        lambda S: (S == "ABC").sum()
-    )
-    df2.to_parquet("output.pq")
-
-```
-
-To run Bodo programs such as this example, programmers can simply use
-the command line such as `mpiexec -n 1024 python data_transform.py` (to
-run on 1024 cores), or use [Jupyter Notebook][ipyparallelsetup].
-
+If you want to try the free community edition of Bodo on your local setup, you can follow the steps outlined [here][install].
