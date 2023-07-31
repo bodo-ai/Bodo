@@ -1,0 +1,57 @@
+name: Azure image cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: dryrun. true by default, i.e. only finds the VMIs that would be removed but doesn't delete them from Azure.
+        required: false
+        default: 'true'
+
+jobs:
+
+  find_and_delete_images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+    
+      - name: Configure Azure Credentials
+        uses: azure/login@v1
+        with:
+          creds: ${{secrets.AZURE_CREDENTIALS}}
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      
+      - name: Install dependencies
+        run: |
+          set -eo pipefail
+          python -m pip install azure.identity==1.0
+          python -m pip install azure.mgmt.compute==27.0
+        
+      - name: Find and delete images
+        env:
+          DRYRUN: ${{ github.event.inputs.dryrun }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_IMAGES_RESOURCE_GROUP: ${{ secrets.AZURE_IMAGES_RESOURCE_GROUP }}
+        run: |
+          set -eo pipefail
+          DELETE_FLAG="--no-delete"
+          if [[ "$DRYRUN" == "false" ]]; then
+            DELETE_FLAG="--delete"
+          fi
+          cd bodo-platform-images
+          python vmi_cleanup.py --output vmis_to_remove.json $DELETE_FLAG
+
+      - name: Upload Image Details
+        uses: actions/upload-artifact@v2
+        with:
+          name: removed-vmis
+          path: vmis_to_remove.json
+
