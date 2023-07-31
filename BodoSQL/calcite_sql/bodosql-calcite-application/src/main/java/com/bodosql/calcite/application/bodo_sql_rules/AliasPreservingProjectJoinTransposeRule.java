@@ -5,13 +5,14 @@ import static java.util.Objects.requireNonNull;
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin;
 import com.bodosql.calcite.rel.logical.BodoLogicalProject;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
-import org.apache.calcite.plan.*;
+import org.apache.calcite.plan.RelOptRuleCall;
+import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.Project;
@@ -19,7 +20,11 @@ import org.apache.calcite.rel.rules.PushProjector;
 import org.apache.calcite.rel.rules.TransformationRule;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.rex.*;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexOver;
+import org.apache.calcite.rex.RexShuttle;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.immutables.value.Value;
@@ -29,7 +34,7 @@ import org.immutables.value.Value;
  * org.apache.calcite.rel.core.Join} by splitting the projection into a projection on top of each
  * child of the join.
  *
- * @see CoreRules#PROJECT_JOIN_TRANSPOSE
+ * @see org.apache.calcite.rel.rules.CoreRules#PROJECT_JOIN_TRANSPOSE
  *     <p>This code is a modified version of the default ProjectJoinTransposeRule found at:
  *     https://github.com/apache/calcite/blob/fd6ffc901ef28bf8408cca28b57eba9f8a204749/core/src/main/java/org/apache/calcite/rel/rules/ProjectJoinTransposeRule.java
  *     However, the original rule does not preserve aliases in some conditions
@@ -69,7 +74,7 @@ public class AliasPreservingProjectJoinTransposeRule
 
   /**
    * Convert a Project from an implementation with non-InputRef expresions into a Projection with
-   * only inputRef expresions that cover every column used by the original node.
+   * only inputRef expressions that cover every column used by the original node.
    *
    * @param node Projection to be converted to just input refs
    * @return A projection that contains all of the used columns but only inputRefs.
