@@ -2316,11 +2316,9 @@ def overload_dataframe_drop_duplicates(
     # TODO: support inplace
     args_dict = {
         "inplace": inplace,
-        "ignore_index": ignore_index,
     }
     args_default_dict = {
         "inplace": False,
-        "ignore_index": False,
     }
 
     subset_columns = []
@@ -2365,6 +2363,14 @@ def overload_dataframe_drop_duplicates(
             "DataFrame.drop_duplicates(): keep must be 'first', 'last', or False"
         )
 
+    # get ignore_index parameter
+    if is_overload_constant_bool(ignore_index):
+        ignore_index = get_overload_const_bool(ignore_index)
+    else:  # pragma: no cover
+        raise_bodo_error(
+            "DataFrame.drop_duplicates(): ignore_index must be a constant boolean"
+        )
+
     check_unsupported_args(
         "DataFrame.drop_duplicates",
         args_dict,
@@ -2398,6 +2404,12 @@ def overload_dataframe_drop_duplicates(
 
     n_cols = len(df.columns)
 
+    # handle empty dataframe corner case
+    if n_cols == 0:
+        return (
+            lambda df, subset=None, keep="first", inplace=False, ignore_index=False: df
+        )  # pragma: no cover
+
     subset_args = ["data_{}".format(i) for i in subset_idx]
     non_subset_args = [
         "data_{}".format(i) for i in range(n_cols) if i not in subset_idx
@@ -2410,6 +2422,9 @@ def overload_dataframe_drop_duplicates(
 
     index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
 
+    if ignore_index:
+        index = "None"
+
     func_text = (
         "def impl(df, subset=None, keep='first', inplace=False, ignore_index=False):\n"
     )
@@ -2421,7 +2436,7 @@ def overload_dataframe_drop_duplicates(
         )
         func_text += f"  out_table, index_arr = bodo.utils.table_utils.drop_duplicates_table(in_table, {index}, {n_cols}, {keep_i})\n"
         data_args = "out_table"
-
+        out_len = "len(out_table)"
     else:
         drop_duplicates_args = ", ".join(subset_args + non_subset_args)
 
@@ -2435,8 +2450,13 @@ def overload_dataframe_drop_duplicates(
         func_text += "  ({0},), index_arr = bodo.libs.array_kernels.drop_duplicates(({0},), {1}, {2}, {3})\n".format(
             drop_duplicates_args, index, num_drop_cols, keep_i
         )
+        out_len = "len(data_0)"
 
-    func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
+    if ignore_index:
+        func_text += f"  index = bodo.hiframes.pd_index_ext.init_range_index(0, {out_len}, 1, None)\n"
+    else:
+        func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
+
     return _gen_init_df(func_text, df.columns, data_args, "index")
 
 

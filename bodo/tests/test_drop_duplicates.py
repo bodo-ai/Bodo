@@ -283,6 +283,19 @@ def test_drop_duplicates_2col_int_string(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_drop_duplicates_empty(memory_leak_check):
+    """
+    Test drop_duplicates() on empty dataframe
+    """
+
+    def test_impl(df):
+        return df.drop_duplicates()
+
+    df1 = pd.DataFrame()
+    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
+
+
+@pytest.mark.slow
 @pytest.mark.parametrize("n, len_siz", [(100, 10), (30, 3)])
 def test_drop_duplicates_2col_random_nullable_int(n, len_siz, memory_leak_check):
     """
@@ -290,7 +303,7 @@ def test_drop_duplicates_2col_random_nullable_int(n, len_siz, memory_leak_check)
     """
 
     def test_impl(df1):
-        df2 = df1.drop_duplicates()
+        df2 = df1.drop_duplicates(ignore_index=True)
         return df2
 
     def get_random_column(n, len_siz):
@@ -310,7 +323,7 @@ def test_drop_duplicates_2col_random_nullable_int(n, len_siz, memory_leak_check)
 
     random.seed(5)
     df1 = get_random_dataframe(n, len_siz)
-    check_func(test_impl, (df1,), sort_output=True)
+    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
 
 
 @pytest.mark.slow
