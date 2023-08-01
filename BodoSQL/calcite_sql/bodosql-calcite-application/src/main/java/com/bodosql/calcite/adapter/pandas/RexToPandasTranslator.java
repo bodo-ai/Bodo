@@ -522,7 +522,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     builder.startCodegenFrame();
     Variable outputVar = visitCaseOperands(localTranslator, operands);
     Variable caseBodyGlobal =
-        visitor.lowerAsGlobal(new FrameTripleQuotedString(builder.endFrame(), 2));
+        visitor.lowerAsMetaType(new FrameTripleQuotedString(builder.endFrame(), 2));
 
     ImmutableList.Builder<Expr> caseArgsBuilder = ImmutableList.builder();
     for (RexNode ref : inputFinder.getRefs()) {
