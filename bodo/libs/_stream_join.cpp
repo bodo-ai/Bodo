@@ -621,7 +621,7 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
                      uint64_t n_keys_, bool build_table_outer_,
                      bool probe_table_outer_, cond_expr_fn_t cond_func_,
                      bool build_parallel_, bool probe_parallel_,
-                     int64_t output_batch_size_)
+                     int64_t output_batch_size_, uint64_t sync_iter)
     : build_arr_c_types(build_arr_c_types_),
       build_arr_array_types(build_arr_array_types_),
       probe_arr_c_types(probe_arr_c_types_),
@@ -633,6 +633,9 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
       build_parallel(build_parallel_),
       probe_parallel(probe_parallel_),
       output_batch_size(output_batch_size_),
+      sync_iter(sync_iter),
+      build_iter(0),
+      probe_iter(0),
       dummy_probe_table(alloc_table(probe_arr_c_types, probe_arr_array_types)) {
     this->key_dict_builders.resize(this->n_keys);
 
@@ -816,13 +819,12 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
                              uint64_t n_keys_, bool build_table_outer_,
                              bool probe_table_outer_, cond_expr_fn_t cond_func_,
                              bool build_parallel_, bool probe_parallel_,
-                             int64_t output_batch_size_,
-                             uint64_t shuffle_sync_iter,
+                             int64_t output_batch_size_, uint64_t sync_iter,
                              size_t max_partition_depth_)
     : JoinState(build_arr_c_types, build_arr_array_types, probe_arr_c_types,
                 probe_arr_array_types, n_keys_, build_table_outer_,
                 probe_table_outer_, cond_func_, build_parallel_,
-                probe_parallel_, output_batch_size_),
+                probe_parallel_, output_batch_size_, sync_iter),
       // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           // Use all available memory for now:
@@ -831,9 +833,6 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
           JOIN_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD)),
       op_mm(bodo::buffer_memory_manager(op_pool.get())),
       max_partition_depth(max_partition_depth_),
-      build_iter(0),
-      probe_iter(0),
-      shuffle_sync_iter(shuffle_sync_iter),
       join_event("HashJoin") {
     this->build_shuffle_buffer =
         TableBuildBuffer(build_arr_c_types, build_arr_array_types,
@@ -1195,8 +1194,9 @@ std::shared_ptr<table_info> filter_na_values(
  * @param join_state join state pointer
  * @param in_table build table batch
  * @param is_last is last batch
+ * @return updated is_last
  */
-void join_build_consume_batch(HashJoinState* join_state,
+bool join_build_consume_batch(HashJoinState* join_state,
                               std::shared_ptr<table_info> in_table,
                               bool use_bloom_filter, bool is_last) {
     if (join_state->build_input_finalized) {
@@ -1206,12 +1206,18 @@ void join_build_consume_batch(HashJoinState* join_state,
                 "the build was already finalized!");
         }
         // Nothing left to do for build
-        return;
+        // When build is finalized global is_last has been seen so no need for
+        // additional synchronization
+        return true;
     }
     int n_pes, myrank;
     auto iterationEvent(join_state->join_event.iteration());
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    // Make is_last global
+    is_last = stream_sync_is_last(is_last, join_state->build_iter,
+                                  join_state->sync_iter);
 
     // Unify dictionaries to allow consistent hashing and fast key comparison
     // using indices
@@ -1413,8 +1419,7 @@ void join_build_consume_batch(HashJoinState* join_state,
     }
     if (shuffle_this_iter(join_state->build_parallel, is_last,
                           join_state->build_shuffle_buffer.data_table,
-                          join_state->build_iter,
-                          join_state->shuffle_sync_iter)) {
+                          join_state->build_iter, join_state->sync_iter)) {
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             join_state->build_shuffle_buffer.data_table;
@@ -1480,6 +1485,7 @@ void join_build_consume_batch(HashJoinState* join_state,
         join_state->FinalizeBuild();
     }
     join_state->build_iter++;
+    return is_last;
 }
 
 /**
@@ -1493,14 +1499,16 @@ void join_build_consume_batch(HashJoinState* join_state,
  * side.
  * @param is_last is last batch
  * @param parallel parallel flag
+ * @return updated global is_last with the possiblity of false positives dues to
+ * iterations between syncs
  */
 template <bool build_table_outer, bool probe_table_outer,
           bool non_equi_condition, bool use_bloom_filter>
-void join_probe_consume_batch(HashJoinState* join_state,
+bool join_probe_consume_batch(HashJoinState* join_state,
                               std::shared_ptr<table_info> in_table,
                               const std::vector<uint64_t> build_kept_cols,
                               const std::vector<uint64_t> probe_kept_cols,
-                              const bool is_last) {
+                              bool is_last) {
     if (join_state->probe_input_finalized) {
         if (in_table->nrows() != 0) {
             throw std::runtime_error(
@@ -1508,12 +1516,18 @@ void join_probe_consume_batch(HashJoinState* join_state,
                 "the probe was already finalized!");
         }
         // No processing left.
-        return;
+        // When probe is finalized global is_last has been seen so no need for
+        // additional synchronization
+        return true;
     }
 
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    // Make is_last global
+    is_last = stream_sync_is_last(is_last, join_state->probe_iter,
+                                  join_state->sync_iter);
 
     // Update active partition state (temporarily) for hashing and
     // comparison functions.
@@ -1647,8 +1661,7 @@ void join_probe_consume_batch(HashJoinState* join_state,
 
     if (shuffle_this_iter(shuffle_possible, is_last,
                           join_state->probe_shuffle_buffer.data_table,
-                          join_state->probe_iter,
-                          join_state->shuffle_sync_iter)) {
+                          join_state->probe_iter, join_state->sync_iter)) {
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             join_state->probe_shuffle_buffer.data_table;
@@ -1807,6 +1820,7 @@ void join_probe_consume_batch(HashJoinState* join_state,
         // Finalize the probe side
         join_state->FinalizeProbe();
     }
+    return is_last;
 }
 
 /**
@@ -1830,7 +1844,7 @@ JoinState* join_state_init_py_entry(
     int8_t* probe_arr_c_types, int8_t* probe_arr_array_types, int n_probe_arrs,
     uint64_t n_keys, bool build_table_outer, bool probe_table_outer,
     cond_expr_fn_t cond_func, bool build_parallel, bool probe_parallel,
-    int64_t output_batch_size, uint64_t shuffle_sync_iter) {
+    int64_t output_batch_size, uint64_t sync_iter) {
     // nested loop join is required if there are no equality keys
     if (n_keys == 0) {
         return new NestedLoopJoinState(
@@ -1843,7 +1857,7 @@ JoinState* join_state_init_py_entry(
             std::vector<int8_t>(probe_arr_array_types,
                                 probe_arr_array_types + n_probe_arrs),
             build_table_outer, probe_table_outer, cond_func, build_parallel,
-            probe_parallel, output_batch_size);
+            probe_parallel, output_batch_size, sync_iter);
     }
 
     return new HashJoinState(
@@ -1856,7 +1870,7 @@ JoinState* join_state_init_py_entry(
         std::vector<int8_t>(probe_arr_array_types,
                             probe_arr_array_types + n_probe_arrs),
         n_keys, build_table_outer, probe_table_outer, cond_func, build_parallel,
-        probe_parallel, output_batch_size, shuffle_sync_iter);
+        probe_parallel, output_batch_size, sync_iter);
 }
 
 /**
@@ -1864,27 +1878,29 @@ JoinState* join_state_init_py_entry(
  *
  * @param join_state_ join state pointer
  * @param in_table build table batch
- * @param is_last is last batch
+ * @param is_last is last batch locally
+ * @return updated global is_last with possibility of false negatives due to
+ * iterations between syncs
  */
-void join_build_consume_batch_py_entry(JoinState* join_state_,
+bool join_build_consume_batch_py_entry(JoinState* join_state_,
                                        table_info* in_table, bool is_last) {
     // nested loop join is required if there are no equality keys
     if (join_state_->n_keys == 0) {
-        nested_loop_join_build_consume_batch_py_entry(
+        return nested_loop_join_build_consume_batch_py_entry(
             (NestedLoopJoinState*)join_state_, in_table, is_last);
-        return;
     }
 
     HashJoinState* join_state = (HashJoinState*)join_state_;
 
     try {
         bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
-        join_build_consume_batch(join_state,
-                                 std::unique_ptr<table_info>(in_table),
-                                 has_bloom_filter, is_last);
+        return join_build_consume_batch(join_state,
+                                        std::unique_ptr<table_info>(in_table),
+                                        has_bloom_filter, is_last);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
+    return false;
 }
 
 /**
@@ -1920,7 +1936,7 @@ table_info* join_probe_consume_batch_py_entry(
 
         // nested loop join is required if there are no equality keys
         if (join_state_->n_keys == 0) {
-            nested_loop_join_probe_consume_batch(
+            is_last = nested_loop_join_probe_consume_batch(
                 (NestedLoopJoinState*)join_state_, std::move(input_table),
                 std::move(build_kept_cols), std::move(probe_kept_cols),
                 is_last);
@@ -1928,18 +1944,19 @@ table_info* join_probe_consume_batch_py_entry(
             HashJoinState* join_state = (HashJoinState*)join_state_;
 
 #ifndef CONSUME_PROBE_BATCH
-#define CONSUME_PROBE_BATCH(build_table_outer, probe_table_outer,              \
-                            has_non_equi_cond, use_bloom_filter,               \
-                            build_table_outer_exp, probe_table_outer_exp,      \
-                            has_non_equi_cond_exp, use_bloom_filter_exp)       \
-    if (build_table_outer == build_table_outer_exp &&                          \
-        probe_table_outer == probe_table_outer_exp &&                          \
-        has_non_equi_cond == has_non_equi_cond_exp &&                          \
-        use_bloom_filter == use_bloom_filter_exp) {                            \
-        join_probe_consume_batch<build_table_outer_exp, probe_table_outer_exp, \
-                                 has_non_equi_cond_exp, use_bloom_filter_exp>( \
-            join_state, std::move(input_table), std::move(build_kept_cols),    \
-            std::move(probe_kept_cols), is_last);                              \
+#define CONSUME_PROBE_BATCH(build_table_outer, probe_table_outer,           \
+                            has_non_equi_cond, use_bloom_filter,            \
+                            build_table_outer_exp, probe_table_outer_exp,   \
+                            has_non_equi_cond_exp, use_bloom_filter_exp)    \
+    if (build_table_outer == build_table_outer_exp &&                       \
+        probe_table_outer == probe_table_outer_exp &&                       \
+        has_non_equi_cond == has_non_equi_cond_exp &&                       \
+        use_bloom_filter == use_bloom_filter_exp) {                         \
+        is_last = join_probe_consume_batch<                                 \
+            build_table_outer_exp, probe_table_outer_exp,                   \
+            has_non_equi_cond_exp, use_bloom_filter_exp>(                   \
+            join_state, std::move(input_table), std::move(build_kept_cols), \
+            std::move(probe_kept_cols), is_last);                           \
     }
 #endif
 

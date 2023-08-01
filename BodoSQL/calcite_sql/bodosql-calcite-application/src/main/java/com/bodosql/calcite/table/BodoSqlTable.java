@@ -253,7 +253,8 @@ public abstract class BodoSqlTable implements ExtensibleTable {
       Variable stateVarName,
       Variable tableVarName,
       Variable colNamesGlobal,
-      Variable isLastVarName);
+      Variable isLastVarName,
+      Variable iterVarName);
 
   /**
    * Return the location from which the table is generated. The return value is always entirely

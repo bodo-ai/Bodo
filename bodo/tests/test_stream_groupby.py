@@ -1,11 +1,9 @@
-import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 import bodo.io.snowflake
 import bodo.tests.utils
-from bodo.ir.aggregate import supported_agg_funcs
 from bodo.libs.stream_groupby import (
     delete_groupby_state,
     groupby_build_consume_batch,
@@ -44,17 +42,13 @@ def test_groupby_basic(func_name, memory_leak_check):
             batch1 = df.iloc[(_temp1 * batch_size) : ((_temp1 + 1) * batch_size)]
             is_last1 = (_temp1 * batch_size) >= len(df)
             _temp1 = _temp1 + 1
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
                 (),
                 kept_cols,
                 2,
             )
-            groupby_build_consume_batch(groupby_state, table1, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, table1, is_last1)
 
         out_dfs = []
         is_last2 = False
@@ -117,17 +111,13 @@ def test_groupby_drop_duplicates(memory_leak_check):
             batch1 = df.iloc[(_temp1 * batch_size) : ((_temp1 + 1) * batch_size)]
             is_last1 = (_temp1 * batch_size) >= len(df)
             _temp1 = _temp1 + 1
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
                 (),
                 kept_cols,
                 2,
             )
-            groupby_build_consume_batch(groupby_state, table1, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, table1, is_last1)
 
         out_dfs = []
         is_last2 = False
@@ -188,17 +178,13 @@ def test_groupby_key_reorder(memory_leak_check):
             batch1 = df.iloc[(_temp1 * batch_size) : ((_temp1 + 1) * batch_size)]
             is_last1 = (_temp1 * batch_size) >= len(df)
             _temp1 = _temp1 + 1
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
                 (),
                 kept_cols,
                 2,
             )
-            groupby_build_consume_batch(groupby_state, table1, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, table1, is_last1)
 
         out_dfs = []
         is_last2 = False
@@ -250,6 +236,7 @@ def test_groupby_dict_str(func_name, memory_leak_check):
     fnames = bodo.utils.typing.MetaType((func_name,))
     f_in_offsets = bodo.utils.typing.MetaType((0, 1))
     f_in_cols = bodo.utils.typing.MetaType((1,))
+
     def test_groupby(df):
         groupby_state = init_groupby_state(keys_inds, fnames, f_in_offsets, f_in_cols)
         _temp1 = 0
@@ -258,17 +245,13 @@ def test_groupby_dict_str(func_name, memory_leak_check):
             batch1 = df.iloc[(_temp1 * batch_size) : ((_temp1 + 1) * batch_size)]
             is_last1 = (_temp1 * batch_size) >= len(df)
             _temp1 = _temp1 + 1
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
                 (),
                 kept_cols,
                 2,
             )
-            groupby_build_consume_batch(groupby_state, table1, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, table1, is_last1)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -282,6 +265,7 @@ def test_groupby_dict_str(func_name, memory_leak_check):
             out_dfs.append(df_final)
         delete_groupby_state(groupby_state)
         return pd.concat(out_dfs)
+
     df = pd.DataFrame(
         {
             "A": ["xyz", "xyz", "wxy", "wxy", "vwx", "vwx"],

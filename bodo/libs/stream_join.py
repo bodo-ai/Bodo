@@ -813,9 +813,7 @@ def _init_join_state(
         output_batch_size = context.get_constant(
             types.int64, bodo.bodosql_streaming_batch_size
         )
-        shuffle_sync_iter = context.get_constant(
-            types.uint64, bodo.stream_loop_sync_iters
-        )
+        sync_iter = context.get_constant(types.uint64, bodo.stream_loop_sync_iters)
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
@@ -852,7 +850,7 @@ def _init_join_state(
             build_parallel,
             probe_parallel,
             output_batch_size,
-            shuffle_sync_iter,
+            sync_iter,
         )
         ret = builder.call(fn_tp, input_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -1041,7 +1039,7 @@ def _join_build_consume_batch(
 ):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.VoidType(),
+            lir.IntType(1),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
@@ -1051,10 +1049,11 @@ def _join_build_consume_batch(
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="join_build_consume_batch_py_entry"
         )
-        builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
 
-    sig = types.void(join_state, cpp_table, is_last)
+    sig = types.bool_(join_state, cpp_table, is_last)
     return sig, codegen
 
 
@@ -1065,7 +1064,9 @@ def join_build_consume_batch(join_state, table, is_last):
     Args:
         join_state (JoinState): C++ JoinState pointer
         table (table_type): build table batch
-        is_last (bool): is last batch
+        is_last (bool): is last batch locally
+    Returns:
+        bool: is last batch globally with possiblity of false negatives due to iterations between syncs
     """
     in_col_inds = MetaType(join_state.build_indices)
     n_table_cols = join_state.num_build_input_arrs
@@ -1078,7 +1079,7 @@ def join_build_consume_batch(join_state, table, is_last):
             table, cast_table_type, False, False
         )
         cpp_table = py_data_to_cpp_table(cast_table, (), in_col_inds, n_table_cols)
-        _join_build_consume_batch(join_state, cpp_table, is_last)
+        return _join_build_consume_batch(join_state, cpp_table, is_last)
 
     return impl
 

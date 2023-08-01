@@ -155,9 +155,10 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
       Variable stateVarName,
       Variable tableVarName,
       Variable colNamesGlobal,
-      Variable isLastVarName) {
+      Variable isLastVarName,
+      Variable iterVarName) {
     return this.catalog.generateStreamingWriteAppendCode(
-        stateVarName, tableVarName, colNamesGlobal, isLastVarName);
+        stateVarName, tableVarName, colNamesGlobal, isLastVarName, iterVarName);
   }
 
   /**

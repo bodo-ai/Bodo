@@ -229,9 +229,11 @@ void eval_groupby_funcs(GroupbyState* groupby_state,
  *
  * @param groupby_state groupby state pointer
  * @param in_table build table batch
- * @param is_last is last batch
+ * @param is_last is last batch locally
+ * @return updated global is_last with possibility of false negatives due to
+ * iterations between syncs
  */
-void groupby_build_consume_batch(GroupbyState* groupby_state,
+bool groupby_build_consume_batch(GroupbyState* groupby_state,
                                  std::shared_ptr<table_info> in_table,
                                  bool is_last) {
     // High level workflow (reusing as much of existing groupby infrastructure
@@ -255,6 +257,10 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
     auto iterationEvent(groupby_state->groupby_event.iteration());
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    // Make is_last global
+    is_last = stream_sync_is_last(is_last, groupby_state->build_iter,
+                                  groupby_state->sync_iter);
 
     // NOTE: in_table->num_keys is used by groupby infrastructure (e.g.
     // get_group_info)
@@ -337,7 +343,7 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
     if (shuffle_this_iter(groupby_state->parallel, is_last,
                           groupby_state->shuffle_table_buffer.data_table,
                           groupby_state->build_iter,
-                          groupby_state->shuffle_sync_iter)) {
+                          groupby_state->sync_iter)) {
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             groupby_state->shuffle_table_buffer.data_table;
@@ -411,6 +417,7 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
     }
 
     groupby_state->build_iter++;
+    return is_last;
 }
 
 /**
@@ -421,8 +428,9 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
  * @param groupby_state groupby state pointer
  * @param in_table build table batch
  * @param is_last is last batch
+ * @return updated is_last
  */
-void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
+bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
                                      std::shared_ptr<table_info> in_table,
                                      bool is_last) {
     int n_pes, myrank;
@@ -430,6 +438,8 @@ void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     auto iterationEvent(groupby_state->groupby_event.iteration());
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    is_last = stream_sync_is_last(is_last, groupby_state->build_iter,
+                                  groupby_state->sync_iter);
 
     // Unify dictionaries to allow consistent hashing and fast key comparison
     // using indices
@@ -466,7 +476,7 @@ void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     if (shuffle_this_iter(groupby_state->parallel, is_last,
                           groupby_state->shuffle_table_buffer.data_table,
                           groupby_state->build_iter,
-                          groupby_state->shuffle_sync_iter)) {
+                          groupby_state->sync_iter)) {
         std::shared_ptr<table_info> shuffle_table =
             groupby_state->shuffle_table_buffer.data_table;
 
@@ -508,6 +518,7 @@ void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     }
 
     groupby_state->build_iter++;
+    return is_last;
 }
 
 /**
@@ -534,22 +545,25 @@ std::tuple<std::shared_ptr<table_info>, bool> groupby_produce_output_batch(
  *
  * @param groupby_state groupby state pointer
  * @param in_table build table batch
- * @param is_last is last batch
+ * @param is_last is last batch locally
+ * @return updated global is_last with possibility of false negatives due to
+ * iterations between syncs
  */
-void groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
+bool groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
                                           table_info* in_table, bool is_last) {
     try {
         if (groupby_state->accumulate_before_update) {
-            groupby_acc_build_consume_batch(
+            return groupby_acc_build_consume_batch(
                 groupby_state, std::unique_ptr<table_info>(in_table), is_last);
         } else {
-            groupby_build_consume_batch(
+            return groupby_build_consume_batch(
                 groupby_state, std::unique_ptr<table_info>(in_table), is_last);
         }
 
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
+    return false;
 }
 
 /**
@@ -591,7 +605,7 @@ GroupbyState* groupby_state_init_py_entry(
     int8_t* build_arr_c_types, int8_t* build_arr_array_types, int n_build_arrs,
     int32_t* ftypes, int32_t* f_in_offsets, int32_t* f_in_cols, int n_funcs,
     uint64_t n_keys, int64_t output_batch_size, bool parallel,
-    uint64_t shuffle_sync_iters) {
+    uint64_t sync_iters) {
     return new GroupbyState(
         std::vector<int8_t>(build_arr_c_types,
                             build_arr_c_types + n_build_arrs),
@@ -602,7 +616,7 @@ GroupbyState* groupby_state_init_py_entry(
         std::vector<int32_t>(f_in_offsets, f_in_offsets + n_funcs + 1),
         std::vector<int32_t>(f_in_cols, f_in_cols + f_in_offsets[n_funcs]),
 
-        n_keys, output_batch_size, parallel, shuffle_sync_iters);
+        n_keys, output_batch_size, parallel, sync_iters);
 }
 
 /**
