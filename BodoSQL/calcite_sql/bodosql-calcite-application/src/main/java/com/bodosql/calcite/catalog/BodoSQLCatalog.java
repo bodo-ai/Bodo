@@ -120,13 +120,15 @@ public interface BodoSQLCatalog {
    * @param tableVarName Name of the variable storing the table to append
    * @param colNamesGlobal Column names of table to append
    * @param isLastVarName Name of the variable indicating the is_last flag
+   * @param iterVarName Name of the variable storing the loop iteration
    * @return The generated code to produce the write-appending code
    */
   Expr generateStreamingWriteAppendCode(
       Variable stateVarName,
       Variable tableVarName,
       Variable colNamesGlobal,
-      Variable isLastVarName);
+      Variable isLastVarName,
+      Variable iterVarName);
 
   /**
    * Generates the code necessary to produce a read expression from the given catalog.

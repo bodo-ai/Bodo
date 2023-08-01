@@ -3465,7 +3465,7 @@ table_info* shuffle_renormalization_py_entrypt(table_info* in_table, int random,
 
 bool shuffle_this_iter(const bool parallel, const bool is_last,
                        const std::shared_ptr<table_info>& shuffle_table,
-                       const uint64_t iter, const uint64_t shuffle_sync_iter) {
+                       const uint64_t iter, const uint64_t sync_iter) {
     if (!parallel) {
         return false;
     }
@@ -3473,7 +3473,8 @@ bool shuffle_this_iter(const bool parallel, const bool is_last,
         return true;
     }
 
-    if (iter % shuffle_sync_iter == 0) {
+    // Use iter + 1 to avoid a sync on the first iteration
+    if ((iter + 1) % sync_iter == 0) {
         uint64_t local_shuffle_buffer_nrows = shuffle_table->nrows();
         uint64_t reduced_shuffle_buffer_nrows;
         MPI_Allreduce(&local_shuffle_buffer_nrows,
