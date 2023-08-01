@@ -835,7 +835,7 @@ class DataFramePass:
         import bodosql
 
         init_code = self.typemap[rhs.args[2].name].instance_type.meta
-        body_code = get_overload_const_str(self.typemap[rhs.args[3].name])
+        body_code = self.typemap[rhs.args[3].name].instance_type.meta
         var_name = get_overload_const_str(self.typemap[rhs.args[4].name])
         out_arr_type = unwrap_typeref(self.typemap[rhs.args[5].name])
 
