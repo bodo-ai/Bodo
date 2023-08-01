@@ -2,6 +2,7 @@
 #ifndef _GROUPBY_COL_SET_H_INCLUDED
 #define _GROUPBY_COL_SET_H_INCLUDED
 
+#include <algorithm>
 #include "_bodo_common.h"
 #include "_groupby.h"
 #include "_groupby_common.h"
@@ -43,13 +44,46 @@ class BasicColSet {
     virtual ~BasicColSet();
 
     /**
-     * Allocate my columns for update step.
-     * @param number of groups found in the input table
-     * @param[in,out] vector of columns of update table. This method adds
-     *                columns to this vector.
+     * Allocate running value columns for the update/combine steps, and places
+     * them in out_cols. Note that this does not modify any fields in the colset
+     * itself; The caller is responsible for calling setUpdateCols or
+     * setCombineCols on the output of this function to set the update/combine
+     * columns of this colset.
+     *
+     *
+     * Allocated columns should always be identical to those allocated in
+     * alloc_update_columns/alloc_combine_columns.
+     *
+     * @param num_groups number of groups found in the input table
+     * @param[in,out] out_cols vector of columns for the update/combine step.
+     * This method adds columns to this vector.
+     */
+    virtual void alloc_running_value_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+
+    /**
+     * Allocates the running value columns for the update step, places
+     * them in out_cols, and sets the update_cols field of this colset.
+     *
+     * Allocated columns should always be identical to those allocated in
+     * alloc_combine_columns/alloc_running_value_columns.
+     *
+     * May do some additional misc initialization work for specific older
+     * column sets that require it (std, var, skew, etc.), but this
+     * Should not be overwritten moving forward.
+     *
+     * TODO: Move misc init work to a separate method and remove this method
+     * in favor of always calling alloc_running_value_columns
+     *
+     * @param num_groups number of groups found in the input table
+     * @param[in,out] out_cols vector of columns for the update step.
+     * This method adds columns to this vector.
      */
     virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+        alloc_running_value_columns(num_groups, out_cols);
+        this->update_cols = out_cols;
+    }
 
     /**
      * Perform update step for this column set. This will fill my columns with
@@ -71,14 +105,28 @@ class BasicColSet {
         typename std::vector<std::shared_ptr<array_info>>::iterator& it);
 
     /**
-     * Allocate my columns for combine step.
-     * @param number of groups found in the input table (which is the update
-     * table)
-     * @param[in,out] vector of columns of combine table. This method adds
-     *                columns to this vector.
+     * Allocates the running value columns for the combine step, places
+     * them in out_cols, and sets the combine_cols field of this colset.
+     *
+     * Allocated columns should always be identical to those allocated in
+     * alloc_update_columns/alloc_running_value_columns.
+     *
+     * May do some additional misc initialization work for specific older
+     * column sets that require it (std, var, skew, etc.), but this
+     * Should not be overwritten moving forward.
+     *
+     * TODO: Move misc init work to a separate method and remove this method
+     * in favor of always calling alloc_running_value_columns
+     *
+     * @param num_groups number of groups found in the input table
+     * @param[in,out] out_cols vector of columns for the combine step.
+     * This method adds columns to this vector.
      */
     virtual void alloc_combine_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+        alloc_running_value_columns(num_groups, out_cols);
+        this->combine_cols = out_cols;
+    }
 
     /**
      * Perform combine step for this column set. This will fill my columns with
@@ -120,9 +168,9 @@ class BasicColSet {
     }
 
     /**
-     * @brief Get update column types for this ColSet function with the given
-     * input array types.
-     * Should match arrays allocated with alloc_update_columns().
+     * @brief Get combine/update column types for this ColSet function with the
+     * given input array types. Should match arrays allocated with
+     * alloc_update_or_combine_columns().
      *
      * @param in_arr_types input array types
      * @param in_dtypes input array dtypes
@@ -131,11 +179,11 @@ class BasicColSet {
      */
     virtual std::tuple<std::vector<bodo_array_type::arr_type_enum>,
                        std::vector<Bodo_CTypes::CTypeEnum>>
-    getUpdateColumnTypes(
+    getRunningValueColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
         const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) {
-        // TODO[BSE-578]: implement getUpdateColumnTypes() for other colsets
-        // that can have more update columns
+        // TODO[BSE-578]: implement getRunningValueColumnTypes() for other
+        // colsets that can have more update columns
         std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
             out_arr_type =
                 get_groupby_output_dtype(ftype, in_arr_types[0], in_dtypes[0]);
@@ -143,38 +191,6 @@ class BasicColSet {
             std::vector<bodo_array_type::arr_type_enum>{
                 std::get<0>(out_arr_type)},
             std::vector<Bodo_CTypes::CTypeEnum>{std::get<1>(out_arr_type)});
-    }
-
-    /**
-     * @brief Get combine column types for this ColSet function with the given
-     * update array types.
-     * Should match arrays allocated with alloc_combine_columns().
-     *
-     * @param update_arr_types update array types
-     * @param update_dtypes update dtypes
-     * @return std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-     * std::vector<Bodo_CTypes::CTypeEnum>> combine column array types and
-     * dtypes
-     */
-    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-               std::vector<Bodo_CTypes::CTypeEnum>>
-    getCombineColumnTypes(
-        const std::vector<bodo_array_type::arr_type_enum>& update_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& update_dtypes) {
-        // TODO[BSE-578]: implement getCombineColumnTypes() for other colsets
-        // that can have more update columns
-        int combine_ftype = get_combine_func(ftype);
-        std::vector<bodo_array_type::arr_type_enum> out_arr_types;
-        std::vector<Bodo_CTypes::CTypeEnum> out_dtypes;
-        for (size_t i = 0; i < update_arr_types.size(); i++) {
-            std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
-                out_arr_type_info = get_groupby_output_dtype(
-                    combine_ftype, update_arr_types[i], update_dtypes[i]);
-            out_arr_types.push_back(std::get<0>(out_arr_type_info));
-            out_dtypes.push_back(std::get<1>(out_arr_type_info));
-        }
-
-        return std::tuple(out_arr_types, out_dtypes);
     }
 
     /**
@@ -228,7 +244,7 @@ class MeanColSet : public BasicColSet {
     MeanColSet(std::shared_ptr<array_info> in_col, bool combine_step,
                bool use_sql_rules);
     virtual ~MeanColSet();
-    void alloc_update_columns(
+    void alloc_running_value_columns(
         size_t num_groups,
         std::vector<std::shared_ptr<array_info>>& out_cols) override;
     void update(const std::vector<grouping_info>& grp_infos) override;
@@ -238,7 +254,7 @@ class MeanColSet : public BasicColSet {
 
     std::tuple<std::vector<bodo_array_type::arr_type_enum>,
                std::vector<Bodo_CTypes::CTypeEnum>>
-    getUpdateColumnTypes(
+    getRunningValueColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
         const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override {
         // Mean's update columns are always float64 for sum data and uint64 for
@@ -285,7 +301,7 @@ class WindowColSet : public BasicColSet {
      * input column regardless of input column types (i.e num_groups is not used
      * in this case)
      */
-    virtual void alloc_update_columns(
+    virtual void alloc_running_value_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
     /**
      * Perform update step for this column set. This first shuffles
@@ -328,6 +344,9 @@ class IdxMinMaxColSet : public BasicColSet {
 
     virtual ~IdxMinMaxColSet();
 
+    virtual void alloc_running_value_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+
     virtual void alloc_update_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
@@ -354,7 +373,7 @@ class BoolXorColSet : public BasicColSet {
 
     ~BoolXorColSet() override;
 
-    void alloc_update_columns(
+    void alloc_running_value_columns(
         size_t num_groups,
         std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
@@ -367,7 +386,7 @@ class BoolXorColSet : public BasicColSet {
 
     std::tuple<std::vector<bodo_array_type::arr_type_enum>,
                std::vector<Bodo_CTypes::CTypeEnum>>
-    getUpdateColumnTypes(
+    getRunningValueColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
         const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override;
 };
@@ -384,6 +403,10 @@ class VarStdColSet : public BasicColSet {
     virtual ~VarStdColSet();
 
     void alloc_update_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+
+    void alloc_running_value_columns(
         size_t num_groups,
         std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
@@ -405,7 +428,7 @@ class VarStdColSet : public BasicColSet {
 
     std::tuple<std::vector<bodo_array_type::arr_type_enum>,
                std::vector<Bodo_CTypes::CTypeEnum>>
-    getUpdateColumnTypes(
+    getRunningValueColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
         const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override;
 
@@ -428,6 +451,10 @@ class SkewColSet : public BasicColSet {
         size_t num_groups,
         std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
+    void alloc_running_value_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+
     void update(const std::vector<grouping_info>& grp_infos) override;
 
     void alloc_combine_columns(
@@ -446,7 +473,7 @@ class SkewColSet : public BasicColSet {
 
     std::tuple<std::vector<bodo_array_type::arr_type_enum>,
                std::vector<Bodo_CTypes::CTypeEnum>>
-    getUpdateColumnTypes(
+    getRunningValueColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
         const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override;
 
@@ -467,7 +494,7 @@ class ListAggColSet : public BasicColSet {
 
     virtual ~ListAggColSet();
 
-    void alloc_update_columns(
+    void alloc_running_value_columns(
         size_t num_groups,
         std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
@@ -497,6 +524,10 @@ class KurtColSet : public BasicColSet {
         size_t num_groups,
         std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
+    void alloc_running_value_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+
     void update(const std::vector<grouping_info>& grp_infos) override;
 
     void alloc_combine_columns(
@@ -515,7 +546,7 @@ class KurtColSet : public BasicColSet {
 
     std::tuple<std::vector<bodo_array_type::arr_type_enum>,
                std::vector<Bodo_CTypes::CTypeEnum>>
-    getUpdateColumnTypes(
+    getRunningValueColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
         const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override;
 
@@ -534,6 +565,9 @@ class UdfColSet : public BasicColSet {
               int n_redvars, bool use_sql_rules);
 
     virtual ~UdfColSet();
+
+    virtual void alloc_running_value_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     void alloc_update_columns(
         size_t num_groups,
@@ -643,7 +677,7 @@ class CumOpColSet : public BasicColSet {
 
     virtual ~CumOpColSet();
 
-    void alloc_update_columns(
+    void alloc_running_value_columns(
         size_t num_groups,
         std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
@@ -664,7 +698,7 @@ class ShiftColSet : public BasicColSet {
 
     virtual ~ShiftColSet();
 
-    void alloc_update_columns(
+    void alloc_running_value_columns(
         size_t num_groups,
         std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
@@ -685,6 +719,10 @@ class TransformColSet : public BasicColSet {
                     bool use_sql_rules);
 
     virtual ~TransformColSet();
+
+    void alloc_running_value_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
     void alloc_update_columns(
         size_t num_groups,
@@ -714,7 +752,7 @@ class HeadColSet : public BasicColSet {
 
     virtual ~HeadColSet();
 
-    void alloc_update_columns(
+    void alloc_running_value_columns(
         size_t update_col_len,
         std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
@@ -751,7 +789,7 @@ class NgroupColSet : public BasicColSet {
      * input column regardless of input column types (i.e num_groups is not used
      * in this case)
      */
-    void alloc_update_columns(
+    void alloc_running_value_columns(
         size_t num_groups,
         std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
