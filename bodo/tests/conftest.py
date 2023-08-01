@@ -89,6 +89,20 @@ def memory_leak_check():
         assert total_mi_alloc == total_mi_free
 
 
+def item_file_name(item):
+    if isinstance(item, (CppTestFile, CppTestItem)):
+        return item.filename
+    else:
+        return item.module.__name__.split(".")[-1] + ".py"
+
+
+def item_module_name(item):
+    if isinstance(item, (CppTestFile, CppTestItem)):
+        return item.filename
+    else:
+        return item.module.__name__
+
+
 def pytest_collection_modifyitems(items):
     """
     called after collection has been performed.
@@ -149,6 +163,7 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodo_29of30,
         pytest.mark.bodo_30of30,
     ]
+
     # Sort the collected items. This is needed due to a niche issue with azure CI:
     # https://bodo.atlassian.net/browse/BE-4190
     items.sort(key=functools.cmp_to_key(fn_compare))
@@ -161,7 +176,7 @@ def pytest_collection_modifyitems(items):
     module_to_run = os.environ.get("BODO_TEST_PYTEST_MOD", None)
     if module_to_run is not None:
         for item in items:
-            if module_to_run == item.module.__name__.split(".")[-1] + ".py":
+            if module_to_run == item_file_name(item):
                 item.add_marker(pytest.mark.single_mod)
 
     for i, item in enumerate(items):
@@ -170,7 +185,7 @@ def pytest_collection_modifyitems(items):
         azure_2p_marker = azure_2p_markers[i % len(azure_2p_markers)]
         # All of the test_s3.py tests must be on the same rank because they
         # haven't been refactored to remove cross-test dependencies.
-        testfile = item.module.__name__.split(".")[-1] + ".py"
+        testfile = item_file_name(item)
         if "test_s3.py" in testfile:
             azure_1p_marker = azure_1p_markers[0]
             azure_2p_marker = azure_2p_markers[0]
@@ -185,7 +200,7 @@ def pytest_collection_modifyitems(items):
 
         for item in items:
             # Gives filename + function name
-            testname = item.module.__name__.split(".")[-1] + ".py" + "::" + item.name
+            testname = item_file_name(item) + "::" + item.name
             if testname in marker_groups:
                 group_marker = marker_groups[testname]
             else:
@@ -198,7 +213,7 @@ def fn_compare(fn1, fn2):
     # dupe hashes which are sorted differently on different ranks, which would lead to some REALLY
     # nasty to debug errors, so we're just taking the performance hit, and doing string comparison,
     # since this doesn't need to be performant
-    return fn1.module.__name__ + str(fn1) < fn2.module.__name__ + str(fn2)
+    return item_module_name(fn1) + str(fn1) < item_module_name(fn2) + str(fn2)
 
 
 def group_from_hash(testname, num_groups):
@@ -714,3 +729,86 @@ def date_df():
             }
         )
     }
+
+
+class CppTestFile(pytest.File):
+    """Represents a c++ unit testing file that integrates with pytest.
+
+    When bodo is built with `setup.py develop --test`, the bodo.ext module contains the
+    compiled versions of the C++ tests. When pytest is run with a .cpp file, this class makes it
+    look up the c++ file in the compiled module. The module is able to enumerate all tests in the file.
+    """
+
+    @classmethod
+    def from_parent(kls, parent, **kwargs):
+        return super().from_parent(parent, **kwargs)
+
+    def __init__(self, parent, **kwargs):
+        super().__init__(fspath=kwargs["fspath"], parent=parent)
+        self.tests = kwargs["tests"]
+        self.filename = kwargs["filename"]
+
+    def collect(self):
+        for test in self.tests:
+            yield CppTestItem.from_parent(self, test=test)
+
+
+class CppTestItem(pytest.Item):
+    """Every individual c++ test in a file can be enumerated. The 'CppTestFile' class builds
+    a 'CppTestItem' for each test in the given c++ file.
+    """
+
+    def __init__(self, parent, *, test):
+        super().__init__(test.name, parent=parent)
+        self.test = test
+
+    @property
+    def filename(self):
+        return self.parent.filename
+
+    def runtest(self):
+        self.test()
+
+    def reportinfo(self):
+        return self.test.filename, self.test.lineno, self.test.name
+
+
+def pytest_collect_file(parent, path):
+    """
+    A hook into py.test to collect test_*.cpp test files.
+
+    This adds functionality to collect test_*.cpp files (except for test_framework.cpp).
+
+    Each c++ file gets a corresponding 'CppTestFile' pytest item, which lets pytest run c++ tests.
+
+    The C++ tests are built as part of the bodo.ext module when `--test` is given to the `setup.py develop` command.
+
+    When built, the tests are available as the `bodo.ext.test_cpp` module. Otherwise, the import fails
+    and this file won't collect any C++ tests (but it will print out a warning)
+    """
+    try:
+        from bodo.ext import test_cpp
+    except ImportError:
+        test_cpp = None
+
+    if (
+        path.ext == ".cpp"
+        and path.basename.startswith("test_")
+        and path.basename != "test_framework.cpp"
+    ):
+        if test_cpp is None:
+            import warnings
+
+            warnings.warn(
+                "c++ tests are disabled in this build. Run 'setup.py develop' with the '--test' flag to enable."
+            )
+            return
+
+        tests = [
+            test
+            for test in test_cpp.tests
+            if path.basename == os.path.basename(test.filename)
+        ]
+        return CppTestFile.from_parent(
+            parent, fspath=path, filename=path.basename, tests=tests
+        )

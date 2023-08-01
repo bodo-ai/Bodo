@@ -952,6 +952,10 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, stream_groupby_cpp);
     SetAttrStringFromPyInit(m, stream_dict_encoding_cpp);
 
+#ifdef IS_TESTING
+    SetAttrStringFromPyInit(m, test_cpp);
+#endif
+
     SetAttrStringFromPyInit(m, listagg);
 
     return m;
