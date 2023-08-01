@@ -850,9 +850,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<String> colNames = node.getRowType().getFieldNames();
     List<Expr.StringLiteral> colNamesList = stringsToStringLiterals(colNames);
     Variable colNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(colNamesList));
-    // Update the loop exit cond to global isLast
     Variable globalIsLast = genGenericTempVar();
-    currentPipeline.endSection(globalIsLast);
 
     // Generate append call
     Expr writerAppendCall =
@@ -863,6 +861,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             currentPipeline.getExitCond(),
             currentPipeline.getIterVar());
     this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
+    currentPipeline.endSection(globalIsLast);
     timerInfo.insertLoopOperationEndTimer();
 
     // Lastly, end the loop
@@ -1118,10 +1117,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Get column names for write append call
     Variable colNamesGlobal =
         lowerAsColNamesMetaType(new Expr.Tuple(stringsToStringLiterals(colNames)));
-    // Update the loop exit cond to global isLast
     Variable globalIsLast = genGenericTempVar();
-    currentPipeline.endSection(globalIsLast);
-
     // Generate append call
     Expr writerAppendCall =
         bodoSqlTable.generateStreamingWriteAppendCode(
@@ -1131,6 +1127,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             currentPipeline.getExitCond(),
             currentPipeline.getIterVar());
     this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
+    currentPipeline.endSection(globalIsLast);
     timerInfo.insertLoopOperationEndTimer();
 
     // Lastly, end the loop

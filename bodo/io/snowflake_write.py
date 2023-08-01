@@ -483,7 +483,7 @@ def snowflake_writer_append_table(
         # internal stage and sync with rank 0 before it issues COPY INTO.
         "def impl(writer, table, col_names_meta, is_last, iter):\n"
         "    if writer['finished']:\n"
-        "        return\n"
+        "        return True\n"
         "    ev = tracing.Event('snowflake_writer_append_table', is_parallel=writer['parallel'])\n"
         "    is_last = bodo.libs.distributed_api.sync_is_last(is_last, iter)\n"
         # ===== Part 1: Accumulate batch in writer and compute total size
