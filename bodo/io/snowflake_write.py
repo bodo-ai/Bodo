@@ -19,7 +19,7 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.hiframes.pd_dataframe_ext import DataFrameType, TableType
+from bodo.hiframes.pd_dataframe_ext import TableType
 from bodo.io.helpers import exception_propagating_thread_type
 from bodo.io.parquet_pio import parquet_write_table_cpp
 from bodo.io.snowflake import (
@@ -81,9 +81,6 @@ snowflake_writer_payload_members = (
     ("finished", types.boolean),
     # Region of internal stage bucket
     ("bucket_region", types.unicode_type),
-    # Number of iterations append() has been called. Used to sync less often
-    # when computing file_count_global
-    ("append_iter_idx", types.int64),
     # Total number of Parquet files written on this rank that have not yet
     # been COPY INTO'd
     ("file_count_local", types.int64),
@@ -382,7 +379,6 @@ def snowflake_writer_init(
         "    writer['table_type'] = table_type\n"
         "    writer['parallel'] = _is_parallel\n"
         "    writer['finished'] = False\n"
-        "    writer['append_iter_idx'] = 0\n"
         "    writer['file_count_local'] = 0\n"
         "    writer['file_count_global'] = 0\n"
         "    writer['copy_into_prev_sfqid'] = ''\n"
@@ -437,7 +433,9 @@ def snowflake_writer_init(
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def snowflake_writer_append_table(writer, table, col_names_meta, is_last):  # pragma: no cover
+def snowflake_writer_append_table(
+    writer, table, col_names_meta, is_last, iter
+):  # pragma: no cover
     if not isinstance(writer, SnowflakeWriterType):  # pragma: no cover
         raise BodoError(
             f"snowflake_writer_append_table: Expected type SnowflakeWriterType "
@@ -472,7 +470,9 @@ def snowflake_writer_append_table(writer, table, col_names_meta, is_last):  # pr
 
     col_names_arr = pd.array(col_names_meta.meta)
     col_types_arr = table.arr_types
-    sf_schema = bodo.io.snowflake.gen_snowflake_schema(col_names_meta.meta, table.arr_types)
+    sf_schema = bodo.io.snowflake.gen_snowflake_schema(
+        col_names_meta.meta, table.arr_types
+    )
 
     py_table_typ = table
 
@@ -481,11 +481,11 @@ def snowflake_writer_append_table(writer, table, col_names_meta, is_last):  # pr
         # This is because we only execute COPY INTO commands from rank 0, so
         # all ranks must finish writing their respective files to Snowflake
         # internal stage and sync with rank 0 before it issues COPY INTO.
-        "def impl(writer, table, col_names_meta, is_last):\n"
+        "def impl(writer, table, col_names_meta, is_last, iter):\n"
         "    if writer['finished']:\n"
         "        return\n"
         "    ev = tracing.Event('snowflake_writer_append_table', is_parallel=writer['parallel'])\n"
-        "    writer['append_iter_idx'] += 1\n"
+        "    is_last = bodo.libs.distributed_api.sync_is_last(is_last, iter)\n"
         # ===== Part 1: Accumulate batch in writer and compute total size
         "    ev_append_batch = tracing.Event(f'append_batch', is_parallel=True)\n"
         "    cpp_table = py_table_to_cpp_table(table, py_table_typ)\n"
@@ -579,7 +579,7 @@ def snowflake_writer_append_table(writer, table, col_names_meta, is_last):  # pr
         # To reduce synchronization, we do this infrequently
         # Note: This requires append() to be called the same number of times on all ranks
         "    if writer['parallel']:\n"
-        "        if is_last or (writer['append_iter_idx'] % bodo.stream_loop_sync_iters == 0):\n"
+        "        if is_last or (iter % bodo.stream_loop_sync_iters == 0):\n"
         "            sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)\n"
         "            writer['file_count_global'] = bodo.libs.distributed_api.dist_reduce(\n"
         "                writer['file_count_local'], sum_op\n"
@@ -696,6 +696,7 @@ def snowflake_writer_append_table(writer, table, col_names_meta, is_last):  # pr
         "            bodo.barrier()\n"
         "        writer['finished'] = True\n"
         "    ev.finalize()\n"
+        "    return is_last"
     )
 
     glbls = {

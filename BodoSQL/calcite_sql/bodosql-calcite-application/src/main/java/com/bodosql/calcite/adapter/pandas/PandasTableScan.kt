@@ -69,7 +69,7 @@ class PandasTableScan(
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
         val tableChunkVar = builder.symbolTable.genTableVar()
-        val isLastVar = currentPipeline.exitCond
+        val isLastVar = currentPipeline.getExitCond()
         val readArrowNextCall = Expr.Call("bodo.io.arrow_reader.read_arrow_next", listOf(stateVar))
         builder.add(Op.TupleAssign(listOf(tableChunkVar, isLastVar), readArrowNextCall))
 

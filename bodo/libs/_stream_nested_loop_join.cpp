@@ -1,3 +1,4 @@
+#include "_distributed.h"
 #include "_shuffle.h"
 #include "_stream_join.h"
 
@@ -55,13 +56,13 @@ void NestedLoopJoinState::FinalizeBuild() {
  * @param in_table build table batch
  * @param is_last is last batch
  */
-void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
+bool nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
                                           std::shared_ptr<table_info> in_table,
                                           bool is_last) {
     // just add batch to build table buffer
     if (join_state->build_input_finalized) {
         // Nothing left to do for build
-        return;
+        return true;
     }
 
     // Unify dictionaries to allow consistent hashing and fast key
@@ -75,10 +76,12 @@ void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
 
     join_state->build_table_buffer.AppendBatch(in_table);
 
+    // is_last can be local here because build only shuffles once at the end
     if (is_last) {
         // Finalize the join state
         join_state->FinalizeBuild();
     }
+    return is_last;
 }
 
 /**
@@ -174,7 +177,7 @@ void nested_loop_join_local_chunk(NestedLoopJoinState* join_state,
 #undef JOIN_TABLE_LOCAL
 }
 
-void nested_loop_join_probe_consume_batch(
+bool nested_loop_join_probe_consume_batch(
     NestedLoopJoinState* join_state, std::shared_ptr<table_info> in_table,
     const std::vector<uint64_t> build_kept_cols,
     const std::vector<uint64_t> probe_kept_cols, bool is_last) {
@@ -186,11 +189,17 @@ void nested_loop_join_probe_consume_batch(
                 "the probe was already finalized!");
         }
         // No processing left.
-        return;
+        // When probe is finalized global is_last has been seen so no need for
+        // additional synchronization
+        return true;
     }
 
     // define the number of rows already processed as 0
     int64_t build_table_offset = 0;
+
+    // Make is_last global
+    is_last = stream_sync_is_last(is_last, join_state->probe_iter,
+                                  join_state->sync_iter);
 
     // We only need to take the parallel path if both tables are parallel
     // and the build table wasn't broadcast.
@@ -236,7 +245,6 @@ void nested_loop_join_probe_consume_batch(
             build_table_offset += build_table->nrows();
         }
     }
-
     if (join_state->build_table_outer && is_last) {
         // Add unmatched rows from build table
         // for outer join
@@ -262,14 +270,17 @@ void nested_loop_join_probe_consume_batch(
         // Finalize the probe side
         join_state->FinalizeProbe();
     }
+    join_state->probe_iter++;
+    return is_last;
 }
 
-void nested_loop_join_build_consume_batch_py_entry(
+bool nested_loop_join_build_consume_batch_py_entry(
     NestedLoopJoinState* join_state, table_info* in_table, bool is_last) {
     try {
-        nested_loop_join_build_consume_batch(
+        return nested_loop_join_build_consume_batch(
             join_state, std::shared_ptr<table_info>(in_table), is_last);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
+    return false;
 }

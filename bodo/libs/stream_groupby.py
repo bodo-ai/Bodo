@@ -14,7 +14,6 @@ from numba.extending import intrinsic, models, register_model
 
 import bodo
 from bodo.ext import stream_groupby_cpp
-
 from bodo.ir.aggregate import supported_agg_funcs
 from bodo.libs.array import (
     cpp_table_to_py_table,
@@ -22,7 +21,12 @@ from bodo.libs.array import (
     py_data_to_cpp_table,
 )
 from bodo.libs.array import table_type as cpp_table_type
-from bodo.utils.typing import MetaType, is_overload_none, unwrap_typeref, BodoError
+from bodo.utils.typing import (
+    BodoError,
+    MetaType,
+    is_overload_none,
+    unwrap_typeref,
+)
 from bodo.utils.utils import numba_to_c_array_type, numba_to_c_type
 
 ll.add_symbol(
@@ -337,9 +341,7 @@ def _init_groupby_state(
         output_batch_size = context.get_constant(
             types.int64, bodo.bodosql_streaming_batch_size
         )
-        shuffle_sync_iter = context.get_constant(
-            types.uint64, bodo.stream_loop_sync_iters
-        )
+        sync_iter = context.get_constant(types.uint64, bodo.stream_loop_sync_iters)
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
@@ -370,7 +372,7 @@ def _init_groupby_state(
             n_keys,
             output_batch_size,
             parallel,
-            shuffle_sync_iter,
+            sync_iter,
         )
         ret = builder.call(fn_tp, input_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -393,7 +395,7 @@ def _init_groupby_state(
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def init_groupby_state(
     key_inds,
-    fnames, # fnames matches function names in supported_agg_funcs
+    fnames,  # fnames matches function names in supported_agg_funcs
     f_in_offsets,
     f_in_cols,
     expected_state_type=None,
@@ -456,7 +458,7 @@ def _groupby_build_consume_batch(
 ):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.VoidType(),
+            lir.IntType(1),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
@@ -466,10 +468,11 @@ def _groupby_build_consume_batch(
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="groupby_build_consume_batch_py_entry"
         )
-        builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
 
-    sig = types.void(groupby_state, cpp_table, is_last)
+    sig = types.bool_(groupby_state, cpp_table, is_last)
     return sig, codegen
 
 
@@ -481,14 +484,16 @@ def groupby_build_consume_batch(groupby_state, table, is_last):
     Args:
         groupby_state (GroupbyState): C++ GroupbyState pointer
         table (table_type): build table batch
-        is_last (bool): is last batch
+        is_last (bool): is last batch locally
+    Returns:
+        bool: is last batch globally with possiblity of false negatives due to iterations between syncs
     """
     in_col_inds = MetaType(groupby_state.build_indices)
     n_table_cols = groupby_state.num_build_input_arrs
 
     def impl(groupby_state, table, is_last):  # pragma: no cover
         cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
-        _groupby_build_consume_batch(groupby_state, cpp_table, is_last)
+        return _groupby_build_consume_batch(groupby_state, cpp_table, is_last)
 
     return impl
 

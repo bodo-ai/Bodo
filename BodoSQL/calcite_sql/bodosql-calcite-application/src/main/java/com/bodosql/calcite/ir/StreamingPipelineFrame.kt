@@ -7,7 +7,7 @@ package com.bodosql.calcite.ir
  * exitCond: The variable that controls when the pipeline loop is exited.
  * iterVar: The variable that tracks the count of iterations of the pipeline loop.
  * **/
-class StreamingPipelineFrame(var exitCond: Variable, private var iterVar: Variable): Frame {
+class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar: Variable): Frame {
 
     /** Values to initialize before the loop generation. **/
     private var initializations: MutableList<Op.Assign> = mutableListOf()
@@ -32,7 +32,6 @@ class StreamingPipelineFrame(var exitCond: Variable, private var iterVar: Variab
         for (initVal in initializations) {
             initVal.emit(doc)
         }
-        ensureExitCondSynchronized()
         /** Add variable tracking iteration number **/
         code.add(Op.Assign(iterVar, Expr.Binary("+", iterVar, Expr.IntegerLiteral(1))))
         /** Generate the condition. **/
@@ -97,34 +96,28 @@ class StreamingPipelineFrame(var exitCond: Variable, private var iterVar: Variab
      * "Ends" the current section of the pipeline that is
      * controlled by the current exitCond and sets a new exitCond.
      *
-     * This is used when an operation will output potentially more batches
-     * than the previous "pipeline driver" (e.g. Join Probe). This function
-     * has a side effect of synchronizing the old exitCond because the new
-     * section may depend on it. This function should be called BEFORE adding
-     * any code that would depend on a consistent value for the old exitCond
-     * across all ranks.
-     *
      * @param newExitCond The new exit condition.
      */
     fun endSection(newExitCond: Variable) {
-        // Synchronize the old value.
-        ensureExitCondSynchronized()
         // Setup the new condition.
         this.exitCond = newExitCond
         initExitCond()
     }
 
     /**
-     * Generate to ensure the result of the exit condition is synchronized across all ranks.
+     * Get the loop's exit condition
+     * @return the loop's exit condition
      */
-    fun ensureExitCondSynchronized() {
-        if (!synchronized) {
-            // TODO: Move Logical_And.value from Expr.Raw
-            // Generate the MPI call
-            val syncCall = Expr.Call("bodo.libs.distributed_api.sync_is_last", listOf(exitCond, iterVar))
-            code.add(Op.Assign(exitCond, syncCall))
-        }
-        synchronized = true
+    fun getExitCond(): Variable {
+        return exitCond
+    }
+
+    /**
+     * Get the loop's variable tracking iterations
+     * @return the loop's variable tracking iterations
+     */
+    fun getIterVar(): Variable {
+        return iterVar
     }
 
     /**

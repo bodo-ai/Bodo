@@ -850,12 +850,19 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<String> colNames = node.getRowType().getFieldNames();
     List<Expr.StringLiteral> colNamesList = stringsToStringLiterals(colNames);
     Variable colNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(colNamesList));
+    // Update the loop exit cond to global isLast
+    Variable globalIsLast = genGenericTempVar();
+    currentPipeline.endSection(globalIsLast);
 
     // Generate append call
     Expr writerAppendCall =
         outputSchemaAsCatalog.generateStreamingWriteAppendCode(
-            writerVar, inTable, colNamesGlobal, currentPipeline.getExitCond());
-    this.generatedCode.add(new Op.Stmt(writerAppendCall));
+            writerVar,
+            inTable,
+            colNamesGlobal,
+            currentPipeline.getExitCond(),
+            currentPipeline.getIterVar());
+    this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
     timerInfo.insertLoopOperationEndTimer();
 
     // Lastly, end the loop
@@ -1111,12 +1118,19 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Get column names for write append call
     Variable colNamesGlobal =
         lowerAsColNamesMetaType(new Expr.Tuple(stringsToStringLiterals(colNames)));
+    // Update the loop exit cond to global isLast
+    Variable globalIsLast = genGenericTempVar();
+    currentPipeline.endSection(globalIsLast);
 
     // Generate append call
     Expr writerAppendCall =
         bodoSqlTable.generateStreamingWriteAppendCode(
-            writerVar, tableVar, colNamesGlobal, currentPipeline.getExitCond());
-    this.generatedCode.add(new Op.Stmt(writerAppendCall));
+            writerVar,
+            tableVar,
+            colNamesGlobal,
+            currentPipeline.getExitCond(),
+            currentPipeline.getIterVar());
+    this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
     timerInfo.insertLoopOperationEndTimer();
 
     // Lastly, end the loop
@@ -1464,14 +1478,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Fetch the streaming pipeline
     StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
     inputPipeline.addInitialization(groupbyInit);
-    // Groupby needs the isLast to be global before calling the build side change.
-    inputPipeline.ensureExitCondSynchronized();
     Variable batchExitCond = inputPipeline.getExitCond();
+    Variable newExitCond = genGenericTempVar();
+    inputPipeline.endSection(newExitCond);
     Expr.Call batchCall =
         new Expr.Call(
             "bodo.libs.stream_groupby.groupby_build_consume_batch",
             List.of(groupbyStateVar, buildTable, batchExitCond));
-    generatedCode.add(new Op.Stmt(batchCall));
+    generatedCode.add(new Op.Assign(newExitCond, batchCall));
     // Finalize and add the batch pipeline.
     generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));
 
@@ -1842,14 +1856,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.insertLoopOperationStartTimer();
     // Fetch the batch state
     StreamingPipelineFrame batchPipeline = generatedCode.getCurrentStreamingPipeline();
-    // Join needs the isLast to be global before calling the build side change.
-    batchPipeline.ensureExitCondSynchronized();
     Variable batchExitCond = batchPipeline.getExitCond();
+    Variable newExitCond = genGenericTempVar();
+    batchPipeline.endSection(newExitCond);
     Expr.Call batchCall =
         new Expr.Call(
             "bodo.libs.stream_join.join_build_consume_batch",
             List.of(joinStateVar, buildTable, batchExitCond));
-    generatedCode.add(new Op.Stmt(batchCall));
+    generatedCode.add(new Op.Assign(newExitCond, batchCall));
     timerInfo.insertLoopOperationEndTimer();
     // Finalize and add the batch pipeline.
     generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));

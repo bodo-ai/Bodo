@@ -292,11 +292,7 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
         )
         while True:
             table1, is_last1 = read_arrow_next(reader1)
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
 
@@ -309,10 +305,6 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
         out_dfs = []
         while True:
             table2, is_last2 = read_arrow_next(reader2)
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
@@ -321,10 +313,6 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             if is_last3:
                 break
         delete_join_state(join_state)
@@ -545,11 +533,7 @@ def test_nested_loop_join(
         )
         while True:
             table1, is_last1 = read_arrow_next(reader1)
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
 
@@ -562,10 +546,6 @@ def test_nested_loop_join(
         out_dfs = []
         while True:
             table2, is_last2 = read_arrow_next(reader2)
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
@@ -574,10 +554,6 @@ def test_nested_loop_join(
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             if is_last3:
                 break
         delete_join_state(join_state)
@@ -682,11 +658,7 @@ def test_broadcast_nested_loop_join(use_dict_encoding, broadcast, memory_leak_ch
         )
         while True:
             table1, is_last1 = read_arrow_next(reader1)
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
 
@@ -699,10 +671,6 @@ def test_broadcast_nested_loop_join(use_dict_encoding, broadcast, memory_leak_ch
         out_dfs = []
         while True:
             table2, is_last2 = read_arrow_next(reader2)
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
@@ -711,10 +679,6 @@ def test_broadcast_nested_loop_join(use_dict_encoding, broadcast, memory_leak_ch
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             if is_last3:
                 break
         delete_join_state(join_state)
@@ -810,11 +774,7 @@ def test_hash_join_reorder(memory_leak_check):
         )
         while True:
             table1, is_last1 = read_arrow_next(reader1)
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
 
@@ -827,10 +787,6 @@ def test_hash_join_reorder(memory_leak_check):
         out_dfs = []
         while True:
             table2, is_last2 = read_arrow_next(reader2)
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
@@ -839,10 +795,6 @@ def test_hash_join_reorder(memory_leak_check):
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             if is_last3:
                 break
         delete_join_state(join_state)
@@ -938,17 +890,13 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
             batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
                 (),
                 kept_cols,
                 2,
             )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
 
         _temp2 = 0
         out_dfs = []
@@ -958,10 +906,6 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
             batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
             is_last2 = (_temp2 * 4000) >= len(df2)
             _temp2 = _temp2 + 1
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table2 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
                 (),
@@ -976,10 +920,6 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df_final)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
@@ -1090,17 +1030,13 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
             batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
                 (),
                 kept_cols,
                 2,
             )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
 
         _temp2 = 0
         out_dfs = []
@@ -1110,10 +1046,6 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
             batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
             is_last2 = (_temp2 * 4000) >= len(df2)
             _temp2 = _temp2 + 1
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table2 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
                 (),
@@ -1128,10 +1060,6 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df_final)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
@@ -1232,17 +1160,13 @@ def test_non_equi_join_cond(build_outer, probe_outer, broadcast, memory_leak_che
             batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
                 (),
                 kept_cols,
                 2,
             )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
 
         _temp2 = 0
         out_dfs = []
@@ -1252,10 +1176,6 @@ def test_non_equi_join_cond(build_outer, probe_outer, broadcast, memory_leak_che
             batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
             is_last2 = (_temp2 * 4000) >= len(df2)
             _temp2 = _temp2 + 1
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table2 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
                 (),
@@ -1270,10 +1190,6 @@ def test_non_equi_join_cond(build_outer, probe_outer, broadcast, memory_leak_che
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df_final)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
@@ -1381,17 +1297,13 @@ def test_join_key_prune(memory_leak_check):
             batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
                 (),
                 kept_cols,
                 2,
             )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
 
         _temp2 = 0
         out_dfs = []
@@ -1401,10 +1313,6 @@ def test_join_key_prune(memory_leak_check):
             batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
             is_last2 = (_temp2 * 4000) >= len(df2)
             _temp2 = _temp2 + 1
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table2 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
                 (),
@@ -1420,10 +1328,6 @@ def test_join_key_prune(memory_leak_check):
             )
             df_final = df_join[["B", "D"]]
             out_dfs.append(df_final)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
@@ -1492,17 +1396,13 @@ def test_key_multicast(memory_leak_check):
             batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
                 (),
                 kept_cols1,
                 2,
             )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
 
         _temp2 = 0
         out_dfs = []
@@ -1512,10 +1412,6 @@ def test_key_multicast(memory_leak_check):
             batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
             is_last2 = (_temp2 * 4000) >= len(df2)
             _temp2 = _temp2 + 1
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table2 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
                 (),
@@ -1530,10 +1426,6 @@ def test_key_multicast(memory_leak_check):
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df_final)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
@@ -1634,17 +1526,13 @@ def test_only_one_distributed(
             batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
                 (),
                 kept_cols,
                 2,
             )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
 
         _temp2 = 0
         out_dfs = []
@@ -1654,10 +1542,6 @@ def test_only_one_distributed(
             batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
             is_last2 = (_temp2 * 4000) >= len(df2)
             _temp2 = _temp2 + 1
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table2 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
                 (),
@@ -1672,10 +1556,6 @@ def test_only_one_distributed(
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df_final)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
@@ -1795,7 +1675,6 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
         while not is_last1:
             batch1 = df1.iloc[(_temp1 * batch_size) : ((_temp1 + 1) * batch_size)]
             is_last1 = (_temp1 * batch_size) >= len(df1)
-            # We don't need the Allreduce call for is_last1 since the test only runs on 1 rank.
             _temp1 = _temp1 + 1
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
@@ -1803,7 +1682,7 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
                 kept_cols,
                 2,
             )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
 
         _temp2 = 0
         out_dfs = []
@@ -1812,7 +1691,6 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
         while not is_last3:
             batch2 = df2.iloc[(_temp2 * batch_size) : ((_temp2 + 1) * batch_size)]
             is_last2 = ((_temp2 + 1) * batch_size) >= len(df2)
-            # We don't need the Allreduce call for is_last2 since the test only runs on 1 rank.
             _temp2 = _temp2 + 1
             table2 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
@@ -1821,7 +1699,6 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
                 2,
             )
             out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
-            # We don't need the Allreduce call for is_last3 since the test only runs on 1 rank.
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -1888,9 +1765,14 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             }
         )
         out_dfs = test_helper(build_df, probe_df, batch_size)
-        assert len(out_dfs) == 1
-        assert len(out_dfs[0]) == batch_size
-        assert (out_dfs[0]["D"].str.len() == pd.Series([str_len] * batch_size)).all()
+        assert len(out_dfs) == bodo.stream_loop_sync_iters
+        assert len(out_dfs[bodo.stream_loop_sync_iters - 1]) == batch_size
+        for i in range(bodo.stream_loop_sync_iters - 1):
+            assert len(out_dfs[i]) == 0
+        assert (
+            out_dfs[bodo.stream_loop_sync_iters - 1]["D"].str.len()
+            == pd.Series([str_len] * batch_size)
+        ).all()
 
     # Test 2: Check that if each string is > ((string_prealloc) * 2**(max_resize_count))
     # bytes, we get expected number of batches and the size of the batches is as expected.
@@ -1902,6 +1784,12 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             (batch_size * string_prealloc * (2**max_resize_count)),
         )
         exp_out_chunks = math.ceil(str_len * batch_size / max_buffer_size)
+        # Round to nearest bodo.stream_loop_sync_iters to account for the fact that is_last
+        # can only be true every bodo.stream_loop_sync_iters batches.
+        exp_out_chunks_rounded = (
+            math.ceil(exp_out_chunks / bodo.stream_loop_sync_iters)
+            * bodo.stream_loop_sync_iters
+        )
         build_df = pd.DataFrame(
             {
                 "A": pd.array(np.arange(batch_size), dtype="Int64"),
@@ -1915,12 +1803,14 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             }
         )
         out_dfs = test_helper(build_df, probe_df, batch_size)
-        assert len(out_dfs) == exp_out_chunks
+        assert len(out_dfs) == exp_out_chunks_rounded
         assert len(out_dfs[0]) == (max_buffer_size // str_len)
         assert (
             out_dfs[0]["D"].str.len()
             == pd.Series([str_len] * (max_buffer_size // str_len))
         ).all()
+        for i in range(1, exp_out_chunks_rounded - 1):
+            assert len(out_dfs[i]) == 0
         assert sum([len(df) for df in out_dfs]) == batch_size
 
     # Test 3: Check that if we create a string that's larger than
@@ -1945,10 +1835,12 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             }
         )
         out_dfs = test_helper(build_df, probe_df, batch_size)
-        assert len(out_dfs) == 2
+        assert len(out_dfs) == bodo.stream_loop_sync_iters
         assert len(out_dfs[0]) == 1
-        assert len(out_dfs[1]) == (batch_size - 1)
+        assert len(out_dfs[-1]) == (batch_size - 1)
         assert len(out_dfs[0]["D"][0]) == max_buffer_size + 10
+        for i in range(1, bodo.stream_loop_sync_iters - 2):
+            assert len(out_dfs[i]) == 0
 
     # Test 4: Fill up buffer so that it has resized one fewer than max allowed times.
     # Then add a string that's larger than max buffer size, and it should still
@@ -1989,9 +1881,11 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             }
         )
         out_dfs = test_helper(build_df, probe_df, batch_size)
-        assert len(out_dfs) == 1
-        assert len(out_dfs[0]) == batch_size
-        assert len(out_dfs[0]["D"][batch_size - 1]) == str_len_p2
+        assert len(out_dfs) == bodo.stream_loop_sync_iters
+        assert len(out_dfs[-1]) == batch_size
+        assert len(out_dfs[-1]["D"][batch_size - 1]) == str_len_p2
+        for i in range(bodo.stream_loop_sync_iters - 2):
+            assert len(out_dfs[i]) == 0
 
     # Test 5: Fill up the buffer so that it has resized max number of times.
     # Then, try adding a string that's larger than max allowed size and verify
@@ -2032,10 +1926,12 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             }
         )
         out_dfs = test_helper(build_df, probe_df, batch_size)
-        assert len(out_dfs) == 2
+        assert len(out_dfs) == bodo.stream_loop_sync_iters
         assert len(out_dfs[0]) == (batch_size - 1)
-        assert len(out_dfs[1]) == 1
-        assert len(out_dfs[1]["D"][0]) == str_len_p2
+        assert len(out_dfs[-1]) == 1
+        assert len(out_dfs[-1]["D"][0]) == str_len_p2
+        for i in range(1, 98):
+            assert len(out_dfs[i]) == 0
 
     # Run all tests:
     test1()
@@ -2109,17 +2005,13 @@ def test_prune_na(build_outer, memory_leak_check):
             batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
                 (),
                 kept_cols,
                 2,
             )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
 
         _temp2 = 0
         out_dfs = []
@@ -2129,10 +2021,6 @@ def test_prune_na(build_outer, memory_leak_check):
             batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
             is_last2 = (_temp2 * 4000) >= len(df2)
             _temp2 = _temp2 + 1
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table2 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
                 (),
@@ -2147,10 +2035,6 @@ def test_prune_na(build_outer, memory_leak_check):
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df_final)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
@@ -2260,17 +2144,13 @@ def test_outer_join_na_one_dist(build_dist, broadcast, memory_leak_check):
             batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table1 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
                 (),
                 kept_cols,
                 2,
             )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
 
         _temp2 = 0
         out_dfs = []
@@ -2280,10 +2160,6 @@ def test_outer_join_na_one_dist(build_dist, broadcast, memory_leak_check):
             batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
             is_last2 = (_temp2 * 4000) >= len(df2)
             _temp2 = _temp2 + 1
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
             table2 = bodo.hiframes.table.logical_table_to_table(
                 bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
                 (),
@@ -2298,10 +2174,6 @@ def test_outer_join_na_one_dist(build_dist, broadcast, memory_leak_check):
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df_final)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
@@ -2396,11 +2268,6 @@ def test_hash_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
             batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
             is_last1 = (_temp1 * 4000) >= len(df1)
 
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
-
             if build_idx == 1 and insert_loc == "middle" and side == "build":
                 batch1 = df1.iloc[(_temp1 * 4000) : (_temp1 * 4000)]
             else:
@@ -2424,7 +2291,7 @@ def test_hash_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
                 kept_cols,
                 2,
             )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
 
         _temp2 = 0
         out_dfs = []
@@ -2435,10 +2302,6 @@ def test_hash_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
         while not is_last3:
             batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
             is_last2 = (_temp2 * 4000) >= len(df2)
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
 
             if probe_idx == 1 and insert_loc == "middle" and side == "probe":
                 batch2 = df2.iloc[(_temp2 * 4000) : (_temp2 * 4000)]
@@ -2471,10 +2334,6 @@ def test_hash_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df_final)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
@@ -2554,11 +2413,6 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
             batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
             is_last1 = (_temp1 * 4000) >= len(df1)
 
-            is_last1 = bodo.libs.distributed_api.dist_reduce(
-                is_last1,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
-
             if build_idx == 1 and insert_loc == "middle" and side == "build":
                 batch1 = df1.iloc[(_temp1 * 4000) : (_temp1 * 4000)]
             else:
@@ -2582,7 +2436,7 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
                 kept_cols,
                 2,
             )
-            join_build_consume_batch(join_state, table1, is_last1)
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
 
         _temp2 = 0
         out_dfs = []
@@ -2593,10 +2447,6 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
         while not is_last3:
             batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
             is_last2 = (_temp2 * 4000) >= len(df2)
-            is_last2 = bodo.libs.distributed_api.dist_reduce(
-                is_last2,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
 
             if probe_idx == 1 and insert_loc == "middle" and side == "probe":
                 batch2 = df2.iloc[(_temp2 * 4000) : (_temp2 * 4000)]
@@ -2629,10 +2479,6 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df_final)
-            is_last3 = bodo.libs.distributed_api.dist_reduce(
-                is_last3,
-                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-            )
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 

@@ -336,10 +336,10 @@ void reverse_shuffle_preallocated_data_array(
  * @param is_last : is this the last iteration
  * @param shuffle_table: the table to test for shuffling
  * @param iter : the current iteration
- * @param shuffle_sync_iter : the number of iterations between syncs
+ * @param sync_iter : the number of iterations between syncs
  */
 bool shuffle_this_iter(const bool parallel, const bool is_last,
                        const std::shared_ptr<table_info>& shuffle_table,
-                       const uint64_t iter, const uint64_t shuffle_sync_iter);
+                       const uint64_t iter, const uint64_t sync_iter);
 
 #endif  // _SHUFFLE_H_INCLUDED
