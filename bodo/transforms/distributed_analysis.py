@@ -2161,6 +2161,36 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
             return
 
+        if fdef == ("drop_duplicates_table", "bodo.utils.table_utils"):
+            # output of drop_duplicates is variable-length even if input is 1D
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            # arg0 is a table, arg1 is an array
+            in_dist = Distribution(
+                min(
+                    array_dists[rhs.args[0].name].value,
+                    array_dists[rhs.args[1].name].value,
+                )
+            )
+            # return is a tuple(table, array)
+            out_dist = Distribution(
+                min(
+                    array_dists[lhs][0].value,
+                    array_dists[lhs][1].value,
+                    in_dist.value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, out_dist)
+
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                in_dist = out_dist
+
+            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            return
+
         if fdef == ("union_tables", "bodo.libs.array"):
             # output of union_tables is variable-length even if input is 1D
             if lhs not in array_dists:

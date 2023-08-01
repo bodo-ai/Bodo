@@ -2626,7 +2626,7 @@ def shuffle_renormalization_group(
 
 
 @intrinsic
-def drop_duplicates_table(
+def drop_duplicates_cpp_table(
     typingctx, table_t, parallel_t, nkey_t, keep_t, dropna, drop_local_first
 ):
     """
