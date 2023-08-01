@@ -109,6 +109,11 @@ if "--debug" in sys.argv:
 else:
     debug_flag = "-g0"
 
+is_testing = os.environ.get("NUMBA_DEVELOPER_MODE") == "1"
+if "--no-test" in sys.argv:
+    is_testing = False
+    sys.argv.remove("--no-test")
+
 address_sanitizer_flag = []
 if "--address-sanitizer" in sys.argv:
     sys.argv.remove("--address-sanitizer")
@@ -330,6 +335,13 @@ ext_metadata["depends"] += [
     "bodo/libs/_window_compute.h",
     "bodo/libs/_stream_dict_encoding.h",
 ]
+
+if is_testing:
+    ext_metadata["sources"].extend(
+        ["bodo/tests/test_framework.cpp", "bodo/tests/test_example.cpp"]
+    )
+    ext_metadata["define_macros"].append(("IS_TESTING", "1"))
+
 
 # We cannot compile with -Werror yet because _fsspec_reader.cpp
 # depends on pyfs.cpp which generates a warning.
