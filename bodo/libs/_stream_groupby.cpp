@@ -63,6 +63,7 @@ inline void update_groups(
     grouping_info& grp_info, const std::shared_ptr<table_info>& in_table,
     std::shared_ptr<uint32_t[]>& batch_hashes_groupby, size_t i_row) {
     // get local or shuffle build state to update
+
     TableBuildBuffer& build_table_buffer =
         is_local ? groupby_state->local_table_buffer
                  : groupby_state->shuffle_table_buffer;
@@ -71,6 +72,7 @@ inline void update_groups(
                  : groupby_state->shuffle_table_groupby_hashes;
     int64_t& next_group = is_local ? groupby_state->local_next_group
                                    : groupby_state->shuffle_next_group;
+
     bodo::vector<int64_t>& row_to_group = grp_info.row_to_group;
     // TODO[BSE-578]: update group_to_first_row, group_to_first_row etc. if
     // necessary
