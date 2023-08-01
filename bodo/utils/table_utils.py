@@ -601,13 +601,20 @@ def overload_drop_duplicates(in_table, ind_arr, ncols, keep_i, parallel=False):
     # ncols <= n_table_cols. The duplicate checked columns are always at the front.
     n_table_cols = len(in_table.arr_types)
 
+    ignore_index = is_overload_none(ind_arr)
+
+    extra_arrs = "()" if ignore_index else "(ind_arr,)"
+
     func_text = "def impl(in_table, ind_arr, ncols, keep_i, parallel=False):\n"
-    func_text += f"  in_cpp_table = py_data_to_cpp_table(in_table, (ind_arr,), in_col_inds, {n_table_cols})\n"
+    func_text += f"  in_cpp_table = py_data_to_cpp_table(in_table, {extra_arrs}, in_col_inds, {n_table_cols})\n"
     # NOTE: C++ will delete table pointer
     func_text += "  out_cpp_table = drop_duplicates_cpp_table(in_cpp_table, parallel, ncols, keep_i, False, True)\n"
     func_text += "  out_table = cpp_table_to_py_table(out_cpp_table, table_idxs, py_table_type, 0)\n"
 
-    func_text += f"  out_arr_index = array_from_cpp_table(out_cpp_table, {n_table_cols}, ind_arr)\n"
+    if ignore_index:
+        func_text += "  out_arr_index = None\n"
+    else:
+        func_text += f"  out_arr_index = array_from_cpp_table(out_cpp_table, {n_table_cols}, ind_arr)\n"
     func_text += "  delete_table(out_cpp_table)\n"
     func_text += "  return out_table, out_arr_index\n"
     loc_vars = {}
@@ -620,7 +627,9 @@ def overload_drop_duplicates(in_table, ind_arr, ncols, keep_i, parallel=False):
             "array_from_cpp_table": bodo.libs.array.array_from_cpp_table,
             "delete_table": bodo.libs.array.delete_table,
             "py_table_type": in_table,
-            "in_col_inds": MetaType(tuple(range(n_table_cols + 1))),
+            "in_col_inds": MetaType(
+                tuple(range(n_table_cols + (0 if ignore_index else 1)))
+            ),
             "table_idxs": np.arange(n_table_cols, dtype=np.int64),
         },
         loc_vars,

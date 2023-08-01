@@ -631,17 +631,11 @@ def test_df_drop_duplicates_errors(memory_leak_check):
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         df.drop_duplicates(inplace=True)
 
-    def impl2():
-        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
-        return df.drop_duplicates(ignore_index=True)
-
     unsupported_arg_err_msg = (
         "DataFrame.drop_duplicates.* parameter only supports default value"
     )
     with pytest.raises(BodoError, match=unsupported_arg_err_msg):
         bodo.jit(impl1)()
-    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
-        bodo.jit(impl2)()
 
 
 @pytest.mark.slow

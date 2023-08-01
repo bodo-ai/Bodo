@@ -1332,9 +1332,12 @@ def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
     # ncols <= count. The duplicate checked columns are always at the front.
     count = len(data)
 
+    ignore_index = is_overload_none(ind_arr)
+    ind_info = "" if ignore_index else "array_to_info(ind_arr)"
+
     func_text = "def impl(data, ind_arr, ncols, keep_i, parallel=False):\n"
-    func_text += "  info_list_total = [{}, array_to_info(ind_arr)]\n".format(
-        ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
+    func_text += "  info_list_total = [{}, {}]\n".format(
+        ", ".join("array_to_info(data[{}])".format(x) for x in range(count)), ind_info
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
     # NOTE: C++ will delete table pointer
@@ -1345,9 +1348,12 @@ def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
                 i_col, i_col, i_col
             )
         )
-    func_text += (
-        "  out_arr_index = array_from_cpp_table(out_table, {}, ind_arr)\n".format(count)
-    )
+    if ignore_index:
+        func_text += "  out_arr_index = None\n"
+    else:
+        func_text += (
+            f"  out_arr_index = array_from_cpp_table(out_table, {count}, ind_arr)\n"
+        )
     func_text += "  delete_table(out_table)\n"
     func_text += "  return ({},), out_arr_index\n".format(
         ", ".join("out_arr_{}".format(i) for i in range(count))

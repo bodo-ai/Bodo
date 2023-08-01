@@ -2136,18 +2136,65 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
+            # df.drop_duplicates(ignore_index=True) passes None as Index to
+            # drop_duplicates kernel, which causes it to return None as output Index.
+            ignore_index = is_overload_none(self.typemap[rhs.args[1].name])
+
             # arg0 is a tuple of arrays, arg1 is an array
             in_dist = Distribution(
                 min(
                     min(a.value for a in array_dists[rhs.args[0].name]),
-                    array_dists[rhs.args[1].name].value,
+                    Distribution.OneD.value
+                    if ignore_index
+                    else array_dists[rhs.args[1].name].value,
                 )
             )
             # return is a tuple(tuple(arrays), array)
             out_dist = Distribution(
                 min(
                     min(a.value for a in array_dists[lhs][0]),
-                    array_dists[lhs][1].value,
+                    Distribution.OneD.value
+                    if ignore_index
+                    else array_dists[lhs][1].value,
+                    in_dist.value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, out_dist)
+
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                in_dist = out_dist
+
+            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            return
+
+        if fdef == ("drop_duplicates_table", "bodo.utils.table_utils"):
+            # output of drop_duplicates is variable-length even if input is 1D
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            # df.drop_duplicates(ignore_index=True) passes None as Index to
+            # drop_duplicates_table kernel, which causes it to return None as output
+            # Index.
+            ignore_index = is_overload_none(self.typemap[rhs.args[1].name])
+
+            # arg0 is a table, arg1 is an array
+            in_dist = Distribution(
+                min(
+                    array_dists[rhs.args[0].name].value,
+                    Distribution.OneD.value
+                    if ignore_index
+                    else array_dists[rhs.args[1].name].value,
+                )
+            )
+            # return is a tuple(table, array)
+            out_dist = Distribution(
+                min(
+                    array_dists[lhs][0].value,
+                    Distribution.OneD.value
+                    if ignore_index
+                    else array_dists[lhs][1].value,
                     in_dist.value,
                 )
             )
