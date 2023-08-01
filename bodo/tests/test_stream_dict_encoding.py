@@ -524,3 +524,48 @@ def test_regexp_replace_cplusplus(memory_leak_check):
         py_output=py_output,
         use_dict_encoded_strings=True,
     )
+
+
+def test_multi_function_gen_vectorize(memory_leak_check):
+    """
+    Tests that using gen_vectorize calls reuse the output func_id.
+    """
+    func_id1 = 1
+    func_id2 = 2
+    slice_size = 3
+
+    def impl(S):
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
+        finished = False
+        batch_num = 0
+        arr_size = len(arr)
+        batches = []
+        while not finished:
+            section = arr[batch_num * slice_size : (batch_num + 1) * slice_size]
+            finished = ((batch_num + 1) * slice_size) >= arr_size
+            out_arr1 = bodo.libs.bodosql_array_kernels.lower(
+                section, dict_encoding_state=dict_encoding_state, func_id=func_id1
+            )
+            out_arr2 = bodo.libs.bodosql_array_kernels.ltrim(
+                out_arr1, " ", dict_encoding_state=dict_encoding_state, func_id=func_id2
+            )
+            batches.append(out_arr2)
+            batch_num += 1
+        num_sets = bodo.libs.stream_dict_encoding.get_state_num_set_calls(
+            dict_encoding_state
+        )
+        bodo.libs.stream_dict_encoding.delete_dict_encoding_state(dict_encoding_state)
+        out_arr = bodo.libs.array_kernels.concat(batches)
+        return (out_arr, num_sets)
+
+    arr = pd.array(
+        [" Hierq", "owerew ", None, " Help", "help  ", "HELP", "   cons   "] * 2
+    )
+    py_output = (pd.Series(arr).str.lower().str.lstrip().array, 2)
+    check_func(
+        impl,
+        (pd.Series(arr),),
+        py_output=py_output,
+        use_dict_encoded_strings=True,
+    )
