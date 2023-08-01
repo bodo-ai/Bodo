@@ -176,20 +176,15 @@ void combine_input_table(GroupbyState* groupby_state,
                          int64_t init_start_row,
                          std::shared_ptr<table_info> in_table,
                          grouping_info& grp_info) {
-    const std::vector<int32_t>& f_update_offsets =
-        groupby_state->f_update_offsets;
-    const std::vector<int32_t>& f_combine_offsets =
-        groupby_state->f_combine_offsets;
+    const std::vector<int32_t>& f_running_value_offsets =
+        groupby_state->f_running_value_offsets;
     for (size_t i = 0; i < groupby_state->col_sets.size(); i++) {
         std::shared_ptr<BasicColSet>& col_set = groupby_state->col_sets[i];
         std::vector<std::shared_ptr<array_info>> in_update_cols;
         std::vector<std::shared_ptr<array_info>> out_combine_cols;
-        for (size_t col_ind = (size_t)f_update_offsets[i];
-             col_ind < (size_t)f_update_offsets[i + 1]; col_ind++) {
+        for (size_t col_ind = (size_t)f_running_value_offsets[i];
+             col_ind < (size_t)f_running_value_offsets[i + 1]; col_ind++) {
             in_update_cols.push_back(in_table->columns[col_ind]);
-        }
-        for (size_t col_ind = (size_t)f_combine_offsets[i];
-             col_ind < (size_t)f_combine_offsets[i + 1]; col_ind++) {
             out_combine_cols.push_back(build_table->columns[col_ind]);
         }
         col_set->setUpdateCols(in_update_cols);
@@ -207,14 +202,14 @@ void combine_input_table(GroupbyState* groupby_state,
  */
 void eval_groupby_funcs(GroupbyState* groupby_state,
                         std::shared_ptr<table_info> build_table) {
-    const std::vector<int32_t>& f_combine_offsets =
-        groupby_state->f_combine_offsets;
+    const std::vector<int32_t>& f_running_value_offsets =
+        groupby_state->f_running_value_offsets;
     for (size_t i = 0; i < groupby_state->col_sets.size(); i++) {
         std::shared_ptr<BasicColSet>& col_set = groupby_state->col_sets[i];
         std::vector<std::shared_ptr<array_info>> out_combine_cols;
 
-        for (size_t col_ind = (size_t)f_combine_offsets[i];
-             col_ind < (size_t)f_combine_offsets[i + 1]; col_ind++) {
+        for (size_t col_ind = (size_t)f_running_value_offsets[i];
+             col_ind < (size_t)f_running_value_offsets[i + 1]; col_ind++) {
             out_combine_cols.push_back(build_table->columns[col_ind]);
         }
         col_set->setCombineCols(out_combine_cols);
