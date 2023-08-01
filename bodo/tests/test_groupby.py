@@ -957,50 +957,96 @@ def test_sum_binary(memory_leak_check):
     check_func(impl, (df1,), sort_output=True)
 
 
-def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
+# ------ impls used within the test function "random_decimal_sum_min_max_last" below ------
+
+
+def random_decimal_sum_min_max_last_impl1(df):
+    df_ret = df.groupby("A", as_index=False).nunique()
+    return df_ret["B"].copy()
+
+
+def random_decimal_sum_min_max_last_impl2(df):
+    A = df.groupby("A", as_index=False).last()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl3(df):
+    A = df.groupby("A", as_index=False)["B"].first()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl4(df):
+    A = df.groupby("A", as_index=False)["B"].count()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl5(df):
+    A = df.groupby("A", as_index=False).max()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl6(df):
+    A = df.groupby("A", as_index=False).min()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl7(df):
+    A = df.groupby("A", as_index=False)["B"].mean()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl8(df):
+    A = df.groupby("A", as_index=False)["B"].median()
+    return A
+
+
+def random_decimal_sum_min_max_last_impl9(df):
+    A = df.groupby("A", as_index=False)["B"].var()
+    return A
+
+
+# We need to drop column A because the column A is replaced by std(A)
+# in pandas due to a pandas bug.
+def random_decimal_sum_min_max_last_impl10(df):
+    A = df.groupby("A", as_index=False)["B"].std()
+    return A.drop(columns="A")
+
+
+@pytest.mark.parametrize(
+    "impl",
+    [
+        pytest.param(random_decimal_sum_min_max_last_impl1, id="impl1"),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl2, id="impl2", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl3, id="impl3", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl4, id="impl4", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl5, id="impl5", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl6, id="impl6", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl7, id="impl7", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl8, id="impl8", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl9, id="impl9", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            random_decimal_sum_min_max_last_impl10, id="impl10", marks=pytest.mark.slow
+        ),
+    ],
+)
+def test_random_decimal_sum_min_max_last(impl, memory_leak_check):
     """We do not have decimal as index. Therefore we have to use as_index=False"""
-
-    def impl1(df):
-        df_ret = df.groupby("A", as_index=False).nunique()
-        return df_ret["B"].copy()
-
-    def impl2(df):
-        A = df.groupby("A", as_index=False).last()
-        return A
-
-    def impl3(df):
-        A = df.groupby("A", as_index=False)["B"].first()
-        return A
-
-    def impl4(df):
-        A = df.groupby("A", as_index=False)["B"].count()
-        return A
-
-    def impl5(df):
-        A = df.groupby("A", as_index=False).max()
-        return A
-
-    def impl6(df):
-        A = df.groupby("A", as_index=False).min()
-        return A
-
-    def impl7(df):
-        A = df.groupby("A", as_index=False)["B"].mean()
-        return A
-
-    def impl8(df):
-        A = df.groupby("A", as_index=False)["B"].median()
-        return A
-
-    def impl9(df):
-        A = df.groupby("A", as_index=False)["B"].var()
-        return A
-
-    # We need to drop column A because the column A is replaced by std(A)
-    # in pandas due to a pandas bug.
-    def impl10(df):
-        A = df.groupby("A", as_index=False)["B"].std()
-        return A.drop(columns="A")
 
     random.seed(5)
     n = 10
@@ -1011,49 +1057,33 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
         }
     )
 
-    # Direct checks for which pandas has equivalent functions.
-    check_func(impl1, (df1,), sort_output=True, reset_index=True)
-    if not is_slow_run:
-        return
-    check_func(impl2, (df1,), sort_output=True, reset_index=True)
-    check_func(impl3, (df1,), sort_output=True, reset_index=True)
-    check_func(impl4, (df1,), sort_output=True, reset_index=True)
-    check_func(impl5, (df1,), sort_output=True, reset_index=True)
-    check_func(impl6, (df1,), sort_output=True, reset_index=True)
-
-    # For mean/median/var/std we need to map the types.
-    check_func(
-        impl7,
-        (df1,),
-        sort_output=True,
-        reset_index=True,
-        convert_columns_to_pandas=True,
-        check_dtype=False,
-    )
-    check_func(
-        impl8,
-        (df1,),
-        sort_output=True,
-        reset_index=True,
-        convert_columns_to_pandas=True,
-        check_dtype=False,
-    )
-    check_func(
-        impl9,
-        (df1,),
-        sort_output=True,
-        reset_index=True,
-        convert_columns_to_pandas=True,
-        check_dtype=False,
-    )
-    check_func(
-        impl10,
-        (df1,),
-        sort_output=True,
-        reset_index=True,
-        convert_columns_to_pandas=True,
-        check_dtype=False,
-    )
+    if impl in {
+        random_decimal_sum_min_max_last_impl1,
+        random_decimal_sum_min_max_last_impl2,
+        random_decimal_sum_min_max_last_impl3,
+        random_decimal_sum_min_max_last_impl4,
+        random_decimal_sum_min_max_last_impl5,
+        random_decimal_sum_min_max_last_impl6,
+    }:
+        # Direct checks for which pandas has equivalent functions.
+        check_func(impl, (df1,), sort_output=True, reset_index=True)
+    elif impl in {
+        random_decimal_sum_min_max_last_impl7,
+        random_decimal_sum_min_max_last_impl8,
+        random_decimal_sum_min_max_last_impl9,
+        random_decimal_sum_min_max_last_impl10,
+    }:
+        # For mean/median/var/std we need to map the types.
+        check_func(
+            impl,
+            (df1,),
+            sort_output=True,
+            reset_index=True,
+            convert_columns_to_pandas=True,
+            check_dtype=False,
+        )
+    else:
+        raise ValueError("Unexpected impl")
 
 
 def test_random_string_sum_min_max_first_last(memory_leak_check):
@@ -2034,48 +2064,61 @@ def test_agg_len_mix(memory_leak_check):
     )
 
 
+def agg_multi_udf_impl(df):
+    def id1(x):
+        return (x <= 2).sum()
+
+    def id2(x):
+        return (x > 2).sum()
+
+    return df.groupby("A")["B"].agg((id1, id2))
+
+
+def agg_multi_udf_impl2(df):
+    def id1(x):
+        return (x <= 2).sum()
+
+    def id2(x):
+        return (x > 2).sum()
+
+    return df.groupby("A")["B"].agg(("var", id1, id2, "sum"))
+
+
+# check_dtype=False for impl3 since Bodo returns float for Series.min/max. TODO: fix min/max
+def agg_multi_udf_impl3(df):
+    return df.groupby("A")["B"].agg(
+        (lambda x: x.max() - x.min(), lambda x: x.max() + x.min())
+    )
+
+
+def agg_multi_udf_impl4(df):
+    return df.groupby("A")["B"].agg(("cumprod", "cumsum"))
+
+
 @pytest_mark_pandas
-def test_agg_multi_udf(memory_leak_check):
+@pytest.mark.parametrize(
+    "impl",
+    [
+        agg_multi_udf_impl,
+        agg_multi_udf_impl2,
+        agg_multi_udf_impl3,
+        agg_multi_udf_impl4,
+    ],
+)
+def test_agg_multi_udf(impl, memory_leak_check):
     """
     Test Groupby.agg() multiple user defined functions
     """
-
-    def impl(df):
-        def id1(x):
-            return (x <= 2).sum()
-
-        def id2(x):
-            return (x > 2).sum()
-
-        return df.groupby("A")["B"].agg((id1, id2))
-
-    def impl2(df):
-        def id1(x):
-            return (x <= 2).sum()
-
-        def id2(x):
-            return (x > 2).sum()
-
-        return df.groupby("A")["B"].agg(("var", id1, id2, "sum"))
-
-    def impl3(df):
-        return df.groupby("A")["B"].agg(
-            (lambda x: x.max() - x.min(), lambda x: x.max() + x.min())
-        )
-
-    def impl4(df):
-        return df.groupby("A")["B"].agg(("cumprod", "cumsum"))
 
     df = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": [1, 2, 3, 4, 5, 6, 7]},
         index=[7, 8, 9, 2, 3, 4, 5],
     )
 
-    check_func(impl, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True, check_dtype=False)
-    # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
-    check_func(impl3, (df,), sort_output=True, check_dtype=False)
-    check_func(impl4, (df,), sort_output=True)
+    if impl in {agg_multi_udf_impl2, agg_multi_udf_impl3}:
+        check_func(impl, (df,), sort_output=True, check_dtype=False)
+    elif impl in {agg_multi_udf_impl, agg_multi_udf_impl4}:
+        check_func(impl, (df,), sort_output=True)
 
 
 @pytest_mark_pandas

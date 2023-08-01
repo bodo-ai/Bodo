@@ -211,22 +211,22 @@ class GroupbyState {
                 // get update/combine type info to initialize build state
                 std::tuple<std::vector<bodo_array_type::arr_type_enum>,
                            std::vector<Bodo_CTypes::CTypeEnum>>
-                    update_arr_types =
-                        col_set->getUpdateColumnTypes(in_arr_types, in_dtypes);
-                std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-                           std::vector<Bodo_CTypes::CTypeEnum>>
-                    combine_arr_types = col_set->getCombineColumnTypes(
-                        std::get<0>(update_arr_types),
-                        std::get<1>(update_arr_types));
-                for (auto t : std::get<0>(combine_arr_types)) {
+                    running_values_arr_types =
+                        col_set->getRunningValueColumnTypes(in_arr_types,
+                                                            in_dtypes);
+
+                for (auto t : std::get<0>(running_values_arr_types)) {
                     build_arr_array_types.push_back(t);
                 }
-                for (auto t : std::get<1>(combine_arr_types)) {
+                for (auto t : std::get<1>(running_values_arr_types)) {
                     build_arr_c_types.push_back(t);
                 }
-                curr_update_offset += std::get<0>(update_arr_types).size();
+
+                curr_update_offset +=
+                    std::get<0>(running_values_arr_types).size();
                 f_update_offsets.push_back(curr_update_offset);
-                curr_combine_offset += std::get<0>(combine_arr_types).size();
+                curr_combine_offset +=
+                    std::get<0>(running_values_arr_types).size();
                 f_combine_offsets.push_back(curr_combine_offset);
             }
 
