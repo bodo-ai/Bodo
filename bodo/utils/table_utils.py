@@ -7,11 +7,13 @@ from typing import Any, Dict, Set
 import numba
 import numpy as np
 from numba.core import types
+from numba.extending import overload
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.table import TableType
 from bodo.utils.typing import (
+    MetaType,
     get_castable_arr_dtype,
     get_overload_const_bool,
     get_overload_const_str,
@@ -579,3 +581,49 @@ def table_astype_equiv(self, scope, equiv_set, loc, args, kws):
 
 
 ArrayAnalysis._analyze_op_call_bodo_utils_table_utils_table_astype = table_astype_equiv  # type: ignore
+
+
+def drop_duplicates_table(
+    data, ind_arr, ncols, keep_i, parallel=False
+):  # pragma: no cover
+    pass
+
+
+@overload(drop_duplicates_table, no_unliteral=True)
+def overload_drop_duplicates(in_table, ind_arr, ncols, keep_i, parallel=False):
+    """
+    Kernel implementation for drop_duplicates. ncols is the number of
+    columns to check for possible duplicates, which are always at the front.
+    keep_i is either 0, 1, or 2 corresponding to keep="first", "last", or False
+    """
+
+    # ncols is the number of columns that are checked for duplicates
+    # ncols <= n_table_cols. The duplicate checked columns are always at the front.
+    n_table_cols = len(in_table.arr_types)
+
+    func_text = "def impl(in_table, ind_arr, ncols, keep_i, parallel=False):\n"
+    func_text += f"  in_cpp_table = py_data_to_cpp_table(in_table, (ind_arr,), in_col_inds, {n_table_cols})\n"
+    # NOTE: C++ will delete table pointer
+    func_text += "  out_cpp_table = drop_duplicates_cpp_table(in_cpp_table, parallel, ncols, keep_i, False, True)\n"
+    func_text += "  out_table = cpp_table_to_py_table(out_cpp_table, table_idxs, py_table_type, 0)\n"
+
+    func_text += f"  out_arr_index = array_from_cpp_table(out_cpp_table, {n_table_cols}, ind_arr)\n"
+    func_text += "  delete_table(out_cpp_table)\n"
+    func_text += "  return out_table, out_arr_index\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "py_data_to_cpp_table": bodo.libs.array.py_data_to_cpp_table,
+            "cpp_table_to_py_table": bodo.libs.array.cpp_table_to_py_table,
+            "drop_duplicates_cpp_table": bodo.libs.array.drop_duplicates_cpp_table,
+            "array_from_cpp_table": bodo.libs.array.array_from_cpp_table,
+            "delete_table": bodo.libs.array.delete_table,
+            "py_table_type": in_table,
+            "in_col_inds": MetaType(tuple(range(n_table_cols + 1))),
+            "table_idxs": np.arange(n_table_cols, dtype=np.int64),
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl

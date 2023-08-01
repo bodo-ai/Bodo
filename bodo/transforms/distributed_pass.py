@@ -2038,6 +2038,13 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
+        if fdef == (
+            "drop_duplicates_table",
+            "bodo.utils.table_utils",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
         if fdef == ("union_tables", "bodo.libs.array") and self._is_1D_or_1D_Var_arr(
             lhs
         ):
