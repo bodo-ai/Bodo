@@ -86,8 +86,7 @@ class GroupbyState {
     const std::vector<int32_t> f_in_cols;
 
     // indices of update and combine columns for each function
-    std::vector<int32_t> f_update_offsets;
-    std::vector<int32_t> f_combine_offsets;
+    std::vector<int32_t> f_running_value_offsets;
 
     // Current iteration of build steps
     uint64_t build_iter;
@@ -150,10 +149,8 @@ class GroupbyState {
         }
         // Get offsets of update and combine columns for each function since
         // some functions have multiple update/combine columns
-        f_update_offsets.push_back(n_keys);
-        int32_t curr_update_offset = n_keys;
-        f_combine_offsets.push_back(n_keys);
-        int32_t curr_combine_offset = n_keys;
+        f_running_value_offsets.push_back(n_keys);
+        int32_t curr_running_value_offset = n_keys;
 
         for (size_t i = 0; i < ftypes.size(); i++) {
             int ftype = ftypes[i];
@@ -222,12 +219,9 @@ class GroupbyState {
                     build_arr_c_types.push_back(t);
                 }
 
-                curr_update_offset +=
+                curr_running_value_offset +=
                     std::get<0>(running_values_arr_types).size();
-                f_update_offsets.push_back(curr_update_offset);
-                curr_combine_offset +=
-                    std::get<0>(running_values_arr_types).size();
-                f_combine_offsets.push_back(curr_combine_offset);
+                f_running_value_offsets.push_back(curr_running_value_offset);
             }
 
             this->col_sets.push_back(col_set);
