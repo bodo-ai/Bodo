@@ -41,8 +41,8 @@ from bodo.libs.array import (
     array_from_cpp_table,
     array_to_info,
     delete_table,
+    drop_duplicates_cpp_table,
     drop_duplicates_local_dictionary,
-    drop_duplicates_table,
     sample_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType, offset_type
@@ -1338,7 +1338,7 @@ def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
     # NOTE: C++ will delete table pointer
-    func_text += "  out_table = drop_duplicates_table(table_total, parallel, ncols, keep_i, False, True)\n"
+    func_text += "  out_table = drop_duplicates_cpp_table(table_total, parallel, ncols, keep_i, False, True)\n"
     for i_col in range(count):
         func_text += (
             "  out_arr_{} = array_from_cpp_table(out_table, {}, data[{}])\n".format(
@@ -1359,7 +1359,7 @@ def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
             "np": np,
             "bodo": bodo,
             "array_to_info": array_to_info,
-            "drop_duplicates_table": drop_duplicates_table,
+            "drop_duplicates_cpp_table": drop_duplicates_cpp_table,
             "arr_info_list_to_table": arr_info_list_to_table,
             "array_from_cpp_table": array_from_cpp_table,
             "delete_table": delete_table,
@@ -1385,7 +1385,9 @@ def overload_drop_duplicates_array(data_arr, parallel=False):
         table_total = arr_info_list_to_table(info_list_total)
         keep_i = 0
         # NOTE: C++ will delete table pointer
-        out_table = drop_duplicates_table(table_total, parallel, 1, keep_i, False, True)
+        out_table = drop_duplicates_cpp_table(
+            table_total, parallel, 1, keep_i, False, True
+        )
         out_arr = array_from_cpp_table(out_table, 0, data_arr)
         delete_table(out_table)
         return out_arr
@@ -2336,7 +2338,7 @@ def unique_overload(A, dropna=False, parallel=False):
         n_key = 1
         keep_i = 0
         # NOTE: C++ will delete table pointer
-        out_table = drop_duplicates_table(
+        out_table = drop_duplicates_cpp_table(
             input_table, parallel, n_key, keep_i, dropna, True
         )
         out_arr = array_from_cpp_table(out_table, 0, A)

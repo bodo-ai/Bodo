@@ -814,7 +814,7 @@ def overload_dataframe_isna(df):
 
     header = "def impl(df):\n"
     extra_globals = None
-    out_df_type = None
+
     if df.is_table_format:
         # isna generates a boolean array for every column
         output_arr_typ = bodo.boolean_array_type
@@ -2408,21 +2408,34 @@ def overload_dataframe_drop_duplicates(
     else:
         num_drop_cols = n_cols
 
-    drop_duplicates_args = ", ".join(subset_args + non_subset_args)
-
-    data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
+    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
 
     func_text = (
         "def impl(df, subset=None, keep='first', inplace=False, ignore_index=False):\n"
     )
-    for i in range(n_cols):
-        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
-            i
+
+    # TODO(ehsan): support subset with table format
+    if df.is_table_format and is_overload_none(subset):
+        func_text += (
+            "  in_table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)\n"
         )
-    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
-    func_text += "  ({0},), index_arr = bodo.libs.array_kernels.drop_duplicates(({0},), {1}, {2}, {3})\n".format(
-        drop_duplicates_args, index, num_drop_cols, keep_i
-    )
+        func_text += f"  out_table, index_arr = bodo.utils.table_utils.drop_duplicates_table(in_table, {index}, {n_cols}, {keep_i})\n"
+        data_args = "out_table"
+
+    else:
+        drop_duplicates_args = ", ".join(subset_args + non_subset_args)
+
+        data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
+
+        for i in range(n_cols):
+            func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
+                i
+            )
+
+        func_text += "  ({0},), index_arr = bodo.libs.array_kernels.drop_duplicates(({0},), {1}, {2}, {3})\n".format(
+            drop_duplicates_args, index, num_drop_cols, keep_i
+        )
+
     func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
     return _gen_init_df(func_text, df.columns, data_args, "index")
 
