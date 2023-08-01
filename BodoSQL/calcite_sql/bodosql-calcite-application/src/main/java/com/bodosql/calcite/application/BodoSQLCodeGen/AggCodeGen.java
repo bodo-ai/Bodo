@@ -373,7 +373,7 @@ public class AggCodeGen {
       if (group.size() < inputColumnNames.size()) {
         aggString.append(".iloc[:, ").append(neededColsIxd).append("]");
       }
-      aggString.append(".drop_duplicates()");
+      aggString.append(".drop_duplicates(ignore_index=True)");
     } else {
       // If we're grouping by no columns with no aggregations, the expected
       // output for this group is one row of all NULL's. In order to match this behavior, we create

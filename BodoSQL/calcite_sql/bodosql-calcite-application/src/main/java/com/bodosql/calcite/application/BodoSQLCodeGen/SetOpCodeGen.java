@@ -183,15 +183,15 @@ public class SetOpCodeGen {
                   .append(outVar.emit())
                   .append(" = ")
                   .append(lhsExpr.emit())
-                  .append(".drop_duplicates().rename(columns=")
+                  .append(".drop_duplicates(ignore_index=True).rename(columns=")
                   .append(renameColumns(lhsRenameMap))
                   .append(", copy=False).merge(")
                   .append(rhsExpr.emit())
-                  .append(".drop_duplicates().rename(columns=")
+                  .append(".drop_duplicates(ignore_index=True).rename(columns=")
                   .append(renameColumns(rhsRenameMap))
                   .append(", copy=False), on=")
                   .append(columnNamesList)
-                  .append(").drop_duplicates()\n")
+                  .append(").drop_duplicates(ignore_index=True)\n")
                   .toString()));
     }
 
@@ -284,7 +284,7 @@ public class SetOpCodeGen {
                   .append(rhsDfTmp.emit())
                   .append(", ")
                   .append(rhsDfTmp.emit())
-                  .append("]).drop_duplicates(keep=False).drop(columns=[")
+                  .append("]).drop_duplicates(keep=False, ignore_index=True).drop(columns=[")
                   .append(makeQuoted(getDummyColNameBase()))
                   .append("])\n")
                   .toString()));
@@ -314,18 +314,18 @@ public class SetOpCodeGen {
                   .append(rhsExpr.emit())
                   .append(".rename(columns=")
                   .append(renameColumns(rhsRenameMap))
-                  .append(", copy=False).drop_duplicates()\n")
+                  .append(", copy=False).drop_duplicates(ignore_index=True)\n")
                   .append(indent)
                   .append(outVar.emit())
                   .append(" = pd.concat([")
                   .append(lhsExpr.emit())
                   .append(".rename(columns=")
                   .append(renameColumns(lhsRenameMap))
-                  .append(", copy=False).drop_duplicates(), ")
+                  .append(", copy=False).drop_duplicates(ignore_index=True), ")
                   .append(rhsDfTmp.emit())
                   .append(", ")
                   .append(rhsDfTmp.emit())
-                  .append("]).drop_duplicates(keep=False)\n")
+                  .append("]).drop_duplicates(keep=False, ignore_index=True)\n")
                   .toString()));
     }
 
