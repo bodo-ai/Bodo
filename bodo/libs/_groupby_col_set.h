@@ -622,7 +622,7 @@ class GeneralUdfColSet : public UdfColSet {
  */
 class MedianColSet : public BasicColSet {
    public:
-    MedianColSet(std::shared_ptr<array_info> in_col, bool _skipna,
+    MedianColSet(std::shared_ptr<array_info> in_col, bool _skip_na_data,
                  bool use_sql_rules);
 
     virtual ~MedianColSet();
@@ -630,7 +630,7 @@ class MedianColSet : public BasicColSet {
     void update(const std::vector<grouping_info>& grp_infos) override;
 
    private:
-    bool skipna;
+    bool skip_na_data;
 };
 
 /**
@@ -661,7 +661,7 @@ class NUniqueColSet : public BasicColSet {
     void update(const std::vector<grouping_info>& grp_infos) override;
 
    private:
-    bool dropna;
+    bool skip_na_data;
     std::shared_ptr<table_info> my_nunique_table = nullptr;
     bool is_parallel;
 };
@@ -672,8 +672,8 @@ class NUniqueColSet : public BasicColSet {
  */
 class CumOpColSet : public BasicColSet {
    public:
-    CumOpColSet(std::shared_ptr<array_info> in_col, int ftype, bool _skipna,
-                bool use_sql_rules);
+    CumOpColSet(std::shared_ptr<array_info> in_col, int ftype,
+                bool _skip_na_data, bool use_sql_rules);
 
     virtual ~CumOpColSet();
 
@@ -684,7 +684,7 @@ class CumOpColSet : public BasicColSet {
     void update(const std::vector<grouping_info>& grp_infos) override;
 
    private:
-    bool skipna;
+    bool skip_na_data;
 };
 
 /**
@@ -810,7 +810,7 @@ class NgroupColSet : public BasicColSet {
  * @param ftype function type associated with this column set.
  * @param do_combine whether GroupbyPipeline will perform combine operation
  *        or not.
- * @param skipna option used for nunique, cumsum, cumprod, cummin, cummax
+ * @param skip_na_data option used for nunique, cumsum, cumprod, cummin, cummax
  * @param periods option used for shift
  * @param transform_func option used for identifying transform function
  *        (currently groupby operation that are already supported)
@@ -834,7 +834,7 @@ class NgroupColSet : public BasicColSet {
 std::unique_ptr<BasicColSet> makeColSet(
     std::vector<std::shared_ptr<array_info>> in_cols,
     std::shared_ptr<array_info> index_col, int ftype, bool do_combine,
-    bool skipna, int64_t periods, std::vector<int64_t> transform_funcs,
+    bool skip_na_data, int64_t periods, std::vector<int64_t> transform_funcs,
     int n_udf, bool is_parallel, std::vector<bool> window_ascending,
     std::vector<bool> window_na_position, std::vector<void*> window_args,
     int n_input_cols, int* udf_n_redvars = nullptr,

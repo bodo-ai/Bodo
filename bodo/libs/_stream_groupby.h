@@ -180,7 +180,14 @@ class GroupbyState {
         // TODO[BSE-578]: handle all necessary ColSet parameters for BodoSQL
         // groupby functions
         std::shared_ptr<array_info> index_col = nullptr;
-        bool skipna = false;
+
+        // Currently, all SQL aggregations that we support excluding count(*)
+        // drop or ignore na values durring computation. Since count(*) maps to
+        // size, and skip_na_data has no effect on that aggregation, we can
+        // safely set skip_na_data to true for all SQL aggregations. There is an
+        // issue to fix this behavior so that use_sql_rules trumps the value of
+        // skip_na_data: https://bodo.atlassian.net/browse/BSE-841
+        bool skip_na_data = true;
         bool use_sql_rules = true;
         bool do_combine = !accumulate_before_update;
         std::vector<bool> window_ascending_vect;
@@ -200,9 +207,10 @@ class GroupbyState {
                     (Bodo_CTypes::CTypeEnum)in_arr_c_types[input_ind]);
             }
             std::shared_ptr<BasicColSet> col_set = makeColSet(
-                input_cols, index_col, ftypes[i], do_combine, skipna, 0, {0}, 0,
-                parallel, window_ascending_vect, window_na_position_vect,
-                {nullptr}, 0, nullptr, nullptr, 0, nullptr, use_sql_rules);
+                input_cols, index_col, ftypes[i], do_combine, skip_na_data, 0,
+                {0}, 0, parallel, window_ascending_vect,
+                window_na_position_vect, {nullptr}, 0, nullptr, nullptr, 0,
+                nullptr, use_sql_rules);
 
             if (!accumulate_before_update) {
                 // get update/combine type info to initialize build state

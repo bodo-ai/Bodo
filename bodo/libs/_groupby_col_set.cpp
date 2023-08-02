@@ -1287,16 +1287,16 @@ void GeneralUdfColSet::fill_in_columns(
 
 // ############################## Median ##############################
 
-MedianColSet::MedianColSet(std::shared_ptr<array_info> in_col, bool _skipna,
-                           bool use_sql_rules)
+MedianColSet::MedianColSet(std::shared_ptr<array_info> in_col,
+                           bool _skip_na_data, bool use_sql_rules)
     : BasicColSet(in_col, Bodo_FTypes::median, false, use_sql_rules),
-      skipna(_skipna) {}
+      skip_na_data(_skip_na_data) {}
 
 MedianColSet::~MedianColSet() {}
 
 void MedianColSet::update(const std::vector<grouping_info>& grp_infos) {
     median_computation(this->in_col, this->update_cols[0], grp_infos[0],
-                       this->skipna, use_sql_rules);
+                       this->skip_na_data, use_sql_rules);
 }
 
 // ############################## Mode ##############################
@@ -1313,12 +1313,13 @@ void ModeColSet::update(const std::vector<grouping_info>& grp_infos) {
 
 // ############################## NUnique ##############################
 
-NUniqueColSet::NUniqueColSet(std::shared_ptr<array_info> in_col, bool _dropna,
+NUniqueColSet::NUniqueColSet(std::shared_ptr<array_info> in_col,
+                             bool _skip_na_data,
                              std::shared_ptr<table_info> nunique_table,
                              bool do_combine, bool _is_parallel,
                              bool use_sql_rules)
     : BasicColSet(in_col, Bodo_FTypes::nunique, do_combine, use_sql_rules),
-      dropna(_dropna),
+      skip_na_data(_skip_na_data),
       my_nunique_table(nunique_table),
       is_parallel(_is_parallel) {}
 
@@ -1339,20 +1340,21 @@ void NUniqueColSet::update(const std::vector<grouping_info>& grp_infos) {
         aggfunc_output_initialize(this->update_cols[0], Bodo_FTypes::sum,
                                   use_sql_rules);  // zero initialize
         nunique_computation(std::move(input_col), this->update_cols[0],
-                            grp_infos[my_nunique_table->id], dropna,
+                            grp_infos[my_nunique_table->id], this->skip_na_data,
                             is_parallel);
     } else {
         // use default grouping_info
         nunique_computation(std::move(input_col), this->update_cols[0],
-                            grp_infos[0], dropna, is_parallel);
+                            grp_infos[0], this->skip_na_data, is_parallel);
     }
 }
 
 // ############################## CumOp ##############################
 
 CumOpColSet::CumOpColSet(std::shared_ptr<array_info> in_col, int ftype,
-                         bool _skipna, bool use_sql_rules)
-    : BasicColSet(in_col, ftype, false, use_sql_rules), skipna(_skipna) {}
+                         bool _skip_na_data, bool use_sql_rules)
+    : BasicColSet(in_col, ftype, false, use_sql_rules),
+      skip_na_data(_skip_na_data) {}
 
 CumOpColSet::~CumOpColSet() {}
 
@@ -1373,7 +1375,7 @@ void CumOpColSet::alloc_running_value_columns(
 
 void CumOpColSet::update(const std::vector<grouping_info>& grp_infos) {
     cumulative_computation(this->in_col, this->update_cols[0], grp_infos[0],
-                           this->ftype, this->skipna);
+                           this->ftype, this->skip_na_data);
 }
 
 // ############################## Shift ##############################
@@ -1589,7 +1591,7 @@ void NgroupColSet::update(const std::vector<grouping_info>& grp_infos) {
 std::unique_ptr<BasicColSet> makeColSet(
     std::vector<std::shared_ptr<array_info>> in_cols,
     std::shared_ptr<array_info> index_col, int ftype, bool do_combine,
-    bool skipna, int64_t periods, std::vector<int64_t> transform_funcs,
+    bool skip_na_data, int64_t periods, std::vector<int64_t> transform_funcs,
     int n_udf, bool is_parallel, std::vector<bool> window_ascending,
     std::vector<bool> window_na_position, std::vector<void*> window_args,
     int n_input_cols, int* udf_n_redvars, std::shared_ptr<table_info> udf_table,
@@ -1614,21 +1616,22 @@ std::unique_ptr<BasicColSet> makeColSet(
                                           udf_table_idx, use_sql_rules);
             break;
         case Bodo_FTypes::median:
-            colset = new MedianColSet(in_cols[0], skipna, use_sql_rules);
+            colset = new MedianColSet(in_cols[0], skip_na_data, use_sql_rules);
             break;
         case Bodo_FTypes::mode:
             colset = new ModeColSet(in_cols[0], use_sql_rules);
             break;
         case Bodo_FTypes::nunique:
-            colset =
-                new NUniqueColSet(in_cols[0], skipna, std::move(nunique_table),
-                                  do_combine, is_parallel, use_sql_rules);
+            colset = new NUniqueColSet(in_cols[0], skip_na_data,
+                                       std::move(nunique_table), do_combine,
+                                       is_parallel, use_sql_rules);
             break;
         case Bodo_FTypes::cumsum:
         case Bodo_FTypes::cummin:
         case Bodo_FTypes::cummax:
         case Bodo_FTypes::cumprod:
-            colset = new CumOpColSet(in_cols[0], ftype, skipna, use_sql_rules);
+            colset =
+                new CumOpColSet(in_cols[0], ftype, skip_na_data, use_sql_rules);
             break;
         case Bodo_FTypes::mean:
             colset = new MeanColSet(in_cols[0], do_combine, use_sql_rules);
