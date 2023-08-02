@@ -188,7 +188,14 @@ class BodoBuffer : public arrow::ResizableBuffer {
     }
 
     /// @brief Wrapper for Pinning Buffers
-    inline void pin() { NRT_MemInfo_Pin(this->meminfo); }
+    inline void pin() {
+        NRT_MemInfo_Pin(this->meminfo);
+        // If the buffer was spilled, its data pointer could have changed upon
+        // restoring it to memory. Therefore, we need to resynchronize the
+        // `data_` pointer of the buffer with that of the MemInfo (which is what
+        // the BufferPool changes in place to the new location).
+        this->data_ = (uint8_t*)this->meminfo->data;
+    }
 
     /// @brief Wrapper for Unpinning Buffers
     inline void unpin() { NRT_MemInfo_Unpin(this->meminfo); }
