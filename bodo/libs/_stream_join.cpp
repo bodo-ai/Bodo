@@ -762,20 +762,6 @@ void JoinState::InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
         DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
 }
 
-/**
- * @brief Helper for UnifyBuildTableDictionaryArrays and
- * UnifyProbeTableDictionaryArrays. Unifies dictionaries of input table with
- * dictionaries in dict_builders by appending its new dictionary values to
- * buffer's dictionaries and transposing input's indices.
- *
- * @param in_table input table
- * @param dict_builders Dictionary builders to unify with. The dict builders
- * will be appended with the new values from dictionaries in input_table.
- * @param n_keys number of key columns
- * @param only_keys only unify key columns
- * @return std::shared_ptr<table_info> input table with dictionaries unified
- * with build table dictionaries.
- */
 std::shared_ptr<table_info> unify_dictionary_arrays_helper(
     const std::shared_ptr<table_info>& in_table,
     std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,

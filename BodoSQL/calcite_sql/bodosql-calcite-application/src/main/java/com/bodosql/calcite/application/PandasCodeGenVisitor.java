@@ -477,13 +477,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable batchAccumulatorVariable = this.genBatchAccumulatorVar();
     StreamingPipelineFrame activePipeline = this.generatedCode.getCurrentStreamingPipeline();
     activePipeline.addInitialization(
-        new Op.Assign(batchAccumulatorVariable, new Expr.List(List.of())));
+        new Op.Assign(
+            batchAccumulatorVariable,
+            new Expr.Call("bodo.libs.table_builder.init_table_builder_state", List.of())));
 
     // Append to the list at the end of the loop.
     List<Expr> args = new ArrayList<>();
+    args.add(batchAccumulatorVariable);
     args.add(inputTableVar);
     Op appendStatement =
-        new Op.Stmt(new Expr.Call.Method(batchAccumulatorVariable, "append", args, List.of()));
+        new Op.Stmt(new Expr.Call("bodo.libs.table_builder.table_builder_append", args));
     generatedCode.add(appendStatement);
 
     // Pop the pipeline
@@ -495,7 +498,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // expect a single-batch dataframe can operate as needed.
     Variable accumulatedTable = genTableVar();
     Expr concatenatedTable =
-        new Expr.Call("bodo.utils.table_utils.concat_tables", List.of(batchAccumulatorVariable));
+        new Expr.Call(
+            "bodo.libs.table_builder.table_builder_finalize", List.of(batchAccumulatorVariable));
     generatedCode.add(new Op.Assign(accumulatedTable, concatenatedTable));
     tableGenStack.push(new BodoEngineTable(accumulatedTable.getName(), node));
   }

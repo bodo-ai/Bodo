@@ -237,7 +237,7 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:
     elif arr_type == bodo.dict_str_arr_type:
         return CArrayTypeEnum.DICT.value
     else:  # pragma: no cover
-        raise BodoError("Unsupported Array Type in numba_to_c_array_type")
+        raise BodoError(f"Unsupported Array Type '{arr_type}' in numba_to_c_array_type")
 
 
 def is_alloc_callname(func_name, mod_name):

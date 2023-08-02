@@ -73,7 +73,7 @@ class SymbolTable {
     }
 
     fun genBatchAccumulatorVar(): Variable {
-        return Variable("__bodo_streaming_batches_list_${accVarId++}")
+        return Variable("__bodo_streaming_batches_table_builder_${accVarId++}")
     }
 
     fun genFinishedStreamingFlag(): Variable {
