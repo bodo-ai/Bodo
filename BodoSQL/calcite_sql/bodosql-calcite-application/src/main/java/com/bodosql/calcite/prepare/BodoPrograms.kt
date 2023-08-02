@@ -5,9 +5,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.bodo_sql_rules.JoinExtractOverRule
 import com.bodosql.calcite.application.bodo_sql_rules.ListAggOptionalReplaceRule
-import com.bodosql.calcite.rel.logical.BodoLogicalFilter
-import com.bodosql.calcite.rel.logical.BodoLogicalJoin
-import com.bodosql.calcite.rel.logical.BodoLogicalProject
+import com.bodosql.calcite.rel.logical.*
 import com.bodosql.calcite.rel.metadata.PandasRelMetadataProvider
 import com.google.common.collect.Iterables
 import org.apache.calcite.plan.*
@@ -21,9 +19,7 @@ import org.apache.calcite.rel.RelShuttle
 import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.core.RelFactories
 import org.apache.calcite.rel.core.TableScan
-import org.apache.calcite.rel.logical.LogicalFilter
-import org.apache.calcite.rel.logical.LogicalJoin
-import org.apache.calcite.rel.logical.LogicalProject
+import org.apache.calcite.rel.logical.*
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
 import org.apache.calcite.rel.rules.SubQueryRemoveRule
 import org.apache.calcite.rex.RexExecutorImpl
@@ -238,6 +234,23 @@ object BodoPrograms {
                     join.hints,
                     join.condition,
                     join.joinType,
+                )
+
+            override fun visit(union: LogicalUnion): RelNode {
+                val updatedUnion = this.visitChildren(union)
+                return BodoLogicalUnion.create(
+                    updatedUnion.inputs,
+                    union.all,
+                )
+            }
+
+            override fun visit(agg: LogicalAggregate): RelNode =
+                BodoLogicalAggregate.create(
+                    agg.input.accept(this),
+                    agg.hints,
+                    agg.groupSet,
+                    agg.groupSets,
+                    agg.aggCallList
                 )
         }
     }

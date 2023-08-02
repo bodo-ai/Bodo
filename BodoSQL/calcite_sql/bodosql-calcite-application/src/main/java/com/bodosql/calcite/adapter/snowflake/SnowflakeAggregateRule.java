@@ -1,10 +1,8 @@
 package com.bodosql.calcite.adapter.snowflake;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.rel.logical.BodoLogicalAggregate;
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter;
-
-import org.apache.calcite.rel.logical.LogicalAggregate;
-import org.apache.calcite.rel.logical.LogicalFilter;
 import org.immutables.value.Value;
 import org.jetbrains.annotations.NotNull;
 
@@ -21,7 +19,7 @@ public class SnowflakeAggregateRule extends AbstractSnowflakeAggregateRule {
         ImmutableSnowflakeAggregateRule.Config.of()
             .withOperandSupplier(
                 b0 ->
-                    b0.operand(LogicalAggregate.class)
+                    b0.operand(BodoLogicalAggregate.class)
                         .predicate(SnowflakeAggregateRule::isPushableAggregate)
                         .oneInput(b1 -> b1.operand(SnowflakeTableScan.class).noInputs()))
             .as(Config.class);
@@ -30,7 +28,7 @@ public class SnowflakeAggregateRule extends AbstractSnowflakeAggregateRule {
         ImmutableSnowflakeAggregateRule.Config.of()
             .withOperandSupplier(
                 b0 ->
-                    b0.operand(LogicalAggregate.class)
+                    b0.operand(BodoLogicalAggregate.class)
                         .predicate(SnowflakeAggregateRule::isPushableAggregate)
                         .oneInput(
                             b1 ->

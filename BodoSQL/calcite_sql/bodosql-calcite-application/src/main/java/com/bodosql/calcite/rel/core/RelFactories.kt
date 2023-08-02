@@ -1,12 +1,11 @@
 package com.bodosql.calcite.rel.core
 
-import com.bodosql.calcite.rel.logical.BodoLogicalFilter
-import com.bodosql.calcite.rel.logical.BodoLogicalJoin
-import com.bodosql.calcite.rel.logical.BodoLogicalProject
-import com.bodosql.calcite.rel.logical.BodoLogicalUnion
+import com.bodosql.calcite.rel.logical.*
+import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.Context
 import org.apache.calcite.plan.Contexts
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.rel.core.CorrelationId
 import org.apache.calcite.rel.core.JoinRelType
 import org.apache.calcite.rel.core.RelFactories.*
@@ -15,6 +14,7 @@ import org.apache.calcite.rex.RexNode
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.tools.RelBuilder
 import org.apache.calcite.tools.RelBuilderFactory
+import org.apache.calcite.util.ImmutableBitSet
 
 object RelFactories {
     @JvmField
@@ -30,11 +30,15 @@ object RelFactories {
     val SET_OP_FACTORY: SetOpFactory = SetOpFactory(::createSetOp)
 
     @JvmField
+    val AGGREGATE_FACTORY: AggregateFactory = AggregateFactory(::createAggregate)
+
+    @JvmField
     val DEFAULT_CONTEXT: Context = Contexts.of(
         PROJECT_FACTORY,
         FILTER_FACTORY,
         JOIN_FACTORY,
         SET_OP_FACTORY,
+        AGGREGATE_FACTORY,
     )
 
     @JvmField
@@ -67,5 +71,10 @@ object RelFactories {
             SqlKind.UNION -> BodoLogicalUnion.create(inputs, all)
             else -> DEFAULT_SET_OP_FACTORY.createSetOp(kind, inputs, all);
         }
+    }
+
+    private fun createAggregate(input: RelNode, hints: List<RelHint>, groupSet: ImmutableBitSet,
+                                groupSets: ImmutableList<ImmutableBitSet>, aggCalls: List<AggregateCall>): RelNode {
+        return BodoLogicalAggregate.create(input, hints, groupSet, groupSets, aggCalls)
     }
 }

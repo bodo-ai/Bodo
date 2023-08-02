@@ -1,14 +1,11 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.application.RelationalAlgebraGenerator
-import com.bodosql.calcite.application.Utils.AggHelpers
-import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rel.core.Aggregate
 import org.apache.calcite.rel.core.AggregateCall
-import org.apache.calcite.rel.logical.LogicalAggregate
 import org.apache.calcite.sql.SqlKind
 
 class PandasAggregateRule private constructor(config: Config) : ConverterRule(config) {
@@ -16,7 +13,7 @@ class PandasAggregateRule private constructor(config: Config) : ConverterRule(co
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                LogicalAggregate::class.java, Convention.NONE, PandasRel.CONVENTION,
+                BodoLogicalAggregate::class.java, Convention.NONE, PandasRel.CONVENTION,
                 "PandasAggregateRule"
             )
             .withRuleFactory { config -> PandasAggregateRule(config) }

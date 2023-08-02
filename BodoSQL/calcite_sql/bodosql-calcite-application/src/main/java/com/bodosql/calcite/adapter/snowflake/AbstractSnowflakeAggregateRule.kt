@@ -5,13 +5,11 @@ import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelRule
 import org.apache.calcite.rel.core.Aggregate
 import org.apache.calcite.rel.core.Filter
-import org.apache.calcite.rel.logical.LogicalAggregate
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.sql.SqlKind
-import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeUtil
 import org.immutables.value.Value
 
@@ -78,7 +76,7 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
         )
 
         @JvmStatic
-        fun isPushableAggregate(aggregate: LogicalAggregate): Boolean {
+        fun isPushableAggregate(aggregate: Aggregate): Boolean {
             // We only allow aggregates to be pushed if there's no grouping
             // and they are considered simple. I'm honestly not sure what the
             // other types of aggregates are. It's likely fine to allow more
