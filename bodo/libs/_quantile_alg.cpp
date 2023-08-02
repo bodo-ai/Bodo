@@ -55,7 +55,7 @@ double approx_percentile_py_entrypt(array_info *arr_raw, double percentile,
     @output res: the median as output
  */
 void median_series_computation_py_entry(double *res, array_info *arr,
-                                        bool parallel, bool skipna);
+                                        bool parallel, bool skip_na_data);
 
 /* Compute the autocorrelation of the series.
    @output res: the autocorrelation as output
@@ -658,9 +658,9 @@ void median_series_computation_eff(double *res, std::vector<T, Alloc> my_array,
  */
 template <typename T, Bodo_CTypes::CTypeEnum DType>
 void median_series_computation_T(double *res, std::shared_ptr<array_info> arr,
-                                 bool parallel, bool skipna) {
+                                 bool parallel, bool skip_na_data) {
     local_global_stat_nan e_stat = nb_entries_global<T, DType>(arr, parallel);
-    if ((e_stat.glob_nb_miss > 0 && !skipna) || e_stat.glob_nb_ok == 0) {
+    if ((e_stat.glob_nb_miss > 0 && !skip_na_data) || e_stat.glob_nb_ok == 0) {
         *res = std::nan("");
         return;
     }
@@ -686,45 +686,45 @@ void median_series_computation_T(double *res, std::shared_ptr<array_info> arr,
     According to the data type we trigger a different templatized function.
  */
 void median_series_computation_py_entry(double *res, array_info *p_arr,
-                                        bool parallel, bool skipna) {
+                                        bool parallel, bool skip_na_data) {
     try {
         std::shared_ptr<array_info> arr(p_arr);
         Bodo_CTypes::CTypeEnum dtype = arr->dtype;
         switch (dtype) {
             case Bodo_CTypes::INT8:
                 return median_series_computation_T<int8_t, Bodo_CTypes::INT8>(
-                    res, arr, parallel, skipna);
+                    res, arr, parallel, skip_na_data);
             case Bodo_CTypes::UINT8:
                 return median_series_computation_T<uint8_t, Bodo_CTypes::UINT8>(
-                    res, arr, parallel, skipna);
+                    res, arr, parallel, skip_na_data);
             case Bodo_CTypes::INT16:
                 return median_series_computation_T<int16_t, Bodo_CTypes::INT16>(
-                    res, arr, parallel, skipna);
+                    res, arr, parallel, skip_na_data);
             case Bodo_CTypes::UINT16:
                 return median_series_computation_T<uint16_t,
                                                    Bodo_CTypes::UINT16>(
-                    res, arr, parallel, skipna);
+                    res, arr, parallel, skip_na_data);
             case Bodo_CTypes::INT32:
                 return median_series_computation_T<int32_t, Bodo_CTypes::INT32>(
-                    res, arr, parallel, skipna);
+                    res, arr, parallel, skip_na_data);
             case Bodo_CTypes::UINT32:
                 return median_series_computation_T<uint32_t,
                                                    Bodo_CTypes::UINT32>(
-                    res, arr, parallel, skipna);
+                    res, arr, parallel, skip_na_data);
             case Bodo_CTypes::INT64:
                 return median_series_computation_T<int64_t, Bodo_CTypes::INT64>(
-                    res, arr, parallel, skipna);
+                    res, arr, parallel, skip_na_data);
             case Bodo_CTypes::UINT64:
                 return median_series_computation_T<uint64_t,
                                                    Bodo_CTypes::UINT64>(
-                    res, arr, parallel, skipna);
+                    res, arr, parallel, skip_na_data);
             case Bodo_CTypes::FLOAT32:
                 return median_series_computation_T<float, Bodo_CTypes::FLOAT32>(
-                    res, arr, parallel, skipna);
+                    res, arr, parallel, skip_na_data);
             case Bodo_CTypes::FLOAT64:
                 return median_series_computation_T<double,
                                                    Bodo_CTypes::FLOAT64>(
-                    res, arr, parallel, skipna);
+                    res, arr, parallel, skip_na_data);
             case Bodo_CTypes::DECIMAL:
                 // We choose to return double in case of decimal (while a
                 // decimal return is conceptually feasible) because it would
@@ -732,7 +732,7 @@ void median_series_computation_py_entry(double *res, array_info *p_arr,
                 // well.
                 return median_series_computation_T<double,
                                                    Bodo_CTypes::DECIMAL>(
-                    res, arr, parallel, skipna);
+                    res, arr, parallel, skip_na_data);
             default:
                 throw std::runtime_error(
                     "_quantile_alg.cpp::median_series_computation: type not "

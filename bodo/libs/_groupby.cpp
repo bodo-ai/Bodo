@@ -93,7 +93,7 @@ class GroupbyPipeline {
         bool _is_parallel, int* ftypes, int* func_offsets, int* _udf_nredvars,
         std::shared_ptr<table_info> _udf_table, udf_table_op_fn update_cb,
         udf_table_op_fn combine_cb, udf_eval_fn eval_cb,
-        udf_general_fn general_udfs_cb, bool skipna, int64_t periods,
+        udf_general_fn general_udfs_cb, bool skip_na_data, int64_t periods,
         int64_t* transform_funcs, int64_t _head_n, bool _return_key,
         bool _return_index, bool _key_dropna, bool* window_ascending,
         bool* window_na_position, void** window_args,
@@ -391,22 +391,23 @@ class GroupbyPipeline {
                             nunique_tables[i + m]->columns[num_keys]);
                     }
                     col_sets.push_back(makeColSet(
-                        input_cols, index_col, ftypes[j], do_combine, skipna,
-                        periods, transform_funcs_vect, n_udf, is_parallel,
-                        window_ascending_vect, window_na_position_vect,
-                        window_args_vect, n_input_cols, udf_n_redvars,
-                        udf_table, udf_table_idx, nunique_tables[i],
-                        use_sql_rules));
+                        input_cols, index_col, ftypes[j], do_combine,
+                        skip_na_data, periods, transform_funcs_vect, n_udf,
+                        is_parallel, window_ascending_vect,
+                        window_na_position_vect, window_args_vect, n_input_cols,
+                        udf_n_redvars, udf_table, udf_table_idx,
+                        nunique_tables[i], use_sql_rules));
                 } else {
                     for (int m = 0; m < num_used_cols; m++) {
                         input_cols.push_back(in_table->columns[i + m]);
                     }
-                    col_sets.push_back(makeColSet(
-                        input_cols, index_col, ftypes[j], do_combine, skipna,
-                        periods, transform_funcs_vect, n_udf, is_parallel,
-                        window_ascending_vect, window_na_position_vect,
-                        window_args_vect, n_input_cols, udf_n_redvars,
-                        udf_table, udf_table_idx, nullptr, use_sql_rules));
+                    col_sets.push_back(
+                        makeColSet(input_cols, index_col, ftypes[j], do_combine,
+                                   skip_na_data, periods, transform_funcs_vect,
+                                   n_udf, is_parallel, window_ascending_vect,
+                                   window_na_position_vect, window_args_vect,
+                                   n_input_cols, udf_n_redvars, udf_table,
+                                   udf_table_idx, nullptr, use_sql_rules));
                 }
                 if (ftypes[j] == Bodo_FTypes::udf ||
                     ftypes[j] == Bodo_FTypes::gen_udf) {
@@ -431,9 +432,9 @@ class GroupbyPipeline {
                                      ftypes[0] == Bodo_FTypes::ngroup)) {
             col_sets.push_back(
                 makeColSet({in_table->columns[0]}, index_col, ftypes[0],
-                           do_combine, skipna, periods, {0}, n_udf, is_parallel,
-                           {false}, {false}, {0}, 0, udf_n_redvars, udf_table,
-                           udf_table_idx, nullptr, use_sql_rules));
+                           do_combine, skip_na_data, periods, {0}, n_udf,
+                           is_parallel, {false}, {false}, {0}, 0, udf_n_redvars,
+                           udf_table, udf_table_idx, nullptr, use_sql_rules));
         }
         // Add key-sort column and index to col_sets
         // to apply head_computation on them as well.
@@ -441,14 +442,14 @@ class GroupbyPipeline {
             // index-column
             col_sets.push_back(
                 makeColSet({index_col}, index_col, Bodo_FTypes::head,
-                           do_combine, skipna, periods, {0}, n_udf, is_parallel,
-                           {false}, {false}, {0}, 0, udf_n_redvars, udf_table,
-                           udf_table_idx, nullptr, use_sql_rules));
+                           do_combine, skip_na_data, periods, {0}, n_udf,
+                           is_parallel, {false}, {false}, {0}, 0, udf_n_redvars,
+                           udf_table, udf_table_idx, nullptr, use_sql_rules));
             if (head_i) {
                 col_sets.push_back(makeColSet(
                     {in_table->columns[in_table->columns.size() - 1]},
-                    index_col, Bodo_FTypes::head, do_combine, skipna, periods,
-                    {0}, n_udf, is_parallel, {false}, {false}, {0}, 0,
+                    index_col, Bodo_FTypes::head, do_combine, skip_na_data,
+                    periods, {0}, n_udf, is_parallel, {false}, {false}, {0}, 0,
                     udf_n_redvars, udf_table, udf_table_idx, nullptr,
                     use_sql_rules));
             }
@@ -1040,9 +1041,9 @@ table_info* groupby_and_aggregate(
     table_info* input_table, int64_t num_keys, int8_t* ncols_per_func,
     int8_t* n_window_calls_per_func, int64_t num_funcs, bool input_has_index,
     int* ftypes, int* func_offsets, int* udf_nredvars, bool is_parallel,
-    bool skipdropna, int64_t periods, int64_t* transform_funcs, int64_t head_n,
-    bool return_key, bool return_index, bool key_dropna, void* update_cb,
-    void* combine_cb, void* eval_cb, void* general_udfs_cb,
+    bool skip_na_data, int64_t periods, int64_t* transform_funcs,
+    int64_t head_n, bool return_key, bool return_index, bool key_dropna,
+    void* update_cb, void* combine_cb, void* eval_cb, void* general_udfs_cb,
     table_info* in_udf_dummy_table, int64_t* n_out_rows, bool* window_ascending,
     bool* window_na_position, void** window_args,
     int8_t* n_window_args_per_func, int* n_input_cols_per_func,
@@ -1069,7 +1070,7 @@ table_info* groupby_and_aggregate(
                 is_parallel, ftypes, func_offsets, udf_nredvars,
                 udf_dummy_table, (udf_table_op_fn)update_cb,
                 (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
-                (udf_general_fn)general_udfs_cb, skipdropna, periods,
+                (udf_general_fn)general_udfs_cb, skip_na_data, periods,
                 transform_funcs, head_n, return_key, return_index, key_dropna,
                 window_ascending, window_na_position, window_args,
                 n_window_args_per_func, n_input_cols_per_func,
@@ -1082,7 +1083,7 @@ table_info* groupby_and_aggregate(
             [&](std::shared_ptr<array_info> cat_column) -> table_info* {
             std::shared_ptr<table_info> ret_table =
                 mpi_exscan_computation(cat_column, in_table, num_keys, ftypes,
-                                       func_offsets, is_parallel, skipdropna,
+                                       func_offsets, is_parallel, skip_na_data,
                                        return_key, return_index, use_sql_rules);
             *n_out_rows = in_table->nrows();
             return new table_info(*ret_table);

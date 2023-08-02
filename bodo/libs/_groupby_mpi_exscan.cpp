@@ -182,14 +182,14 @@ std::shared_ptr<array_info> compute_categorical_index(
  * @param ftypes The types of the functions
  * @param func_offsets The offsets of the functions
  * @param is_parallel Whether the computation is parallel
- * @param skipdropna Whether to skip dropna
+ * @param skip_na_data Whether to skip/drop na data
  */
 template <typename Tkey, typename T, Bodo_CTypes::CTypeEnum DType>
 void mpi_exscan_computation_numpy_T(
     std::vector<std::shared_ptr<array_info>>& out_arrs,
     std::shared_ptr<array_info> cat_column,
     std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t k,
-    int* ftypes, int* func_offsets, bool is_parallel, bool skipdropna) {
+    int* ftypes, int* func_offsets, bool is_parallel, bool skip_na_data) {
     int64_t n_rows = in_table->nrows();
     int start = func_offsets[k];
     int end = func_offsets[k + 1];
@@ -227,7 +227,7 @@ void mpi_exscan_computation_numpy_T(
                 } else {
                     size_t pos = idx + max_row_idx * (j - start);
                     T val = in_col->at<T>(i_row);
-                    if (skipdropna && isnan_alltype<T, DType>(val)) {
+                    if (skip_na_data && isnan_alltype<T, DType>(val)) {
                         work_col->at<T>(i_row) = val;
                     } else {
                         T new_val = oper(val, cumulative[pos]);
@@ -274,10 +274,10 @@ void mpi_exscan_computation_numpy_T(
     for (int j = start; j != end; j++) {
         const std::shared_ptr<array_info>& work_col = out_arrs[j];
         int ftype = ftypes[j];
-        // For skipdropna:
+        // For skip_na_data:
         //   The cumulative is never a NaN. The sum therefore works
         //   correctly whether val is a NaN or not.
-        // For !skipdropna:
+        // For !skip_na_data:
         //   the cumulative can be a NaN. The sum also works correctly.
         auto apply_oper = [&](auto const& oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
@@ -318,14 +318,14 @@ void mpi_exscan_computation_numpy_T(
  * @param ftypes The types of the functions
  * @param func_offsets The offsets of the functions
  * @param is_parallel Whether the computation is parallel
- * @param skipdropna Whether to skip dropna
+ * @param skip_na_data Whether to skip dropna
  */
 template <typename Tkey, typename T, int dtype>
 void mpi_exscan_computation_nullable_T(
     std::vector<std::shared_ptr<array_info>>& out_arrs,
     std::shared_ptr<array_info> cat_column,
     std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t k,
-    int* ftypes, int* func_offsets, bool is_parallel, bool skipdropna) {
+    int* ftypes, int* func_offsets, bool is_parallel, bool skip_na_data) {
     int64_t n_rows = in_table->nrows();
     int start = func_offsets[k];
     int end = func_offsets[k + 1];
@@ -350,9 +350,9 @@ void mpi_exscan_computation_nullable_T(
     }
     bodo::vector<T> cumulative_recv = cumulative;
     bodo::vector<uint8_t> cumulative_mask, cumulative_mask_recv;
-    // If we use skipdropna then we do not need to keep track of
+    // If we use skip_na_data then we do not need to keep track of
     // the previous values
-    if (!skipdropna) {
+    if (!skip_na_data) {
         cumulative_mask = bodo::vector<uint8_t>(max_row_idx * n_oper, 0);
         cumulative_mask_recv = bodo::vector<uint8_t>(max_row_idx * n_oper, 0);
     }
@@ -373,7 +373,7 @@ void mpi_exscan_computation_nullable_T(
                     T new_val = oper(val, cumulative[pos]);
                     bool bit_o = bit_i;
                     work_col->at<T>(i_row) = new_val;
-                    if (skipdropna) {
+                    if (skip_na_data) {
                         if (bit_i)
                             cumulative[pos] = new_val;
                     } else {
@@ -425,7 +425,7 @@ void mpi_exscan_computation_nullable_T(
                        MPI_COMM_WORLD);
         }
     }
-    if (!skipdropna) {
+    if (!skip_na_data) {
         mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
         MPI_Exscan(cumulative_mask.data(), cumulative_mask_recv.data(),
                    max_row_idx * n_oper, mpi_typ, MPI_MAX, MPI_COMM_WORLD);
@@ -441,7 +441,7 @@ void mpi_exscan_computation_nullable_T(
                     T val = work_col->at<T>(i_row);
                     T new_val = oper(val, cumulative_recv[pos]);
                     work_col->at<T>(i_row) = new_val;
-                    if (!skipdropna && cumulative_mask_recv[pos] == 1)
+                    if (!skip_na_data && cumulative_mask_recv[pos] == 1)
                         work_col->set_null_bit(i_row, false);
                 }
             }
@@ -470,23 +470,23 @@ void mpi_exscan_computation_nullable_T(
  * @param ftypes The types of the functions
  * @param func_offsets The offsets of the functions
  * @param is_parallel Whether the computation is parallel
- * @param skipdropna Whether to skip dropna
+ * @param skip_na_data Whether to skip dropna
  */
 template <typename Tkey, typename T, Bodo_CTypes::CTypeEnum DType>
 void mpi_exscan_computation_T(
     std::vector<std::shared_ptr<array_info>>& out_arrs,
     std::shared_ptr<array_info> cat_column,
     std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t k,
-    int* ftypes, int* func_offsets, bool is_parallel, bool skipdropna) {
+    int* ftypes, int* func_offsets, bool is_parallel, bool skip_na_data) {
     const std::shared_ptr<array_info>& in_col = in_table->columns[k + num_keys];
     if (in_col->arr_type == bodo_array_type::NUMPY) {
         return mpi_exscan_computation_numpy_T<Tkey, T, DType>(
             out_arrs, std::move(cat_column), in_table, num_keys, k, ftypes,
-            func_offsets, is_parallel, skipdropna);
+            func_offsets, is_parallel, skip_na_data);
     } else {
         return mpi_exscan_computation_nullable_T<Tkey, T, DType>(
             out_arrs, std::move(cat_column), in_table, num_keys, k, ftypes,
-            func_offsets, is_parallel, skipdropna);
+            func_offsets, is_parallel, skip_na_data);
     }
 }
 
@@ -500,7 +500,7 @@ void mpi_exscan_computation_T(
  * @param ftypes The types of the functions
  * @param func_offsets The offsets of the functions
  * @param is_parallel Whether the computation is parallel
- * @param skipdropna Whether to skip dropna
+ * @param skip_na_data Whether to skip dropna
  * @param return_key Whether to return the key column
  * @param return_index Whether to return the index column
  * @param use_sql_rules Whether to use SQL rules in allocation
@@ -510,7 +510,7 @@ template <typename Tkey>
 std::shared_ptr<table_info> mpi_exscan_computation_Tkey(
     std::shared_ptr<array_info> cat_column,
     std::shared_ptr<table_info> in_table, int64_t num_keys, int* ftypes,
-    int* func_offsets, bool is_parallel, bool skipdropna, bool return_key,
+    int* func_offsets, bool is_parallel, bool skip_na_data, bool return_key,
     bool return_index, bool use_sql_rules) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     // We do not return the keys in output in the case of cumulative operations.
@@ -543,7 +543,7 @@ std::shared_ptr<table_info> mpi_exscan_computation_Tkey(
         mpi_exscan_computation_T<Tkey, typename dtype_to_type<CTYPE>::type, \
                                  CTYPE>(out_arrs, cat_column, in_table,     \
                                         num_keys, k, ftypes, func_offsets,  \
-                                        is_parallel, skipdropna);           \
+                                        is_parallel, skip_na_data);         \
     }
 #endif
     for (uint64_t i = num_keys; i < in_table->ncols() - return_index_i;
@@ -572,18 +572,19 @@ std::shared_ptr<table_info> mpi_exscan_computation_Tkey(
 std::shared_ptr<table_info> mpi_exscan_computation(
     std::shared_ptr<array_info> cat_column,
     std::shared_ptr<table_info> in_table, int64_t num_keys, int* ftypes,
-    int* func_offsets, bool is_parallel, bool skipdropna, bool return_key,
+    int* func_offsets, bool is_parallel, bool skip_na_data, bool return_key,
     bool return_index, bool use_sql_rules) {
     tracing::Event ev("mpi_exscan_computation", is_parallel);
     const Bodo_CTypes::CTypeEnum dtype = cat_column->dtype;
     // macro to reduce code duplication
 #ifndef MPI_EXSCAN_COMPUTATION_CALL
-#define MPI_EXSCAN_COMPUTATION_CALL(CTYPE)                                     \
-    if (dtype == CTYPE) {                                                      \
-        return mpi_exscan_computation_Tkey<                                    \
-            typename dtype_to_type<CTYPE>::type>(                              \
-            std::move(cat_column), in_table, num_keys, ftypes, func_offsets,   \
-            is_parallel, skipdropna, return_key, return_index, use_sql_rules); \
+#define MPI_EXSCAN_COMPUTATION_CALL(CTYPE)                                   \
+    if (dtype == CTYPE) {                                                    \
+        return mpi_exscan_computation_Tkey<                                  \
+            typename dtype_to_type<CTYPE>::type>(                            \
+            std::move(cat_column), in_table, num_keys, ftypes, func_offsets, \
+            is_parallel, skip_na_data, return_key, return_index,             \
+            use_sql_rules);                                                  \
     }
 #endif
     MPI_EXSCAN_COMPUTATION_CALL(Bodo_CTypes::INT8)
