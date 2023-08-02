@@ -1,15 +1,17 @@
 package com.bodosql.calcite.prepare
 
-import com.bodosql.calcite.adapter.pandas.*
+import com.bodosql.calcite.adapter.pandas.PandasJoin
+import com.bodosql.calcite.adapter.pandas.PandasJoinRule
+import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.application.bodo_sql_rules.*
 import com.bodosql.calcite.rel.core.RelFactories
+import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import com.google.common.collect.Iterables
 import org.apache.calcite.plan.RelOptRule
 import org.apache.calcite.rel.core.Sort
-import org.apache.calcite.rel.logical.LogicalAggregate
 import org.apache.calcite.rel.rules.*
 
 object BodoRules {
@@ -74,7 +76,7 @@ object BodoRules {
     @JvmField
     val AGGREGATE_JOIN_REMOVE_RULE: RelOptRule =
         AggregateJoinRemoveRule.Config.DEFAULT
-            .withOperandFor(LogicalAggregate::class.java, BodoLogicalJoin::class.java)
+            .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java)
             .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
             .toRule()
 
@@ -84,7 +86,7 @@ object BodoRules {
     @JvmField
     val AGGREGATE_JOIN_TRANSPOSE_RULE: RelOptRule =
         AggregateJoinTransposeRule.Config.DEFAULT
-            .withOperandFor(LogicalAggregate::class.java, BodoLogicalJoin::class.java, true)
+            .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java, true)
             .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
             .toRule()
 
@@ -179,7 +181,7 @@ object BodoRules {
     @JvmField
     val AGGREGATE_REMOVE_RULE: RelOptRule =
         AggregateJoinRemoveRule.Config.DEFAULT
-            .withOperandFor(LogicalAggregate::class.java, BodoLogicalJoin::class.java)
+            .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java)
             .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
             .toRule()
 
@@ -211,7 +213,7 @@ object BodoRules {
     @JvmField
     val AGGREGATE_JOIN_JOIN_REMOVE_RULE: RelOptRule =
         AggregateJoinJoinRemoveRule.Config.DEFAULT
-            .withOperandFor(LogicalAggregate::class.java, BodoLogicalJoin::class.java)
+            .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java)
             .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
             .toRule()
 

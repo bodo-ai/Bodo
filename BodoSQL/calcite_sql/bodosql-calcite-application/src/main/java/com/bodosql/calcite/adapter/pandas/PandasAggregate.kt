@@ -4,12 +4,12 @@ import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.Utils.AggHelpers.aggContainsFilter
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.rel.core.AggregateBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.core.Aggregate
 import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.util.ImmutableBitSet
 
@@ -20,13 +20,14 @@ class PandasAggregate(
     groupSet: ImmutableBitSet,
     groupSets: List<ImmutableBitSet>?,
     aggCalls: List<AggregateCall>,
-) : Aggregate(cluster, traitSet, ImmutableList.of(), input, groupSet, groupSets, aggCalls), PandasRel {
+) : AggregateBase(cluster, traitSet, ImmutableList.of(), input, groupSet, groupSets, aggCalls), PandasRel {
 
     init {
         assert(convention == PandasRel.CONVENTION)
         // Require streaming if we have enabled streaming and it makes sense for this node.
-        if (getStreamingTrait(this.groupSets, this.aggCalls) == BatchingProperty.STREAMING)
+        if (getStreamingTrait(this.groupSets, this.aggCalls) == BatchingProperty.STREAMING) {
             assert(traitSet.containsIfApplicable(BatchingProperty.STREAMING))
+        }
     }
 
     companion object {
