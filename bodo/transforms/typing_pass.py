@@ -5,10 +5,11 @@ according to Bodo requirements (using partial typing).
 import copy
 import itertools
 import operator
+import textwrap
 import types as pytypes
 import warnings
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple, Union
+from typing import Any, Dict, List, Set, Tuple, Union
 
 import numba
 import numpy as np
@@ -336,6 +337,9 @@ class BodoTypeInference(PartialTypeInference):
                     typemap[stmt.target.name] = types.unknown
 
         return types.unknown not in typemap.values()
+
+
+unresolved_types = (None, types.unknown, types.undefined)
 
 
 class TypingTransforms:
@@ -3159,10 +3163,13 @@ class TypingTransforms:
             )
 
         if func_mod == "bodo.libs.stream_join":
-            return self._run_call_stream_join(assign, rhs, func_name)
+            return self._run_call_stream_join(assign, rhs, func_name, label)
 
         if func_mod == "bodo.libs.stream_groupby":
             return self._run_call_stream_groupby(assign, rhs, func_name)
+
+        if func_mod == "bodo.libs.table_builder":
+            return self._run_call_table_builder(assign, rhs, func_name, label)
 
         return [assign]
 
@@ -4397,12 +4404,200 @@ class TypingTransforms:
             find_build_tuple(self.func_ir, args_var)
         return apply_assign, args_var
 
-    def _run_call_stream_join(self, assign, rhs, func_name):  # pragma: no cover
+    def _get_state_defining_call(self, state, fn):
+        """Find the expression defining `state` (e.g. join/table builder state)
+        and return it only if it is a call to `fn`."""
+        defn = get_definition(self.func_ir, state)
+        init = find_callname(self.func_ir, defn)
+        if init != fn:
+            raise GuardException("initialization is not the expected call")
+        return defn
+
+    def _replace_state_definition(
+        self,
+        func_text: str,
+        func_name: str,
+        extra_globals: Dict[str, Any],
+        args: Tuple[Any],
+        retvar,
+        def_to_replace,
+        label_of_replacer: int,
+    ):
+        """Replace the definition of some state variable (e.g. join/table
+        builder)
+        Note that this transformation requires that the definition we are
+        replacing is in a different basic block. Otherwise we will be modifying
+        the current block while iterating over it.
+
+        e.g.:
+          # this is ok:
+          table_builder = bodo.libs.table_builder.init_table_builder_state()
+          ...
+          while foo:
+            ...
+            bodo.libs.table_builder.table_builder_append(table_builder, T0)
+            ...
+
+          # this is NOT ok
+          table_builder = bodo.libs.table_builder.init_table_builder_state()
+          ...
+          bodo.libs.table_builder.table_builder_append(table_builder, T0)
+          ...
+
+        Args:
+            func_text (str): Source defining a new function where the body will
+              replace the old definition
+            func_name (str): Name of the new function defined in func_text
+            extra_globals (Dict[str, Any]): Additional globals to use while
+              evaluating func_text
+            args (Tuple[Any]): Arguments to pass to the function
+            retvar: ir Node corresponding to the variable being assigned to
+            def_to_replace: ir Node corresponding to original definition of retvar
+            label_of_replacer: label of block currently being iterated during
+              the transformation
+        """
+        loc_vars = {}
+        exec(
+            func_text,
+            {"bodo": bodo, **extra_globals},
+            loc_vars,
+        )
+        func = loc_vars[func_name]
+        new_nodes = compile_func_single_block(
+            func,
+            args,
+            retvar,
+            self,
+            extra_globals=extra_globals,
+        )
+        label_of_replacee = self.rhs_labels[def_to_replace]
+        assert (
+            label_of_replacer != label_of_replacee
+        ), "Invalid replacement of definition"
+
+        block = self.func_ir.blocks[label_of_replacee]
+        remove_line = -1
+        for i, stmt in enumerate(block.body):
+            # Find the instruction
+            if is_assign(stmt) and stmt.target.name == retvar.name:
+                # Just want to set i here
+                remove_line = i
+                break
+        assert (
+            remove_line != -1
+        ), "Could not find original table builder state to replace"
+        block.body = (
+            block.body[:remove_line] + new_nodes + block.body[remove_line + 1 :]
+        )
+        # Replicate the changes that would occur to defintions and labels if this was
+        # done in the active block.
+
+        # Delete the old definition. Note the function may cause an intermediate assignment,
+        # so we need to delete all definitions.
+        assert (
+            len(self.func_ir._definitions[retvar.name])
+        ) == 1, "There must be exactly 1 definition for table builder state."
+        del self.func_ir._definitions[retvar.name]
+        update_node_list_definitions(new_nodes, self.func_ir)
+        # Update the labels as well
+        for inst in new_nodes:
+            if is_assign(inst):
+                self.rhs_labels[inst.value] = label_of_replacee
+        self.needs_transform = True
+        self.changed = True
+        return new_nodes
+
+    def _run_call_table_builder(
+        self, assign, rhs, func_name, label
+    ):  # pragma: no cover
+        """
+        Handle the typing pass information needed for updating the type of the
+        input table for TableBuilderStateType
+        """
+        if func_name == "init_table_builder_state":
+            expected_arg = get_call_expr_arg(
+                "init_table_builder_state",
+                rhs.args,
+                dict(rhs.kws),
+                0,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+        elif func_name == "table_builder_append":
+            builder_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(builder_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            builder_def = guard(
+                self._get_state_defining_call,
+                builder_state,
+                ("init_table_builder_state", "bodo.libs.table_builder"),
+            )
+            if builder_def is None:
+                self.needs_transform = True
+                return [assign]
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_table_builder_state",
+                builder_def.args,
+                dict(builder_def.kws),
+                0,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            # Check that the build/probe type match.
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            if input_table_type != output_type.build_table_type:
+                args = builder_def.args[:1]
+                new_type = bodo.libs.table_builder.TableBuilderStateType(
+                    input_table_type
+                )
+                func_text = textwrap.dedent(
+                    f"""\
+                    def impl():
+                      return bodo.libs.table_builder.init_table_builder_state(
+                          expected_state_type=_expected_state_type
+                       )
+                """
+                )
+                self._replace_state_definition(
+                    func_text,
+                    "impl",
+                    {"_expected_state_type": new_type},
+                    args,
+                    builder_state,
+                    builder_def,
+                    label,
+                )
+        return [assign]
+
+    def _run_call_stream_join(self, assign, rhs, func_name, label):  # pragma: no cover
         """
         Handle the typing pass information needed for updating the join state with
         streaming join.
         """
-        unresolved_types = (None, types.unknown, types.undefined)
         if func_name == "init_join_state":
             expected_arg = get_call_expr_arg(
                 "init_join_state",
@@ -4440,17 +4635,13 @@ class TypingTransforms:
 
             # Fetch the join information from the definition
             join_state = rhs.args[0]
-            join_def = guard(get_definition, self.func_ir, join_state)
+            join_def = self._get_state_defining_call(
+                join_state, ("init_join_state", "bodo.libs.stream_join")
+            )
             if join_def is None:
-                # If we can't find the definition we need to transform
                 self.needs_transform = True
                 return [assign]
-            state_init = guard(find_callname, self.func_ir, join_def)
-            # Verify we are at init_join_state and we can fetch the call name.
-            if state_init != ("init_join_state", "bodo.libs.stream_join"):
-                self.needs_transform = True
-                return [assign]
-                # Fetch the expected type.
+            # Fetch the expected type.
             expected_arg = get_call_expr_arg(
                 "init_join_state",
                 join_def.args,
@@ -4537,53 +4728,15 @@ class TypingTransforms:
                         non_equi_condition={non_equi_val},
                     )
                 """
-                loc_vars = {}
-                exec(
+                self._replace_state_definition(
                     func_text,
-                    {"bodo": bodo, "_expected_state_type": new_type},
-                    loc_vars,
-                )
-                func = loc_vars["impl"]
-
-                new_nodes = compile_func_single_block(
-                    func,
+                    "impl",
+                    {"_expected_state_type": new_type},
                     args,
                     join_state,
-                    self,
-                    extra_globals={"_expected_state_type": new_type},
+                    join_def,
+                    label,
                 )
-                # Find the label.
-                label = self.rhs_labels[join_def]
-                block = self.func_ir.blocks[label]
-                remove_line = -1
-                for i, stmt in enumerate(block.body):
-                    # Find the instruction
-                    if is_assign(stmt) and stmt.target.name == join_state.name:
-                        # Just want to set i here
-                        remove_line = i
-                        break
-                assert (
-                    remove_line != -1
-                ), "Could not find original join state to replace"
-                block.body = (
-                    block.body[:remove_line] + new_nodes + block.body[remove_line + 1 :]
-                )
-                # Replicate the changes that would occur to defintions and labels if this was
-                # done in the active block.
-
-                # Delete the old definition. Note the function may cause an intermediate assignment,
-                # so we need to delete all definitions.
-                assert (
-                    len(self.func_ir._definitions[join_state.name])
-                ) == 1, "There must be exactly 1 definition for join state."
-                del self.func_ir._definitions[join_state.name]
-                update_node_list_definitions(new_nodes, self.func_ir)
-                # Update the labels as well
-                for inst in new_nodes:
-                    if is_assign(inst):
-                        self.rhs_labels[inst.value] = label
-                self.needs_transform = True
-                self.changed = True
 
         return [assign]
 
@@ -4592,7 +4745,6 @@ class TypingTransforms:
         Handle the typing pass information needed for updating the groupby state with
         streaming groupby.
         """
-        unresolved_types = (None, types.unknown, types.undefined)
         if func_name == "init_groupby_state":
             expected_arg = get_call_expr_arg(
                 "init_groupby_state",
