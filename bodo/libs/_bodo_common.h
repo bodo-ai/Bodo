@@ -1306,6 +1306,7 @@ PyMODINIT_FUNC PyInit_stream_join_cpp(void);
 PyMODINIT_FUNC PyInit_listagg(void);
 PyMODINIT_FUNC PyInit_stream_groupby_cpp(void);
 PyMODINIT_FUNC PyInit_stream_dict_encoding_cpp(void);
+PyMODINIT_FUNC PyInit_table_builder_cpp(void);
 #ifdef IS_TESTING
 PyMODINIT_FUNC PyInit_test_cpp(void);
 #endif

@@ -1537,10 +1537,7 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[0].name, array_dists, in_dist, False)
             return
 
-        if fdef == (
-            "init_join_state",
-            "bodo.libs.stream_join",
-        ):  # pragma: no cover
+        if fdef == ("init_join_state", "bodo.libs.stream_join"):  # pragma: no cover
             # Initialize join state to 1D
             if lhs not in array_dists:
                 default_dist = (Distribution.OneD, Distribution.OneD)
@@ -1620,9 +1617,9 @@ class DistributedAnalysis:
             self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             return
 
-        if fdef == (
-            "init_groupby_state",
-            "bodo.libs.stream_groupby",
+        if fdef in (
+            ("init_groupby_state", "bodo.libs.stream_groupby"),
+            ("init_table_builder_state", "bodo.libs.table_builder"),
         ):  # pragma: no cover
             # Initialize groupby state to 1D
             if lhs not in array_dists:
@@ -1660,6 +1657,20 @@ class DistributedAnalysis:
 
             # Update the state
             self._set_var_dist(rhs.args[0].name, array_dists, state_dist, False)
+            return
+
+        if fdef == (
+            "table_builder_finalize",
+            "bodo.libs.table_builder",
+        ):  # pragma: no cover
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if fdef == (
+            "table_builder_append",
+            "bodo.libs.table_builder",
+        ):  # pragma: no cover
+            self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             return
 
         if (

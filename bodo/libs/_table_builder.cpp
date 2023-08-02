@@ -1,5 +1,6 @@
 #include "_table_builder.h"
 #include "_array_hash.h"
+#include "_stream_join.h"
 
 /* -------------------------- ArrayBuildBuffer ---------------------------- */
 
@@ -645,3 +646,72 @@ std::shared_ptr<table_info> alloc_table_like(
 }
 
 /* ------------------------------------------------------------------------ */
+
+struct TableBuilderState {
+    std::vector<int8_t> arr_c_types;
+    std::vector<int8_t> arr_array_types;
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    TableBuildBuffer builder;
+
+    TableBuilderState(std::vector<int8_t> _arr_c_types,
+                      std::vector<int8_t> _arr_array_types)
+        : arr_c_types(std::move(_arr_c_types)),
+          arr_array_types(std::move(_arr_array_types)) {
+        // Create dictionary builders for all columns
+        for (size_t i = 0; i < arr_array_types.size(); i++) {
+            if (arr_array_types[i] == bodo_array_type::DICT) {
+                std::shared_ptr<array_info> dict = alloc_array(
+                    0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
+                dict_builders.emplace_back(
+                    std::make_shared<DictionaryBuilder>(dict, false));
+            } else {
+                dict_builders.emplace_back(nullptr);
+            }
+        }
+        builder = TableBuildBuffer(arr_c_types, arr_array_types, dict_builders);
+    }
+};
+
+TableBuilderState* table_builder_state_init_py_entry(int8_t* arr_c_types,
+                                                     int8_t* arr_array_types,
+                                                     int n_arrs) {
+    std::vector<int8_t> ctype_vec(n_arrs);
+    std::vector<int8_t> ctype_arr_vec(n_arrs);
+    for (int i = 0; i < n_arrs; i++) {
+        ctype_vec[i] = arr_c_types[i];
+        ctype_arr_vec[i] = arr_array_types[i];
+    }
+    auto* state = new TableBuilderState(ctype_vec, ctype_arr_vec);
+    return state;
+}
+
+void table_builder_append_py_entry(TableBuilderState* state,
+                                   table_info* in_table) {
+    std::shared_ptr<table_info> tmp_table(in_table);
+
+    tmp_table = unify_dictionary_arrays_helper(tmp_table, state->dict_builders,
+                                               0, false);
+    state->builder.ReserveTable(tmp_table);
+    state->builder.AppendBatch(tmp_table);
+}
+
+table_info* table_builder_finalize(TableBuilderState* state) {
+    auto* rettable = new table_info(*state->builder.data_table);
+    delete state;
+    return rettable;
+}
+
+PyMODINIT_FUNC PyInit_table_builder_cpp(void) {
+    PyObject* m;
+    MOD_DEF(m, "table_builder_cpp", "No docs", NULL);
+    if (m == NULL) {
+        return NULL;
+    }
+
+    bodo_common_init();
+
+    SetAttrStringFromVoidPtr(m, table_builder_state_init_py_entry);
+    SetAttrStringFromVoidPtr(m, table_builder_append_py_entry);
+    SetAttrStringFromVoidPtr(m, table_builder_finalize);
+    return m;
+}
