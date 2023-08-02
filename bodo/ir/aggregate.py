@@ -449,15 +449,30 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_pre_shuffle = 2
         func.ncols_post_shuffle = 2
         return func
-    if func_name in supported_agg_funcs[:-11]:
+    if func_name in list_cumulative or func_name in {
+        "nunique",
+        "shift",
+        "head",
+        "transform",
+        "count",
+        "sum",
+        "max",
+        "min",
+        "size",
+        "mean",
+        "median",
+    }:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.fname = func_name
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1
-        skipdropna = True
+        skip_na_data = True
         shift_periods_t = 1
         head_n = -1
+
+        # Check for skipna/dropna argument, for the functions that support it.
+        # (currently only "cumsum", "cumprod", "cummin", "cummax", and "nunique")
         if isinstance(rhs, ir.Expr):
             for erec in rhs.kws:
                 # Type checking should be handled at the overload/bound_func level.
@@ -465,8 +480,8 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                 # output column.
                 if func_name in list_cumulative:
                     if erec[0] == "skipna":
-                        skipdropna = guard(find_const, func_ir, erec[1])
-                        if not isinstance(skipdropna, bool):
+                        skip_na_data = guard(find_const, func_ir, erec[1])
+                        if not isinstance(skip_na_data, bool):  # pragma: no cover
                             raise BodoError(
                                 "For {} argument of skipna should be a boolean".format(
                                     func_name
@@ -474,8 +489,8 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                             )
                 if func_name == "nunique":
                     if erec[0] == "dropna":
-                        skipdropna = guard(find_const, func_ir, erec[1])
-                        if not isinstance(skipdropna, bool):
+                        skip_na_data = guard(find_const, func_ir, erec[1])
+                        if not isinstance(skip_na_data, bool):  # pragma: no cover
                             raise BodoError(
                                 "argument of dropna to nunique should be a boolean"
                             )
@@ -509,7 +524,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                 raise BodoError(
                     f"groupby.{func_name} does not work with negative values."
                 )
-        func.skipdropna = skipdropna
+        func.skip_na_data = skip_na_data
         func.periods = shift_periods_t
         func.head_n = head_n
         if func_name == "transform":
@@ -583,7 +598,10 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         return func
 
     # agg case
-    assert func_name in ["agg", "aggregate"]
+    assert func_name in [
+        "agg",
+        "aggregate",
+    ], f"Expected agg or aggregate function, found: {func_name}"
 
     # NOTE: assuming typemap is provided here
     assert typemap is not None
@@ -1990,7 +2008,7 @@ def gen_top_level_agg_func(
     func_ncols = []
     # number of redvars for each udf function
     udf_ncols = []
-    skipdropna = False
+    skip_na_data = False
     shift_periods = 1
     head_n = -1
     num_cum_funcs = 0
@@ -2024,8 +2042,8 @@ def gen_top_level_agg_func(
             do_combine = False
         if func.ftype in list_cumulative:
             num_cum_funcs += 1
-        if hasattr(func, "skipdropna"):
-            skipdropna = func.skipdropna
+        if hasattr(func, "skip_na_data"):
+            skip_na_data = func.skip_na_data
         if func.ftype == "shift":
             shift_periods = func.periods
             do_combine = False  # See median/nunique note ^
@@ -2255,7 +2273,7 @@ def gen_top_level_agg_func(
     # single-element numpy array to return number of rows from C++
     func_text += "    total_rows_np = np.array([0], dtype=np.int64)\n"
     # call C++ groupby
-    # We pass the logical arguments to the function (skipdropna, return_key, same_index, ...)
+    # We pass the logical arguments to the function (skip_na_data, return_key, same_index, ...)
 
     # Determine the subset of the keys to shuffle on
     n_shuffle_keys = (
@@ -2265,7 +2283,7 @@ def gen_top_level_agg_func(
     func_text += (
         f"    out_table = groupby_and_aggregate(table, {n_keys}, cols_per_func.ctypes, n_window_calls_per_func.ctypes,"
         f"{len(allfuncs)}, {agg_node.input_has_index}, ftypes.ctypes, func_offsets.ctypes, "
-        f"udf_ncols.ctypes, {parallel}, {skipdropna}, {shift_periods}, "
+        f"udf_ncols.ctypes, {parallel}, {skip_na_data}, {shift_periods}, "
         f"transform_funcs.ctypes, {head_n}, {agg_node.return_key}, {agg_node.same_index}, "
         f"{agg_node.dropna}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, "
         f"cpp_cb_general_addr, udf_table_dummy, total_rows_np.ctypes, window_ascending.ctypes, "

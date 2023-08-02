@@ -43,7 +43,7 @@ int determine_groupby_strategy(std::shared_ptr<table_info> in_table,
  * @param ftypes the type of operations used by groupby
  * @param func_offsets The offsets for the columns used in the functions.
  * @param is_parallel Is the computation parallel or not?
- * @param skipdropna Should we skip dropna?
+ * @param skip_na_data Should we skip na values?
  * @param return_key Should we return the key?
  * @param return_index Should we return the index?
  * @param use_sql_rules Should we use SQL rules?
@@ -53,7 +53,7 @@ int determine_groupby_strategy(std::shared_ptr<table_info> in_table,
 std::shared_ptr<table_info> mpi_exscan_computation(
     std::shared_ptr<array_info> cat_column,
     std::shared_ptr<table_info> in_table, int64_t num_keys, int* ftypes,
-    int* func_offsets, bool is_parallel, bool skipdropna, bool return_key,
+    int* func_offsets, bool is_parallel, bool skip_na_data, bool return_key,
     bool return_index, bool use_sql_rules);
 
 /**

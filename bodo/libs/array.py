@@ -2681,7 +2681,7 @@ def groupby_and_aggregate(
     func_offsets,
     udf_n_redvars,
     is_parallel,
-    skipdropna_t,
+    skip_na_data_t,
     shift_periods_t,
     transform_func,
     head_n,

@@ -83,7 +83,7 @@ struct grouping_info {
  * @param udf_nredvars[i] is the number of redvar columns needed by udf i
  * @param is_parallel: true if needs to run in parallel (distributed data on
  * multiple processes)
- * @param skipdropna: whether to drop NaN values or not from the computation
+ * @param skip_na_data: whether to drop NaN values or not from the computation
  *                    (dropna for nunique and skipna for median/cumsum/cumprod)
  * @param periods: shift value to use with gb.shift operation.
  * @param transform_funcs: function number(s) to use with transform operation.
@@ -123,9 +123,9 @@ table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, int8_t* ncols_per_func,
     int8_t* n_window_calls_per_func, int64_t num_funcs, bool input_has_index,
     int* ftypes, int* func_offsets, int* udf_nredvars, bool is_parallel,
-    bool skipdropna, int64_t periods, int64_t* transform_funcs, int64_t head_n,
-    bool return_key, bool return_index, bool key_dropna, void* update_cb,
-    void* combine_cb, void* eval_cb, void* general_udfs_cb,
+    bool skip_na_data, int64_t periods, int64_t* transform_funcs,
+    int64_t head_n, bool return_key, bool return_index, bool key_dropna,
+    void* update_cb, void* combine_cb, void* eval_cb, void* general_udfs_cb,
     table_info* udf_dummy_table, int64_t* n_out_rows, bool* window_ascending,
     bool* window_na_position, void** window_args,
     int8_t* n_window_args_per_func, int* n_input_cols_per_func,
