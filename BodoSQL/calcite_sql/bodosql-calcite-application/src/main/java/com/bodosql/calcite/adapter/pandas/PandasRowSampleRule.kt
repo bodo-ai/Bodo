@@ -4,7 +4,7 @@ import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
-import org.apache.calcite.rel.core.RowSample
+import com.bodosql.calcite.rel.core.RowSample
 
 class PandasRowSampleRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
