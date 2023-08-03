@@ -29,6 +29,7 @@ import org.apache.calcite.runtime.FlatLists;
 import org.apache.calcite.runtime.GeoFunctions;
 import org.apache.calcite.runtime.Geometries;
 import org.apache.calcite.sql.SqlCollation;
+import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
@@ -540,9 +541,9 @@ public class RexLiteral extends RexNode {
   /** Returns a list of the time units covered by an interval type such
    * as HOUR TO SECOND. Adds MILLISECOND if the end is SECOND, to deal with
    * fractional seconds. */
-  private static List<TimeUnit> getTimeUnits(SqlTypeName typeName) {
-    final TimeUnit start = typeName.getStartUnit();
-    final TimeUnit end = typeName.getEndUnit();
+  private static List<TimeUnit> getTimeUnits(SqlIntervalQualifier qualifier) {
+    final TimeUnit start = qualifier.getStartUnit() == null ? qualifier.getEndUnit() : qualifier.getStartUnit();
+    final TimeUnit end = qualifier.getEndUnit() == null ? qualifier.getStartUnit() : qualifier.getEndUnit();
     final ImmutableList<TimeUnit> list =
         TIME_UNITS.subList(start.ordinal(), end.ordinal() + 1);
     if (end == TimeUnit.SECOND) {
@@ -552,7 +553,7 @@ public class RexLiteral extends RexNode {
   }
 
   private String intervalString(BigDecimal v) {
-    final List<TimeUnit> timeUnits = getTimeUnits(type.getSqlTypeName());
+    final List<TimeUnit> timeUnits = getTimeUnits(type.getIntervalQualifier());
     final StringBuilder b = new StringBuilder();
     for (TimeUnit timeUnit : timeUnits) {
       final BigDecimal[] result = v.divideAndRemainder(timeUnit.multiplier);
