@@ -276,4 +276,25 @@ public class StringFnCodeGen {
       throw new BodoSQLCodegenException("Invalid number of arguments passed to REPLACE.");
     }
   }
+
+  /**
+   * Generate python code for SHA2
+   *
+   * @param operands Input arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Generated code
+   */
+  public static Expr generateSHA2(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    if (operands.size() == 1) {
+      return ExprKt.BodoSQLKernel(
+          "sha2",
+          List.of(operands.get(0), new Expr.IntegerLiteral(256)), streamingNamedArgs);
+    } else if (operands.size() == 2) {
+      return ExprKt.BodoSQLKernel("sha2", operands, streamingNamedArgs);
+    } else {
+      throw new BodoSQLCodegenException("Invalid number of arguments passed to SHA2.");
+    }
+  }
 }

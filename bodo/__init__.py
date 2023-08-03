@@ -173,6 +173,7 @@ from numba.core.types import List
 
 import bodo.ext
 import bodo.libs
+import bodo.libs.bodosql_crypto_funcs
 import bodo.libs.distributed_api
 import bodo.libs.timsort
 import bodo.libs.stream_join
