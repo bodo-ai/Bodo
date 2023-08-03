@@ -163,7 +163,7 @@ concept NullSentinelDtype = (float_dtype<DType> || datetime_timedelta<DType>);
 // select dtypes that can have sentinel NAs in SQL which
 // represent NULL.
 template <Bodo_CTypes::CTypeEnum DType>
-concept SQLNASentinelDtype = DType == Bodo_CTypes::TIMEDELTA;
+concept SQLNASentinelDtype = datetime_timedelta<DType>;
 
 /**
  * @brief Returns a NA value for the corresponding type. Used for
