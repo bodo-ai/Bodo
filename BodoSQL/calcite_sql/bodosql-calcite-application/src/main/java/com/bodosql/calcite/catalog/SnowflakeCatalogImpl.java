@@ -3,7 +3,6 @@ package com.bodosql.calcite.catalog;
 import static java.lang.Math.min;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
-import com.bodosql.calcite.adapter.snowflake.SnowflakeSqlDialect;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
@@ -38,6 +37,7 @@ import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
+import org.apache.calcite.sql.dialect.SnowflakeSqlDialect;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BodoTZInfo;
