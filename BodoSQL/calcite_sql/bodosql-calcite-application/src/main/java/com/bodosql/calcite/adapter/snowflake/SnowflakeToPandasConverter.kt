@@ -33,7 +33,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     override fun loggingTitle() = "IO TIMING"
 
     override fun nodeDetails() = (if (input is SnowflakeTableScan) {
-        getTableName()
+        getTableName(input as SnowflakeRel)
     } else {
         getSnowflakeSQL()
     })!!
@@ -109,16 +109,16 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         return readExpr
     }
 
-    private fun getTableName()  = (input as SnowflakeTableScan).catalogTable.name
-    private fun getSchemaName()  = (input as SnowflakeTableScan).catalogTable.schema.name
+    private fun getTableName(input: SnowflakeRel)  = input.getCatalogTable().name
+    private fun getSchemaName(input: SnowflakeRel)  = input.getCatalogTable().schema.name
 
     /**
      * Generate the code required to read a table. This path is necessary because the Snowflake
      * API allows for more accurate sampling when operating directly on a table.
      */
     private fun sqlReadTable(tableScan: SnowflakeTableScan, ctx: PandasRel.BuildContext): Expr.Call {
-        val tableName = getTableName()
-        val schemaName = getSchemaName()
+        val tableName = getTableName(tableScan)
+        val schemaName = getSchemaName(tableScan)
         val relInput = input as SnowflakeRel
         val args = listOf(
             Expr.StringLiteral(tableName),

@@ -1,6 +1,5 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
 import com.bodosql.calcite.table.CatalogTableImpl
 import com.bodosql.calcite.traits.BatchingProperty
 import com.google.common.collect.ImmutableList
@@ -14,7 +13,7 @@ import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl
 import org.apache.calcite.rel.type.RelRecordType
 
-class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: RelTraitSet, table: RelOptTable?, val catalogTable: CatalogTableImpl) :
+class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: RelTraitSet, table: RelOptTable?, private val catalogTable: CatalogTableImpl) :
     TableScan(cluster, traitSet, ImmutableList.of(), table), SnowflakeRel {
 
     /**
@@ -28,21 +27,10 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
         })
     }
 
+    override fun getCatalogTable(): CatalogTableImpl = catalogTable
+
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode {
         return SnowflakeTableScan(cluster, traitSet, table, catalogTable)
-    }
-
-    override fun generatePythonConnStr(schema: String): String {
-        // TODO(jsternberg): The catalog will specifically be SnowflakeCatalogImpl.
-        // This cast is a bad idea and is particularly unsafe and unverifiable using
-        // the compiler tools. It would be better if the catalog implementations were
-        // refactored to not be through an interface and we had an actual class type
-        // that referenced snowflake than needing to do it through a cast.
-        // That's a bit too much work to refactor quite yet, so this cast gets us
-        // through this time where the code is too abstract and we just need a way
-        // to convert over.
-        val catalog = catalogTable.catalog as SnowflakeCatalogImpl
-        return catalog.generatePythonConnStr(schema)
     }
 
     override fun register(planner: RelOptPlanner) {

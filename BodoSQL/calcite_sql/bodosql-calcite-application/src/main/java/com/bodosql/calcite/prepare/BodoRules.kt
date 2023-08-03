@@ -5,10 +5,7 @@ import com.bodosql.calcite.adapter.pandas.PandasJoinRule
 import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.application.bodo_sql_rules.*
 import com.bodosql.calcite.rel.core.RelFactories
-import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
-import com.bodosql.calcite.rel.logical.BodoLogicalFilter
-import com.bodosql.calcite.rel.logical.BodoLogicalJoin
-import com.bodosql.calcite.rel.logical.BodoLogicalProject
+import com.bodosql.calcite.rel.logical.*
 import com.google.common.collect.Iterables
 import org.apache.calcite.plan.RelOptRule
 import org.apache.calcite.rel.RelNode
@@ -282,7 +279,7 @@ object BodoRules {
     @JvmField
     val LIMIT_PROJECT_TRANSPOSE_RULE: RelOptRule =
         LimitProjectTransposeRule.Config.DEFAULT
-            .withOperandFor(Sort::class.java, BodoLogicalProject::class.java)
+            .withOperandFor(BodoLogicalSort::class.java, BodoLogicalProject::class.java)
             .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
             .toRule()
 

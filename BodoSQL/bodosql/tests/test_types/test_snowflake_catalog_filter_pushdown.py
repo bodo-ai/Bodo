@@ -393,8 +393,6 @@ def test_snowflake_catalog_limit_pushdown(memory_leak_check):
     )
 
     query = "select mycol from PUBLIC.BODOSQL_ALL_SUPPORTED WHERE mycol = 'A' LIMIT 5"
-    check_func(impl, (bc, query), py_output=py_output)
-
     # make sure filter + limit pushdown worked
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -584,8 +582,10 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" IS NOT NULL',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1017,8 +1017,10 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where b or c"
@@ -1033,8 +1035,10 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" OR "C"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query3 = f"Select a from {table_name} where b and c"
@@ -1049,8 +1053,10 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" AND "C"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1096,8 +1102,10 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where not(b or c)"
@@ -1112,8 +1120,10 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B" AND NOT "C"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query3 = f"Select a from {table_name} where not(b and c)"
@@ -1128,8 +1138,10 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B" OR NOT "C"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query4 = f"Select a from {table_name} where (not b) or c"
@@ -1144,8 +1156,10 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B" OR "C"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query5 = f"Select a from {table_name} where (not b) and c"
@@ -1160,8 +1174,10 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B" AND "C"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1209,8 +1225,10 @@ def test_snowflake_not_comparison_pushdown(
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" = 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where not (b <= 3)"
@@ -1225,8 +1243,10 @@ def test_snowflake_not_comparison_pushdown(
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" > 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query3 = f"Select a from {table_name} where not (b < 3)"
@@ -1241,8 +1261,10 @@ def test_snowflake_not_comparison_pushdown(
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" >= 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query4 = f"Select a from {table_name} where not (b >= 3)"
@@ -1257,8 +1279,10 @@ def test_snowflake_not_comparison_pushdown(
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" < 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query5 = f"Select a from {table_name} where not (b > 3)"
@@ -1273,8 +1297,10 @@ def test_snowflake_not_comparison_pushdown(
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" <= 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query6 = f"Select a from {table_name} where NOT((b > 3 OR b < 2) AND C)"
@@ -1337,8 +1363,10 @@ def test_snowflake_not_is_null_pushdown(test_db_snowflake_catalog, memory_leak_c
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" IS NOT NULL',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where not (b is not NULL)"
@@ -1354,7 +1382,8 @@ def test_snowflake_not_is_null_pushdown(test_db_snowflake_catalog, memory_leak_c
                 sort_output=True,
             )
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" IS NULL',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 

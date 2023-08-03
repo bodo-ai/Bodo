@@ -1,6 +1,5 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
 import com.bodosql.calcite.table.CatalogTableImpl
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.RelOptCluster
@@ -17,7 +16,7 @@ class SnowflakeSort private constructor(
     collation: RelCollation,
     offset: RexNode?,
     fetch: RexNode?,
-    val catalogTable: CatalogTableImpl,
+    private val catalogTable: CatalogTableImpl,
 ) :
     Sort(cluster, traitSet, input, collation, offset, fetch), SnowflakeRel {
 
@@ -31,10 +30,7 @@ class SnowflakeSort private constructor(
         return SnowflakeSort(cluster, traitSet, newInput, newCollation, offset, fetch, catalogTable)
     }
 
-    override fun generatePythonConnStr(schema: String): String {
-        val catalog = catalogTable.catalog as SnowflakeCatalogImpl
-        return catalog.generatePythonConnStr(schema)
-    }
+    override fun getCatalogTable(): CatalogTableImpl = catalogTable
 
     companion object {
         @JvmStatic
