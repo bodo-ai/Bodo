@@ -13,6 +13,7 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.type.BodoTZInfo;
+import org.apache.calcite.sql.type.TZAwareSqlType;
 
 /**
  * Definition of a table that is not associated with any schema. These tables include in memory
@@ -213,7 +214,7 @@ public class LocalTableImpl extends BodoSqlTable {
       BodoSQLColumn.BodoSQLColumnDataType newColType =
           BodoSQLColumn.BodoSQLColumnDataType.fromSqlType(colType);
       // getTZInfo() returns null if the type is not TZAware Timestamp
-      BodoTZInfo tzInfo = colType.getTZInfo();
+      BodoTZInfo tzInfo = TZAwareSqlType.getTZInfo(colType);
       BodoSQLColumn newCol = new BodoSQLColumnImpl(fieldName, newColType, false, tzInfo);
       extendedColumns.add(newCol);
     }

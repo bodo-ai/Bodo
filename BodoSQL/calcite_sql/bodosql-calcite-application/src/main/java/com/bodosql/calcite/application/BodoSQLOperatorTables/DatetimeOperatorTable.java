@@ -6,6 +6,7 @@ import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTabl
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 import com.google.common.collect.Sets;
 
 import java.util.*;
@@ -317,8 +318,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
         returnType = typeFactory.createSqlType(SqlTypeName.TIMESTAMP);
       } else {
         returnType =
-            typeFactory.createTZAwareSqlType(
-                binding.getTypeFactory().getTypeSystem().getDefaultTZInfo());
+            BodoRelDataTypeFactory.createTZAwareSqlType(typeFactory, null);
       }
     } else {
       throw new BodoSQLCodegenException(
@@ -678,11 +678,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding ->
-              opBinding
-                  .getTypeFactory()
-                  .createTZAwareSqlType(
-                      opBinding.getTypeFactory().getTypeSystem().getDefaultTZInfo()),
+          BodoReturnTypes.TZAWARE_TIMESTAMP,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -704,11 +700,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding ->
-              opBinding
-                  .getTypeFactory()
-                  .createTZAwareSqlType(
-                      opBinding.getTypeFactory().getTypeSystem().getDefaultTZInfo()),
+          BodoReturnTypes.TZAWARE_TIMESTAMP,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -724,11 +716,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding ->
-              opBinding
-                  .getTypeFactory()
-                  .createTZAwareSqlType(
-                      opBinding.getTypeFactory().getTypeSystem().getDefaultTZInfo()),
+          BodoReturnTypes.TZAWARE_TIMESTAMP,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -750,7 +738,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> opBinding.getTypeFactory().createTZAwareSqlType(BodoTZInfo.UTC),
+          BodoReturnTypes.UTC_TIMESTAMP,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -782,7 +770,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> opBinding.getTypeFactory().createTZAwareSqlType(BodoTZInfo.UTC),
+          BodoReturnTypes.UTC_TIMESTAMP,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,

@@ -23,9 +23,8 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.plan.CostFactory
-import com.bodosql.calcite.rel.core.RelFactories
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
-import com.bodosql.calcite.sql.validate.implicit.BodoTypeCoercionImpl
+import org.apache.calcite.sql.validate.implicit.BodoTypeCoercionImpl
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.avatica.util.Casing
 import org.apache.calcite.config.NullCollation

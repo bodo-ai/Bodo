@@ -11,6 +11,8 @@ import org.apache.calcite.sql.fun.SqlLibraryOperators;
 import org.apache.calcite.sql.type.*;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
+import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
+
 /**
  * Operator table which contains function definitions for functions usable in BodoSQL. This operator
  * table contains definition for functions which handle converting between different SQL types.
@@ -226,8 +228,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
     } else {
       // Otherwise we output a timezone-aware Timestamp with the local timestamp.
       returnType =
-          typeFactory.createTZAwareSqlType(
-              binding.getTypeFactory().getTypeSystem().getDefaultTZInfo());
+          BodoRelDataTypeFactory.createTZAwareSqlType(binding.getTypeFactory(), null);
       if (runtimeFailureIsNull) {
         // Note this path includes arguments for 0 that can fail at runtime.
         // If this runtimeFailureIsNull is set then failed conversions make
