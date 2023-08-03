@@ -129,12 +129,12 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
 
     private fun getSnowflakeSQL(): String {
         // Use the snowflake dialect for generating the sql string.
-        val rel2sql = RelToSqlConverter(SnowflakeSqlDialect.DEFAULT)
+        val rel2sql = RelToSqlConverter(BodoSnowflakeSqlDialect.DEFAULT)
         return rel2sql.visitRoot(input)
             .asSelect()
             .toSqlString { c ->
                 c.withClauseStartsLine(false)
-                    .withDialect(SnowflakeSqlDialect.DEFAULT)
+                    .withDialect(BodoSnowflakeSqlDialect.DEFAULT)
             }
             .toString()
     }

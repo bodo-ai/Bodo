@@ -211,7 +211,7 @@ object BodoPrograms {
         }
     }
 
-    private object LogicalConverterProgram : Program by ShuttleProgram(Visitor) {
+     object LogicalConverterProgram : Program by ShuttleProgram(Visitor) {
         private object Visitor : RelShuttleImpl() {
             override fun visit(project: LogicalProject): RelNode =
                 BodoLogicalProject.create(
@@ -303,7 +303,7 @@ object BodoPrograms {
      * Adds SnowflakeRel.CONVENTION to any SnowflakeTableScan nodes.
      * See the comment in SnowflakeTableScan about why this is needed.
      */
-    private class SnowflakeTraitAdder : Program by ShuttleProgram(Visitor) {
+     class SnowflakeTraitAdder : Program by ShuttleProgram(Visitor) {
         private object Visitor : RelShuttleImpl() {
             override fun visit(scan: TableScan): RelNode {
                 return when (scan) {
