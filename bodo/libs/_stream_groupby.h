@@ -82,6 +82,15 @@ class GroupbyState {
     std::shared_ptr<uint32_t[]> in_table_hashes = nullptr;
 
     // indices of input columns for each function
+    // f_in_offsets contains the offsets into f_in_cols.
+    // f_in_cols is a list of physical column indices.
+    // For example:
+    //
+    // f_in_offsets = (0, 1, 5)
+    // f_in_cols = (0, 7, 1, 3, 4, 0)
+    // The first function uses the columns in f_in_cols[0:1]. IE physical index
+    // 0 in the input table. The second function uses the column f_in_cols[1:5].
+    // IE physical index 7, 1, 3, 4, 0 in the input table.
     const std::vector<int32_t> f_in_offsets;
     const std::vector<int32_t> f_in_cols;
 
@@ -198,13 +207,17 @@ class GroupbyState {
             std::vector<std::shared_ptr<array_info>> input_cols;
             std::vector<bodo_array_type::arr_type_enum> in_arr_types;
             std::vector<Bodo_CTypes::CTypeEnum> in_dtypes;
-            for (size_t input_ind = (size_t)f_in_offsets[i];
-                 input_ind < (size_t)f_in_offsets[i + 1]; input_ind++) {
+            for (size_t logical_input_ind = (size_t)f_in_offsets[i];
+                 logical_input_ind < (size_t)f_in_offsets[i + 1];
+                 logical_input_ind++) {
+                size_t physical_input_ind =
+                    (size_t)f_in_cols[logical_input_ind];
                 input_cols.push_back(nullptr);
-                in_arr_types.push_back((bodo_array_type::arr_type_enum)
-                                           in_arr_array_types[input_ind]);
+                in_arr_types.push_back(
+                    (bodo_array_type::arr_type_enum)
+                        in_arr_array_types[physical_input_ind]);
                 in_dtypes.push_back(
-                    (Bodo_CTypes::CTypeEnum)in_arr_c_types[input_ind]);
+                    (Bodo_CTypes::CTypeEnum)in_arr_c_types[physical_input_ind]);
             }
             std::shared_ptr<BasicColSet> col_set = makeColSet(
                 input_cols, index_col, ftypes[i], do_combine, skip_na_data, 0,
