@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.calcite.plan;
+package com.bodosql.calcite.plan;
 
 /**
  * RelOptRowSamplingParameters represents the parameters necessary to

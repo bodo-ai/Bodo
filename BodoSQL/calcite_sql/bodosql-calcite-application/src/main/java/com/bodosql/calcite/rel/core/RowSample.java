@@ -14,11 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.calcite.rel.core;
+package com.bodosql.calcite.rel.core;
 
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.plan.RelOptRowSamplingParameters;
+import com.bodosql.calcite.plan.RelOptRowSamplingParameters;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelInput;
 import org.apache.calcite.rel.RelNode;
