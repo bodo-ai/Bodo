@@ -4,13 +4,7 @@ import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable
 import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelRule
 import org.apache.calcite.rel.core.Aggregate
-import org.apache.calcite.rel.core.Filter
-import org.apache.calcite.rex.RexCall
-import org.apache.calcite.rex.RexInputRef
-import org.apache.calcite.rex.RexLiteral
-import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.sql.SqlKind
-import org.apache.calcite.sql.type.SqlTypeUtil
 import org.immutables.value.Value
 
 @BodoSQLStyleImmutable
@@ -21,44 +15,38 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
         if (call == null) {
             return
         }
+        val (aggregate, rel) = extractNodes(call)
+        val catalogTable = rel.getCatalogTable()
 
-        val (aggregate, filter, scan) = extractNodes(call)
-        val catalogTable = scan.catalogTable
-
-        val newNode = scan.let { input ->
-            filter?.let { f ->
-                // TODO(jsternberg): There should be another planner rule that's already
-                // constructed the SnowflakeFilter and this rule should not have to do that.
-                // That would simplify this rule some amount, but we don't presently have
-                // proper code generation for the snowflake filter and it may conflict
-                // with pushdowns in the bodosql code so we're just using this as a placeholder.
-                SnowflakeFilter.create(
-                    f.cluster,
-                    f.traitSet,
-                    input,
-                    f.condition,
-                    catalogTable,
-                )
-            } ?: input
-        }.let { input ->
-            SnowflakeAggregate.create(
-                aggregate.cluster,
-                aggregate.traitSet,
-                input,
-                aggregate.groupSet,
-                aggregate.groupSets,
-                aggregate.aggCallList.toList(),
-                catalogTable,
-            )
-        }
+        val newNode = SnowflakeAggregate.create(
+            aggregate.cluster,
+            aggregate.traitSet,
+            rel,
+            aggregate.groupSet,
+            aggregate.groupSets,
+            aggregate.aggCallList.toList(),
+            catalogTable,
+        )
         call.transformTo(newNode)
     }
 
-    private fun extractNodes(call: RelOptRuleCall): Triple<Aggregate, Filter?, SnowflakeTableScan> {
-        return if (call.rels.size == 3) {
-            Triple(call.rel(0), call.rel(1), call.rel(2))
-        } else {
-            Triple(call.rel(0), null, call.rel(1))
+    private fun extractNodes(call: RelOptRuleCall): Pair<Aggregate, SnowflakeRel> {
+        return when (call.rels.size) {
+            // Inputs are:
+            // Aggregate ->
+            //      CombineStreamsExchange ->
+            //          SnowflakeToPandasConverter ->
+            //             SnowflakeRel
+            4 -> Pair(call.rel(0), call.rel(3))
+            // Inputs are:
+            // Aggregate ->
+            //   SnowflakeToPandasConverter ->
+            //      SnowflakeRel
+            3 -> Pair(call.rel(0), call.rel(2))
+            // Inputs are:
+            // Aggregate ->
+            //    SnowflakeRel
+            else -> Pair(call.rel(0), call.rel(1))
         }
     }
 
@@ -86,58 +74,6 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
                     && aggregate.aggCallList.all { agg ->
                 SUPPORTED_AGGREGATES.contains(agg.aggregation.kind)
             }
-        }
-
-        private val SUPPORTED_CALLS = setOf(
-            // Logical operators.
-            SqlKind.AND,
-            SqlKind.OR,
-            SqlKind.NOT,
-            // Comparison operators.
-            SqlKind.EQUALS,
-            SqlKind.NOT_EQUALS,
-            SqlKind.NULL_EQUALS,
-            SqlKind.LESS_THAN,
-            SqlKind.LESS_THAN_OR_EQUAL,
-            SqlKind.GREATER_THAN,
-            SqlKind.GREATER_THAN_OR_EQUAL,
-            // Logical identity operators.
-            SqlKind.IS_FALSE,
-            SqlKind.IS_NOT_FALSE,
-            SqlKind.IS_TRUE,
-            SqlKind.IS_NOT_TRUE,
-            SqlKind.IS_NULL,
-            SqlKind.IS_NOT_NULL,
-            // Math operators.
-            SqlKind.PLUS,
-            SqlKind.MINUS,
-            SqlKind.TIMES,
-            SqlKind.DIVIDE,
-            SqlKind.MINUS_PREFIX,
-        )
-
-        @JvmStatic
-        fun isPushableFilter(filter: Filter): Boolean {
-            // Not sure what things are ok to push, but we're going to be fairly conservative
-            // and whitelist specific things rather than blacklist.
-            return filter.condition.accept(object : RexVisitorImpl<Boolean?>(true) {
-                override fun visitLiteral(literal: RexLiteral): Boolean {
-                    // We can't yet write the rex literals for intervals back to sql.
-                    // See SnowflakeSqlDialect for the area where we need to implement this.
-                    return !SqlTypeUtil.isInterval(literal.type)
-                }
-
-                override fun visitInputRef(inputRef: RexInputRef): Boolean = true
-
-                override fun visitCall(call: RexCall): Boolean {
-                    // Allow select operators to be pushed down.
-                    // This list is non-exhaustive, but are generally the functions we've seen
-                    // and verified to work. Add more as appropriate.
-                    return SUPPORTED_CALLS.contains(call.kind) &&
-                            // Arguments also need to be pushable.
-                            call.operands.all { op -> op.accept(this) ?: false }
-                }
-            }) ?: false
         }
     }
 

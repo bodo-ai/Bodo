@@ -1,8 +1,8 @@
 package com.bodosql.calcite.adapter.snowflake;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
-import com.bodosql.calcite.rel.logical.BodoLogicalAggregate;
-import com.bodosql.calcite.rel.logical.BodoLogicalFilter;
+import com.bodosql.calcite.traits.CombineStreamsExchange;
+import org.apache.calcite.rel.core.Aggregate;
 import org.immutables.value.Value;
 import org.jetbrains.annotations.NotNull;
 
@@ -15,28 +15,45 @@ public class SnowflakeAggregateRule extends AbstractSnowflakeAggregateRule {
 
   @Value.Immutable
   public interface Config extends AbstractSnowflakeAggregateRule.Config {
-    Config DEFAULT =
+    Config DEFAULT_CONFIG =
         ImmutableSnowflakeAggregateRule.Config.of()
             .withOperandSupplier(
                 b0 ->
-                    b0.operand(BodoLogicalAggregate.class)
+                    b0.operand(Aggregate.class)
                         .predicate(SnowflakeAggregateRule::isPushableAggregate)
-                        .oneInput(b1 -> b1.operand(SnowflakeTableScan.class).noInputs()))
+                        .oneInput(b1 -> b1.operand(SnowflakeRel.class).anyInputs()))
             .as(Config.class);
 
-    Config WITH_FILTER =
+    Config NESTED_CONFIG =
         ImmutableSnowflakeAggregateRule.Config.of()
             .withOperandSupplier(
                 b0 ->
-                    b0.operand(BodoLogicalAggregate.class)
+                    b0.operand(Aggregate.class)
                         .predicate(SnowflakeAggregateRule::isPushableAggregate)
                         .oneInput(
                             b1 ->
-                                b1.operand(BodoLogicalFilter.class)
-                                    .predicate(SnowflakeAggregateRule::isPushableFilter)
+                                b1.operand(SnowflakeToPandasConverter.class)
+                                    .oneInput(b2 -> b2.operand(SnowflakeRel.class).anyInputs())))
+            .withDescription("SnowflakeAggregateRule::WithSnowflakeToPandasConverter")
+            .as(Config.class);
+
+    Config STREAMING_CONFIG =
+        ImmutableSnowflakeAggregateRule.Config.of()
+            .withOperandSupplier(
+                b0 ->
+                    b0.operand(Aggregate.class)
+                        .predicate(SnowflakeAggregateRule::isPushableAggregate)
+                        .oneInput(
+                            b1 ->
+                                b1.operand(CombineStreamsExchange.class)
                                     .oneInput(
-                                        b2 -> b2.operand(SnowflakeTableScan.class).noInputs())))
-            .withDescription("SnowflakeAggregateRule::WithFilter")
+                                        b2 ->
+                                            b2.operand(SnowflakeToPandasConverter.class)
+                                                .oneInput(
+                                                    b3 ->
+                                                        b3.operand(SnowflakeRel.class)
+                                                            .anyInputs()))))
+            .withDescription("SnowflakeAggregateRule::WithCombineStreamsExchange")
             .as(Config.class);
 
     @Override

@@ -252,6 +252,14 @@ object BodoPrograms {
                     agg.groupSets,
                     agg.aggCallList
                 )
+
+            override fun visit(sort: LogicalSort): RelNode =
+                BodoLogicalSort.create(
+                    sort.input.accept(this),
+                    sort.collation,
+                    sort.offset,
+                    sort.fetch
+                )
         }
     }
 

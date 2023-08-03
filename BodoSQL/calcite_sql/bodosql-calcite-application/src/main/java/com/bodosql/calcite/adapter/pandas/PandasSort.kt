@@ -2,12 +2,12 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.rel.core.SortBase
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelCollation
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.core.Sort
 import org.apache.calcite.rex.RexNode
 
 class PandasSort(
@@ -17,7 +17,7 @@ class PandasSort(
     collation: RelCollation,
     offset: RexNode?,
     fetch: RexNode?,
-) : Sort(cluster, traitSet, input, collation, offset, fetch), PandasRel {
+) : SortBase(cluster, traitSet, input, collation, offset, fetch), PandasRel {
 
     init {
         assert(convention == PandasRel.CONVENTION)
@@ -25,12 +25,12 @@ class PandasSort(
 
     override fun copy(
         traitSet: RelTraitSet,
-        newInput: RelNode,
-        newCollation: RelCollation,
+        input: RelNode,
+        collation: RelCollation,
         offset: RexNode?,
         fetch: RexNode?
-    ): Sort {
-        return PandasSort(cluster, traitSet, newInput, newCollation, offset, fetch)
+    ): PandasSort {
+        return PandasSort(cluster, traitSet, input, collation, offset, fetch)
     }
 
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {

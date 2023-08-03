@@ -1,10 +1,10 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.rel.logical.BodoLogicalSort
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
-import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.Sort
 import org.apache.calcite.rel.logical.LogicalSort
 
@@ -13,7 +13,7 @@ class PandasSortRule private constructor(config: Config) : ConverterRule(config)
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                LogicalSort::class.java, Convention.NONE, PandasRel.CONVENTION,
+                BodoLogicalSort::class.java, Convention.NONE, PandasRel.CONVENTION,
                 "PandasSortRule")
             .withRuleFactory { config -> PandasSortRule(config) }
     }
