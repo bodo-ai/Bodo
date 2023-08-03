@@ -190,6 +190,7 @@ broadcasted_fixed_arg_functions = {
     "rtrim",
     "rtrimmed_length",
     "second_timestamp",
+    "sha2",
     "sign",
     "sin",
     "sinh",

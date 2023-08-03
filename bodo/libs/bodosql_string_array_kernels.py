@@ -2194,3 +2194,64 @@ def split_util(string, separator, dict_encoding_state, func_id):  # pragma: no c
         dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
         func_id_name="func_id" if use_dict_caching else None,
     )
+
+
+@numba.generated_jit(nopython=True)
+def sha2(msg, digest_size, dict_encoding_state=None, func_id=-1):
+    """Handles cases where sha2 receives optional arguments and forwards
+        to the appropriate version of the real implementation"""
+    args = [msg, digest_size]
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.sha2",
+                ["msg", "digest_size", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
+            )
+
+    def impl(msg, digest_size, dict_encoding_state=None, func_id=-1):
+        return sha2_util(msg, digest_size, dict_encoding_state, func_id)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def sha2_util(msg, digest_size, dict_encoding_state, func_id):
+    """A dedicated kernel for the SQL function SPLIT which takes in a
+               string, (or string column) and a separator string (or string column) and
+               returns the result strings in arrays
+
+    Args:
+        msg (string scalar/column): The strings(s) to be encrypted
+        digest_size (int): Size (in bits) of the output, corresponding to the specific
+            SHA-2 function used to encrypt the string
+
+    Returns:
+        String scalar/column: hex-encoded string containing the N-bit SHA-2 message digest
+    """
+    verify_string_binary_arg(msg, "SHA2", "msg")
+    verify_int_arg(digest_size, "SHA2", "digest_size")
+
+    arg_names = ["msg", "digest_size", "dict_encoding_state", "func_id"]
+    arg_types = [msg, digest_size, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
+    out_dtype = bodo.string_array_type
+    # TODO: support bytes for SHA2
+    if is_valid_binary_arg(msg):
+        scalar_text = "msg_str = arg0._to_str()\n"
+    else:
+        scalar_text = "msg_str = arg0\n"
+    scalar_text += "res[i] = bodo.libs.bodosql_crypto_funcs.sha2_algorithms(msg_str, arg1)"
+
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )

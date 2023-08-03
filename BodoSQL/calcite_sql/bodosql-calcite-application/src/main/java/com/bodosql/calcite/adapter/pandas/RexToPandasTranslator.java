@@ -68,6 +68,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.gen
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateInitcapInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generatePosition;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateReplace;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateSHA2;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateStrtok;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateSubstringCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateTrimFnCode;
@@ -1176,6 +1177,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         return generateInitcapInfo(operands, streamingNamedArgs);
       case "REPLACE":
         return generateReplace(operands, streamingNamedArgs);
+      case "SHA2":
+      case "SHA2_HEX":
+        return generateSHA2(operands, streamingNamedArgs);
       default:
         throw new BodoSQLCodegenException(String.format("Unexpected String function: %s", fnName));
     }
@@ -1698,6 +1702,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "SPLIT":
           case "EDITDISTANCE":
           case "INITCAP":
+          case "SHA2":
+          case "SHA2_HEX":
             return visitStringFunc(fnOperation, operands);
           case "DATE_TRUNC":
             dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(1));

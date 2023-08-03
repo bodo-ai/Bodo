@@ -1295,3 +1295,95 @@ def test_replace_two_args_column(memory_leak_check):
         check_names=False,
         expected_output=expected_output,
     )
+
+
+@pytest.mark.parametrize(
+    "query, output",
+[
+        pytest.param(
+            "SELECT SHA2('Default digest size is 256')",
+            "dac91c24b4686ce55713b01c5a21fff1cbce74db3a3e3feee36231471b13f96c",
+            id="default_digest_size",
+        ),
+        pytest.param(
+            "SELECT SHA2_HEX('Test SHA224 result', 224)",
+            "44d92c6ef8c8c89f721f8a4b63ab59caa3f267cfb2c111b576b7f221",
+            id="224",
+        ),
+        pytest.param(
+            "SELECT SHA2('Two arguments SHA256 test case', 256)",
+            "2e898ab336709daee16584ea08d8e75c14502d169e16584243b76ee6ddfaf5ca",
+            id="256",
+        ),
+        pytest.param(
+            "SELECT SHA2_HEX('fkghvjjgiuglj', 384)",
+            "2e472a1acd0f33c7707fdfcfc3dea65169e2962a0fb0e62c5d59c67b08314e58c5fe9698e37c8e1360174c8db4dbf6b4",
+            id="384",
+        ),
+        pytest.param(
+            "SELECT SHA2('*&IUYHKJB^TUYFD', 512)",
+            "581f65968e1cdaffe0603f394efcb33ae91c37c1d8da85b4491c24e476cdcd2d"
+            "50a219c5f6f46eaf753d32e79b58e2cd6776d12f6c18f6d43745b4a4eadab379",
+            id="512",
+        ),
+    ],
+)
+def test_sha2_scalars(query, output, memory_leak_check):
+    """Test SHA2 and SHA2_HEX work correctly with scalar inputs"""
+    check_query(
+        query,
+        {},
+        None,
+        check_names=False,
+        is_out_distributed=False,
+        expected_output=pd.DataFrame({"A": pd.Series([output])}),
+    )
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param(
+            "SELECT SHA2(A, 256) FROM table1",
+            id="256",
+        ),
+        pytest.param(
+            "SELECT CASE WHEN A IS NULL THEN NULL ELSE SHA2_HEX(A, 256) END FROM table1",
+            id="256_case",
+        ),
+        pytest.param(
+            "SELECT SHA2(B, 256) FROM table1",
+            id="256_binary",
+        ),
+    ],
+)
+def test_sha2_columns(query, memory_leak_check):
+    """Test SHA2 and SHA2_HEX work correctly with column inputs"""
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": ["abcabcabc", None, "kbykujdt", "no replace", "zzyyxxxzy"] * 4,
+                "B": [b"abcabcabc", None, b"kbykujdt", b"no replace", b"zzyyxxxzy"] * 4,
+            }
+        )
+    }
+    output = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [
+                    "76b99ab4be8521d78b19bcff7d1078aabeb477bd134f404094c92cd39f051c3e",
+                    None,
+                    "90babc4e5405e215a4bbdfaf13def1687ef0f00ad152705250890400b7a097a3",
+                    "0dc95e29e0583513cb4a75409bcdf9cee72eb647d0ee7f43fa47832b4efd4c23",
+                    "b3af10a334d34a4c6dee44530efd39a1b2564b443d5e617d209cb8921c642f7e",
+                ] * 4,
+            )
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        expected_output=output,
+    )

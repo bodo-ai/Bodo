@@ -585,6 +585,30 @@ public final class StringOperatorTable implements SqlOperatorTable {
           OperandTypes.STRING_STRING,
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction SHA2 =
+      new SqlFunction(
+          "SHA2",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.VARCHAR_2000,
+          null,
+          OperandTypes.or(
+              OperandTypes.STRING,
+              OperandTypes.STRING_INTEGER
+          ),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction SHA2_HEX =
+      new SqlFunction(
+          "SHA2_HEX",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.VARCHAR_2000,
+          null,
+          OperandTypes.or(
+              OperandTypes.STRING,
+              OperandTypes.STRING_INTEGER
+          ),
+          SqlFunctionCategory.STRING);
+
   private List<SqlOperator> stringOperatorList =
       Arrays.asList(
           CONCAT,
@@ -617,6 +641,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           INSERT,
           POSITION,
           CHARINDEX,
+          SHA2,
+          SHA2_HEX,
           SPLIT,
           SPLIT_PART,
           STRTOK,
