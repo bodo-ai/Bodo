@@ -1,12 +1,13 @@
 package com.bodosql.calcite.application.bodo_sql_rules;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.rel.logical.BodoLogicalProject;
+import com.bodosql.calcite.rel.logical.BodoLogicalSort;
 import com.google.common.collect.ImmutableList;
 import org.apache.calcite.plan.*;
 import org.apache.calcite.rel.*;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.Sort;
-import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.rules.TransformationRule;
 import org.immutables.value.Value;
 
@@ -54,7 +55,7 @@ public class LimitProjectTransposeRule extends RelRule<LimitProjectTransposeRule
   public interface Config extends RelRule.Config {
     LimitProjectTransposeRule.Config DEFAULT =
         ImmutableLimitProjectTransposeRule.Config.of()
-            .withOperandFor(Sort.class, LogicalProject.class);
+            .withOperandFor(BodoLogicalSort.class, BodoLogicalProject.class);
 
     @Override
     default RelOptRule toRule() {

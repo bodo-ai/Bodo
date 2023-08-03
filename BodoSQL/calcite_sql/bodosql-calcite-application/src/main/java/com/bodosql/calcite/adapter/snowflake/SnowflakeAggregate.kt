@@ -1,6 +1,5 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
 import com.bodosql.calcite.table.CatalogTableImpl
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.RelOptCluster
@@ -17,7 +16,7 @@ class SnowflakeAggregate private constructor(
     groupSet: ImmutableBitSet,
     groupSets: List<ImmutableBitSet>?,
     aggCalls: List<AggregateCall>,
-    val catalogTable: CatalogTableImpl,
+    private val catalogTable: CatalogTableImpl,
 ) :
     Aggregate(cluster, traitSet, listOf(), input, groupSet, groupSets, aggCalls),
     SnowflakeRel {
@@ -32,10 +31,7 @@ class SnowflakeAggregate private constructor(
         return SnowflakeAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls, catalogTable)
     }
 
-    override fun generatePythonConnStr(schema: String): String {
-        val catalog = catalogTable.catalog as SnowflakeCatalogImpl
-        return catalog.generatePythonConnStr(schema)
-    }
+    override fun getCatalogTable(): CatalogTableImpl = catalogTable
 
     companion object {
         @JvmStatic

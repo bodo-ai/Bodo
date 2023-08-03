@@ -1,9 +1,8 @@
 package com.bodosql.calcite.adapter.snowflake;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
-import com.bodosql.calcite.rel.logical.BodoLogicalFilter;
-
-import org.apache.calcite.rel.logical.LogicalSort;
+import com.bodosql.calcite.traits.CombineStreamsExchange;
+import org.apache.calcite.rel.core.Sort;
 import org.immutables.value.Value;
 import org.jetbrains.annotations.NotNull;
 
@@ -16,28 +15,45 @@ public class SnowflakeLimitRule extends AbstractSnowflakeLimitRule {
 
   @Value.Immutable
   public interface Config extends AbstractSnowflakeLimitRule.Config {
-    Config DEFAULT =
+    Config DEFAULT_CONFIG =
         ImmutableSnowflakeLimitRule.Config.of()
             .withOperandSupplier(
                 b0 ->
-                    b0.operand(LogicalSort.class)
+                    b0.operand(Sort.class)
                         .predicate(SnowflakeLimitRule::isOnlyLimit)
-                        .oneInput(b1 -> b1.operand(SnowflakeTableScan.class).noInputs()))
+                        .oneInput(b1 -> b1.operand(SnowflakeRel.class).anyInputs()))
             .as(Config.class);
 
-    Config WITH_FILTER =
+    Config NESTED_CONFIG =
         ImmutableSnowflakeLimitRule.Config.of()
             .withOperandSupplier(
                 b0 ->
-                    b0.operand(LogicalSort.class)
+                    b0.operand(Sort.class)
                         .predicate(SnowflakeLimitRule::isOnlyLimit)
                         .oneInput(
                             b1 ->
-                                b1.operand(BodoLogicalFilter.class)
-                                    .predicate(SnowflakeAggregateRule::isPushableFilter)
+                                b1.operand(SnowflakeToPandasConverter.class)
+                                    .oneInput(b2 -> b2.operand(SnowflakeRel.class).anyInputs())))
+            .withDescription("SnowflakeLimitRule::WithSnowflakeToPandasConverter")
+            .as(Config.class);
+
+    Config STREAMING_CONFIG =
+        ImmutableSnowflakeLimitRule.Config.of()
+            .withOperandSupplier(
+                b0 ->
+                    b0.operand(Sort.class)
+                        .predicate(SnowflakeLimitRule::isOnlyLimit)
+                        .oneInput(
+                            b1 ->
+                                b1.operand(CombineStreamsExchange.class)
                                     .oneInput(
-                                        b2 -> b2.operand(SnowflakeTableScan.class).noInputs())))
-            .withDescription("SnowflakeLimitRule::WithFilter")
+                                        b2 ->
+                                            b2.operand(SnowflakeToPandasConverter.class)
+                                                .oneInput(
+                                                    b3 ->
+                                                        b3.operand(SnowflakeRel.class)
+                                                            .anyInputs()))))
+            .withDescription("SnowflakeLimitRule::WithCombineStreamsExchange")
             .as(Config.class);
 
     @Override

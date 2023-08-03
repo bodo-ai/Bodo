@@ -4,6 +4,7 @@ import com.bodosql.calcite.rel.logical.*
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.Context
 import org.apache.calcite.plan.Contexts
+import org.apache.calcite.rel.RelCollation
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.rel.core.CorrelationId
@@ -15,6 +16,7 @@ import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.tools.RelBuilder
 import org.apache.calcite.tools.RelBuilderFactory
 import org.apache.calcite.util.ImmutableBitSet
+import org.checkerframework.checker.nullness.qual.Nullable
 
 object RelFactories {
     @JvmField
@@ -33,12 +35,16 @@ object RelFactories {
     val AGGREGATE_FACTORY: AggregateFactory = AggregateFactory(::createAggregate)
 
     @JvmField
+    val SORT_FACTORY: SortFactory = SortFactory(::createSort)
+
+    @JvmField
     val DEFAULT_CONTEXT: Context = Contexts.of(
         PROJECT_FACTORY,
         FILTER_FACTORY,
         JOIN_FACTORY,
         SET_OP_FACTORY,
         AGGREGATE_FACTORY,
+        SORT_FACTORY,
     )
 
     @JvmField
@@ -76,5 +82,9 @@ object RelFactories {
     private fun createAggregate(input: RelNode, hints: List<RelHint>, groupSet: ImmutableBitSet,
                                 groupSets: ImmutableList<ImmutableBitSet>, aggCalls: List<AggregateCall>): RelNode {
         return BodoLogicalAggregate.create(input, hints, groupSet, groupSets, aggCalls)
+    }
+
+    private fun createSort(input: RelNode, collation: RelCollation, offset: RexNode?, fetch: RexNode?) : RelNode {
+        return BodoLogicalSort.create(input, collation, offset, fetch)
     }
 }
