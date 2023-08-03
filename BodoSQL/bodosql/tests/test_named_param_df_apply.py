@@ -38,7 +38,7 @@ def test_case(basic_df, spark_info, many_params_fixture, memory_leak_check):
         return_codegen=True,
     )["pandas_code"]
 
-    # Check pandas code has appropriate appliesc
+    # Check pandas code has appropriate applies
     regexp = re.compile(
         r".*bodosql_case_placeholder.*a\s*=\s*a, b\s*=\s*b, c\s*=\s*c, d\s*=\s*d, e\s*=\s*e, f\s*=\s*f, g\s*=\s*g.*"
     )

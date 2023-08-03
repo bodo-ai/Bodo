@@ -302,3 +302,152 @@ def test_case_no_inlining(basic_df, spark_info, memory_leak_check):
     finally:
         # restore the old threshold
         bodo.COMPLEX_CASE_THRESHOLD = old_threshold
+
+
+@pytest.mark.slow
+def test_case_indent_limit(memory_leak_check):
+    """
+    Test of case statement bug noted in BSE-853.
+    This demonstrates a Python limitation where if a
+    case statement is naively decomposed into if/else
+    it hits a max indentation limit.
+    """
+    query = """
+    select
+        case
+            when endswith(A, ' a') or startswith(A, 'a ') or A like '% abortion %' then 'a'
+            when endswith(A, ' ab') or startswith(A, 'ab ') or A like '% ab %' then 'ab'
+            when endswith(A, ' ad') or startswith(A, 'ad ') or A like '% ad %' then 'ad'
+            when endswith(A, ' al') or startswith(A, 'al ') or A like '% al %' then 'al'
+            when endswith(A, ' al2') or startswith(A, 'al2 ') or A like '% al2 %' then 'al2'
+            when endswith(A, ' am') or startswith(A, 'am ') or A like '% am %' then 'am'
+            when endswith(A, ' an') or startswith(A, 'an ') or A like '% an %' then 'an'
+            when endswith(A, ' an2') or startswith(A, 'an2 ') or A like '% an2 %' then 'an2'
+            when endswith(A, ' ar') or startswith(A, 'ar ') or A like '% ar %' then 'ar'
+            when endswith(A, ' as') or startswith(A, 'as ') or A like '% as %' then 'as'
+            when endswith(A, ' as2') or startswith(A, 'as2 ') or A like '% as2 %' then 'as2'
+            when endswith(A, ' ay') or startswith(A, 'ay ') or A like '% ay %' then 'ay'
+            when endswith(A, ' ba') or startswith(A, 'ba ') or A like '% ba %' then 'ba'
+            when endswith(A, ' ba2') or startswith(A, 'ba2 ') or A like '% ba2 %' then 'ba2'
+            when endswith(A, ' ba3') or startswith(A, 'ba3 ') or A like '% ba3 %' then 'ba3'
+            when endswith(A, ' ba4') or startswith(A, 'ba4 ') or A like '% ba4 %' then 'ba4'
+            when endswith(A, ' ba5') or startswith(A, 'ba5 ') or A like '% ba5 %' then 'ba5'
+            when endswith(A, ' bd') or startswith(A, 'bd ') or A like '% bd %' then 'bd'
+            when endswith(A, ' be') or startswith(A, 'be ') or A like '% be %' then 'be'
+            when endswith(A, ' be2') or startswith(A, 'be2 ') or A like '% be2 %' then 'be2'
+            when endswith(A, ' be3') or startswith(A, 'be3 ') or A like '% be3 %' then 'be3'
+            when endswith(A, ' be4') or startswith(A, 'be4 ') or A like '% be4 %' then 'be4'
+            when endswith(A, ' be5') or startswith(A, 'be5 ') or A like '% be5 %' then 'be5'
+            when endswith(A, ' bi') or startswith(A, 'bi ') or A like '% bi %' then 'bi'
+            when endswith(A, ' bi2') or startswith(A, 'bi2 ') or A like '% bi2 %' then 'bi2'
+            when endswith(A, ' bl') or startswith(A, 'bl ') or A like '% bl %' then 'bl'
+            when endswith(A, ' bm') or startswith(A, 'bm ') or A like '% bm %' then 'bm'
+            when endswith(A, ' bo') or startswith(A, 'bo ') or A like '% bo %' then 'bo'
+            when endswith(A, ' bo2') or startswith(A, 'bo2 ') or A like '% bo2 %' then 'bo2'
+            when endswith(A, ' bo3') or startswith(A, 'bo3 ') or A like '% bo3 %' then 'bo3'
+            when endswith(A, ' bo4') or startswith(A, 'bo4 ') or A like '% bo4 %' then 'bo4'
+            when endswith(A, ' bo5') or startswith(A, 'bo5 ') or A like '% bo5 %' then 'bo5'
+            when endswith(A, ' bo6') or startswith(A, 'bo6 ') or A like '% bo6 %' then 'bo6'
+            when endswith(A, ' br') or startswith(A, 'br ') or A like '% br %' then 'br'
+            when endswith(A, ' br2') or startswith(A, 'br2 ') or A like '% br2 %' then 'br2'
+            when endswith(A, ' br3') or startswith(A, 'br3 ') or A like '% br3 %' then 'br3'
+            when endswith(A, ' br4') or startswith(A, 'br4 ') or A like '% br4 %' then 'br4'
+            when endswith(A, ' br5') or startswith(A, 'br5 ') or A like '% br5 %' then 'br5'
+            when endswith(A, ' bu') or startswith(A, 'bu ') or A like '% bu %' then 'bu'
+            when endswith(A, ' bu2') or startswith(A, 'bu2 ') or A like '% bu2 %' then 'bu2'
+            when endswith(A, ' bu3') or startswith(A, 'bu3 ') or A like '% bu3 %' then 'bu3'
+            when endswith(A, ' bu4') or startswith(A, 'bu4 ') or A like '% bu4 %' then 'bu4'
+            when endswith(A, ' ca') or startswith(A, 'ca ') or A like '% ca %' then 'ca'
+            when endswith(A, ' ca2') or startswith(A, 'ca2 ') or A like '% ca2 %' then 'ca2'
+            when endswith(A, ' ca3') or startswith(A, 'ca3 ') or A like '% ca3 %' then 'ca3'
+            when endswith(A, ' ca4') or startswith(A, 'ca4 ') or A like '% ca4 %' then 'ca4'
+            when endswith(A, ' ca5') or startswith(A, 'ca5 ') or A like '% ca5 %' then 'ca5'
+            when endswith(A, ' ca6') or startswith(A, 'ca6 ') or A like '% ca6 %' then 'ca6'
+            when endswith(A, ' ca7') or startswith(A, 'ca7 ') or A like '% ca7 %' then 'ca7'
+            when endswith(A, ' ca8') or startswith(A, 'ca8 ') or A like '% ca8 %' then 'ca8'
+            when endswith(A, ' cb') or startswith(A, 'cb ') or A like '% cb %' then 'cb'
+            when endswith(A, ' ce') or startswith(A, 'ce ') or A like '% ce %' then 'ce'
+            when endswith(A, ' ch') or startswith(A, 'ch ') or A like '% ch %' then 'ch'
+            when endswith(A, ' ch2') or startswith(A, 'ch2 ') or A like '% ch2 %' then 'ch2'
+            when endswith(A, ' ch3') or startswith(A, 'ch3 ') or A like '% ch3 %' then 'ch3'
+            when endswith(A, ' cl') or startswith(A, 'cl ') or A like '% cl %' then 'cl'
+            when endswith(A, ' cl2') or startswith(A, 'cl2 ') or A like '% cl2 %' then 'cl2'
+            when endswith(A, ' cl3') or startswith(A, 'cl3 ') or A like '% cl3 %' then 'cl3'
+            when endswith(A, ' co') or startswith(A, 'co ') or A like '% co %' then 'co'
+            when endswith(A, ' co2') or startswith(A, 'co2 ') or A like '% co2 %' then 'co2'
+            when endswith(A, ' co3') or startswith(A, 'co3 ') or A like '% co3 %' then 'co3'
+            when endswith(A, ' co4') or startswith(A, 'co4 ') or A like '% co4 %' then 'co4'
+            when endswith(A, ' co5') or startswith(A, 'co5 ') or A like '% co5 %' then 'co5'
+            when endswith(A, ' co6') or startswith(A, 'co6 ') or A like '% co6 %' then 'co6'
+            when endswith(A, ' co7') or startswith(A, 'co7 ') or A like '% co7 %' then 'co7'
+            when endswith(A, ' co8') or startswith(A, 'co8 ') or A like '% co8 %' then 'co8'
+            when endswith(A, ' co9') or startswith(A, 'co9 ') or A like '% co9 %' then 'co9'
+            when endswith(A, ' cr') or startswith(A, 'cr ') or A like '% cr %' then 'cr'
+            when endswith(A, ' cu') or startswith(A, 'cu ') or A like '% cu %' then 'cu'
+            when endswith(A, ' cu2') or startswith(A, 'cu2 ') or A like '% cu2 %' then 'cu2'
+            when endswith(A, ' da') or startswith(A, 'da ') or A like '% da %' then 'da'
+            when endswith(A, ' da2') or startswith(A, 'da2 ') or A like '% da2 %' then 'da2'
+            when endswith(A, ' de') or startswith(A, 'de ') or A like '% de %' then 'de'
+            when endswith(A, ' de2') or startswith(A, 'de2 ') or A like '% de2 %' then 'de2'
+            when endswith(A, ' de3') or startswith(A, 'de3 ') or A like '% de3 %' then 'de3'
+            when endswith(A, ' di') or startswith(A, 'di ') or A like '% di %' then 'di'
+            when endswith(A, ' di2') or startswith(A, 'di2 ') or A like '% di2 %' then 'di2'
+            when endswith(A, ' di3') or startswith(A, 'di3 ') or A like '% di3 %' then 'di3'
+            when endswith(A, ' di4') or startswith(A, 'di4 ') or A like '% di4 %' then 'di4'
+            when endswith(A, ' dk') or startswith(A, 'dk ') or A like '% dk %' then 'dk'
+            when endswith(A, ' do') or startswith(A, 'do ') or A like '% do %' then 'do'
+            when endswith(A, ' do2') or startswith(A, 'do2 ') or A like '% do2 %' then 'do2'
+            when endswith(A, ' do3') or startswith(A, 'do3 ') or A like '% do3 %' then 'do3'
+            when endswith(A, ' do4') or startswith(A, 'do4 ') or A like '% do4 %' then 'do4'
+            when endswith(A, ' dr') or startswith(A, 'dr ') or A like '% dr %' then 'dr'
+            when endswith(A, ' du') or startswith(A, 'du ') or A like '% du %' then 'du'
+            when endswith(A, ' dy') or startswith(A, 'dy ') or A like '% dy %' then 'dy'
+            when endswith(A, ' el') or startswith(A, 'el ') or A like '% el %' then 'el'
+            when endswith(A, ' el2') or startswith(A, 'el2 ') or A like '% el2 %' then 'el2'
+            when endswith(A, ' er') or startswith(A, 'er ') or A like '% er %' then 'er'
+            when endswith(A, ' er2') or startswith(A, 'er2 ') or A like '% er2 %' then 'er2'
+            when endswith(A, ' er3') or startswith(A, 'er3 ') or A like '% er3 %' then 'er3'
+            when endswith(A, ' er4') or startswith(A, 'er4 ') or A like '% er4 %' then 'er4'
+            when endswith(A, ' es') or startswith(A, 'es ') or A like '% es %' then 'es'
+            when endswith(A, ' et') or startswith(A, 'et ') or A like '% et %' then 'et'
+            when endswith(A, ' f') or startswith(A, 'f ') or A like '% f %' then 'f'
+            when endswith(A, ' f2') or startswith(A, 'f2 ') or A like '% f2 %' then 'f2'
+            when endswith(A, ' f3') or startswith(A, 'f3 ') or A like '% f3 %' then 'f3'
+            else null
+        end as sensitive_word
+    from table1
+    """
+    df = pd.DataFrame({"A": ["er ", "a ", " el2    ", " f2 "] * 5})
+    ctx = {"table1": df}
+    py_output = pd.DataFrame({"sensitive_word": ["er", "a", "el2", "f2"] * 5})
+    check_query(query, ctx, None, expected_output=py_output)
+
+
+def test_nested_case(memory_leak_check):
+    """Tests when a case statement is nested
+    within another case statement.
+    """
+    query = """
+    Select CASE
+        WHEN A = 3
+                then (CASE
+                    WHEN B > 5
+                        then 1
+                    Else 0
+                end)
+                +
+                (CASE
+                    WHEN C < 3
+                        then 1
+                    Else 0
+                end)
+        ELSE -1
+        end as res
+    from table1
+    """
+    df = pd.DataFrame(
+        {"A": [3, 3, 3, 3, 4] * 3, "B": [1, 6, 1, 6, 1] * 3, "C": [2, 4, 4, 2, 4] * 3}
+    )
+    ctx = {"table1": df}
+    py_output = pd.DataFrame({"res": [1, 1, 0, 2, -1] * 3})
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)

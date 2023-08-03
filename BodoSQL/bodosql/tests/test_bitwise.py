@@ -322,11 +322,11 @@ def test_bitxor(args, bitwise_df, spark_info, memory_leak_check):
                         # support unsigned int properly. See [BE-3419].
                         0: pd.Series(
                             [
-                                -9223372036854775808,
-                                -9223372036854775808,
-                                -9223372036854775808,
-                                -9223372036854775808,
                                 0,
+                                -128,
+                                -43,
+                                -129,
+                                -14,
                                 0,
                             ],
                         )
@@ -382,7 +382,7 @@ def test_bitnot(args, bitwise_df, spark_info, memory_leak_check):
                         # NOTE: Calcite makes the result signed int64 and doesn't really
                         # support unsigned int properly. See [BE-3419].
                         0: pd.Series(
-                            [-9223372036854775808, 0, 1664, 5376, 16256, 16384],
+                            [-128, 0, 1664, 5376, 16256, 16384],
                         )
                     }
                 ),

@@ -836,8 +836,9 @@ class DataFramePass:
 
         init_code = self.typemap[rhs.args[2].name].instance_type.meta
         body_code = self.typemap[rhs.args[3].name].instance_type.meta
-        var_name = get_overload_const_str(self.typemap[rhs.args[4].name])
-        out_arr_type = unwrap_typeref(self.typemap[rhs.args[5].name])
+        arr_variable_name = get_overload_const_str(self.typemap[rhs.args[4].name])
+        indexing_variable_name = get_overload_const_str(self.typemap[rhs.args[5].name])
+        out_arr_type = unwrap_typeref(self.typemap[rhs.args[6].name])
 
         named_params = dict(rhs.kws)
         named_param_args = ", ".join(named_params.keys())
@@ -848,19 +849,26 @@ class DataFramePass:
         # Extract the arrays used in the codegen to verify we can avoid inlining.
         var_names = []
         init_lines = init_code.split("\n")
+        must_inline = False
         for line in init_lines:
             parts = line.split("=")
             # If len parts is 1, then this isn't an assignment
             # Right now everything is required to be an assignment
-            # except empty whitespace at the BodoSQL level
+            # except empty whitespace at the BodoSQL level or closures.
+            # We don't yet know how to avoid inlining the IR if we have
+            # closures
             if len(parts) > 1:
                 var_names.append(parts[0].strip())
             elif parts[0].strip() != "":
-                raise BodoError(
-                    "Invalid initialization code for bodosql_case_placeholder()"
-                )
+                must_inline = True
+                break
 
-        if is_complex and len(var_names) > 0 and not named_param_args:
+        if (
+            not must_inline
+            and is_complex
+            and len(var_names) > 0
+            and not named_param_args
+        ):
             # TODO: Support named params
             func_text = f"def f(arrs, n, {named_param_args}):\n"
             func_text += init_code
@@ -873,13 +881,10 @@ class DataFramePass:
                 inner_func_text += f"  {varname} = arrs[{i}]\n"
             # Derive the length from the input array
             inner_func_text += f"  n = len({var_names[0]})\n"
-            inner_func_text += (
-                f"  out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
-            )
-            inner_func_text += "  for i in range(n):\n"
+            inner_func_text += f"  {arr_variable_name} = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
+            inner_func_text += f"  for {indexing_variable_name} in range(n):\n"
             inner_func_text += body_code
-            inner_func_text += f"    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({var_name})\n"
-            inner_func_text += "  return out_arr\n"
+            inner_func_text += f"  return {arr_variable_name}\n"
 
             loc_vars = {}
             inner_glbls = {
@@ -908,13 +913,10 @@ class DataFramePass:
             func_text = f"def f(arrs, n, {named_param_args}):\n"
             func_text += init_code
             func_text += "  numba.parfors.parfor.init_prange()\n"
-            func_text += (
-                "  out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
-            )
-            func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+            func_text += f"  {arr_variable_name} = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
+            func_text += f"  for {indexing_variable_name} in numba.parfors.parfor.internal_prange(n):\n"
             func_text += body_code
-            func_text += f"    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({var_name})\n"
-            func_text += "  return out_arr\n"
+            func_text += f"  return {arr_variable_name}\n"
 
             loc_vars = {}
             glbls = {

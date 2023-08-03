@@ -160,4 +160,27 @@ interface Op {
             body.emit(doc.indent())
         }
     }
+
+    /**
+     * Represents an array setitem call with the given index
+     * and value
+     *
+     * @param inputExpr: The input array.
+     * @param index: The index into the array.
+     * @param value: The Expr being Set
+     */
+    class SetItem(private val inputExpr: Expr, private val index: Expr, private val value: Expr) : Op {
+        override fun emit(doc: Doc) {
+            val line = "${inputExpr.emit()}[${index.emit()}] = ${value.emit()}"
+            doc.write(line)
+        }
+    }
+
+
+
+    object Continue : Op {
+        override fun emit(doc: Doc) {
+            doc.write("continue")
+        }
+    }
 }

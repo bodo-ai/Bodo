@@ -93,6 +93,8 @@ import com.bodosql.calcite.ir.Frame;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Op.Assign;
+import com.bodosql.calcite.ir.Op.Continue;
+import com.bodosql.calcite.ir.Op.Function;
 import com.bodosql.calcite.ir.Op.If;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.rex.RexNamedParam;
@@ -464,25 +466,14 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
   }
 
-  protected Expr visitCaseOp(RexCall node) {
-    return visitCaseOp(node, false);
-  }
-
   /**
    * Overview of code generation for case:
    * https://bodo.atlassian.net/wiki/spaces/B/pages/1368752135/WIP+BodoSQL+Case+Implementation
    *
    * @param node The case node to visit
-   * @param isSingleRow Is case a nested inside another case statement?
    * @return The resulting expression from generating case code.
    */
-  protected Expr visitCaseOp(RexCall node, boolean isSingleRow) {
-    if (isSingleRow) {
-      // If we are inside a scalar context then we can just continue
-      // to process the operands.
-      return visitCaseOperands(this, node.getOperands());
-    }
-
+  protected Expr visitCaseOp(RexCall node) {
     // Extract the inputs as we need to know what columns to pass into
     // the case placeholder and we need to rewrite the refs to the ones
     // we will generate.
@@ -499,30 +490,40 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     builder.startCodegenFrame();
     ImmutableList.Builder<Expr> localRefsBuilder = ImmutableList.builder();
     Variable arrs = new Variable("arrs");
+    Variable indexingVar = builder.getSymbolTable().genGenericTempVar();
+    List<Variable> closureVars = new ArrayList<>();
     for (int i = 0; i < inputFinder.size(); i++) {
       Variable localVar = new Variable(input.getName() + "_" + i);
+      closureVars.add(localVar);
       localRefsBuilder.add(
-          new Expr.Call(
-              "bodo.utils.indexing.scalar_optional_getitem", localVar, new Variable("i")));
+          new Expr.Call("bodo.utils.indexing.scalar_optional_getitem", localVar, indexingVar));
 
       Op.Assign initLine = new Assign(localVar, new Expr.GetItem(arrs, new Expr.IntegerLiteral(i)));
       builder.add(initLine);
     }
+    closureVars.add(indexingVar);
     List<Expr> localRefs = localRefsBuilder.build();
-    Variable caseBodyInit =
-        visitor.lowerAsMetaType(new FrameTripleQuotedString(builder.endFrame(), 1));
 
     // Create a local translator for the case operands and initialize it with the
     // local variables we initialized above.
-    RexToPandasTranslator localTranslator =
+    ScalarContext localTranslator =
         new RexToPandasTranslator.ScalarContext(
-            visitor, builder, typeSystem, nodeId, input, localRefs);
+            visitor, builder, typeSystem, nodeId, input, localRefs, closureVars);
 
     // Start a new codegen frame as we will perform our processing there.
-    builder.startCodegenFrame();
-    Variable outputVar = visitCaseOperands(localTranslator, operands);
-    Variable caseBodyGlobal =
-        visitor.lowerAsMetaType(new FrameTripleQuotedString(builder.endFrame(), 2));
+    Variable arrVar = builder.getSymbolTable().genArrayVar();
+
+    Frame outputFrame =
+        visitCaseOperands(localTranslator, operands, List.of(arrVar, indexingVar), false);
+    Variable caseBodyGlobal = visitor.lowerAsMetaType(new FrameTripleQuotedString(outputFrame, 2));
+
+    // Append all of the closures generated to the init frame
+    List<Function> closures = localTranslator.getClosures();
+    for (Function closure : closures) {
+      builder.add(closure);
+    }
+    Variable caseBodyInit =
+        visitor.lowerAsMetaType(new FrameTripleQuotedString(builder.endFrame(), 1));
 
     ImmutableList.Builder<Expr> caseArgsBuilder = ImmutableList.builder();
     for (RexNode ref : inputFinder.getRefs()) {
@@ -549,7 +550,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 caseBodyInit,
                 caseBodyGlobal,
                 // Note: The variable name must be a string literal here.
-                new Expr.StringLiteral(outputVar.getName()),
+                new Expr.StringLiteral(arrVar.emit()),
+                // Note: The variable name must be a string literal here.
+                new Expr.StringLiteral(indexingVar.emit()),
                 outputArrayTypeGlobal),
             namedArgs);
     builder.add(new Op.Assign(tempVar, casePlaceholder));
@@ -617,69 +620,101 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   }
 
   /**
-   * Visit the operands to a call to case using the given translator. These operands are traversed
-   * in reverse order because each operand should generate its code into a different Python frame
-   * and its simplest to generate the code this way.
+   * Visit the operands to a call to case using the given translator. Each operand generates its
+   * code in a unique frame to define a unique scope.
    *
    * <p>The operands to case are of the form: [cond1, truepath1, cond2, truepath2, ..., elsepath]
    * All of these components are present, so the operands is always of Length 2n + 1, where n is the
    * number of conditions and n > 0. The else is always present, even if not explicit in the
    * original SQL query.
    *
-   * <p>For code generation purposes we first process the else and then we process each pair of
-   * condition + truepath. The final code will place each truepath in the `if` block when evaluating
-   * each condition and the next condition in its else block.
-   *
-   * <p>All "result" paths are defined to use the same output Variable, which is returned by this
-   * function.
+   * <p>For code generation purposes we cannot produce an arbitrary set of if/else statements
+   * because this can potentially trigger a max indentation depth issue in Python. As a result we
+   * generate each if statement as its own scope and either continue or return directly from that
+   * block.
    *
    * <p>For example, if we have 5 inputs with no intermediate variables, the generated code might
    * look like this:
    *
    * <p><code>
    *     if bodo.libs.bodosql_array_kernels.is_true(cond1):
-   *        output_var = truepath1
-   *     else:
-   *        if bodo.libs.bodosql_array_kernels.is_true(cond2):
-   *          output_var = truepath2
-   *        else:
-   *          output_var = elsepath
+   *        out_arr[i] = truepath1
+   *        continue
+   *     if bodo.libs.bodosql_array_kernels.is_true(cond2):
+   *        out_arr[i] = truepath2
+   *        continue
+   *     out_arr[i] = elsepath
+   * </code> If instead this is called from a scalar context, then we will be generating a closure
+   * so each out_arr[i] should be a return instead
+   *
+   * <p><code>
+   *     if bodo.libs.bodosql_array_kernels.is_true(cond1):
+   *        var = truepath1
+   *        return var
+   *     if bodo.libs.bodosql_array_kernels.is_true(cond2):
+   *        var = truepath2
+   *        return var
+   *     var = elsepath
+   *     return var
    * </code>
    *
    * @param translator The translator used to visit each operand.
    * @param operands The list of RexNodes to visit to capture the proper computation.
-   * @return The output variable written to in all paths.
+   * @param outputVars The variables used in generating the output.
+   * @param isScalarContext Is this code generated in a scalar context?
+   * @return A single frame containing all the generated code.
    */
-  private Variable visitCaseOperands(RexToPandasTranslator translator, List<RexNode> operands) {
-    // Create the output variable shared by all nodes
-    Variable outputVar = visitor.genGenericTempVar();
-    // Generate the frames we will use. Each operand is it a different, frame,
-    // including the current frame for the 0th operand.
-    for (int i = 0; i < operands.size() - 1; i++) {
-      builder.startCodegenFrame();
-    }
-    // Generate the else code
-    Expr elsePath = operands.get(operands.size() - 1).accept(translator);
-    // Assign to the output variable
-    builder.add(new Op.Assign(outputVar, elsePath));
-    for (int i = operands.size() - 2; i > 0; i -= 2) {
-      // Pop the else Frame
-      Frame elseFrame = builder.endFrame();
-      // Generate the if path frame + code
-      Expr ifPath = operands.get(i).accept(translator);
-      // Assign to the output variable
-      builder.add(new Op.Assign(outputVar, ifPath));
-      // Pop the two frames for the condition
-      Frame ifFrame = builder.endFrame();
+  protected Frame visitCaseOperands(
+      RexToPandasTranslator translator,
+      List<RexNode> operands,
+      List<Variable> outputVars,
+      boolean isScalarContext) {
+    // Generate the target Frame for the output
+    builder.startCodegenFrame();
+    for (int i = 0; i < operands.size() - 1; i += 2) {
       // Visit the cond code
-      Expr cond = operands.get(i - 1).accept(translator);
-      // Wrap the cond expr in a is_true call
-      Expr.Call condCall = new Expr.Call("bodo.libs.bodosql_array_kernels.is_true", List.of(cond));
+      Expr cond = operands.get(i).accept(translator);
+      // Visit the if code
+      builder.startCodegenFrame();
+      Expr ifPath = operands.get(i + 1).accept(translator);
+      assignCasePathOutput(ifPath, outputVars, isScalarContext);
+      // Pop the frame
+      Frame ifFrame = builder.endFrame();
       // Generate the if statement
-      Op.If ifStatement = new If(condCall, ifFrame, elseFrame);
+      Expr.Call condCall = new Expr.Call("bodo.libs.bodosql_array_kernels.is_true", List.of(cond));
+      Op.If ifStatement = new If(condCall, ifFrame, null);
       builder.add(ifStatement);
     }
-    return outputVar;
+    // Process the else.
+    Expr elsePath = operands.get(operands.size() - 1).accept(translator);
+    assignCasePathOutput(elsePath, outputVars, isScalarContext);
+    return builder.endFrame();
+  }
+
+  /**
+   * Assign the output value from a singular case path.
+   *
+   * @param outputExpr The expression from one of the then/else paths that needs to be assigned to
+   *     the final output.
+   * @param outputVars The variables used in generating the output.
+   * @param isScalarContext Is this code generated in a scalar context?
+   */
+  private void assignCasePathOutput(
+      Expr outputExpr, List<Variable> outputVars, boolean isScalarContext) {
+    if (isScalarContext) {
+      // Scalar path. Assign and return the variable.
+      Variable outputVar = outputVars.get(0);
+      builder.add(new Op.Assign(outputVar, outputExpr));
+      builder.add(new Op.ReturnStatement(outputVar));
+    } else {
+      // Unwrap the code
+      Variable arrVar = outputVars.get(0);
+      Variable indexVar = outputVars.get(1);
+      Expr unwrappedExpr =
+          new Expr.Call("bodo.utils.conversion.unbox_if_tz_naive_timestamp", List.of(outputExpr));
+      builder.add(new Op.SetItem(arrVar, indexVar, unwrappedExpr));
+      builder.add(Continue.INSTANCE);
+    }
   }
 
   protected Expr visitCastScan(RexCall operation) {
@@ -1764,25 +1799,26 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    * scalar context.
    */
   private static class ScalarContext extends RexToPandasTranslator {
+
+    /**
+     * List of functions generated by this scalar context. This is needed for nested case statements
+     * to maintain control flow.
+     */
+    private final @NotNull List<Function> closures = new ArrayList<>();
+
+    /** Variable names used in generated closures. */
+    private final @NotNull List<? extends Variable> closurevars;
+
     public ScalarContext(
         @NotNull PandasCodeGenVisitor visitor,
         @NotNull Module.Builder builder,
         @NotNull RelDataTypeSystem typeSystem,
         int nodeId,
         @NotNull BodoEngineTable input,
-        @NotNull List<? extends Expr> localRefs) {
+        @NotNull List<? extends Expr> localRefs,
+        @NotNull List<? extends Variable> closurevars) {
       super(visitor, builder, typeSystem, nodeId, input, localRefs);
-    }
-
-    @Override
-    public Expr visitInputRef(RexInputRef inputRef) {
-      // Add a use for generating variables in case
-      ctx.getUsedColumns().add(inputRef.getIndex());
-      // NOTE: Codegen for bodosql_case_placeholder() expects column value accesses
-      // (e.g. bodo.utils.indexing.scalar_optional_getitem(T1_1, i))
-      Variable inputVar = new Variable(input.getName() + "_" + inputRef.getIndex());
-      Variable index = new Variable("i");
-      return new Expr.Call("bodo.utils.indexing.scalar_optional_getitem", List.of(inputVar, index));
+      this.closurevars = closurevars;
     }
 
     @Override
@@ -1795,9 +1831,28 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       return visitCastScan(operation, true, List.of());
     }
 
+    /**
+     * Generating code in a scalar context requires building a closure that will be "bubbled up" to
+     * the original RexToPandasTranslator and then generating an expression that looks like var =
+     * func(...).
+     *
+     * <p>This updates closures in and the builder to generate the function call.
+     *
+     * @return The final Variable for the output of the closure.
+     */
     @Override
     protected Expr visitCaseOp(RexCall node) {
-      return visitCaseOp(node, true);
+      // Generate the frame for the closure.
+      Frame closureFrame =
+          visitCaseOperands(
+              this,
+              node.getOperands(),
+              List.of(builder.getSymbolTable().genGenericTempVar()),
+              true);
+      Variable funcVar = builder.getSymbolTable().genClosureVar();
+      Function closure = new Function(funcVar.emit(), this.closurevars, closureFrame);
+      closures.add(closure);
+      return new Expr.Call(funcVar, this.closurevars);
     }
 
     @Override
@@ -1814,6 +1869,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     public Expr visitOver(RexOver over) {
       throw new BodoSQLCodegenException(
           "Internal Error: Calcite Plan Produced an Unsupported RexOver: " + over.getOperator());
+    }
+
+    /** @return The closures generated by this scalar context. */
+    public List<Function> getClosures() {
+      return closures;
     }
   }
 
