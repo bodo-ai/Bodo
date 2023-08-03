@@ -33,6 +33,7 @@ package ${parser.package};
 import ${importStr};
 </#list>
 
+import com.bodosql.calcite.sql.BodoSqlUtil;
 import com.bodosql.calcite.sql.fun.SqlNamedParameterOperator;
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.avatica.util.DateTimeUtils;
@@ -2434,10 +2435,7 @@ SqlNode TableRef2(boolean lateral) :
                 }
             ]
             {
-                // NOTE(jsternberg): The original for this had a lot of code for the parser
-                // that is just not parsing code. This has been migrated to SqlUtil
-                // temporarily to accomodate the changes. See the note there about future plans.
-                SqlSampleSpec tableSampleSpec = SqlUtil.createTableSample(getPos(),
+                SqlSampleSpec tableSampleSpec = BodoSqlUtil.createTableSample(getPos(),
                     isBernoulli, samplePercentage, sampleByRows,
                     isRepeatable, repeatableSeed);
 

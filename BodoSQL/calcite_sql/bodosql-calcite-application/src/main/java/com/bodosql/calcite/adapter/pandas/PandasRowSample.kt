@@ -4,7 +4,7 @@ import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.RelOptCluster
-import org.apache.calcite.plan.RelOptRowSamplingParameters
+import com.bodosql.calcite.plan.RelOptRowSamplingParameters
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelCollationTraitDef
 import org.apache.calcite.rel.RelNode

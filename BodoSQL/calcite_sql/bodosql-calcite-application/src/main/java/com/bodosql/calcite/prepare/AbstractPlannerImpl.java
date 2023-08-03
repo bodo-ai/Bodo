@@ -20,6 +20,7 @@ import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
 import com.bodosql.calcite.sql.validate.BodoSqlValidator;
+import com.bodosql.calcite.sql2rel.BodoSqlToRelConverter;
 import com.google.common.collect.ImmutableList;
 import java.io.Reader;
 import java.util.List;
@@ -257,7 +258,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
         RelOptCluster.create(requireNonNull(planner, "planner"), rexBuilder);
     final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
     final SqlToRelConverter sqlToRelConverter =
-        new SqlToRelConverter(
+        new BodoSqlToRelConverter(
             this, validator, createCatalogReader(), cluster, convertletTable, config);
     RelRoot root = sqlToRelConverter.convertQuery(validatedSqlNode, false, true);
     root = root.withRel(sqlToRelConverter.flattenTypes(root.rel, true));

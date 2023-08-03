@@ -5,7 +5,7 @@ import com.bodosql.calcite.ir.Expr;
 import java.util.ArrayList;
 import java.util.List;
 import kotlin.Pair;
-import org.apache.calcite.plan.RelOptRowSamplingParameters;
+import com.bodosql.calcite.plan.RelOptRowSamplingParameters;
 import org.apache.calcite.plan.RelOptSamplingParameters;
 
 /**

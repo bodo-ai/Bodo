@@ -314,8 +314,6 @@
 										<exclude>org/apache/calcite/prepare/RelOptTableImpl$MySchemaPlus.class</exclude>
 										<exclude>org/apache/calcite/prepare/RelOptTableImpl.class</exclude>
 										<exclude>org/apache/calcite/rel/core/LogicalTableCreate.class</exclude>
-										<exclude>org/apache/calcite/rel/core/RowSample.class</exclude>
-										<exclude>org/apache/calcite/rel/core/Snapshot.class</exclude>
 										<exclude>org/apache/calcite/rel/core/TableCreate.class</exclude>
 										<exclude>org/apache/calcite/rel/core/TableModify$1.class</exclude>
 										<exclude>org/apache/calcite/rel/core/TableModify$Operation.class</exclude>
@@ -323,12 +321,6 @@
 										<exclude>org/apache/calcite/rel/logical/LogicalTargetTableScan.class</exclude>
 										<exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness$1.class</exclude>
 										<exclude>org/apache/calcite/rel/metadata/RelMdColumnUniqueness.class</exclude>
-										<exclude>org/apache/calcite/rel/mutable/MutableRelType.class</exclude>
-										<exclude>org/apache/calcite/rel/mutable/MutableRels$1.class</exclude>
-										<exclude>org/apache/calcite/rel/mutable/MutableRels$2.class</exclude>
-										<exclude>org/apache/calcite/rel/mutable/MutableRels$3.class</exclude>
-										<exclude>org/apache/calcite/rel/mutable/MutableRels.class</exclude>
-										<exclude>org/apache/calcite/rel/mutable/MutableRowSample.class</exclude>
 										<exclude>org/apache/calcite/rex/RexCall$1.class</exclude>
 										<exclude>org/apache/calcite/rex/RexCall.class</exclude>
 										<exclude>org/apache/calcite/rex/RexLiteral$1.class</exclude>
@@ -357,11 +349,6 @@
 										<exclude>org/apache/calcite/sql/SqlMerge.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlNode.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlNodeList.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlSampleSpec$1.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlSampleSpec$SqlSubstitutionSampleSpec.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlSampleSpec$SqlTableSampleRowLimitSpec.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlSampleSpec$SqlTableSampleSpec.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlSampleSpec.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlSelect.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlSelectOperator.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlTableIdentifierWithID.class</exclude>
