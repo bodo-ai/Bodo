@@ -927,7 +927,7 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
     } else {
         // Mmap-ed memory is always page (typically 4096B) aligned
         // (https://stackoverflow.com/questions/42259495/does-mmap-return-aligned-pointer-values).
-        static long page_size = sysconf(_SC_PAGE_SIZE);
+        const static long page_size = sysconf(_SC_PAGE_SIZE);
         if (alignment > page_size) {
             return ::arrow::Status::Invalid(
                 "Requested alignment higher than max supported alignment.");

@@ -91,8 +91,13 @@ class GroupbyStateType(types.Type):
 
     @property
     def f_in_cols(self) -> Tuple[int]:
-        """Recompute _f_in_cols after reordering the columns to put
-        the keys in the front.
+        """
+        Because we reorder the columns to put the keys in the front, we need to
+        map the original column indices contained in _f_in_cols to the new column
+        indices after reordering.
+
+        In the case that the build_table_type hasn't been resolved yet, we just
+        return the original _f_in_cols.
 
         Returns:
             Tuple[int]: A tuple with the _f_in_cols after remapping
