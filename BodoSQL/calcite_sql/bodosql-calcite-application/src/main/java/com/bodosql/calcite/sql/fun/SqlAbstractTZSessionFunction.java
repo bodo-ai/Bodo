@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.calcite.sql.fun;
+package com.bodosql.calcite.sql.fun;
 
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlFunction;
@@ -22,12 +22,13 @@ import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlSyntax;
-import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.SqlOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.validate.SqlMonotonicity;
+
+import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getOperandLiteralValueOrThrow;
 import static org.apache.calcite.util.Static.RESOURCE;
@@ -74,8 +75,7 @@ public class SqlAbstractTZSessionFunction extends SqlFunction {
               opBinding.getOperator().getName(), 0,
               SqlTypeName.MAX_DATETIME_PRECISION));
     }
-    BodoTZInfo tzInfo = opBinding.getTypeFactory().getTypeSystem().getDefaultTZInfo();
-    return opBinding.getTypeFactory().createTZAwareSqlType(tzInfo);
+    return BodoRelDataTypeFactory.createTZAwareSqlType(opBinding.getTypeFactory(), null);
   }
 
 

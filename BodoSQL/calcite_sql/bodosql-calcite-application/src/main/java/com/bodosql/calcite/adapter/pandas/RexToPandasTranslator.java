@@ -1530,7 +1530,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "CURRENT_TIME":
           case "LOCALTIME":
             assert operands.size() == 0;
-            BodoTZInfo tzTimeInfo = this.typeSystem.getDefaultTZInfo();
+            BodoTZInfo tzTimeInfo = BodoTZInfo.getDefaultTZInfo(this.typeSystem);
             return generateCurrTimeCode(fnName, tzTimeInfo);
           case "SYSDATE":
           case "UTC_TIMESTAMP":
@@ -1554,7 +1554,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateDateFormatCode(operands.get(0), operands.get(1));
           case "CONVERT_TIMEZONE":
             assert operands.size() == 2 || operands.size() == 3;
-            return generateConvertTimezoneCode(operands, this.typeSystem.getDefaultTZInfo());
+            return generateConvertTimezoneCode(operands, BodoTZInfo.getDefaultTZInfo(this.typeSystem));
           case "CURRENT_DATE":
           case "CURDATE":
             assert operands.size() == 0;

@@ -2,6 +2,11 @@ package org.apache.calcite.sql.type;
 
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.sql.SqlOperatorBinding;
+
+import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
+
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class BodoReturnTypes {
   /**
@@ -37,4 +42,23 @@ public class BodoReturnTypes {
   public static final SqlReturnTypeInference NULLABLE_SUB =
       new SqlReturnTypeInferenceChain(
           ReturnTypes.DECIMAL_SUM_NULLABLE, DATE_SUB_NULLABLE, ReturnTypes.LEAST_RESTRICTIVE);
+
+  public static final SqlReturnTypeInference TZAWARE_TIMESTAMP =
+      new SqlReturnTypeInference() {
+        @Override public @Nullable RelDataType inferReturnType(final SqlOperatorBinding opBinding) {
+          return BodoRelDataTypeFactory.createTZAwareSqlType(
+              opBinding.getTypeFactory(), null);
+        }
+      };
+
+  public static final SqlReturnTypeInference TZAWARE_TIMESTAMP_NULLABLE =
+      TZAWARE_TIMESTAMP.andThen(SqlTypeTransforms.TO_NULLABLE);
+
+  public static final SqlReturnTypeInference UTC_TIMESTAMP =
+      new SqlReturnTypeInference() {
+        @Override public @Nullable RelDataType inferReturnType(final SqlOperatorBinding opBinding) {
+          return BodoRelDataTypeFactory.createTZAwareSqlType(
+              opBinding.getTypeFactory(), BodoTZInfo.UTC);
+        }
+      };
 }

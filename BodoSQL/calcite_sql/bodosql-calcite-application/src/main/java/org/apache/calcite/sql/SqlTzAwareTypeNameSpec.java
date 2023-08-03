@@ -23,6 +23,8 @@ import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.util.Litmus;
 
+import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
+
 import java.util.Objects;
 
 /**
@@ -44,21 +46,8 @@ public class SqlTzAwareTypeNameSpec extends SqlTypeNameSpec {
     this.origTz = type.getTZInfo();
   }
 
-
-  /**
-   * Creates a {@code SqlTzAwareTypeNameSpec}.
-   *
-   * @param name Name of the type, must not be null
-   * @param info TzInfo of the type, must not be null
-   * @param pos  Parser position, must not be null
-   */
-  SqlTzAwareTypeNameSpec(SqlIdentifier name, BodoTZInfo info, SqlParserPos pos) {
-    super(name, pos);
-    this.origTz = info;
-  }
-
   @Override public RelDataType deriveType(final SqlValidator validator) {
-    return validator.getTypeFactory().createTZAwareSqlType(origTz);
+    return BodoRelDataTypeFactory.createTZAwareSqlType(validator.getTypeFactory(), origTz);
   }
 
   @Override public void unparse(final SqlWriter writer, final int leftPrec, final int rightPrec) {
@@ -71,5 +60,4 @@ public class SqlTzAwareTypeNameSpec extends SqlTypeNameSpec {
     }
     return this.origTz == ((SqlTzAwareTypeNameSpec) spec).origTz;
   }
-
 }

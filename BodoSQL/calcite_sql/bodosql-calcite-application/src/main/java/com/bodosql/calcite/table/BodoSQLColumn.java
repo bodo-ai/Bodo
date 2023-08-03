@@ -1,6 +1,8 @@
 package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.ir.Variable;
+import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
+
 import java.sql.JDBCType;
 import java.util.Locale;
 import kotlin.Pair;
@@ -346,7 +348,7 @@ public interface BodoSQLColumn {
           break;
         case TZ_AWARE_TIMESTAMP:
           assert tzInfo != null;
-          temp = typeFactory.createTZAwareSqlType(tzInfo);
+          temp = BodoRelDataTypeFactory.createTZAwareSqlType(typeFactory, tzInfo);
           break;
         case TIMEDELTA:
           // TODO: Figure out SqlParserPos. Probably not relevant

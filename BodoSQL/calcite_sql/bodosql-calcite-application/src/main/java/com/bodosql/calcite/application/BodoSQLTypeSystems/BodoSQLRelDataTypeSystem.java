@@ -167,7 +167,6 @@ public class BodoSQLRelDataTypeSystem implements RelDataTypeSystem {
     return defaultTypeSystem.isSchemaCaseSensitive();
   }
 
-  @Override
   public BodoTZInfo getDefaultTZInfo() {
     return defaultTZInfo;
   }
