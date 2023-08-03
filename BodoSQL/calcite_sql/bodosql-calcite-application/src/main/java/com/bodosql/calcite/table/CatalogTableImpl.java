@@ -221,7 +221,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
       BodoSQLColumn.BodoSQLColumnDataType newColType =
           BodoSQLColumn.BodoSQLColumnDataType.fromSqlType(colType);
       // getTZInfo() returns null if the type is not TZAware Timestamp
-      BodoTZInfo tzInfo = colType.getTZInfo();
+      BodoTZInfo tzInfo = TZAwareSqlType.getTZInfo(colType);
       BodoSQLColumn newCol = new BodoSQLColumnImpl(fieldName, newColType, false, tzInfo);
       extendedColumns.add(newCol);
     }

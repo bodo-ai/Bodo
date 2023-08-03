@@ -16,6 +16,10 @@
  */
 package org.apache.calcite.sql.type;
 
+import org.apache.calcite.rel.type.RelDataTypeSystem;
+
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
+
 import java.util.Locale;
 
 /**
@@ -57,6 +61,11 @@ public class BodoTZInfo {
     }
   }
 
-
-
+  public static BodoTZInfo getDefaultTZInfo(RelDataTypeSystem typeSystem) {
+    if (typeSystem instanceof BodoSQLRelDataTypeSystem) {
+      return ((BodoSQLRelDataTypeSystem) typeSystem).getDefaultTZInfo();
+    } else {
+      return BodoTZInfo.UTC;
+    }
+  }
 }

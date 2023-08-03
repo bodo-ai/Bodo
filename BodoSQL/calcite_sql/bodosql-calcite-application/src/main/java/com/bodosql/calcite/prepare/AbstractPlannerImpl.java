@@ -18,6 +18,7 @@ package com.bodosql.calcite.prepare;
 
 import static java.util.Objects.requireNonNull;
 
+import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
 import com.bodosql.calcite.sql.validate.BodoSqlValidator;
 import com.google.common.collect.ImmutableList;
 import java.io.Reader;
@@ -27,7 +28,6 @@ import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionConfigImpl;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.calcite.config.CalciteSystemProperty;
-import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.plan.Context;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
@@ -180,7 +180,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
     }
     ensure(State.STATE_1_RESET);
 
-    typeFactory = new JavaTypeFactoryImpl(typeSystem);
+    typeFactory = new BodoTypeFactoryImpl(typeSystem);
     RelOptPlanner planner = this.planner = new VolcanoPlanner(costFactory, context);
     RelOptUtil.registerDefaultRules(
         planner, connectionConfig.materializationsEnabled(), Hook.ENABLE_BINDABLE.get(false));

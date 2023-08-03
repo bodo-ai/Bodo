@@ -16,6 +16,10 @@
  */
 package org.apache.calcite.sql.type;
 
+import org.apache.calcite.rel.type.RelDataType;
+
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.util.Objects;
 
 import static org.apache.calcite.sql.type.SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
@@ -57,7 +61,15 @@ public class TZAwareSqlType extends AbstractSqlType {
     sb.append(")");
   }
 
-  @Override public BodoTZInfo getTZInfo() {
+  public BodoTZInfo getTZInfo() {
     return tzInfo;
+  }
+
+  public static @Nullable BodoTZInfo getTZInfo(RelDataType type) {
+    if (type instanceof TZAwareSqlType) {
+      return ((TZAwareSqlType) type).getTZInfo();
+    } else {
+      return null;
+    }
   }
 }

@@ -329,17 +329,6 @@
 										<exclude>org/apache/calcite/rel/mutable/MutableRels$3.class</exclude>
 										<exclude>org/apache/calcite/rel/mutable/MutableRels.class</exclude>
 										<exclude>org/apache/calcite/rel/mutable/MutableRowSample.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataType.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataTypeFactory$Builder.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataTypeFactory$FieldInfo.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataTypeFactory$FieldInfoBuilder.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataTypeFactory.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataTypeImpl$1.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataTypeImpl$Slot.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataTypeImpl.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataTypeSystem$1.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataTypeSystem$2.class</exclude>
-										<exclude>org/apache/calcite/rel/type/RelDataTypeSystem.class</exclude>
 										<exclude>org/apache/calcite/rex/RexCall$1.class</exclude>
 										<exclude>org/apache/calcite/rex/RexCall.class</exclude>
 										<exclude>org/apache/calcite/rex/RexLiteral$1.class</exclude>
@@ -378,7 +367,6 @@
 										<exclude>org/apache/calcite/sql/SqlTableIdentifierWithID.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlTableRefWithID$1.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlTableRefWithID.class</exclude>
-										<exclude>org/apache/calcite/sql/SqlTzAwareTypeNameSpec.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlUpdate.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlUtil$1.class</exclude>
 										<exclude>org/apache/calcite/sql/SqlUtil$DatabaseMetaDataInvocationHandler.class</exclude>
@@ -390,7 +378,6 @@
 										<exclude>org/apache/calcite/sql/ddl/SqlCreateTable$1.class</exclude>
 										<exclude>org/apache/calcite/sql/ddl/SqlCreateTable$CreateTableType.class</exclude>
 										<exclude>org/apache/calcite/sql/ddl/SqlCreateTable.class</exclude>
-										<exclude>org/apache/calcite/sql/fun/SqlAbstractTZSessionFunction.class</exclude>
 										<exclude>org/apache/calcite/sql/fun/SqlCoalesceFunction.class</exclude>
 										<exclude>org/apache/calcite/sql/fun/SqlQuantifyOperator.class</exclude>
 										<exclude>org/apache/calcite/sql/fun/SqlTimestampDiffFunction.class</exclude>
@@ -407,11 +394,6 @@
 										<exclude>org/apache/calcite/sql/parser/SqlParserUtil$ToTreeListItem.class</exclude>
 										<exclude>org/apache/calcite/sql/parser/SqlParserUtil$TokenSequenceImpl.class</exclude>
 										<exclude>org/apache/calcite/sql/parser/SqlParserUtil.class</exclude>
-										<exclude>org/apache/calcite/sql/type/SqlTypeFactoryImpl.class</exclude>
-										<exclude>org/apache/calcite/sql/type/SqlTypeUtil$1.class</exclude>
-										<exclude>org/apache/calcite/sql/type/SqlTypeUtil$2.class</exclude>
-										<exclude>org/apache/calcite/sql/type/SqlTypeUtil.class</exclude>
-										<exclude>org/apache/calcite/sql/type/TZAwareSqlType.class</exclude>
 										<exclude>org/apache/calcite/sql/util/SqlBasicVisitor$ArgHandler.class</exclude>
 										<exclude>org/apache/calcite/sql/util/SqlBasicVisitor$ArgHandlerImpl.class</exclude>
 										<exclude>org/apache/calcite/sql/util/SqlBasicVisitor.class</exclude>
