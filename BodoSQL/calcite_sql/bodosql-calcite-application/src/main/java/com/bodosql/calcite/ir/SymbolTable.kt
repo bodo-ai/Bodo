@@ -27,6 +27,7 @@ class SymbolTable {
     private var iterVarId: Int = 1
     private var stateVarId: Int = 1
     private var funcIdCounter: Int = 1
+    private var closureVarId: Int = 1
 
     companion object {
         private const val dummyColNameBase = "__bodo_dummy__"
@@ -103,5 +104,9 @@ class SymbolTable {
 
     fun genFuncID(): Expr.IntegerLiteral {
         return Expr.IntegerLiteral(funcIdCounter++)
+    }
+
+    fun genClosureVar(): Variable {
+        return Variable("func_${closureVarId++}")
     }
 }

@@ -177,7 +177,7 @@ abstract class Expr {
      * not a name.
      * @param inputExpr: The input expression to apply the op to.
      */
-    class Unary(val opString: String, val inputExpr: Expr) : Expr() {
+    class Unary(private val opString: String, private val inputExpr: Expr) : Expr() {
 
         override fun emit(): String {
             return "${opString}(${inputExpr.emit()})"
@@ -195,7 +195,7 @@ abstract class Expr {
      * @param input1: The first input to the op.
      * @param input2: The second input to the op.
      */
-    class Binary(val opString: String, val input1: Expr, val input2: Expr) : Expr() {
+    class Binary(private val opString: String, private val input1: Expr, private val input2: Expr) : Expr() {
 
         override fun emit(): String {
             // TODO(jsternberg): As things get more complex in here, we'll have to mark
