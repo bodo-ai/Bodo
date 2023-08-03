@@ -11,8 +11,10 @@ import com.bodosql.calcite.rel.logical.BodoLogicalJoin
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import com.google.common.collect.Iterables
 import org.apache.calcite.plan.RelOptRule
+import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Sort
 import org.apache.calcite.rel.rules.*
+import org.apache.calcite.tools.RelBuilderFactory
 
 object BodoRules {
     /**
@@ -391,6 +393,15 @@ object BodoRules {
             .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
             .toRule()
 
+    /**
+     * Pull up Constants used in Aggregates.
+     */
+    @JvmField
+    val AGGREGATE_CONSTANT_PULL_UP_RULE = VolcanoAcceptingAggregateProjectPullUpConstantsRule.Config.DEFAULT
+        .withOperandFor(BodoLogicalAggregate::class.java, RelNode::class.java)
+        .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+        .toRule()
+
     @JvmField
     val HEURISTIC_RULE_SET: List<RelOptRule> = listOf(
         PROJECT_UNALIASED_REMOVE_RULE,
@@ -420,6 +431,7 @@ object BodoRules {
         MIN_ROW_NUMBER_FILTER_RULE,
         REX_SIMPLIFICATION_RULE,
         LIST_AGG_OPTIONAL_REPLACE_RULE,
+        AGGREGATE_CONSTANT_PULL_UP_RULE,
     )
 
     @JvmField
@@ -461,5 +473,6 @@ object BodoRules {
         LIST_AGG_OPTIONAL_REPLACE_RULE,
         JOIN_COMMUTE_RULE,
         LOPT_OPTIMIZE_JOIN_RULE,
+        AGGREGATE_CONSTANT_PULL_UP_RULE,
     )
 }
