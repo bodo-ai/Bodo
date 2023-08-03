@@ -57,72 +57,25 @@ pytestmark = pytest_perf_regression
 bodo.set_verbose_level(2)
 
 global_2 = MetaType((0,))
-global_3 = MetaType((0,))
-global_1 = ColNamesMetaType(
-    (
-        "o_orderkey",
-        "o_custkey",
-        "o_orderstatus",
-        "o_totalprice",
-        "o_orderdate",
-        "o_orderpriority",
-        "o_clerk",
-        "o_shippriority",
-        "o_comment",
-    )
-)
-global_11 = ColNamesMetaType(
-    (
-        "l_orderkey",
-        "l_extendedprice",
-        "l_shipinstruct",
-        "l_shipmode",
-        "l_comment",
-        "o_orderpriority",
-        "o_comment",
-        "o_custkey",
-    )
-)
-global_10 = MetaType((0, 1, 2, 3, 4, 5, 6, 7))
-global_8 = MetaType((0, 1, 2, 3, 4))
-global_9 = ColNamesMetaType(
-    (
-        "O_ORDERKEY",
-        "O_CUSTKEY",
-        "O_ORDERPRIORITY",
-        "O_COMMENT",
-        "L_ORDERKEY",
-        "L_EXTENDEDPRICE",
-        "L_SHIPINSTRUCT",
-        "L_SHIPMODE",
-        "L_COMMENT",
-    )
-)
-global_6 = MetaType((0, 1, 2, 3))
+global_3 = ColNamesMetaType(("O_ORDERKEY", "O_CUSTKEY", "O_ORDERPRIORITY", "O_COMMENT"))
+global_1 = MetaType((0, 1, 5, 8))
+global_6 = MetaType((4, 5, 6, 7, 8, 2, 3, 1))
 global_7 = ColNamesMetaType(
     (
         "l_orderkey",
-        "l_partkey",
-        "l_suppkey",
-        "l_linenumber",
-        "l_quantity",
         "l_extendedprice",
-        "l_discount",
-        "l_tax",
-        "l_returnflag",
-        "l_linestatus",
-        "l_shipdate",
-        "l_commitdate",
-        "l_receiptdate",
         "l_shipinstruct",
         "l_shipmode",
         "l_comment",
+        "o_orderpriority",
+        "o_comment",
+        "o_custkey",
     )
 )
-global_4 = ColNamesMetaType(("O_ORDERKEY", "O_CUSTKEY", "O_ORDERPRIORITY", "O_COMMENT"))
-global_5 = ColNamesMetaType(
+global_4 = ColNamesMetaType(
     ("L_ORDERKEY", "L_EXTENDEDPRICE", "L_SHIPINSTRUCT", "L_SHIPMODE", "L_COMMENT")
 )
+global_5 = MetaType((0, 5, 13, 14, 15))
 
 # Codegen change: Global variables for setting build-outer and probe-outer flags.
 global_build_outer = False
@@ -169,238 +122,164 @@ def impl(conn_str):  # Codegen change: add conn_str
         conn_str,  # Codegen change: use conn_str
         _bodo_is_table_input=True,
         _bodo_chunksize=4096,
+        _bodo_read_as_table=True,
     )
     # Codegen change: timer for build step
     build_time = 0.0
     _temp7 = time.time()
     _temp8 = _temp7 - _temp5
     _temp4 = _temp4 + _temp8
-    _temp14 = 0.0
-    _temp15 = time.time()
+    _temp12 = 0.0
+    _temp13 = time.time()
     state_2 = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
-    _temp17 = time.time()
-    _temp18 = _temp17 - _temp15
-    _temp14 = _temp14 + _temp18
+    _temp15 = time.time()
+    _temp16 = _temp15 - _temp13
+    _temp12 = _temp12 + _temp16
     _temp1 = 0.0
     _temp2 = time.time()
     # Codegen change: Use global flags for build-outer and probe-outer
     state_3 = bodo.libs.stream_join.init_join_state(
-        global_2, global_3, global_4, global_5, global_build_outer, global_probe_outer
+        global_2, global_2, global_3, global_4, global_build_outer, global_probe_outer
     )
-    _temp23 = time.time()
-    _temp24 = _temp23 - _temp2
-    _temp1 = _temp1 + _temp24
-    while not (__bodo_is_last_streaming_output_1):
+    _temp20 = time.time()
+    _temp21 = _temp20 - _temp2
+    _temp1 = _temp1 + _temp21
+    _temp22 = False
+    while not (_temp22):
         _temp6 = time.time()
         (
-            T9,
+            T1,
             __bodo_is_last_streaming_output_1,
         ) = bodo.io.arrow_reader.read_arrow_next(state_1)
-        index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T9), 1, None)
-        df10 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T9,), index_1, global_1)
-        _temp11 = time.time()
-        _temp12 = _temp11 - _temp6
-        _temp4 = _temp4 + _temp12
-        _temp16 = time.time()
-        df19 = df10.loc[
-            :, ["o_orderkey", "o_custkey", "o_orderpriority", "o_comment"]
-        ].rename(
-            columns={
-                "o_orderkey": "O_ORDERKEY",
-                "o_custkey": "O_CUSTKEY",
-                "o_orderpriority": "O_ORDERPRIORITY",
-                "o_comment": "O_COMMENT",
-            },
-            copy=False,
-        )
-        _temp20 = time.time()
-        _temp21 = _temp20 - _temp16
-        _temp14 = _temp14 + _temp21
+        _temp9 = time.time()
+        _temp10 = _temp9 - _temp6
+        _temp4 = _temp4 + _temp10
+        _temp14 = time.time()
+        T2 = bodo.hiframes.table.table_subset(T1, global_1, False)
+        _temp17 = time.time()
+        _temp18 = _temp17 - _temp14
+        _temp12 = _temp12 + _temp18
         _temp3 = time.time()
-        __bodo_is_last_streaming_output_1 = bodo.libs.distributed_api.sync_is_last(
-            __bodo_is_last_streaming_output_1, _iter_1
-        )
-        T25 = bodo.hiframes.table.logical_table_to_table(
-            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df19), (), global_6, 4
-        )
         # Codegen change: Track build time
         t_build = time.time()
-        bodo.libs.stream_join.join_build_consume_batch(
-            state_3, T25, __bodo_is_last_streaming_output_1
+        _temp22 = bodo.libs.stream_join.join_build_consume_batch(
+            state_3, T2, __bodo_is_last_streaming_output_1
         )
         build_time += time.time() - t_build
-        _temp26 = time.time()
-        _temp27 = _temp26 - _temp3
-        _temp1 = _temp1 + _temp27
+        _temp23 = time.time()
+        _temp24 = _temp23 - _temp3
+        _temp1 = _temp1 + _temp24
         _iter_1 = _iter_1 + 1
     bodo.io.arrow_reader.arrow_reader_del(state_1)
-    _temp13 = "ORDERS"
+    _temp11 = "ORDERS"
     bodo.user_logging.log_message(
-        "IO TIMING", f"""Execution time for reading table {_temp13}: {_temp4}"""
+        "IO TIMING", f"""Execution time for reading table {_temp11}: {_temp4}"""
     )
     bodo.libs.stream_dict_encoding.delete_dict_encoding_state(state_2)
-    _temp22 = "PandasProject(O_ORDERKEY=[$0], O_CUSTKEY=[$1], O_ORDERPRIORITY=[$5], O_COMMENT=[$8])"
+    _temp19 = "PandasProject(O_ORDERKEY=[$0], O_CUSTKEY=[$1], O_ORDERPRIORITY=[$5], O_COMMENT=[$8])"
     bodo.user_logging.log_message(
-        "RELNODE_TIMING", f"""Execution time for RelNode {_temp22}: {_temp14}"""
+        "RELNODE_TIMING", f"""Execution time for RelNode {_temp19}: {_temp12}"""
     )
     # Codegen change: print build timer
     bodo.user_logging.log_message("RELNODE_TIMING", f"Join build took {build_time}s")
     __bodo_is_last_streaming_output_2 = False
     _iter_2 = 0
-    _temp28 = 0.0
-    _temp29 = time.time()
+    _temp25 = 0.0
+    _temp26 = time.time()
     state_4 = pd.read_sql(
         "LINEITEM",
         conn_str,  # Codegen change: use conn_str
         _bodo_is_table_input=True,
         _bodo_chunksize=4096,
+        _bodo_read_as_table=True,
     )
-    _temp31 = time.time()
-    _temp32 = _temp31 - _temp29
-    _temp28 = _temp28 + _temp32
-    _temp38 = 0.0
-    _temp39 = time.time()
+    _temp28 = time.time()
+    _temp29 = _temp28 - _temp26
+    _temp25 = _temp25 + _temp29
+    _temp33 = 0.0
+    _temp34 = time.time()
     state_5 = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
-    _temp41 = time.time()
-    _temp42 = _temp41 - _temp39
-    _temp38 = _temp38 + _temp42
-    _temp47 = False
-    _temp54 = 0.0
-    _temp55 = time.time()
+    _temp36 = time.time()
+    _temp37 = _temp36 - _temp34
+    _temp33 = _temp33 + _temp37
+    _temp41 = False
+    _temp45 = 0.0
+    _temp46 = time.time()
     state_6 = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
-    _temp57 = time.time()
-    _temp58 = _temp57 - _temp55
-    _temp54 = _temp54 + _temp58
+    _temp48 = time.time()
+    _temp49 = _temp48 - _temp46
+    _temp45 = _temp45 + _temp49
     # Codegen change: timer for probe step
     probe_time = 0.0
     __bodo_streaming_batches_list_1 = []
-    while not (_temp47):
-        _temp30 = time.time()
+    while not (_temp41):
+        _temp27 = time.time()
         (
-            T33,
+            T3,
             __bodo_is_last_streaming_output_2,
         ) = bodo.io.arrow_reader.read_arrow_next(state_4)
-        index_2 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T33), 1, None)
-        df34 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T33,), index_2, global_7)
+        _temp30 = time.time()
+        _temp31 = _temp30 - _temp27
+        _temp25 = _temp25 + _temp31
         _temp35 = time.time()
-        _temp36 = _temp35 - _temp30
-        _temp28 = _temp28 + _temp36
-        _temp40 = time.time()
-        df43 = df34.loc[
-            :,
-            [
-                "l_orderkey",
-                "l_extendedprice",
-                "l_shipinstruct",
-                "l_shipmode",
-                "l_comment",
-            ],
-        ].rename(
-            columns={
-                "l_orderkey": "L_ORDERKEY",
-                "l_extendedprice": "L_EXTENDEDPRICE",
-                "l_shipinstruct": "L_SHIPINSTRUCT",
-                "l_shipmode": "L_SHIPMODE",
-                "l_comment": "L_COMMENT",
-            },
-            copy=False,
-        )
-        _temp44 = time.time()
-        _temp45 = _temp44 - _temp40
-        _temp38 = _temp38 + _temp45
+        T4 = bodo.hiframes.table.table_subset(T3, global_5, False)
+        _temp38 = time.time()
+        _temp39 = _temp38 - _temp35
+        _temp33 = _temp33 + _temp39
         _temp3 = time.time()
-        __bodo_is_last_streaming_output_2 = bodo.libs.distributed_api.sync_is_last(
-            __bodo_is_last_streaming_output_2, _iter_2
-        )
-        T48 = bodo.hiframes.table.logical_table_to_table(
-            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df43), (), global_8, 5
-        )
         # Codegen change: track probe time
         t_probe = time.time()
         (
-            T49,
-            _temp47,
+            T5,
+            _temp41,
         ) = bodo.libs.stream_join.join_probe_consume_batch(
-            state_3, T48, __bodo_is_last_streaming_output_2
+            state_3, T4, __bodo_is_last_streaming_output_2
         )
         probe_time += time.time() - t_probe
-        index_3 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T49), 1, None)
-        df50 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T49,), index_3, global_9)
-        _temp51 = time.time()
-        _temp52 = _temp51 - _temp3
-        _temp1 = _temp1 + _temp52
-        _temp56 = time.time()
-        df59 = df50.loc[
-            :,
-            [
-                "L_ORDERKEY",
-                "L_EXTENDEDPRICE",
-                "L_SHIPINSTRUCT",
-                "L_SHIPMODE",
-                "L_COMMENT",
-                "O_ORDERPRIORITY",
-                "O_COMMENT",
-                "O_CUSTKEY",
-            ],
-        ].rename(
-            columns={
-                "L_ORDERKEY": "l_orderkey",
-                "L_EXTENDEDPRICE": "l_extendedprice",
-                "L_SHIPINSTRUCT": "l_shipinstruct",
-                "L_SHIPMODE": "l_shipmode",
-                "L_COMMENT": "l_comment",
-                "O_ORDERPRIORITY": "o_orderpriority",
-                "O_COMMENT": "o_comment",
-                "O_CUSTKEY": "o_custkey",
-            },
-            copy=False,
-        )
-        _temp60 = time.time()
-        _temp61 = _temp60 - _temp56
-        _temp54 = _temp54 + _temp61
-        T63 = bodo.hiframes.table.logical_table_to_table(
-            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df59),
-            (),
-            global_10,
-            8,
-        )
-        __bodo_streaming_batches_list_1.append(T63)
-        _temp47 = bodo.libs.distributed_api.sync_is_last(_temp47, _iter_2)
+        _temp42 = time.time()
+        _temp43 = _temp42 - _temp3
+        _temp1 = _temp1 + _temp43
+        _temp47 = time.time()
+        T6 = bodo.hiframes.table.table_subset(T5, global_6, False)
+        _temp50 = time.time()
+        _temp51 = _temp50 - _temp47
+        _temp45 = _temp45 + _temp51
+        __bodo_streaming_batches_list_1.append(T6)
         _iter_2 = _iter_2 + 1
     bodo.io.arrow_reader.arrow_reader_del(state_4)
     # Codegen change: print probe time
     bodo.user_logging.log_message("RELNODE_TIMING", f"Join probe took {probe_time}s")
-    _temp37 = "LINEITEM"
+    _temp32 = "LINEITEM"
     bodo.user_logging.log_message(
-        "IO TIMING", f"""Execution time for reading table {_temp37}: {_temp28}"""
+        "IO TIMING", f"""Execution time for reading table {_temp32}: {_temp25}"""
     )
     bodo.libs.stream_dict_encoding.delete_dict_encoding_state(state_5)
-    _temp46 = "PandasProject(L_ORDERKEY=[$0], L_EXTENDEDPRICE=[$5], L_SHIPINSTRUCT=[$13], L_SHIPMODE=[$14], L_COMMENT=[$15])"
+    _temp40 = "PandasProject(L_ORDERKEY=[$0], L_EXTENDEDPRICE=[$5], L_SHIPINSTRUCT=[$13], L_SHIPMODE=[$14], L_COMMENT=[$15])"
     bodo.user_logging.log_message(
-        "RELNODE_TIMING", f"""Execution time for RelNode {_temp46}: {_temp38}"""
+        "RELNODE_TIMING", f"""Execution time for RelNode {_temp40}: {_temp33}"""
     )
     bodo.libs.stream_join.delete_join_state(state_3)
-    _temp53 = "PandasJoin(condition=[=($4, $0)], joinType=[inner])"
+    _temp44 = "PandasJoin(condition=[=($4, $0)], joinType=[inner])"
     bodo.user_logging.log_message(
-        "RELNODE_TIMING", f"""Execution time for RelNode {_temp53}: {_temp1}"""
+        "RELNODE_TIMING", f"""Execution time for RelNode {_temp44}: {_temp1}"""
     )
     bodo.libs.stream_dict_encoding.delete_dict_encoding_state(state_6)
-    _temp62 = "PandasProject(l_orderkey=[$4], l_extendedprice=[$5], l_shipinstruct=[$6], l_shipmode=[$7], l_comment=[$8], o_orderpriority=[$2], o_comment=[$3], o_custkey=[$1])"
+    _temp52 = "PandasProject(l_orderkey=[$4], l_extendedprice=[$5], l_shipinstruct=[$6], l_shipmode=[$7], l_comment=[$8], o_orderpriority=[$2], o_comment=[$3], o_custkey=[$1])"
     bodo.user_logging.log_message(
-        "RELNODE_TIMING", f"""Execution time for RelNode {_temp62}: {_temp54}"""
+        "RELNODE_TIMING", f"""Execution time for RelNode {_temp52}: {_temp45}"""
     )
     # Codegen change: track concat time
     concat_time_start = time.time()
-    T64 = bodo.utils.table_utils.concat_tables(__bodo_streaming_batches_list_1)
-    index_4 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T64), 1, None)
-    df65 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T64,), index_4, global_11)
+    T7 = bodo.utils.table_utils.concat_tables(__bodo_streaming_batches_list_1)
+    index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T7), 1, None)
+    df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T7,), index_1, global_7)
     bodo.user_logging.log_message(
         "RELNODE_TIMING", f"Concat Time: {time.time() - concat_time_start}"
     )
     # Codegen change: print overall execution time
     print(f"Finished executing the query. It took {time.time() - t0} seconds.")
-    print("Output shape: ", df65.shape)
-    return df65
+    print("Output shape: ", df1.shape)
+    return df1
 
 
 # Codegen change: call the function
