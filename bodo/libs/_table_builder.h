@@ -149,14 +149,13 @@ struct ArrayBuildBuffer {
     void AppendBatch(const std::shared_ptr<array_info>& in_arr,
                      const std::vector<bool>& append_rows,
                      uint64_t append_rows_sum) {
-        offset_t* curr_offsets = (offset_t*)this->data_array->data2();
-        offset_t* in_offsets = (offset_t*)in_arr->data2();
-
         // resize and copy offsets
         CHECK_ARROW_MEM(
             data_array->buffers[1]->Resize(
                 (size + 1 + append_rows_sum) * sizeof(offset_t), false),
             "Resize Failed!");
+        offset_t* curr_offsets = (offset_t*)this->data_array->data2();
+        offset_t* in_offsets = (offset_t*)in_arr->data2();
         u_int64_t offset_size = this->size;
         for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
             if (append_rows[row_ind]) {
@@ -401,6 +400,9 @@ struct ArrayBuildBuffer {
                         "Resize Failed!");
         CHECK_ARROW_MEM(data_array->buffers[2]->Resize(new_bitmap_size, false),
                         "Resize Failed!");
+
+        // Re-fetch pointers in case the buffer was reallocated
+        curr_offsets = (offset_t*)this->data_array->data2();
 
         // Copy data
         char* out_ptr = this->data_array->data1() + old_data_size;
