@@ -51,7 +51,7 @@ public class SqlTzAwareTypeNameSpec extends SqlTypeNameSpec {
   }
 
   @Override public void unparse(final SqlWriter writer, final int leftPrec, final int rightPrec) {
-    writer.keyword("TIMESTAMP(" + this.origTz.getPyZone() + ")");
+    writer.keyword(String.format("TIMESTAMP(%s)", this.origTz.getZoneExpr().emit()));
   }
 
   @Override public boolean equalsDeep(final SqlTypeNameSpec spec, final Litmus litmus) {

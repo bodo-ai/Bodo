@@ -115,8 +115,7 @@ public class DatetimeFnCodeGen {
    * @return
    */
   public static Expr generateCurrTimestampCode(String opName, BodoTZInfo tzInfo) {
-    String fnExpression = String.format("pd.Timestamp.now(%s)", tzInfo.getPyZone());
-    return new Expr.Raw(fnExpression);
+    return new Expr.Call("pd.Timestamp.now", tzInfo.getZoneExpr());
   }
 
   /**
@@ -126,27 +125,22 @@ public class DatetimeFnCodeGen {
    * @param tzInfo The Timezone information with which to create the Time.
    * @return
    */
-  public static Expr generateCurrTimeCode(String opName, BodoTZInfo tzInfo) {
-    String fnExpression =
-        String.format(
-            "bodo.libs.bodosql_array_kernels.to_time(pd.Timestamp.now(%s), format_str=None,"
-                + " _try=True)",
-            tzInfo == null ? "" : tzInfo.getPyZone());
-    return new Expr.Raw(fnExpression);
+  public static Expr generateCurrTimeCode(BodoTZInfo tzInfo) {
+    Expr tzArg = tzInfo == null ? Expr.None.INSTANCE : tzInfo.getZoneExpr();
+    Expr nowCall = new Expr.Call("pd.Timestamp.now", tzArg);
+    List<Pair<String, Expr>> namedArgs =
+        List.of(
+            new Pair<>("format_str", Expr.None.INSTANCE),
+            new Pair<>("_try", Expr.BooleanLiteral.True.INSTANCE));
+    return new Expr.Call("bodo.libs.bodosql_array_kernels.to_time", List.of(nowCall), namedArgs);
   }
 
-  public static Expr generateUTCTimestampCode(String opName) {
-    // use utcnow if/when we decide to support timezones
-    String fnExpression = "pd.Timestamp.now(tz='UTC')";
-    return new Expr.Raw(fnExpression);
+  public static Expr generateUTCTimestampCode() {
+    return new Expr.Call("pd.Timestamp.now", new Expr.StringLiteral("UTC"));
   }
 
   public static Expr generateUTCDateCode() {
-    // use utcnow if/when we decide to support timezones
-    // As dates are tz-naive, we use tz_localize to convert a UTC timestamp
-    // into a tz-naive date type with the correct value.
-    String fnExpression = "pd.Timestamp.now(tz='UTC').floor(freq=\"D\").tz_localize(None)";
-    return new Expr.Raw(fnExpression);
+    return new Expr.Call("datetime.date.today");
   }
 
   /**
@@ -190,10 +184,10 @@ public class DatetimeFnCodeGen {
    * @return The Expr corresponding to the function call
    */
   public static Expr generateConvertTimezoneCode(List<Expr> operands, BodoTZInfo tzTimeInfo) {
-    String defaultTimezoneStr = tzTimeInfo.getPyZone();
+    Expr defaultTz = tzTimeInfo.getZoneExpr();
     List<Expr> args = new ArrayList<>();
     if (operands.size() == 2) {
-      args.add(new Expr.Raw(defaultTimezoneStr));
+      args.add(defaultTz);
       args.addAll(operands);
       args.add(new Expr.BooleanLiteral(true));
     } else if (operands.size() == 3) {
@@ -204,13 +198,24 @@ public class DatetimeFnCodeGen {
   }
 
   /**
-   * Helper function that handles codegen for CURDATE and CURRENTDATE
+   * Helper function that handles codegen for CURDATE and CURRENTDATE. CURRENT_DATE actually returns
+   * the date from the Timestamp in the system's local timezone.
+   * https://docs.snowflake.com/en/sql-reference/functions/current_date
+   *
+   * <p>As a result, if the timezone isn't in UTC we need to pass that information.
    *
    * @return The Expr corresponding to the function call
    */
-  public static Expr generateCurdateCode() {
-    String fnExpression = "datetime.date.today()";
-    return new Expr.Raw(fnExpression);
+  public static Expr generateCurrentDateCode(BodoTZInfo defaultTZInfo) {
+    if (defaultTZInfo.equals(BodoTZInfo.UTC)) {
+      // UTC doesn't need timezone info.
+      return new Expr.Call("datetime.date.today");
+    } else {
+      // Wrap in a BodoSQL function we can't directly
+      // pass Timezone objects
+      return new Expr.Call(
+          "bodo.hiframes.datetime_date_ext.now_date_wrapper", defaultTZInfo.getZoneExpr());
+    }
   }
 
   /**
@@ -288,9 +293,7 @@ public class DatetimeFnCodeGen {
    * @return the rexNodeVisitorInfo for the function call
    */
   public static Expr generateDateTimeTypeFromPartsCode(
-      String fnName, List<Expr> operandsInfo, String tzStr) {
-    StringBuilder code = new StringBuilder();
-
+      final String fnName, List<Expr> operandsInfo, final Expr tzExpr) {
     boolean time_mode = false;
     boolean date_mode = false;
     boolean timestamp_mode = false;
@@ -309,42 +312,31 @@ public class DatetimeFnCodeGen {
       default:
         timestamp_mode = true;
     }
-
-    code.append("bodo.libs.bodosql_array_kernels.");
-
+    String generateFnName;
     if (time_mode) {
-      code.append("time_from_parts");
+      generateFnName = "time_from_parts";
     } else if (date_mode) {
-      code.append("date_from_parts");
+      generateFnName = "date_from_parts";
     } else { // timestamp_mode
-      code.append("construct_timestamp");
+      generateFnName = "construct_timestamp";
     }
 
-    code.append("(");
-
-    for (int i = 0; i < numArgs; i++) {
-      if (i != 0) {
-        code.append(", ");
-      }
-      code.append(operandsInfo.get(i).emit());
-    }
+    // Copy the arguments because we will need to append.
+    List<Expr> args = new ArrayList<>(operandsInfo);
 
     // For time, add the nanosecond argument if necessary
     if (time_mode && numArgs == 3) {
-      code.append(", 0");
+      args.add(Expr.Companion.getZero());
     }
     // For timestamp, fill in the nanosecond argument if necessary
     if (timestamp_mode && numArgs < 7) {
-      code.append(", 0");
+      args.add(Expr.Companion.getZero());
     }
     // For timestamp, fill in the time_zone argument if necessary
     if (timestamp_mode && numArgs < 8) {
-      code.append(", ").append(tzStr);
+      args.add(tzExpr);
     }
-
-    code.append(")");
-
-    return new Expr.Raw(code.toString());
+    return ExprKt.BodoSQLKernel(generateFnName, args, List.of());
   }
 
   public static ArrayList<String> TIME_PART_UNITS =

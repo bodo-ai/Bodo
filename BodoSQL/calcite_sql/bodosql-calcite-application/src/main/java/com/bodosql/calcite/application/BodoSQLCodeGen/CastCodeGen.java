@@ -48,10 +48,8 @@ public class CastCodeGen {
         fnName = "bodo.libs.bodosql_array_kernels.to_char";
         break;
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
-        String tzStr = ((TZAwareSqlType) outputType).getTZInfo().getPyZone();
-        // TODO(njriasan): Refactor/remove getPyZone, which contains the information to make a
-        // Python str
-        args.add(new Expr.Raw(tzStr));
+        Expr tzExpr = ((TZAwareSqlType) outputType).getTZInfo().getZoneExpr();
+        args.add(tzExpr);
         // TZ-Aware data needs special handling
         switch (inputTypeName) {
           case TIMESTAMP:
@@ -150,9 +148,8 @@ public class CastCodeGen {
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         fnName = "try_to_timestamp";
         args.add(None.INSTANCE);
-        // TODO(njriasan): Modify getPyZone to no longer output a Python string.
-        String tzStr = ((TZAwareSqlType) outputType).getTZInfo().getPyZone();
-        args.add(new Expr.Raw(tzStr));
+        Expr tzExpr = ((TZAwareSqlType) outputType).getTZInfo().getZoneExpr();
+        args.add(tzExpr);
         args.add(new Expr.IntegerLiteral(0));
         break;
       case TIMESTAMP:

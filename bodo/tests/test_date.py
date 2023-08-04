@@ -8,6 +8,7 @@ import random
 import numpy as np
 import pandas as pd
 import pytest
+import pytz
 
 import bodo
 from bodo.tests.utils import check_func, generate_comparison_ops_func
@@ -2571,4 +2572,30 @@ def test_date_compare_datetime64(date, datetime64, op, memory_leak_check):
         comparison_impl(op),
         (datetime64, date),
         py_output=expected_output(datetime64, date),
+    )
+
+
+def test_now_date_wrapper(memory_leak_check):
+    """
+    Test that now_date_wrapper works with various timezones
+    that could be provided.
+    """
+
+    def impl(tz):
+        return bodo.hiframes.datetime_date_ext.now_date_wrapper(tz)
+
+    # Test naive
+    check_func(impl, (None,), py_output=datetime.date.today())
+    # Test integer delta of 23 hours 59 minute (as close to 1 day
+    # as we can get).
+    # pytz.FixedOffset is in minutes but our types expect nanoseconds
+    nanoseconds_delta = 86_400_000_000_000 - 60_000_000_000
+    tzInfo = bodo.libs.pd_datetime_arr_ext.nanoseconds_to_offset(nanoseconds_delta)
+    check_func(
+        impl, (nanoseconds_delta,), py_output=datetime.datetime.now(tzInfo).date()
+    )
+    # Test str tz
+    tz_str = "US/Pacific"
+    check_func(
+        impl, (tz_str,), py_output=datetime.datetime.now(pytz.timezone(tz_str)).date()
     )
