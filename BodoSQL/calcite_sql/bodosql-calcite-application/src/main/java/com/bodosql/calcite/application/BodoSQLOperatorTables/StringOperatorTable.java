@@ -609,11 +609,31 @@ public final class StringOperatorTable implements SqlOperatorTable {
           ),
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction MD5 =
+      new SqlFunction(
+          "MD5",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.VARCHAR_2000,
+          null,
+          OperandTypes.STRING,
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction MD5_HEX =
+      new SqlFunction(
+          "MD5_HEX",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.VARCHAR_2000,
+          null,
+          OperandTypes.STRING,
+          SqlFunctionCategory.STRING);
+
   private List<SqlOperator> stringOperatorList =
       Arrays.asList(
           CONCAT,
           CONCAT_WS,
           CONTAINS,
+          MD5,
+          MD5_HEX,
           MID,
           SUBSTR,
           INSTR,

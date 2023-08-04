@@ -1160,6 +1160,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "SHA2":
       case "SHA2_HEX":
         return generateSHA2(operands, streamingNamedArgs);
+      case "MD5":
+      case "MD5_HEX":
+        return ExprKt.BodoSQLKernel("md5", operands, streamingNamedArgs);
       default:
         throw new BodoSQLCodegenException(String.format("Unexpected String function: %s", fnName));
     }
@@ -1684,6 +1687,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "INITCAP":
           case "SHA2":
           case "SHA2_HEX":
+          case "MD5":
+          case "MD5_HEX":
             return visitStringFunc(fnOperation, operands);
           case "DATE_TRUNC":
             dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(1));

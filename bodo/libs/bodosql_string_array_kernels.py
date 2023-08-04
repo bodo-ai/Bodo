@@ -2255,3 +2255,57 @@ def sha2_util(msg, digest_size, dict_encoding_state, func_id):
         dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
         func_id_name="func_id" if use_dict_caching else None,
     )
+
+
+@numba.generated_jit(nopython=True)
+def md5(msg, dict_encoding_state=None, func_id=-1):
+    """Handles cases where md5 receives optional arguments and forwards
+        to the appropriate version of the real implementation"""
+    if isinstance(msg, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.md5",
+            ["msg", "dict_encoding_state", "func_id"],
+            0,
+            default_map={"dict_encoding_state": None, "func_id": -1},
+        )
+
+    def impl(msg, dict_encoding_state=None, func_id=-1):
+        return md5_util(msg, dict_encoding_state, func_id)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def md5_util(msg, dict_encoding_state, func_id):
+    """A dedicated kernel for the SQL function MD5 which takes in a string,
+               binary, (or string/binary column) and returns the MD5 encrypted strings
+
+    Args:
+        msg (string scalar/column): The strings(s) to be encrypted
+
+    Returns:
+        String scalar/column: hex-encoded string encrypted by MD5
+    """
+    verify_string_binary_arg(msg, "MD5", "msg")
+
+    arg_names = ["msg", "dict_encoding_state", "func_id"]
+    arg_types = [msg, dict_encoding_state, func_id]
+    propagate_null = [True] + [False] * 2
+    out_dtype = bodo.string_array_type
+    if is_valid_binary_arg(msg):
+        scalar_text = "msg_str = arg0._to_str()\n"
+    else:
+        scalar_text = "msg_str = arg0\n"
+    scalar_text += "res[i] = bodo.libs.bodosql_crypto_funcs.md5_algorithm(msg_str)"
+
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )

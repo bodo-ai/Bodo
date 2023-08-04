@@ -108,3 +108,68 @@ def test_sha2_kernel(msg, digest_size, memory_leak_check):
         py_output=answer,
         is_out_distributed=is_out_distributed,
     )
+
+
+@pytest.mark.parametrize(
+    "msg",
+    [
+        pytest.param(
+            "asfq2w2eq43w6",
+            id="string_scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    None,
+                    "doifqe132e8w7nu",
+                    ";'afs['-=:>@#!!@$!",
+                    "equ90wd3oiurjq",
+                ] * 4,
+            ),
+            id="string_vector",
+        ),
+        pytest.param(
+            b"12e;'safl?><",
+            id="binary_scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    b"asdopim32re",
+                    b"sx#%Q!'-=:>@lkadjl",
+                    b"j:OJ+_)()_o8",
+                    None,
+                ] * 4,
+            ),
+            id="binary_vector",
+        ),
+    ]
+)
+def test_md5_kernel(msg, memory_leak_check):
+    """Test md5 bodo kernel"""
+    is_out_distributed = True
+
+    def impl(msg):
+        return pd.Series(bodo.libs.bodosql_array_kernels.md5(msg))
+
+    if not isinstance(msg, pd.Series):
+        is_out_distributed = False
+        # Setting is_output_distributed = False is necessary for scalar test with np > 1
+        impl = lambda msg: bodo.libs.bodosql_array_kernels.md5(msg)
+
+    def scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        if isinstance(elem, str):
+            return hashlib.md5(elem.encode('utf-8')).hexdigest()
+        else:  # bytes
+            return hashlib.md5(elem).hexdigest()
+
+    answer = vectorized_sol((msg,), scalar_fn, None)
+
+    check_func(
+        impl,
+        (msg,),
+        py_output=answer,
+        is_out_distributed=is_out_distributed,
+    )
