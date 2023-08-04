@@ -2087,7 +2087,8 @@ void get_search_regex(std::shared_ptr<array_info> in_arr,
                       const bool case_sensitive, const bool match_beginning,
                       char const* const pat,
                       std::shared_ptr<array_info> out_arr) {
-    tracing::Event ev("get_search_regex");
+    // get_search_regex can be called a different number of times per ank.
+    tracing::Event ev("get_search_regex", false);
     // See:
     // https://www.boost.org/doc/libs/1_76_0/boost/xpressive/regex_constants.hpp
     boost::xpressive::regex_constants::syntax_option_type flag =
