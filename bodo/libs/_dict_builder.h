@@ -41,6 +41,13 @@ struct DictionaryBuilder {
     int64_t cached_array_id = -1;
     std::vector<dict_indices_t> cached_transpose_map;
 
+    /// @brief Tracing event for this dictionary builder.
+    tracing::ResumableEvent dict_builder_event;
+
+    // Track the number of times we can't cache the dictionary
+    // unification
+    int64_t unify_cache_misses = 0;
+
     /**
      * @brief Construct a new Dictionary Builder.
      *
@@ -51,13 +58,22 @@ struct DictionaryBuilder {
      * the values in this dictionary.
      */
     DictionaryBuilder(std::shared_ptr<array_info> dict, bool is_key_)
-        : is_key(is_key_) {
+        : is_key(is_key_),
+          // Note: We cannot guarantee all DictionaryBuilders are created
+          // the same number of times on each rank. Right now we do, but
+          // in the future this could change.
+          dict_builder_event("DictionaryBuilder::UnifyDictionaryArray", false) {
         // Dictionary build dictionaries are always unique.
         dict->is_locally_unique = true;
         this->dict_buff = std::make_shared<ArrayBuildBuffer>(dict);
         this->dict_hashes = std::make_shared<bodo::vector<uint32_t>>();
         this->dict_str_to_ind = std::make_shared<std::unordered_map<
             std::string, dict_indices_t, string_hash, std::equal_to<>>>();
+    }
+
+    ~DictionaryBuilder() {
+        dict_builder_event.add_attribute("Unify_Cache_Misses",
+                                         this->unify_cache_misses);
     }
 
     /**

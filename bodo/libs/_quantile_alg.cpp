@@ -1109,7 +1109,7 @@ void autocorr_series_computation_py_entry(double *res, array_info *p_arr,
  * @param data the bodo array whose percentile is being approximated
  * @param size the size of the array
  * @param percentile the percentile value being sought (e.g. 0.5=median)
- * @param parallel whether this is ocurring across multiple ranks
+ * @param parallel whether this is occurring across multiple ranks
  * @return the approximate percentile value as a double
  */
 template <typename T, Bodo_CTypes::CTypeEnum DType>

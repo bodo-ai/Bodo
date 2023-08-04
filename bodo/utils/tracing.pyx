@@ -360,7 +360,7 @@ cdef class Event(EventBase):
         if TRACING == 0:
             return  # nop
         if is_batchable and len(ITERATION_STACK) > 0:
-            self.parent_event = ITERATION_STACK[-1].get_or_create_child_event(name)
+            self.parent_event = ITERATION_STACK[-1].get_or_create_child_event(name, is_parallel)
             self.parent_event.start_iteration()
         else:
             self.parent_event = None
@@ -394,9 +394,10 @@ cdef class ResumableEvent(EventBase):
         self.iteration_count = 0
         self._child_events = {}
 
-    def get_or_create_child_event(self, name not None, bint is_parallel=1, bint sync=1):
+    def get_or_create_child_event(self, name not None, bint is_parallel=1):
         if name not in self._child_events:
-            self._child_events[name] = ResumableEvent(name, is_parallel, sync)
+            # Disable sync by default to protect against hangs.
+            self._child_events[name] = ResumableEvent(name, is_parallel, False)
         return self._child_events[name]
 
 

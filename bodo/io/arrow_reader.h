@@ -187,7 +187,9 @@ class ArrowReader {
                 "ArrowReader::read_batch(): not initialized");
         }
 
-        tracing::Event ev("reader::read_batch", parallel);
+        // Note: These can be called in a loop by streaming.
+        // Set the parallel flag to False.
+        tracing::Event ev("reader::read_batch", false);
         // Handling for repeated extra calls to reader
         // TODO: Determine the general handling for the no-column case
         // (when selected_fields.empty() == true)
