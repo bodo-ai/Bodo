@@ -1593,13 +1593,13 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
         pytest.param(3, id="adls", marks=pytest.mark.slow),
     ],
 )
-# TODO fix memory leak for ADLS test with `sf_write_use_put`
 def test_batched_write_agg(
     sf_write_overlap,
     sf_write_use_put,
     sf_write_streaming_num_files,
     is_distributed,
     snowflake_user,
+    memory_leak_check,
 ):
     """
     Test a simple use of batched Snowflake writes by reading a table, writing
