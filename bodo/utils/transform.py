@@ -356,6 +356,10 @@ no_side_effect_call_tuples = {
     # Streaming join
     ("init_join_state", "stream_join", "libs", bodo),
     ("init_groupby_state", "stream_groupby", "libs", bodo),
+    # Datetime utils
+    # TODO(njriasan): Move all "pure" datetime_date_ext functions
+    # to the same file so can have file level DCE.
+    ("now_date", "datetime_date_ext", "hiframes", bodo),
 }
 
 

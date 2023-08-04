@@ -4,11 +4,13 @@
 import datetime
 import operator
 import warnings
+from typing import Union
 
 import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+import pytz
 from llvmlite import ir as lir
 from numba.core import cgutils, types, typing
 from numba.core.imputils import lower_builtin, lower_constant
@@ -1223,3 +1225,54 @@ def create_cmp_op_overload_arr(op):
 
 
 UNIX_EPOCH_ORD = _ymd2ord(1970, 1, 1)
+
+
+def now_date_python(tz_value_or_none: Union[str, int, None]):
+    """Pure python function run in object mode
+    to return the equivalent of datetime.datetime.now(tzInfo).date().
+
+    This function is responsible for converting tz_value_or_none
+    to a proper timezone.
+
+    Args:
+        tz_value_or_none (Union[str, int, None]): The input to
+        create a new tzInfo.
+
+    Returns:
+        datetime.date: Current date in the local timezone.
+    """
+    if tz_value_or_none is None:
+        return datetime.date.today()
+    else:
+        if isinstance(tz_value_or_none, int):
+            tz_info = bodo.libs.pd_datetime_arr_ext.nanoseconds_to_offset(
+                tz_value_or_none
+            )
+        else:
+            assert isinstance(tz_value_or_none, str)
+            tz_info = pytz.timezone(tz_value_or_none)
+        return datetime.datetime.now(tz_info).date()
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def now_date_wrapper(tz_value_or_none=None):
+    """JIT wrapper equivalent to datetime.datetime.now(tzInfo).date(),
+    but accepting a string/int instead of an actual timezone.
+    This is because we cannot represent timezone objects directly yet.
+
+    Args:
+        tz_str_or_none Union[str, int, None]: The input to
+        create a new tzInfo.
+
+    Returns:
+        datetime.date: Current date in the local timezone.
+
+    Returns: t
+    """
+
+    def impl(tz_value_or_none=None):  # pragma: no cover
+        with numba.objmode(d="datetime_date_type"):
+            d = now_date_python(tz_value_or_none)
+        return d
+
+    return impl
