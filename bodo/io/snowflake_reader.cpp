@@ -221,8 +221,9 @@ class SnowflakeReader : public ArrowReader {
     // https://bodo.atlassian.net/l/cp/4JwaiChQ
     virtual std::tuple<table_info*, bool, uint64_t> read_inner() {
         using namespace std::chrono;
-
-        tracing::Event ev("reader::read_inner", parallel);
+        // Note: These can be called in a loop by streaming.
+        // Set the parallel flag to False.
+        tracing::Event ev("reader::read_inner", false);
         int64_t to_arrow_time = 0;
         int64_t cast_arrow_table_time = 0;
         int64_t append_time = 0;

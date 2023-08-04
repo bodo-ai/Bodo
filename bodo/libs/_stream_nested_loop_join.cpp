@@ -95,7 +95,6 @@ bool nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
  * build side.
  * @param probe_kept_cols Which columns to generate in the output on the
  * probe side.
- * @param parallel_trace parallel flag for tracing purposes
  * @param build_table_offset the number of bits from the start of
  * build_table_matched that belongs to previous chunks of the build table buffer
  */
@@ -104,7 +103,6 @@ void nested_loop_join_local_chunk(NestedLoopJoinState* join_state,
                                   std::shared_ptr<table_info> probe_table,
                                   const std::vector<uint64_t>& build_kept_cols,
                                   const std::vector<uint64_t>& probe_kept_cols,
-                                  bool parallel_trace,
                                   int64_t build_table_offset) {
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
@@ -125,7 +123,7 @@ void nested_loop_join_local_chunk(NestedLoopJoinState* join_state,
         nested_loop_join_table_local<build_table_outer_exp,                   \
                                      probe_table_outer_exp,                   \
                                      non_equi_condition_exp>(                 \
-            build_table, probe_table, cond_func, parallel_trace, build_idxs,  \
+            build_table, probe_table, cond_func, false, build_idxs,           \
             probe_idxs, join_state->build_table_matched, probe_table_matched, \
             build_table_offset);                                              \
     }
@@ -225,7 +223,7 @@ bool nested_loop_join_probe_consume_batch(
             for (auto& build_table : join_state->build_table_buffer.chunks) {
                 nested_loop_join_local_chunk(
                     join_state, build_table, bcast_probe_chunk, build_kept_cols,
-                    probe_kept_cols, parallel, build_table_offset);
+                    probe_kept_cols, build_table_offset);
                 build_table_offset += build_table->nrows();
             }
         }
@@ -241,7 +239,7 @@ bool nested_loop_join_probe_consume_batch(
         for (auto& build_table : join_state->build_table_buffer.chunks) {
             nested_loop_join_local_chunk(join_state, build_table, in_table,
                                          build_kept_cols, probe_kept_cols,
-                                         parallel, build_table_offset);
+                                         build_table_offset);
             build_table_offset += build_table->nrows();
         }
     }

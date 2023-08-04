@@ -11,6 +11,8 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         throw std::runtime_error("UnifyDictionaryArray: DICT array expected");
     }
 
+    auto iterationEvent(this->dict_builder_event.iteration());
+
     std::shared_ptr<array_info> batch_dict = in_arr->child_arrays[0];
     bool valid_arr_id = batch_dict->array_id >= 0;
     bool dicts_match =
@@ -35,6 +37,8 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
     // Compute the cached_transpose_map if this isn't the same as the
     // previous batch
     if (!valid_arr_id || (this->cached_array_id != batch_dict->array_id)) {
+        // Record that we have a cache miss.
+        this->unify_cache_misses++;
         this->dict_buff->ReserveArray(batch_dict);
         // Clear the cache.
         this->cached_transpose_map.clear();
