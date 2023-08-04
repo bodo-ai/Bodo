@@ -81,3 +81,18 @@ def overload_sha2_algorithms(msg, digest_size):
         return output
 
     return impl
+
+
+def md5_algorithm(msg): # pragma: no cover
+    """Function used to calculate the result of MD5 encryption"""
+
+
+@overload(md5_algorithm)
+def overload_md5_algorithm(msg):
+    kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
+    def impl(msg):  # pragma: no cover
+        output = numba.cpython.unicode._empty_string(kind, 32, 1)
+        run_crypto_function(msg, np.int32(0), output)
+        return output
+
+    return impl

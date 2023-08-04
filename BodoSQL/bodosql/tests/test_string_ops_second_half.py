@@ -1387,3 +1387,79 @@ def test_sha2_columns(query, memory_leak_check):
         check_names=False,
         expected_output=output,
     )
+
+
+@pytest.mark.parametrize(
+    "query, output",
+[
+        pytest.param(
+            "SELECT MD5('String to be MD5 encrypted')",
+            "6f8c044a4e850a2710dfb65fc77e9665",
+            id="MD5",
+        ),
+        pytest.param(
+            "SELECT MD5_HEX('Test MD5_HEX')",
+            "cb3c5742480f5e49edd014f103ac2679",
+            id="MD5_HEX",
+        ),
+    ],
+)
+def test_md5_scalars(query, output, memory_leak_check):
+    """Test MD5 and MD5_HEX work correctly with scalar inputs"""
+    check_query(
+        query,
+        {},
+        None,
+        check_names=False,
+        is_out_distributed=False,
+        expected_output=pd.DataFrame({"A": pd.Series([output])}),
+    )
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param(
+            "SELECT MD5(A) FROM table1",
+            id="no_case",
+        ),
+        pytest.param(
+            "SELECT CASE WHEN A IS NULL THEN NULL ELSE MD5(A) END FROM table1",
+            id="with_case",
+        ),
+        pytest.param(
+            "SELECT MD5(B) FROM table1",
+            id="binary",
+        ),
+    ],
+)
+def test_md5_columns(query, memory_leak_check):
+    """Test MD5 and MD5_HEX work correctly with column inputs"""
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": ["bcdbcdbcd", "CVMDKAJDS", None, "no replace", ":@#E?><"] * 4,
+                "B": [b"bcdbcdbcd", b"CVMDKAJDS", None, b"no replace", b":@#E?><"] * 4,
+            }
+        )
+    }
+    output = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [
+                    "b533ce74b4f2b0dfde46e0f8bb35e4c9",
+                    "52b6fbd8a16092d4e96bd9af00e8a7bf",
+                    None,
+                    "ea168808cd7e976473706fd1ec902b6f",
+                    "e68c0610abfc1dd0f5fde151e0c7ee35",
+                ] * 4,
+            )
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        expected_output=output,
+    )

@@ -158,6 +158,7 @@ broadcasted_fixed_arg_functions = {
     "lpad",
     "ltrim",
     "makedate",
+    "md5",
     "mod",
     "monthname",
     "months_between",

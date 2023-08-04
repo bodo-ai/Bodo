@@ -8,6 +8,7 @@
  */
 #include "_bodo_common.h"
 #include "_crypto_funcs.h"
+#include <openssl/md5.h>
 #include <openssl/sha.h>
 #include <Python.h>
 #include <stdexcept>
@@ -15,7 +16,11 @@
 void run_crypto_function(char *in_str, int64_t in_len, crypto_function func, char *output) {
     switch (func) {
         case crypto_function::md5:
-            // TODO: Support MD5
+            unsigned char md5_str[MD5_DIGEST_LENGTH];
+            MD5((const unsigned char *)in_str, in_len, md5_str);
+            for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
+                std::snprintf(output + (i * 2), 4, "%02x", md5_str[i]);
+            }
             break;
         case crypto_function::sha1:
             // TODO: Support SHA1
