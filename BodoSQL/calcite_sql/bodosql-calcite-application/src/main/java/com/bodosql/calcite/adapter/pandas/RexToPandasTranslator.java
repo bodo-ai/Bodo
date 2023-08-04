@@ -18,26 +18,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.g
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateMySQLDateAddCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateSnowflakeDateAddCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.generateDateDiffFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.DateTimeType;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.TIME_PART_UNITS;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateConvertTimezoneCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurdateCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurrTimeCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurrTimestampCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateFormatCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateTimeTypeFromPartsCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateTruncCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateLastDayCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateMakeDateInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateTimeSliceFnCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateToTimeCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateUTCDateCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateUTCTimestampCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getDateTimeDataType;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getDoubleArgDatetimeFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getSingleArgDatetimeFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getYearWeekFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateDatePart;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.generateJsonTwoArgsInfo;
@@ -992,8 +973,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "TRY_TO_TIMESTAMP_TZ":
         Expr tzInfo;
         if (fnOperation.getType() instanceof TZAwareSqlType) {
-          // TODO(njriasan): Remove getPyZone to put all the Python conversion logic in BodoSQL
-          tzInfo = new Expr.Raw(((TZAwareSqlType) fnOperation.getType()).getTZInfo().getPyZone());
+          tzInfo = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getZoneExpr();
         } else {
           tzInfo = None.INSTANCE;
         }
@@ -1531,11 +1511,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "LOCALTIME":
             assert operands.size() == 0;
             BodoTZInfo tzTimeInfo = BodoTZInfo.getDefaultTZInfo(this.typeSystem);
-            return generateCurrTimeCode(fnName, tzTimeInfo);
+            return generateCurrTimeCode(tzTimeInfo);
           case "SYSDATE":
           case "UTC_TIMESTAMP":
             assert operands.size() == 0;
-            return generateUTCTimestampCode(fnName);
+            return generateUTCTimestampCode();
           case "UTC_DATE":
             assert operands.size() == 0;
             return generateUTCDateCode();
@@ -1554,11 +1534,12 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateDateFormatCode(operands.get(0), operands.get(1));
           case "CONVERT_TIMEZONE":
             assert operands.size() == 2 || operands.size() == 3;
-            return generateConvertTimezoneCode(operands, BodoTZInfo.getDefaultTZInfo(this.typeSystem));
+            return generateConvertTimezoneCode(
+                operands, BodoTZInfo.getDefaultTZInfo(this.typeSystem));
           case "CURRENT_DATE":
           case "CURDATE":
             assert operands.size() == 0;
-            return generateCurdateCode();
+            return generateCurrentDateCode(BodoTZInfo.getDefaultTZInfo(this.typeSystem));
           case "YEARWEEK":
             assert operands.size() == 1;
             return getYearWeekFnInfo(operands.get(0));
@@ -1633,9 +1614,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateFromDaysCode(operands.get(0));
           case "DATE_FROM_PARTS":
           case "DATEFROMPARTS":
-            tzStr = "None";
             assert operands.size() == 3;
-            return generateDateTimeTypeFromPartsCode(fnName, operands, tzStr);
+            return generateDateTimeTypeFromPartsCode(fnName, operands, None.INSTANCE);
           case "TIMEFROMPARTS":
           case "TIME_FROM_PARTS":
           case "TIMESTAMP_FROM_PARTS":
@@ -1646,11 +1626,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TIMESTAMPLTZFROMPARTS":
           case "TIMESTAMP_TZ_FROM_PARTS":
           case "TIMESTAMPTZFROMPARTS":
-            tzStr = "None";
+            Expr tzExpr = None.INSTANCE;
             if (fnOperation.getType() instanceof TZAwareSqlType) {
-              tzStr = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getPyZone();
+              tzExpr = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getZoneExpr();
             }
-            return generateDateTimeTypeFromPartsCode(fnName, operands, tzStr);
+            return generateDateTimeTypeFromPartsCode(fnName, operands, tzExpr);
           case "UNIX_TIMESTAMP":
             return generateUnixTimestamp();
           case "FROM_UNIXTIME":

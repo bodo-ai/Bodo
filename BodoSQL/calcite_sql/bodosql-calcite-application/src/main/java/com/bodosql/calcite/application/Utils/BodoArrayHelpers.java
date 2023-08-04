@@ -38,7 +38,7 @@ public class BodoArrayHelpers {
         return String.format("np.empty(%s, dtype=\"datetime64[ns]\")", len);
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         // TZ-Aware timestamps contain tz info in the type.
-        String tzStr = ((TZAwareSqlType) typ).getTZInfo().getPyZone();
+        String tzStr = ((TZAwareSqlType) typ).getTZInfo().getZoneExpr().emit();
         return String.format(
             "bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(%s, %s)", len, tzStr);
       case INTERVAL_DAY_HOUR:
@@ -86,8 +86,10 @@ public class BodoArrayHelpers {
         typeName = "bodo.null_array_type";
         break;
       case ARRAY:
-        typeName = String.format("bodo.ArrayItemArrayType(%s)",
-          sqlTypeToBodoArrayType(type.getComponentType(), false).emit());
+        typeName =
+            String.format(
+                "bodo.ArrayItemArrayType(%s)",
+                sqlTypeToBodoArrayType(type.getComponentType(), false).emit());
         break;
       case BOOLEAN:
         // TODO: Add nullable support in the type
@@ -150,7 +152,9 @@ public class BodoArrayHelpers {
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         // TODO: Add nullable support
         TZAwareSqlType tzAwareType = (TZAwareSqlType) type;
-        typeName = String.format("bodo.DatetimeArrayType(%s)", tzAwareType.getTZInfo().getPyZone());
+        typeName =
+            String.format(
+                "bodo.DatetimeArrayType(%s)", tzAwareType.getTZInfo().getZoneExpr().emit());
         break;
       case TIME:
         // TODO: Add nullable support

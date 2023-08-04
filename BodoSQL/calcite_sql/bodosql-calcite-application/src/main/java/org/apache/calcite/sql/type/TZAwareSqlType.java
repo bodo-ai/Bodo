@@ -56,9 +56,7 @@ public class TZAwareSqlType extends AbstractSqlType {
    *                   be included;
    */
   @Override protected void generateTypeString(StringBuilder sb, boolean withDetail) {
-    sb.append("TIMESTAMP(");
-    sb.append(tzInfo.getPyZone());
-    sb.append(")");
+    sb.append(String.format("TIMESTAMP(%s)", tzInfo.getZoneExpr().emit()));
   }
 
   public BodoTZInfo getTZInfo() {

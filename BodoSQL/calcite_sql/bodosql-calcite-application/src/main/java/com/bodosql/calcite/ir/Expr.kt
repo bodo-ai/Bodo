@@ -394,9 +394,9 @@ abstract class Expr {
 
 
 fun BodoSQLKernel(callee: String, args: List<Expr> = listOf(), namedArgs: List<Pair<String, Expr>> = listOf()) : Expr {
-    return Expr.Call("bodo.libs.bodosql_array_kernels.${callee}", args, namedArgs);
+    return Expr.Call("bodo.libs.bodosql_array_kernels.${callee}", args, namedArgs)
 }
 
 fun initRangeIndex(args: List<Expr> = listOf(), namedArgs: List<Pair<String, Expr>> = listOf()) : Expr {
-    return Expr.Call("bodo.hiframes.pd_index_ext.init_range_index", args, namedArgs);
+    return Expr.Call("bodo.hiframes.pd_index_ext.init_range_index", args, namedArgs)
 }

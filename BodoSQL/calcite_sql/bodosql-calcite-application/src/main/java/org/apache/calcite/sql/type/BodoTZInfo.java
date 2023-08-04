@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.sql.type;
 
+import com.bodosql.calcite.ir.Expr;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
@@ -51,13 +52,13 @@ public class BodoTZInfo {
    * @return A string of the generated Python code for
    * the zone.
    */
-  public String getPyZone() {
+  public Expr getZoneExpr() {
     if (pyType.equals("str")) {
       // Append single quotes for Python strings.
-      return String.format(Locale.ROOT, "'%s'", zone);
+      return new Expr.StringLiteral(zone);
     } else {
       assert pyType.equals("int");
-      return zone;
+      return new Expr.IntegerLiteral(Integer.valueOf(zone));
     }
   }
 
