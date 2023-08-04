@@ -461,6 +461,8 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         "size",
         "mean",
         "median",
+        "prod",
+        "ngroup",
     }:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
