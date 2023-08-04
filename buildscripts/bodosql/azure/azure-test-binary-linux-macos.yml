@@ -7,6 +7,8 @@ parameters:
   NP: ''
   PYTHON_VERSION: ''
   CACHE_TEST: ''
+  BODO_STREAMING_ENABLED: 0
+  BODO_VOLCANO_ENABLED: 0
 
 jobs:
 - job: ${{ parameters.name }}
@@ -123,4 +125,6 @@ jobs:
       CACHE_TEST: ${{ parameters.CACHE_TEST }}
       SF_USERNAME: $(SNOWFLAKE_USER)
       SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
+      BODO_STREAMING_ENABLED: ${{ parameters.BODO_STREAMING_ENABLED }}
+      BODO_VOLCANO_ENABLED: ${{ parameters.BODO_VOLCANO_ENABLED }}
     displayName: 'Test BodoSQL'

@@ -581,6 +581,178 @@ stages:
         TEST_2P:
           NP: 2
 
+
+  # BodoSQL tests with streaming enabled
+- stage: Test_BodoSQL_Binary_Streaming
+  displayName: 'Test BodoSQL Binary Streaming'
+  dependsOn: Build_BodoSQL_Binary
+  jobs:
+
+  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly check uname to determine the os
+      # for the bodoSQL tests
+      name: BODOSQL_Linux
+      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
+      CONDA_ENV: run_bodo_sql
+      PYTHON_VERSION: 3.10
+      BODO_STREAMING_ENABLED: 1
+      BODO_VOLCANO_ENABLED: 1
+      matrix:
+        BODOSQL_1P_1_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_1of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_2_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_2of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_3_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_3of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_4_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_4of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_5_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_5of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_6_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_6of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_7_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_7of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_8_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_8of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_9_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_9of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_10_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_10of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_11_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_11of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_12_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_12of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_1_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_1of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_2_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_2of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_3_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_3of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_4_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_4of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_5_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_5of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_6_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_6of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_7_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_7of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_8_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_8of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_9_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_9of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_10_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_10of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_11_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_11of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_12_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_12of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_13_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_13of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_14_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_14of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_15_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_15of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_16_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_16of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_17_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_17of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_18_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_18of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_19_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_19of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_20_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_20of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_21_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_21of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_22_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_22of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+
+
+  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly pass CACHE_TEST and
+      # check uname to determine the os for the bodoSQL tests
+      name: BODOSQL_Linux_cache
+      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
+      CONDA_ENV: build_bodo_sql
+      PYTHON_VERSION: 3.10
+      CACHE_TEST: true
+      PYTEST_MARKER: ""
+      BODO_STREAMING_ENABLED: 1
+      BODO_VOLCANO_ENABLED: 1
+      matrix:
+        TEST_2P:
+          NP: 2
+
 # Maven unit tests
 - stage: Test_BodoSQL_Maven
   displayName: 'Test BodoSQL Maven unit tests'
