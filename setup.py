@@ -340,7 +340,11 @@ ext_metadata["depends"] += [
 
 if is_testing:
     ext_metadata["sources"].extend(
-        ["bodo/tests/test_framework.cpp", "bodo/tests/test_example.cpp"]
+        [
+            "bodo/tests/test_framework.cpp",
+            "bodo/tests/test_example.cpp",
+            "bodo/tests/test_dict_builder.cpp",
+        ]
     )
     ext_metadata["define_macros"].append(("IS_TESTING", "1"))
 
