@@ -81,10 +81,6 @@ struct MemInfo {
 
 typedef struct MemInfo NRT_MemInfo;
 
-#if !defined MIN
-#define MIN(a, b) ((a) < (b)) ? (a) : (b)
-#endif
-
 /* ------- Wrappers around MemSys.mi_allocator functions ------- */
 
 /**
@@ -219,10 +215,6 @@ inline void buffer_pool_aligned_data_free(void *ptr, size_t size,
 /// @brief Destructor for Meminfo (and underlying data) allocated
 /// through NRT_MemInfo_alloc_common.
 inline void nrt_internal_custom_dtor(void *ptr, size_t size, void *pool) {
-    // Add debug markers to indicate dead memory.
-    // XXX Move this to the BufferPool to centralize the logic?
-    memset(ptr, 0xDE, MIN(size, 256));
-
     // Free the data buffer
     buffer_pool_aligned_data_free(ptr, size, (bodo::IBufferPool *)pool);
 }
@@ -248,13 +240,6 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_common(size_t size, unsigned align,
     // mi->data. This will also store a pointer to mi->data in the
     // bodo::BufferPool for eviction purposes later.
     buffer_pool_aligned_data_alloc(size, align, mi, pool);
-
-    // Add debug markers.
-    // See notes here about why these memory markers are useful:
-    // https://stackoverflow.com/questions/370195/when-and-why-will-a-compiler-initialise-memory-to-0xcd-0xdd-etc-on-malloc-fre
-    // Only fill up a couple cachelines to minimize overhead.
-    // XXX Move this to the bodo::BufferPool to centralize the logic?
-    memset(mi->data, 0xCB, MIN(size, 256));
 
     // Initialize the MemInfo object. We assign our custom
     // destructor (nrt_internal_custom_dtor) which will be used

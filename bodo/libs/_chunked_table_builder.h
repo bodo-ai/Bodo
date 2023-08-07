@@ -721,14 +721,17 @@ struct ChunkedTableArrayBuilder {
  * each chunk is of size at most 'active_chunk_capacity'
  * rows. The chunks are stored in a std::deque to provide
  * queue like behavior, while allowing iteration over the
- * chunks without removing them.
- * See design doc here: https://bodo.atlassian.net/l/cp/mzidHW9G.
+ * chunks without removing them. All finalized chunks are kept unpinned and we
+ * use PopChunk to pin and return chunks. See design doc here:
+ * https://bodo.atlassian.net/l/cp/mzidHW9G.
  *
  */
 struct ChunkedTableBuilder {
     // Queue of finalized chunks. We use a deque instead of
     // a regular queue since it gives us ability to both
-    // iterate over elements as well as pop/push.
+    // iterate over elements as well as pop/push. Finalized chunks are unpinned.
+    // If we want to access finalized chunks, we need to pin and unpin them
+    // manually.
     std::deque<std::shared_ptr<table_info>> chunks;
 
     /* Active chunk state */
@@ -848,7 +851,7 @@ struct ChunkedTableBuilder {
 
     /**
      * @brief Get the first available chunk. This will pop
-     * an element from this->chunks.
+     * an element from this->chunks. The returned chunk is pinned.
      *
      * @param force_return If this->chunks is
      * empty, it will finalize and return the active chunk

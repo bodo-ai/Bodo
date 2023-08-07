@@ -678,7 +678,8 @@ class HashJoinState : public JoinState {
 class NestedLoopJoinState : public JoinState {
    public:
     // Build state
-    ChunkedTableBuilder build_table_buffer;     // Append only buffer.
+    std::unique_ptr<ChunkedTableBuilder>
+        build_table_buffer;                     // Append only buffer.
     bodo::vector<uint8_t> build_table_matched;  // state for building output
                                                 // table (for outer joins)
 
@@ -696,14 +697,14 @@ class NestedLoopJoinState : public JoinState {
                     probe_parallel_, output_batch_size_,
                     sync_iter_),  // NestedLoopJoin is only used when
                                   // n_keys is 0
-          build_table_buffer(
+          build_table_buffer(std::make_unique<ChunkedTableBuilder>(
               build_arr_c_types, build_arr_array_types,
               build_table_dict_builders,
               DEFAULT_BLOCK_SIZE_BYTES /
                   get_row_bytes(
                       build_arr_array_types,
                       build_arr_c_types),  // each chunk has a single block
-              DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
+              DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES)),
           join_event("NestedLoopJoin") {
         // TODO: Integrate dict_builders for nested loop join.
     }
