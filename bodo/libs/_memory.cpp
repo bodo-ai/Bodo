@@ -1006,6 +1006,13 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
         this->update_pinned_bytes(size_class_bytes);
         this->stats_.UpdateAllocatedBytes(size_class_bytes);
     }
+
+    // Add debug markers.
+    // See notes here about why these memory markers are useful:
+    // https://stackoverflow.com/questions/370195/when-and-why-will-a-compiler-initialise-memory-to-0xcd-0xdd-etc-on-malloc-fre
+    // Only fill up a couple cachelines to minimize overhead.
+    memset(*out, 0xCB, std::min(size, (int64_t)256));
+
     return ::arrow::Status::OK();
 }
 
@@ -1105,6 +1112,9 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
         }
         return;
     }
+
+    // Add debug markers to indicate dead memory only for frames in memory.
+    memset(buffer, 0xDE, std::min(size, (int64_t)256));
 
     auto [is_mmap_alloc, size_class_idx, frame_idx, size_freed] =
         this->get_alloc_details(buffer, size, alignment);

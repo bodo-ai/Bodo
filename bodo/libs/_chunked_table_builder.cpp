@@ -350,9 +350,9 @@ void ChunkedTableBuilder::FinalizeActiveChunk(bool shrink_to_fit) {
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders =
         get_dict_builders_from_chunked_table_array_builders(
             this->active_chunk_array_builders);
-    // Add chunk to the deque
-    this->chunks.push_back(std::move(this->active_chunk));
-    // TODO (future) Unpin this chunk.
+    // Unpin the chunk and add it to the list of finalized chunks:
+    this->active_chunk->unpin();
+    this->chunks.emplace_back(std::move(this->active_chunk));
     // Reset state for active chunk:
     this->active_chunk = std::move(new_active_chunk);
     this->active_chunk_size = 0;
@@ -994,9 +994,9 @@ void ChunkedTableBuilder::Finalize(bool shrink_to_fit) {
         for (auto& builder : this->active_chunk_array_builders) {
             builder.Finalize(shrink_to_fit);
         }
-        // Add chunk to the deque
-        this->chunks.push_back(std::move(this->active_chunk));
-        // TODO (future) Unpin this chunk.
+        // Unpin the chunk and add it to the list of finalized chunks:
+        this->active_chunk->unpin();
+        this->chunks.emplace_back(std::move(this->active_chunk));
     }
     // Reset state for active chunk:
     this->active_chunk = nullptr;
@@ -1017,6 +1017,8 @@ std::tuple<std::shared_ptr<table_info>, int64_t> ChunkedTableBuilder::PopChunk(
     // active_chunk was empty, so we still need this check.
     if (this->chunks.size() > 0) {
         std::shared_ptr<table_info> chunk = this->chunks.front();
+        // Pin the chunk before returning it
+        chunk->pin();
         this->chunks.pop_front();
         size_t chunk_nrows = chunk->nrows();
         if (this->dummy_output_chunk->ncols() == 0) {
@@ -1026,7 +1028,6 @@ std::tuple<std::shared_ptr<table_info>, int64_t> ChunkedTableBuilder::PopChunk(
             chunk_nrows =
                 std::min(this->active_chunk_capacity, this->total_remaining);
         }
-
         this->total_remaining -= chunk_nrows;
         return std::tuple(chunk, chunk_nrows);
     }
