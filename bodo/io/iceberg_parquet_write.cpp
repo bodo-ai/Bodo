@@ -394,9 +394,9 @@ void iceberg_pq_write(const char *table_data_loc,
                                   multi_col_key_hash>
             key_to_partition;
 
-        new_table->num_keys = transform_cols.size();
+        const int64_t num_keys = transform_cols.size();
         for (uint64_t i = 0; i < new_table->nrows(); i++) {
-            multi_col_key key(hashes[i], new_table, i);
+            multi_col_key key(hashes[i], new_table, i, num_keys);
             partition_write_info &p = key_to_partition[key];
             if (p.rows.size() == 0) {
                 // This is the path after the table_loc that will
@@ -408,9 +408,9 @@ void iceberg_pq_write(const char *table_data_loc,
                 // 3 (for file_name, record_count and file_size) + number of
                 // partition fields (same as number of transform cols).
                 // See function description string for more details.
-                p.iceberg_file_info_py = PyTuple_New(3 + transform_cols.size());
+                p.iceberg_file_info_py = PyTuple_New(3 + num_keys);
 
-                for (size_t j = 0; j < transform_cols.size(); j++) {
+                for (size_t j = 0; j < num_keys; j++) {
                     auto transformed_part_col = transform_cols[j];
                     // convert transformed partition value to string
                     std::string value_str = transform_val_to_str(

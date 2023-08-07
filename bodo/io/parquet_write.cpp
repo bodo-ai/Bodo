@@ -479,9 +479,9 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
 void pq_write_partitioned_py_entry(
     const char *_path_name, table_info *in_table, array_info *in_col_names_arr,
     array_info *in_col_names_arr_no_partitions, table_info *in_categories_table,
-    int *partition_cols_idx, int num_partition_cols, const char *compression,
-    bool is_parallel, const char *bucket_region, int64_t row_group_size,
-    const char *prefix, const char *tz) {
+    int *partition_cols_idx, const int num_partition_cols,
+    const char *compression, bool is_parallel, const char *bucket_region,
+    int64_t row_group_size, const char *prefix, const char *tz) {
     // TODOs
     // - Do is parallel here?
     // - sequential (only rank 0 writes, or all write with same name -which?-)
@@ -552,9 +552,8 @@ void pq_write_partitioned_py_entry(
         std::string fname = gen_pieces_file_name(
             dist_get_rank(), dist_get_size(), prefix, ".parquet");
 
-        new_table->num_keys = num_partition_cols;
         for (uint64_t i = 0; i < new_table->nrows(); i++) {
-            multi_col_key key(hashes[i], new_table, i);
+            multi_col_key key(hashes[i], new_table, i, num_partition_cols);
             partition_write_info &p = key_to_partition[key];
             if (p.rows.size() == 0) {
                 // generate output file name

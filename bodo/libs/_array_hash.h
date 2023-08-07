@@ -107,13 +107,14 @@ struct multi_col_key {
     uint32_t hash;
     std::shared_ptr<table_info> table;
     int64_t row;
+    int64_t num_keys;
 
     multi_col_key(uint32_t _hash, std::shared_ptr<table_info> _table,
-                  int64_t _row)
-        : hash(_hash), table(_table), row(_row) {}
+                  int64_t _row, int64_t _num_keys)
+        : hash(_hash), table(_table), row(_row), num_keys(_num_keys) {}
 
     bool operator==(const multi_col_key& other) const {
-        for (int64_t i = 0; i < table->num_keys; i++) {
+        for (int64_t i = 0; i < this->num_keys; i++) {
             std::shared_ptr<array_info> c1 = table->columns[i];
             std::shared_ptr<array_info> c2 = other.table->columns[i];
             size_t size_type;

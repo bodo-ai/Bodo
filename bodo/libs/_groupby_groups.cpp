@@ -131,7 +131,7 @@ void get_group_info_impl(
 
 void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
                     std::shared_ptr<uint32_t[]>& hashes, size_t nunique_hashes,
-                    std::vector<grouping_info>& grp_infos,
+                    std::vector<grouping_info>& grp_infos, const int64_t n_keys,
                     bool check_for_null_keys, bool key_dropna,
                     bool is_parallel) {
     tracing::Event ev("get_group_info", is_parallel);
@@ -142,7 +142,8 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
     ev.add_attribute("input_table_nrows", static_cast<size_t>(table->nrows()));
     std::vector<std::shared_ptr<array_info>> key_cols =
         std::vector<std::shared_ptr<array_info>>(
-            table->columns.begin(), table->columns.begin() + table->num_keys);
+            table->columns.begin(), table->columns.begin() + n_keys);
+
     if (!hashes) {
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
         nunique_hashes =
@@ -151,13 +152,13 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
     grp_infos.emplace_back();
     grouping_info& grp_info = grp_infos.back();
-    const int64_t n_keys = table->num_keys;
 
     HashLookupIn32bitTable hash_fct{hashes};
 
     // use faster specialized implementation for common 1 key cases
     if (n_keys == 1) {
         std::shared_ptr<array_info> arr = table->columns[0];
+
         bodo_array_type::arr_type_enum arr_type = arr->arr_type;
         Bodo_CTypes::CTypeEnum dtype = arr->dtype;
 
@@ -179,7 +180,6 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
         return;                                                          \
     }
 #endif
-
         GROUPBY_INFO_IMPL_1_KEY(bodo_array_type::NULLABLE_INT_BOOL,
                                 Bodo_CTypes::INT32);
         GROUPBY_INFO_IMPL_1_KEY(bodo_array_type::NULLABLE_INT_BOOL,
@@ -276,6 +276,7 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
         bodo::unord_map_container<int64_t, int64_t, HashLookupIn32bitTable,
                                   KeysEqualComparator>;
     rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);
+
     get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table, key_cols,
                         hashes, nunique_hashes, check_for_null_keys, key_dropna,
                         UNORDERED_MAP_MAX_LOAD_FACTOR, is_parallel);
@@ -285,8 +286,8 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
                             std::shared_ptr<uint32_t[]>& hashes,
                             size_t nunique_hashes,
                             std::vector<grouping_info>& grp_infos,
-                            const bool consider_missing, bool key_dropna,
-                            bool is_parallel) {
+                            const int64_t n_keys, const bool consider_missing,
+                            bool key_dropna, bool is_parallel) {
     tracing::Event ev("get_group_info_iterate", is_parallel);
     if (tables.size() == 0) {
         throw std::runtime_error("get_group_info: tables is empty");
@@ -294,7 +295,7 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
     std::shared_ptr<table_info> table = tables[0];
     std::vector<std::shared_ptr<array_info>> key_cols =
         std::vector<std::shared_ptr<array_info>>(
-            table->columns.begin(), table->columns.begin() + table->num_keys);
+            table->columns.begin(), table->columns.begin() + n_keys);
     // TODO: if |tables| > 1 then we probably need to use hashes from all the
     // tables to get an accurate nunique_hashes estimate. We can do it, but
     // it would mean calculating all hashes in advance
@@ -344,7 +345,7 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
                 continue;
             }
         }
-        multi_col_key key(hashes[i], table, i);
+        multi_col_key key(hashes[i], table, i, n_keys);
         int64_t& group = key_to_group[key];  // this inserts 0 into the map if
                                              // key doesn't exist
         if (group == 0) {
@@ -368,7 +369,7 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
         // key columns (but not the same values in key columns)
         table = tables[j];
         key_cols = std::vector<std::shared_ptr<array_info>>(
-            table->columns.begin(), table->columns.begin() + table->num_keys);
+            table->columns.begin(), table->columns.begin() + n_keys);
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
         grp_infos.emplace_back();
         grouping_info& grp_info = grp_infos.back();
@@ -387,7 +388,7 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
                     continue;
                 }
             }
-            multi_col_key key(hashes[i], table, i);
+            multi_col_key key(hashes[i], table, i, n_keys);
             int64_t& group = key_to_group[key];  // this inserts 0 into the map
                                                  // if key doesn't exist
             if ((group == 0) ||
@@ -566,7 +567,7 @@ int64_t get_groupby_labels(std::shared_ptr<table_info> table,
     // TODO(ehsan): refactor to avoid code duplication with get_group_info
     // This function is similar to get_group_info. See that function for
     // more comments
-    table->num_keys = table->columns.size();
+    const int64_t n_keys = table->columns.size();
     std::vector<std::shared_ptr<array_info>> key_cols = table->columns;
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
     for (auto a : key_cols) {
@@ -580,7 +581,6 @@ int64_t get_groupby_labels(std::shared_ptr<table_info> table,
     size_t nunique_hashes =
         get_nunique_hashes(hashes, table->nrows(), is_parallel);
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
-    const int64_t n_keys = table->num_keys;
 
     HashLookupIn32bitTable hash_fct{hashes};
     KeyEqualLookupIn32bitTable equal_fct{n_keys, table};
