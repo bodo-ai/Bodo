@@ -5,7 +5,6 @@ according to Bodo requirements (using partial typing).
 import copy
 import itertools
 import operator
-import textwrap
 import types as pytypes
 import warnings
 from collections import defaultdict
@@ -4574,14 +4573,13 @@ class TypingTransforms:
                 new_type = bodo.libs.table_builder.TableBuilderStateType(
                     input_table_type
                 )
-                func_text = textwrap.dedent(
-                    f"""\
-                    def impl():
-                      return bodo.libs.table_builder.init_table_builder_state(
-                          expected_state_type=_expected_state_type
-                       )
-                """
+                func_text = (
+                    "def impl():\n"
+                    "  return bodo.libs.table_builder.init_table_builder_state(\n"
+                    "    expected_state_type=_expected_state_type\n"
+                    "  )\n"
                 )
+
                 self._replace_state_definition(
                     func_text,
                     "impl",
