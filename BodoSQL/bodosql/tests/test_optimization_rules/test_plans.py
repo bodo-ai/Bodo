@@ -7,6 +7,13 @@ import bodosql
 import pandas as pd
 import pytest
 
+import bodo
+
+pytestmark = pytest.mark.skipif(
+    bodo.bodosql_use_streaming_plan or bodo.bodosql_use_volcano_plan,
+    reason="Only test for non-volcano/streaming plans",
+)
+
 
 @pytest.fixture()
 def dummy_test_ctx():
