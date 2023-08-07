@@ -571,7 +571,6 @@ class GroupbyPipeline {
      */
     void update() {
         tracing::Event ev("update", is_parallel);
-        in_table->num_keys = num_keys;
         std::vector<std::shared_ptr<table_info>> tables;
         // If nunique_only and nunique_tables.size() > 0 then all of the input
         // data is in nunique_tables
@@ -589,10 +588,11 @@ class GroupbyPipeline {
                                           transform_op || ngroup_op ||
                                           window_op;
             get_group_info_iterate(tables, hashes, nunique_hashes, grp_infos,
-                                   consider_missing, key_dropna, is_parallel);
+                                   this->num_keys, consider_missing, key_dropna,
+                                   is_parallel);
         } else {
-            get_group_info(tables, hashes, nunique_hashes, grp_infos, true,
-                           key_dropna, is_parallel);
+            get_group_info(tables, hashes, nunique_hashes, grp_infos,
+                           this->num_keys, true, key_dropna, is_parallel);
         }
         grouping_info& grp_info = grp_infos[0];
         grp_info.dispatch_table = dispatch_table;
@@ -695,11 +695,10 @@ class GroupbyPipeline {
      */
     void combine() {
         tracing::Event ev("combine", is_parallel);
-        update_table->num_keys = num_keys;
         grp_infos.clear();
         std::vector<std::shared_ptr<table_info>> tables = {update_table};
-        get_group_info(tables, hashes, nunique_hashes, grp_infos, false,
-                       key_dropna, is_parallel);
+        get_group_info(tables, hashes, nunique_hashes, grp_infos,
+                       this->num_keys, false, key_dropna, is_parallel);
         grouping_info& grp_info = grp_infos[0];
         num_groups = grp_info.num_groups;
         grp_info.dispatch_table = dispatch_table;
@@ -867,7 +866,6 @@ class GroupbyPipeline {
             std::shared_ptr<table_info> tmp = std::make_shared<table_info>();
             tmp->columns.assign(in_table->columns.begin(),
                                 in_table->columns.begin() + num_keys);
-            tmp->num_keys = num_keys;
             int8_t num_input_cols_used = ncols_per_func[i];
             if (num_input_cols_used != 1) {
                 throw new std::runtime_error(
@@ -954,7 +952,6 @@ class GroupbyPipeline {
                 }
             }
             shared_key_value_hashes.reset();
-            tmp2->num_keys = num_keys;
             tmp2->id = table_id_counter++;
             nunique_tables[col_idx] = tmp2;
         }
