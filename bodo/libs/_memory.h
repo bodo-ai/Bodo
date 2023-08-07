@@ -1027,6 +1027,137 @@ std::shared_ptr<::arrow::MemoryManager> buffer_memory_manager(
  */
 std::shared_ptr<::arrow::MemoryManager> default_buffer_memory_manager();
 
+template <typename Spillable>
+class pin_guard;
+
+template <typename Spillable>
+pin_guard<Spillable> pin(Spillable& s);
+
+/**
+ * @brief The pin() methods of a pinnable type can return a pointer-like value
+ * that is used to provide smart pointer-like semantics to the pin_guard class.
+ * This helper struct handles storing the pointed-to value, or, if the pin()
+ * method returns void, nothing.
+ */
+template <typename X>
+struct pinned_storage {
+    using type = X;
+};
+
+/**
+ * @brief When a pin() method returns void, nothing is stored
+ */
+template <>
+struct pinned_storage<void> {
+    struct type {};
+};
+
+template <typename ElTy>
+inline typename pinned_storage<ElTy>::type do_pin(std::function<ElTy()> pin) {
+    return pin();
+}
+
+template <>
+inline typename pinned_storage<void>::type do_pin<void>(
+    std::function<void()> pin) {
+    pin();
+    return {};
+}
+
+/**
+ * @brief Several classes support pinning or unpinning memory via pin() and
+ * unpin() methods. This is brittle as c++ never guarantees that unpin() will
+ * actually be called. It's better to use destructors to automatically handle
+ * this.
+ *
+ * This class lets you automatically manage pinning for any class that has a
+ * pin() method.
+ */
+template <typename Spillable>
+class pin_guard {
+   public:
+    ~pin_guard() { release(); }
+
+    using element_type =
+        std::invoke_result<decltype(&Spillable::pin), Spillable*>::type;
+    using reference_type = std::remove_pointer<element_type>::type&;
+    using const_reference_type = typename std::add_const<reference_type>::type;
+
+    std::enable_if_t<!std::is_void_v<element_type>, element_type> operator->()
+        const {
+        return val_;
+    }
+    std::enable_if_t<!std::is_void_v<element_type>, element_type> get() const {
+        return val_;
+    }
+
+    std::enable_if_t<!std::is_void_v<element_type>, reference_type>
+    operator*() {
+        return *val_;
+    }
+    std::enable_if_t<!std::is_void_v<element_type>, reference_type> operator*()
+        const {
+        return *val_;
+    }
+
+    template <typename Sz>
+    std::enable_if_t<!std::is_void_v<element_type>, reference_type> operator[](
+        Sz sz) const {
+        return get()[sz];
+    }
+
+    /// @brief Release the pinned value early. Any further attempts to
+    /// de-reference or access this pinned (other than destruction) is undefined
+    /// behavior.
+    void release() {
+        if (!released_) {
+            released_ = true;
+            underlying_.unpin();
+        }
+    }
+
+   private:
+    inline pin_guard(Spillable& s)
+        : underlying_(s),
+          val_(do_pin<element_type>(std::bind(&Spillable::pin, underlying_))),
+          released_(false) {}
+
+    Spillable& underlying_;
+    typename pinned_storage<element_type>::type val_;
+    bool released_;
+
+    friend pin_guard<Spillable> pin<Spillable>(Spillable& s);
+};
+
+/**
+ * @brief Automatically manage pinning for any class  that has pin() and unpin()
+ * methods
+ *
+ * That is, instead of doing:
+ *   x.pin()
+ *   ...
+ *   x.unpin()
+ *
+ * Instead, do
+ *
+ *  {
+ *   auto xPin(bodo::pin(x));
+ *  }
+ *
+ * For maximum safety, do not expose a pin() or unpin() method on your class.
+ * Instead make the methods private and add bodo::pin_guard<YourClass> as a
+ * friend.
+ *
+ * @tparam Spillable The class whose pinning to manage. Inferred automatically.
+ * Do not provide.
+ * @param s The thing you want to pin
+ * @return pin_guard<Spillable>
+ */
+template <typename Spillable>
+pin_guard<Spillable> pin(Spillable& s) {
+    return pin_guard<Spillable>(s);
+}
+
 }  // namespace bodo
 
 #ifdef MS_WINDOWS
