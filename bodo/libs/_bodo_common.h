@@ -761,9 +761,21 @@ struct array_info {
         }
     }
 
-    void unpin() {
+    /**
+     * @param unpin_dict The flag that indicates if the dictionary for
+     * dictionary-encoded string arrays will be unpinned. Dictionary are shared
+     * among many dictionary-encoded arrays. Unpinning the dictionary can
+     * potentially affect other pinned dictionary-encoded arrays, so we don't
+     * want to unpin it by default.
+     */
+    void unpin(bool unpin_dict = false) {
         switch (arr_type) {
             case bodo_array_type::DICT:
+                if (unpin_dict) {
+                    this->child_arrays[0]->unpin();
+                }
+                this->child_arrays[1]->unpin();
+                break;
             case bodo_array_type::LIST_STRING:
                 for (auto& arr : this->child_arrays) {
                     arr->unpin();

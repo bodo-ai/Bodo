@@ -4,7 +4,7 @@
 
 void NestedLoopJoinState::FinalizeBuild() {
     // Finalize any active chunk
-    build_table_buffer.FinalizeActiveChunk();
+    this->build_table_buffer->Finalize();
 
     // If the build table is small enough, broadcast it to all ranks
     // so the probe table can be joined locally.
@@ -12,35 +12,45 @@ void NestedLoopJoinState::FinalizeBuild() {
     // replicated.
     if (this->build_parallel && this->probe_parallel) {
         int64_t table_size = 0;
-        for (auto& table : build_table_buffer.chunks) {
+        for (auto& table : this->build_table_buffer->chunks) {
+            // For certain data types like string, we need to load the buffers (e.g. the offset buffers for strings) in memory to be able to calculate the memory size. https://bodo.atlassian.net/browse/BSE-874 will resolve this.
+            table->pin();
             table_size += table_local_memory_size(table);
+            table->unpin();
         }
         MPI_Allreduce(MPI_IN_PLACE, &table_size, 1, MPI_INT64_T, MPI_SUM,
                       MPI_COMM_WORLD);
         if (table_size < get_bcast_join_threshold()) {
             this->build_parallel = false;
             // calculate the max number of chunks for all partitions
-            int64_t n_chunks = build_table_buffer.chunks.size();
+            int64_t n_chunks = this->build_table_buffer->chunks.size();
             MPI_Allreduce(MPI_IN_PLACE, &n_chunks, 1, MPI_INT64_T, MPI_MAX,
                           MPI_COMM_WORLD);
-            std::vector<std::shared_ptr<table_info>> gathered_tables;
+            // Create a new chunked table which will store the chunks gathered from all ranks.
+            // This will eventually become the new build_table_buffer of this JoinState.
+            std::unique_ptr<ChunkedTableBuilder> new_build_table_buffer =
+                std::make_unique<ChunkedTableBuilder>(
+                    this->build_arr_c_types, this->build_arr_array_types,
+                    this->build_table_dict_builders,
+                    this->build_table_buffer->active_chunk_capacity,
+                    this->build_table_buffer
+                        ->max_resize_count_for_variable_size_dtypes);
             for (int64_t i_chunk = 0; i_chunk < n_chunks; i_chunk++) {
-                gathered_tables.push_back(
-                    gather_table(std::get<0>(build_table_buffer.PopChunk()), -1,
-                                 true, true));
+                std::shared_ptr<table_info> gathered_chunk = gather_table(
+                    std::get<0>(this->build_table_buffer->PopChunk()), -1, true,
+                    true);
+                new_build_table_buffer->AppendBatch(
+                    this->UnifyBuildTableDictionaryArrays(gathered_chunk));
             }
-            build_table_buffer.Reset();
-            for (auto& gathered_table : gathered_tables) {
-                build_table_buffer.AppendBatch(
-                    this->UnifyBuildTableDictionaryArrays(gathered_table));
-            }
-            build_table_buffer.FinalizeActiveChunk();
+            this->build_table_buffer = std::move(new_build_table_buffer);
+            this->build_table_buffer->Finalize();
         }
     }
 
     if (this->build_table_outer) {
         build_table_matched.resize(
-            arrow::bit_util::BytesForBits(build_table_buffer.total_remaining),
+            arrow::bit_util::BytesForBits(
+                this->build_table_buffer->total_remaining),
             0);
     }
 
@@ -74,7 +84,7 @@ bool nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
     // be unified.
     in_table = join_state->UnifyBuildTableDictionaryArrays(in_table);
 
-    join_state->build_table_buffer.AppendBatch(in_table);
+    join_state->build_table_buffer->AppendBatch(in_table);
 
     // is_last can be local here because build only shuffles once at the end
     if (is_last) {
@@ -220,11 +230,13 @@ bool nested_loop_join_probe_consume_batch(
                 in_table, in_table, in_table->ncols(), parallel, p);
             bcast_probe_chunk =
                 join_state->UnifyProbeTableDictionaryArrays(bcast_probe_chunk);
-            for (auto& build_table : join_state->build_table_buffer.chunks) {
+            for (auto& build_table : join_state->build_table_buffer->chunks) {
+                build_table->pin();
                 nested_loop_join_local_chunk(
                     join_state, build_table, bcast_probe_chunk, build_kept_cols,
                     probe_kept_cols, build_table_offset);
                 build_table_offset += build_table->nrows();
+                build_table->unpin();
             }
         }
     } else {
@@ -236,11 +248,13 @@ bool nested_loop_join_probe_consume_batch(
         // and probe_shuffle_buffer also share their dictionaries and will also
         // be unified.
         in_table = join_state->UnifyProbeTableDictionaryArrays(in_table);
-        for (auto& build_table : join_state->build_table_buffer.chunks) {
+        for (auto& build_table : join_state->build_table_buffer->chunks) {
+            build_table->pin();
             nested_loop_join_local_chunk(join_state, build_table, in_table,
                                          build_kept_cols, probe_kept_cols,
                                          build_table_offset);
             build_table_offset += build_table->nrows();
+            build_table->unpin();
         }
     }
     if (join_state->build_table_outer && is_last) {
@@ -250,7 +264,8 @@ bool nested_loop_join_probe_consume_batch(
         bodo::vector<int64_t> build_idxs;
         bodo::vector<int64_t> probe_idxs;
 
-        for (auto& build_table : join_state->build_table_buffer.chunks) {
+        for (auto& build_table : join_state->build_table_buffer->chunks) {
+            build_table->pin();
             add_unmatched_rows(
                 join_state->build_table_matched, build_table->nrows(),
                 build_idxs, probe_idxs,
@@ -260,6 +275,7 @@ bool nested_loop_join_probe_consume_batch(
                 build_table, join_state->dummy_probe_table, build_idxs,
                 probe_idxs, build_kept_cols, probe_kept_cols);
             build_table_offset += build_table->nrows();
+            build_table->unpin();
             build_idxs.clear();
             probe_idxs.clear();
         }

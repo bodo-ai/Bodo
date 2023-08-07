@@ -2055,9 +2055,12 @@ def test_local_spill_file(tmp_path: Path):
 
     # Check file contents
     expected_contents = (
-        "Hello BufferPool from Bodo!" + (4 * 1024 * 1024 - len(write_bytes)) * "\x00"
+        write_bytes
+        + b"\x00"
+        + (255 - len(write_bytes)) * b"\xcb"
+        + (4 * 1024 * 1024 - 256) * b"\x00"
     )
-    assert block_file.read_text() == expected_contents
+    assert block_file.read_bytes() == expected_contents
 
     pool.free(allocation_1)
     pool.free(allocation_2)
