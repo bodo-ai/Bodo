@@ -227,6 +227,8 @@ class JoinPartition {
     /**
      * @brief Add all rows from in_table to this partition.
      * This includes populating the hash table.
+     * This API assumes that ReserveBuildTable was
+     * called beforehand.
      *
      * @tparam is_active Is this the active partition.
      * @param in_table Table to insert.
@@ -234,8 +236,8 @@ class JoinPartition {
      * @param partitioning_hashes Partitioning hashes for the table records.
      */
     template <bool is_active>
-    void AppendBuildBatch(const std::shared_ptr<table_info>& in_table,
-                          const std::shared_ptr<uint32_t[]>& join_hashes);
+    void UnsafeAppendBuildBatch(const std::shared_ptr<table_info>& in_table,
+                                const std::shared_ptr<uint32_t[]>& join_hashes);
 
     /**
      * @brief Inserts the last row of build buffer
@@ -247,6 +249,8 @@ class JoinPartition {
     /**
      * @brief Add all rows from in_table to this partition.
      * This includes populating the hash table.
+     * This API assumes that ReserveBuildTable was
+     * called beforehand.
      *
      * @tparam is_active Is this the active partition.
      * @param in_table Table to insert.
@@ -256,9 +260,9 @@ class JoinPartition {
      * row
      */
     template <bool is_active>
-    void AppendBuildBatch(const std::shared_ptr<table_info>& in_table,
-                          const std::shared_ptr<uint32_t[]>& join_hashes,
-                          const std::vector<bool>& append_rows);
+    void UnsafeAppendBuildBatch(const std::shared_ptr<table_info>& in_table,
+                                const std::shared_ptr<uint32_t[]>& join_hashes,
+                                const std::vector<bool>& append_rows);
 
     /**
      * @brief Finalize the build step for this partition.
@@ -486,7 +490,7 @@ class HashJoinState : public JoinState {
 
     // Keep a table of NA keys for bypassing the hash table
     // if we have an outer join and any keys can contain NAs.
-    TableBuildBuffer build_na_key_buffer;
+    ChunkedTableBuilder build_na_key_buffer;
     // How many NA values have we seen. This is used for consistent
     // partitioning if the build table is replicated and the probe table
     // distributed. This is unused if the build table is distributed or
@@ -563,11 +567,14 @@ class HashJoinState : public JoinState {
      * will be simply added to the build buffer of the partition.
      * It is slightly optimized for the single partition case.
      *
+     * NOTE: This assumes that ReserveBuildTable has been called
+     * beforehand.
+     *
      * @param in_table Table to add the rows from.
      * @param join_hashes Join hashes for the records.
      * @param partitioning_hashes Partitioning hashes for the records.
      */
-    void AppendBuildBatch(
+    void UnsafeAppendBuildBatch(
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& join_hashes,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes);
@@ -581,13 +588,16 @@ class HashJoinState : public JoinState {
      * will be simply added to the build buffer of the partition.
      * It is slightly optimized for the single partition case.
      *
+     * NOTE: This assumes that ReserveBuildTable has been called
+     * beforehand.
+     *
      * @param in_table Table to add the rows from.
      * @param join_hashes Join hashes for the records.
      * @param partitioning_hashes Partitioning hashes for the records.
      * @param append_rows Vector of booleans indicating whether to append the
      * row
      */
-    void AppendBuildBatch(
+    void UnsafeAppendBuildBatch(
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& join_hashes,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes,

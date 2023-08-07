@@ -252,15 +252,16 @@ TableBuildBuffer::TableBuildBuffer(
     }
 }
 
-void TableBuildBuffer::AppendBatch(const std::shared_ptr<table_info>& in_table,
-                                   const std::vector<bool>& append_rows) {
+void TableBuildBuffer::UnsafeAppendBatch(
+    const std::shared_ptr<table_info>& in_table,
+    const std::vector<bool>& append_rows) {
     u_int64_t append_rows_sum =
         std::accumulate(append_rows.begin(), append_rows.end(), (u_int64_t)0);
 
 #ifndef APPEND_BATCH
-#define APPEND_BATCH(arr_type_exp, dtype_exp)                                  \
-    array_buffers[i].AppendBatch<arr_type_exp, dtype_exp>(in_arr, append_rows, \
-                                                          append_rows_sum)
+#define APPEND_BATCH(arr_type_exp, dtype_exp)                    \
+    array_buffers[i].UnsafeAppendBatch<arr_type_exp, dtype_exp>( \
+        in_arr, append_rows, append_rows_sum)
 #endif
 
     for (size_t i = 0; i < in_table->ncols(); i++) {
@@ -410,11 +411,11 @@ void TableBuildBuffer::AppendBatch(const std::shared_ptr<table_info>& in_table,
 #undef APPEND_BATCH
 }
 
-void TableBuildBuffer::AppendBatch(
+void TableBuildBuffer::UnsafeAppendBatch(
     const std::shared_ptr<table_info>& in_table) {
 #ifndef APPEND_BATCH
 #define APPEND_BATCH(arr_type_exp, dtype_exp) \
-    array_buffers[i].AppendBatch<arr_type_exp, dtype_exp>(in_arr)
+    array_buffers[i].UnsafeAppendBatch<arr_type_exp, dtype_exp>(in_arr)
 #endif
 
     for (size_t i = 0; i < in_table->ncols(); i++) {
@@ -692,7 +693,7 @@ void table_builder_append_py_entry(TableBuilderState* state,
     tmp_table = unify_dictionary_arrays_helper(tmp_table, state->dict_builders,
                                                0, false);
     state->builder.ReserveTable(tmp_table);
-    state->builder.AppendBatch(tmp_table);
+    state->builder.UnsafeAppendBatch(tmp_table);
 }
 
 table_info* table_builder_finalize(TableBuilderState* state) {

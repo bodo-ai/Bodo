@@ -463,11 +463,11 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
              hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank);
     }
 
-    groupby_state->local_table_buffer.AppendBatch(in_table,
-                                                  append_row_to_build_table);
+    groupby_state->local_table_buffer.UnsafeAppendBatch(
+        in_table, append_row_to_build_table);
     append_row_to_build_table.flip();
     std::vector<bool>& append_row_to_shuffle_table = append_row_to_build_table;
-    groupby_state->shuffle_table_buffer.AppendBatch(
+    groupby_state->shuffle_table_buffer.UnsafeAppendBatch(
         in_table, append_row_to_shuffle_table);
 
     batch_hashes_partition.reset();
@@ -503,7 +503,7 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
         new_data = groupby_state->UnifyBuildTableDictionaryArrays(new_data);
 
         groupby_state->local_table_buffer.ReserveTable(new_data);
-        groupby_state->local_table_buffer.AppendBatch(new_data);
+        groupby_state->local_table_buffer.UnsafeAppendBatch(new_data);
     }
 
     // compute output when all input batches are accumulated
