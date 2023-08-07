@@ -55,17 +55,17 @@ struct ArrayBuildBuffer {
               Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  DType == Bodo_CTypes::_BOOL)
-    void AppendBatch(const std::shared_ptr<array_info>& in_arr,
-                     const std::vector<bool>& append_rows,
-                     uint64_t append_rows_sum) {
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
+                           const std::vector<bool>& append_rows,
+                           uint64_t append_rows_sum) {
         CHECK_ARROW_MEM(
-            data_array->buffers[0]->Resize(
-                arrow::bit_util::BytesForBits(size + append_rows_sum), false),
-            "Resize Failed!");
+            data_array->buffers[0]->SetSize(
+                arrow::bit_util::BytesForBits(size + append_rows_sum)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
         CHECK_ARROW_MEM(
-            data_array->buffers[1]->Resize(
-                arrow::bit_util::BytesForBits(size + append_rows_sum), false),
-            "Resize Failed!");
+            data_array->buffers[1]->SetSize(
+                arrow::bit_util::BytesForBits(size + append_rows_sum)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
 
         uint8_t* out_ptr = (uint8_t*)this->data_array->data1();
         const uint8_t* in_ptr = (uint8_t*)in_arr->data1();
@@ -98,18 +98,19 @@ struct ArrayBuildBuffer {
               Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  DType != Bodo_CTypes::_BOOL)
-    void AppendBatch(const std::shared_ptr<array_info>& in_arr,
-                     const std::vector<bool>& append_rows,
-                     uint64_t append_rows_sum) {
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
+                           const std::vector<bool>& append_rows,
+                           uint64_t append_rows_sum) {
         using T = typename dtype_to_type<DType>::type;
 
-        CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
-                            sizeof(T) * (size + append_rows_sum), false),
-                        "Resize Failed!");
         CHECK_ARROW_MEM(
-            data_array->buffers[1]->Resize(
-                arrow::bit_util::BytesForBits(size + append_rows_sum), false),
-            "Resize Failed!");
+            data_array->buffers[0]->SetSize(sizeof(T) *
+                                            (size + append_rows_sum)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
+        CHECK_ARROW_MEM(
+            data_array->buffers[1]->SetSize(
+                arrow::bit_util::BytesForBits(size + append_rows_sum)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
 
         T* out_ptr = (T*)this->data_array->data1();
         const T* in_ptr = (T*)in_arr->data1();
@@ -146,14 +147,14 @@ struct ArrayBuildBuffer {
     template <bodo_array_type::arr_type_enum arr_type,
               Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::STRING)
-    void AppendBatch(const std::shared_ptr<array_info>& in_arr,
-                     const std::vector<bool>& append_rows,
-                     uint64_t append_rows_sum) {
-        // resize and copy offsets
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
+                           const std::vector<bool>& append_rows,
+                           uint64_t append_rows_sum) {
+        // Set size and copy offsets
         CHECK_ARROW_MEM(
-            data_array->buffers[1]->Resize(
-                (size + 1 + append_rows_sum) * sizeof(offset_t), false),
-            "Resize Failed!");
+            data_array->buffers[1]->SetSize((size + 1 + append_rows_sum) *
+                                            sizeof(offset_t)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
         offset_t* curr_offsets = (offset_t*)this->data_array->data2();
         offset_t* in_offsets = (offset_t*)in_arr->data2();
         u_int64_t offset_size = this->size;
@@ -167,13 +168,12 @@ struct ArrayBuildBuffer {
             }
         }
 
-        // resize and copy characters
+        // Set size and copy characters
         CHECK_ARROW_MEM(
             // data_array->n_sub_elems() is correct because we set offsets above
             // and n_sub_elems is based on the offsets array
-            data_array->buffers[0]->Resize(this->data_array->n_sub_elems(),
-                                           false),
-            "Resize Failed!");
+            data_array->buffers[0]->SetSize(this->data_array->n_sub_elems()),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
         u_int64_t character_size = this->size;
         for (u_int64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
             // TODO If subsequent rows are to be appended, combine the memcpy
@@ -189,9 +189,9 @@ struct ArrayBuildBuffer {
         }
 
         CHECK_ARROW_MEM(
-            data_array->buffers[2]->Resize(
-                arrow::bit_util::BytesForBits(size + append_rows_sum), false),
-            "Resize Failed!");
+            data_array->buffers[2]->SetSize(
+                arrow::bit_util::BytesForBits(size + append_rows_sum)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
         uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
         const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
         for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
@@ -218,16 +218,17 @@ struct ArrayBuildBuffer {
     template <bodo_array_type::arr_type_enum arr_type,
               Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::DICT)
-    void AppendBatch(const std::shared_ptr<array_info>& in_arr,
-                     const std::vector<bool>& append_rows,
-                     uint64_t append_rows_sum) {
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
+                           const std::vector<bool>& append_rows,
+                           uint64_t append_rows_sum) {
         if (!is_matching_dictionary(this->data_array->child_arrays[0],
                                     in_arr->child_arrays[0])) {
-            throw std::runtime_error("dictionary not unified in AppendRow");
+            throw std::runtime_error(
+                "dictionary not unified in UnsafeAppendBatch");
         }
 
-        this->dict_indices->AppendBatch<bodo_array_type::NULLABLE_INT_BOOL,
-                                        Bodo_CTypes::INT32>(
+        this->dict_indices->UnsafeAppendBatch<
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32>(
             in_arr->child_arrays[1], append_rows, append_rows_sum);
         this->size += append_rows_sum;
         this->data_array->length = this->size;
@@ -246,14 +247,15 @@ struct ArrayBuildBuffer {
     template <bodo_array_type::arr_type_enum arr_type,
               Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::NUMPY)
-    void AppendBatch(const std::shared_ptr<array_info>& in_arr,
-                     const std::vector<bool>& append_rows,
-                     uint64_t append_rows_sum) {
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
+                           const std::vector<bool>& append_rows,
+                           uint64_t append_rows_sum) {
         using T = typename dtype_to_type<DType>::type;
 
-        CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
-                            sizeof(T) * (size + append_rows_sum), false),
-                        "Resize Failed!");
+        CHECK_ARROW_MEM(
+            data_array->buffers[0]->SetSize(sizeof(T) *
+                                            (size + append_rows_sum)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
         T* out_ptr = (T*)this->data_array->data1();
         const T* in_ptr = (T*)in_arr->data1();
         for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
@@ -287,15 +289,15 @@ struct ArrayBuildBuffer {
               Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  DType == Bodo_CTypes::_BOOL)
-    void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr) {
         CHECK_ARROW_MEM(
-            data_array->buffers[0]->Resize(
-                arrow::bit_util::BytesForBits(size + in_arr->length), false),
-            "Resize Failed!");
+            data_array->buffers[0]->SetSize(
+                arrow::bit_util::BytesForBits(size + in_arr->length)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
         CHECK_ARROW_MEM(
-            data_array->buffers[1]->Resize(
-                arrow::bit_util::BytesForBits(size + in_arr->length), false),
-            "Resize Failed!");
+            data_array->buffers[1]->SetSize(
+                arrow::bit_util::BytesForBits(size + in_arr->length)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
 
         uint8_t* out_ptr = (uint8_t*)this->data_array->data1();
         const uint8_t* in_ptr = (uint8_t*)in_arr->data1();
@@ -334,15 +336,16 @@ struct ArrayBuildBuffer {
               Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  DType != Bodo_CTypes::_BOOL)
-    void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr) {
         uint64_t size_type = numpy_item_size[in_arr->dtype];
-        CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
-                            (size + in_arr->length) * size_type, false),
-                        "Resize Failed!");
         CHECK_ARROW_MEM(
-            data_array->buffers[1]->Resize(
-                arrow::bit_util::BytesForBits(size + in_arr->length), false),
-            "Resize Failed!");
+            data_array->buffers[0]->SetSize((size + in_arr->length) *
+                                            size_type),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
+        CHECK_ARROW_MEM(
+            data_array->buffers[1]->SetSize(
+                arrow::bit_util::BytesForBits(size + in_arr->length)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
 
         char* out_ptr = this->data_array->data1() + size_type * size;
         const char* in_ptr = in_arr->data1();
@@ -379,7 +382,7 @@ struct ArrayBuildBuffer {
     template <bodo_array_type::arr_type_enum arr_type,
               Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::STRING)
-    void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr) {
         offset_t* curr_offsets = (offset_t*)this->data_array->data2();
         offset_t* in_offsets = (offset_t*)in_arr->data2();
         // Determine the new data sizes
@@ -392,17 +395,17 @@ struct ArrayBuildBuffer {
         size_t new_bitmap_size =
             arrow::bit_util::BytesForBits(this->size + in_arr->length);
 
-        // Ensure there is enough space.
-        CHECK_ARROW_MEM(data_array->buffers[0]->Resize(new_data_size, false),
-                        "Resize Failed!");
-        CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
-                            new_offset_size * sizeof(offset_t), false),
-                        "Resize Failed!");
-        CHECK_ARROW_MEM(data_array->buffers[2]->Resize(new_bitmap_size, false),
-                        "Resize Failed!");
-
-        // Re-fetch pointers in case the buffer was reallocated
-        curr_offsets = (offset_t*)this->data_array->data2();
+        // Set new buffer sizes. Required space should've been reserved
+        // beforehand.
+        CHECK_ARROW_MEM(
+            data_array->buffers[0]->SetSize(new_data_size),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
+        CHECK_ARROW_MEM(
+            data_array->buffers[1]->SetSize(new_offset_size * sizeof(offset_t)),
+            "ArrayBuildBuffer::UnsafeAppendBatch1: SetSize Failed!:");
+        CHECK_ARROW_MEM(
+            data_array->buffers[2]->SetSize(new_bitmap_size),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
 
         // Copy data
         char* out_ptr = this->data_array->data1() + old_data_size;
@@ -448,13 +451,14 @@ struct ArrayBuildBuffer {
     template <bodo_array_type::arr_type_enum arr_type,
               Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::DICT)
-    void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr) {
         if (!is_matching_dictionary(this->data_array->child_arrays[0],
                                     in_arr->child_arrays[0])) {
-            throw std::runtime_error("dictionary not unified in AppendRow");
+            throw std::runtime_error(
+                "dictionary not unified in UnsafeAppendBatch");
         }
-        this->dict_indices->AppendBatch<bodo_array_type::NULLABLE_INT_BOOL,
-                                        Bodo_CTypes::INT32>(
+        this->dict_indices->UnsafeAppendBatch<
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32>(
             in_arr->child_arrays[1]);
         // Update the size + length which won't be handled by the recursive
         // case.
@@ -475,12 +479,12 @@ struct ArrayBuildBuffer {
     template <bodo_array_type::arr_type_enum arr_type,
               Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::NUMPY)
-    void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr) {
         uint64_t size_type = numpy_item_size[in_arr->dtype];
-        CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
-                            (size + in_arr->length) * size_type, false),
-                        "Resize Failed!");
-
+        CHECK_ARROW_MEM(
+            data_array->buffers[0]->SetSize((size + in_arr->length) *
+                                            size_type),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
         char* out_ptr = this->data_array->data1() + size_type * size;
         const char* in_ptr = in_arr->data1();
         memcpy(out_ptr, in_ptr, size_type * in_arr->length);
@@ -675,10 +679,10 @@ struct TableBuildBuffer {
      * @param in_table input table with the new row
      * @param row_inds bit vector indicating which rows to append
      */
-    void AppendBatch(const std::shared_ptr<table_info>& in_table,
-                     const std::vector<bool>& append_rows);
+    void UnsafeAppendBatch(const std::shared_ptr<table_info>& in_table,
+                           const std::vector<bool>& append_rows);
 
-    void AppendBatch(const std::shared_ptr<table_info>& in_table);
+    void UnsafeAppendBatch(const std::shared_ptr<table_info>& in_table);
 
     /**
      * @brief Append key columns of a row of input table, assuming there is

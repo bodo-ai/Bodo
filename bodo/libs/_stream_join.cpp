@@ -217,7 +217,7 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
             }
         }
 
-        new_part1->build_table_buffer.AppendBatch(
+        new_part1->build_table_buffer.UnsafeAppendBatch(
             this->build_table_buffer.data_table, append_partition1);
 
         append_partition1.flip();
@@ -321,14 +321,14 @@ inline void JoinPartition::InsertLastRowIntoMap() {
 }
 
 template <bool is_active>
-void JoinPartition::AppendBuildBatch(
+void JoinPartition::UnsafeAppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& join_hashes) {
     this->build_table_join_hashes.insert(this->build_table_join_hashes.end(),
                                          join_hashes.get(),
                                          join_hashes.get() + in_table->nrows());
     if (is_active) {
-        this->build_table_buffer.AppendBatch(in_table);
+        this->build_table_buffer.UnsafeAppendBatch(in_table);
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             this->InsertLastRowIntoMap();
             this->curr_build_size++;
@@ -339,12 +339,12 @@ void JoinPartition::AppendBuildBatch(
 }
 
 template <bool is_active>
-void JoinPartition::AppendBuildBatch(
+void JoinPartition::UnsafeAppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& join_hashes,
     const std::vector<bool>& append_rows) {
     if (is_active) {
-        this->build_table_buffer.AppendBatch(in_table, append_rows);
+        this->build_table_buffer.UnsafeAppendBatch(in_table, append_rows);
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             if (append_rows[i_row]) {
                 this->build_table_join_hashes.push_back(join_hashes[i_row]);
@@ -602,7 +602,7 @@ void JoinPartition::ActivatePartition() {
             auto [build_table_chunk, build_table_nrows_chunk] =
                 this->build_table_buffer_chunked.PopChunk();
             this->build_table_buffer.ReserveTable(build_table_chunk);
-            this->build_table_buffer.AppendBatch(build_table_chunk);
+            this->build_table_buffer.UnsafeAppendBatch(build_table_chunk);
         }
 
         // Rebuild hash table for new active partition
@@ -819,18 +819,15 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
           JOIN_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD)),
       op_mm(bodo::buffer_memory_manager(op_pool.get())),
       max_partition_depth(max_partition_depth_),
+      build_shuffle_buffer(build_arr_c_types, build_arr_array_types,
+                           this->build_table_dict_builders),
+      probe_shuffle_buffer(probe_arr_c_types, probe_arr_array_types,
+                           this->probe_table_dict_builders),
+      // Create a build buffer for NA values to skip the hash table.
+      build_na_key_buffer(build_arr_c_types, build_arr_array_types,
+                          this->build_table_dict_builders, output_batch_size_,
+                          DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
       join_event("HashJoin") {
-    this->build_shuffle_buffer =
-        TableBuildBuffer(build_arr_c_types, build_arr_array_types,
-                         this->build_table_dict_builders);
-    this->probe_shuffle_buffer =
-        TableBuildBuffer(probe_arr_c_types, probe_arr_array_types,
-                         this->probe_table_dict_builders);
-    // Create a build buffer for NA values to skip the hash table.
-    this->build_na_key_buffer =
-        TableBuildBuffer(build_arr_c_types, build_arr_array_types,
-                         this->build_table_dict_builders);
-
     // Disable the threshold enforcement in the buffer pool for now:
     this->op_pool->DisableThresholdEnforcement();
 
@@ -905,13 +902,14 @@ void HashJoinState::ReserveBuildTable(
     }
 }
 
-void HashJoinState::AppendBuildBatch(
+void HashJoinState::UnsafeAppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& join_hashes,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes) {
     if (this->partitions.size() == 1) {
         // Fast path for the single partition case
-        this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes);
+        this->partitions[0]->UnsafeAppendBuildBatch<true>(in_table,
+                                                          join_hashes);
         return;
     }
 
@@ -936,27 +934,27 @@ void HashJoinState::AppendBuildBatch(
         }
         if (!found_partition) {
             throw std::runtime_error(
-                "HashJoinState::AppendBuildBatch: Couldn't find "
+                "HashJoinState::UnsafeAppendBuildBatch: Couldn't find "
                 "any matching partition for row!");
         }
     }
-    this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes,
-                                                append_rows_by_partition[0]);
+    this->partitions[0]->UnsafeAppendBuildBatch<true>(
+        in_table, join_hashes, append_rows_by_partition[0]);
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
-        this->partitions[i_part]->AppendBuildBatch<false>(
+        this->partitions[i_part]->UnsafeAppendBuildBatch<false>(
             in_table, join_hashes, append_rows_by_partition[i_part]);
     }
 }
 
-void HashJoinState::AppendBuildBatch(
+void HashJoinState::UnsafeAppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& join_hashes,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes,
     const std::vector<bool>& append_rows) {
     if (this->partitions.size() == 1) {
         // Fast path for the single partition case
-        this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes,
-                                                    append_rows);
+        this->partitions[0]->UnsafeAppendBuildBatch<true>(in_table, join_hashes,
+                                                          append_rows);
         return;
     }
 
@@ -984,15 +982,15 @@ void HashJoinState::AppendBuildBatch(
             }
             if (!found_partition) {
                 throw std::runtime_error(
-                    "HashJoinState::AppendBuildBatch: Couldn't find "
+                    "HashJoinState::UnsafeAppendBuildBatch: Couldn't find "
                     "any matching partition for row!");
             }
         }
     }
-    this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes,
-                                                append_rows_by_partition[0]);
+    this->partitions[0]->UnsafeAppendBuildBatch<true>(
+        in_table, join_hashes, append_rows_by_partition[0]);
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
-        this->partitions[i_part]->AppendBuildBatch<false>(
+        this->partitions[i_part]->UnsafeAppendBuildBatch<false>(
             in_table, join_hashes, append_rows_by_partition[i_part]);
     }
 }
@@ -1008,17 +1006,34 @@ void HashJoinState::InitOutputBuffer(
     JoinState::InitOutputBuffer(build_kept_cols, probe_kept_cols);
     // Append any NA values from the NA side.
     if (this->build_table_outer) {
-        // Create the idxs.
-        int64_t n_rows = this->build_na_key_buffer.data_table->nrows();
-        std::vector<int64_t> build_idxs(n_rows);
-        std::vector<int64_t> probe_idxs(n_rows, -1);
-        for (int64_t i = 0; i < n_rows; i++) {
-            build_idxs[i] = i;
+        std::vector<int64_t> build_idxs;
+        // build_idxs can only become as large as the max chunk size
+        build_idxs.reserve(this->build_na_key_buffer.active_chunk_capacity);
+        // Start probe_idxs off with -1s. We will resize it in the loop.
+        std::vector<int64_t> probe_idxs(
+            this->build_na_key_buffer.active_chunk_capacity, -1);
+        while (!this->build_na_key_buffer.chunks.empty()) {
+            // The buffer should already be finalized by now, so
+            // we can just go over the chunks.
+            auto [build_na_table_chunk, n_rows] =
+                this->build_na_key_buffer.PopChunk();
+            // Create the idxs.
+            for (int64_t i = 0; i < n_rows; i++) {
+                build_idxs.push_back(i);
+            }
+            // Just resize to the required size and fill
+            // any extra required space with -1s. In most cases,
+            // this should be a NOP.
+            probe_idxs.resize(n_rows, -1);
+            this->output_buffer->AppendJoinOutput(
+                build_na_table_chunk, this->dummy_probe_table, build_idxs,
+                probe_idxs, build_kept_cols, probe_kept_cols);
+            // We don't need to clear probe_idxs since in the next iteration
+            // we will just resize it (and contents don't need to be changed).
+            build_idxs.clear();
+            // 'build_na_table_chunk' will go out of scope and be freed
+            // automatically here.
         }
-        this->output_buffer->AppendJoinOutput(
-            this->build_na_key_buffer.data_table, this->dummy_probe_table,
-            build_idxs, probe_idxs, build_kept_cols, probe_kept_cols);
-        // TODO: Free memory. This is never used again.
     }
 }
 
@@ -1030,6 +1045,8 @@ void HashJoinState::FinalizeBuild() {
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
         this->partitions[i_part]->FinalizeBuild();
     }
+    // Finalize the NA buffer now that we've seen all the input.
+    this->build_na_key_buffer.Finalize();
     JoinState::FinalizeBuild();
 }
 
@@ -1267,14 +1284,14 @@ bool join_build_consume_batch(HashJoinState* join_state,
              hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank);
     }
 
-    join_state->AppendBuildBatch(in_table, batch_hashes_join,
-                                 batch_hashes_partition,
-                                 append_row_to_build_table);
+    join_state->UnsafeAppendBuildBatch(in_table, batch_hashes_join,
+                                       batch_hashes_partition,
+                                       append_row_to_build_table);
 
     append_row_to_build_table.flip();
     std::vector<bool>& append_row_to_shuffle_table = append_row_to_build_table;
-    join_state->build_shuffle_buffer.AppendBatch(in_table,
-                                                 append_row_to_shuffle_table);
+    join_state->build_shuffle_buffer.UnsafeAppendBatch(
+        in_table, append_row_to_shuffle_table);
 
     batch_hashes_partition.reset();
     batch_hashes_join.reset();
@@ -1343,7 +1360,7 @@ bool join_build_consume_batch(HashJoinState* join_state,
 
                 join_state->ReserveBuildTable(
                     join_state->build_shuffle_buffer.data_table);
-                join_state->AppendBuildBatch(
+                join_state->UnsafeAppendBuildBatch(
                     join_state->build_shuffle_buffer.data_table,
                     batch_hashes_join, batch_hashes_partition);
 
@@ -1395,8 +1412,8 @@ bool join_build_consume_batch(HashJoinState* join_state,
                     join_state->global_bloom_filter->AddAll(
                         batch_hashes_partition, 0, gathered_table->nrows());
                 }
-                join_state->AppendBuildBatch(gathered_table, batch_hashes_join,
-                                             batch_hashes_partition);
+                join_state->UnsafeAppendBuildBatch(
+                    gathered_table, batch_hashes_join, batch_hashes_partition);
                 batch_hashes_partition.reset();
                 batch_hashes_join.reset();
                 gathered_table.reset();
@@ -1456,8 +1473,8 @@ bool join_build_consume_batch(HashJoinState* join_state,
 
         // Add new batch of data to partitions (bulk insert)
         join_state->ReserveBuildTable(new_data);
-        join_state->AppendBuildBatch(new_data, batch_hashes_join,
-                                     batch_hashes_partition);
+        join_state->UnsafeAppendBuildBatch(new_data, batch_hashes_join,
+                                           batch_hashes_partition);
         batch_hashes_join.reset();
         batch_hashes_partition.reset();
     }
@@ -1624,7 +1641,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     join_state->AppendProbeBatchToInactivePartition(
         in_table, batch_hashes_join, batch_hashes_partition,
         append_to_probe_inactive_partition);
-    join_state->probe_shuffle_buffer.AppendBatch(
+    join_state->probe_shuffle_buffer.UnsafeAppendBatch(
         in_table, append_to_probe_shuffle_buffer);
     append_to_probe_inactive_partition.clear();
     append_to_probe_shuffle_buffer.clear();

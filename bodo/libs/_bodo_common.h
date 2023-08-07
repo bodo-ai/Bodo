@@ -144,6 +144,29 @@ class BodoBuffer : public arrow::ResizableBuffer {
     }
 
     /**
+     * @brief Set the size of the buffer to 'new_size'.
+     * If 'new_size' is greater than the buffer's
+     * capacity, a CapacityError will be returned.
+     *
+     * @param new_size New size to set to.
+     * @return arrow::Status
+     */
+    arrow::Status SetSize(const int64_t new_size) {
+        if (ARROW_PREDICT_FALSE(new_size < 0)) {
+            return arrow::Status::Invalid(
+                "BodoBuffer::SetSize: Negative buffer resize: ", new_size);
+        }
+        if (new_size > this->capacity_) {
+            return arrow::Status::CapacityError(
+                "BodoBuffer::SetSize: new_size (" + std::to_string(new_size) +
+                ") is greater than capacity (" +
+                std::to_string(this->capacity_) + ")!");
+        }
+        this->size_ = new_size;
+        return arrow::Status::OK();
+    }
+
+    /**
      * @brief Make sure there is enough capacity and resize the buffer.
      * If shrink_to_fit=true and new_size is smaller than existing size, updates
      * capacity to the nearest multiple of 64 bytes.
