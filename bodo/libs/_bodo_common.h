@@ -223,6 +223,9 @@ class BodoBuffer : public arrow::ResizableBuffer {
     /// @brief Wrapper for Unpinning Buffers
     inline void unpin() { NRT_MemInfo_Unpin(this->meminfo); }
 
+    template <typename X>
+    friend class ::bodo::pin_guard;
+
    private:
     NRT_MemInfo* meminfo;
     arrow::MemoryPool* pool_;
@@ -789,6 +792,9 @@ struct array_info {
         }
     }
 
+    template <typename X>
+    friend class ::bodo::pin_guard;
+
     /**
      * @brief Can a given a array contain NA values.
      * Currently this decides solely based on type but
@@ -1092,6 +1098,9 @@ struct table_info {
             col->unpin();
         }
     }
+
+    template <typename X>
+    friend class ::bodo::pin_guard;
 };
 
 /**
