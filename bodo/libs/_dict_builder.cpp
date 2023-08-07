@@ -34,15 +34,22 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         return in_arr;
     }
 
-    // Compute the cached_transpose_map if this isn't the same as the
-    // previous batch
-    if (!valid_arr_id || (this->cached_array_id != batch_dict->array_id)) {
-        // Record that we have a cache miss.
+    auto cache_entry = std::find_if(
+        this->cached_array_transposes.begin(),
+        this->cached_array_transposes.end(),
+        [batch_dict](const std::pair<int64_t, std::vector<int>> entry) {
+            return entry.first == batch_dict->array_id;
+        });
+
+    std::vector<int> active_transpose_map;
+    // Compute the cached_transpose_map if it is not already cached.
+    if (!valid_arr_id || cache_entry == this->cached_array_transposes.end()) {
         this->unify_cache_misses++;
+
         this->dict_buff->ReserveArray(batch_dict);
-        // Clear the cache.
-        this->cached_transpose_map.clear();
-        this->cached_transpose_map.reserve(batch_dict->length);
+
+        // Create new transpose map
+        std::vector<int> new_transpose_map(batch_dict->length);
 
         // Check/update dictionary hash table and create transpose map
         char* data = batch_dict->data1();
@@ -51,7 +58,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         for (size_t i = 0; i < batch_dict->length; i++) {
             // handle nulls in the dictionary
             if (!batch_dict->get_null_bit(i)) {
-                this->cached_transpose_map.emplace_back(-1);
+                new_transpose_map.emplace_back(-1);
                 continue;
             }
             offset_t start_offset = offsets[i];
@@ -61,14 +68,14 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
             // get existing index if already in hash table
             if (this->dict_str_to_ind->contains(val)) {
                 dict_indices_t ind = this->dict_str_to_ind->find(val)->second;
-                this->cached_transpose_map.emplace_back(ind);
+                new_transpose_map.emplace_back(ind);
             } else {
                 found_insert = true;
                 // insert into hash table if not exists
                 dict_indices_t ind = this->dict_str_to_ind->size();
                 // TODO: remove std::string() after upgrade to C++23
                 (*(this->dict_str_to_ind))[std::string(val)] = ind;
-                this->cached_transpose_map.emplace_back(ind);
+                new_transpose_map.emplace_back(ind);
                 this->dict_buff->AppendRow(batch_dict, i);
                 if (this->is_key) {
                     uint32_t hash;
@@ -78,8 +85,10 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
                 }
             }
         }
-        // Update the cached id
-        this->cached_array_id = batch_dict->array_id;
+        // Update the cached id and transpose map
+        this->_AddToCache(
+            std::make_pair(batch_dict->array_id, new_transpose_map));
+        active_transpose_map = new_transpose_map;
         if (dicts_match && (batch_dict->length ==
                             static_cast<uint64_t>(this->dict_buff->size))) {
             // If the dictionary was copied without changing (e.g. no entries
@@ -93,6 +102,11 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
             // Update the dict id if there was any change to the dictionary.
             this->dict_buff->data_array->array_id =
                 generate_array_id(this->dict_buff->data_array->length);
+        }
+    } else {
+        active_transpose_map = cache_entry->second;
+        if (cache_entry != cached_array_transposes.begin()) {
+            this->_AddToCache(*cache_entry);
         }
     }
 
@@ -109,7 +123,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
             out_inds[i] = -1;
             continue;
         }
-        dict_indices_t ind = this->cached_transpose_map[in_inds[i]];
+        dict_indices_t ind = active_transpose_map[in_inds[i]];
         out_inds[i] = ind;
         if (ind == -1) {
             out_indices_arr->set_null_bit(i, false);
@@ -124,6 +138,12 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
 std::shared_ptr<bodo::vector<uint32_t>>
 DictionaryBuilder::GetDictionaryHashes() {
     return this->dict_hashes;
+}
+
+void DictionaryBuilder::_AddToCache(
+    std::pair<int64_t, std::vector<int>> cache_entry) {
+    this->cached_array_transposes.pop_back();
+    this->cached_array_transposes.push_front(cache_entry);
 }
 
 /* ------------------------------------------------------------------------ */
