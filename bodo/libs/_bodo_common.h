@@ -1028,11 +1028,6 @@ struct mpi_comm_info {
 
 struct table_info {
     std::vector<std::shared_ptr<array_info>> columns;
-    // this is set and used by groupby to avoid putting additional info in
-    // multi_col_key (which is only needed when key equality is checked but not
-    // for hashing)
-    // TODO consider passing 'num_keys' to the constructor
-    int64_t num_keys;
     // keep shuffle info to be able to reverse the shuffle if necessary
     // currently used in groupby apply
     // TODO: refactor out?

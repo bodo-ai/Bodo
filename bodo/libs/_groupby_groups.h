@@ -29,7 +29,7 @@
  */
 void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
                     std::shared_ptr<uint32_t[]>& hashes, size_t nunique_hashes,
-                    std::vector<grouping_info>& grp_infos,
+                    std::vector<grouping_info>& grp_infos, const int64_t n_keys,
                     bool check_for_null_keys, bool key_dropna,
                     bool is_parallel);
 
@@ -53,8 +53,8 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
                             std::shared_ptr<uint32_t[]>& hashes,
                             size_t nunique_hashes,
                             std::vector<grouping_info>& grp_infos,
-                            const bool consider_missing, bool key_dropna,
-                            bool is_parallel);
+                            const int64_t n_keys, const bool consider_missing,
+                            bool key_dropna, bool is_parallel);
 
 /**
  * @brief Get total number of groups for input key arrays. This

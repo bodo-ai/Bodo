@@ -119,17 +119,22 @@ std::shared_ptr<table_info> get_update_table(
     size_t nunique_hashes = get_nunique_hashes(
         batch_hashes_groupby, in_table->nrows(), groupby_state->parallel);
     std::vector<grouping_info> grp_infos;
+
     if (groupby_state->req_extended_group_info) {
         // TODO[BSE-578]: set to true when handling cumulative operations that
         // need the list of NA row indexes.
         const bool consider_missing = false;
+
         get_group_info_iterate(tables, batch_hashes_groupby, nunique_hashes,
-                               grp_infos, consider_missing, false,
+                               grp_infos, groupby_state->n_keys,
+                               consider_missing, false,
                                groupby_state->parallel);
     } else {
         get_group_info(tables, batch_hashes_groupby, nunique_hashes, grp_infos,
-                       true, false, groupby_state->parallel);
+                       groupby_state->n_keys, true, false,
+                       groupby_state->parallel);
     }
+
     grouping_info& grp_info = grp_infos[0];
     grp_info.mode = 1;
     size_t num_groups = grp_info.num_groups;
@@ -137,6 +142,7 @@ std::shared_ptr<table_info> get_update_table(
     std::shared_ptr<table_info> update_table = std::make_shared<table_info>();
     alloc_init_keys(tables, update_table, grp_infos, groupby_state->n_keys,
                     num_groups);
+
     const std::vector<int32_t>& f_in_offsets = groupby_state->f_in_offsets;
     const std::vector<int32_t>& f_in_cols = groupby_state->f_in_cols;
     for (size_t i = 0; i < groupby_state->col_sets.size(); i++) {
@@ -157,6 +163,7 @@ std::shared_ptr<table_info> get_update_table(
         }
         col_set->update(grp_infos);
     }
+
     return update_table;
 }
 
@@ -259,14 +266,10 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
     is_last = stream_sync_is_last(is_last, groupby_state->build_iter,
                                   groupby_state->sync_iter);
 
-    // NOTE: in_table->num_keys is used by groupby infrastructure (e.g.
-    // get_group_info)
-    in_table->num_keys = groupby_state->n_keys;
+    // Unify dictionaries keys to allow consistent hashing and fast key
+    // comparison using indices
+    in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table, true);
     in_table = get_update_table(groupby_state, in_table);
-
-    // Unify dictionaries to allow consistent hashing and fast key comparison
-    // using indices
-    in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table);
 
     // Dictionary hashes for the key columns which will be used for
     // the partitioning hashes:
@@ -505,8 +508,6 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
 
     // compute output when all input batches are accumulated
     if (is_last) {
-        groupby_state->local_table_buffer.data_table->num_keys =
-            groupby_state->n_keys;
         std::shared_ptr<table_info> output_table = get_update_table(
             groupby_state, groupby_state->local_table_buffer.data_table);
         groupby_state->InitOutputBuffer(output_table);
@@ -655,6 +656,7 @@ std::shared_ptr<table_info> GroupbyState::UnifyBuildTableDictionaryArrays(
         }
         out_arrs.emplace_back(out_arr);
     }
+
     return std::make_shared<table_info>(out_arrs);
 }
 
