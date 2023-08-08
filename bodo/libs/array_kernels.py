@@ -724,6 +724,39 @@ def approx_percentile(arr, percentile, parallel=False):  # pragma: no cover
     return result
 
 
+ll.add_symbol(
+    "percentile_py_entrypt",
+    quantile_alg.percentile_py_entrypt,
+)
+
+_percentile = types.ExternalFunction(
+    "percentile_py_entrypt",
+    types.float64(
+        bodo.libs.array.array_info_type, types.float64, types.bool_, types.bool_
+    ),
+)
+
+
+@numba.njit
+def percentile_cont(arr, percentile, parallel=False):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    result = _percentile(arr_info, percentile, True, parallel)
+    check_and_propagate_cpp_exception()
+    if np.isnan(result):
+        return None
+    return result
+
+
+@numba.njit
+def percentile_disc(arr, percentile, parallel=False):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    result = _percentile(arr_info, percentile, False, parallel)
+    check_and_propagate_cpp_exception()
+    if np.isnan(result):
+        return None
+    return result
+
+
 ################################ quantile ####################################
 
 

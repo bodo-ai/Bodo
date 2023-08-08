@@ -1222,7 +1222,7 @@ inline bool non_null_at(array_info& arr, size_t idx) {
  */
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
-    requires(numpy_array<ArrType> && datetime_timedelta<DType>)
+    requires(numpy_array<ArrType> && NullSentinelDtype<DType>)
 inline bool non_null_at(array_info& arr, size_t idx) {
     return !isnan_alltype<T, DType>(get_arr_item<ArrType, T, DType>(arr, idx));
 }
@@ -1274,7 +1274,7 @@ inline bool is_null_at(array_info& arr, size_t idx) {
  */
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
-    requires(numpy_array<ArrType> && datetime_timedelta<DType>)
+    requires(numpy_array<ArrType> && NullSentinelDtype<DType>)
 inline bool is_null_at(array_info& arr, size_t idx) {
     return isnan_alltype<T, DType>(get_arr_item<ArrType, T, DType>(arr, idx));
 }
