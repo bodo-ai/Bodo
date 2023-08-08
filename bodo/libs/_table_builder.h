@@ -157,7 +157,7 @@ struct ArrayBuildBuffer {
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
         offset_t* curr_offsets = (offset_t*)this->data_array->data2();
         offset_t* in_offsets = (offset_t*)in_arr->data2();
-        u_int64_t offset_size = this->size;
+        uint64_t offset_size = this->size;
         for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
             if (append_rows[row_ind]) {
                 // append offset
@@ -174,8 +174,8 @@ struct ArrayBuildBuffer {
             // and n_sub_elems is based on the offsets array
             data_array->buffers[0]->SetSize(this->data_array->n_sub_elems()),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
-        u_int64_t character_size = this->size;
-        for (u_int64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+        uint64_t character_size = this->size;
+        for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
             // TODO If subsequent rows are to be appended, combine the memcpy
             if (append_rows[row_ind]) {
                 // copy characters
@@ -270,8 +270,8 @@ struct ArrayBuildBuffer {
     /**
      * @brief Copy a bitmap from src to dest with length bits.
      */
-    void _copy_bitmap(u_int8_t* dest, const u_int8_t* src, u_int64_t length) {
-        u_int64_t bytes_to_copy = (length + 7) >> 3;
+    void _copy_bitmap(uint8_t* dest, const uint8_t* src, uint64_t length) {
+        uint64_t bytes_to_copy = (length + 7) >> 3;
         memcpy(dest, src, bytes_to_copy);
     }
 
@@ -360,7 +360,7 @@ struct ArrayBuildBuffer {
             this->size += in_arr->length;
         } else {
             // Slow path for non-byte aligned null bitmask
-            for (u_int64_t i = 0; i < in_arr->length; i++) {
+            for (uint64_t i = 0; i < in_arr->length; i++) {
                 bool bit = GetBit(in_bitmask, i);
                 SetBitTo(out_bitmask, this->size, bit);
                 this->size++;
@@ -592,12 +592,25 @@ struct ArrayBuildBuffer {
     }
 
     /**
+     * @brief Utility function for type check before ReserveArray
+     *
+     * @param in_table input table used for finding new buffer sizes to reserve
+     */
+    void ReserveArrayTypeCheck(const std::shared_ptr<array_info>& in_arr);
+
+    /**
      * @brief Reserve enough space to potentially append all contents of input
      * array to buffer. NOTE: This requires reserving space for variable-sized
      * elements like strings and nested arrays.
      *
      * @param in_arr input array used for finding new buffer sizes to reserve
+     * @param reserve_rows bitmask indicating whether to reserve the row
+     * @param reserve_rows_sum number of rows to reserve
      */
+    void ReserveArray(const std::shared_ptr<array_info>& in_arr,
+                      const std::vector<bool>& reserve_rows,
+                      uint64_t reserve_rows_sum);
+
     void ReserveArray(const std::shared_ptr<array_info>& in_arr);
 
     /**
@@ -677,7 +690,7 @@ struct TableBuildBuffer {
      * there is already enough space reserved (with ReserveTable).
      *
      * @param in_table input table with the new row
-     * @param row_inds bit vector indicating which rows to append
+     * @param append_rows bit vector indicating which rows to append
      */
     void UnsafeAppendBatch(const std::shared_ptr<table_info>& in_table,
                            const std::vector<bool>& append_rows);
@@ -709,7 +722,11 @@ struct TableBuildBuffer {
      * elements like strings and nested arrays.
      *
      * @param in_table input table used for finding new buffer sizes to reserve
+     * @param reserve_rows bit vector indicating which rows to reserve
      */
+    void ReserveTable(const std::shared_ptr<table_info>& in_table,
+                      const std::vector<bool>& reserve_rows);
+
     void ReserveTable(const std::shared_ptr<table_info>& in_table);
 
     /**

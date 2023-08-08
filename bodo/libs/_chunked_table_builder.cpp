@@ -371,8 +371,8 @@ void ChunkedTableBuilder::AppendBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::vector<bool>& append_rows) {
     // Convert bool vector into indices vector
-    u_int64_t num_append_rows =
-        std::accumulate(append_rows.begin(), append_rows.end(), (u_int64_t)0);
+    size_t num_append_rows =
+        std::accumulate(append_rows.begin(), append_rows.end(), (size_t)0);
     std::vector<int64_t> idxs;
     idxs.reserve(num_append_rows);
 
