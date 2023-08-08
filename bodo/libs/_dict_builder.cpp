@@ -49,7 +49,8 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         this->dict_buff->ReserveArray(batch_dict);
 
         // Create new transpose map
-        std::vector<int> new_transpose_map(batch_dict->length);
+        std::vector new_transpose_map = std::vector<int>();
+        new_transpose_map.reserve(batch_dict->length);
 
         // Check/update dictionary hash table and create transpose map
         char* data = batch_dict->data1();
