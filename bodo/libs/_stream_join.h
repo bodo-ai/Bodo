@@ -690,7 +690,7 @@ class NestedLoopJoinState : public JoinState {
                         bool build_table_outer_, bool probe_table_outer_,
                         cond_expr_fn_t cond_func_, bool build_parallel_,
                         bool probe_parallel_, int64_t output_batch_size_,
-                        u_int64_t sync_iter_)
+                        uint64_t sync_iter_)
         : JoinState(build_arr_c_types, build_arr_array_types, probe_arr_c_types,
                     probe_arr_array_types, 0, build_table_outer_,
                     probe_table_outer_, cond_func_, build_parallel_,
