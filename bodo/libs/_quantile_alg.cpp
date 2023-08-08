@@ -48,6 +48,9 @@ double quantile_dispatch(void *data, int64_t local_size, double quantile,
 double approx_percentile_py_entrypt(array_info *arr_raw, double percentile,
                                     bool parallel);
 
+double percentile_py_entrypt(array_info *arr_raw, double percentile,
+                             bool interpolate, bool parallel);
+
 /** Compute the median of the series.
     @param arr: The array_info used for the computation
     @param parallel: whether to use the parallel algorithm
@@ -91,6 +94,7 @@ PyMODINIT_FUNC PyInit_quantile_alg(void) {
     SetAttrStringFromVoidPtr(m, autocorr_series_computation_py_entry);
     SetAttrStringFromVoidPtr(m, compute_series_monotonicity_py_entry);
     SetAttrStringFromVoidPtr(m, approx_percentile_py_entrypt);
+    SetAttrStringFromVoidPtr(m, percentile_py_entrypt);
 
     return m;
 }
@@ -1193,4 +1197,152 @@ double approx_percentile_py_entrypt(array_info *arr_raw, double percentile,
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return 0.0;
     }
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+double percentile_util(const std::unique_ptr<array_info> &arr,
+                       double percentile, bool interpolate, bool parallel) {
+    using T = typename dtype_to_type<DType>::type;
+    // Place all of the non-null entries in a vector as doubles
+    std::vector<double> vect;
+    for (int64_t i = 0; i < arr->length; i++) {
+        if (non_null_at<ArrType, T, DType>(*arr, i)) {
+            T val = get_arr_item<ArrType, T, DType>(*arr, i);
+            vect.emplace_back(to_double<T, DType>(val));
+        }
+    }
+
+    int64_t len = vect.size();
+
+    int myrank, n_pes;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    // Calculate the total number of elements across all ranks.
+    int64_t total_size = len;
+    if (parallel) {
+        MPI_Allreduce(&len, &total_size, 1, MPI_LONG_LONG_INT, MPI_SUM,
+                      MPI_COMM_WORLD);
+    }
+
+    // If there were no non-null entries, output null
+    // (using NaN as a sentinel).
+    if (total_size == 0) {
+        return nan_val<double, Bodo_CTypes::FLOAT64>();
+    }
+
+    if (interpolate) {
+        // Algorithm for PERCENTILE_CONT
+        double k_approx = (total_size - 1) * percentile;
+        int64_t k_exact = (int64_t)k_approx;
+        if (k_approx == k_exact) {
+            // If a value lies exactly at the percentile value being sought,
+            // return that value.
+            return get_nth_q(vect, len, k_exact, Bodo_CTypes::FLOAT64, myrank,
+                             n_pes, parallel);
+        } else {
+            // Otherwise, find the nearest value above
+            // and below, then linearly interpolate between them.
+            double v1 = get_nth_q(vect, len, k_exact, Bodo_CTypes::FLOAT64,
+                                  myrank, n_pes, parallel);
+            double v2 = get_nth_q(vect, len, k_exact + 1, Bodo_CTypes::FLOAT64,
+                                  myrank, n_pes, parallel);
+            return v1 + (k_approx - k_exact) * (v2 - v1);
+        }
+    } else {
+        // Algorithm for PERCENTILE_DISC
+        double k_approx = total_size * percentile;
+        int64_t k_exact = (int64_t)k_approx;
+        // The following formula will choose the ordinal formula
+        // corresponding to the first location whose cumulative distribution
+        // is >= percentile.
+        int64_t k_select = (k_approx == k_exact) ? (k_exact - 1) : k_exact;
+        if (k_select < 0) {
+            k_select = 0;
+        }
+        return get_nth_q(vect, len, k_select, Bodo_CTypes::FLOAT64, myrank,
+                         n_pes, parallel);
+    }
+}
+
+template <bodo_array_type::arr_type_enum ArrType>
+double percentile_dtype_helper(const std::unique_ptr<array_info> &arr,
+                               double percentile, bool interpolate,
+                               bool parallel) {
+    switch (arr->dtype) {
+        case Bodo_CTypes::INT8: {
+            return percentile_util<ArrType, Bodo_CTypes::INT8>(
+                arr, percentile, interpolate, parallel);
+        }
+        case Bodo_CTypes::UINT8: {
+            return percentile_util<ArrType, Bodo_CTypes::UINT8>(
+                arr, percentile, interpolate, parallel);
+        }
+        case Bodo_CTypes::INT16: {
+            return percentile_util<ArrType, Bodo_CTypes::INT16>(
+                arr, percentile, interpolate, parallel);
+        }
+        case Bodo_CTypes::UINT16: {
+            return percentile_util<ArrType, Bodo_CTypes::UINT16>(
+                arr, percentile, interpolate, parallel);
+        }
+        case Bodo_CTypes::INT32: {
+            return percentile_util<ArrType, Bodo_CTypes::INT32>(
+                arr, percentile, interpolate, parallel);
+        }
+        case Bodo_CTypes::UINT32: {
+            return percentile_util<ArrType, Bodo_CTypes::UINT32>(
+                arr, percentile, interpolate, parallel);
+        }
+        case Bodo_CTypes::INT64: {
+            return percentile_util<ArrType, Bodo_CTypes::INT64>(
+                arr, percentile, interpolate, parallel);
+        }
+        case Bodo_CTypes::UINT64: {
+            return percentile_util<ArrType, Bodo_CTypes::UINT64>(
+                arr, percentile, interpolate, parallel);
+        }
+        case Bodo_CTypes::FLOAT32: {
+            return percentile_util<ArrType, Bodo_CTypes::FLOAT32>(
+                arr, percentile, interpolate, parallel);
+        }
+        case Bodo_CTypes::FLOAT64: {
+            return percentile_util<ArrType, Bodo_CTypes::FLOAT64>(
+                arr, percentile, interpolate, parallel);
+        }
+        default: {
+            throw new std::runtime_error("Unsupported DType for percentile: " +
+                                         GetDtype_as_string(arr->dtype));
+        }
+    }
+}
+
+double percentile_py_entrypt(array_info *arr_raw, double percentile,
+                             bool interpolate, bool parallel) {
+    std::unique_ptr<array_info> arr(arr_raw);
+    double res;
+    switch (arr->arr_type) {
+        case bodo_array_type::NULLABLE_INT_BOOL: {
+            res = percentile_dtype_helper<bodo_array_type::NULLABLE_INT_BOOL>(
+                arr, percentile, interpolate, parallel);
+            break;
+        }
+        case bodo_array_type::NUMPY: {
+            res = percentile_dtype_helper<bodo_array_type::NUMPY>(
+                arr, percentile, interpolate, parallel);
+            break;
+        }
+        default: {
+            throw new std::runtime_error(
+                "Unsupported ArrayType for percentile: " +
+                GetArrType_as_string(arr->arr_type));
+        }
+    }
+    if (parallel) {
+        int myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::FLOAT64);
+        MPI_Bcast(&res, 1, mpi_typ, 0, MPI_COMM_WORLD);
+    }
+    return res;
 }

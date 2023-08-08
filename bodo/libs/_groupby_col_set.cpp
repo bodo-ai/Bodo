@@ -1285,6 +1285,22 @@ void GeneralUdfColSet::fill_in_columns(
     }
 }
 
+// ############################## Percentile ##############################
+
+PercentileColSet::PercentileColSet(std::shared_ptr<array_info> in_col,
+                                   std::shared_ptr<array_info> percentile_col,
+                                   bool _interpolate, bool use_sql_rules)
+    : BasicColSet(in_col, Bodo_FTypes::median, false, use_sql_rules),
+      percentile(getv<double>(percentile_col, 0)),
+      interpolate(_interpolate) {}
+
+PercentileColSet::~PercentileColSet() {}
+
+void PercentileColSet::update(const std::vector<grouping_info>& grp_infos) {
+    percentile_computation(this->in_col, this->update_cols[0], this->percentile,
+                           this->interpolate, grp_infos[0]);
+}
+
 // ############################## Median ##############################
 
 MedianColSet::MedianColSet(std::shared_ptr<array_info> in_col,
@@ -1599,7 +1615,9 @@ std::unique_ptr<BasicColSet> makeColSet(
     bool use_sql_rules) {
     BasicColSet* colset;
 
-    if ((ftype != Bodo_FTypes::window and ftype != Bodo_FTypes::listagg) &&
+    if ((ftype != Bodo_FTypes::window && ftype != Bodo_FTypes::listagg &&
+         ftype != Bodo_FTypes::percentile_cont &&
+         ftype != Bodo_FTypes::percentile_disc) &&
         in_cols.size() != 1) {
         throw std::runtime_error(
             "Only window functions and listagg can have multiple input "
@@ -1614,6 +1632,12 @@ std::unique_ptr<BasicColSet> makeColSet(
         case Bodo_FTypes::gen_udf:
             colset = new GeneralUdfColSet(in_cols[0], std::move(udf_table),
                                           udf_table_idx, use_sql_rules);
+            break;
+        case Bodo_FTypes::percentile_disc:
+        case Bodo_FTypes::percentile_cont:
+            colset = new PercentileColSet(in_cols[0], in_cols[1],
+                                          ftype == Bodo_FTypes::percentile_cont,
+                                          use_sql_rules);
             break;
         case Bodo_FTypes::median:
             colset = new MedianColSet(in_cols[0], skip_na_data, use_sql_rules);

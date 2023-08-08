@@ -366,7 +366,18 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
         return dtype_to_array_type(types.int64), "ok"
     elif (
         func_name
-        in {"median", "mean", "var_pop", "std_pop", "var", "std", "kurtosis", "skew"}
+        in {
+            "median",
+            "mean",
+            "var_pop",
+            "std_pop",
+            "var",
+            "std",
+            "kurtosis",
+            "skew",
+            "percentile_cont",
+            "percentile_disc",
+        }
     ) and isinstance(in_dtype, (Decimal128Type, types.Integer, types.Float)):
         # TODO: Only make the output nullable if the input is nullable?
         return to_nullable_type(dtype_to_array_type(types.float64)), "ok"
@@ -927,7 +938,9 @@ def get_agg_funcname_and_outtyp(
     return f_name, out_tp
 
 
-def handle_extended_named_agg_input_cols(data_col_name, f_name, args):
+def handle_extended_named_agg_input_cols(
+    data_col_name, f_name, args
+):  # pragma: no cover
     assert (
         len(args) == 3
     ), "Internal error in handle_extended_named_agg_input_cols: args length does not equal 3"
@@ -951,6 +964,16 @@ def handle_extended_named_agg_input_cols(data_col_name, f_name, args):
             get_literal_value(args[1]) == "listagg"
         ), "Internal error in resolve_listagg_func_inputs: Called on not listagg function."
         return resolve_listagg_func_inputs(data_col_name, additional_args_made_literal)
+    if f_name in {"percentile_cont", "percentile_disc"}:
+        assert (
+            get_literal_value(args[1]) == f_name
+        ), f"Internal error in resolve_listagg_func_inputs: Called on not {f_name} function."
+        percentile = additional_args_made_literal[0]
+        if not (isinstance(percentile, str)):
+            raise_bodo_error(
+                f"Groupby.{f_name}: 'percentile' should be a string of a single column name."
+            )
+        return (data_col_name, additional_args_made_literal[0]), ()
 
     raise RuntimeError(
         f"Internal error in handle_extended_named_agg_input_cols: Unsupported function name: {f_name}"

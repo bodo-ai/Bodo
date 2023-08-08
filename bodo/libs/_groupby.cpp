@@ -158,7 +158,9 @@ class GroupbyPipeline {
                        ftype == Bodo_FTypes::transform ||
                        ftype == Bodo_FTypes::ngroup ||
                        ftype == Bodo_FTypes::window ||
-                       ftype == Bodo_FTypes::listagg) {
+                       ftype == Bodo_FTypes::listagg ||
+                       ftype == Bodo_FTypes::percentile_cont ||
+                       ftype == Bodo_FTypes::percentile_disc) {
                 // these operations first require shuffling the data to
                 // gather all rows with the same key in the same process
                 if (is_parallel) {
