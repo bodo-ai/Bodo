@@ -78,6 +78,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             SqlKind.TIMES,
             SqlKind.DIVIDE,
             SqlKind.MINUS_PREFIX,
+            SqlKind.SEARCH,
         )
 
         private val SUPPORTED_GENERIC_CALL_NAMES = setOf(
