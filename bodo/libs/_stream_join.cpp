@@ -2038,8 +2038,9 @@ table_info* join_probe_consume_batch_py_entry(
         *total_rows = chunk_size;
         // This is the last output if we've already seen all input (i.e.
         // is_last) and there's no more output remaining in the output_buffer:
-        *out_is_last =
-            is_last && join_state_->output_buffer->total_remaining == 0;
+        *out_is_last = stream_sync_is_last(
+            is_last && join_state_->output_buffer->total_remaining == 0,
+            join_state_->probe_iter - 1, join_state_->sync_iter);
         return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
