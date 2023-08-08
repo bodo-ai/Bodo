@@ -1733,7 +1733,15 @@ class DistributedAnalysis:
             return
 
         if fdef == ("approx_percentile", "bodo.libs.array_kernels"):
-            # quantile doesn't affect input's distribution
+            # approx_percentile doesn't affect input's distribution
+            return
+
+        if fdef == ("percentile_cont", "bodo.libs.array_kernels"):
+            # percentile_cont doesn't affect input's distribution
+            return
+
+        if fdef == ("percentile_disc", "bodo.libs.array_kernels"):
+            # percentile_disc doesn't affect input's distribution
             return
 
         if fdef == ("nunique", "bodo.libs.array_kernels"):

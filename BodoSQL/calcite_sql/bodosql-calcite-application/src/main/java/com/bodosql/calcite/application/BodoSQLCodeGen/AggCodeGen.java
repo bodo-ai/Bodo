@@ -109,6 +109,8 @@ public class AggCodeGen {
     equivalentHelperFnMap.put("APPROX_PERCENTILE", "approx_percentile");
 
     equivalentExtendedNamedAggAggregates.put("LISTAGG", "listagg");
+    equivalentExtendedNamedAggAggregates.put("PERCENTILE_CONT", "percentile_cont");
+    equivalentExtendedNamedAggAggregates.put("PERCENTILE_DISC", "percentile_disc");
   }
 
   /**
@@ -248,6 +250,22 @@ public class AggCodeGen {
           || aggFunc.equals("bitand_agg")
           || aggFunc.equals("bitxor_agg")) {
         aggExpr = new Expr.Call("bodo.libs.array_kernels." + aggFunc, aggExpr);
+      } else if (aggFunc.equals("percentile_cont") || aggFunc.equals("percentile_disc")) {
+        if (a.collation == null) {
+          throw new BodoSQLCodegenException(a.getName() + " requires a WITHIN GROUP term");
+        }
+        if (a.collation.getFieldCollations().size() > 1) {
+          throw new BodoSQLCodegenException(
+              a.getName() + " requires the terms to be ordered by a single column");
+        }
+        Expr quantileScalar = new Expr.Index(aggExpr, Expr.Companion.getZero());
+        RelFieldCollation curCollation = a.collation.getFieldCollations().get(0);
+        aggExpr =
+            new Expr.Call(
+                "bodo.hiframes.pd_dataframe_ext.get_dataframe_data",
+                List.of(inVar, new Expr.IntegerLiteral(curCollation.getFieldIndex())));
+        aggExpr = new Expr.Call("bodo.libs.array_kernels." + aggFunc, aggExpr, quantileScalar);
+
       } else if (aggFunc.equals("approx_percentile")) {
         assertWithErrMsg(a.getArgList().size() == 2, "APPROX_PERCENTILE requires two arguments");
         // Currently, the scalar float argument is converted into a column. To
@@ -453,7 +471,14 @@ public class AggCodeGen {
             .append(aggFunc)
             .append("),");
       } else {
-        Expr additionalArgs = getAdditionalArgs(a, inputColumnNames);
+        Expr.Tuple additionalArgs = getAdditionalArgs(a, inputColumnNames);
+        // Calcite will think that the percentile amount is the aggregation column and
+        // that the aggregation column is the extra argument, so we need to switch them.
+        if (aggFunc.equals("\"percentile_cont\"") || aggFunc.equals("\"percentile_disc\"")) {
+          Expr percentileCol = additionalArgs.getArgs().get(0);
+          additionalArgs = new Expr.Tuple(new Expr.StringLiteral(aggCol));
+          aggCol = percentileCol.emit();
+        }
         aggString
             .append(tempName)
             .append("=bodo.utils.utils.ExtendedNamedAgg(column=")
@@ -483,12 +508,26 @@ public class AggCodeGen {
    * @return An expr to be used for the additional_args keyword argument of
    *     bodo.utils.utils.ExtendedNamedAgg.
    */
-  static Expr getAdditionalArgs(AggregateCall agg, List<String> inputColumnNames) {
+  static Expr.Tuple getAdditionalArgs(AggregateCall agg, List<String> inputColumnNames) {
     SqlKind kind = agg.getAggregation().getKind();
     assert equivalentExtendedNamedAggAggregates.containsKey(kind.name());
     List<Integer> argsList = agg.getArgList();
     List<Expr> additionalArgsList = new ArrayList<>();
+    RelFieldCollation curCollation;
     switch (kind) {
+      case PERCENTILE_DISC:
+      case PERCENTILE_CONT:
+        if (agg.collation == null) {
+          throw new BodoSQLCodegenException(agg.getName() + " requires a WITHIN GROUP term");
+        }
+        if (agg.collation.getFieldCollations().size() > 1) {
+          throw new BodoSQLCodegenException(
+              agg.getName() + " requires the terms to be ordered by a single column");
+        }
+        curCollation = agg.collation.getFieldCollations().get(0);
+        additionalArgsList.add(
+            new Expr.StringLiteral(inputColumnNames.get(curCollation.getFieldIndex())));
+        return new Expr.Tuple(additionalArgsList);
       case LISTAGG:
         if (argsList.size() == 1) {
           throw new BodoSQLCodegenException(
@@ -509,7 +548,7 @@ public class AggCodeGen {
           List<Expr.StringLiteral> nullDirList = new ArrayList<>();
 
           for (int i = 0; i < agg.collation.getFieldCollations().size(); i++) {
-            RelFieldCollation curCollation = agg.collation.getFieldCollations().get(i);
+            curCollation = agg.collation.getFieldCollations().get(i);
             orderbyList.add(
                 new Expr.StringLiteral(inputColumnNames.get(curCollation.getFieldIndex())));
             ascendingList.add(getAscendingExpr(curCollation.direction));
@@ -637,6 +676,8 @@ public class AggCodeGen {
       } else if (aggFunc.equals("listagg")) {
         Variable dfVar = new Variable("df");
         fnString.append(genNonGroupedListaggCall(dfVar, inputColumnNames, a).emit());
+      } else if (aggFunc.equals("percentile_cont") || aggFunc.equals("percentile_disc")) {
+        throw new BodoSQLCodegenException("PERCENTILE_DISC not supported with a filter clause");
       } else {
         if (!isMethod) {
           // If we have a function surround the column

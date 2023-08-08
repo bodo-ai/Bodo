@@ -498,6 +498,185 @@ void ngroup_computation(std::shared_ptr<array_info> arr,
     }
 }
 
+// PERCENTILE
+
+template <bodo_array_type::arr_type_enum ArrayType,
+          Bodo_CTypes::CTypeEnum DType>
+void percentile_computation_util(std::shared_ptr<array_info> arr,
+                                 std::shared_ptr<array_info> out_arr,
+                                 double percentile, bool interpolate,
+                                 grouping_info const& grp_info) {
+    using T = typename dtype_to_type<DType>::type;
+    // Iterate across each group to find its percentile value
+    for (size_t igrp = 0; igrp < grp_info.num_groups; igrp++) {
+        // Set up a vector that will contain all of the values from the current
+        // group as a double.
+        std::vector<double> vect;
+        for (int64_t i = grp_info.group_to_first_row[igrp]; i != -1;
+             i = grp_info.next_row_in_group[i]) {
+            if (!is_null_at<ArrayType, T, DType>(*arr, i)) {
+                T val = get_arr_item<ArrayType, T, DType>(*arr, i);
+                vect.emplace_back(to_double<T, DType>(val));
+            }
+        }
+        // If there were no non-null entries, output null.
+        if (vect.size() == 0) {
+            set_to_null<bodo_array_type::NULLABLE_INT_BOOL, double,
+                        Bodo_CTypes::FLOAT64>(*out_arr, igrp);
+            continue;
+        }
+        double valReturn = 0;
+        size_t len = vect.size();
+        if (interpolate) {
+            // Algorithm for PERCENTILE_CONT
+
+            // Calculate the index in the array that corresponds to
+            // the desired percentile. Cast to int64_t to round down.
+            double k_approx = (len - 1) * percentile;
+            int64_t k_exact = (int64_t)k_approx;
+            if (k_approx == k_exact) {
+                // If rounding down does not change the value, then
+                // k_exact is the exact index we want. Obtain
+                // the k_exact-largest element by using std::nth
+                // element to partially sort about that index.
+                std::nth_element(vect.begin(), vect.begin() + k_exact,
+                                 vect.end());
+                valReturn = vect[k_exact];
+            } else {
+                // Otherwise, we want a weighted average of the
+                // values at k_exact and the next index.  Obtain
+                // the k_exact-largest element by using std::nth
+                // element to partially sort about that index.
+                std::nth_element(vect.begin(), vect.begin() + k_exact,
+                                 vect.end());
+                double v1 = vect[k_exact];
+                // Then, find the minimum of the remaining elements
+                double v2 =
+                    *std::min_element(vect.begin() + k_exact + 1, vect.end());
+                // Linearly interpolate between v1 and v2 where
+                // the weight is based on how close k_approx is
+                // to k_exact vs k_exact + 1. E.g. if k_exact
+                // is 12 and k_approx = 12.25, then the formula
+                // is v1 + 0.25 * (v2 - v1) = 0.75*v1 + 0.25*v2
+                valReturn = v1 + (k_approx - k_exact) * (v2 - v1);
+            }
+        } else {
+            // Algorithm for PERCENTILE_DISC
+
+            // Calculate the index in the array that corresponds to
+            // the desired percentile. Cast to int64_t to round down.
+            double k_approx = len * percentile;
+            int64_t k_exact = (int64_t)k_approx;
+            // The following formula will choose the ordinal formula
+            // corresponding to the first location whose cumulative distribution
+            // is >= percentile.
+            int64_t k_select = (k_approx == k_exact) ? (k_exact - 1) : k_exact;
+            if (k_select < 0)
+                k_select = 0;
+            std::nth_element(vect.begin(), vect.begin() + k_select, vect.end());
+            valReturn = vect[k_select];
+        }
+        // Store the answer in the output array
+        set_non_null<bodo_array_type::NULLABLE_INT_BOOL, double,
+                     Bodo_CTypes::FLOAT64>(*out_arr, igrp);
+        set_arr_item<bodo_array_type::NULLABLE_INT_BOOL, double,
+                     Bodo_CTypes::FLOAT64>(*out_arr, igrp, valReturn);
+    }
+}
+
+template <bodo_array_type::arr_type_enum ArrayType>
+void percentile_computation_dtype_helper(std::shared_ptr<array_info> arr,
+                                         std::shared_ptr<array_info> out_arr,
+                                         double percentile, bool interpolate,
+                                         grouping_info const& grp_info) {
+    switch (arr->dtype) {
+        case Bodo_CTypes::INT8: {
+            percentile_computation_util<ArrayType, Bodo_CTypes::INT8>(
+                arr, out_arr, percentile, interpolate, grp_info);
+            break;
+        }
+        case Bodo_CTypes::UINT8: {
+            percentile_computation_util<ArrayType, Bodo_CTypes::UINT8>(
+                arr, out_arr, percentile, interpolate, grp_info);
+            break;
+        }
+        case Bodo_CTypes::INT16: {
+            percentile_computation_util<ArrayType, Bodo_CTypes::INT16>(
+                arr, out_arr, percentile, interpolate, grp_info);
+            break;
+        }
+        case Bodo_CTypes::UINT16: {
+            percentile_computation_util<ArrayType, Bodo_CTypes::UINT16>(
+                arr, out_arr, percentile, interpolate, grp_info);
+            break;
+        }
+        case Bodo_CTypes::INT32: {
+            percentile_computation_util<ArrayType, Bodo_CTypes::INT32>(
+                arr, out_arr, percentile, interpolate, grp_info);
+            break;
+        }
+        case Bodo_CTypes::UINT32: {
+            percentile_computation_util<ArrayType, Bodo_CTypes::UINT32>(
+                arr, out_arr, percentile, interpolate, grp_info);
+            break;
+        }
+        case Bodo_CTypes::INT64: {
+            percentile_computation_util<ArrayType, Bodo_CTypes::INT64>(
+                arr, out_arr, percentile, interpolate, grp_info);
+            break;
+        }
+        case Bodo_CTypes::UINT64: {
+            percentile_computation_util<ArrayType, Bodo_CTypes::UINT64>(
+                arr, out_arr, percentile, interpolate, grp_info);
+            break;
+        }
+        case Bodo_CTypes::FLOAT32: {
+            percentile_computation_util<ArrayType, Bodo_CTypes::FLOAT32>(
+                arr, out_arr, percentile, interpolate, grp_info);
+            break;
+        }
+        case Bodo_CTypes::FLOAT64: {
+            percentile_computation_util<ArrayType, Bodo_CTypes::FLOAT64>(
+                arr, out_arr, percentile, interpolate, grp_info);
+            break;
+        }
+        case Bodo_CTypes::DECIMAL: {
+            percentile_computation_util<ArrayType, Bodo_CTypes::DECIMAL>(
+                arr, out_arr, percentile, interpolate, grp_info);
+            break;
+        }
+        default: {
+            throw std::runtime_error(
+                "Unsupported dtype for percentile_computation: " +
+                GetDtype_as_string(arr->dtype));
+        }
+    }
+}
+
+void percentile_computation(std::shared_ptr<array_info> arr,
+                            std::shared_ptr<array_info> out_arr,
+                            double percentile, bool interpolate,
+                            grouping_info const& grp_info) {
+    switch (arr->arr_type) {
+        case bodo_array_type::NUMPY: {
+            percentile_computation_dtype_helper<bodo_array_type::NUMPY>(
+                arr, out_arr, percentile, interpolate, grp_info);
+            break;
+        }
+        case bodo_array_type::NULLABLE_INT_BOOL: {
+            percentile_computation_dtype_helper<
+                bodo_array_type::NULLABLE_INT_BOOL>(arr, out_arr, percentile,
+                                                    interpolate, grp_info);
+            break;
+        }
+        default: {
+            throw std::runtime_error(
+                "Unsupported array type for percentile_computation: " +
+                GetArrType_as_string(arr->arr_type));
+        }
+    }
+}
+
 // MEDIAN
 
 void median_computation(std::shared_ptr<array_info> arr,

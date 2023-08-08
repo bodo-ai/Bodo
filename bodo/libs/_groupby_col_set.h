@@ -617,6 +617,26 @@ class GeneralUdfColSet : public UdfColSet {
 };
 
 /**
+ * @brief ColSet for Percentile operations.
+ *
+ */
+class PercentileColSet : public BasicColSet {
+   public:
+    PercentileColSet(std::shared_ptr<array_info> in_col,
+                     std::shared_ptr<array_info> percentile_col,
+                     bool _interpolate, bool use_sql_rules);
+
+    virtual ~PercentileColSet();
+
+    void update(const std::vector<grouping_info>& grp_infos) override;
+
+   private:
+    double percentile;
+    bool interpolate;
+    bool skipna;
+};
+
+/**
  * @brief ColSet for Median operations.
  *
  */

@@ -282,6 +282,8 @@ supported_agg_funcs = [
     "count_if",
     "listagg",
     "mode",
+    "percentile_cont",
+    "percentile_disc",
     "udf",
     "gen_udf",
     "window",
@@ -299,9 +301,11 @@ supported_agg_funcs = [
 
 # This is just a list of the functions that can be used with
 # bodo.utils.utils.ExtendedNamedAgg. Any function in this list
-# should also be incldueded in supported_agg_funcs
+# should also be included in supported_agg_funcs
 supported_extended_agg_funcs = [
     "listagg",
+    "percentile_cont",
+    "percentile_disc",
 ]
 
 # Currently supported operations with transform
@@ -393,14 +397,20 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.fname = func_name
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1
-
         (
             func.listagg_sep,
             func.orderby,
             func.ascending,
             func.na_position_b,
         ) = handle_listagg_additional_args(func_ir, rhs)
-
+        return func
+    elif func_name in {"percentile_cont", "percentile_disc"}:
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.fname = func_name
+        func.ncols_pre_shuffle = 1
+        func.ncols_post_shuffle = 1
+        func.percentile = handle_percentile_additional_args(func_ir, rhs)
         return func
     elif func_name == "kurtosis":
         func = pytypes.SimpleNamespace()
@@ -767,7 +777,7 @@ def _get_const_agg_func(func_typ, func_ir):
     return agg_func
 
 
-def handle_listagg_additional_args(func_ir, outcol_and_namedagg):
+def handle_listagg_additional_args(func_ir, outcol_and_namedagg):  # pragma: no cover
     """
     Extract additional arguments for the listagg function.
 
@@ -792,6 +802,26 @@ def handle_listagg_additional_args(func_ir, outcol_and_namedagg):
         for na_pos in get_const_or_build_tuple_of_consts(additional_args_values[3])
     ]
     return listagg_sep, orderby, ascending, na_position_b
+
+
+def handle_percentile_additional_args(func_ir, outcol_and_namedagg):  # pragma: no cover
+    """
+    Extract additional arguments for PERCENTILE_CONT/PERCENTILE_DISC.
+
+    In this case, outcol_and_namedagg is a tuple containing the assigned column name,
+    and the pd.NamedAgg/ExtendedAgg value. For example,
+    in df.groupby("A").agg(New_B=pd.NamedAgg("B", "sum")), outcol_and_namedagg is
+    ("new_b", pd.NamedAgg("B", "sum")) (as the relevant numba types).
+
+    """
+    additional_args_values = extract_extendedagg_additional_args_tuple(
+        func_ir, outcol_and_namedagg
+    )
+
+    assert isinstance(
+        additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)
+    ), "Internal error in handle_percentile_additional_args: percentile should be a constant value"
+    return additional_args_values[0].value
 
 
 def extract_extendedagg_additional_args_tuple(func_ir, outcol_and_namedagg):
@@ -2038,7 +2068,15 @@ def gen_top_level_agg_func(
         w_args = []
         n_args = 0
         n_cols = 0
-        if func.ftype in {"median", "nunique", "ngroup", "listagg", "mode"}:
+        if func.ftype in {
+            "median",
+            "nunique",
+            "ngroup",
+            "listagg",
+            "mode",
+            "percentile_cont",
+            "percentile_disc",
+        }:
             # these operations require shuffle at the beginning, so a
             # local aggregation followed by combine is not necessary
             do_combine = False

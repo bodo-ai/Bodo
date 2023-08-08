@@ -73,6 +73,27 @@ void ngroup_computation(std::shared_ptr<array_info> arr,
                         std::shared_ptr<array_info> out_arr,
                         grouping_info const& grp_info, bool is_parallel);
 
+// PERCENTILE
+
+/**
+ * @brief The percentile function. It uses the symbolic information to
+ * compute the percentile results.
+ *
+ * @param[in] arr The input column on which we do the computation
+ * @param[out] out_arr The output column'
+ * @param[in] percentile The percentile value being sought
+ * @param[in] interpolate If true, lineraly interpolate between the two
+ *            nearest values when there is not an exact match. If false,
+ *            choose whatever is closer.
+ * @param[in] grp_info: The grouping information.
+ * @param[in] skipna: Whether to skip NA values.
+ * @param[in] use_sql_rules: Should allocation use SQL rules.
+ */
+void percentile_computation(std::shared_ptr<array_info> arr,
+                            std::shared_ptr<array_info> out_arr,
+                            double percentile, bool interpolate,
+                            grouping_info const& grp_info);
+
 // MEDIAN
 
 /**
