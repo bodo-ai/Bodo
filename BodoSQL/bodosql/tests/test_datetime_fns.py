@@ -764,20 +764,17 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
 def test_utc_date(basic_df, spark_info, memory_leak_check):
     """tests utc_date"""
 
-    query = f"SELECT A, EXTRACT(day from UTC_DATE()), (EXTRACT(HOUR from UTC_DATE()) + EXTRACT(MINUTE from UTC_DATE()) + EXTRACT(SECOND from UTC_DATE()) ) = 0  from table1"
+    query = f"SELECT A as A, UTC_DATE() as B from table1"
     expected_output = pd.DataFrame(
         {
-            "unknown_name1": basic_df["table1"]["A"],
-            "unknown_name2": pd.Timestamp.now(tz="UTC").day,
-            "unknown_name5": True,
+            "A": basic_df["table1"]["A"],
+            "B": pd.Timestamp.now(tz="UTC").date(),
         }
     )
     check_query(
         query,
         basic_df,
         spark_info,
-        check_names=False,
-        check_dtype=False,
         expected_output=expected_output,
     )
 
