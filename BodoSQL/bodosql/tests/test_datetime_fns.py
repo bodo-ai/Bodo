@@ -4,11 +4,13 @@ Test correctness of SQL datetime functions with BodoSQL
 """
 import datetime
 
+import bodosql
 import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
+import bodo
 from bodo.libs.bodosql_datetime_array_kernels import (
     standardize_snowflake_date_time_part_compile_time,
 )
@@ -27,6 +29,7 @@ from bodo.tests.timezone_common import (  # noqa
     generate_date_trunc_time_func,
     representative_tz,
 )
+from bodo.tests.utils import DistTestPipeline, dist_IR_contains
 
 EQUIVALENT_SPARK_DT_FN_MAP = {
     "WEEK": "WEEKOFYEAR",
@@ -498,6 +501,40 @@ def test_getdate(query, spark_info, memory_leak_check):
         equivalent_spark_query=spark_query,
         only_jit_1DVar=True,
     )
+
+
+def test_getdate_dist_len(spark_info, memory_leak_check):
+    """Make sure GETDATE() doesn't create a distributed reduction (to avoid streaming
+    hang)
+    """
+    ctx = {
+        "table1": pd.DataFrame(
+            {"A": pd.Series(list(range(1, 13)), dtype=pd.Int32Dtype())}
+        )
+    }
+
+    query = "select distinct A, getdate() as B from table1"
+    spark_query = query.replace("getdate", "current_date")
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        equivalent_spark_query=spark_query,
+        only_jit_1DVar=True,
+    )
+
+    # make sure scalar to array conversion doesn't require distributed len which leads
+    # to dist_reduce() generation
+    @bodo.jit(pipeline_class=DistTestPipeline, all_args_distributed_varlength=True)
+    def bodo_func(bc, query):
+        return bc.sql(query)
+
+    bodo_func(bodosql.BodoSQLContext(ctx), query)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert not dist_IR_contains(f_ir, "dist_reduce")
 
 
 def compute_valid_times(start_time, timeout=3):
