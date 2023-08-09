@@ -574,6 +574,29 @@ def test_bodosql_context_loop_unrolling(memory_leak_check):
     check_func(impl, (bc, query), py_output=py_output)
 
 
+def test_bodosql_context_generate_plan(memory_leak_check):
+    """Tests that BodoSQLContext.generate_plan works as expected"""
+
+    if bodo.get_size() > 1:
+        pytest.skip("This test should only be run on 1 rank")
+
+    from bodosql import BodoSQLContext
+
+    df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
+    bc = BodoSQLContext({"t1": df})
+    query = "select * from t1"
+
+    # Don't perform a detailed check on the output,
+    # since it's a string that can change.
+    # the full correctness checking for the generated string
+    # should be done in the maven unit tests.
+    # This test is just to confirm that we can generate the plan at all in python.
+    plan1 = bc.generate_plan(query)
+    plan2 = bc.generate_plan(query, show_cost=True)
+    assert "cost =" not in plan1
+    assert "cost =" in plan2
+
+
 @pytest.mark.parametrize(
     "query",
     [
