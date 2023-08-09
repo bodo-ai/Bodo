@@ -22,11 +22,7 @@ from bodo.libs.bool_arr_ext import boolean_dtype
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.nullable_tuple_ext import NullableTupleType
 from bodo.libs.str_arr_ext import get_utf8_size
-from bodo.utils.indexing import (
-    add_nested_counts,
-    bitmap_size,
-    init_nested_counts,
-)
+from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (
     BodoError,
     dtype_to_array_type,
@@ -792,8 +788,8 @@ def overload_coerce_to_array(
             A = np.empty(scalar_to_arr_len, "datetime64[ns]")
             dt64_val = data.to_datetime64()
             null_bitmap = np.full(
-                bitmap_size(scalar_to_arr_len),
-                0 if np.isnat(dt64_val) else 0xFF,
+                bodo.utils.indexing.bitmap_size(scalar_to_arr_len),
+                bodo.utils.indexing.get_dt64_bitmap_fill(dt64_val),
                 dtype=np.uint8,
             )
             for i in numba.parfors.parfor.internal_prange(scalar_to_arr_len):
