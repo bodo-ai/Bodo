@@ -2162,12 +2162,20 @@ def check_caching(
 
     if is_cached:
         # assert that it was loaded from cache
-        assert bodo_func._cache_hits[sig] == 1
-        assert bodo_func._cache_misses[sig] == 0
+        assert (
+            bodo_func._cache_hits[sig] == 1
+        ), "Expected a cache hit for function signature"
+        assert (
+            bodo_func._cache_misses[sig] == 0
+        ), "Expected no cache miss for function signature"
     else:
         # assert that it wasn't loaded from cache
-        assert bodo_func._cache_hits[sig] == 0
-        assert bodo_func._cache_misses[sig] == 1
+        assert (
+            bodo_func._cache_hits[sig] == 0
+        ), "Expected no cache hits for function signature"
+        assert (
+            bodo_func._cache_misses[sig] == 1
+        ), "Expected a miss for function signature"
 
     return bodo_output
 
