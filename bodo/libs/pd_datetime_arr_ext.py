@@ -166,7 +166,7 @@ class DatetimeArrayType(types.IterableType, types.ArrayCompatible):
         self.tz = tz
         self._data_array_type = types.Array(types.NPDatetime("ns"), 1, "C")
         self._dtype = PandasDatetimeTZDtype(tz)
-        super(DatetimeArrayType, self).__init__(name=f"PandasDatetimeArray[{tz}]")
+        super(DatetimeArrayType, self).__init__(name=f"DatetimeArrayType('{tz}')")
 
     @property
     def data_array_type(self):
