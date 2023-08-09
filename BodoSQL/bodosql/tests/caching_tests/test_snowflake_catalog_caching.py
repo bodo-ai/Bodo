@@ -5,6 +5,7 @@ sequential and parallel code.
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 import os
+import traceback
 
 import bodosql
 import numpy as np
@@ -19,6 +20,7 @@ from bodo.tests.utils import (
     drop_snowflake_table,
     get_snowflake_connection_string,
     pytest_mark_snowflake,
+    reduce_sum,
 )
 
 
@@ -100,17 +102,25 @@ def test_snowflake_catalog_write_caching(fn_distribution, is_cached):
     read_table = "EXAMPLE_CACHE_READ_TABLE"
     write_table = "EXAMPLE_CACHE_WRITE_TABLE"
 
+    passed = 1
     try:
+        err = "see error on rank 0"
         if bodo.get_rank() == 0:
-            conn_str = get_snowflake_connection_string(db, schema)
-            new_df.to_sql(
-                read_table.lower(), conn_str, index=False, if_exists="replace"
-            )
-            # Create the write table for caching.
-            new_df.to_sql(
-                write_table.lower(), conn_str, index=False, if_exists="replace"
-            )
-        bodo.barrier()
+            try:
+                conn_str = get_snowflake_connection_string(db, schema)
+                new_df.to_sql(
+                    read_table.lower(), conn_str, index=False, if_exists="replace"
+                )
+                # Create the write table for caching.
+                new_df.to_sql(
+                    write_table.lower(), conn_str, index=False, if_exists="replace"
+                )
+            except Exception as e:
+                passed = 0
+                err = "".join(traceback.format_exception(None, e, e.__traceback__))
+        n_passed = reduce_sum(passed)
+        assert n_passed == bodo.get_size(), err
+
         write_query = (
             f"create or replace table {write_table} as select * from {read_table}"
         )
