@@ -21,6 +21,12 @@ def bitmap_size(n: int) -> int:  # pragma: no cover
 
 
 @register_jitable
+def get_dt64_bitmap_fill(dt64_val):  # pragma: no cover
+    """Returns bitmap fill value for nullable dt64 arrays: 0s if null value else 1s."""
+    return 0 if np.isnat(dt64_val) else 0xFF
+
+
+@register_jitable
 def get_new_null_mask_bool_index(old_mask, ind, n):  # pragma: no cover
     """create a new null bitmask for output of indexing using bool index 'ind'.
     'n' is the total number of elements in original array (not bytes).
