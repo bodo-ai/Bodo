@@ -961,7 +961,7 @@ class BodoSQLContext:
             impl, args_maybe_distributed=False, returns_maybe_distributed=False
         )(*(list(self.tables.values()) + list(params_dict.values())))
 
-    def generate_plan(self, sql, params_dict=None):
+    def generate_plan(self, sql, params_dict=None, show_cost=False):
         """
         Return the optimized plan for the SQL code as
         as a Python string.
@@ -986,7 +986,7 @@ class BodoSQLContext:
                     False,
                     write_type,
                 )
-                plan_or_err_msg = str(generator.getOptimizedPlanString(sql))
+                plan_or_err_msg = str(generator.getOptimizedPlanString(sql, show_cost))
                 # Remove the named Params table
                 self._remove_named_params()
             except Exception as e:

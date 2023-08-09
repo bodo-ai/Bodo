@@ -3,6 +3,7 @@ package com.bodosql.calcite.application;
 import com.bodosql.calcite.adapter.pandas.PandasRel;
 import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
+import com.bodosql.calcite.application.Utils.RelCostWriter;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.prepare.PlannerImpl;
 import com.bodosql.calcite.prepare.PlannerType;
@@ -10,6 +11,8 @@ import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.HashMap;
@@ -415,8 +418,21 @@ public class RelationalAlgebraGenerator {
   }
 
   public String getOptimizedPlanString(String sql) throws Exception {
+    return getOptimizedPlanString(sql, false);
+  }
+
+  public String getOptimizedPlanString(String sql, Boolean includeCosts) throws Exception {
     RelRoot root = getRelationalAlgebra(sql, true);
-    return RelOptUtil.toString(PandasUtilKt.pandasProject(root));
+    RelNode newRoot = PandasUtilKt.pandasProject(root);
+    if (includeCosts) {
+      StringWriter sw = new StringWriter();
+      com.bodosql.calcite.application.Utils.RelCostWriter costWriter =
+          new RelCostWriter(new PrintWriter(sw), newRoot);
+      newRoot.explain(costWriter);
+      return sw.toString();
+    } else {
+      return RelOptUtil.toString(newRoot);
+    }
   }
 
   public String getUnoptimizedPlanString(String sql) throws Exception {
