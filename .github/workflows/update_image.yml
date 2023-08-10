@@ -61,11 +61,12 @@ jobs:
           UPDATED_IMAGE_NAME: ${{ inputs.updatedBodoVersion }}
           UPDATE_IMAGE: true
         run: |
-          cd bodo-platform-images
           sleep 5
           if [[ '${{ inputs.deregisterImage }}' == 'false' ]]; then
+            cd bodo-platform-image
             python manage_images.py
           else
+            cd bodo-platform-image
             python manage_images.py --deregister
           fi;
 
@@ -136,7 +137,7 @@ jobs:
           UPDATED_IMAGE_NAME: ${{ inputs.updatedBodoVersion }}
           UPDATE_IMAGE: true
         run: |
-          cd bodo-platform-images
+          cd bodo-platform-image
           sleep 5
           if [[ '${{ inputs.deregisterImage }}' == 'false' ]]; then
             python manage_images.py
@@ -173,13 +174,14 @@ jobs:
           UPDATED_IMAGE_NAME: ${{ inputs.updatedBodoVersion }}
           UPDATE_IMAGE: true
         run: |
-          cd bodo-platform-images
+          cd bodo-platform-image
           sleep 5
           if [[ '${{ inputs.deregisterImage }}' == 'false' ]]; then
             python manage_images.py
           else
             python manage_images.py --deregister
           fi;
+        
   notify-images-update:
     runs-on: ubuntu-latest
     if: ${{ success() &&  inputs.deregisterImage==false }}

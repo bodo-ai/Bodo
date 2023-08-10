@@ -1,6 +1,8 @@
 # Compiled python modules.
 *.pyc
 *.pyd
+.python-version
+__pycache__/
 *~
 
 # Pytest artifacts
@@ -133,3 +135,16 @@ BodoSQL/test-output.xml
 BodoSQL/dev_docs/_build
 
 .env
+
+# image artifacts
+ami_share_requests.json
+vmi_share_requests.json
+amis_to_remove*.json
+bodo_versions.txt
+*_manifest_*.json
+.vscode/*
+.DS_Store
+.idea
+.venv
+
+# 

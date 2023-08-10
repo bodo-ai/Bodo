@@ -44,7 +44,7 @@ jobs:
           DRYRUN: ${{ github.event.inputs.dryrun }}
         run: |
           set -eo pipefail
-          cd bodo-platform-images
+          cd bodo-platform-image
           DEREGISTER_FLAG="--no-deregister"
           if [[ "$DRYRUN" == "false" ]]; then
             DEREGISTER_FLAG="--deregister"
@@ -60,4 +60,4 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: removed-amis
-          path: amis_to_remove_*.json
+          path: bodo-platform-image/amis_to_remove_*.json

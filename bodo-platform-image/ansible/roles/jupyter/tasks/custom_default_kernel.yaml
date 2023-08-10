@@ -1,0 +1,19 @@
+---
+- name: JUPYTER | Install bodo_platform_dummy_kernel kernelspec
+  command:
+    cmd: "/opt/conda/bin/python -m bodo_platform_dummy_kernel.install --sys-prefix"
+  tags:
+    - jupyter
+
+- name: JUPYTER | Remove default python3 kernel
+  command:
+    cmd: "/opt/conda/bin/jupyter kernelspec uninstall python3 -y"
+  tags:
+    - jupyter
+
+- name: JUPYTER | Reload jupyter service again
+  systemd:
+    name: jupyter.service
+    daemon_reload: yes
+  tags:
+    - jupyter

@@ -1,0 +1,23 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: true
+  become: yes
+  vars_files:
+    - ./vars/common.yaml
+    - ./vars/conda.yaml
+    - ./vars/efa.yaml
+    - ./vars/bodo.yaml
+    - ./vars/intelmpi.yaml
+
+  roles:
+    - common
+    - conda
+    - worker_deps
+    - role: efa
+      when: packer_build_name == 'aws-ebs-build'
+    - ipython
+    - ipyparallel
+    - bodo
+    - hdfs
+    - intelmpi

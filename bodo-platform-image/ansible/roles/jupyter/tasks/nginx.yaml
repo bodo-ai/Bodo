@@ -1,0 +1,17 @@
+---
+- name: JUPYTER | Install nginx and required packages
+  yum:
+    name: "{{ PACKAGES }}"
+    state: installed
+  tags:
+    - nginx
+
+- name: JUPYTER | Deploy nginx config
+  copy:
+    src: nginx.conf
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: '0644'
+  tags:
+  - nginx

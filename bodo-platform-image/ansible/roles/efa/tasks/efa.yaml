@@ -1,0 +1,15 @@
+---
+- name: EFA | Download and unarchive EFA installation files.
+  unarchive:
+    src: "https://s3.us-west-2.amazonaws.com/aws-efa-installer/aws-efa-installer-{{ EFA_INSTALLER_VERSION }}.tar.gz"
+    dest: /tmp
+    remote_src: yes
+  tags:
+    - efa
+
+- name: EFA | Install EFA software
+  command:
+    chdir: "/tmp/aws-efa-installer/"
+    cmd: "/bin/bash efa_installer.sh -y --minimal --no-verify"
+  tags:
+    - efa

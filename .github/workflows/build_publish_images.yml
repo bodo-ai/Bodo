@@ -83,7 +83,7 @@ jobs:
           ORGANIZATION_UUID: ${{ secrets.PROD_ORGANIZATION_UUID }}
           CI_EVENT: ${{ github.event_name }}
         run: |
-          cd bodo-platform-images
+          cd bodo-platform-image
           python get_bodo_versions.py
 
       - name: Get Bodo Version from Workflow Dispatch Inputs
@@ -91,13 +91,13 @@ jobs:
         env:
           BODO_VERSION: ${{ github.event.inputs.bodoVersion }}
         run: |
-          echo "$BODO_VERSION" > bodo_versions.txt
+          echo "$BODO_VERSION" > bodo-platform-image/bodo_versions.txt
 
       - name: Upload Bodo Versions Artifact
         uses: actions/upload-artifact@v2
         with:
           name: bodo-versions-artifact
-          path: bodo_versions.txt
+          path: bodo-platform-image/bodo_versions.txt
 
   build-worker:
     needs: [get-bodo-versions]
@@ -131,6 +131,7 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: bodo-versions-artifact
+          path: bodo-platform-image/
 
       - name: Create Azure Image definition
         # For event that is not workflow, we skip the image creation in the build step,
@@ -142,7 +143,7 @@ jobs:
         with:
           azcliversion: 2.30.0
           inlineScript: |
-            $GITHUB_WORKSPACE/scripts/azure/create_image_definition.sh \
+            $GITHUB_WORKSPACE/bodo-platform-image/scripts/azure/create_image_definition.sh \
               --image-sha ${GIT_SHA} \
               --node-role worker
 
@@ -167,7 +168,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          cd bodo-platform-images
+          cd bodo-platform-image
           cd packer
           arguments=$(if [ "$GITHUB_EVENT" != 'workflow_dispatch' ]; then echo "--skip-create-images"; fi)
           bash build_images_and_gen_manifests.sh \
@@ -180,7 +181,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: worker-manifest
-          path: packer/worker_manifest_*.json
+          path: bodo-platform-image/packer/worker_manifest_*.json
 
   build-jupyter:
     needs: [get-bodo-versions]
@@ -213,6 +214,7 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: bodo-versions-artifact
+          path: bodo-platform-image/
 
       - name: Create Azure image definition
         uses: azure/CLI@v1.0.6
@@ -224,7 +226,7 @@ jobs:
         with:
           azcliversion: 2.30.0
           inlineScript: |
-            $GITHUB_WORKSPACE/scripts/azure/create_image_definition.sh \
+            $GITHUB_WORKSPACE/bodo-platform-image/scripts/azure/create_image_definition.sh \
               --image-sha ${GIT_SHA} \
               --node-role jupyter
 
@@ -241,7 +243,7 @@ jobs:
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           GIT_SHA: ${{ env.SHA }}
         run: |
-          cd bodo-platform-images
+          cd bodo-platform-image
           cd packer
           arguments=$(if [ "$GITHUB_EVENT" != 'workflow_dispatch' ]; then echo "--skip-create-images"; fi)
           bash build_images_and_gen_manifests.sh \
@@ -254,7 +256,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: jupyter-manifest
-          path: packer/jupyter_manifest_*.json
+          path: bodo-platform-image/packer/jupyter_manifest_*.json
 
   combine-manifest-gen-ami-entries:
     needs: [build-worker, build-jupyter]
@@ -268,11 +270,13 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: worker-manifest
+          path: bodo-platform-image/
 
       - name: Download Jupyter Packer Manifest
         uses: actions/download-artifact@v2
         with:
           name: jupyter-manifest
+          path: bodo-platform-image/
 
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -283,14 +287,14 @@ jobs:
         env:
           GIT_SHA: ${{ github.sha }}
         run: |
-          cd bodo-platform-images
+          cd bodo-platform-image
           python gen_images_entries_from_manifests.py
 
       - name: Upload Image Entries Request JSON
         uses: actions/upload-artifact@v2
         with:
           name: img-entries-request-json
-          path: img_share_requests.json
+          path: bodo-platform-image/img_share_requests.json
   # TESTING
   share-images-with-testing-platform:
     needs: [combine-manifest-gen-ami-entries]
@@ -318,6 +322,7 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: img-entries-request-json
+          path: bodo-platform-image/
 
       - name: Share Images with Testing Platform
         id: share
@@ -329,7 +334,7 @@ jobs:
           ORGANIZATION_UUID: ${{ secrets.TESTING_ORGANIZATION_UUID }}
         run: |
           sleep 120
-          cd bodo-platform-images
+          cd bodo-platform-image
           python manage_images.py
 
   add-bodo-version-to-testing-backend:
@@ -366,7 +371,7 @@ jobs:
       - name: Add Bodo Version to Testing Platform Backend
         id: add-bodo-version
         run: |
-          cd bodo-platform-images
+          cd bodo-platform-image
           python add_bodo_version.py
 
 
@@ -397,6 +402,7 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: img-entries-request-json
+          path: bodo-platform-image/
 
       - name: Share Images with Dev Platform
         id: share
@@ -408,7 +414,7 @@ jobs:
           ORGANIZATION_UUID: ${{ secrets.DEV_ORGANIZATION_UUID }}
         run: |
           sleep 120
-          cd bodo-platform-images
+          cd bodo-platform-image
           python manage_images.py
 
   add-bodo-version-to-staging-backend:
@@ -445,7 +451,7 @@ jobs:
       - name: Add Bodo Version to Staging Platform Backend
         id: add-bodo-version
         run: |
-          cd bodo-platform-images
+          cd bodo-platform-image
           python add_bodo_version.py
 
 
@@ -476,6 +482,7 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: img-entries-request-json
+          path: bodo-platform-image/
 
       - name: Share Images with Staging Platform
         id: share
@@ -487,7 +494,7 @@ jobs:
           ORGANIZATION_UUID: ${{ secrets.STAGING_ORGANIZATION_UUID }}
         run: |
           sleep 120
-          cd bodo-platform-images
+          cd bodo-platform-image
           python manage_images.py
 
   add-bodo-version-to-dev-backend:
@@ -524,7 +531,7 @@ jobs:
       - name: Add Bodo Version to Dev Platform Backend
         id: add-bodo-version
         run: |
-          cd bodo-platform-images
+          cd bodo-platform-image
           python add_bodo_version.py
 
 
@@ -556,6 +563,7 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: img-entries-request-json
+          path: bodo-platform-image/
 
       - name: Share Images with Prod Platform
         id: share
@@ -567,7 +575,7 @@ jobs:
           ORGANIZATION_UUID: ${{ secrets.PROD_ORGANIZATION_UUID }}
         run: |
           sleep 120
-          cd bodo-platform-images
+          cd bodo-platform-image
           python manage_images.py
 
   add-bodo-version-to-prod-backend:
@@ -604,5 +612,5 @@ jobs:
       - name: Add Bodo Version to Prod Platform Backend
         id: add-bodo-version
         run: |
-          cd bodo-platform-images
+          cd bodo-platform-image
           python add_bodo_version.py

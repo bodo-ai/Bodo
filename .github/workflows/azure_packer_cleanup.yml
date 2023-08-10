@@ -46,7 +46,7 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         run: |
           set -eo pipefail
-          cd bodo-platform-images
+          cd bodo-platform-image
           DELETE_FLAG="--delete"
           if [[ "$DRYRUN" == "true" ]]; then
             # default is delete for cron schedule
@@ -58,5 +58,5 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: removed-resource-groups
-          path: resource_groups_to_remove.json
+          path: bodo-platform-image/resource_groups_to_remove.json
 
