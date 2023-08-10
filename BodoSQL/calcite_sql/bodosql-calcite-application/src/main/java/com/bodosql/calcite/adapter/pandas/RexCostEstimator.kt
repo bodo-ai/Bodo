@@ -62,7 +62,7 @@ object RexCostEstimator : RexVisitor<Cost>, PandasCostEstimator {
         if (op.name == "MIN_ROW_NUMBER_FILTER") {
             1.0
         } else {
-            10.0
+            100.0
         }
 
     override fun visitOver(over: RexOver): Cost {

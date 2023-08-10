@@ -1418,7 +1418,7 @@ def extract_window_args(
     """
     Processes a function name and tuple of argument strings corresponding to a window function
     inside of a groupby.window term. Verifies that the number of arguments is correct for
-    the input function, and returns the scalar and vector arguments in seperate lists
+    the input function, and returns the scalar and vector arguments in separate lists
 
     Args:
 
