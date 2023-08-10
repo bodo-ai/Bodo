@@ -2280,7 +2280,7 @@ def gen_top_level_agg_func(
     func_text += "    window_args = np.array([{}], dtype=np.int64)\n".format(
         ", ".join(
             [
-                "0" if arg is "None" else f"np.int64(wrap_window_arg({arg}))"
+                "0" if arg == "None" else f"np.int64(wrap_window_arg({arg}))"
                 for arg in (window_args + [0])
             ]
         )
