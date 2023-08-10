@@ -1,0 +1,9 @@
+COMMON_PACKAGES:
+  - vim
+  - git
+  - jq
+  - htop
+  - s3fs-fuse
+  - nvme-cli
+
+CLUSTER_USER: bodo

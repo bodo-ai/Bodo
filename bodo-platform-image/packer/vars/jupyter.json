@@ -1,0 +1,4 @@
+{
+    "node_role"     : "jupyter",
+    "playbook_file" : "jupyter_playbook.yaml"
+}
