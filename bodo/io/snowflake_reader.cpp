@@ -410,7 +410,7 @@ class SnowflakeReader : public ArrowReader {
         std::vector<int8_t> arr_types;
         for (size_t i = 0; i < next_batch->ncols(); i++) {
             types.push_back(next_batch->columns[i]->dtype);
-            auto arr_type = bodo_array_type::arr_type_enum::DICT;
+            auto arr_type = next_batch->columns[i]->arr_type;
             arr_types.push_back(arr_type);
             if (arr_type == bodo_array_type::arr_type_enum::DICT) {
                 std::shared_ptr<array_info> dict = alloc_array(
