@@ -85,7 +85,7 @@ def arrow_reader_read_py_entry(typingctx, arrow_reader_t):  # pragma: no cover
 def read_arrow_next(arrow_reader, used_cols=None):  # pragma: no cover
     if not isinstance(arrow_reader, ArrowReaderType):
         raise BodoError(
-            "read_arrow_next(): First argument arrow_reader must be an ArrowReader"
+            f"read_arrow_next(): First argument arrow_reader must be an ArrowReader type, not {arrow_reader}"
         )
 
     if is_overload_none(used_cols):

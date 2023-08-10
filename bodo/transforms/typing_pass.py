@@ -42,6 +42,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
+from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import get_table_iterator
 from bodo.ir.filter import supported_arrow_funcs_map, supported_funcs_map
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
@@ -3833,7 +3834,9 @@ class TypingTransforms:
 
         return nodes + [assign]
 
-    def _run_call_read_sql_table(self, assign, rhs, func_name, label):
+    def _run_call_read_sql_table(
+        self, assign: ir.Assign, rhs: ir.Expr, func_name, label
+    ):
         """transform pd.read_sql_table into a SQL node"""
         func_str = "pandas.read_sql_table"
         lhs = assign.target
@@ -3970,6 +3973,25 @@ class TypingTransforms:
         if not isinstance(detect_dict_cols, bool):
             raise BodoError(err_msg)
 
+        # _bodo_chunksize enables streaming Iceberg reads with specified batch-size
+        _bodo_chunksize_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_chunksize",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_bodo_chunksize', if provided, must be a constant integer."
+        chunksize = (
+            self._get_const_value(_bodo_chunksize_var, label, rhs.loc, err_msg=err_msg)
+            if _bodo_chunksize_var
+            else None
+        )
+        if chunksize and not isinstance(chunksize, int):
+            raise BodoError(err_msg)
+
         (
             col_names,
             arr_types,
@@ -4032,27 +4054,44 @@ class TypingTransforms:
             tuple(col_names),
             is_table_format=True,
         )
-        data_arrs = [
-            ir.Var(lhs.scope, mk_unique_var("sql_table"), lhs.loc),
-            # Note index_col will always be dead since we don't support
-            # index_col yet.
-            ir.Var(lhs.scope, mk_unique_var("index_col"), lhs.loc),
-            ir.Var(lhs.scope, mk_unique_var("file_list"), lhs.loc),
-            ir.Var(lhs.scope, mk_unique_var("snapshot_id"), lhs.loc),
-        ]
 
-        self.typemap[data_arrs[0].name] = df_type.table_type
-        self.typemap[data_arrs[1].name] = types.none
+        if _bodo_merge_into and chunksize is not None:
+            raise BodoError(
+                "pandas.read_sql_table(): Batched reads does not support MERGE INTO"
+            )
+
+        # Merge INTO default output types
         file_list_type = types.pyobject_of_list_type
         snapshot_id_type = types.int64
-        # If we have a merge into we will return a list of original iceberg files
-        # + the snapshot id.
-        if _bodo_merge_into:
-            self.typemap[data_arrs[2].name] = file_list_type
-            self.typemap[data_arrs[3].name] = snapshot_id_type
+
+        if chunksize is None:
+            # Normal, non-streaming case
+            data_arrs = [
+                ir.Var(lhs.scope, mk_unique_var("sql_table"), lhs.loc),
+                # Note index_col will always be dead since we don't support
+                # index_col yet.
+                ir.Var(lhs.scope, mk_unique_var("index_col"), lhs.loc),
+                ir.Var(lhs.scope, mk_unique_var("file_list"), lhs.loc),
+                ir.Var(lhs.scope, mk_unique_var("snapshot_id"), lhs.loc),
+            ]
+
+            self.typemap[data_arrs[0].name] = df_type.table_type  # type: ignore
+            self.typemap[data_arrs[1].name] = types.none
+            # If we have a merge into we will return a list of original iceberg files
+            # + the snapshot id.
+            if _bodo_merge_into:
+                self.typemap[data_arrs[2].name] = file_list_type
+                self.typemap[data_arrs[3].name] = snapshot_id_type
+            else:
+                self.typemap[data_arrs[2].name] = types.none
+                self.typemap[data_arrs[3].name] = types.none
         else:
-            self.typemap[data_arrs[2].name] = types.none
-            self.typemap[data_arrs[3].name] = types.none
+            # Streaming case
+            data_arrs = [
+                ir.Var(lhs.scope, mk_unique_var("arrow_iterator"), lhs.loc),
+            ]
+            self.typemap[data_arrs[0].name] = ArrowReaderType(col_names, df_type.data)
+
         nodes = [
             bodo.ir.sql_ext.SqlReader(
                 table_name,
@@ -4060,7 +4099,9 @@ class TypingTransforms:
                 lhs.name,
                 list(df_type.columns),
                 data_arrs,
-                list(df_type.data),
+                list(df_type.data)
+                if chunksize is None
+                else [ArrowReaderType(col_names, df_type.data)],
                 set(),
                 "iceberg",
                 lhs.loc,
@@ -4076,42 +4117,48 @@ class TypingTransforms:
                 file_list_type,  # file_list_type
                 snapshot_id_type,  # snapshot_id_type
                 False,  # downcast_decimal_to_double
+                chunksize=chunksize,
             )
         ]
-        data_args = ["table_val", "idx_arr_val", "file_list_val", "snapshot_id_val"]
-        func_text = f"def _init_df({data_args[0]}, {data_args[1]}, {data_args[2]}, {data_args[3]}):\n"
-        # If using BodoSQL, output the answer as a Table, oherwise, output the answer as a DataFrame
-        if _bodo_read_as_table:
-            df_value = data_args[0]
-        else:
+
+        if not _bodo_read_as_table and chunksize is None:
+            data_args = ["table_val", "idx_arr_val", "file_list_val", "snapshot_id_val"]
             # Create the index + dataframe
             index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
+            func_text = f"def _init_df({data_args[0]}, {data_args[1]}, {data_args[2]}, {data_args[3]}):\n"
             df_value = f"bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_read_sql_table)"
-        if _bodo_merge_into:
-            # If merge_into we return a tuple of values
-            func_text += f"  return ({df_value}, {data_args[2]}, {data_args[3]})\n"
-        else:
-            # Otherwise just return the DataFrame
-            func_text += f"  return {df_value}\n"
-        loc_vars = {}
-        exec(
-            func_text,
-            {"__col_name_meta_value_read_sql_table": ColNamesMetaType(df_type.columns)},
-            loc_vars,
-        )
-        _init_df = loc_vars["_init_df"]
+            if _bodo_merge_into:
+                # If merge_into we return a tuple of values
+                func_text += f"  return ({df_value}, {data_args[2]}, {data_args[3]})\n"
+            else:
+                # Otherwise just return the DataFrame
+                func_text += f"  return {df_value}\n"
+            loc_vars = {}
+            exec(
+                func_text,
+                {
+                    "__col_name_meta_value_read_sql_table": ColNamesMetaType(
+                        df_type.columns
+                    )
+                },
+                loc_vars,
+            )
+            _init_df = loc_vars["_init_df"]
 
-        nodes += compile_func_single_block(
-            _init_df,
-            data_arrs,
-            lhs,
-            self,
-            extra_globals={
-                "__col_name_meta_value_read_sql_table": ColNamesMetaType(
-                    df_type.columns
-                )
-            },
-        )
+            nodes += compile_func_single_block(
+                _init_df,
+                data_arrs,
+                lhs,
+                self,
+                extra_globals={
+                    "__col_name_meta_value_read_sql_table": ColNamesMetaType(
+                        df_type.columns
+                    )
+                },
+            )
+        else:
+            nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
+
         # Mark the IR as changed
         self.changed = True
         return nodes

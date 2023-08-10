@@ -147,6 +147,9 @@ def test_column_pruning(memory_leak_check, iceberg_database, iceberg_table_conn)
     check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
 
 
+@pytest.mark.skipif(
+    bodo.bodosql_use_streaming_plan, reason="Streaming doesn't support shape pushdown "
+)
 @pytest.mark.slow
 def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table_conn):
     """
@@ -285,7 +288,7 @@ def test_merge_into_simple(iceberg_database, iceberg_table_conn):
 
 @pytest.mark.slow
 def test_merge_into_simple_2(iceberg_database, iceberg_table_conn):
-    table_name = "test_merge_into_simple_tbl"
+    table_name = "test_merge_into_simple_tbl2"
     db_schema, warehouse_loc = iceberg_database
     sql_schema = [
         ("id", "int", True),
