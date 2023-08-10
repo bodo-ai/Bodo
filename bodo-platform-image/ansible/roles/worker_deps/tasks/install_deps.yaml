@@ -1,0 +1,91 @@
+---
+
+- name: WORKER_DEPS | Upload environemnt file to /tmp/worker_env.yaml
+  template:
+    dest: /tmp/worker_env.yaml
+    src: ../files/worker_env.yaml
+    owner: "{{ CLUSTER_USER }}"
+    group: "{{ CLUSTER_USER }}"
+    mode: '0644'
+  tags:
+    - worker_deps
+
+
+- name: WORKER_DEPS | Install bodo and all other dependencies via mamba.
+  command:
+    cmd: "/opt/conda/bin/mamba env update --name base --file /tmp/worker_env.yaml"
+  tags:
+    - worker_deps
+
+- name: WORKER_DEPS | Download Slurm binaries from S3
+  command:
+    cmd: "/usr/local/bin/aws s3 cp s3://bodo-slurm-binaries /tmp/slurm_bin --recursive"
+  environment:
+    AWS_ACCESS_KEY_ID: "{{ aws_access_key_id }}"
+    AWS_SECRET_ACCESS_KEY: "{{ aws_secret_access_key }}"
+    # aws cli needs region to be set sometimes to avoid errors
+    AWS_DEFAULT_REGION: us-east-2
+  tags:
+    - worker_deps
+
+- name: WORKER_DEPS | Install Slurm binaries
+  command:
+    cmd: |
+      yum install mariadb-server mariadb-devel netcat -y
+      yum install rng-tools -y
+      yum localinstall -y \
+        /tmp/slurm_bin/slurm-{{ slurm_version }}-1.amzn2.x86_64.rpm \
+        /tmp/slurm_bin/slurm-perlapi-{{ slurm_version }}-1.amzn2.x86_64.rpm \
+        /tmp/slurm_bin/slurm-devel-{{ slurm_version }}-1.amzn2.x86_64.rpm \
+        /tmp/slurm_bin/slurm-example-configs-{{ slurm_version }}-1.amzn2.x86_64.rpm \
+        /tmp/slurm_bin/slurm-slurmctld-{{ slurm_version }}-1.amzn2.x86_64.rpm \
+        /tmp/slurm_bin/slurm-slurmd-{{ slurm_version }}-1.amzn2.x86_64.rpm \
+        /tmp/slurm_bin/slurm-slurmdbd-{{ slurm_version }}-1.amzn2.x86_64.rpm \
+        /tmp/slurm_bin/slurm-libpmi-{{ slurm_version }}-1.amzn2.x86_64.rpm \
+        /tmp/slurm_bin/slurm-torque-{{ slurm_version }}-1.amzn2.x86_64.rpm \
+        /tmp/slurm_bin/slurm-openlava-{{ slurm_version }}-1.amzn2.x86_64.rpm \
+        /tmp/slurm_bin/slurm-contribs-{{ slurm_version }}-1.amzn2.x86_64.rpm \
+        /tmp/slurm_bin/slurm-pam_slurm-{{ slurm_version }}-1.amzn2.x86_64.rpm \
+        /tmp/slurm_bin/slurm-slurmrestd-{{ slurm_version }}-1.amzn2.x86_64.rpm
+  tags:
+    - worker_deps
+
+- name: WORKER_DEPS | setup Slurm user and files
+  shell: |
+    export SLURMUSER=692
+    groupadd -f -g $SLURMUSER slurm
+    useradd  -m -c "SLURM workload manager" -d /var/lib/slurm -u $SLURMUSER -g slurm -s /bin/bash slurm
+
+    mkdir -p /var/spool/slurmctld
+    chown slurm: /var/spool/slurmctld
+    chmod 755 /var/spool/slurmctld
+    touch /var/log/slurmctld.log
+    chown slurm: /var/log/slurmctld.log
+    touch /var/log/slurm_jobacct.log /var/log/slurm_jobcomp.log
+    chown slurm: /var/log/slurm_jobacct.log /var/log/slurm_jobcomp.log
+    mkdir -p /var/spool/slurmd
+    chown slurm: /var/spool/slurmd
+    chmod 755 /var/spool/slurmd
+    touch /var/log/slurmd.log
+    chown slurm: /var/log/slurmd.log
+
+    # setup Slurm database
+    systemctl enable mariadb
+    systemctl start mariadb
+    systemctl status mariadb
+
+    mysql -e "GRANT ALL ON slurm_acct_db.* TO 'slurm'@'localhost' IDENTIFIED BY '1234' with grant option;"
+    mysql -e "SHOW VARIABLES LIKE 'have_innodb';"
+    mysql -e "FLUSH PRIVILEGES;"
+    mysql -e "CREATE DATABASE slurm_acct_db;"
+
+    touch /var/log/slurmdbd.log
+    chown slurm: /var/log/slurmdbd.log
+  tags:
+    - worker_deps
+    
+- name: WORKER_DEPS | Install Goofys
+  get_url: 
+    url: https://github.com/kahing/goofys/releases/download/v0.24.0/goofys
+    dest: /usr/bin/goofys
+    mode: '0777'

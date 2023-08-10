@@ -1,0 +1,3 @@
+---
+- name: HDFS | Install Hadoop and set variables
+  include: hdfs.yaml

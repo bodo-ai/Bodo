@@ -1,0 +1,4 @@
+PACKAGES:
+  - epel-release
+  - nginx
+  - certbot-nginx

@@ -1,0 +1,3 @@
+---
+- name: CONDA | Install miniconda.
+  include: conda.yaml

@@ -1,0 +1,9 @@
+---
+
+- name: PLATFORM-JLAB-EXT | Test that Bodo JupyterLab Extension is activated
+  shell: |
+    set -eux
+    /opt/conda/bin/jupyter labextension list 2>&1 | grep -ie "bodo-jupyterlab.*OK"
+    /opt/conda/bin/jupyter server extension list 2>&1 | grep -ie "bodo_jupyterlab.*OK"
+  tags:
+    - jupyter

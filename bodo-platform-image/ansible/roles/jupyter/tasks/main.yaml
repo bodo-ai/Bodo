@@ -1,0 +1,15 @@
+---
+- name: JUPYTER | Install jupyter packages.
+  include: jupyter.yaml
+
+- name: JUPYTER | Replace default kernel with custom one
+  include: custom_default_kernel.yaml
+
+- name: JUPYTER | Install Bodo Platform Jupyterlab Platform Extension
+  include: platform_jupyterlab_extension.yaml
+
+- name: JUPYTER | Install jupyterlab_execute_time extension
+  include: jlab_execute_time.yaml
+
+- name: JUPYTER | Install and configure nginx proxy
+  include: nginx.yaml

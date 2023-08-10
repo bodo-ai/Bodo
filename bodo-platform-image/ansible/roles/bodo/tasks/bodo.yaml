@@ -1,0 +1,78 @@
+---
+
+- name: BODO | Install bodo
+  command:
+    cmd: "/opt/conda/bin/mamba install --quiet --yes -c {{ URL_BODO }} -c conda-forge bodo=={{ BODO_VERSION }}"
+  tags:
+    - bodo
+
+- name: BODO | Install BodoSQL if specified
+  command:
+    cmd: "/opt/conda/bin/mamba install --quiet --yes -c {{ BODOSQL_CHANNEL }} -c conda-forge bodosql=={{ BODOSQL_VERSION }}"
+  when: "BODOSQL_VERSION | length > 0"
+  tags:
+    - bodo
+
+- name: BODO | Install ICEBERG Connector if specified
+  command:
+    cmd: "/opt/conda/bin/mamba install --quiet --yes -c {{ ICEBERG_CONNECTOR_CHANNEL }} -c conda-forge bodo-iceberg-connector=={{ ICEBERG_CONNECTOR_VERSION }}"
+  when: "ICEBERG_CONNECTOR_VERSION | length > 0"
+  tags:
+    - bodo
+
+- name: BODO-ML | Install XGBoost
+  shell: |
+    export PATH=/opt/conda/bin:$PATH
+    echo "PATH: $PATH"
+    echo "CXX: $CXX"
+    echo "LDFLAGS: $LDFLAGS"
+    git clone --recursive https://github.com/dmlc/xgboost --branch v1.3.3 /xgboost
+    cd /xgboost
+    mkdir build
+    cd build
+    cmake -DRABIT_BUILD_MPI=ON ..
+    make -j4
+    cd ../python-package
+    python setup.py install
+    cd /
+    rm -rf /xgboost
+  tags:
+    - bodo
+
+- name: BODO | Insert Environment Variables at the end of a bashrc/bash_profile.
+  blockinfile:
+    path: "/home/{{ CLUSTER_USER }}/.bashrc"
+    insertbefore: '.*'
+    marker: "#<!-- {mark} Adding Env Variables to control threading -->"
+    block: |
+      export PYTHONUNBUFFERED=1
+      export OPENBLAS_NUM_THREADS=1
+      export MKL_NUM_THREADS=1
+      export OMP_NUM_THREADS=1
+      export PS1="\[\033[0;32m\]\u@\h: \[\033[36m\]\W\[\033[0m\] \$ "
+  tags:
+    - bodo
+
+# Note: if this is done as part of the worker enviornment, we get a nasty error whoose root cause is:
+# _configtest.c:2:10: fatal error: 'mpi.h' file not found
+# I'm not certain why, but doing the pip installation separately from the other installs in
+# the environment file resolves this issue
+- name: BODO | Install Bodo Platform Utils Package
+  command:
+    cmd: "/opt/conda/bin/pip install bodo-platform-utils=={{ BODO_PLATFORM_UTILS_VERSION }}"
+  tags:
+    - bodo
+
+# Same problem as above since bodo-platform-utils is a dependency
+- name: BODO | Install Bodo Platform Extensions Package
+  command:
+    cmd: "/opt/conda/bin/pip install bodo-platform-extensions=={{ BODO_PLATFORM_EXTENSIONS_VERSION }}"
+  tags:
+    - bodo
+
+
+- name: BODO | Clean Cache for Conda
+  command:
+    cmd: "/opt/conda/bin/mamba clean --all"
+  tags:
+    - bodo

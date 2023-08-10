@@ -1,0 +1,7 @@
+---
+- name: COMMON | Install common packages.
+  yum:
+    name: "{{ COMMON_PACKAGES }}"
+    state: installed
+  tags:
+    - common

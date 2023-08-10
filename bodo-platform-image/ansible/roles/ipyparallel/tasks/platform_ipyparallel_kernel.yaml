@@ -1,0 +1,6 @@
+---
+- name: IPYPARALLEL | Install Bodo-Platform-IPyParallel-Kernel
+  command:
+    cmd: "/opt/conda/bin/python  -m bodo_platform_ipyparallel_kernel.install --sys-prefix"
+  tags:
+    - ipyparallel
