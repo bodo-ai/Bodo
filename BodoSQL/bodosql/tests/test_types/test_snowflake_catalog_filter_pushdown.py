@@ -1317,8 +1317,10 @@ def test_snowflake_not_comparison_pushdown(
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" >= 2 AND "B" <= 3 OR NOT "C"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1427,8 +1429,10 @@ def test_snowflake_not_in_pushdown(test_db_snowflake_catalog, memory_leak_check)
                 reset_index=True,
                 sort_output=True,
             )
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" NOT IN (1, 3)',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
