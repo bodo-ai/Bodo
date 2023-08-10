@@ -11,6 +11,7 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.SingleRel
 import org.apache.calcite.rel.metadata.RelMetadataQuery
+import java.lang.Double.max
 
 class CombineStreamsExchange(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) : SingleRel(cluster,  traits,  input), PandasRel {
 
@@ -48,9 +49,10 @@ class CombineStreamsExchange(cluster: RelOptCluster, traits: RelTraitSet, input:
     override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
         val rows = mq.getRowCount(this)
         val averageRowSize = mq.getAverageRowSize(this)
-        val rowSize = averageRowSize?.times(rows) ?: 0.0
+        val rowMultiplier = rows ?: 1.0
+        val rowCost = averageRowSize?.times(rowMultiplier) ?: 0.0
         // No CPU cost, only memory cost. In reality there is a "concat",
         // but this is fixed cost.
-        return planner.makeCost(rows = rows, mem = rowSize)
+        return planner.makeCost(rows = rows, mem = rowCost)
     }
 }

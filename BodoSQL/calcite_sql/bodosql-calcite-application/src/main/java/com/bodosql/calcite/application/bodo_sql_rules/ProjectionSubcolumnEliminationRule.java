@@ -2,7 +2,6 @@ package com.bodosql.calcite.application.bodo_sql_rules;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.rel.logical.BodoLogicalProject;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -61,32 +60,49 @@ public class ProjectionSubcolumnEliminationRule
   @Override
   public void onMatch(RelOptRuleCall call) {
     final Project project = call.rel(0);
-    RelNode x = apply(call, project);
+    final RelNode input = call.rel(1);
+    final RelBuilder builder = call.builder();
+    RelNode x = apply(builder, project, input);
     if (x != null) {
       call.transformTo(x);
     }
   }
 
-  public static @Nullable RelNode apply(RelOptRuleCall call, Project project) {
-    if (seenNodes.contains(project.getId())) {
-      // Exit if we have cached this node cannot match.
-      return null;
+  /**
+   * Create a Map from NodeCount -> Index. This is used to quickly determine if we might have a
+   * matching column.
+   *
+   * @param columns The RexNodes upon which we will compute the node count.
+   * @return The newly created map.
+   */
+  private static Map<Integer, List<Integer>> computeCountMap(List<RexNode> columns) {
+    Map<Integer, List<Integer>> countMap = new TreeMap<>();
+    for (int i = 0; i < columns.size(); i++) {
+      RexNode col = columns.get(i);
+      int count = col.nodeCount();
+      if (!countMap.containsKey(count)) {
+        countMap.put(count, new ArrayList<>());
+      }
+      countMap.get(count).add(i);
     }
+    return countMap;
+  }
+
+  private static @Nullable RelNode apply(
+      final RelBuilder builder, final Project project, final RelNode input) {
     // Ensure we run on this node only once.
     seenNodes.add(project.getId());
-    RelBuilder builder = call.builder();
-    // Push the projection's current child to ensure creating input refs
-    RelNode input = project.getInput();
+    // The input to enable creating input refs
     builder.push(input);
     // Create a new projection that combines input refs from each of the older
     // columns with our current projection. This is to handle the edge
     // case where the column that is modified references another column
     // in its unchanged portion. If any of these columns are unused they
     // will be pruned at the end of this function.
+    List<RexNode> columns = project.getProjects();
     List<RexNode> totalProjects = new ArrayList<>();
     List<String> totalFieldNames = new ArrayList<>();
     // Add the current expressions.
-    List<RexNode> columns = project.getProjects();
     List<String> fieldNames = project.getRowType().getFieldNames();
     totalProjects.addAll(columns);
     totalFieldNames.addAll(fieldNames);
@@ -99,8 +115,7 @@ public class ProjectionSubcolumnEliminationRule
 
     // Create a fused projection so columns in the outer projection can reference
     // columns from the input if necessary. This will be pruned later.
-    builder.push(project.getInput())
-            .project(totalProjects, totalFieldNames);
+    builder.push(input).project(totalProjects, totalFieldNames);
 
     // Keep track of which columns will be kept
     Set<Integer> keptIndices = new HashSet<>();
@@ -112,15 +127,7 @@ public class ProjectionSubcolumnEliminationRule
 
     // Sorting by NodeCount step:
     // Create mapping from NodeCount -> index. This will be used for sorting
-    Map<Integer, List<Integer>> countMap = new TreeMap<>();
-    for (int i = 0; i < numColumns; i++) {
-      RexNode col = columns.get(i);
-      int count = col.nodeCount();
-      if (!countMap.containsKey(count)) {
-        countMap.put(count, new ArrayList<>());
-      }
-      countMap.get(count).add(i);
-    }
+    Map<Integer, List<Integer>> countMap = computeCountMap(columns);
 
     // Checking for Matching Columns step
 
@@ -478,6 +485,10 @@ public class ProjectionSubcolumnEliminationRule
     return node;
   }
 
+  public static boolean notSeen(Project p) {
+    return !seenNodes.contains(p.getId());
+  }
+
   /** Rule configuration. */
   @Value.Immutable
   public interface Config extends RelRule.Config {
@@ -494,7 +505,11 @@ public class ProjectionSubcolumnEliminationRule
     /** Defines an operand tree for the given classes. */
     default ProjectionSubcolumnEliminationRule.Config withOperandFor(
         Class<? extends Project> projectClass) {
-      return withOperandSupplier(b0 -> b0.operand(projectClass).anyInputs())
+      return withOperandSupplier(
+              b0 ->
+                  b0.operand(projectClass)
+                      .predicate(ProjectionSubcolumnEliminationRule::notSeen)
+                      .oneInput(b1 -> b1.operand(RelNode.class).anyInputs()))
           .as(ProjectionSubcolumnEliminationRule.Config.class);
     }
   }
