@@ -44,6 +44,14 @@ table_info* iceberg_pq_read_py_entry(
     int64_t* total_rows_out, PyObject** file_list_ptr,
     int64_t* snapshot_id_ptr);
 
+ArrowReader* iceberg_pq_reader_init_py_entry(
+    const char* conn, const char* database_schema, const char* table_name,
+    bool parallel, int64_t tot_rows_to_read, PyObject* dnf_filters,
+    PyObject* expr_filters, int32_t* _selected_fields,
+    int32_t num_selected_fields, int32_t* _is_nullable,
+    PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
+    int32_t num_str_as_dict_cols, int64_t batch_size);
+
 // --------- function defined in snowflake_reader.cpp ---------
 table_info* snowflake_read_py_entry(
     const char* query, const char* conn, bool parallel, bool is_independent,
@@ -97,11 +105,14 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     SetAttrStringFromVoidPtr(m, pq_reader_init_py_entry);
 
     SetAttrStringFromVoidPtr(m, iceberg_pq_read_py_entry);
+    SetAttrStringFromVoidPtr(m, iceberg_pq_reader_init_py_entry);
+
     SetAttrStringFromVoidPtr(m, pq_write_py_entry);
     SetAttrStringFromVoidPtr(m, iceberg_pq_write_py_entry);
     SetAttrStringFromVoidPtr(m, pq_write_partitioned_py_entry);
     SetAttrStringFromVoidPtr(m, snowflake_read_py_entry);
     SetAttrStringFromVoidPtr(m, snowflake_reader_init_py_entry);
+
     SetAttrStringFromVoidPtr(m, arrow_reader_read_py_entry);
     SetAttrStringFromVoidPtr(m, arrow_reader_del_py_entry);
 
