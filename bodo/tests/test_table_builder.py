@@ -2,9 +2,9 @@
 """Test Bodo's Table Builder python interface
 """
 
-
 import numpy as np
 import pandas as pd
+import pytest
 
 import bodo
 import bodo.libs.table_builder
@@ -43,18 +43,14 @@ def test_table_builder_empty(memory_leak_check):
     check_func(test, (), py_output=expected_df, convert_to_nullable_float=False)
 
 
-def test_table_builder(memory_leak_check):
+@pytest.mark.parametrize("df1_len", [3, 5, 10])
+@pytest.mark.parametrize("df2_len", [3, 5, 10])
+def test_table_builder(df1_len, df2_len, memory_leak_check):
     """Test that table_builder will correctly concatenate it's inputs"""
     global_1 = MetaType((0, 1))
     col_names = ColNamesMetaType(("A", "B"))
 
-    def test():
-        A1 = np.arange(3) / 10
-        A2 = np.arange(3) / 10 + 1
-        B1 = np.arange(3)
-        B2 = np.arange(3) + 10
-        df1 = pd.DataFrame({"A": A1, "B": B1})
-        df2 = pd.DataFrame({"A": A2, "B": B2})
+    def test(df1, df2):
         T1 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), global_1, 2
         )
@@ -71,12 +67,29 @@ def test_table_builder(memory_leak_check):
         T3 = bodo.libs.table_builder.table_builder_finalize(table_builder)
         idx = bodo.hiframes.pd_index_ext.init_range_index(0, len(T3), 1, None)
         out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T3,), idx, col_names)
+
         return out_df
 
-    expected_df = pd.DataFrame(
-        {"A": [0, 0.1, 0.2, 1, 1.1, 1.2], "B": [0, 1, 2, 10, 11, 12]}
+    data1_a = np.arange(df1_len)
+    data1_b = data1_a / 10
+    df1 = pd.DataFrame({"A": data1_a, "B": data1_b})
+    data2_a = np.arange(df2_len)
+    data2_b = data2_a / 10
+    df2 = pd.DataFrame({"A": data2_a, "B": data2_b})
+
+    expected_df = pd.concat([df1, df2], ignore_index=True)
+
+    # We need sort_output=True and reset_index=True here because when we have
+    # multiple hosts we will execute the appends in a different order than if we
+    # do it sequentially (i.e. appends are not commutative w.r.t ordering)
+    check_func(
+        test,
+        (df1, df2),
+        py_output=expected_df,
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
     )
-    check_func(test, (), py_output=expected_df, convert_to_nullable_float=False)
 
 
 def test_table_builder_with_strings(memory_leak_check):
