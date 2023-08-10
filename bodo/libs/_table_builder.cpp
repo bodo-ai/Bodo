@@ -32,6 +32,21 @@ ArrayBuildBuffer::ArrayBuildBuffer(
     }
 }
 
+size_t ArrayBuildBuffer::EstimatedSize() const {
+    std::function<size_t(const array_info&)> getSizeOfArrayInfo =
+        [&](const array_info& arr) -> size_t {
+        size_t size = 0;
+        for (const auto& buff : arr.buffers) {
+            size += buff->getMeminfo()->size;
+        }
+        for (auto& child : arr.child_arrays) {
+            size += getSizeOfArrayInfo(*child);
+        }
+        return size;
+    };
+    return getSizeOfArrayInfo(*data_array);
+}
+
 void ArrayBuildBuffer::IncrementSize() {
     switch (this->data_array->arr_type) {
         case bodo_array_type::NULLABLE_INT_BOOL: {
@@ -281,6 +296,23 @@ TableBuildBuffer::TableBuildBuffer(
         array_buffers.emplace_back(this->data_table->columns[i],
                                    dict_builders[i]);
     }
+}
+
+size_t TableBuildBuffer::EstimatedSize() const {
+    size_t size = 0;
+    for (const auto& arr : array_buffers) {
+        size += arr.EstimatedSize();
+    }
+    return size;
+}
+
+void TableBuildBuffer::UnifyTablesAndAppend(
+    const std::shared_ptr<table_info>& in_table,
+    std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders) {
+    auto unified_table =
+        unify_dictionary_arrays_helper(in_table, dict_builders, 0, false);
+    ReserveTable(unified_table);
+    UnsafeAppendBatch(unified_table);
 }
 
 void TableBuildBuffer::UnsafeAppendBatch(
@@ -731,11 +763,7 @@ TableBuilderState* table_builder_state_init_py_entry(int8_t* arr_c_types,
 void table_builder_append_py_entry(TableBuilderState* state,
                                    table_info* in_table) {
     std::shared_ptr<table_info> tmp_table(in_table);
-
-    tmp_table = unify_dictionary_arrays_helper(tmp_table, state->dict_builders,
-                                               0, false);
-    state->builder.ReserveTable(tmp_table);
-    state->builder.UnsafeAppendBatch(tmp_table);
+    state->builder.UnifyTablesAndAppend(tmp_table, state->dict_builders);
 }
 
 table_info* table_builder_finalize(TableBuilderState* state) {
