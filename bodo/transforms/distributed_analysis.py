@@ -1670,7 +1670,17 @@ class DistributedAnalysis:
             "table_builder_append",
             "bodo.libs.table_builder",
         ):  # pragma: no cover
-            self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            if array_dists[rhs.args[0].name] == Distribution.REP:
+                # If the builder is REP then we must set the input table to also
+                # be REP
+                array_dists[rhs.args[1].name] = Distribution.REP
+            # If the input is OneD, it the output should be OneD_Var since
+            # appending multiple OneD tables together may break the invariant
+            # that we have only at most 1 extra row on a given rank.
+            out_dist = self._min_dist(
+                Distribution.OneD_Var, array_dists[rhs.args[1].name]
+            )
+            array_dists[rhs.args[0].name] = out_dist
             return
 
         if (
