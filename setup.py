@@ -345,6 +345,7 @@ if is_testing:
             "bodo/tests/test_example.cpp",
             "bodo/tests/test_framework.cpp",
             "bodo/tests/test_table_builder.cpp",
+            "bodo/tests/test_table_generator.cpp",
         ]
     )
     ext_metadata["define_macros"].append(("IS_TESTING", "1"))

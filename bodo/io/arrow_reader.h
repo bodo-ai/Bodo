@@ -52,7 +52,7 @@ class TableBuilder {
      */
     TableBuilder(std::shared_ptr<arrow::Schema> schema,
                  std::set<int>& selected_fields, const int64_t num_rows,
-                 std::vector<bool>& is_nullable,
+                 const std::vector<bool>& is_nullable,
                  const std::set<std::string>& str_as_dict_cols,
                  const bool create_dict_from_string,
                  const std::vector<int64_t>& dict_ids = {});
