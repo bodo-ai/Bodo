@@ -40,6 +40,8 @@ struct ArrayBuildBuffer {
         std::shared_ptr<array_info> _data_array,
         std::shared_ptr<DictionaryBuilder> _dict_builder = nullptr);
 
+    size_t EstimatedSize() const;
+
     /**
      * @brief Append a new data element to the buffer, assuming
      * there is already enough space reserved (with ReserveArray).
@@ -684,6 +686,12 @@ struct TableBuildBuffer {
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager());
+
+    size_t EstimatedSize() const;
+
+    void UnifyTablesAndAppend(
+        const std::shared_ptr<table_info>& in_table,
+        std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders);
 
     /**
      * @brief Append a batch of data to the buffer, assuming

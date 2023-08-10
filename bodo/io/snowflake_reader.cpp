@@ -8,6 +8,25 @@
 #include "arrow_reader.h"
 
 #include "../libs/_distributed.h"
+#include "../libs/_table_builder.h"
+
+/**
+ * @brief Get the max table size threshold (in bytes) to determine when to stop
+ * reading from snowflake
+ *
+ * @return size_t limit value
+ */
+size_t get_max_table_size() {
+    // We default to 64MB (arbitrarily chosen), unless to user specifies a
+    // threshold manually.
+    size_t table_size = 64 * 2 << 20;
+    char* table_size_str = std::getenv("BODO_READ_MAX_TABLE_SIZE");
+    if (table_size_str) {
+        std::stringstream stream(table_size_str);
+        stream >> table_size;
+    }
+    return table_size;
+}
 
 /**
  * @brief Class that contains the information to convert
@@ -300,71 +319,125 @@ class SnowflakeReader : public ArrowReader {
             return std::make_tuple(out_table, true, out_table->nrows());
         }
 
-        // If next batch not available, prepare next batches
-        if (out_batches.empty() && !result_batches.empty()) {
-            auto next_piece = result_batches.front();
-            result_batches.pop();
+        auto GetNextBatch = [&]() {
+            table_info* next_batch = nullptr;
 
-            int64_t offset = 0;
-            if (is_first_piece) {
-                offset = start_row_first_piece;
-                is_first_piece = false;
+            // If next batch not available, prepare next batches
+            if (out_batches.empty() && !result_batches.empty()) {
+                auto next_piece = result_batches.front();
+                result_batches.pop();
+
+                int64_t offset = 0;
+                if (is_first_piece) {
+                    offset = start_row_first_piece;
+                    is_first_piece = false;
+                }
+
+                auto [table, to_arrow_time, cast_arrow_table_time] =
+                    process_result_batch(next_piece, offset);
+
+                auto start = steady_clock::now();
+
+                // TODO(aneesh) this isn't great for performance since we're
+                // creating a new dictionary for every batch and then unifying
+                // with what we've read so far. Instead, the lifetime of this
+                // builder should be the lifetime of this whole set of reads.
+
+                // Build the dictionary
+                SnowflakeDictionaryBuilder dict_builder(schema, selected_fields,
+                                                        str_as_dict_colnames);
+                // Generate the dict_ids
+                auto [batch_table, dict_ids] = dict_builder.convert(table);
+                // Arrow utility to iterate over row-chunks of an input
+                // table Useful for us to construct batches of Bodo tables
+                // from the piece
+                auto reader = arrow::TableBatchReader(batch_table);
+                reader.set_chunksize(batch_size);
+
+                std::shared_ptr<arrow::RecordBatch> next_recordbatch;
+                for (auto status = reader.ReadNext(&next_recordbatch);
+                     status.ok() && next_recordbatch;
+                     status = reader.ReadNext(&next_recordbatch)) {
+                    // Construct Builder Object for Next Batch
+                    TableBuilder builder(
+                        schema, selected_fields, next_recordbatch->num_rows(),
+                        is_nullable, str_as_dict_colnames, false, dict_ids);
+                    // TODO: Have TableBuilder support RecordBatches
+                    auto res =
+                        arrow::Table::FromRecordBatches({next_recordbatch})
+                            .ValueOrDie();
+                    builder.append(res);
+                    out_batches.push(builder.get_table());
+                }
+
+                auto end = steady_clock::now();
+                append_time =
+                    duration_cast<microseconds>((end - start)).count();
             }
 
-            auto [table, to_arrow_time, cast_arrow_table_time] =
-                process_result_batch(next_piece, offset);
+            ev.add_attribute("total_to_arrow_time_micro", to_arrow_time);
+            ev.add_attribute("total_append_time_micro", append_time);
+            ev.add_attribute("total_cast_arrow_table_time_micro",
+                             cast_arrow_table_time);
 
-            auto start = steady_clock::now();
-
-            // Build the dictionary
-            SnowflakeDictionaryBuilder dict_builder(schema, selected_fields,
-                                                    str_as_dict_colnames);
-            // Generate the dict_ids
-            auto [batch_table, dict_ids] = dict_builder.convert(table);
-            // Arrow utility to iterate over row-chunks of an input table
-            // Useful for us to construct batches of Bodo tables from the piece
-            auto reader = arrow::TableBatchReader(batch_table);
-            reader.set_chunksize(batch_size);
-
-            std::shared_ptr<arrow::RecordBatch> next_recordbatch;
-            for (auto status = reader.ReadNext(&next_recordbatch);
-                 status.ok() && next_recordbatch;
-                 status = reader.ReadNext(&next_recordbatch)) {
-                // Construct Builder Object for Next Batch
-                TableBuilder builder(schema, selected_fields,
-                                     next_recordbatch->num_rows(), is_nullable,
-                                     str_as_dict_colnames, false, dict_ids);
-                // TODO: Have TableBuilder support RecordBatches
-                auto res = arrow::Table::FromRecordBatches({next_recordbatch})
-                               .ValueOrDie();
-                builder.append(res);
-                out_batches.push(builder.get_table());
+            if (out_batches.size() > 0) {
+                next_batch = out_batches.front();
+                out_batches.pop();
+                total_read_rows = next_batch->nrows();
             }
 
-            auto end = steady_clock::now();
-            append_time = duration_cast<microseconds>((end - start)).count();
+            this->rows_left -= total_read_rows;
+
+            ev.add_attribute("out_batch_size",
+                             next_batch == nullptr ? 0 : next_batch->nrows());
+            ev.finalize();
+
+            bool is_last = result_batches.empty() && out_batches.empty();
+            return std::make_pair(next_batch, is_last);
+        };
+        auto [next_batch, is_last] = GetNextBatch();
+
+        // We might want to read multiple batches until our dictionaries reach
+        // the limit instead of just reading a single batch.
+        size_t max_table_size = get_max_table_size();
+
+        // Using the table we just got, create a TableBuildBuffer to handle
+        // combining tables. We use TableBuildBuffer instead of TableBuilder
+        // because we want to unify the dictionaries as early as possible to
+        // reduce memory usage.
+        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+        std::vector<int8_t> types;
+        std::vector<int8_t> arr_types;
+        for (size_t i = 0; i < next_batch->ncols(); i++) {
+            types.push_back(next_batch->columns[i]->dtype);
+            auto arr_type = bodo_array_type::arr_type_enum::DICT;
+            arr_types.push_back(arr_type);
+            if (arr_type == bodo_array_type::arr_type_enum::DICT) {
+                std::shared_ptr<array_info> dict = alloc_array(
+                    0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
+                dict_builders.emplace_back(
+                    std::make_shared<DictionaryBuilder>(dict, false));
+            } else {
+                dict_builders.emplace_back(nullptr);
+            }
         }
 
-        ev.add_attribute("total_to_arrow_time_micro", to_arrow_time);
-        ev.add_attribute("total_append_time_micro", append_time);
-        ev.add_attribute("total_cast_arrow_table_time_micro",
-                         cast_arrow_table_time);
+        TableBuildBuffer table_builder =
+            TableBuildBuffer(types, arr_types, dict_builders);
 
-        table_info* next_batch = nullptr;
-        if (out_batches.size() > 0) {
-            next_batch = out_batches.front();
-            out_batches.pop();
-            total_read_rows = next_batch->nrows();
+        // Get batches and append them to the TableBuildBuffer until either
+        // max_table_size is exceeded or there's no more batches to read.
+        std::shared_ptr<table_info> tmp_table(next_batch);
+        table_builder.UnifyTablesAndAppend(tmp_table, dict_builders);
+        while (!is_last && table_builder.EstimatedSize() < max_table_size) {
+            std::tie(next_batch, is_last) = GetNextBatch();
+
+            std::shared_ptr<table_info> tmp_table(next_batch);
+            table_builder.UnifyTablesAndAppend(tmp_table, dict_builders);
         }
 
-        this->rows_left -= total_read_rows;
-
-        ev.add_attribute("out_batch_size",
-                         next_batch == nullptr ? 0 : next_batch->nrows());
-        ev.finalize();
-
-        bool is_last = result_batches.empty() && out_batches.empty();
-        return std::make_tuple(next_batch, is_last, total_read_rows);
+        auto* rettable = new table_info(*table_builder.data_table);
+        return std::make_tuple(rettable, is_last, total_read_rows);
     }
 
    private:
@@ -380,8 +453,8 @@ class SnowflakeReader : public ArrowReader {
                              // length.
     bool is_select_query;    // Is this query a select statement?
 
-    // instance of snowflake.connector.connection.SnowflakeConnection, used to
-    // read the batches
+    // instance of snowflake.connector.connection.SnowflakeConnection, used
+    // to read the batches
     PyObject* sf_conn = nullptr;
     // Are the ranks executing the function independently?
     bool is_independent = false;
@@ -421,12 +494,12 @@ class SnowflakeReader : public ArrowReader {
  * @param num_str_as_dict_cols
  * @param[out] total_nrows: Pointer used to store to total number of rows to
  *        read. This is used when we are loading 0 columns.
- * @param _only_length_query: Boolean value for if the query was optimized to
- *        only compute the length.
+ * @param _only_length_query: Boolean value for if the query was optimized
+ * to only compute the length.
  * @param _is_select_query: Boolean value for if the query is a select
  *        statement.
- * @param downcast_decimal_to_double Always unsafely downcast double columns to
- *        decimal.
+ * @param downcast_decimal_to_double Always unsafely downcast double columns
+ * to decimal.
  * @param batch_size Size of batches for the ArrowReader to produce
  * @return ArrowReader* Output streaming entity
  */
@@ -475,11 +548,12 @@ ArrowReader* snowflake_reader_init_py_entry(
  * nullable
  * @param[out] total_nrows: Pointer used to store to total number of rows to
  read. This is used when we are loading 0 columns.
- * @param _only_length_query: Boolean value for if the query was optimized to
- only compute the length.
+ * @param _only_length_query: Boolean value for if the query was optimized
+ to only compute the length.
  * @param _is_select_query: Boolean value for if the query is a select
  statement.
- * @param downcast_decimal_to_double Always unsafely downcast double columns to
+ * @param downcast_decimal_to_double Always unsafely downcast double columns
+ to
  *        decimal.
  * @return table containing all the arrays read
  */
