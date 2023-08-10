@@ -238,3 +238,62 @@ table_info* iceberg_pq_read_py_entry(
         return NULL;
     }
 }
+
+/**
+ * Construct an Iceberg Parquet-based ArrowReader
+ *
+ * @param conn : Connection string for the iceberg table
+ * @param database_schema : Database schema in which the iceberg table resides
+ * @param table_name : Name of the iceberg table to read
+ * @param parallel : true if reading in parallel
+ * @param tot_rows_to_read : limit of rows to read or -1 if not limited
+ * @param dnf_filters : filters passed to iceberg for filter pushdown
+ * @param expr_filters : PyObject passed to pyarrow.parquet.ParquetDataset
+ * filters argument to remove rows from scanned data
+ * @param _selected_fields : Fields to select from the parquet dataset,
+ * using the field ID of Arrow schema. Note that this *DOES* include
+ * partition columns (Iceberg has hidden partitioning, so they *ARE* part of the
+ * parquet files)
+ * NOTE: selected_fields must be sorted
+ * @param num_selected_fields : length of selected_fields array
+ * @param is_nullable : array of booleans that indicates which of the
+ * selected fields is nullable. Same length and order as selected_fields.
+ * @param pyarrow_schema : PyArrow schema (instance of pyarrow.lib.Schema)
+ * determined at compile time. Used for schema evolution detection, and for
+ * evaluating transformations in the future.
+ * @param batch_size Reading batch size
+ * @return ArrowReader to read the table's data
+ */
+ArrowReader* iceberg_pq_reader_init_py_entry(
+    const char* conn, const char* database_schema, const char* table_name,
+    bool parallel, int64_t tot_rows_to_read, PyObject* dnf_filters,
+    PyObject* expr_filters, int32_t* _selected_fields,
+    int32_t num_selected_fields, int32_t* _is_nullable,
+    PyObject* pyarrow_schema, int32_t* _str_as_dict_cols,
+    int32_t num_str_as_dict_cols, int64_t batch_size) {
+    try {
+        std::set<int> selected_fields(
+            {_selected_fields, _selected_fields + num_selected_fields});
+        std::vector<bool> is_nullable(_is_nullable,
+                                      _is_nullable + num_selected_fields);
+        std::span<int32_t> str_as_dict_cols(_str_as_dict_cols,
+                                            num_str_as_dict_cols);
+
+        auto reader = new IcebergParquetReader(
+            conn, database_schema, table_name, parallel, tot_rows_to_read,
+            dnf_filters, expr_filters, selected_fields, is_nullable,
+            pyarrow_schema, batch_size);
+
+        // Initialize reader
+        reader->init_iceberg_reader(str_as_dict_cols);
+        return reinterpret_cast<ArrowReader*>(reader);
+
+    } catch (const std::exception& e) {
+        // if the error string is "python" this means the C++ exception is
+        // a result of a Python exception, so we don't call PyErr_SetString
+        // because we don't want to replace the original Python error
+        if (std::string(e.what()) != "python")
+            PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
+}

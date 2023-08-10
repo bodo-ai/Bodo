@@ -21,6 +21,7 @@ from mpi4py import MPI
 from numba.core import types
 
 import bodo
+from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.tests.iceberg_database_helpers import spark_reader
 from bodo.tests.iceberg_database_helpers.part_sort_table import (
     BASE_NAME as PART_SORT_TABLE_BASE_NAME,
@@ -640,7 +641,7 @@ def test_dict_encoding_sync_determination(iceberg_database, iceberg_table_conn):
     # Validate that all columns are typed correctly.
     passed = 1
     try:
-        for (col_name, col_type) in zip(typemap["df"].columns, typemap["df"].data):
+        for col_name, col_type in zip(typemap["df"].columns, typemap["df"].data):
             if col_name.startswith("A"):
                 assert isinstance(col_type, bodo.libs.dict_arr_ext.DictionaryArrayType)
             elif col_name.startswith("B"):
@@ -2962,7 +2963,6 @@ def test_merge_into_cow_simple_e2e(iceberg_database, iceberg_table_conn):
 
     passed = True
     if bodo.get_rank() == 0:
-
         # We had issues with spark caching previously, this alleviates those issues
         spark = get_spark()
         spark.sql("CLEAR CACHE;")
@@ -3066,7 +3066,6 @@ def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_co
 
     passed = False
     if bodo.get_rank() == 0:
-
         spark = get_spark()
         # We had issues with spark caching previously, this alleviates those issues
         spark.sql("CLEAR CACHE;")
@@ -3277,3 +3276,108 @@ def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
             [PartitionField("A", "bucket", 4)],
         )
     test_output(impl, S, S, table_name, "append")
+
+
+def test_batched_read_agg(iceberg_database, iceberg_table_conn, memory_leak_check):
+    """
+    Test a simple use of batched Iceberg reads by
+    getting the max of a column
+    """
+
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+
+    def impl(table_name, conn, db_schema):
+        total_max = pd.Timestamp(year=1970, month=1, day=1, tz="UTC")
+        is_last_global = False
+        reader = pd.read_sql_table(table_name, conn, db_schema, _bodo_chunksize=4096)  # type: ignore
+
+        while not is_last_global:
+            table, is_last = read_arrow_next(reader)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(table), 1, None
+            )
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (table,), index_var, col_meta
+            )
+            df = df[df["B"] > 10]
+            # Perform more compute in between to see caching speedup
+            local_max = df["A"].max()
+            total_max = max(local_max, total_max)
+
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+
+        arrow_reader_del(reader)
+        return total_max
+
+    table_name = "simple_primitives_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (table_name, conn, db_schema),
+            py_output=pd.Timestamp(year=2024, month=5, day=14, tz="US/Eastern"),
+        )
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+        check_logger_msg(stream, "Columns loaded ['A']")
+
+
+def test_batched_read_only_len(iceberg_database, iceberg_table_conn, memory_leak_check):
+    """
+    Test shape pushdown with batched Snowflake reads
+    """
+
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+
+    def impl(table_name, conn, db_schema):
+        total_len = 0
+        is_last_global = False
+
+        reader = pd.read_sql_table(table_name, conn, db_schema, _bodo_chunksize=4096)  # type: ignore
+        while not is_last_global:
+            table, is_last = read_arrow_next(reader)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(table), 1, None
+            )
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (table,), index_var, col_meta
+            )
+            total_len += len(df)
+
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+
+        arrow_reader_del(reader)
+        return total_len
+
+    table_name = "simple_primitives_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(impl, (table_name, conn, db_schema), py_output=200)
+        check_logger_msg(stream, "Columns loaded []")
