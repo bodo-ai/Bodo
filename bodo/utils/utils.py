@@ -40,6 +40,7 @@ from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.null_arr_ext import null_dtype
 from bodo.libs.pd_datetime_arr_ext import (
     DatetimeArrayType,
     PandasDatetimeTZDtype,
@@ -109,6 +110,10 @@ _numba_to_c_type_map = {
     bodo.hiframes.datetime_date_ext.datetime_date_type: CTypeEnum.Date.value,
     types.unicode_type: CTypeEnum.STRING.value,
     bodo.libs.binary_arr_ext.bytes_type: CTypeEnum.BINARY.value,
+    # Null arrays are passed as nullable bool arrays to C++ currently.
+    # TODO[BSE-433]: support null dtype in C++ directly
+    # https://github.com/Bodo-inc/Bodo/blob/b9b38a8643d61a5038bcf4a3a5dff4f14040b76c/bodo/libs/_array.cpp#L165
+    null_dtype: CTypeEnum.Bool.value,
 }
 
 
