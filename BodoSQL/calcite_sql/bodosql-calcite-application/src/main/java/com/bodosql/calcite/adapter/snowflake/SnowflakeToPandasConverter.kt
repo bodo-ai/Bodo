@@ -185,7 +185,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         val isLastVar = currentPipeline.getExitCond()
         val readArrowNextCall = Expr.Call("bodo.io.arrow_reader.read_arrow_next", listOf(stateVar))
         builder.add(Op.TupleAssign(listOf(tableChunkVar, isLastVar), readArrowNextCall))
-        return BodoEngineTable(tableChunkVar.name, this)
+        return BodoEngineTable(tableChunkVar.emit(), this)
     }
 
     /**
