@@ -1,6 +1,7 @@
 package com.bodosql.calcite.rel.core
 
 import com.bodosql.calcite.adapter.pandas.RexCostEstimator
+import com.bodosql.calcite.application.Utils.RexNormalizer
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import org.apache.calcite.plan.RelOptCluster
@@ -21,7 +22,7 @@ open class ProjectBase(
     input: RelNode,
     projects: List<RexNode>,
     rowType: RelDataType
-) : Project(cluster, traitSet, hints, input, projects, rowType) {
+) : Project(cluster, traitSet, hints, input, RexNormalizer(cluster.rexBuilder).visitList(projects), rowType) {
     override fun copy(traitSet: RelTraitSet, input: RelNode, projects: List<RexNode>, rowType: RelDataType): Project {
         return ProjectBase(cluster, traitSet, hints, input, projects, rowType)
     }

@@ -20,6 +20,7 @@ package com.bodosql.calcite.application.bodo_sql_rules;
 import static com.bodosql.calcite.application.bodo_sql_rules.FilterRulesCommon.rexNodeContainsCase;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.application.Utils.RexNormalizer;
 import com.bodosql.calcite.rel.logical.BodoLogicalProject;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -29,7 +30,6 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPredicateList;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -91,13 +91,6 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
   // ~ Static fields/initializers ---------------------------------------------
 
   /**
-   * Regular expression that matches the description of all instances of this rule and {@link
-   * ValuesReduceRule} also. Use it to prevent the planner from invoking these rules.
-   */
-  public static final Pattern EXCLUSION_PATTERN =
-      Pattern.compile("Reduce(Expressions|Values)Rule.*");
-
-  /**
    * Rule that reduces constants inside a {@link org.apache.calcite.rel.core.Filter}. If the
    * condition is a constant, the filter is removed (if TRUE) or replaced with an empty {@link
    * org.apache.calcite.rel.core.Values} (if FALSE or NULL).
@@ -139,8 +132,11 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
             config.matchNullability(),
             config.treatDynamicCallsAsConstant())) {
           assert expList.size() == 1;
-          newConditionExp = expList.get(0);
-          reduced = true;
+          newConditionExp =
+              expList.get(0).accept(new RexNormalizer(call.builder().getRexBuilder()));
+          // Check if we have changed anything. The reduction may ping pong with normalization
+          // that we do when creating filters.
+          reduced = !newConditionExp.equals(filter.getCondition());
         } else {
           // No reduction, but let's still test the original
           // predicate to see if it was already a constant,
@@ -280,14 +276,22 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
             config.treatDynamicCallsAsConstant())) {
           assert !project.getProjects().equals(expList)
               : "Reduced expressions should be different from original expressions";
-          call.transformTo(
-              call.builder()
-                  .push(project.getInput())
-                  .project(expList, project.getRowType().getFieldNames())
-                  .build());
 
-          // New plan is absolutely better than old plan.
-          call.getPlanner().prune(project);
+          // Bodo Change:
+          // Ensure every node is normalized to avoid ping-ponging
+          List<RexNode> finalExpList =
+              new RexNormalizer(call.builder().getRexBuilder()).visitList(expList);
+          boolean changed = !project.getProjects().equals(finalExpList);
+          if (changed) {
+            call.transformTo(
+                call.builder()
+                    .push(project.getInput())
+                    .project(finalExpList, project.getRowType().getFieldNames())
+                    .build());
+
+            // New plan is absolutely better than old plan.
+            call.getPlanner().prune(project);
+          }
         }
       } catch (RuntimeException e) {
         // Bodo Change: If we hit an exception we cannot reduce this expression.
@@ -322,19 +326,6 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
   }
 
   // ~ Methods ----------------------------------------------------------------
-
-  /**
-   * Reduces a list of expressions.
-   *
-   * @param rel Relational expression
-   * @param expList List of expressions, modified in place
-   * @param predicates Constraints known to hold on input expressions
-   * @return whether reduction found something to change, and succeeded
-   */
-  protected static boolean reduceExpressions(
-      RelNode rel, List<RexNode> expList, RelOptPredicateList predicates) {
-    return reduceExpressions(rel, expList, predicates, false, true, false);
-  }
 
   /**
    * Reduces a list of expressions.

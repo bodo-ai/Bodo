@@ -501,7 +501,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         new Expr.Call(
             "bodo.libs.table_builder.table_builder_finalize", List.of(batchAccumulatorVariable));
     generatedCode.add(new Op.Assign(accumulatedTable, concatenatedTable));
-    tableGenStack.push(new BodoEngineTable(accumulatedTable.getName(), node));
+    tableGenStack.push(new BodoEngineTable(accumulatedTable.emit(), node));
   }
 
   private void visitSeparateStreamExchange(SeparateStreamExchange node) {
@@ -547,7 +547,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Expr done = new Expr.Binary(">=", sliceStart, localLen);
     generatedCode.add(new Op.Assign(exitCond, done));
 
-    this.tableGenStack.push(new BodoEngineTable(outTableVar.getName(), node));
+    this.tableGenStack.push(new BodoEngineTable(outTableVar.emit(), node));
   }
 
   /**
@@ -1279,7 +1279,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                       + e.getMessage();
               throw new RuntimeException(errorMsg);
             }
-            tableGenStack.push(new BodoEngineTable(outputVar.getName(), node));
+            tableGenStack.push(new BodoEngineTable(outputVar.emit(), node));
           } else {
             throw new BodoSQLCodegenException(
                 "Delete only supported when all source tables are found within a user's Snowflake"
@@ -1319,13 +1319,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<String> expectedOutputCols = node.getRowType().getFieldNames();
 
     int nodeId = node.getId();
-    Variable outVar = this.genDfVar();
     if (isNodeCached(node)) {
-      BodoEngineTable cacheKey = tableCache.get(nodeId);
-      this.generatedCode.add(new Op.Assign(outVar, cacheKey));
-
-      tableGenStack.push(new BodoEngineTable(outVar.getName(), node));
+      tableGenStack.push(tableCache.get(nodeId));
     } else {
+      Variable outVar = this.genDfVar();
       final List<AggregateCall> aggCallList = node.getAggCallList();
 
       // Expected output column names according to the calcite plan, contains any/all of the
@@ -1509,7 +1506,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 "bodo.libs.stream_groupby.delete_groupby_state", List.of(groupbyStateVar)));
     outputPipeline.addTermination(deleteState);
     // Add the DF to the stack
-    tableGenStack.push(new BodoEngineTable(outTable.getName(), node));
+    tableGenStack.push(new BodoEngineTable(outTable.emit(), node));
   }
 
   /**
@@ -1685,13 +1682,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
       this.generatedCode.add(new Op.Assign(outVar, castExpr));
       outTable = ctx.convertDfToTable(outVar, node);
     } else {
-      outTable = new BodoEngineTable(readVar.getName(), node);
+      outTable = new BodoEngineTable(readVar.emit(), node);
     }
 
     if (!isTargetTableScan) {
       // Add the table to cached values. We only support this for regular
       // tables and not the target table in merge into.
-      tableCache.put(nodeId, new BodoEngineTable(outTable.getName(), node));
+      tableCache.put(nodeId, new BodoEngineTable(outTable.emit(), node));
     }
 
     return outTable;
@@ -1718,13 +1715,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void visitBatchedPandasJoin(PandasJoin node) {
     BuildContext ctx = new BuildContext(node);
     /* get left/right tables */
-    Variable outVar = this.genDfVar();
     int nodeId = node.getId();
     List<String> outputColNames = node.getRowType().getFieldNames();
     if (this.isNodeCached(node)) {
-      Variable cacheKey = tableCache.get(nodeId);
-      this.generatedCode.add(new Op.Assign(outVar, cacheKey));
+      BodoEngineTable tableVar = tableCache.get(nodeId);
+      tableGenStack.push(tableVar);
     } else {
+      Variable outDfVar = this.genDfVar();
       this.visit(node.getLeft(), 0, node);
       List<String> leftColNames = node.getLeft().getRowType().getFieldNames();
       Variable leftTable = ctx.convertTableToDf(tableGenStack.pop());
@@ -1752,7 +1749,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
             Op.Assign joinCode =
                 generateJoinCode(
-                    outVar,
+                    outDfVar,
                     joinType,
                     rightTable,
                     leftTable,
@@ -1763,7 +1760,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                     mergeCols,
                     tryRebalanceOutput);
             this.generatedCode.add(joinCode);
-            BodoEngineTable outTable = ctx.convertDfToTable(outVar, node);
+            BodoEngineTable outTable = ctx.convertDfToTable(outDfVar, node);
             tableCache.put(nodeId, outTable);
             tableGenStack.push(outTable);
           });
@@ -1897,7 +1894,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             new Expr.Call("bodo.libs.stream_join.delete_join_state", List.of(joinStateVar)));
     probePipeline.addTermination(deleteState);
     // Add the table to the stack
-    tableGenStack.push(new BodoEngineTable(outTable.getName(), node));
+    tableGenStack.push(new BodoEngineTable(outTable.emit(), node));
   }
 
   /**
@@ -2160,7 +2157,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     public BodoEngineTable returns(@NotNull final Expr result) {
       Variable destination = generatedCode.getSymbolTable().genTableVar();
       generatedCode.add(new Op.Assign(destination, result));
-      return new BodoEngineTable(destination.getName(), node);
+      return new BodoEngineTable(destination.emit(), node);
     }
 
     /**
@@ -2188,7 +2185,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               buildColNums,
               new Expr.IntegerLiteral(numBuildCols));
       generatedCode.add(new Op.Assign(outVar, tablExpr));
-      return new BodoEngineTable(outVar.getName(), node);
+      return new BodoEngineTable(outVar.emit(), node);
     }
 
     /**
@@ -2216,7 +2213,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               buildColNums,
               new Expr.IntegerLiteral(numBuildCols));
       generatedCode.add(new Op.Assign(outVar, tablExpr));
-      return new BodoEngineTable(outVar.getName(), node);
+      return new BodoEngineTable(outVar.emit(), node);
     }
 
     /**
