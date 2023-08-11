@@ -291,9 +291,9 @@ jobs:
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/obfuscation/decompress_traces.py"`
       if [[ "${{ parameters.caching_test }}" == "true" ]]; then
-        python -m bodo.runtests_caching "$NP" bodo/tests/caching_tests
+        python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
       else
-        python -m bodo.runtests "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+        python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       fi
     env:
       SF_USERNAME: $(SNOWFLAKE_USER)
