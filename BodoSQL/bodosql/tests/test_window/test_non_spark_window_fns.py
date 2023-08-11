@@ -231,109 +231,60 @@ def test_median(data_col, partition_col, window_frame, answer):
     )
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize(
-    "data_col, partition_col, answer",
+    "data_info, dtype",
     [
         pytest.param(
-            pd.Series([0, 1, -1, None] * 4, dtype=pd.Int32Dtype()),
-            pd.Series(["A", "B", "C", "D"] * 4),
-            pd.Series([None, 0.25, 0.25, None] * 4),
-            id="int32-groups_of_4",
-            marks=pytest.mark.slow,
+            [
+                (0, [None, None, None]),
+                (0, [10, -15, 5]),
+                (10, [1, 2, None, 3, 4]),
+                (16, [16, None]),
+                (15, [1, 0, -4, 9, -16, 25]),
+            ],
+            pd.Int32Dtype(),
+            id="int32",
         ),
         pytest.param(
-            pd.Series([0, 1, -1, None] * 4, dtype=pd.Int32Dtype()),
-            pd.Series(["A"] * 16),
-            pd.Series([None] * 16),
-            id="int32-single_partition",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            pd.Series([0, 1, -1, None] * 4, dtype=pd.Int32Dtype()),
-            pd.Series(list("AABBCCCCCCDDEEEE")),
-            pd.Series(
-                [
-                    0,
-                    1,
-                    1,
-                    None,
-                    0,
-                    1,
-                    -1,
-                    None,
-                    0,
-                    1,
-                    1,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                ]
-            ),
-            id="int32-varying_groups",
-        ),
-        pytest.param(
-            pd.Series(
-                [None if i % 2 == 1 else i for i in range(16)], dtype=pd.UInt8Dtype()
-            ),
-            pd.Series(["A", "B", "C", "D"] * 4),
-            pd.Series(
-                [
-                    0,
-                    None,
-                    1 / 16,
-                    None,
-                    1 / 6,
-                    None,
-                    3 / 16,
-                    None,
-                    1 / 3,
-                    None,
-                    5 / 16,
-                    None,
-                    1 / 2,
-                    None,
-                    7 / 16,
-                    None,
-                ]
-            ),
-            id="uint8-groups_of_4",
-        ),
-        pytest.param(
-            pd.Series(
-                [None if i % 2 == 1 else i for i in range(16)], dtype=pd.UInt8Dtype()
-            ),
-            pd.Series(["A"] * 16),
-            pd.Series([None if i % 2 == 1 else i / 56 for i in range(16)]),
-            id="uint8-single_partition",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            pd.Series(
-                [np.inf, 1, -2, 10, np.inf, 30, -np.inf, np.inf, 40, np.inf],
-            ),
-            pd.Series(["A"] * 5 + ["B"] * 5),
-            pd.Series([None, 0, 0, 0, None, None, None, None, None, None]),
-            id="float64-infinities",
-            marks=pytest.mark.slow,
+            [
+                (0, [None, None, None]),
+                (0, [3.6, -3.6]),
+                (2.5, [5.5, None, -3]),
+                (-11.0, [-1.0, 2.0, -4.0, 8.0, -16.0]),
+            ],
+            np.float64,
+            id="float64",
         ),
     ],
 )
-def test_ratio_to_report(data_col, partition_col, answer, memory_leak_check):
-    query = "SELECT A, B, RATIO_TO_REPORT(A) OVER (PARTITION BY B) FROM table1"
-
-    assert len(data_col) == len(partition_col)
-    ctx = {"table1": pd.DataFrame({"A": data_col, "B": partition_col})}
-
+def test_ratio_to_report(data_info, dtype, memory_leak_check):
+    query = "SELECT R, P, D, RATIO_TO_REPORT(D) OVER (PARTITION BY P) FROM table1"
+    partitions = []
+    data = []
+    answers = []
+    for i, (total, elems) in enumerate(data_info):
+        for elem in elems:
+            partitions.append(i)
+            data.append(elem)
+            if total == 0 or elem is None:
+                answers.append(None)
+            else:
+                answers.append(elem / total)
+    data = pd.Series(data, dtype=dtype)
+    rows = np.arange(len(data))
+    df = pd.DataFrame({"R": rows, "P": partitions, "D": data})
+    answer = df.copy()
+    answer["A"] = answers
+    # Shuffle the rows of the input dataframe
+    ordering = np.random.default_rng(42).permutation(np.arange(len(data)))
+    ctx = {"table1": df.iloc[ordering]}
     check_query(
         query,
         ctx,
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"A": data_col, "B": partition_col, "C": answer}),
+        expected_output=answer,
         only_jit_1DVar=True,
     )
 

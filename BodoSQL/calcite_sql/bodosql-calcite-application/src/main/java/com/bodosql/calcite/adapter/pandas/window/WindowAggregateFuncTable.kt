@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.pandas.window
 
 import com.bodosql.calcite.application.BodoSQLOperatorTables.CondOperatorTable
+import com.bodosql.calcite.application.BodoSQLOperatorTables.NumericOperatorTable
 import com.bodosql.calcite.ir.Expr
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.SqlKind
@@ -38,6 +39,7 @@ internal object WindowAggregateFuncTable {
      */
     private val nameMapping = mapOf(
         CondOperatorTable.MIN_ROW_NUMBER_FILTER to define("min_row_number_filter"),
+        NumericOperatorTable.RATIO_TO_REPORT to define("ratio_to_report", ExprType.SERIES),
         CondOperatorTable.CONDITIONAL_TRUE_EVENT to define("conditional_true_event", ExprType.SERIES),
         CondOperatorTable.CONDITIONAL_CHANGE_EVENT to define("conditional_change_event", ExprType.SERIES),
         CondOperatorTable.COUNT_IF to defineBounded("count_if", ExprType.SERIES),
