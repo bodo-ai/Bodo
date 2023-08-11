@@ -162,7 +162,7 @@ array_info* null_array_to_info(uint64_t n_items) {
     // most of the C++ code doesn't support null arrays, so we create an
     // all null boolean array.
 
-    // TODO: Avoid allocating the null bitmap and data array and create
+    // TODO[BSE-433]: Avoid allocating the null bitmap and data array and create
     // a NULL CTYPE. This will require changes in the C++ code to support.
     return alloc_nullable_array_all_nulls(n_items, Bodo_CTypes::_BOOL, 0)
         .release();
@@ -361,7 +361,7 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
 }
 
 void info_to_null_array(array_info* info, uint64_t* n_items) {
-    // TODO: Replace with proper null array requirements once
+    // TODO[BSE-433]: Replace with proper null array requirements once
     // they are integrated into C++.
     if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
         PyErr_SetString(PyExc_RuntimeError,
