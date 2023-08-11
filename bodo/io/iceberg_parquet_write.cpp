@@ -410,7 +410,7 @@ void iceberg_pq_write(const char *table_data_loc,
                 // See function description string for more details.
                 p.iceberg_file_info_py = PyTuple_New(3 + num_keys);
 
-                for (size_t j = 0; j < num_keys; j++) {
+                for (int64_t j = 0; j < num_keys; j++) {
                     auto transformed_part_col = transform_cols[j];
                     // convert transformed partition value to string
                     std::string value_str = transform_val_to_str(

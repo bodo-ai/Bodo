@@ -144,9 +144,9 @@ class GroupbyState {
                             KeyEqualGroupbyTable<true>(this, n_keys)),
           shuffle_build_table({}, HashGroupbyTable<false>(this),
                               KeyEqualGroupbyTable<false>(this, n_keys)),
-          sync_iter(sync_iter_),
           f_in_offsets(std::move(f_in_offsets_)),
           f_in_cols(std::move(f_in_cols_)),
+          sync_iter(sync_iter_),
           groupby_event("Groupby") {
         // Add key column types to runnig value buffer types (same type as
         // input)

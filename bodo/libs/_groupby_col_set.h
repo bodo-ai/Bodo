@@ -566,8 +566,9 @@ class UdfColSet : public BasicColSet {
 
     virtual ~UdfColSet();
 
-    virtual void alloc_running_value_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+    void alloc_running_value_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
     void alloc_update_columns(
         size_t num_groups,
