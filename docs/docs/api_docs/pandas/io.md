@@ -106,44 +106,7 @@ See more in [File IO][file_io], such as
         in the warehouse (specified by `con`) where your table exists.
     -   Arguments `index_col`, `coerce_float`, `parse_dates`, `columns` and `chunksize` are
         not supported.
-    -   `_bodo_detect_dict_cols` is a Bodo specific argument which allows
-        for users to manually enable or disable the compile-time detection 
-        process for loading string columns using dictionary encoding. 
-        Dictionary-encoding stores data in memory in an efficient
-        manner and is most effective when the column has many repeated values.
-        By default, this argument is true and Bodo will use a heuristic to determine
-        if dictionary encoding a column would be benefitial. Disabling detection
-        is useful if compilation is taking too long or is unable to access the
-        source dataset.  Note that columns specified in `_bodo_read_as_dict` 
-        (see below) will still be dictionary-encoded even if 
-        `_bodo_detect_dict_cols` is set to `False`.
-        Read more about dictionary-encoded layout
-        [here](https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout){target=blank}.
-        
-        For example:
-        ```py
-        @bodo.jit()
-        def impl(conn_str):
-          df = pd.read_sql_table("table_name", conn_str, schema="", _bodo_detect_dict_cols=False)
-          return df
-        ```
-    -   `_bodo_read_as_dict` is a Bodo specific argument which forces 
-        the specified string columns to be read with dictionary-encoding.
-        Bodo automatically loads string columns using dictionary
-        encoding when it determines it would be beneficial based on 
-        a heuristic.
-        Dictionary-encoding stores data in memory in an efficient
-        manner and is most effective when the column has many repeated values.
-        Read more about dictionary-encoded layout
-        [here](https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout){target=blank}.
 
-        For example:
-        ```py
-        @bodo.jit()
-        def impl(f):
-          df = pd.read_sql_table("table_name", conn_str, schema="", _bodo_read_as_dict=["A", "B", "C"])
-          return df
-        ```
 
 #### pd.read_parquet
 

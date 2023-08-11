@@ -1089,10 +1089,12 @@ BodoSQL Currently supports the following Numeric Functions:
 
 
 #### CEIL
--   `#!sql CEIL(X)`
+-   `#!sql CEIL(X[, scale])`
 
-    Converts X to an integer, rounding towards positive
-    infinity
+    Converts X to the specified scale, rounding towards positive
+    infinity. For example, `scale=0` rounds up to the nearest integer,
+    `scale=2` rounds up to the nearest `0.01`, and `scale=-1` rounds
+    up to the nearest multiple of 10.
 
 #### CEILING
 -   `#!sql CEILING(X)`
@@ -1100,9 +1102,12 @@ BodoSQL Currently supports the following Numeric Functions:
     Equivalent to `#!sql CEIL`
 
 #### FLOOR
--   `#!sql FLOOR(X)`
+-   `#!sql FLOOR(X[, scale])`
 
-    Converts X to an integer, rounding towards negative infinity
+    Converts X to the specified scale, rounding towards negative
+    infinity. For example, `scale=0` down up to the nearest integer,
+    `scale=2` rounds down to the nearest `0.01`, and `scale=-1` rounds
+    down to the nearest multiple of 10.
 
 #### DEGREES
 -   `#!sql DEGREES(X)`
@@ -1188,7 +1193,7 @@ BodoSQL Currently supports the following Numeric Functions:
     Returns 1 if X > 0, -1 if X < 0, and 0 if X = 0
 
 #### ROUND
--   `#!sql ROUND(X, num_decimal_places)`
+-   `#!sql ROUND(X[, num_decimal_places])`
 
     Rounds X to the specified number of decimal places
 
@@ -1227,7 +1232,7 @@ BodoSQL Currently supports the following Numeric Functions:
 -   `#!sql BITSHIFTLEFT(A, B)`
 
     Returns the bitwise-leftshift of its inputs.
-    
+
     !!! note
         - The output is always of type int64.
         - Undefined behavior when B is negative or too large.
@@ -1291,44 +1296,48 @@ BodoSQL Currently supports the following Numeric Functions:
     Returns `NULL` if either input is `NULL`, otherwise `Y`
 
 
-#### TO_NUMBER
--   `#!sql TO_NUMBER(EXPR)`
+#### HASH
+-   `#!sql HASH(A, B, C, ...)`
 
-    Converts an input expression to a fixed-point number. For `NULL` input,
-    the output is `NULL`.
-
-
-#### TO_NUMERIC
--   `#!sql TO_NUMERIC(EXPR)`
-
-    Equivalent to `#!sql TO_NUMBER(EXPR)`
+    Takes in a variable number of arguments of any type and returns a hash
+    value that considers the values in each column. The hash function is
+    deterministic across multiple ranks or multiple sessions.
 
 
-#### TO_DECIMAL
--   `#!sql TO_DECIMAL(EXPR)`
+###  Data Generation Functions
 
-    Equivalent to `#!sql TO_NUMBER(EXPR)`
+BodoSQL Currently supports the following data generaiton functions:
+
+#### RANDOM
+-   `#!sql RANDOM()`
+
+    Outputs a random 64-bit integer. If used inside of a select statement with
+    a table, the number of random values will match the number of rows in the
+    input table (and each value should be randomly and independently generated).
+    Note that running with multiple processors may affect the randomization
+    results.
+
+    !!! note
+        Currently, BodoSQL does not support the format of `#!sql RANDOM()` that
+        takes in a seed value.
+
+    !!! note
+        At present, aliases to `RANDOM` calls occasionally produce unexpected
+        behavior. For certain SQL operations, calling `RANDOM` and storing the
+        result with an alias, then later re-using that alias may result in
+        another call to `RANDOM`. This behavior is somewhat rare.
 
 
-#### TRY_TO_NUMBER
--   `#!sql TRY_TO_NUMBER(EXPR)`
+#### UNIFORM
+-   `#!sql UNIFORM(lo, hi, gen)`
 
-    A special version of `#!sql TO_NUMBER` that performs
-    the same operation (i.e. converts an input expression to a fixed-point
-    number), but with error-handling support (i.e. if the conversion cannot be
-    performed, it returns a `NULL` value instead of raising an error).
-
-
-#### TRY_TO_NUMERIC
--   `#!sql TRY_TO_NUMERIC(EXPR)`
-
-    Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`
-
-
-#### TRY_TO_DECIMAL
--   `#!sql TRY_TO_DECIMAL(EXPR)`
-
-    Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`
+    Outputs a random number uniformly distributed in the interval `[lo, hi]`.
+    If `lo` and `hi` are both integers, then the output is an integer between
+    `lo` and `hi` (including both endpoints). If either `lo` or `hi` is a float,
+    the output is a random float between them. The values of `gen` are used to
+    seed the randomness, so if `gen` is all distinct values (or is randomly
+    generated) then the output of `UNIFORM` should be random. However, if 2
+    rows have the same `gen` value they will produce the same output value.
 
 
 ### Aggregation Functions
@@ -1346,8 +1355,8 @@ all types:
 #### ANY_VALUE
 -   `#!sql ANY_VALUE`
 
-    Select an arbitrary value. 
-    
+    Select an arbitrary value.
+
     !!! note
         Currently, BodoSQL always selects the first value, but this is subject to change at any time.
 
@@ -1409,6 +1418,65 @@ numeric types
     SELECT SUM(CASE WHEN A THEN 1 ELSE 0 END) FROM table1
     `#!sql ``
 
+
+#### LISTAGG
+-   `LISTAGG(str_col[, delimeter]) [WITHIN GROUP (ORDER BY order_col)]`
+
+    Concatenates all of the strings in `str_col` within each group into a single
+    string seperated by the characters in the string `delimiter`. If no delimiter
+    is provided, an empty string is used by default.
+
+    Optionally allows using a `WITHIN GROUP` clause to specify how the strings should
+    be ordered before being concatenated. If no clause is specified, then the ordering
+    is unpredictable.
+
+
+#### MODE
+-   `#!sql MODE`
+
+    Returns the most frequent element in a group, or `NULL` if the group is empty.
+
+    !!! note
+        This aggregation function is currently only supported with a `GROUP BY` clause.
+        In case of a tie, BodoSQL will choose a value arbitrarily based on performance considerations.
+
+#### APPROX_PERCENTILE
+-   `#!sql APPROX_PERCENTILE(A, q)`
+
+    Returns the approximate value of the `q`-th percentile of column `A` (e.g.
+    0.5 = median, or 0.9 = the 90th percentile). `A` can be any numeric column,
+    and `q` can be any scalar float between zero and one.
+
+    The approximation is calculated using the t-digest algorithm.
+
+#### PERCENTILE_CONT
+-   `#!sql APPROX_PEPERCENTILE_CONTRCENTILE(q) WITHIN GROUP (ORDER BY A)`
+
+    Computes the exact value of the `q`-th percentile of column `A` (e.g.
+    0.5 = median, or 0.9 = the 90th percentile). `A` can be any numeric column,
+    and `q` can be any scalar float between zero and one.
+
+    If no value lies exactly at the desired percentile, the two nearest
+    values are linearly interpolated. For example, consider the dataset `[2, 8, 25, 40]`.
+    If we sought the percentile `q=0.25` we would be looking for the value
+    at index 0.75. There is no value at index 0.75, so we linearly interpolate
+    between 2 and 8 to get 6.5.
+
+#### PERCENTILE_DISC
+-   `#!sql PERCENTILE_DISC(q) WITHIN GROUP (ORDER BY A)`
+
+    Computes the exact value of the `q`-th percentile of column `A` (e.g.
+    0.5 = median, or 0.9 = the 90th percentile). `A` can be any numeric column,
+    and `q` can be any scalar float between zero and one.
+
+    This function differs from `PERCENTILE_CONT` in that it always outputs a
+    value from the original array. The value it chooses is the smallest value
+    in `A` such that the `CUME_DIST` of all values in the column `A` is greater 
+    than or equal to `q`. For example, consider the dataset `[2, 8, 8, 40]`.
+    The `CUME_DIST` of each of these values is `[0.25, 0.75, 0.75, 1.0]`.
+    If we sought the percentile `q=0.6` we would output 8 since it has the 
+    smallest `CUME_DIST` that is `>=0.6`.
+
 #### VARIANCE
 -   `#!sql VARIANCE`
 
@@ -1436,12 +1504,38 @@ numeric types
 
     Compute the kurtosis of a column
 
+#### BITOR_AGG
+-   `#!sql BITOR_AGG`
+    
+    Compute the bitwise OR of every input
+    in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries.
+    Accepts floating point values, integer values, and strings. Strings are interpreted
+    directly as numbers, converting to 64-bit floating point numbers.
+
+
 #### BOOLOR_AGG
 -   `#!sql BOOLOR_AGG`
 
     Compute the logical OR of the boolean value of every input
-    in a group. This is supported for numeric and boolean types.
-    Currently, this requires a `#!sql GROUP BY` clause.
+    in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
+    returning True if there is at least 1 non-zero entry. This is supported for
+    numeric and boolean types.
+
+#### BOOLAND_AGG
+-   `#!sql BOOLAND_AGG`
+
+    Compute the logical AND of the boolean value of every input
+    in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
+    returning True if all non-`#!sql NULL` entries are also non-zero. This is supported for
+    numeric and boolean types.
+
+#### BOOLXOR_AGG
+-   `#!sql BOOLXOR_AGG`
+
+    Returns `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
+    returning True if exactly one non-`#!sql NULL` entry is also non-zero (this is
+    counterintuitive to how the logical XOR is normally thought of). This is
+    supported for numeric and boolean types.
 
 All aggregate functions have the syntax:
 
@@ -1555,13 +1649,37 @@ BodoSQL currently supports the following Timestamp functions:
 
     Note: month does not have to be in the 1-12 range, and day does not have to
     be in the 1-31 range. Values out of bounds are overflowed logically,
-    e.g. `(2020, 14, -1)` will output January 31st, 2021. 
+    e.g. `(2020, 14, -1)` will output January 31st, 2021.
 
 
 #### DATEFROMPARTS
 -   `DATEFROMPARTS(year, month, day)`
 
     Equivalent to `DATE_FROM_PARTS`
+
+
+#### TIME_FROM_PARTS
+-   `#!sql TIME_FROM_PARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`
+
+    Creates a time from individual numeric components. Usually,
+    `integer_hour_val` is in the 0-23 range, `integer_minute_val` is in the 0-59
+    range, `integer_second_val` is in the 0-59 range, and
+    `integer_nanoseconds_val` (if provided) is a 9-digit integer.
+    ```sql
+    TIMEFROMPARTS(12, 34, 56, 987654321)
+    12:34:56.987654321
+    ```
+
+
+#### TIMEFROMPARTS
+-   `#!sql TIMEFROMPARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`
+
+    See TIME_FROM_PARTS.
+
+    ```sql
+    TIMEFROMPARTS(12, 34, 56, 987654321)
+    12:34:56.987654321
+    ```
 
 
 #### TIMESTAMP_FROM_PARTS
@@ -1691,6 +1809,23 @@ BodoSQL currently supports the following Timestamp functions:
     -   "MICROSECOND"
     -   "NANOSECOND"
 
+
+#### TIME_SLICE
+-   `#!sql TIME_SLICE(date_or_time_expr, slice_length, unit[, start_or_end])`
+
+    Calculates one of the endpoints of a "slice" of time containing the date
+    specified by `date_or_time_expr` where each slice has length of time corresponding
+    to `slice_length` times the date/time unit specified by `unit`. The slice
+    start/ends are always aligned to the unix epoch `1970-01-1` (at midnight). The fourth argument
+    specifies whether to return the begining or the end of the slice
+    (`'START'` for begining, `'END'` for end), where the default is `'START'`.
+    
+    For example, `#!sql TIME_SLICE(T, 3, 'YEAR')` would return the timestamp
+    corresponding to the begining of the first 3-year window (aligned with
+    1970) that contains timestamp `T`. So `T = 1995-7-4 12:30:00` would
+    output `1994-1-1` for `'START'` or `1997-1-1` for `'END'`. 
+
+
 #### NOW
 -   `#!sql NOW()`
 
@@ -1710,6 +1845,28 @@ BodoSQL currently supports the following Timestamp functions:
 
     Equivalent to `#!sql NOW`
 
+#### GETDATE
+-   `#!sql GETDATE()`
+
+    Equivalent to `#!sql NOW`
+
+#### SYSTIMESTAMP
+-   `#!sql SYSTIMESTAMP()`
+
+    Equivalent to `#!sql NOW`
+
+#### LOCALTIME
+-   `#!sql LOCALTIME()`
+
+    Computes a time equal to the current time in the session's timezone.
+    By default the current time is in local time, and it can be updated as a
+    parameter when using the Snowflake Catalog.
+
+#### CURRENT_TIME
+-   `#!sql CURRENT_TIME()`
+
+    Equivalent to `#!sql LOCALTIME`
+
 #### CURDATE
 -   `#!sql CURDATE()`
 
@@ -1720,12 +1877,6 @@ BodoSQL currently supports the following Timestamp functions:
 -   `#!sql CURRENT_DATE()`
 
     Equivalent to `#!sql CURDATE`
-
-#### GETDATE
--   `#!sql GETDATE()`
-
-    Equivalent to `#!sql CURDATE`
-
 
 #### EXTRACT
 -   `#!sql EXTRACT(TimeUnit from timestamp_val)`
@@ -1753,6 +1904,7 @@ BodoSQL currently supports the following Timestamp functions:
 
     Equivalent to `#!sql EXTRACT(unit FROM timestamp_val)` with the following unit
     string literals:
+
     -   YEAR: `year`, `years`, `yr`, `yrs`, `y`, `yy`, `yyy`, `yyyy`
     -   QUARTER: `quarter`, `quarters`, `q`, `qtr`, `qtrs`
     -   MONTH: `month`, `months`, `mm`, `mon`, `mons`
@@ -1764,6 +1916,7 @@ BodoSQL currently supports the following Timestamp functions:
     -   MILLISECOND: `millisecond`, `milliseconds`, `ms`, `msecs`
     -   MICROSECOND: `microsecond`, `microseconds`, `us`, `usec`
     -   NANOSECOND: `nanosecond`, `nanoseconds`, `nanosec`, `nsec`, `nsecs`, `nsecond`, `ns`, `nanonsecs`
+
     Supported with timezone-aware data.
 
 #### MICROSECOND
@@ -1885,7 +2038,7 @@ BodoSQL currently supports the following Timestamp functions:
     Returns the amount of time that has passed since `timestamp_val1` until
     `timestamp_val2` in terms of the unit specified, ignoring all smaller units.
     E.g., December 31 of 2020 and January 1 of 2021 count as 1 year apart.
-    
+
     !!! note
         For all units larger than `#!sql NANOSECOND`, the output type is `#!sql INTEGER`
         instead of `#!sql BIGINT`, so any difference values that cannot be stored as
@@ -1920,33 +2073,15 @@ BodoSQL currently supports the following Timestamp functions:
 
     Returns the current UTC date and time as a timestamp value.
 
+#### SYSDATE
+-   `SYSDATE()`
+
+    Equivalent to `UTC_TIMESTAMP`
+
 #### UTC_DATE
 -   `#!sql UTC_DATE()`
 
     Returns the current UTC date as a Timestamp value.
-
-
-#### TIME_FROM_PARTS
--   `#!sql TIME_FROM_PARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`
-
-    Creates a time from individual numeric components. Usually,
-    `integer_hour_val` is in the 0-23 range, `integer_minute_val` is in the 0-59
-    range, `integer_second_val` is in the 0-59 range, and
-    `integer_nanoseconds_val` (if provided) is a 9-digit integer.
-    ```sql
-    TIMEFROMPARTS(12, 34, 56, 987654321)
-    12:34:56.987654321
-    ```
-
-#### TIMEFROMPARTS
--   `#!sql TIMEFROMPARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`
-
-    See TIME_FROM_PARTS.
-    
-    ```sql
-    TIMEFROMPARTS(12, 34, 56, 987654321)
-    12:34:56.987654321
-    ```
 
 
 ###  String Functions
@@ -2077,19 +2212,19 @@ BodoSQL currently supports the following string functions:
     spaces.
 
 #### LTRIM
--   `#!sql LTRIM(str)`
+-   `#!sql LTRIM(str[, chars])`
 
-    Returns the input string, will remove all spaces from the
-    left of the string
+    Removes leading characters from a string column/literal str.
+    These characters are specified by chars or are whitespace.
 
 #### RTRIM
--   `#!sql RTRIM(str)`
+-   `#!sql RTRIM(str[, chars])`
 
-    Returns the input string, will remove all spaces from the
-    right of the string
+    Removes trailing characters from a string column/literal str.
+    These characters are specified by chars or are whitespace.
 
 #### TRIM
--   `#!sql TRIM(str)`
+-   `#!sql TRIM(str[, chars])`
 
     Returns the input string, will remove all spaces from the
     left and right of the string
@@ -2200,9 +2335,9 @@ BodoSQL currently supports the following string functions:
 -   `#!sql POSITION(str1, str2)`
 
     Returns the 1-indexed location where `str1` first occurs in `str2`, or 0 if
-    there is no occurrences of `str1` in `str2`. 
+    there is no occurrences of `str1` in `str2`.
 
-    !!! note 
+    !!! note
         BodoSQL oes not currently support alternate syntax `#!sql POSITION(str1, str2)`, or binary data.
 
 
@@ -2211,8 +2346,8 @@ BodoSQL currently supports the following string functions:
 
     Equivalent to `#!sql POSITION(str1, str2)` when 2 arguments are provided. When the
     optional third argument is provided, it only starts searching at that index.
-    
-    !!! note 
+
+    !!! note
         Not currently supported on binary data.
 
 
@@ -2235,10 +2370,37 @@ BodoSQL currently supports the following string functions:
     the first `len` characters after `pos` in the process. If `len` is zero,
     inserts `str2` into `str1` without deleting any characters. If `pos` is one,
     prepends `str2` to `str1`. If `pos` is larger than the length of `str1`, appends
-    `str2` to `str1`. 
+    `str2` to `str1`.
 
     !!! note
         Behavior when `pos` or `len` are negative is not well-defined at this time.
+
+
+#### SHA2
+-   `#!sql SHA2(msg[, digest_size])`
+
+    Encodes the `msg` string using the `SHA-2` algorithm with the specified
+    digest size (only values supported are, 224, 256, 384 and 512). Outputs
+    the result as a hex-encoded string.
+
+
+#### SHA2_HEX
+-   `#!sql SHA2_HEX(msg[, digest_size])`
+
+    Equivalent to `#!sql SHA2(msg[, digest_size])`
+
+
+#### MD5
+-   `#!sql MD5(msg])`
+
+    Encodes the `msg` string using the `MD5` algorithm. Outputs the
+    result as a hex-encoded string.
+
+
+#### MD5_HEX
+-   `#!sql MD5_HEX(msg)`
+
+    Equivalent to `#!sql MD5_HEX(msg)`
 
 
 ###  Regex Functions
@@ -2507,9 +2669,9 @@ BodoSQL currently supports the following JSON functions:
     When `Arg0` is `Arg1`, outputs `Arg2`. When `Arg0` is `Arg3`,
     outputs `Arg4`. Repeats until it runs out of pairs of arguments.
     At this point, if there is one remaining argument, this is used
-    as a default value. If not, then the output is `NULL`. 
+    as a default value. If not, then the output is `NULL`.
 
-    !!! note 
+    !!! note
         Treats `NULL` as a literal value that can be matched on.
 
     Therefore, the following:
@@ -2517,7 +2679,7 @@ BodoSQL currently supports the following JSON functions:
     ```sql
     DECODE(A, NULL, 0, 'x', 1, 'y', 2, 'z', 3, -1)
     ```
-    
+
     Is logically equivalent to:
 
     ```sql
@@ -2652,7 +2814,15 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
 (if there is an `#!sql ORDER BY` clause).
 !!! note
     `#!sql RANGE BETWEEN` is not currently supported.
-    Currently, BodoSQL supports the following Window functions:
+
+Currently, BodoSQL supports the following Window functions:
+
+!!!note
+    If a window frame contains `NaN` values, the output may diverge from Snowflake's
+    behavior. When a `NaN` value enters a window, any window function that combines
+    the results with arithmetic (e.g. `SUM`, `AVG`, `VARIANCE`, etc.) will output
+    `NaN` until the `NaN` value has exited the window.
+
 
 #### COUNT
 -   `#!sql COUNT(*)`
@@ -2700,15 +2870,22 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
 #### COVAR_SAMP
 -   `#!sql COVAR_SAMP(Y, X)`
 
-    Compute the sample covariance over the window of both inputs, or `NULL` if 
+    Compute the sample covariance over the window of both inputs, or `NULL` if
     the window is empty.
 
 
 #### COVAR_POP
 -   `#!sql COVAR_POP(Y, X)`
 
-    Compute the population covariance over the window of both inputs, or `NULL` if 
+    Compute the population covariance over the window of both inputs, or `NULL` if
     the window is empty.
+
+
+#### CORR
+-   `#!sql CORR(Y, X)`
+
+    Compute the correlation over the window of both inputs, or `NULL` if
+    the window is empty. Equivalent to `#!sql COVAR(Y, X) / (STDDEV_POP(Y) * STDDEV_POP(X))`
 
 
 #### MAX
@@ -2750,9 +2927,8 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
     Returns the most frequent element in the window, or `NULL` if the window is
     empty.
 
-    !!! note 
+    !!! note
         In case of a tie, BodoSQL will choose a value arbitrarily based on performance considerations.
-
 
 #### SKEW
 -   `#!sql SKEW(COLUMN_EXPRESSION)`
@@ -2767,6 +2943,34 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
     Compute the skew over the window, or `NULL` if the window contains fewer
     than 4 non-`NULL` entries.
 
+#### BITOR_AGG
+-   `#!sql BITOR_AGG`
+    
+    Outputs the bitwise OR of every input
+    in the window, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
+    Accepts floating point values, integer values, and strings. Strings are interpreted
+    directly as numbers, converting to 64-bit floating point numbers.
+
+#### BOOLOR_AGG
+-   `#!sql BOOLOR_AGG`
+
+    Outputs `#!sql true` if there is at least 1 non-zero` element in the
+    window, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
+
+
+#### BOOLAND_AGG
+-   `#!sql BOOLAND_AGG`
+
+    Outputs `#!sql true` if every element in the window that is non-`#!sql NULL`
+    is also non-zero, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
+
+
+#### BOOLXOR_AGG
+-   `#!sql BOOLXOR_AGG`
+
+    Outputs `#!sql true` if there is at exactly 1 non-zero element in the
+    window, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
+
 
 #### LEAD
 -   `#!sql LEAD(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
@@ -2777,7 +2981,7 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
     there are fewer than N rows the follow the current row in
     the window, it returns FILL_VALUE. N must be a literal
     non-negative integer if specified. FILL_VALUE must be a
-    scalar if specified. 
+    scalar if specified.
 
     !!!note
         - At this time Bodo does not support the `#!sql IGNORE NULLS` keyword.
@@ -2792,9 +2996,9 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
     there are fewer than N rows that precede the current row in
     the window, it returns FILL_VALUE. N must be a literal
     non-negative integer if specified. FILL_VALUE must be a
-    scalar if specified. 
+    scalar if specified.
 
-    !!! note 
+    !!! note
         - At this time BodoSQL does not support the `#!sql IGNORE NULLS` keyword.
         - This function cannot be used with `#!sql ROWS BETWEEN`.
 
@@ -2826,9 +3030,9 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
 -   `#!sql ANY_VALUE(COLUMN_EXPRESSION)`
 
     Select an arbitrary value in the window or `NULL` if the window
-    is empty. 
+    is empty.
 
-    !!! note 
+    !!! note
         Currently, BodoSQL always selects the first value, but this is subject to change at any time.
 
 
@@ -2885,6 +3089,9 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
 
     Compute an increasing row number (starting at 1) for each
     row. This function cannot be used with `#!sql ROWS BETWEEN`.
+
+!!! note
+    This window function is supported without a partition.
 
 
 #### CONDITIONAL_TRUE_EVENT
@@ -3033,12 +3240,12 @@ BodoSQL currently supports the following casting/conversion functions:
     - `'ZETA'` contains non-hex characters `Z` and `T`
     - `'#fizz'` is 5 characters, which is not an even number and contains non-hex
     characters `#`, `i` and `z`
-    
+
 
 #### TRY_TO_BINARY
 -  `TRY_TO_BINARY(COLUMN_EXPRESSION)`
 
-    See `TO_BINARY`. The only difference is that `TRY_TO_BINARY` will return `NULL` upon 
+    See `TO_BINARY`. The only difference is that `TRY_TO_BINARY` will return `NULL` upon
     encountering an invalid expression instead of raising an exception.
 
 
@@ -3117,79 +3324,154 @@ BodoSQL currently supports the following casting/conversion functions:
 
     This is similar to `#!sql TO_DOUBLE` except that it will return `NULL` instead of throwing an error invalid inputs.
 
+#### TO_NUMBER
+-   `#!sql TO_NUMBER(EXPR)`
+
+    Converts an input expression to a fixed-point number. For `NULL` input,
+    the output is `NULL`.
+
+
+#### TO_NUMERIC
+-   `#!sql TO_NUMERIC(EXPR)`
+
+    Equivalent to `#!sql TO_NUMBER(EXPR)`.
+
+
+#### TO_DECIMAL
+-   `#!sql TO_DECIMAL(EXPR)`
+
+    Equivalent to `#!sql TO_NUMBER(EXPR)`.
+
+
+#### TRY_TO_NUMBER
+-   `#!sql TRY_TO_NUMBER(EXPR)`
+
+    A special version of `#!sql TO_NUMBER` that performs
+    the same operation (i.e. converts an input expression to a fixed-point
+    number), but with error-handling support (i.e. if the conversion cannot be
+    performed, it returns a `NULL` value instead of raising an error).
+
+
+#### TRY_TO_NUMERIC
+-   `#!sql TRY_TO_NUMERIC(EXPR)`
+
+    Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`.
+
+
+#### TRY_TO_DECIMAL
+-   `#!sql TRY_TO_DECIMAL(EXPR)`
+
+    Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`.
+
+
+#### TO_DATE
+-   `#!sql TO_DATE(EXPR)`
+
+    Converts an input expression to a `DATE` type. The input can be one of
+    the following:
+
+    - `#!sql TO_DATE(timestamp_expr)` truncates the timestamp to its date value.
+    - `#!sql TO_DATE(string_expr)` if the string is in date format (e.g. `"1999-01-01"`)
+    then it is convrted to a corresponding date. If the string represents an integer
+    (e.g. `"123456"`) then it is interpreted as the number of seconds/milliseconds/microseconds/nanoseconds
+    since `1970-01-1`. Which unit it is interpreted as depends on the magnitude of the number,
+    in accordance with [the semantics used by Snowflake](https://docs.snowflake.com/en/sql-reference/functions/to_date#usage-notes).
+    - `#!sql TO_DATE(string_expr, format_expr)` uses the format string to specify how to parse the
+    string expression as a date. Uses the format string rules [as specified by Snowflake](https://docs.snowflake.com/en/sql-reference/functions-conversion#label-date-time-format-conversion).
+    - If the input is `NULL`, outputs `NULL`.
+
+    Raises an error if the input expression does not match one of these formats.
 
 #### TRY_TO_DATE
--   `TRY_TO_DATE(col_expr)`
+-   `#!sql TRY_TO_DATE(EXPR)`
 
-    See `TO_DATE`. The only difference is that `TRY_TO_DATE` will return `NULL` upon encountering an invalid expression
-    instead of raising an error. We recommend using this function for converting to date.
+    A special version of `#!sql TO_DATE` that performs
+    the same operation but returns `NULL` instead of raising an error if
+    something goes wrong during the conversion.
 
+#### TO_TIME
+-   `#!sql TO_TIME(EXPR)`
+
+    Converts an input expression to a `TIME` type. The input can be one of
+    the following:
+
+    - `#!sql TO_TIME(timestamp_expr)` extracts the time component from a timestamp.
+    - `#!sql TO_TIME(string_expr)` if the string is in date format (e.g. `"12:30:15"`)
+    then it is convrted to a corresponding time.
+    - `#!sql TO_TIME(string_expr, format_expr)` uses the format string to specify how to parse the
+    string expression as a time. Uses the format string rules [as specified by Snowflake](https://docs.snowflake.com/en/sql-reference/functions-conversion#label-date-time-format-conversion).
+    - If the input is `NULL`, outputs `NULL`
+
+    Raises an error if the input expression does not match one of these formats.
+
+#### TRY_TO_TIME
+-   `#!sql TRY_TO_TIME(EXPR)`
+
+    A special version of `#!sql TO_TIME` that performs
+    the same operation but returns `NULL` instead of raising an error if
+    something goes wrong during the conversion.
 
 #### TO_TIMESTAMP
--   `TO_TIMESTAMP(col_expr)`
+-   `#!sql TO_TIMESTAMP(EXPR)`
 
-    Casts the col_expr to a timestamp column truncated to the date
-    portion. Supported for Integers, Floats, Strings, and Datetime types.
-    For information on valid for conversion, see: https://docs.snowflake.com/en/sql-reference/functions/to_timestamp.html.
-    Raises an error if supplied an invalid expression.
+    Converts an input expression to a `TIMESTAMP` type without a timezone. The input can be one of
+    the following:
 
--   `TO_TIMESTAMP(col_expr, scale)`
+    - `#!sql TO_TIMESTAMP(date_expr)` upcasts a `DATE` to a `TIMESTAMP`.
+    - `#!sql TO_TIMESTAMP(integer)` creates a timestamp using the integer as the number of 
+    seconds/milliseconds/microseconds/nanoseconds since `1970-01-1`. Which unit it is interpreted 
+    as depends on the magnitude of the number, in accordance with [the semantics used by Snowflake](https://docs.snowflake.com/en/sql-reference/functions/to_date#usage-notes).
+    - `#!sql TO_TIMESTAMP(integer, scale)` the same as the integer case except that the scale provided specifes which
+    unit is used. THe scale can be an integer constant between 0 and 9, where 0 means seconds and 9 means nanoseconds.
+    - `#!sql TO_TIMESTAMP(string_expr)` if the string is in timestamp format (e.g. `"1999-12-31 23:59:30"`)
+    then it is convrted to a corresponding timestamp. If the string represents an integer
+    (e.g. `"123456"`) then it uses the same rule as the corresponding input integer.
+    - `#!sql TO_TIMESTAMP(string_expr, format_expr)` uses the format string to specify how to parse the
+    string expression as a timestamp. Uses the format string rules [as specified by Snowflake](https://docs.snowflake.com/en/sql-reference/functions-conversion#label-date-time-format-conversion).
+    - `#!sql TO_TIMESTAMP(timestamp_exr)` returns a timestamp expression representing the same moment in time,
+    but changing the timezone if necessary to be timezone-naive.
+    - If the input is `NULL`, outputs `NULL`
 
-    Integer inputs can optionally accept an integer literal as a second argument
-    specifying the magnitude of the input. The integer can be from 0 (the default,
-    meaning seconds) to 9 (meaning nanoseconds).
+    Raises an error if the input expression does not match one of these formats.
 
 #### TRY_TO_TIMESTAMP
--   `TRY_TO_TIMESTAMP(col_expr)`
+-   `#!sql TRY_TO_TIMESTAMP(EXPR)`
 
-    See `TO_TIMESTAMP`. The only difference is that `TRY_TO_TIMESTAMP` will return `NULL` upon encountering an invalid expression
-    instead of raising an error. We recommend using this function for converting to Timestamp.
-    Has the same 2-argument options as `TO_TIMESTAMP`.
-
+    A special version of `#!sql TO_TIMESTAMP` that performs
+    the same operation but returns `NULL` instead of raising an error if
+    something goes wrong during the conversion.
 
 #### TO_TIMESTAMP_NTZ
--   `TO_TIMESTAMP_NTZ(col_expr)`
+-   `#!sql TO_TIMESTAMP_NTZ(EXPR)`
 
-    Alias for `TO_TIMESTAMP`. Has the same 2-argument options as `TO_TIMESTAMP`.
-
+    Equivalent to `#!sql TO_TIMESTAMP`.
 
 #### TRY_TO_TIMESTAMP_NTZ
--   `TRY_TO_TIMESTAMP_NTZ(col_expr)`
+-   `#!sql TRY_TO_TIMESTAMP_NTZ(EXPR)`
 
-    Alias for `TRY_TO_TIMESTAMP`. Has the same 2-argument options as `TRY_TO_TIMESTAMP`.
-
+    Equivalent to `#!sql TRY_TO_TIMESTAMP`.
 
 #### TO_TIMESTAMP_LTZ
--   `TO_TIMESTAMP_LTZ(col_expr)`
+-   `#!sql TO_TIMESTAMP_LTZ(EXPR)`
 
-    See `TO_TIMESTAMP`. The only difference is that `TO_TIMESTAMP_LTZ` will always return
-    a timestamp with the local time zone whereas `TO_TIMESTAMP` will output timezone-naive
-    data. By default the local timezone is UTC and it can be updated as a parameter
-    when using the Snowflake Catalog. Has the same 2-argument options as `TO_TIMESTAMP`.
-
+    Equivalent to `#!sql TO_TIMESTAMP` except that it uses the local time zone.
 
 #### TRY_TO_TIMESTAMP_LTZ
--   `TRY_TO_TIMESTAMP_LTZ(col_expr)`
+-   `#!sql TRY_TO_TIMESTAMP_NTZ(EXPR)`
 
-    See `TO_TIMESTAMP_LTZ`. The only difference is that `TO_TIMESTAMP_LTZ` will return `NULL` upon encountering an invalid expression
-    instead of raising an error. We recommend using this function for converting to Timestamp.
-    Has the same 2-argument options as `TO_TIMESTAMP`.
-
+    Equivalent to `#!sql TRY_TO_TIMESTAMP` except that it uses the local time zone.
 
 #### TO_TIMESTAMP_TZ
--   `TO_TIMESTAMP_TZ(col_expr)`
+-   `#!sql TO_TIMESTAMP_LTZ(EXPR)`
 
-    See `TO_TIMESTAMP_LTZ`. The only difference is that if input is already timezone-aware data,
-    then `TO_TIMESTAMP_TZ` will preserve its current timezone instead of replacing it.
-    Has the same 2-argument options as `TO_TIMESTAMP`.
-
+    Equivalent to `#!sql TO_TIMESTAMP` except that it uses the local time zone, or keeps
+    the original timezone if the input is a timezone-aware timestamp.
 
 #### TRY_TO_TIMESTAMP_TZ
--   `TRY_TO_TIMESTAMP_TZ(col_expr)`
+-   `#!sql TRY_TO_TIMESTAMP_NTZ(EXPR)`
 
-    See `TO_TIMESTAMP_TZ`. The only difference is that `TO_TIMESTAMP_TZ` will return `NULL` upon encountering an invalid expression
-    instead of raising an error. We recommend using this function for converting to Timestamp.
-    Has the same 2-argument options as `TO_TIMESTAMP`.
+    Equivalent to `#!sql TRY_TO_TIMESTAMP` except that it uses the local time zone, or keeps
+    the original timezone if the input is a timezone-aware timestamp.
 
 
 ## Supported DataFrame Data Types
