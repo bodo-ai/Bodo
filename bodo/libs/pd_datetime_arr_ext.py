@@ -340,7 +340,7 @@ def box_pd_datetime_array(typ, val, c):
 
 
 @intrinsic
-def init_pandas_datetime_array(typingctx, data, null_bitmap, tz):
+def init_datetime_array(typingctx, data, null_bitmap, tz):
     """
     Initialize a pandas.arrays.DatetimeArray.
     """
@@ -370,12 +370,36 @@ def init_pandas_datetime_array(typingctx, data, null_bitmap, tz):
     return sig, codegen
 
 
+def init_datetime_array_equiv(self, scope, equiv_set, loc, args, kws):
+    assert len(args) == 3 and not kws, "invalid arguments in init_datetime_array_equiv"
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_pd_datetime_arr_ext_init_datetime_array = (
+    init_datetime_array_equiv
+)
+
+
+def alias_ext_init_datetime_array(lhs_name, args, alias_map, arg_aliases):
+    assert len(args) == 3, "invalid arguments in alias_ext_init_datetime_array"
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
+
+
+numba.core.ir_utils.alias_func_extensions[
+    ("init_datetime_array", "bodo.libs.pd_datetime_arr_ext")
+] = alias_ext_init_datetime_array
+
+
 # high-level allocation function for tz-aware arrays arrays
 @numba.njit(no_cpython_wrapper=True)
 def alloc_pd_datetime_array(n, tz):  # pragma: no cover
     data_arr = np.empty(n, dtype="datetime64[ns]")
     null_bitmap_arr = np.empty(bitmap_size(n), dtype=np.uint8)
-    return init_pandas_datetime_array(data_arr, null_bitmap_arr, tz)
+    return init_datetime_array(data_arr, null_bitmap_arr, tz)
 
 
 def alloc_pd_datetime_array_equiv(self, scope, equiv_set, loc, args, kws):
@@ -433,7 +457,7 @@ def overload_pd_datetime_tz_convert(A, tz):
     else:
 
         def impl(A, tz):  # pragma: no cover
-            return init_pandas_datetime_array(A._data.copy(), A._null_bitmap.copy(), tz)
+            return init_datetime_array(A._data.copy(), A._null_bitmap.copy(), tz)
 
     return impl
 
@@ -443,7 +467,7 @@ def overload_pd_datetime_tz_convert(A):
     tz = A.tz
 
     def impl(A):  # pragma: no cover
-        return init_pandas_datetime_array(A._data.copy(), A._null_bitmap.copy(), tz)
+        return init_datetime_array(A._data.copy(), A._null_bitmap.copy(), tz)
 
     return impl
 
@@ -492,7 +516,7 @@ def overload_getitem(A, ind):
             ind = bodo.utils.conversion.coerce_to_array(ind)
             new_data = ensure_contig_if_np(A._data[ind])
             null_bitmap = ensure_contig_if_np(build_dt_valid_bitmap(new_data))
-            return init_pandas_datetime_array(new_data, null_bitmap, tz)
+            return init_datetime_array(new_data, null_bitmap, tz)
 
         return impl_bool
 
@@ -503,7 +527,7 @@ def overload_getitem(A, ind):
             ind = bodo.utils.conversion.coerce_to_array(ind)
             new_data = ensure_contig_if_np(A._data[ind])
             null_bitmap = ensure_contig_if_np(build_dt_valid_bitmap(new_data))
-            return init_pandas_datetime_array(new_data, null_bitmap, tz)
+            return init_datetime_array(new_data, null_bitmap, tz)
 
         return impl_int_arr
 
@@ -513,7 +537,7 @@ def overload_getitem(A, ind):
         def impl_slice(A, ind):  # pragma: no cover
             new_data = ensure_contig_if_np(A._data[ind])
             null_bitmap = ensure_contig_if_np(build_dt_valid_bitmap(new_data))
-            return init_pandas_datetime_array(new_data, null_bitmap, tz)
+            return init_datetime_array(new_data, null_bitmap, tz)
 
         return impl_slice
 
