@@ -8,6 +8,9 @@
 #include "_groupby_ftypes.h"
 
 template <int ftype>
+concept ratio_to_report = ftype == Bodo_FTypes::ratio_to_report;
+
+template <int ftype>
 concept any_value = ftype == Bodo_FTypes::any_value;
 
 // Enums to specify which type of window frame is being computer, in case
@@ -222,6 +225,49 @@ class WindowAggfunc {
         // The aggrevate value is the number of indices in the window frame
         int64_t idx = getv<int64_t>(sorted_idx, i);
         getv<int64_t>(out_arr, idx) = upper_bound - lower_bound;
+    }
+
+    // RATIO_TO_REPORT implementations.
+
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
+        requires(ratio_to_report<ftype> && !string_or_dict<ArrayType>)
+    inline void init() {
+        m1 = 0.0;
+    }
+
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType, window_frame_enum frame_type>
+        requires(ratio_to_report<ftype> && !string_or_dict<ArrayType>)
+    inline void enter(int64_t i) {
+        int64_t idx = getv<int64_t>(sorted_idx, i);
+        if (non_null_at<ArrayType, T, DType>(*in_arr, idx)) {
+            m1 += to_double<T, DType>(
+                get_arr_item<ArrayType, T, DType>(*in_arr, idx));
+        }
+    }
+
+    template <int ftype, bodo_array_type::arr_type_enum ArrayType, typename T,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(ratio_to_report<ftype> && !string_or_dict<ArrayType>)
+    inline void compute_partition(int64_t start_idx, int64_t end_idx) {
+        // For each row in the partition, divides the row by the sum
+        // of values in the partition.
+        const bool all_null = m1 == 0.0;
+        for (int64_t i = start_idx; i < end_idx; i++) {
+            int64_t idx = getv<int64_t>(sorted_idx, i);
+            if (all_null || is_null_at<ArrayType, T, DType>(*in_arr, idx)) {
+                set_to_null<bodo_array_type::NULLABLE_INT_BOOL, double,
+                            Bodo_CTypes::FLOAT64>(*out_arr, idx);
+            } else {
+                double val = to_double<T, DType>(
+                    get_arr_item<ArrayType, T, DType>(*in_arr, idx));
+                set_arr_item<bodo_array_type::NULLABLE_INT_BOOL, double,
+                             Bodo_CTypes::FLOAT64>(*out_arr, idx, val / m1);
+                set_non_null<bodo_array_type::NULLABLE_INT_BOOL, double,
+                             Bodo_CTypes::FLOAT64>(*out_arr, idx);
+            }
+        }
     }
 
     // COUNT implementations.
@@ -457,6 +503,7 @@ class WindowAggfunc {
     std::shared_ptr<array_info> sorted_idx;
     // Accumulator values.
     int64_t in_window;
+    double m1;
     // Vectors to store the intermediary string values before they are placed
     // into a final array.
     std::shared_ptr<bodo::vector<std::string>> string_vector = nullptr;

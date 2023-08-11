@@ -443,6 +443,11 @@ void window_frame_computation_ftype_handler(
                                                     ArrayType, T, DType>(
                 in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi);
             break;
+        case Bodo_FTypes::ratio_to_report:
+            window_frame_computation_bounds_handler<
+                Bodo_FTypes::ratio_to_report, ArrayType, T, DType>(
+                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi);
+            break;
         case Bodo_FTypes::count:
             window_frame_computation_bounds_handler<Bodo_FTypes::count,
                                                     ArrayType, T, DType>(

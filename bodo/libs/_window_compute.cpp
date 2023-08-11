@@ -706,6 +706,7 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 // Window functions that do not require the sorted table
                 break;
             }
+            case Bodo_FTypes::ratio_to_report:
             case Bodo_FTypes::any_value:
             case Bodo_FTypes::row_number:
             case Bodo_FTypes::rank:
@@ -898,6 +899,7 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 break;
             }
             // Window functions that only support partition-wide aggregation
+            case Bodo_FTypes::ratio_to_report:
             case Bodo_FTypes::any_value: {
                 window_frame_computation(input_arrs[window_col_offset],
                                          out_arrs[i], iter_table->columns[0],

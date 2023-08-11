@@ -1538,6 +1538,7 @@ void WindowColSet::alloc_running_value_columns(
         // the arr_type and dtype as that.
         if (window_func == Bodo_FTypes::conditional_true_event ||
             window_func == Bodo_FTypes::conditional_change_event ||
+            window_func == Bodo_FTypes::ratio_to_report ||
             window_func == Bodo_FTypes::size ||
             window_func == Bodo_FTypes::count_if ||
             window_func == Bodo_FTypes::any_value) {

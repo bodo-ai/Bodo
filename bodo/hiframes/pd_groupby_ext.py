@@ -1432,6 +1432,7 @@ def extract_window_args(
     # Map each function to the pattern of expected arguments (default is no arguments)
     func_arg_typs = {
         "ntile": ["scalar"],
+        "ratio_to_report": ["vector"],
         "conditional_true_event": ["vector"],
         "conditional_change_event": ["vector"],
         "size": ["scalar", "scalar"],
@@ -1535,6 +1536,7 @@ def resolve_window_funcs(
         "rank": dtype_to_array_type(types.uint64),
         "dense_rank": dtype_to_array_type(types.uint64),
         "ntile": dtype_to_array_type(types.uint64),
+        "ratio_to_report": to_nullable_type(dtype_to_array_type(types.float64)),
         "conditional_true_event": dtype_to_array_type(types.uint64),
         "conditional_change_event": dtype_to_array_type(types.uint64),
         "size": dtype_to_array_type(types.uint64),
