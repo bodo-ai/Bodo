@@ -16,6 +16,9 @@ num_processes = int(sys.argv[2])
 # the third is the directory of the caching tests
 cache_test_dir = sys.argv[3]
 
+# Pipeline name is only used when testing on Azure
+use_run_name = "AGENT_NAME" in os.environ
+
 pytest_working_dir = os.getcwd()
 try:
     # change to directory of this file
@@ -56,8 +59,11 @@ pytest_cmd_yes_cached_flag = [
     cache_test_dir,
     "--is_cached",
     "y",
-    f"--test-run-title={pipeline_name}",
 ]
+if use_run_name:
+    pytest_cmd_yes_cached_flag.append(
+        f"--test-run-title={pipeline_name}",
+    )
 # run tests with pytest
 cmd = [
     "mpiexec",

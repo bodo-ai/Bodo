@@ -20,9 +20,9 @@ flake8 bodo
 # if running on one core, collect coverage, otherwise run without
 if [[ "$OSTYPE" == "linux-gnu"* ]] && [ "$NP" = "1" ]; then
     # run the tests
-    python bodo/runtests.py "$NP" -s -v -m "$PYTEST_MARKER" --cov-report= --cov=./ bodo/tests
+    python bodo/runtests.py "Bodo_Tests" "$NP" -s -v -m "$PYTEST_MARKER" --cov-report= --cov=./ bodo/tests
 else
-    python bodo/runtests.py "$NP" -s -v -m "$PYTEST_MARKER" bodo/tests
+    python bodo/runtests.py "Bodo_Tests" "$NP" -s -v -m "$PYTEST_MARKER" bodo/tests
     # Generate an empty coverage file so you can share a single yml file. This should not impact the result
     touch .coverage
 fi
