@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
 import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
@@ -19,14 +20,9 @@ class PandasFilterRule private constructor(config: Config) : ConverterRule(confi
 
     override fun convert(rel: RelNode): RelNode {
         val filter = rel as Filter
-        val containsOver = filter.containsOver()
-        val batchProperty = if (containsOver) BatchingProperty.SINGLE_BATCH else BatchingProperty.STREAMING
-        return PandasFilter.create(
-            rel.cluster,
-            convert(filter.input,
-                filter.input.traitSet
-                    .replace(PandasRel.CONVENTION).replace(batchProperty)),
-            filter.condition
-        )
+        val batchProperty = ExpectedBatchingProperty.projectFilterProperty(listOf(filter.condition))
+        return PandasFilter.create(rel.cluster, convert(filter.input,
+            filter.input.traitSet
+                .replace(PandasRel.CONVENTION).replace(batchProperty)), filter.condition)
     }
 }
