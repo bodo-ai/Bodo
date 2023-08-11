@@ -557,6 +557,10 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum array_type,
             out_array_type = bodo_array_type::NUMPY;
             out_dtype = Bodo_CTypes::FLOAT64;
             break;
+        case Bodo_FTypes::ratio_to_report:
+            out_array_type = bodo_array_type::NULLABLE_INT_BOOL;
+            out_dtype = Bodo_CTypes::FLOAT64;
+            break;
         case Bodo_FTypes::min_row_number_filter:
             out_array_type = bodo_array_type::NULLABLE_INT_BOOL;
             out_dtype = Bodo_CTypes::_BOOL;
