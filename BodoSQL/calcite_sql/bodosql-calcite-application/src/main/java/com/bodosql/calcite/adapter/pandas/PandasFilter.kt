@@ -9,6 +9,7 @@ import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.core.FilterBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelCollationTraitDef
@@ -137,14 +138,8 @@ class PandasFilter(
     companion object {
         fun create(cluster: RelOptCluster, input: RelNode, condition: RexNode): PandasFilter {
             val mq = cluster.metadataQuery
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION)
-                .replaceIf(BatchingPropertyTraitDef.INSTANCE) {
-                    if (RexOver.containsOver(condition)) {
-                        BatchingProperty.SINGLE_BATCH
-                    } else {
-                        BatchingProperty.STREAMING
-                    }
-                }
+            val batchProperty = ExpectedBatchingProperty.projectFilterProperty(listOf(condition))
+            val traitSet = cluster.traitSet().replace(PandasRel.CONVENTION).replace(batchProperty)
                 .replaceIfs(RelCollationTraitDef.INSTANCE) {
                     RelMdCollation.filter(mq, input)
                 }

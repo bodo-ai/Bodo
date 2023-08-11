@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin
 import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
@@ -63,8 +64,10 @@ class PandasJoinRule private constructor(config: Config) : ConverterRule(config)
             return null;
         }
 
+        // Note: Types may be lazily computed so use getRowType() instead of rowType
+        val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(rel.getRowType())
         val inputs = join.inputs.map { input ->
-            convert(input, input.traitSet.replace(PandasRel.CONVENTION).replace(BatchingProperty.STREAMING))
+            convert(input, input.traitSet.replace(PandasRel.CONVENTION).replace(batchingProperty))
         }
         return PandasJoin.create(inputs[0], inputs[1], join.condition, join.joinType)
     }

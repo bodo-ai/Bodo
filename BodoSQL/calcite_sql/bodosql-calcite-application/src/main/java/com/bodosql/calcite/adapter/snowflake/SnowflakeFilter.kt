@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.table.CatalogTableImpl
-import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
@@ -26,7 +26,9 @@ class SnowflakeFilter private constructor(
             cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode,
             condition: RexNode, catalogTable: CatalogTableImpl
         ): SnowflakeFilter {
-            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION).replace(BatchingProperty.STREAMING)
+            // Note: Types may be lazily computed so use getRowType() instead of rowType
+            val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(input.getRowType())
+            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION).replace(batchingProperty)
             return SnowflakeFilter(cluster, newTraitSet, input, condition, catalogTable)
         }
     }

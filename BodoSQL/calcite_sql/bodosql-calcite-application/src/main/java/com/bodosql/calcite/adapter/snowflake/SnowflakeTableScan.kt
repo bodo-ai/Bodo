@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.table.CatalogTableImpl
 import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptPlanner
@@ -43,20 +44,9 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
     companion object {
         @JvmStatic
         fun create(cluster: RelOptCluster, table: RelOptTable, catalogTable: CatalogTableImpl): SnowflakeTableScan {
-            // TODO(jsternberg): This next line should be required and always part
-            // of creating a SnowflakeTableScan. On the other hand, while we are using the
-            // HepPlanner, this trait set causes an issue. The existence of the trait set
-            // causes the HepPlanner to try and stick to the convention, but it uses the
-            // VolcanoPlanner initialized with PlannerImpl to do that. The VolcanoPlanner
-            // gets confused about HepRelVertex and this causes it to fail to enforce
-            // the traits.
-            //
-            // Until we're completely using the VolcanoPlanner for everything in general,
-            // we'll avoid adding the trait set when creating the table scan so this is
-            // treated like the NONE convention by the HepPlanner. We'll then add it using
-            // copy and a RelShuttle before invoking the VolcanoPlanner.
-            // val traitSet = cluster.traitSetOf(SnowflakeRel.CONVENTION)
-            val traitSet = cluster.traitSet().replace(BatchingProperty.STREAMING)
+            // Note: Types may be lazily computed so use getRowType() instead of rowType
+            val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(table.getRowType())
+            val traitSet = cluster.traitSet().replace(batchingProperty)
             return SnowflakeTableScan(cluster, traitSet, table, catalogTable)
         }
     }
