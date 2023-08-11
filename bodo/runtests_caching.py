@@ -7,11 +7,14 @@ import shutil
 import subprocess
 import sys
 
-# first arg is the number of processes to run the tests with
-num_processes = int(sys.argv[1])
+# first arg is the name of the testing pipeline
+pipeline_name = sys.argv[1]
 
-# the second is the directory of the caching tests
-cache_test_dir = sys.argv[2]
+# second arg is the number of processes to run the tests with
+num_processes = int(sys.argv[2])
+
+# the third is the directory of the caching tests
+cache_test_dir = sys.argv[3]
 
 pytest_working_dir = os.getcwd()
 try:
@@ -52,6 +55,7 @@ pytest_cmd_yes_cached_flag = [
     "-v",
     cache_test_dir,
     "--is_cached",
+    f"--test-run-title={pipeline_name}",
 ]
 cmd = ["mpiexec", "-n", str(num_processes)] + pytest_cmd_yes_cached_flag
 print("Running", " ".join(cmd))
