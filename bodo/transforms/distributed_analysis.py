@@ -2761,7 +2761,7 @@ class DistributedAnalysis:
             )
             return
 
-        if fdef == ("init_pandas_datetime_array", "bodo.libs.pd_datetime_arr_ext"):
+        if fdef == ("init_datetime_array", "bodo.libs.pd_datetime_arr_ext"):
             # lhs and data should have the same distribution
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             self._meet_array_dists(lhs, rhs.args[1].name, array_dists)

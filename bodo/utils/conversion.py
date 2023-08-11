@@ -794,7 +794,7 @@ def overload_coerce_to_array(
             )
             for i in numba.parfors.parfor.internal_prange(scalar_to_arr_len):
                 A[i] = dt64_val
-            return bodo.libs.pd_datetime_arr_ext.init_pandas_datetime_array(
+            return bodo.libs.pd_datetime_arr_ext.init_datetime_array(
                 A, null_bitmap, tz_literal
             )
 

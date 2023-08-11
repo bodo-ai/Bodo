@@ -168,6 +168,7 @@ no_side_effect_call_tuples = {
     ("datetime_date_arr_to_dt64_arr", "pd_timestamp_ext", "hiframes", bodo),
     # tz-aware array
     ("alloc_pd_datetime_array", "pd_datetime_arr_ext", "libs", bodo),
+    ("init_datetime_array", "pd_datetime_arr_ext", "libs", bodo),
     # Both of these functions are set as global imports.
     (bodo.libs.bool_arr_ext.compute_or_body,),
     (bodo.libs.bool_arr_ext.compute_and_body,),
@@ -354,6 +355,7 @@ no_side_effect_call_tuples = {
     # Indexing
     ("scalar_optional_getitem", "indexing", "utils", bodo),
     ("bitmap_size", "indexing", "utils", bodo),
+    ("get_dt64_bitmap_fill", "indexing", "utils", bodo),
     # Streaming join
     ("init_join_state", "stream_join", "libs", bodo),
     ("init_groupby_state", "stream_groupby", "libs", bodo),
