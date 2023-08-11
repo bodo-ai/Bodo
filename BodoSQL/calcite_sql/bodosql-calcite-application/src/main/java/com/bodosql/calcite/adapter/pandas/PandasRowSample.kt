@@ -5,6 +5,7 @@ import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import com.bodosql.calcite.plan.RelOptRowSamplingParameters
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelCollationTraitDef
 import org.apache.calcite.rel.RelNode
@@ -49,7 +50,8 @@ class PandasRowSample(
     companion object {
         fun create(cluster: RelOptCluster, input: RelNode, params: RelOptRowSamplingParameters): PandasRowSample {
             val mq = cluster.metadataQuery
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION).replace(BatchingProperty.SINGLE_BATCH)
+            val batchingProperty = ExpectedBatchingProperty.alwaysSingleBatchProperty()
+            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION).replace(batchingProperty)
                 .replaceIfs(RelCollationTraitDef.INSTANCE) {
                     mq.collations(input)
                 }

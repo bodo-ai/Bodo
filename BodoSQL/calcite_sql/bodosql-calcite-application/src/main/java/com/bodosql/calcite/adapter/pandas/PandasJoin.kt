@@ -25,8 +25,6 @@ class PandasJoin(
 
     init {
         assert(convention == PandasRel.CONVENTION)
-        // Require streaming if we have enabled streaming.
-        traitSet.containsIfApplicable(BatchingProperty.STREAMING)
     }
 
     constructor(

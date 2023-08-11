@@ -5,6 +5,7 @@ import com.bodosql.calcite.application.Utils.IsScalar
 import com.bodosql.calcite.ir.*
 import com.bodosql.calcite.rel.core.ProjectBase
 import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty.Companion.projectFilterProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -280,8 +281,7 @@ class PandasProject(
         fun create(input: RelNode, projects: List<RexNode>, rowType: RelDataType): PandasProject {
             val cluster = input.cluster
             val mq = cluster.metadataQuery
-            val containsOver = RexOver.containsOver(projects, null)
-            val batchProperty = if (containsOver) BatchingProperty.SINGLE_BATCH else BatchingProperty.STREAMING
+            val batchProperty = projectFilterProperty(projects)
             val traitSet = cluster.traitSet().replace(PandasRel.CONVENTION).replace(batchProperty)
                 .replaceIfs(RelCollationTraitDef.INSTANCE) {
                     RelMdCollation.project(mq, input, projects)

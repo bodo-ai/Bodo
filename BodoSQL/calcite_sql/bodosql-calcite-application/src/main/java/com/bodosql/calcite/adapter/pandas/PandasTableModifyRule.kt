@@ -4,6 +4,7 @@ import com.bodosql.calcite.schema.CatalogSchemaImpl
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.CatalogTableImpl
 import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.prepare.RelOptTableImpl
 import org.apache.calcite.rel.RelNode
@@ -26,15 +27,12 @@ class PandasTableModifyRule private constructor(config: Config) : ConverterRule(
 
         // Case when output is a Snowflake table
         val bodoSqlTable = (tableModify.table as RelOptTableImpl).table() as BodoSqlTable
-        val newBatchingProperty = if ((bodoSqlTable is CatalogTableImpl) && (bodoSqlTable.dbType.equals("SNOWFLAKE"))) {
-            BatchingProperty.STREAMING
-        } else {
-            BatchingProperty.SINGLE_BATCH
-        }
+        // Note: Types may be lazily computed so use getRowType() instead of rowType
+        val batchingProperty = ExpectedBatchingProperty.tableModifyProperty(bodoSqlTable, tableModify.input.getRowType())
 
         return PandasTableModify(rel.cluster, traitSet, tableModify.table!!, tableModify.catalogReader!!,
             convert(tableModify.input,
-                tableModify.input.traitSet.replace(PandasRel.CONVENTION).replace(newBatchingProperty)),
+                tableModify.input.traitSet.replace(PandasRel.CONVENTION).replace(batchingProperty)),
             tableModify.operation, tableModify.updateColumnList, tableModify.sourceExpressionList,
             tableModify.isFlattened)
     }
