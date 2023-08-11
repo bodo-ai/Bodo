@@ -96,13 +96,14 @@ PyObject *PyTestCase_call(PyObject *tc, PyObject *args, PyObject *kwargs) {
 PyTypeObject PyTestCase::TYPE = {
     PyVarObject_HEAD_INIT(NULL, 0).tp_name = "TestCase",
     .tp_basicsize = sizeof(PyTestCase),
-    .tp_base = nullptr,
-    .tp_flags = Py_TPFLAGS_DEFAULT,
-    .tp_str = &PyTestCase_as_str,
+    .tp_dealloc = &PyTestCase::destroy,
+    .tp_getattr = &PyTestCase_getattr,
     .tp_repr = &PyTestCase_as_str,
     .tp_call = &PyTestCase_call,
-    .tp_getattr = &PyTestCase_getattr,
-    .tp_dealloc = &PyTestCase::destroy};
+    .tp_str = &PyTestCase_as_str,
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_base = nullptr,
+};
 
 PyMODINIT_FUNC PyInit_test_cpp(void) {
     PyObject *m;

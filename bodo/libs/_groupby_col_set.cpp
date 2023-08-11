@@ -357,7 +357,7 @@ void VarStdColSet::alloc_update_columns(
 
     // Add every value to update cols, except the first one
     //(the output column)
-    for (int i = init_start; i < out_cols.size(); i++) {
+    for (size_t i = init_start; i < out_cols.size(); i++) {
         this->update_cols.push_back(out_cols.at(i));
     }
 }
@@ -384,7 +384,7 @@ void VarStdColSet::alloc_combine_columns(
 
     // Add every value to update cols, except the first one
     //(the output column)
-    for (int i = 1; i < out_cols.size(); i++) {
+    for (size_t i = 1; i < out_cols.size(); i++) {
         this->combine_cols.push_back(out_cols.at(i));
     }
 }
@@ -530,7 +530,7 @@ void SkewColSet::alloc_update_columns(
 
     // Add every value to update cols, except the first one
     //(the output column)
-    for (int i = init_start; i < out_cols.size(); i++) {
+    for (size_t i = init_start; i < out_cols.size(); i++) {
         this->update_cols.push_back(out_cols.at(i));
     }
 }
@@ -558,7 +558,7 @@ void SkewColSet::alloc_combine_columns(
 
     // Add every value to update cols, except the first one
     //(the output column)
-    for (int i = 1; i < out_cols.size(); i++) {
+    for (size_t i = 1; i < out_cols.size(); i++) {
         this->combine_cols.push_back(out_cols.at(i));
     }
 }
@@ -1036,7 +1036,7 @@ void KurtColSet::alloc_update_columns(
 
     // Add every value to update cols, except the first one
     //(the output column)
-    for (int i = init_start; i < out_cols.size(); i++) {
+    for (size_t i = init_start; i < out_cols.size(); i++) {
         this->update_cols.push_back(out_cols.at(i));
     }
 }
@@ -1124,7 +1124,7 @@ void KurtColSet::alloc_combine_columns(
 
     // Add every value to update cols, except the first one
     //(the output column)
-    for (int i = 1; i < out_cols.size(); i++) {
+    for (size_t i = 1; i < out_cols.size(); i++) {
         this->combine_cols.push_back(out_cols.at(i));
     }
 }
