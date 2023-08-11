@@ -133,7 +133,7 @@ stages:
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
-      name: Linux
+      name: Bodo_Tests
       useNumbaDev: false
       caching_test: false
       PYTHON_VERSION: 3.10
@@ -424,7 +424,7 @@ stages:
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
-      name: BODOSQL_Linux
+      name: BodoSQL_Regular_Tests
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
@@ -571,7 +571,7 @@ stages:
     parameters:
       # Note: this name is not important, as we explicitly pass CACHE_TEST and
       # check uname to determine the os for the bodoSQL tests
-      name: BODOSQL_Linux_cache
+      name: BodoSQL_Caching_Tests
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: build_bodo_sql
       PYTHON_VERSION: 3.10
@@ -592,7 +592,7 @@ stages:
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
-      name: BODOSQL_Linux
+      name: BodoSQL_Streaming_Tests
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
@@ -741,7 +741,7 @@ stages:
     parameters:
       # Note: this name is not important, as we explicitly pass CACHE_TEST and
       # check uname to determine the os for the bodoSQL tests
-      name: BODOSQL_Linux_cache
+      name: BodoSQL_Streaming_Caching_Tests
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: build_bodo_sql
       PYTHON_VERSION: 3.10
