@@ -144,6 +144,7 @@ if develop_mode:
     # avoid GCC errors for using int64 in allocations
     if not (is_m1_mac or is_mac):
         eca.append("-Wno-alloc-size-larger-than")
+eca.append("-Wno-c99-designator")
 
 
 # Use a single C-extension for all of Bodo
