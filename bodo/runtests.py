@@ -13,6 +13,9 @@ pytest_args = sys.argv[3:]
 # Get File-Level Timeout Info from Environment Variable (in seconds)
 file_timeout = int(os.environ.get("BODO_RUNTESTS_TIMEOUT", 7200))
 
+# Pipeline name is only used when testing on Azure
+use_run_name = "AGENT_NAME" in os.environ
+
 logfile_name = "splitting_logs/logfile-07-18-22.txt"
 
 # If in AWS Codebuild partition tests
@@ -151,8 +154,12 @@ for i, m in enumerate(modules):
         # use PYTEST_MARKER and module name to generate a unique filename for each group of tests as identified
         # by markers and test filename.
         f"--junitxml=pytest-report-{m.split('.')[0]}-{os.environ['PYTEST_MARKER'].replace(' ','-')}.xml",
-        f"--test-run-title={pipeline_name}",
-    ] + mod_pytest_args
+    ]
+    if use_run_name:
+        cmd.append(
+            f"--test-run-title={pipeline_name}",
+        )
+    cmd += mod_pytest_args
     print("Running", " ".join(cmd))
     p = subprocess.Popen(cmd, shell=False)
     rc = p.wait(timeout=file_timeout)

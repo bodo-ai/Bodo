@@ -22,7 +22,7 @@ export BODOSQL_PY4J_GATEWAY_PORT="auto"
 # only collect coverage for Bodo.
 
 # unittests
-python bodosql/runtests.py 1 -s -v -p no:faulthandler -m "$PYTEST_MARKER" bodosql/tests/
+python bodosql/runtests.py "BodoSQL_Tests" 1 -s -v -p no:faulthandler -m "$PYTEST_MARKER" bodosql/tests/
 
 # restore cwd to original directory
 cd ..
