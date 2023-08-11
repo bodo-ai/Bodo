@@ -2,6 +2,7 @@ package com.bodosql.calcite.rel.core
 
 import com.bodosql.calcite.adapter.pandas.PandasFilter
 import com.bodosql.calcite.adapter.pandas.RexCostEstimator
+import com.bodosql.calcite.application.Utils.RexNormalizer
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import org.apache.calcite.plan.RelOptCluster
@@ -18,7 +19,7 @@ open class FilterBase(
     traits: RelTraitSet,
     child: RelNode,
     condition: RexNode,
-) : Filter(cluster, traits, child, condition) {
+) : Filter(cluster, traits, child, condition.accept(RexNormalizer(cluster.rexBuilder))) {
 
     override fun copy(traitSet: RelTraitSet, input: RelNode, condition: RexNode): FilterBase {
         return FilterBase(cluster, traitSet, input, condition)

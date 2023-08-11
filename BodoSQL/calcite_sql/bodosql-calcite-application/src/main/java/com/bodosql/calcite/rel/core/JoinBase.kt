@@ -1,6 +1,7 @@
 package com.bodosql.calcite.rel.core
 
 import com.bodosql.calcite.adapter.pandas.RexCostEstimator
+import com.bodosql.calcite.application.Utils.RexNormalizer
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import com.google.common.collect.ImmutableSet
@@ -24,7 +25,7 @@ abstract class JoinBase(
     right: RelNode,
     condition: RexNode,
     joinType: JoinRelType,
-) : Join(cluster, traitSet, hints, left, right, condition, ImmutableSet.of(), joinType) {
+) : Join(cluster, traitSet, hints, left, right, condition.accept(RexNormalizer(cluster.rexBuilder)), ImmutableSet.of(), joinType) {
     override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
         // Join conditions are still applied on the cross product of the inputs.
         // While we don't materialize all of these rows, the condition cost should

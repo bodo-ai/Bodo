@@ -21,11 +21,12 @@ class PandasFilterRule private constructor(config: Config) : ConverterRule(confi
         val filter = rel as Filter
         val containsOver = filter.containsOver()
         val batchProperty = if (containsOver) BatchingProperty.SINGLE_BATCH else BatchingProperty.STREAMING
-        return PandasFilter(rel.cluster,
-            rel.traitSet.replace(PandasRel.CONVENTION).replace(batchProperty),
+        return PandasFilter.create(
+            rel.cluster,
             convert(filter.input,
                 filter.input.traitSet
                     .replace(PandasRel.CONVENTION).replace(batchProperty)),
-            filter.condition)
+            filter.condition
+        )
     }
 }
