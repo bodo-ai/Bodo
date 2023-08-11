@@ -1089,10 +1089,12 @@ BodoSQL Currently supports the following Numeric Functions:
 
 
 #### CEIL
--   `#!sql CEIL(X)`
+-   `#!sql CEIL(X[, scale])`
 
-    Converts X to an integer, rounding towards positive
-    infinity
+    Converts X to the specified scale, rounding towards positive
+    infinity. For example, `scale=0` rounds up to the nearest integer,
+    `scale=2` rounds up to the nearest `0.01`, and `scale=-1` rounds
+    up to the nearest multiple of 10.
 
 #### CEILING
 -   `#!sql CEILING(X)`
@@ -1100,9 +1102,12 @@ BodoSQL Currently supports the following Numeric Functions:
     Equivalent to `#!sql CEIL`
 
 #### FLOOR
--   `#!sql FLOOR(X)`
+-   `#!sql FLOOR(X[, scale])`
 
-    Converts X to an integer, rounding towards negative infinity
+    Converts X to the specified scale, rounding towards negative
+    infinity. For example, `scale=0` down up to the nearest integer,
+    `scale=2` rounds down to the nearest `0.01`, and `scale=-1` rounds
+    down to the nearest multiple of 10.
 
 #### DEGREES
 -   `#!sql DEGREES(X)`
@@ -1188,7 +1193,7 @@ BodoSQL Currently supports the following Numeric Functions:
     Returns 1 if X > 0, -1 if X < 0, and 0 if X = 0
 
 #### ROUND
--   `#!sql ROUND(X, num_decimal_places)`
+-   `#!sql ROUND(X[, num_decimal_places])`
 
     Rounds X to the specified number of decimal places
 
@@ -1297,46 +1302,6 @@ BodoSQL Currently supports the following Numeric Functions:
     Takes in a variable number of arguments of any type and returns a hash
     value that considers the values in each column. The hash function is
     deterministic across multiple ranks or multiple sessions.
-
-
-#### TO_NUMBER
--   `#!sql TO_NUMBER(EXPR)`
-
-    Converts an input expression to a fixed-point number. For `NULL` input,
-    the output is `NULL`.
-
-
-#### TO_NUMERIC
--   `#!sql TO_NUMERIC(EXPR)`
-
-    Equivalent to `#!sql TO_NUMBER(EXPR)`
-
-
-#### TO_DECIMAL
--   `#!sql TO_DECIMAL(EXPR)`
-
-    Equivalent to `#!sql TO_NUMBER(EXPR)`
-
-
-#### TRY_TO_NUMBER
--   `#!sql TRY_TO_NUMBER(EXPR)`
-
-    A special version of `#!sql TO_NUMBER` that performs
-    the same operation (i.e. converts an input expression to a fixed-point
-    number), but with error-handling support (i.e. if the conversion cannot be
-    performed, it returns a `NULL` value instead of raising an error).
-
-
-#### TRY_TO_NUMERIC
--   `#!sql TRY_TO_NUMERIC(EXPR)`
-
-    Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`
-
-
-#### TRY_TO_DECIMAL
--   `#!sql TRY_TO_DECIMAL(EXPR)`
-
-    Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`
 
 
 ###  Data Generation Functions
@@ -1452,6 +1417,28 @@ numeric types
     ```sql
     SELECT SUM(CASE WHEN A THEN 1 ELSE 0 END) FROM table1
     `#!sql ``
+
+
+#### LISTAGG
+-   `LISTAGG(str_col[, delimeter]) [WITHIN GROUP (ORDER BY order_col)]`
+
+    Concatenates all of the strings in `str_col` within each group into a single
+    string seperated by the characters in the string `delimiter`. If no delimiter
+    is provided, an empty string is used by default.
+
+    Optionally allows using a `WITHIN GROUP` clause to specify how the strings should
+    be ordered before being concatenated. If no clause is specified, then the ordering
+    is unpredictable.
+
+
+#### MODE
+-   `#!sql MODE`
+
+    Returns the most frequent element in a group, or `NULL` if the group is empty.
+
+    !!! note
+        This aggregation function is currently only supported with a `GROUP BY` clause.
+        In case of a tie, BodoSQL will choose a value arbitrarily based on performance considerations.
 
 #### APPROX_PERCENTILE
 -   `#!sql APPROX_PERCENTILE(A, q)`
@@ -1671,6 +1658,30 @@ BodoSQL currently supports the following Timestamp functions:
     Equivalent to `DATE_FROM_PARTS`
 
 
+#### TIME_FROM_PARTS
+-   `#!sql TIME_FROM_PARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`
+
+    Creates a time from individual numeric components. Usually,
+    `integer_hour_val` is in the 0-23 range, `integer_minute_val` is in the 0-59
+    range, `integer_second_val` is in the 0-59 range, and
+    `integer_nanoseconds_val` (if provided) is a 9-digit integer.
+    ```sql
+    TIMEFROMPARTS(12, 34, 56, 987654321)
+    12:34:56.987654321
+    ```
+
+
+#### TIMEFROMPARTS
+-   `#!sql TIMEFROMPARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`
+
+    See TIME_FROM_PARTS.
+
+    ```sql
+    TIMEFROMPARTS(12, 34, 56, 987654321)
+    12:34:56.987654321
+    ```
+
+
 #### TIMESTAMP_FROM_PARTS
 -   `TIMESTAMP_FROM_PARTS(year, month, day, hour, minute, second[, nanosecond[, timezone]])`
 
@@ -1798,6 +1809,23 @@ BodoSQL currently supports the following Timestamp functions:
     -   "MICROSECOND"
     -   "NANOSECOND"
 
+
+#### TIME_SLICE
+-   `#!sql TIME_SLICE(date_or_time_expr, slice_length, unit[, start_or_end])`
+
+    Calculates one of the endpoints of a "slice" of time containing the date
+    specified by `date_or_time_expr` where each slice has length of time corresponding
+    to `slice_length` times the date/time unit specified by `unit`. The slice
+    start/ends are always aligned to the unix epoch `1970-01-1` (at midnight). The fourth argument
+    specifies whether to return the begining or the end of the slice
+    (`'START'` for begining, `'END'` for end), where the default is `'START'`.
+    
+    For example, `#!sql TIME_SLICE(T, 3, 'YEAR')` would return the timestamp
+    corresponding to the begining of the first 3-year window (aligned with
+    1970) that contains timestamp `T`. So `T = 1995-7-4 12:30:00` would
+    output `1994-1-1` for `'START'` or `1997-1-1` for `'END'`. 
+
+
 #### NOW
 -   `#!sql NOW()`
 
@@ -1876,6 +1904,7 @@ BodoSQL currently supports the following Timestamp functions:
 
     Equivalent to `#!sql EXTRACT(unit FROM timestamp_val)` with the following unit
     string literals:
+
     -   YEAR: `year`, `years`, `yr`, `yrs`, `y`, `yy`, `yyy`, `yyyy`
     -   QUARTER: `quarter`, `quarters`, `q`, `qtr`, `qtrs`
     -   MONTH: `month`, `months`, `mm`, `mon`, `mons`
@@ -1887,6 +1916,7 @@ BodoSQL currently supports the following Timestamp functions:
     -   MILLISECOND: `millisecond`, `milliseconds`, `ms`, `msecs`
     -   MICROSECOND: `microsecond`, `microseconds`, `us`, `usec`
     -   NANOSECOND: `nanosecond`, `nanoseconds`, `nanosec`, `nsec`, `nsecs`, `nsecond`, `ns`, `nanonsecs`
+
     Supported with timezone-aware data.
 
 #### MICROSECOND
@@ -2052,29 +2082,6 @@ BodoSQL currently supports the following Timestamp functions:
 -   `#!sql UTC_DATE()`
 
     Returns the current UTC date as a Timestamp value.
-
-
-#### TIME_FROM_PARTS
--   `#!sql TIME_FROM_PARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`
-
-    Creates a time from individual numeric components. Usually,
-    `integer_hour_val` is in the 0-23 range, `integer_minute_val` is in the 0-59
-    range, `integer_second_val` is in the 0-59 range, and
-    `integer_nanoseconds_val` (if provided) is a 9-digit integer.
-    ```sql
-    TIMEFROMPARTS(12, 34, 56, 987654321)
-    12:34:56.987654321
-    ```
-
-#### TIMEFROMPARTS
--   `#!sql TIMEFROMPARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`
-
-    See TIME_FROM_PARTS.
-
-    ```sql
-    TIMEFROMPARTS(12, 34, 56, 987654321)
-    12:34:56.987654321
-    ```
 
 
 ###  String Functions
@@ -2367,6 +2374,33 @@ BodoSQL currently supports the following string functions:
 
     !!! note
         Behavior when `pos` or `len` are negative is not well-defined at this time.
+
+
+#### SHA2
+-   `#!sql SHA2(msg[, digest_size])`
+
+    Encodes the `msg` string using the `SHA-2` algorithm with the specified
+    digest size (only values supported are, 224, 256, 384 and 512). Outputs
+    the result as a hex-encoded string.
+
+
+#### SHA2_HEX
+-   `#!sql SHA2_HEX(msg[, digest_size])`
+
+    Equivalent to `#!sql SHA2(msg[, digest_size])`
+
+
+#### MD5
+-   `#!sql MD5(msg])`
+
+    Encodes the `msg` string using the `MD5` algorithm. Outputs the
+    result as a hex-encoded string.
+
+
+#### MD5_HEX
+-   `#!sql MD5_HEX(msg)`
+
+    Equivalent to `#!sql MD5_HEX(msg)`
 
 
 ###  Regex Functions
@@ -3289,6 +3323,156 @@ BodoSQL currently supports the following casting/conversion functions:
 -  `#!sql TRY_TO_DOUBLE(COLUMN_EXPRESSION)`
 
     This is similar to `#!sql TO_DOUBLE` except that it will return `NULL` instead of throwing an error invalid inputs.
+
+#### TO_NUMBER
+-   `#!sql TO_NUMBER(EXPR)`
+
+    Converts an input expression to a fixed-point number. For `NULL` input,
+    the output is `NULL`.
+
+
+#### TO_NUMERIC
+-   `#!sql TO_NUMERIC(EXPR)`
+
+    Equivalent to `#!sql TO_NUMBER(EXPR)`.
+
+
+#### TO_DECIMAL
+-   `#!sql TO_DECIMAL(EXPR)`
+
+    Equivalent to `#!sql TO_NUMBER(EXPR)`.
+
+
+#### TRY_TO_NUMBER
+-   `#!sql TRY_TO_NUMBER(EXPR)`
+
+    A special version of `#!sql TO_NUMBER` that performs
+    the same operation (i.e. converts an input expression to a fixed-point
+    number), but with error-handling support (i.e. if the conversion cannot be
+    performed, it returns a `NULL` value instead of raising an error).
+
+
+#### TRY_TO_NUMERIC
+-   `#!sql TRY_TO_NUMERIC(EXPR)`
+
+    Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`.
+
+
+#### TRY_TO_DECIMAL
+-   `#!sql TRY_TO_DECIMAL(EXPR)`
+
+    Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`.
+
+
+#### TO_DATE
+-   `#!sql TO_DATE(EXPR)`
+
+    Converts an input expression to a `DATE` type. The input can be one of
+    the following:
+
+    - `#!sql TO_DATE(timestamp_expr)` truncates the timestamp to its date value.
+    - `#!sql TO_DATE(string_expr)` if the string is in date format (e.g. `"1999-01-01"`)
+    then it is convrted to a corresponding date. If the string represents an integer
+    (e.g. `"123456"`) then it is interpreted as the number of seconds/milliseconds/microseconds/nanoseconds
+    since `1970-01-1`. Which unit it is interpreted as depends on the magnitude of the number,
+    in accordance with [the semantics used by Snowflake](https://docs.snowflake.com/en/sql-reference/functions/to_date#usage-notes).
+    - `#!sql TO_DATE(string_expr, format_expr)` uses the format string to specify how to parse the
+    string expression as a date. Uses the format string rules [as specified by Snowflake](https://docs.snowflake.com/en/sql-reference/functions-conversion#label-date-time-format-conversion).
+    - If the input is `NULL`, outputs `NULL`.
+
+    Raises an error if the input expression does not match one of these formats.
+
+#### TRY_TO_DATE
+-   `#!sql TRY_TO_DATE(EXPR)`
+
+    A special version of `#!sql TO_DATE` that performs
+    the same operation but returns `NULL` instead of raising an error if
+    something goes wrong during the conversion.
+
+#### TO_TIME
+-   `#!sql TO_TIME(EXPR)`
+
+    Converts an input expression to a `TIME` type. The input can be one of
+    the following:
+
+    - `#!sql TO_TIME(timestamp_expr)` extracts the time component from a timestamp.
+    - `#!sql TO_TIME(string_expr)` if the string is in date format (e.g. `"12:30:15"`)
+    then it is convrted to a corresponding time.
+    - `#!sql TO_TIME(string_expr, format_expr)` uses the format string to specify how to parse the
+    string expression as a time. Uses the format string rules [as specified by Snowflake](https://docs.snowflake.com/en/sql-reference/functions-conversion#label-date-time-format-conversion).
+    - If the input is `NULL`, outputs `NULL`
+
+    Raises an error if the input expression does not match one of these formats.
+
+#### TRY_TO_TIME
+-   `#!sql TRY_TO_TIME(EXPR)`
+
+    A special version of `#!sql TO_TIME` that performs
+    the same operation but returns `NULL` instead of raising an error if
+    something goes wrong during the conversion.
+
+#### TO_TIMESTAMP
+-   `#!sql TO_TIMESTAMP(EXPR)`
+
+    Converts an input expression to a `TIMESTAMP` type without a timezone. The input can be one of
+    the following:
+
+    - `#!sql TO_TIMESTAMP(date_expr)` upcasts a `DATE` to a `TIMESTAMP`.
+    - `#!sql TO_TIMESTAMP(integer)` creates a timestamp using the integer as the number of 
+    seconds/milliseconds/microseconds/nanoseconds since `1970-01-1`. Which unit it is interpreted 
+    as depends on the magnitude of the number, in accordance with [the semantics used by Snowflake](https://docs.snowflake.com/en/sql-reference/functions/to_date#usage-notes).
+    - `#!sql TO_TIMESTAMP(integer, scale)` the same as the integer case except that the scale provided specifes which
+    unit is used. THe scale can be an integer constant between 0 and 9, where 0 means seconds and 9 means nanoseconds.
+    - `#!sql TO_TIMESTAMP(string_expr)` if the string is in timestamp format (e.g. `"1999-12-31 23:59:30"`)
+    then it is convrted to a corresponding timestamp. If the string represents an integer
+    (e.g. `"123456"`) then it uses the same rule as the corresponding input integer.
+    - `#!sql TO_TIMESTAMP(string_expr, format_expr)` uses the format string to specify how to parse the
+    string expression as a timestamp. Uses the format string rules [as specified by Snowflake](https://docs.snowflake.com/en/sql-reference/functions-conversion#label-date-time-format-conversion).
+    - `#!sql TO_TIMESTAMP(timestamp_exr)` returns a timestamp expression representing the same moment in time,
+    but changing the timezone if necessary to be timezone-naive.
+    - If the input is `NULL`, outputs `NULL`
+
+    Raises an error if the input expression does not match one of these formats.
+
+#### TRY_TO_TIMESTAMP
+-   `#!sql TRY_TO_TIMESTAMP(EXPR)`
+
+    A special version of `#!sql TO_TIMESTAMP` that performs
+    the same operation but returns `NULL` instead of raising an error if
+    something goes wrong during the conversion.
+
+#### TO_TIMESTAMP_NTZ
+-   `#!sql TO_TIMESTAMP_NTZ(EXPR)`
+
+    Equivalent to `#!sql TO_TIMESTAMP`.
+
+#### TRY_TO_TIMESTAMP_NTZ
+-   `#!sql TRY_TO_TIMESTAMP_NTZ(EXPR)`
+
+    Equivalent to `#!sql TRY_TO_TIMESTAMP`.
+
+#### TO_TIMESTAMP_LTZ
+-   `#!sql TO_TIMESTAMP_LTZ(EXPR)`
+
+    Equivalent to `#!sql TO_TIMESTAMP` except that it uses the local time zone.
+
+#### TRY_TO_TIMESTAMP_LTZ
+-   `#!sql TRY_TO_TIMESTAMP_NTZ(EXPR)`
+
+    Equivalent to `#!sql TRY_TO_TIMESTAMP` except that it uses the local time zone.
+
+#### TO_TIMESTAMP_TZ
+-   `#!sql TO_TIMESTAMP_LTZ(EXPR)`
+
+    Equivalent to `#!sql TO_TIMESTAMP` except that it uses the local time zone, or keeps
+    the original timezone if the input is a timezone-aware timestamp.
+
+#### TRY_TO_TIMESTAMP_TZ
+-   `#!sql TRY_TO_TIMESTAMP_NTZ(EXPR)`
+
+    Equivalent to `#!sql TRY_TO_TIMESTAMP` except that it uses the local time zone, or keeps
+    the original timezone if the input is a timezone-aware timestamp.
+
 
 ## Supported DataFrame Data Types
 
