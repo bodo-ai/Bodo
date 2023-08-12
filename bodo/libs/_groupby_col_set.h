@@ -148,12 +148,11 @@ class BasicColSet {
 
     /**
      * Obtain the final output columns resulting from the groupby operation on
-     * this column set by appending them into a provided vector. This will free
-     * all other intermediate or auxiliary
+     * this column set. This will free all other intermediate or auxiliary
      * columns (if any) used by the column set (like reduction variables).
+     * @return constant vector of output columns
      */
-    virtual void addOutputColumns(
-        std::vector<std::shared_ptr<array_info>>& out_cols);
+    virtual const std::vector<std::shared_ptr<array_info>> getOutputColumns();
 
     /**
      * @brief Set input columns of this ColSet (used in streaming groupby for
@@ -316,10 +315,10 @@ class WindowColSet : public BasicColSet {
 
     /**
      * Obtain the final output columns resulting from the groupby operation on
-     * this column set by appending them into a provided vector.
+     * this column set.
+     * @return constant vector of output columns
      */
-    virtual void addOutputColumns(
-        std::vector<std::shared_ptr<array_info>>& out_cols);
+    virtual const std::vector<std::shared_ptr<array_info>> getOutputColumns();
 
    private:
     std::vector<std::shared_ptr<array_info>> input_cols;
@@ -421,9 +420,8 @@ class VarStdColSet : public BasicColSet {
 
     void eval(const grouping_info& grp_info) override;
 
-    void addOutputColumns(
-        std::vector<std::shared_ptr<array_info>>& out_cols) override {
-        out_cols.push_back(this->out_col);
+    const std::vector<std::shared_ptr<array_info>> getOutputColumns() override {
+        return {out_col};
     }
 
     std::tuple<std::vector<bodo_array_type::arr_type_enum>,
@@ -466,9 +464,8 @@ class SkewColSet : public BasicColSet {
 
     void eval(const grouping_info& grp_info) override;
 
-    void addOutputColumns(
-        std::vector<std::shared_ptr<array_info>>& out_cols) override {
-        out_cols.push_back(this->out_col);
+    const std::vector<std::shared_ptr<array_info>> getOutputColumns() override {
+        return {out_col};
     }
 
     std::tuple<std::vector<bodo_array_type::arr_type_enum>,
@@ -539,9 +536,8 @@ class KurtColSet : public BasicColSet {
 
     void eval(const grouping_info& grp_info) override;
 
-    void addOutputColumns(
-        std::vector<std::shared_ptr<array_info>>& out_cols) override {
-        out_cols.push_back(this->out_col);
+    const std::vector<std::shared_ptr<array_info>> getOutputColumns() override {
+        return {out_col};
     }
 
     std::tuple<std::vector<bodo_array_type::arr_type_enum>,

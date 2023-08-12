@@ -71,8 +71,7 @@ void BasicColSet::combine(const grouping_info& grp_info,
 
 void BasicColSet::eval(const grouping_info& grp_info) {}
 
-void BasicColSet::addOutputColumns(
-    std::vector<std::shared_ptr<array_info>>& out_cols) {
+const std::vector<std::shared_ptr<array_info>> BasicColSet::getOutputColumns() {
     std::vector<std::shared_ptr<array_info>>* mycols;
     if (combine_step) {
         mycols = &combine_cols;
@@ -81,7 +80,7 @@ void BasicColSet::addOutputColumns(
     }
 
     std::shared_ptr<array_info> out_col = mycols->at(0);
-    out_cols.push_back(out_col);
+    return {out_col};
 }
 
 // ############################## Mean ##############################
@@ -1470,9 +1469,13 @@ void TransformColSet::eval(const grouping_info& grp_info) {
     // copy_values need to know type of the data it'll copy.
     // Hence we use switch case on the column dtype
     std::vector<std::shared_ptr<array_info>> out_cols;
-    this->transform_op_col->addOutputColumns(out_cols);
-    std::shared_ptr<array_info> child_out_col = out_cols.at(0);
 
+    // getOutputColumns for this ColSet is guaranteed to return a vector of size
+    // 1
+    const std::shared_ptr<array_info> child_out_col =
+        this->transform_op_col->getOutputColumns().at(0);
+
+    assert(this->update_cols.size() == 1);
     copy_values_transform(this->update_cols[0], child_out_col, grp_info,
                           this->is_parallel);
 }
@@ -1571,11 +1574,9 @@ void WindowColSet::update(const std::vector<grouping_info>& grp_infos) {
                        is_parallel, use_sql_rules);
 }
 
-void WindowColSet::addOutputColumns(
-    std::vector<std::shared_ptr<array_info>>& out_cols) {
-    for (std::shared_ptr<array_info> out_col : update_cols) {
-        out_cols.push_back(out_col);
-    }
+const std::vector<std::shared_ptr<array_info>>
+WindowColSet::getOutputColumns() {
+    return update_cols;
 }
 
 // ############################## Ngroup ##############################

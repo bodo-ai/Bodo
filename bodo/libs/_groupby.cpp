@@ -768,7 +768,10 @@ class GroupbyPipeline {
             }
         } else {
             for (std::shared_ptr<BasicColSet> col_set : col_sets) {
-                col_set->addOutputColumns(out_table->columns);
+                const std::vector<std::shared_ptr<array_info>> out_cols =
+                    col_set->getOutputColumns();
+                out_table->columns.insert(out_table->columns.end(),
+                                          out_cols.begin(), out_cols.end());
             }
             // gb.head() already added index to out_table.
             if (!head_op && return_index) {
