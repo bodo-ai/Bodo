@@ -41,7 +41,7 @@ class PandasRelMdSize : RelMdSize() {
             // an entire plan cost calculation based on an unknown field.
             SqlTypeName.UNKNOWN -> 8.0
             else -> super.averageTypeValueSize(type)
-    }
+        }
 
     companion object {
         /**

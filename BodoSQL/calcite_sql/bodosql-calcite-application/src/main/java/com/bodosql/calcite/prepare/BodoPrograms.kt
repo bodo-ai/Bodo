@@ -3,12 +3,22 @@ package com.bodosql.calcite.prepare
 import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
-import com.bodosql.calcite.application.bodo_sql_rules.JoinExtractOverRule
-import com.bodosql.calcite.application.bodo_sql_rules.ListAggOptionalReplaceRule
-import com.bodosql.calcite.rel.logical.*
+import com.bodosql.calcite.application.logicalRules.JoinExtractOverRule
+import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
+import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
+import com.bodosql.calcite.rel.logical.BodoLogicalFilter
+import com.bodosql.calcite.rel.logical.BodoLogicalJoin
+import com.bodosql.calcite.rel.logical.BodoLogicalProject
+import com.bodosql.calcite.rel.logical.BodoLogicalSort
+import com.bodosql.calcite.rel.logical.BodoLogicalUnion
 import com.bodosql.calcite.rel.metadata.PandasRelMetadataProvider
 import com.google.common.collect.Iterables
-import org.apache.calcite.plan.*
+import org.apache.calcite.plan.Context
+import org.apache.calcite.plan.RelOptLattice
+import org.apache.calcite.plan.RelOptMaterialization
+import org.apache.calcite.plan.RelOptPlanner
+import org.apache.calcite.plan.RelOptRule
+import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.plan.hep.HepMatchOrder
 import org.apache.calcite.plan.hep.HepPlanner
 import org.apache.calcite.plan.hep.HepProgram
@@ -19,7 +29,12 @@ import org.apache.calcite.rel.RelShuttle
 import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.core.RelFactories
 import org.apache.calcite.rel.core.TableScan
-import org.apache.calcite.rel.logical.*
+import org.apache.calcite.rel.logical.LogicalAggregate
+import org.apache.calcite.rel.logical.LogicalFilter
+import org.apache.calcite.rel.logical.LogicalJoin
+import org.apache.calcite.rel.logical.LogicalProject
+import org.apache.calcite.rel.logical.LogicalSort
+import org.apache.calcite.rel.logical.LogicalUnion
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
 import org.apache.calcite.rel.rules.SubQueryRemoveRule
 import org.apache.calcite.rex.RexExecutorImpl
@@ -64,7 +79,8 @@ object BodoPrograms {
                     .addMatchOrder(HepMatchOrder.BOTTOM_UP)
                     .addRuleInstance(BodoRules.JOIN_TO_MULTI_JOIN)
                     .build(),
-                false, PandasRelMetadataProvider()
+                false,
+                PandasRelMetadataProvider(),
             )
         } else {
             NoopProgram
@@ -73,7 +89,7 @@ object BodoPrograms {
             Iterables.concat(
                 BodoRules.VOLCANO_MINIMAL_RULE_SET,
                 ifTrue(optimize, BodoRules.VOLCANO_OPTIMIZE_RULE_SET),
-            )
+            ),
         ),
         // TODO(jsternberg): This can likely be adapted and integrated directly with
         // the VolcanoPlanner, but that hasn't been done so leave this here.
@@ -105,7 +121,7 @@ object BodoPrograms {
             rel: RelNode,
             requiredOutputTraits: RelTraitSet?,
             materializations: List<RelOptMaterialization>?,
-            lattices: List<RelOptLattice>?
+            lattices: List<RelOptLattice>?,
         ): RelNode {
             // This is needed because the hep planner will only run rules
             // repeatedly until they don't modify the node anymore, but it
@@ -147,7 +163,7 @@ object BodoPrograms {
             rel: RelNode,
             requiredOutputTraits: RelTraitSet,
             materializations: List<RelOptMaterialization>,
-            lattices: List<RelOptLattice>
+            lattices: List<RelOptLattice>,
         ): RelNode {
             val metadataProvider = PandasRelMetadataProvider()
             rel.cluster.invalidateMetadataQuery()
@@ -204,14 +220,14 @@ object BodoPrograms {
             rel: RelNode,
             requiredOutputTraits: RelTraitSet?,
             materializations: List<RelOptMaterialization>?,
-            lattices: List<RelOptLattice>?
+            lattices: List<RelOptLattice>?,
         ): RelNode {
             val relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.cluster, null)
             return RelDecorrelator.decorrelateQuery(rel, relBuilder)
         }
     }
 
-     object LogicalConverterProgram : Program by ShuttleProgram(Visitor) {
+    object LogicalConverterProgram : Program by ShuttleProgram(Visitor) {
         private object Visitor : RelShuttleImpl() {
             override fun visit(project: LogicalProject): RelNode =
                 BodoLogicalProject.create(
@@ -250,7 +266,7 @@ object BodoPrograms {
                     agg.hints,
                     agg.groupSet,
                     agg.groupSets,
-                    agg.aggCallList
+                    agg.aggCallList,
                 )
 
             override fun visit(sort: LogicalSort): RelNode =
@@ -258,7 +274,7 @@ object BodoPrograms {
                     sort.input.accept(this),
                     sort.collation,
                     sort.offset,
-                    sort.fetch
+                    sort.fetch,
                 )
         }
     }
@@ -275,7 +291,8 @@ object BodoPrograms {
      */
     private class DecorateAttributesProgram : Program by Programs.hep(
         listOf(PandasRules.PANDAS_JOIN_STREAMING_REBALANCE_OUTPUT_RULE, PandasRules.PANDAS_JOIN_BATCH_REBALANCE_OUTPUT_RULE),
-        true, DefaultRelMetadataProvider.INSTANCE
+        true,
+        DefaultRelMetadataProvider.INSTANCE,
     )
 
     /**
@@ -303,7 +320,7 @@ object BodoPrograms {
      * Adds SnowflakeRel.CONVENTION to any SnowflakeTableScan nodes.
      * See the comment in SnowflakeTableScan about why this is needed.
      */
-     class SnowflakeTraitAdder : Program by ShuttleProgram(Visitor) {
+    class SnowflakeTraitAdder : Program by ShuttleProgram(Visitor) {
         private object Visitor : RelShuttleImpl() {
             override fun visit(scan: TableScan): RelNode {
                 return when (scan) {
@@ -320,7 +337,7 @@ object BodoPrograms {
             rel: RelNode,
             requiredOutputTraits: RelTraitSet,
             materializations: MutableList<RelOptMaterialization>,
-            lattices: MutableList<RelOptLattice>
+            lattices: MutableList<RelOptLattice>,
         ): RelNode = rel.accept(shuttle)
     }
 
@@ -330,7 +347,7 @@ object BodoPrograms {
             rel: RelNode,
             requiredOutputTraits: RelTraitSet,
             materializations: List<RelOptMaterialization>,
-            lattices: List<RelOptLattice>
+            lattices: List<RelOptLattice>,
         ): RelNode = rel
     }
 }

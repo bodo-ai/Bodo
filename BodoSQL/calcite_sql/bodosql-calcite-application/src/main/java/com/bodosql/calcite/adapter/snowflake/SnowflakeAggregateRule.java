@@ -1,6 +1,6 @@
 package com.bodosql.calcite.adapter.snowflake;
 
-import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.traits.CombineStreamsExchange;
 import org.apache.calcite.rel.core.Aggregate;
 import org.immutables.value.Value;

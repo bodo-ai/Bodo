@@ -1,10 +1,12 @@
 package com.bodosql.calcite.sql.ddl
 
-import com.bodosql.calcite.sql.validate.BodoSqlValidator
-import org.apache.calcite.sql.*
+import org.apache.calcite.sql.SqlCall
+import org.apache.calcite.sql.SqlIdentifier
+import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.SqlOperator
+import org.apache.calcite.sql.SqlSpecialOperator
+import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.parser.SqlParserPos
-import org.apache.calcite.sql.validate.*
-
 
 /*
  * Superclass for AlterTable statements. Currently supported features:
@@ -16,8 +18,8 @@ import org.apache.calcite.sql.validate.*
  */
 abstract class SqlAlterTable(
     val pos: SqlParserPos,
-    val ifExists : Boolean,
-    val table : SqlIdentifier,
+    val ifExists: Boolean,
+    val table: SqlIdentifier,
 ) : SqlCall(pos) {
 
     companion object {
@@ -26,15 +28,15 @@ abstract class SqlAlterTable(
     }
     override fun getOperator(): SqlOperator = OPERATOR
 
-    override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int)  {
-            writer.keyword("ALTER")
-            writer.keyword("TABLE")
-            if (ifExists) {
-                writer.keyword("IF")
-                writer.keyword("EXISTS")
-            }
-            table.unparse(writer, leftPrec, rightPrec)
-            unparseSuffix(writer, leftPrec, rightPrec)
+    override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
+        writer.keyword("ALTER")
+        writer.keyword("TABLE")
+        if (ifExists) {
+            writer.keyword("IF")
+            writer.keyword("EXISTS")
+        }
+        table.unparse(writer, leftPrec, rightPrec)
+        unparseSuffix(writer, leftPrec, rightPrec)
     }
 
     abstract fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int)

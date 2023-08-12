@@ -11,8 +11,11 @@ class PandasValuesRule private constructor(config: Config) : ConverterRule(confi
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                LogicalValues::class.java, Convention.NONE, PandasRel.CONVENTION,
-                "PandasValuesRule")
+                LogicalValues::class.java,
+                Convention.NONE,
+                PandasRel.CONVENTION,
+                "PandasValuesRule",
+            )
             .withRuleFactory { config -> PandasValuesRule(config) }
     }
 

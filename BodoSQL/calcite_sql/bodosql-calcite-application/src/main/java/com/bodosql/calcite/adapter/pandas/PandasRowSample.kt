@@ -2,10 +2,9 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
-import com.bodosql.calcite.traits.BatchingProperty
-import org.apache.calcite.plan.RelOptCluster
 import com.bodosql.calcite.plan.RelOptRowSamplingParameters
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
+import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelCollationTraitDef
 import org.apache.calcite.rel.RelNode
@@ -23,12 +22,14 @@ class PandasRowSample(
         assert(convention == PandasRel.CONVENTION)
     }
 
-    override fun explainTerms(pw : RelWriter) : RelWriter {
+    override fun explainTerms(pw: RelWriter): RelWriter {
         return super.explainTerms(pw)
             .item("mode", if (params.isBernoulli()) "bernoulli" else "system")
             .item("rows", params.getNumberOfRows())
-            .item("repeatableSeed",
-                if (params.isRepeatable()) params.getRepeatableSeed() else "-");
+            .item(
+                "repeatableSeed",
+                if (params.isRepeatable()) params.getRepeatableSeed() else "-",
+            )
     }
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): PandasRowSample {

@@ -8,24 +8,34 @@ class PandasRules private constructor() {
     companion object {
         @JvmField
         val PANDAS_PROJECT_RULE: RelOptRule = PandasProjectRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_FILTER_RULE: RelOptRule = PandasFilterRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_AGGREGATE_RULE: RelOptRule = PandasAggregateRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_JOIN_RULE: RelOptRule = PandasJoinRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_SORT_RULE: RelOptRule = PandasSortRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_UNION_RULE: RelOptRule = PandasUnionRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_INTERSECT_RULE: RelOptRule = PandasIntersectRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_MINUS_RULE: RelOptRule = PandasMinusRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_VALUES_RULE: RelOptRule = PandasValuesRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_SAMPLE_RULE: RelOptRule = PandasSampleRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_ROW_SAMPLE_RULE: RelOptRule = PandasRowSampleRule.DEFAULT_CONFIG.toRule()
 
@@ -36,10 +46,13 @@ class PandasRules private constructor() {
         // so just going to leave them as-is for the sake of transitioning.
         @JvmField
         val PANDAS_TABLE_MODIFY_RULE: RelOptRule = PandasTableModifyRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_TABLE_CREATE_RULE: RelOptRule = PandasTableCreateRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_TABLE_SCAN: RelOptRule = PandasTableScanRule.DEFAULT_CONFIG.toRule()
+
         @JvmField
         val PANDAS_TARGET_TABLE_SCAN: RelOptRule = PandasTargetTableScanRule.DEFAULT_CONFIG.toRule()
 

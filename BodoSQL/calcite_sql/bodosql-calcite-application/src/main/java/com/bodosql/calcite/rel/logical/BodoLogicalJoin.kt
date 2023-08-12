@@ -25,7 +25,7 @@ class BodoLogicalJoin(
         left: RelNode,
         right: RelNode,
         joinType: JoinRelType,
-        semiJoinDone: Boolean
+        semiJoinDone: Boolean,
     ): Join {
         return BodoLogicalJoin(cluster, traitSet, hints, left, right, conditionExpr, joinType)
     }

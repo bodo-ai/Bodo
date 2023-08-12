@@ -2,15 +2,11 @@ package org.apache.calcite.plan;
 
 import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlOperator;
-import org.apache.calcite.sql.fun.SqlInOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 
-import com.bodosql.calcite.sql.fun.SqlBodoOperatorTable;
-
-import java.util.List;
+import com.bodosql.calcite.sql.func.SqlBodoOperatorTable;
 
 public class BodoRelOptUtil {
   /**
@@ -23,7 +19,7 @@ public class BodoRelOptUtil {
    * The proper way to support this would be to give NULL_EQUALS its own
    * custom {@link org.apache.calcite.sql.fun.SqlQuantifyOperator} so we
    * don't have to modify the upstream version and then use convertlets
-   * to perform the conversion similar to {@link com.bodosql.calcite.sql.fun.SqlLikeQuantifyOperator}.
+   * to perform the conversion similar to {@link com.bodosql.calcite.sql.func.SqlLikeQuantifyOperator}.
    * That's not necessarily straightforward and easy right now so copying
    * this method and utilizing it in {@link SqlToRelConverter} is more
    * straightforward.

@@ -1,11 +1,11 @@
 package com.bodosql.calcite.application.BodoSQLTypeSystems;
 
+import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
-import org.apache.calcite.sql.type.*;
-
-import javax.annotation.Nullable;
+import org.apache.calcite.sql.type.BodoTZInfo;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 /**
  * Class for the RelDataTypeSystem used by BodoSQL. This recycles the default type system but
@@ -174,6 +174,7 @@ public class BodoSQLRelDataTypeSystem implements RelDataTypeSystem {
   public @Nullable Integer getWeekStart() {
     return weekStart;
   }
+
   public @Nullable Integer getWeekOfYearPolicy() {
     return weekOfYearPolicy;
   }

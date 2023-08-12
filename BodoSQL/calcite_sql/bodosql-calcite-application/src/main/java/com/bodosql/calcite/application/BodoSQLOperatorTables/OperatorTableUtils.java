@@ -1,7 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLOperatorTables;
 
 import java.util.*;
-import org.apache.calcite.rel.type.*;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.SqlOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;

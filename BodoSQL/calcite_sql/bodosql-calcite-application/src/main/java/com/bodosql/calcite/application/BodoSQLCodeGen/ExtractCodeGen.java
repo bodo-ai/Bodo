@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
+import static com.bodosql.calcite.application.utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;

@@ -1,6 +1,5 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
@@ -12,8 +11,11 @@ class PandasTargetTableScanRule private constructor(config: Config) : ConverterR
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                LogicalTargetTableScan::class.java, Convention.NONE, PandasRel.CONVENTION,
-                "PandasTargetTableScanRule")
+                LogicalTargetTableScan::class.java,
+                Convention.NONE,
+                PandasRel.CONVENTION,
+                "PandasTargetTableScanRule",
+            )
             .withRuleFactory { config -> PandasTargetTableScanRule(config) }
     }
 

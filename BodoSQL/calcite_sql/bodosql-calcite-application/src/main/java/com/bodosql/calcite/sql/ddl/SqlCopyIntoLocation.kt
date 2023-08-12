@@ -1,8 +1,12 @@
 package com.bodosql.calcite.sql.ddl
 
-import org.apache.calcite.sql.*
+import org.apache.calcite.sql.SqlCall
+import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.SqlNode
+import org.apache.calcite.sql.SqlOperator
+import org.apache.calcite.sql.SqlSpecialOperator
+import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.parser.SqlParserPos
-
 
 class SqlCopyIntoLocation(
     val pos: SqlParserPos,
@@ -15,7 +19,7 @@ class SqlCopyIntoLocation(
     val sourceType: CopyIntoLocationSource,
     val sourceNode: SqlNode,
     val partition: SqlNode?,
-    val fileFormat: SqlSnowflakeFileFormat?
+    val fileFormat: SqlSnowflakeFileFormat?,
 ) : SqlCall(pos) {
     enum class CopyIntoLocationTarget { STAGE, LOCATION }
 
@@ -26,7 +30,7 @@ class SqlCopyIntoLocation(
         val OPERATOR = SqlSpecialOperator("COPY INTO", SqlKind.OTHER_DDL)
     }
 
-    override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int)  {
+    override fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
         writer.keyword("COPY INTO")
         when (targetType) {
             CopyIntoLocationTarget.STAGE -> {
@@ -48,7 +52,7 @@ class SqlCopyIntoLocation(
                 writer.keyword(")")
             }
         }
-        partition?.let{
+        partition?.let {
             writer.keyword("PARTITION BY")
             partition.unparse(writer, leftPrec, rightPrec)
         }
@@ -61,5 +65,5 @@ class SqlCopyIntoLocation(
 
     override fun getOperator(): SqlOperator = OPERATOR
 
-    override fun getOperandList(): List<SqlNode>  = listOf(target, sourceNode)
+    override fun getOperandList(): List<SqlNode> = listOf(target, sourceNode)
 }

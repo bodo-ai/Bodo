@@ -1,7 +1,7 @@
 package com.bodosql.calcite.application;
 
-import static com.bodosql.calcite.application.Utils.Utils.escapePythonQuotes;
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
+import static com.bodosql.calcite.application.utils.Utils.escapePythonQuotes;
+import static com.bodosql.calcite.application.utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;

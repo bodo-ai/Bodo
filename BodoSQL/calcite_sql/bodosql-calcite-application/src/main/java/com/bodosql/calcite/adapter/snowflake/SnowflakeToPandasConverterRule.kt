@@ -10,8 +10,12 @@ class SnowflakeToPandasConverterRule private constructor(config: Config) : Conve
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
-            .withConversion(RelNode::class.java, SnowflakeRel.CONVENTION,
-                PandasRel.CONVENTION, "SnowflakeToPandasConverterRule")
+            .withConversion(
+                RelNode::class.java,
+                SnowflakeRel.CONVENTION,
+                PandasRel.CONVENTION,
+                "SnowflakeToPandasConverterRule",
+            )
             .withRuleFactory { config -> SnowflakeToPandasConverterRule(config) }
     }
 

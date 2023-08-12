@@ -4,18 +4,31 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.s
 import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.argumentRange;
 import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.isOutputNullableCompile;
 
-import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*;
+import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.DateTimeType;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 import com.google.common.collect.Sets;
-
 import java.util.*;
 import javax.annotation.Nullable;
 import org.apache.calcite.avatica.util.TimeUnit;
-import org.apache.calcite.rel.type.*;
-import org.apache.calcite.sql.*;
-import org.apache.calcite.sql.fun.*;
-import org.apache.calcite.sql.type.*;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.sql.SqlCallBinding;
+import org.apache.calcite.sql.SqlFunction;
+import org.apache.calcite.sql.SqlFunctionCategory;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.SqlOperatorBinding;
+import org.apache.calcite.sql.SqlOperatorTable;
+import org.apache.calcite.sql.SqlSyntax;
+import org.apache.calcite.sql.fun.SqlDatePartFunction;
+import org.apache.calcite.sql.type.BodoReturnTypes;
+import org.apache.calcite.sql.type.OperandTypes;
+import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
 public final class DatetimeOperatorTable implements SqlOperatorTable {
@@ -41,8 +54,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
    */
   public static RelDataType dateaddReturnType(SqlOperatorBinding binding) {
     List<RelDataType> operandTypes = binding.collectOperandTypes();
-    if (operandTypes.size() == 2)
-      return mySqlDateaddReturnType(binding);
+    if (operandTypes.size() == 2) return mySqlDateaddReturnType(binding);
     return snowflakeDateaddReturnType(binding, "DATEADD");
   }
 
@@ -61,22 +73,16 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
     String unit;
     if (operandTypes.get(0).getSqlTypeName().equals(SqlTypeName.SYMBOL))
       unit = ((SqlCallBinding) binding).operand(0).toString();
-    else
-      unit = binding.getOperandLiteralValue(0, String.class);
+    else unit = binding.getOperandLiteralValue(0, String.class);
     unit = standardizeTimeUnit(fnName, unit, DateTimeType.TIMESTAMP);
     // TODO: refactor standardizeTimeUnit function to change the third argument to SqlTypeName
     RelDataType returnType;
     if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
       Set<String> DATE_UNITS =
-          new HashSet<>(Arrays.asList("year",
-              "quarter",
-              "month",
-              "week",
-              "day"));
+          new HashSet<>(Arrays.asList("year", "quarter", "month", "week", "day"));
       if (DATE_UNITS.contains(unit))
         returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
-      else
-        returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+      else returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
     } else {
       // If the input is tzAware/tzNaive/time the output is as well.
       returnType = datetimeType;
@@ -102,23 +108,20 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       // when the second argument is integer, it is equivalent to adding day interval
       if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE))
         returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
-      else if (datetimeType instanceof TZAwareSqlType)
-        returnType = datetimeType;
-      else
-        returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
-    }
-    else {
+      else if (datetimeType instanceof TZAwareSqlType) returnType = datetimeType;
+      else returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+    } else {
       // if the first argument is date, the return type depends on the interval type
       if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
         Set<SqlTypeName> DATE_INTERVAL_TYPES =
-            Sets.immutableEnumSet(SqlTypeName.INTERVAL_YEAR_MONTH,
+            Sets.immutableEnumSet(
+                SqlTypeName.INTERVAL_YEAR_MONTH,
                 SqlTypeName.INTERVAL_YEAR,
                 SqlTypeName.INTERVAL_MONTH,
                 SqlTypeName.INTERVAL_DAY);
         if (DATE_INTERVAL_TYPES.contains(operandTypes.get(1).getSqlTypeName()))
           returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
-        else
-          returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+        else returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
       } else if (datetimeType instanceof TZAwareSqlType) {
         returnType = datetimeType;
       } else {
@@ -207,8 +210,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           OperandTypes.or(
               OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.sequence("TO_TIME(STRING, STRING)", OperandTypes.STRING, OperandTypes.STRING)
-          ),
+              OperandTypes.sequence(
+                  "TO_TIME(STRING, STRING)", OperandTypes.STRING, OperandTypes.STRING)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -224,8 +227,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           OperandTypes.or(
               OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.sequence("TIME(STRING, STRING)", OperandTypes.STRING, OperandTypes.STRING)
-          ),
+              OperandTypes.sequence(
+                  "TIME(STRING, STRING)", OperandTypes.STRING, OperandTypes.STRING)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -241,8 +244,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           OperandTypes.or(
               OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.sequence("TRY_TO_TIME(STRING, STRING)", OperandTypes.STRING, OperandTypes.STRING)
-          ),
+              OperandTypes.sequence(
+                  "TRY_TO_TIME(STRING, STRING)", OperandTypes.STRING, OperandTypes.STRING)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -317,8 +320,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       if (defaultToNaive) {
         returnType = typeFactory.createSqlType(SqlTypeName.TIMESTAMP);
       } else {
-        returnType =
-            BodoRelDataTypeFactory.createTZAwareSqlType(typeFactory, null);
+        returnType = BodoRelDataTypeFactory.createTZAwareSqlType(typeFactory, null);
       }
     } else {
       throw new BodoSQLCodegenException(
@@ -837,7 +839,6 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-
   public static final SqlFunction MONTHS_BETWEEN =
       new SqlFunction(
           "MONTHS_BETWEEN",
@@ -851,9 +852,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           /// What Input Types does the function accept.
           OperandTypes.sequence(
-                  "MONTHS_BETWEEN(DATETIME, DATETIME)",
-                  OperandTypes.or(OperandTypes.DATE, OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
-                  OperandTypes.or(OperandTypes.DATE, OperandTypes.DATETIME, OperandTypes.TIMESTAMP)),
+              "MONTHS_BETWEEN(DATETIME, DATETIME)",
+              OperandTypes.or(OperandTypes.DATE, OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
+              OperandTypes.or(OperandTypes.DATE, OperandTypes.DATETIME, OperandTypes.TIMESTAMP)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -871,9 +872,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           /// What Input Types does the function accept. This function accepts the following
           // arguments (Datetime, Interval), (String, Interval)
           OperandTypes.sequence(
-                  "ADD_MONTHS(DATETIME, NUMERIC)",
-                  OperandTypes.or(OperandTypes.DATE, OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
-                  OperandTypes.NUMERIC),
+              "ADD_MONTHS(DATETIME, NUMERIC)",
+              OperandTypes.or(OperandTypes.DATE, OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
+              OperandTypes.NUMERIC),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -962,7 +963,6 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-
   public static final SqlFunction DATE_TRUNC =
       new SqlFunction(
           "DATE_TRUNC",
@@ -976,9 +976,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           // What Input Types does the function accept.
           OperandTypes.sequence(
-              "DATE_TRUNC(UNIT, DATETIME)",
-              OperandTypes.ANY,
-              OperandTypes.DATETIME),
+              "DATE_TRUNC(UNIT, DATETIME)", OperandTypes.ANY, OperandTypes.DATETIME),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -995,30 +993,26 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           // What Input Types does the function accept.
           OperandTypes.or(
-            OperandTypes.sequence(
-                    "TIME_SLICE(DATETIME, INT, UNIT)",
-                    OperandTypes.or(OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
-                    OperandTypes.INTEGER,
-                    OperandTypes.ANY),
-            OperandTypes.sequence(
-                    "TIME_SLICE(DATETIME, INT, UNIT, STRING)",
-                    OperandTypes.or(OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
-                    OperandTypes.INTEGER,
-                    OperandTypes.ANY,
-                    OperandTypes.STRING)
-          ),
+              OperandTypes.sequence(
+                  "TIME_SLICE(DATETIME, INT, UNIT)",
+                  OperandTypes.or(OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
+                  OperandTypes.INTEGER,
+                  OperandTypes.ANY),
+              OperandTypes.sequence(
+                  "TIME_SLICE(DATETIME, INT, UNIT, STRING)",
+                  OperandTypes.or(OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
+                  OperandTypes.INTEGER,
+                  OperandTypes.ANY,
+                  OperandTypes.STRING)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
-
 
   private static RelDataType truncReturnType(SqlOperatorBinding binding) {
     RelDataTypeFactory typeFactory = binding.getTypeFactory();
     RelDataType inputType = binding.getOperandType(0);
 
     if (inputType.getSqlTypeName().getFamily().equals(SqlTypeFamily.NUMERIC)) {
-      return typeFactory.createTypeWithNullability(
-              inputType,
-              inputType.isNullable());
+      return typeFactory.createTypeWithNullability(inputType, inputType.isNullable());
     } else {
       return datetruncReturnType(binding);
     }
@@ -1032,15 +1026,12 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           // What Input Types does the function accept.
           OperandTypes.or(
-                  OperandTypes.sequence("TRUNC(UNIT, DATETIME)",
-                          OperandTypes.ANY,
-                          OperandTypes.DATETIME),
-                  OperandTypes.NUMERIC_INTEGER
-          ),
+              OperandTypes.sequence(
+                  "TRUNC(UNIT, DATETIME)", OperandTypes.ANY, OperandTypes.DATETIME),
+              OperandTypes.NUMERIC_INTEGER),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-
-    public static final SqlFunction YEAROFWEEK =
+  public static final SqlFunction YEAROFWEEK =
       new SqlFunction(
           "YEAROFWEEK",
           // What SqlKind should match?
@@ -1122,15 +1113,15 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction DAY = new SqlDatePartFunction("DAY", TimeUnit.DAY);
 
   public static final SqlFunction CONVERT_TIMEZONE =
-          new SqlFunction("CONVERT_TIMEZONE",
-                  SqlKind.OTHER_FUNCTION,
-                  ReturnTypes.TIMESTAMP,
-                  null,
-                  OperandTypes.or(
-                    OperandTypes.CHARACTER_CHARACTER_DATETIME,
-                    OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME)
-                  ),
-                  SqlFunctionCategory.TIMEDATE);
+      new SqlFunction(
+          "CONVERT_TIMEZONE",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.TIMESTAMP,
+          null,
+          OperandTypes.or(
+              OperandTypes.CHARACTER_CHARACTER_DATETIME,
+              OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME)),
+          SqlFunctionCategory.TIMEDATE);
 
   private List<SqlOperator> functionList =
       Arrays.asList(

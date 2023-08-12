@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.pandas.window
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
-import com.bodosql.calcite.ir.*
+import com.bodosql.calcite.ir.Variable
 
 class WindowAggregate internal constructor(private val groups: List<Group>, private val index: List<GroupIndex>) {
     fun emit(ctx: PandasRel.BuildContext): List<Variable> {

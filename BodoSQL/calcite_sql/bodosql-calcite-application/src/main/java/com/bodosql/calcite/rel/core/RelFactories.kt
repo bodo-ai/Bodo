@@ -1,6 +1,11 @@
 package com.bodosql.calcite.rel.core
 
-import com.bodosql.calcite.rel.logical.*
+import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
+import com.bodosql.calcite.rel.logical.BodoLogicalFilter
+import com.bodosql.calcite.rel.logical.BodoLogicalJoin
+import com.bodosql.calcite.rel.logical.BodoLogicalProject
+import com.bodosql.calcite.rel.logical.BodoLogicalSort
+import com.bodosql.calcite.rel.logical.BodoLogicalUnion
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.Context
 import org.apache.calcite.plan.Contexts
@@ -9,33 +14,33 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.rel.core.CorrelationId
 import org.apache.calcite.rel.core.JoinRelType
-import org.apache.calcite.rel.core.RelFactories.*
+import org.apache.calcite.rel.core.RelFactories
+import org.apache.calcite.rel.core.RelFactories.DEFAULT_SET_OP_FACTORY
 import org.apache.calcite.rel.hint.RelHint
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.tools.RelBuilder
 import org.apache.calcite.tools.RelBuilderFactory
 import org.apache.calcite.util.ImmutableBitSet
-import org.checkerframework.checker.nullness.qual.Nullable
 
 object RelFactories {
     @JvmField
-    val PROJECT_FACTORY: ProjectFactory = ProjectFactory(::createProject)
+    val PROJECT_FACTORY: RelFactories.ProjectFactory = RelFactories.ProjectFactory(::createProject)
 
     @JvmField
-    val FILTER_FACTORY: FilterFactory = FilterFactory(::createFilter)
+    val FILTER_FACTORY: RelFactories.FilterFactory = RelFactories.FilterFactory(::createFilter)
 
     @JvmField
-    val JOIN_FACTORY: JoinFactory = JoinFactory(::createJoin)
+    val JOIN_FACTORY: RelFactories.JoinFactory = RelFactories.JoinFactory(::createJoin)
 
     @JvmField
-    val SET_OP_FACTORY: SetOpFactory = SetOpFactory(::createSetOp)
+    val SET_OP_FACTORY: RelFactories.SetOpFactory = RelFactories.SetOpFactory(::createSetOp)
 
     @JvmField
-    val AGGREGATE_FACTORY: AggregateFactory = AggregateFactory(::createAggregate)
+    val AGGREGATE_FACTORY: RelFactories.AggregateFactory = RelFactories.AggregateFactory(::createAggregate)
 
     @JvmField
-    val SORT_FACTORY: SortFactory = SortFactory(::createSort)
+    val SORT_FACTORY: RelFactories.SortFactory = RelFactories.SortFactory(::createSort)
 
     @JvmField
     val DEFAULT_CONTEXT: Context = Contexts.of(
@@ -60,10 +65,15 @@ object RelFactories {
             BodoLogicalFilter.create(input, condition)
         }
 
-    private fun createJoin(left: RelNode, right: RelNode, hints: List<RelHint>,
-                           condition: RexNode, variablesSet: Set<CorrelationId>,
-                           joinType: JoinRelType,
-                           semiJoinDone: Boolean): RelNode =
+    private fun createJoin(
+        left: RelNode,
+        right: RelNode,
+        hints: List<RelHint>,
+        condition: RexNode,
+        variablesSet: Set<CorrelationId>,
+        joinType: JoinRelType,
+        semiJoinDone: Boolean,
+    ): RelNode =
         if (semiJoinDone) {
             throw UnsupportedOperationException("Semi-join operation is not supported")
         } else if (variablesSet.isNotEmpty()) {
@@ -75,16 +85,21 @@ object RelFactories {
     private fun createSetOp(kind: SqlKind, inputs: List<RelNode>, all: Boolean): RelNode {
         return when (kind) {
             SqlKind.UNION -> BodoLogicalUnion.create(inputs, all)
-            else -> DEFAULT_SET_OP_FACTORY.createSetOp(kind, inputs, all);
+            else -> DEFAULT_SET_OP_FACTORY.createSetOp(kind, inputs, all)
         }
     }
 
-    private fun createAggregate(input: RelNode, hints: List<RelHint>, groupSet: ImmutableBitSet,
-                                groupSets: ImmutableList<ImmutableBitSet>, aggCalls: List<AggregateCall>): RelNode {
+    private fun createAggregate(
+        input: RelNode,
+        hints: List<RelHint>,
+        groupSet: ImmutableBitSet,
+        groupSets: ImmutableList<ImmutableBitSet>,
+        aggCalls: List<AggregateCall>,
+    ): RelNode {
         return BodoLogicalAggregate.create(input, hints, groupSet, groupSets, aggCalls)
     }
 
-    private fun createSort(input: RelNode, collation: RelCollation, offset: RexNode?, fetch: RexNode?) : RelNode {
+    private fun createSort(input: RelNode, collation: RelCollation, offset: RexNode?, fetch: RexNode?): RelNode {
         return BodoLogicalSort.create(input, collation, offset, fetch)
     }
 }

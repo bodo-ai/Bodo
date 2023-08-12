@@ -19,14 +19,12 @@ interface Op {
     data class Assign(val target: Variable, val expr: Expr) : Op {
 
         override fun emit(doc: Doc) {
-            //Assertion to check that we're not shadowing variables
-            //by assigning to them multiple times
+            // Assertion to check that we're not shadowing variables
+            // by assigning to them multiple times
 
             doc.write("${target.name} = ${expr.emit()}")
         }
-
     }
-
 
     /**
      * Represents an assignment of an expression to a tuple of variables
@@ -36,7 +34,7 @@ interface Op {
      */
     data class TupleAssign(val targets: List<Variable>, val expr: Expr) : Op {
         override fun emit(doc: Doc) {
-            //If we have no variables to assign to, this is a no-op
+            // If we have no variables to assign to, this is a no-op
             if (targets.isEmpty()) {
                 return
             }
@@ -45,9 +43,8 @@ interface Op {
                 tuple_builder.append(target.emit())
                 tuple_builder.append(", ")
             }
-            doc.write("(${tuple_builder.toString()}) = ${expr.emit()}")
+            doc.write("($tuple_builder) = ${expr.emit()}")
         }
-
     }
 
     /**
@@ -76,7 +73,7 @@ interface Op {
     /**
      * Represents a return statement
      */
-    data class ReturnStatement( val retVal: Variable?) : Op {
+    data class ReturnStatement(val retVal: Variable?) : Op {
 
         override fun emit(doc: Doc) {
             if (retVal != null) {
@@ -85,7 +82,6 @@ interface Op {
                 doc.write("return")
             }
         }
-
     }
 
     /**
@@ -103,8 +99,8 @@ interface Op {
      * Represents a for loop in python.
      */
     data class For(val identifier: String, val collection: Expr, val body: List<Op>) : Op {
-        constructor(identifier: String, collection: Expr, body: (Variable, MutableList<Op>) -> Unit)
-                : this(identifier, collection, buildList<Op> { body(Variable(identifier), this) })
+        constructor(identifier: String, collection: Expr, body: (Variable, MutableList<Op>) -> Unit) :
+            this(identifier, collection, buildList<Op> { body(Variable(identifier), this) })
 
         override fun emit(doc: Doc) {
             doc.write("for $identifier in ${collection.emit()}:")
@@ -123,7 +119,6 @@ interface Op {
             frame.emit(doc)
         }
     }
-
 
     /**
      * A fallthrough to insert text directly into the document.
@@ -150,7 +145,6 @@ interface Op {
                 }
             }
         }
-
     }
 
     class Function(val name: String, val args: List<Variable>, val body: Frame) : Op {
@@ -175,8 +169,6 @@ interface Op {
             doc.write(line)
         }
     }
-
-
 
     object Continue : Op {
         override fun emit(doc: Doc) {

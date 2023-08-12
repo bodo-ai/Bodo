@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
-import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
@@ -13,8 +12,11 @@ class PandasProjectRule private constructor(config: Config) : ConverterRule(conf
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                BodoLogicalProject::class.java, Convention.NONE, PandasRel.CONVENTION,
-                "PandasProjectRule")
+                BodoLogicalProject::class.java,
+                Convention.NONE,
+                PandasRel.CONVENTION,
+                "PandasProjectRule",
+            )
             .withRuleFactory { config -> PandasProjectRule(config) }
     }
 
@@ -22,10 +24,13 @@ class PandasProjectRule private constructor(config: Config) : ConverterRule(conf
         val project = rel as Project
         val batchProperty = ExpectedBatchingProperty.projectFilterProperty(project.projects)
         return PandasProject.create(
-            convert(project.input,
+            convert(
+                project.input,
                 project.input.traitSet
-                    .replace(PandasRel.CONVENTION).replace(batchProperty)),
+                    .replace(PandasRel.CONVENTION).replace(batchProperty),
+            ),
             project.projects,
-            project.rowType)
+            project.rowType,
+        )
     }
 }

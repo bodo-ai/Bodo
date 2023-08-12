@@ -17,7 +17,7 @@ abstract class SqlSnowflakeCreateTableBase(
     ifNotExists: Boolean,
     name: SqlIdentifier?,
     columnList: SqlNodeList?,
-    query: SqlNode?
+    query: SqlNode?,
 ) : SqlCreateTable(pos, replace, ifNotExists, name, columnList, query) {
     init {
         createType = tableType
@@ -29,7 +29,7 @@ abstract class SqlSnowflakeCreateTableBase(
             writer.keyword("OR REPLACE")
         }
         if (!createTableType.equals(CreateTableType.DEFAULT)) {
-            writer.keyword(createTableType.asStringKeyword());
+            writer.keyword(createTableType.asStringKeyword())
         }
         writer.keyword("TABLE")
         if (ifNotExists) {
@@ -39,6 +39,5 @@ abstract class SqlSnowflakeCreateTableBase(
         unparseSuffix(writer, leftPrec, rightPrec)
     }
 
-    abstract fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int);
-
+    abstract fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int)
 }

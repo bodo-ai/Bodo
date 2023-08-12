@@ -1,18 +1,16 @@
 package com.bodosql.calcite.sql.ddl
 
 import org.apache.calcite.sql.SqlIdentifier
-import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.parser.SqlParserPos
-import org.apache.calcite.util.ImmutableNullableList
 
 class SqlAlterTableRenameCol(
     pos: SqlParserPos,
-    ifExists : Boolean,
-    table : SqlIdentifier,
-    val renameColOld : SqlIdentifier,
-    val renameColNew : SqlIdentifier,
+    ifExists: Boolean,
+    table: SqlIdentifier,
+    val renameColOld: SqlIdentifier,
+    val renameColNew: SqlIdentifier,
 ) : SqlAlterTable(pos, ifExists, table) {
 
     override fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {

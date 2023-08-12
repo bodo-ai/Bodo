@@ -1,7 +1,5 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.schema.CatalogSchemaImpl
-import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty.Companion.tableCreateProperty
 import org.apache.calcite.plan.Convention
@@ -14,8 +12,11 @@ class PandasTableCreateRule private constructor(config: Config) : ConverterRule(
         @JvmField
         val DEFAULT_CONFIG = Config.INSTANCE
             .withConversion(
-                LogicalTableCreate::class.java, Convention.NONE, PandasRel.CONVENTION,
-                "PandasTableCreateRule")
+                LogicalTableCreate::class.java,
+                Convention.NONE,
+                PandasRel.CONVENTION,
+                "PandasTableCreateRule",
+            )
             .withRuleFactory { config -> PandasTableCreateRule(config) }
     }
 
@@ -31,8 +32,18 @@ class PandasTableCreateRule private constructor(config: Config) : ConverterRule(
         // Note: Types may be lazily computed so use getRowType() instead of rowType
         val inputBatchingProperty = tableCreateProperty(createSchema, create.input.getRowType())
 
-        return PandasTableCreate(rel.cluster, traitSet, convert(create.input,
-            create.input.traitSet.replace(PandasRel.CONVENTION).replace(inputBatchingProperty)),
-            create.schema, create.tableName, create.isReplace, create.createTableType, create.schemaPath)
+        return PandasTableCreate(
+            rel.cluster,
+            traitSet,
+            convert(
+                create.input,
+                create.input.traitSet.replace(PandasRel.CONVENTION).replace(inputBatchingProperty),
+            ),
+            create.schema,
+            create.tableName,
+            create.isReplace,
+            create.createTableType,
+            create.schemaPath,
+        )
     }
 }

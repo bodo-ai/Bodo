@@ -1,6 +1,6 @@
 package com.bodosql.calcite.adapter.snowflake;
 
-import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import org.apache.calcite.rel.core.Filter;
 import org.immutables.value.Value;
 import org.jetbrains.annotations.NotNull;

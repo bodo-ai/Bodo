@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.table.CatalogTableImpl
-import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
@@ -22,10 +21,12 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
      * the lowercase normalized names that the table itself exposes.
      */
     override fun deriveRowType(): RelDataType {
-        return RelRecordType(table.rowType.fieldList.map { field ->
-            val name = catalogTable.getPreservedColumnName(field.name)
-            RelDataTypeFieldImpl(name, field.index, field.type)
-        })
+        return RelRecordType(
+            table.rowType.fieldList.map { field ->
+                val name = catalogTable.getPreservedColumnName(field.name)
+                RelDataTypeFieldImpl(name, field.index, field.type)
+            },
+        )
     }
 
     override fun getCatalogTable(): CatalogTableImpl = catalogTable

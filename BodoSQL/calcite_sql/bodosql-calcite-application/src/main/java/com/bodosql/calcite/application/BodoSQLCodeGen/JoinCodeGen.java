@@ -1,8 +1,8 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.AggHelpers.getDummyColName;
-import static com.bodosql.calcite.application.Utils.JoinHelpers.preventColumnCollision;
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
+import static com.bodosql.calcite.application.utils.AggHelpers.getDummyColName;
+import static com.bodosql.calcite.application.utils.JoinHelpers.preventColumnCollision;
+import static com.bodosql.calcite.application.utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Op;

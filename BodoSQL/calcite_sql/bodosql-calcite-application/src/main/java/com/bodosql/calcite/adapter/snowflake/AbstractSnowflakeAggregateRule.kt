@@ -1,6 +1,6 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable
+import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
 import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelRule
 import org.apache.calcite.rel.core.Aggregate
@@ -70,10 +70,10 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
             // other types of aggregates are. It's likely fine to allow more
             // than just group count 0, but I am just leaving it at no grouping
             // for now.
-            return Aggregate.isSimple(aggregate)
-                    && aggregate.aggCallList.all { agg ->
-                SUPPORTED_AGGREGATES.contains(agg.aggregation.kind)
-            }
+            return Aggregate.isSimple(aggregate) &&
+                aggregate.aggCallList.all { agg ->
+                    SUPPORTED_AGGREGATES.contains(agg.aggregation.kind)
+                }
         }
     }
 

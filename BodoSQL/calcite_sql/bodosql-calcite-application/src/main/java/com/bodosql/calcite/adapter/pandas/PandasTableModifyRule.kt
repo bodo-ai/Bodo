@@ -1,8 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.schema.CatalogSchemaImpl
 import com.bodosql.calcite.table.BodoSqlTable
-import com.bodosql.calcite.table.CatalogTableImpl
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
@@ -16,8 +14,12 @@ class PandasTableModifyRule private constructor(config: Config) : ConverterRule(
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
-            .withConversion(LogicalTableModify::class.java, Convention.NONE, PandasRel.CONVENTION,
-                "PandasTableModifyRule")
+            .withConversion(
+                LogicalTableModify::class.java,
+                Convention.NONE,
+                PandasRel.CONVENTION,
+                "PandasTableModifyRule",
+            )
             .withRuleFactory { config -> PandasTableModifyRule(config) }
     }
 
@@ -30,10 +32,14 @@ class PandasTableModifyRule private constructor(config: Config) : ConverterRule(
         // Note: Types may be lazily computed so use getRowType() instead of rowType
         val batchingProperty = ExpectedBatchingProperty.tableModifyProperty(bodoSqlTable, tableModify.input.getRowType())
 
-        return PandasTableModify(rel.cluster, traitSet, tableModify.table!!, tableModify.catalogReader!!,
-            convert(tableModify.input,
-                tableModify.input.traitSet.replace(PandasRel.CONVENTION).replace(batchingProperty)),
+        return PandasTableModify(
+            rel.cluster, traitSet, tableModify.table!!, tableModify.catalogReader!!,
+            convert(
+                tableModify.input,
+                tableModify.input.traitSet.replace(PandasRel.CONVENTION).replace(batchingProperty),
+            ),
             tableModify.operation, tableModify.updateColumnList, tableModify.sourceExpressionList,
-            tableModify.isFlattened)
+            tableModify.isFlattened,
+        )
     }
 }

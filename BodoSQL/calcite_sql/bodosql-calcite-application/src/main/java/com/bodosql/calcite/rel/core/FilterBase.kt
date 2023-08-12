@@ -1,8 +1,7 @@
 package com.bodosql.calcite.rel.core
 
-import com.bodosql.calcite.adapter.pandas.PandasFilter
 import com.bodosql.calcite.adapter.pandas.RexCostEstimator
-import com.bodosql.calcite.application.Utils.RexNormalizer
+import com.bodosql.calcite.application.utils.RexNormalizer
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import org.apache.calcite.plan.RelOptCluster

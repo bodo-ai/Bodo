@@ -21,7 +21,7 @@ open class AggregateBase(
     input: RelNode,
     groupSet: ImmutableBitSet,
     groupSets: List<ImmutableBitSet>?,
-    aggCalls: List<AggregateCall>
+    aggCalls: List<AggregateCall>,
 ) : Aggregate(cluster, traitSet, hints, input, groupSet, groupSets, aggCalls) {
 
     override fun copy(traitSet: RelTraitSet, input: RelNode, groupSet: ImmutableBitSet, groupSets: List<ImmutableBitSet>?, aggCalls: List<AggregateCall>): AggregateBase {

@@ -34,7 +34,7 @@ import ${importStr};
 </#list>
 
 import com.bodosql.calcite.sql.BodoSqlUtil;
-import com.bodosql.calcite.sql.fun.SqlNamedParameterOperator;
+import com.bodosql.calcite.sql.func.SqlNamedParameterOperator;
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.avatica.util.DateTimeUtils;
 import org.apache.calcite.avatica.util.TimeUnit;

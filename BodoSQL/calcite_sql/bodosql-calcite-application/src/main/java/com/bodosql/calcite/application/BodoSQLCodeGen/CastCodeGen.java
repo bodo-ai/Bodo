@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.sqlTypenameToPandasTypename;
+import static com.bodosql.calcite.application.utils.Utils.sqlTypenameToPandasTypename;
 import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
 import static org.apache.calcite.sql.type.SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
 

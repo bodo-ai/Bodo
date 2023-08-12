@@ -1,6 +1,5 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
@@ -13,8 +12,11 @@ class PandasIntersectRule private constructor(config: Config) : ConverterRule(co
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                LogicalIntersect::class.java, Convention.NONE, PandasRel.CONVENTION,
-                "PandasIntersectRule")
+                LogicalIntersect::class.java,
+                Convention.NONE,
+                PandasRel.CONVENTION,
+                "PandasIntersectRule",
+            )
             .withRuleFactory { config -> PandasIntersectRule(config) }
     }
 

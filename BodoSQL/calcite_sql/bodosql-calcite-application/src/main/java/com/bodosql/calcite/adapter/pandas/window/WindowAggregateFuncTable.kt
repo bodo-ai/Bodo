@@ -65,7 +65,6 @@ internal object WindowAggregateFuncTable {
         SCALAR,
     }
 
-
     /**
      * Populates an argument tuple with the expressions for each
      * argument of a window function, processed according to which
@@ -87,7 +86,6 @@ internal object WindowAggregateFuncTable {
         }
     }
 
-
     /**
      * Utility function for defining a window aggregate function that
      * does not accept window bounds.
@@ -102,7 +100,6 @@ internal object WindowAggregateFuncTable {
             resolveOperands(args, call, resolve, *operands)
             return Expr.Tuple(args.build())
         })
-
 
     /**
      * Utility function for defining a window aggregate function that
@@ -120,7 +117,6 @@ internal object WindowAggregateFuncTable {
             args.add(resolve.bound(call.window.upperBound))
             return Expr.Tuple(args.build())
         })
-
 
     /**
      * Utility function for defining the window aggregate function COUNT

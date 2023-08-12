@@ -47,7 +47,7 @@ data: {
       "com.bodosql.calcite.sql.ddl.SqlAlterTableRenameCol",
       "com.bodosql.calcite.sql.ddl.SqlAlterTableDropCol",
       "com.bodosql.calcite.sql.ddl.SqlTruncateTable",
-      "com.bodosql.calcite.sql.fun.SqlBodoOperatorTable",
+      "com.bodosql.calcite.sql.func.SqlBodoOperatorTable",
       "org.apache.calcite.sql.SqlCreate",
       "org.apache.calcite.sql.SqlDrop",
       "org.apache.calcite.sql.SqlDdl",
