@@ -407,7 +407,10 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
             combine_data->columns.begin(),
             combine_data->columns.begin() + groupby_state->n_keys);
         for (std::shared_ptr<BasicColSet> col_set : groupby_state->col_sets) {
-            col_set->addOutputColumns(out_table->columns);
+            const std::vector<std::shared_ptr<array_info>> out_cols =
+                col_set->getOutputColumns();
+            out_table->columns.insert(out_table->columns.end(),
+                                      out_cols.begin(), out_cols.end());
         }
         // TODO(njriasan): Move eval computation directly into the output
         // buffer.
