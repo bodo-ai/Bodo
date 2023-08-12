@@ -9,10 +9,12 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Union
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 
-open class UnionBase(cluster: RelOptCluster,
-                     traitSet: RelTraitSet,
-                     inputs: List<RelNode>,
-                     all: Boolean) : Union(cluster, traitSet, inputs, all) {
+open class UnionBase(
+    cluster: RelOptCluster,
+    traitSet: RelTraitSet,
+    inputs: List<RelNode>,
+    all: Boolean,
+) : Union(cluster, traitSet, inputs, all) {
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>, all: Boolean): UnionBase {
         return UnionBase(cluster, traitSet, inputs, all)

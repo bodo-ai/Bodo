@@ -1,17 +1,13 @@
 package com.bodosql.calcite.rex;
 
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexDynamicParam;
-import org.apache.calcite.rex.RexNode;
-
-import com.bodosql.calcite.sql.fun.SqlNamedParameterOperator;
+import com.bodosql.calcite.sql.func.SqlNamedParameterOperator;
 import com.google.common.collect.ImmutableList;
-
-import org.checkerframework.checker.nullness.qual.Nullable;
-
 import java.util.List;
 import java.util.Objects;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexNode;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class RexNamedParam extends RexCall {
 
@@ -40,14 +36,16 @@ public class RexNamedParam extends RexCall {
     return "@" + name;
   }
 
-  @Override public boolean equals(@Nullable Object obj) {
+  @Override
+  public boolean equals(@Nullable Object obj) {
     return this == obj
         || obj instanceof RexNamedParam
-        && name.equals(((RexNamedParam) obj).name)
-        && super.equals(obj);
+            && name.equals(((RexNamedParam) obj).name)
+            && super.equals(obj);
   }
 
-  @Override public int hashCode() {
+  @Override
+  public int hashCode() {
     return Objects.hash(type, "@", name);
   }
 }

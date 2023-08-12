@@ -48,7 +48,7 @@ class SymbolTable {
     fun genArrayVar(): Variable {
         return Variable("A${arrVarId++}")
     }
-    
+
     fun genIndexVar(): Variable {
         return Variable("index_${idxVarId++}")
     }
@@ -80,7 +80,6 @@ class SymbolTable {
     fun genFinishedStreamingFlag(): Variable {
         return Variable("__bodo_is_last_streaming_output_${streamingFlagId++}")
     }
-
 
     fun genWindowedAggDf(): Variable {
         return Variable("__bodo_windowfn_generated_df_${dfVarId++}")

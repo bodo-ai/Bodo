@@ -1,14 +1,13 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.application.Utils.IsScalar.isScalar
-import com.bodosql.calcite.ir.*
-import com.bodosql.calcite.ir.BodoSQLKernel
+import com.bodosql.calcite.application.utils.IsScalar.isScalar
 import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.BodoSQLKernel
 import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Op
+import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.core.FilterBase
-import com.bodosql.calcite.traits.BatchingProperty
-import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -16,13 +15,12 @@ import org.apache.calcite.rel.RelCollationTraitDef
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.metadata.RelMdCollation
 import org.apache.calcite.rex.RexNode
-import org.apache.calcite.rex.RexOver
 
 class PandasFilter(
     cluster: RelOptCluster,
     traitSet: RelTraitSet,
     child: RelNode,
-    condition: RexNode
+    condition: RexNode,
 ) : FilterBase(cluster, traitSet, child, condition), PandasRel {
 
     init {
@@ -47,15 +45,15 @@ class PandasFilter(
     }
 
     private fun emitStreaming(implementor: PandasRel.Implementor, inputVar: BodoEngineTable): BodoEngineTable {
-        return implementor.buildStreaming (
-            {ctx -> initStateVariable(ctx)},
-            {ctx, stateVar ->
+        return implementor.buildStreaming(
+            { ctx -> initStateVariable(ctx) },
+            { ctx, stateVar ->
                 // Extract window aggregates and update the nodes.
                 val (condition, inputRefs) = genDataFrameWindowInputs(ctx, inputVar)
                 val translator = ctx.streamingRexTranslator(inputVar, inputRefs, stateVar)
                 emit(ctx, translator, inputVar, condition)
             },
-            {ctx, stateVar -> deleteStateVariable(ctx, stateVar)}
+            { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
         )
     }
 
@@ -78,8 +76,6 @@ class PandasFilter(
         val localRefs = windowAggregate.emit(ctx)
         return Pair(condition, localRefs)
     }
-
-
 
     /**
      * Function to create the initial state for a streaming pipeline.
@@ -126,13 +122,14 @@ class PandasFilter(
      * Coerces a scalar value to a boolean array.
      */
     private fun coerceScalar(input: BodoEngineTable, filter: Expr): Expr =
-        Expr.Call("bodo.utils.utils.full_type",
+        Expr.Call(
+            "bodo.utils.utils.full_type",
             Expr.Len(input),
             BodoSQLKernel("is_true", listOf(filter)),
             Expr.Attribute(
                 Expr.Raw("bodo"),
                 "boolean_array_type",
-            )
+            ),
         )
 
     companion object {

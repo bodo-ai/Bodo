@@ -14,11 +14,13 @@ import java.util.function.Supplier;
 import javax.annotation.Nullable;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.type.*;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.TranslatableTable;
-import org.apache.calcite.sql.type.*;
+import org.apache.calcite.sql.type.BodoTZInfo;
+import org.apache.calcite.sql.type.TZAwareSqlType;
 
 /**
  *

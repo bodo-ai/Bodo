@@ -1,7 +1,7 @@
 package com.bodosql.calcite.traits
 
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
-import com.bodosql.calcite.application.Utils.AggHelpers
+import com.bodosql.calcite.application.utils.AggHelpers
 import com.bodosql.calcite.schema.CatalogSchemaImpl
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.CatalogTableImpl
@@ -37,7 +37,7 @@ class ExpectedBatchingProperty {
          * @param rowType The input row type
          * @return A list of the fields as a list of types.
          */
-        private fun rowTypeToTypes(rowType: RelDataType) : List<RelDataType> {
+        private fun rowTypeToTypes(rowType: RelDataType): List<RelDataType> {
             // Note: Types may be lazily computed so use getType() instead of type
             return rowType.fieldList.map { f -> f.getType() }
         }
@@ -57,7 +57,7 @@ class ExpectedBatchingProperty {
          * @param nodeTypes List of types that are the output of the node.
          * All of these must be supported in streaming.
          */
-        private fun getBatchingProperty(streaming: Boolean, nodeTypes: List<RelDataType>) : BatchingProperty {
+        private fun getBatchingProperty(streaming: Boolean, nodeTypes: List<RelDataType>): BatchingProperty {
             val canStream = streaming && !nodeTypes.any { type -> isUnsupportedStreamingType(type) }
             return if (canStream) {
                 BatchingProperty.STREAMING
@@ -67,15 +67,15 @@ class ExpectedBatchingProperty {
         }
 
         @JvmStatic
-        fun alwaysSingleBatchProperty() : BatchingProperty = getBatchingProperty(false, listOf())
+        fun alwaysSingleBatchProperty(): BatchingProperty = getBatchingProperty(false, listOf())
 
         @JvmStatic
-        fun streamingIfPossibleProperty(nodeTypes: List<RelDataType>) : BatchingProperty {
+        fun streamingIfPossibleProperty(nodeTypes: List<RelDataType>): BatchingProperty {
             return getBatchingProperty(true, nodeTypes)
         }
 
         @JvmStatic
-        fun streamingIfPossibleProperty(rowType: RelDataType) : BatchingProperty {
+        fun streamingIfPossibleProperty(rowType: RelDataType): BatchingProperty {
             val nodeTypes = rowTypeToTypes(rowType)
             return streamingIfPossibleProperty(nodeTypes)
         }
@@ -90,7 +90,7 @@ class ExpectedBatchingProperty {
          * @return The Batch property.
          */
         @JvmStatic
-        fun projectFilterProperty(nodes: List<RexNode>) : BatchingProperty {
+        fun projectFilterProperty(nodes: List<RexNode>): BatchingProperty {
             val canStream = !RexOver.containsOver(nodes, null)
             // Note: Types may be lazily computed so use getType() instead of type
             // Unsupported types are also only supported for the output of streaming
@@ -116,14 +116,12 @@ class ExpectedBatchingProperty {
          */
         @JvmStatic
         fun aggregateProperty(groupSets: List<ImmutableBitSet>, aggCallList: List<AggregateCall>, rowType: RelDataType): BatchingProperty {
-            var canStream = RelationalAlgebraGenerator.enableGroupbyStreaming
-                    && groupSets.size == 1 && groupSets[0].cardinality() != 0
-                    && !AggHelpers.aggContainsFilter(aggCallList)
+            var canStream = RelationalAlgebraGenerator.enableGroupbyStreaming &&
+                groupSets.size == 1 && groupSets[0].cardinality() != 0 &&
+                !AggHelpers.aggContainsFilter(aggCallList)
             val nodeTypes = rowTypeToTypes(rowType)
             return getBatchingProperty(canStream, nodeTypes)
         }
-
-
 
         @JvmStatic
         fun tableReadProperty(table: BodoSqlTable?, rowType: RelDataType): BatchingProperty {

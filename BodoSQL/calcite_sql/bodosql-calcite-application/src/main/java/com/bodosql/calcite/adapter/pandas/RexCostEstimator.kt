@@ -1,7 +1,19 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.plan.Cost
-import org.apache.calcite.rex.*
+import org.apache.calcite.rex.RexCall
+import org.apache.calcite.rex.RexCorrelVariable
+import org.apache.calcite.rex.RexDynamicParam
+import org.apache.calcite.rex.RexFieldAccess
+import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexLiteral
+import org.apache.calcite.rex.RexLocalRef
+import org.apache.calcite.rex.RexOver
+import org.apache.calcite.rex.RexPatternFieldRef
+import org.apache.calcite.rex.RexRangeRef
+import org.apache.calcite.rex.RexSubQuery
+import org.apache.calcite.rex.RexTableInputRef
+import org.apache.calcite.rex.RexVisitor
 import org.apache.calcite.sql.SqlOperator
 
 object RexCostEstimator : RexVisitor<Cost>, PandasCostEstimator {
@@ -35,7 +47,7 @@ object RexCostEstimator : RexVisitor<Cost>, PandasCostEstimator {
             cost = cost.plus(
                 call.operands.asSequence()
                     .map { op -> op.accept(this) }
-                    .reduce { l, r -> l.plus(r) as Cost }
+                    .reduce { l, r -> l.plus(r) as Cost },
             ) as Cost
         }
         return cost
@@ -103,5 +115,4 @@ object RexCostEstimator : RexVisitor<Cost>, PandasCostEstimator {
 
     override fun visitPatternFieldRef(patternFieldRef: RexPatternFieldRef): Cost =
         visitInputRef(patternFieldRef)
-
 }

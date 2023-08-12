@@ -1,13 +1,17 @@
 package com.bodosql.calcite.rel.metadata
 
-import org.apache.calcite.rel.metadata.*
+import org.apache.calcite.rel.metadata.BuiltInMetadata
+import org.apache.calcite.rel.metadata.ChainedRelMetadataProvider
+import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
+import org.apache.calcite.rel.metadata.ReflectiveRelMetadataProvider
+import org.apache.calcite.rel.metadata.RelMetadataProvider
 
 class PandasRelMetadataProvider(ranks: Int) : RelMetadataProvider by
 ChainedRelMetadataProvider.of(
     listOf(
         ReflectiveRelMetadataProvider.reflectiveSource(
             PandasRelMdRowCount(),
-            BuiltInMetadata.RowCount.Handler::class.java
+            BuiltInMetadata.RowCount.Handler::class.java,
         ),
         // Inject information about the number of ranks
         // for Pandas queries as the parallelism attribute.
@@ -16,14 +20,14 @@ ChainedRelMetadataProvider.of(
             // Not really used yet but planned to be used for computation
             // costs of nodes with highly parallel operations.
             PandasRelMdParallelism(ranks),
-            BuiltInMetadata.Parallelism.Handler::class.java
+            BuiltInMetadata.Parallelism.Handler::class.java,
         ),
         ReflectiveRelMetadataProvider.reflectiveSource(
             PandasRelMdSize(),
-            BuiltInMetadata.Size.Handler::class.java
+            BuiltInMetadata.Size.Handler::class.java,
         ),
         DefaultRelMetadataProvider.INSTANCE,
-    )
+    ),
 ) {
     /**
      * Default constructor for this metadata provider.

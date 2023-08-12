@@ -20,13 +20,13 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.generat
 import static com.bodosql.calcite.application.JoinCondVisitor.getStreamingJoinKeyIndices;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitJoinCond;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitNonEquiConditions;
-import static com.bodosql.calcite.application.Utils.AggHelpers.aggContainsFilter;
-import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
-import static com.bodosql.calcite.application.Utils.Utils.integerLiteralArange;
-import static com.bodosql.calcite.application.Utils.Utils.isSnowflakeCatalogTable;
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
-import static com.bodosql.calcite.application.Utils.Utils.sqlTypenameToPandasTypename;
-import static com.bodosql.calcite.application.Utils.Utils.stringsToStringLiterals;
+import static com.bodosql.calcite.application.utils.AggHelpers.aggContainsFilter;
+import static com.bodosql.calcite.application.utils.Utils.getBodoIndent;
+import static com.bodosql.calcite.application.utils.Utils.integerLiteralArange;
+import static com.bodosql.calcite.application.utils.Utils.isSnowflakeCatalogTable;
+import static com.bodosql.calcite.application.utils.Utils.makeQuoted;
+import static com.bodosql.calcite.application.utils.Utils.sqlTypenameToPandasTypename;
+import static com.bodosql.calcite.application.utils.Utils.stringsToStringLiterals;
 
 import com.bodosql.calcite.adapter.pandas.PandasAggregate;
 import com.bodosql.calcite.adapter.pandas.PandasIntersect;

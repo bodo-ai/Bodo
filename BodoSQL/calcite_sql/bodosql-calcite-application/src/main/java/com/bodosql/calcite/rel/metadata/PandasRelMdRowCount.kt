@@ -16,10 +16,11 @@ class PandasRelMdRowCount : RelMdRowCount() {
         if (rel.offset is RexDynamicParam || rel.offset is RexCall) {
             return rowCount
         }
-        val offset = if (rel.offset == null)
+        val offset = if (rel.offset == null) {
             0
-        else
+        } else {
             RexLiteral.intValue(rel.offset)
+        }
 
         rowCount = (rowCount - offset).coerceAtLeast(0.0)
         if (rel.fetch != null) {

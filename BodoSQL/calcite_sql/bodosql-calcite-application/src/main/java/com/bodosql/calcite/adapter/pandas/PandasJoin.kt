@@ -33,7 +33,7 @@ class PandasJoin(
         left: RelNode,
         right: RelNode,
         condition: RexNode,
-        joinType: JoinRelType
+        joinType: JoinRelType,
     ) : this(cluster, traitSet, left, right, condition, joinType, false)
 
     override fun copy(
@@ -42,7 +42,7 @@ class PandasJoin(
         left: RelNode,
         right: RelNode,
         joinType: JoinRelType,
-        semiJoinDone: Boolean
+        semiJoinDone: Boolean,
     ): Join {
         assert(PandasJoinRule.isValidNode(conditionExpr))
         return PandasJoin(cluster, traitSet, left, right, conditionExpr, joinType, rebalanceOutput)

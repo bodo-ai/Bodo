@@ -1,15 +1,16 @@
 package com.bodosql.calcite.application.Testing;
 
-import org.apache.calcite.plan.RelOptUtil;
-import org.apache.calcite.rel.RelRoot;
-
 import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.schema.LocalSchemaImpl;
-import com.bodosql.calcite.table.*;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
+import com.bodosql.calcite.table.BodoSQLColumnImpl;
+import com.bodosql.calcite.table.BodoSqlTable;
+import com.bodosql.calcite.table.LocalTableImpl;
 import com.bodosql.calcite.traits.BatchingProperty;
 import java.util.ArrayList;
+import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.rel.RelRoot;
 
 public class TPCHSchemaTest {
   public static void main(String[] args) throws Exception {
@@ -177,7 +178,8 @@ public class TPCHSchemaTest {
     System.out.println(pandasStr + "\n");
   }
 
-  private static String getRelationalAlgebraString(RelationalAlgebraGenerator generator, String sql, boolean optimizePlan) {
+  private static String getRelationalAlgebraString(
+      RelationalAlgebraGenerator generator, String sql, boolean optimizePlan) {
     try {
       RelRoot root = generator.getRelationalAlgebra(sql, optimizePlan);
       return RelOptUtil.toString(PandasUtilKt.pandasProject(root));

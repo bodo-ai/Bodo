@@ -23,8 +23,11 @@ class SnowflakeFilter private constructor(
     companion object {
         @JvmStatic
         fun create(
-            cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode,
-            condition: RexNode, catalogTable: CatalogTableImpl
+            cluster: RelOptCluster,
+            traitSet: RelTraitSet,
+            input: RelNode,
+            condition: RexNode,
+            catalogTable: CatalogTableImpl,
         ): SnowflakeFilter {
             // Note: Types may be lazily computed so use getRowType() instead of rowType
             val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(input.getRowType())

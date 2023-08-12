@@ -5,9 +5,18 @@ import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTabl
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
-import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.SqlFunction;
+import org.apache.calcite.sql.SqlFunctionCategory;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.SqlOperatorTable;
+import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
-import org.apache.calcite.sql.type.*;
+import org.apache.calcite.sql.type.OperandTypes;
+import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlOperandCountRanges;
+import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
 public final class StringOperatorTable implements SqlOperatorTable {
@@ -591,10 +600,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.VARCHAR_2000,
           null,
-          OperandTypes.or(
-              OperandTypes.STRING,
-              OperandTypes.STRING_INTEGER
-          ),
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.STRING_INTEGER),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction SHA2_HEX =
@@ -603,10 +609,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.VARCHAR_2000,
           null,
-          OperandTypes.or(
-              OperandTypes.STRING,
-              OperandTypes.STRING_INTEGER
-          ),
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.STRING_INTEGER),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction MD5 =

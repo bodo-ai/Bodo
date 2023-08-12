@@ -3,20 +3,27 @@ package com.bodosql.calcite.prepare
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.rex.RexNamedParam
-import com.bodosql.calcite.sql.`fun`.SqlBodoOperatorTable
-import com.bodosql.calcite.sql.`fun`.SqlLikeQuantifyOperator
-import com.bodosql.calcite.sql.`fun`.SqlNamedParameterOperator
+import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
+import com.bodosql.calcite.sql.func.SqlLikeQuantifyOperator
+import com.bodosql.calcite.sql.func.SqlNamedParameterOperator
 import com.google.common.collect.ImmutableList
-import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexUtil
-import org.apache.calcite.sql.*
+import org.apache.calcite.sql.SqlCall
+import org.apache.calcite.sql.SqlDataTypeSpec
+import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.SqlLiteral
+import org.apache.calcite.sql.SqlNode
+import org.apache.calcite.sql.SqlNodeList
+import org.apache.calcite.sql.SqlUtil
 import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.validate.SqlValidatorImpl
-import org.apache.calcite.sql2rel.*
-import org.checkerframework.checker.initialization.qual.UnknownInitialization
+import org.apache.calcite.sql2rel.SqlRexContext
+import org.apache.calcite.sql2rel.SqlRexConvertlet
+import org.apache.calcite.sql2rel.StandardConvertletTable
+import org.apache.calcite.sql2rel.StandardConvertletTableConfig
 
 /**
  * Custom convertlet table for Bodo code generation. Handles custom functions
@@ -66,8 +73,11 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
             // in the standard convertlet table. We natively support these
             // operations so avoid converting them to another pattern.
             SqlKind.LEAST, SqlKind.GREATEST -> AliasConverter
-            SqlKind.LIKE -> if (call.operator is SqlLikeQuantifyOperator)
-                LikeQuantifyConverter else super.get(call)
+            SqlKind.LIKE -> if (call.operator is SqlLikeQuantifyOperator) {
+                LikeQuantifyConverter
+            } else {
+                super.get(call)
+            }
 
             SqlKind.OTHER_FUNCTION -> {
                 when (call.operator.name) {
@@ -112,9 +122,12 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
             assert(call.operandCount() >= 2)
 
             val op = call.operator as SqlLikeQuantifyOperator
-            val likeOp = if (op.caseSensitive)
+            val likeOp = if (op.caseSensitive) {
                 // Case insensitive is not standard SQL so it's in the library operators.
-                SqlStdOperatorTable.LIKE else SqlLibraryOperators.ILIKE
+                SqlStdOperatorTable.LIKE
+            } else {
+                SqlLibraryOperators.ILIKE
+            }
 
             val arg0 = cx.convertExpression(call.operandList[0])
             val arg2 = call.operandList.getOrNull(2)?.let { sqlNode -> cx.convertExpression(sqlNode) }

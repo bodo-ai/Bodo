@@ -24,7 +24,7 @@ class Cost private constructor(
     private val cpu: Double,
     private val io: Double,
     val mem: Double,
-    cost: Double?
+    cost: Double?,
 ) : RelOptCost {
 
     /**
@@ -40,7 +40,7 @@ class Cost private constructor(
         cpu,
         io,
         mem,
-        null
+        null,
     )
 
     /**
@@ -66,10 +66,12 @@ class Cost private constructor(
     override fun equals(other: RelOptCost): Boolean {
         return if (other is Cost) {
             return rows == other.rows &&
-                    cpu == other.cpu &&
-                    io == other.io &&
-                    mem == other.mem
-        } else false
+                cpu == other.cpu &&
+                io == other.io &&
+                mem == other.mem
+        } else {
+            false
+        }
     }
 
     override fun getRows(): Double = rows
@@ -147,10 +149,11 @@ class Cost private constructor(
         @JvmField
         val INFINITY: Cost = Cost(0.0, 0.0, 0.0, 0.0, Double.POSITIVE_INFINITY)
 
-        private fun convert(cost: RelOptCost): Cost = if (cost is Cost)
+        private fun convert(cost: RelOptCost): Cost = if (cost is Cost) {
             cost
-        else
+        } else {
             Cost(cost.rows, cost.cpu, cost.io, 0.0)
+        }
     }
 }
 

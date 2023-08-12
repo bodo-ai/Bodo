@@ -1,9 +1,9 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
-import static com.bodosql.calcite.application.Utils.Utils.getDummyColNameBase;
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
-import static com.bodosql.calcite.application.Utils.Utils.renameColumns;
+import static com.bodosql.calcite.application.utils.Utils.getBodoIndent;
+import static com.bodosql.calcite.application.utils.Utils.getDummyColNameBase;
+import static com.bodosql.calcite.application.utils.Utils.makeQuoted;
+import static com.bodosql.calcite.application.utils.Utils.renameColumns;
 
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;

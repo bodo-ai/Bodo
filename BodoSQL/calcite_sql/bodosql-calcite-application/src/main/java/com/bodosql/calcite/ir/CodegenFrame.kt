@@ -4,7 +4,7 @@ package com.bodosql.calcite.ir
  * CodegenFrame is roughly equivalent to a Python Frame, consisting of
  * operations found within the same scope.
  */
-class CodegenFrame: Frame {
+class CodegenFrame : Frame {
     private var code: MutableList<Op> = mutableListOf()
 
     /**
@@ -52,5 +52,4 @@ class CodegenFrame: Frame {
             this.code.add(Op.Code(code))
         }
     }
-
 }

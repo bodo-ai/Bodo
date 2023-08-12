@@ -1,9 +1,13 @@
 package com.bodosql.calcite.application.timers
 
-import com.bodosql.calcite.ir.*
+import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Expr.DoubleLiteral
+import com.bodosql.calcite.ir.Module
+import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.Op.Assign
 import com.bodosql.calcite.ir.Op.Stmt
+import com.bodosql.calcite.ir.StreamingPipelineFrame
+import com.bodosql.calcite.ir.Variable
 
 private val noOpVar = Variable("NOOP")
 
@@ -78,7 +82,7 @@ class StreamingRelNodeTimer(private val builder: Module.Builder, private val isN
         val endTimer = Assign(stateTimerEndVar, timeCall)
         frame.addInitialization(endTimer)
         // Compute the difference
-        val subVar =  builder.symbolTable.genGenericTempVar()
+        val subVar = builder.symbolTable.genGenericTempVar()
         val subCall = Expr.Binary("-", stateTimerEndVar, stateStartTimerVar)
         val subAssign = Assign(subVar, subCall)
         frame.addInitialization(subAssign)
@@ -119,7 +123,7 @@ class StreamingRelNodeTimer(private val builder: Module.Builder, private val isN
         val endTimer = Assign(loopEndTimerVar, timeCall)
         frame.add(endTimer)
         // Compute the difference
-        val subVar =  builder.symbolTable.genGenericTempVar()
+        val subVar = builder.symbolTable.genGenericTempVar()
         val subCall = Expr.Binary("-", loopEndTimerVar, loopStartTimerVar)
         val subAssign = Assign(subVar, subCall)
         frame.add(subAssign)
@@ -150,14 +154,16 @@ class StreamingRelNodeTimer(private val builder: Module.Builder, private val isN
 
         val printMessage = String.format(
             "f'''Execution time for %s {%s}: {%s}'''",
-            operationDescriptor, nodeDetailsVariable.emit(), accumulatorVar.emit()
+            operationDescriptor,
+            nodeDetailsVariable.emit(),
+            accumulatorVar.emit(),
         )
         val logMessageCall: Op = Stmt(
             Expr.Call(
                 "bodo.user_logging.log_message",
-                Expr.StringLiteral(loggingTitle),  // TODO: Add a format string op?
-                Expr.Raw(printMessage)
-            )
+                Expr.StringLiteral(loggingTitle), // TODO: Add a format string op?
+                Expr.Raw(printMessage),
+            ),
         )
         frame.addTermination(logMessageCall)
     }
@@ -170,7 +176,7 @@ class StreamingRelNodeTimer(private val builder: Module.Builder, private val isN
             operationDescriptor: String,
             loggingTitle: String,
             nodeDetails: String,
-            type: SingleBatchRelNodeTimer.OperationType
+            type: SingleBatchRelNodeTimer.OperationType,
         ): StreamingRelNodeTimer {
             val verboseThreshold = if (type == SingleBatchRelNodeTimer.OperationType.BATCH) {
                 RelNodeTimingVerboseLevel
@@ -182,7 +188,7 @@ class StreamingRelNodeTimer(private val builder: Module.Builder, private val isN
                 verboseLevel < verboseThreshold,
                 operationDescriptor,
                 loggingTitle,
-                nodeDetails
+                nodeDetails,
             )
         }
     }

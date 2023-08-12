@@ -2,8 +2,9 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
-import com.bodosql.calcite.ir.*
 import com.bodosql.calcite.table.BodoSqlTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
@@ -35,13 +36,13 @@ class PandasTableScan(
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable =
         if (isStreaming()) {
             implementor.createStreamingPipeline()
-            implementor.buildStreaming (
-                {ctx -> initStateVariable(ctx)},
-                {ctx, stateVar -> generateStreamingTable(ctx, stateVar)},
-                {ctx, stateVar -> deleteStateVariable(ctx, stateVar)}
+            implementor.buildStreaming(
+                { ctx -> initStateVariable(ctx) },
+                { ctx, stateVar -> generateStreamingTable(ctx, stateVar) },
+                { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
             )
         } else {
-            implementor.build {ctx -> ctx.returns(generateNonStreamingTable(ctx))}
+            implementor.build { ctx -> ctx.returns(generateNonStreamingTable(ctx)) }
         }
 
     override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
@@ -50,8 +51,12 @@ class PandasTableScan(
         val readerVar = builder.symbolTable.genStateVar()
 
         val bodoSQLTable = (table as RelOptTableImpl).table() as BodoSqlTable
-        currentPipeline.addInitialization(Op.Assign(
-            readerVar, bodoSQLTable.generateReadCode(true, ctx.streamingOptions())))
+        currentPipeline.addInitialization(
+            Op.Assign(
+                readerVar,
+                bodoSQLTable.generateReadCode(true, ctx.streamingOptions()),
+            ),
+        )
 
         return readerVar
     }

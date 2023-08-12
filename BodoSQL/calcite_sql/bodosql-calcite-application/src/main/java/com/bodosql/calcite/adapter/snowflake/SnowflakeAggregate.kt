@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.table.CatalogTableImpl
-import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -27,7 +26,7 @@ class SnowflakeAggregate private constructor(
         input: RelNode,
         groupSet: ImmutableBitSet,
         groupSets: List<ImmutableBitSet>?,
-        aggCalls: List<AggregateCall>
+        aggCalls: List<AggregateCall>,
     ): Aggregate {
         return SnowflakeAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls, catalogTable)
     }
@@ -37,15 +36,19 @@ class SnowflakeAggregate private constructor(
     companion object {
         @JvmStatic
         fun create(
-            cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode,
-            groupSet: ImmutableBitSet, groupSets: List<ImmutableBitSet>?, aggCalls: List<AggregateCall>,
-            catalogTable: CatalogTableImpl
+            cluster: RelOptCluster,
+            traitSet: RelTraitSet,
+            input: RelNode,
+            groupSet: ImmutableBitSet,
+            groupSets: List<ImmutableBitSet>?,
+            aggCalls: List<AggregateCall>,
+            catalogTable: CatalogTableImpl,
         ): SnowflakeAggregate {
             // Fetch types from keys and aggCalls.
             // Note: Types may be lazily computed so use getRowType() instead of rowType
             // and getType() instead of type.
             val inputType = input.getRowType()
-            val keyTypes = groupSet.toList().map {i -> inputType.fieldList[i].getType()}
+            val keyTypes = groupSet.toList().map { i -> inputType.fieldList[i].getType() }
             // Derive the agg types.
             val aggTypes = aggCalls.map { a -> a.getType() }
 

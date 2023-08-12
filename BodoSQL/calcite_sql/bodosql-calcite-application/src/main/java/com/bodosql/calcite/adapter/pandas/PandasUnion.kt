@@ -12,7 +12,7 @@ class PandasUnion(
     traitSet: RelTraitSet,
     inputs: List<RelNode>,
     all: Boolean,
-) : UnionBase(cluster, traitSet, inputs, all), PandasRel{
+) : UnionBase(cluster, traitSet, inputs, all), PandasRel {
 
     init {
         assert(convention == PandasRel.CONVENTION)

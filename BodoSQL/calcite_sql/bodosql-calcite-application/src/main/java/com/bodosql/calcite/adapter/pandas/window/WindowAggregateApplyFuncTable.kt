@@ -2,8 +2,13 @@ package com.bodosql.calcite.adapter.pandas.window
 
 import com.bodosql.calcite.application.BodoSQLOperatorTables.CondOperatorTable
 import com.bodosql.calcite.application.BodoSQLOperatorTables.NumericOperatorTable
-import com.bodosql.calcite.application.Utils.BodoArrayHelpers
-import com.bodosql.calcite.ir.*
+import com.bodosql.calcite.application.utils.BodoArrayHelpers
+import com.bodosql.calcite.ir.BodoSQLKernel
+import com.bodosql.calcite.ir.Doc
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Frame
+import com.bodosql.calcite.ir.Op
+import com.bodosql.calcite.ir.Variable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.sql.SqlKind
@@ -167,7 +172,7 @@ internal object WindowAggregateApplyFuncTable {
         Expr.Call(
             "np.arange",
             Expr.One,
-            Expr.Binary("+", ctx.len, Expr.One)
+            Expr.Binary("+", ctx.len, Expr.One),
         )
 
     private fun rank(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr {
@@ -178,14 +183,17 @@ internal object WindowAggregateApplyFuncTable {
         }
 
         // Add sorting column to the tuple of arguments.
-        val sortedCols = Expr.Tuple(ctx.orderKeys.map {
-            Expr.Call("bodo.hiframes.pd_series_ext.get_series_data", it)
-        })
+        val sortedCols = Expr.Tuple(
+            ctx.orderKeys.map {
+                Expr.Call("bodo.hiframes.pd_series_ext.get_series_data", it)
+            },
+        )
 
-        val pctExpr = if (call.kind == SqlKind.CUME_DIST)
+        val pctExpr = if (call.kind == SqlKind.CUME_DIST) {
             Expr.True
-        else
+        } else {
             Expr.False
+        }
 
         return Expr.Call(
             "bodo.libs.bodosql_array_kernels.rank_sql",
@@ -193,7 +201,7 @@ internal object WindowAggregateApplyFuncTable {
             namedArgs = listOf(
                 "method" to Expr.StringLiteral(methodName),
                 "pct" to pctExpr,
-            )
+            ),
         )
     }
 
@@ -215,12 +223,12 @@ internal object WindowAggregateApplyFuncTable {
                 Expr.Binary("==", ctx.len, Expr.IntegerLiteral(1)),
                 StatementList(
                     // TODO(jsternberg): Need an op code for this.
-                    Op.Code("${tempArr.emit()}[:] = 0.0")
+                    Op.Code("${tempArr.emit()}[:] = 0.0"),
                 ),
                 StatementList(
-                    Op.Code("${tempArr.emit()} /= (${ctx.len.emit()} - 1)")
+                    Op.Code("${tempArr.emit()} /= (${ctx.len.emit()} - 1)"),
                 ),
-            )
+            ),
         )
         return tempArr
     }
@@ -258,17 +266,19 @@ internal object WindowAggregateApplyFuncTable {
         return if (call.ignoreNulls()) {
             Expr.Call(
                 "bodo.libs.bodosql_array_kernels.null_ignoring_shift",
-                column, shift, fill,
+                column,
+                shift,
+                fill,
             )
         } else {
             Expr.Call(
                 "bodo.hiframes.pd_series_ext.get_series_data",
-            Expr.Method(
-                column,
-                "shift",
-                args = listOf(shift),
-                namedArgs = listOf("fill_value" to fill),
-            ),
+                Expr.Method(
+                    column,
+                    "shift",
+                    args = listOf(shift),
+                    namedArgs = listOf("fill_value" to fill),
+                ),
             )
         }
     }
@@ -306,17 +316,18 @@ internal object WindowAggregateApplyFuncTable {
     private fun conditionalTrueEvent(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr =
         Expr.Call(
             "bodo.hiframes.pd_series_ext.get_series_data",
-        Expr.Call(
-            Expr.Attribute(
-                Expr.Call(
-                    Expr.Attribute(
-                        operands[0], "astype"
+            Expr.Call(
+                Expr.Attribute(
+                    Expr.Call(
+                        Expr.Attribute(
+                            operands[0],
+                            "astype",
+                        ),
+                        Expr.StringLiteral("uint32"),
                     ),
-                    Expr.StringLiteral("uint32"),
+                    "cumsum",
                 ),
-                "cumsum",
             ),
-        ),
         )
 
     // TODO(jsternberg): This entire function should be refactored into a kernel.
@@ -341,8 +352,9 @@ internal object WindowAggregateApplyFuncTable {
         val outputArray = ctx.builder.symbolTable.genArrayVar()
         ctx.builder.add(
             Op.Assign(
-                outputArray, Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type))
-            )
+                outputArray,
+                Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type)),
+            ),
         )
 
         val inputArray = ctx.builder.symbolTable.genArrayVar()
@@ -356,7 +368,7 @@ internal object WindowAggregateApplyFuncTable {
                     Expr.Call(
                         "max",
                         Expr.Zero,
-                        Expr.Binary("+", index, ctx.bounds.lower)
+                        Expr.Binary("+", index, ctx.bounds.lower),
                     ),
                 )
             } else {
@@ -376,7 +388,7 @@ internal object WindowAggregateApplyFuncTable {
                             "+",
                             Expr.Binary("+", index, ctx.bounds.upper),
                             Expr.One,
-                        )
+                        ),
                     ),
                 )
             } else {
@@ -411,9 +423,9 @@ internal object WindowAggregateApplyFuncTable {
                     ),
                     StatementList(
                         // TODO(jsternberg): Need an op code for this.
-                        Op.Code("${outputArray.emit()}[i] = ${inputArray.emit()}[${currentIndex.emit()}]")
-                    )
-                )
+                        Op.Code("${outputArray.emit()}[i] = ${inputArray.emit()}[${currentIndex.emit()}]"),
+                    ),
+                ),
             )
         }
         ctx.builder.add(loop)
@@ -439,7 +451,8 @@ internal object WindowAggregateApplyFuncTable {
         val typeName = call.type.sqlTypeName
         val nullBranch = StatementList(
             Op.Assign(
-                outputArray, when {
+                outputArray,
+                when {
                     SqlTypeName.CHAR_TYPES.contains(typeName) ->
                         Expr.Call(
                             "bodo.libs.str_arr_ext.gen_na_str_array_lens",
@@ -456,83 +469,91 @@ internal object WindowAggregateApplyFuncTable {
                         )
 
                     else -> Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type))
-                }
+                },
             ),
             Op.For("j", Expr.Call("range", Expr.Len(outputArray))) { index, body ->
                 body.add(
-                    Op.Stmt(Expr.Call("bodo.libs.array_kernels.setna", outputArray, index))
+                    Op.Stmt(Expr.Call("bodo.libs.array_kernels.setna", outputArray, index)),
                 )
-            })
+            },
+        )
 
-        val evalBranch = StatementList(when {
-            SqlTypeName.CHAR_TYPES.contains(typeName) -> listOf(
-                Op.Assign(
-                    outputArray, Expr.Call(
-                        "bodo.libs.str_arr_ext.pre_alloc_string_array",
-                        ctx.len,
-                        Expr.Binary(
-                            "*",
-                            Expr.Call(
-                                "bodo.libs.str_arr_ext.get_str_arr_item_length",
-                                inputArray,
-                                targetIndex,
-                            ),
-                            ctx.len,
-                        ),
-                    )
-                ),
-                Op.For("j", Expr.Call("range", Expr.Call("len", outputArray))) { index, body ->
-                    body.add(
-                        Op.Stmt(
-                            Expr.Call(
-                                "bodo.libs.str_arr_ext.get_str_arr_item_copy",
-                                outputArray, index, inputArray, targetIndex
-                            )
-                        )
-                    )
-                }
-            )
-            SqlTypeName.BINARY_TYPES.contains(typeName) -> {
-                val tempVar = ctx.builder.symbolTable.genGenericTempVar()
-                listOf(
-                    Op.Assign(tempVar, Expr.Index(inputArray, targetIndex)),
+        val evalBranch = StatementList(
+            when {
+                SqlTypeName.CHAR_TYPES.contains(typeName) -> listOf(
                     Op.Assign(
-                        outputArray, Expr.Call(
-                            "bodo.libs.str_arr_ext.pre_alloc_binary_array",
+                        outputArray,
+                        Expr.Call(
+                            "bodo.libs.str_arr_ext.pre_alloc_string_array",
                             ctx.len,
                             Expr.Binary(
                                 "*",
-                                Expr.Call("len", tempVar),
+                                Expr.Call(
+                                    "bodo.libs.str_arr_ext.get_str_arr_item_length",
+                                    inputArray,
+                                    targetIndex,
+                                ),
                                 ctx.len,
                             ),
+                        ),
+                    ),
+                    Op.For("j", Expr.Call("range", Expr.Call("len", outputArray))) { index, body ->
+                        body.add(
+                            Op.Stmt(
+                                Expr.Call(
+                                    "bodo.libs.str_arr_ext.get_str_arr_item_copy",
+                                    outputArray,
+                                    index,
+                                    inputArray,
+                                    targetIndex,
+                                ),
+                            ),
                         )
-                    ),
-                    Op.For("j", Expr.Call("range", Expr.Call("len", outputArray))) { index, body ->
-                        body.add(Op.Code("${outputArray.emit()}[${index.emit()}] = ${tempVar.emit()}"))
-                    }
+                    },
                 )
-            }
-            else -> {
-                val tempVar = ctx.builder.symbolTable.genGenericTempVar()
-                listOf(
-                    Op.Assign(tempVar, Expr.Index(inputArray, targetIndex)),
-                    Op.Assign(
-                        outputArray,
-                        Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type))
-                    ),
-                    Op.For("j", Expr.Call("range", Expr.Call("len", outputArray))) { index, body ->
-                        body.add(Op.Code("${outputArray.emit()}[${index.emit()}] = ${tempVar.emit()}"))
-                    }
-                )
-            }
-        })
+                SqlTypeName.BINARY_TYPES.contains(typeName) -> {
+                    val tempVar = ctx.builder.symbolTable.genGenericTempVar()
+                    listOf(
+                        Op.Assign(tempVar, Expr.Index(inputArray, targetIndex)),
+                        Op.Assign(
+                            outputArray,
+                            Expr.Call(
+                                "bodo.libs.str_arr_ext.pre_alloc_binary_array",
+                                ctx.len,
+                                Expr.Binary(
+                                    "*",
+                                    Expr.Call("len", tempVar),
+                                    ctx.len,
+                                ),
+                            ),
+                        ),
+                        Op.For("j", Expr.Call("range", Expr.Call("len", outputArray))) { index, body ->
+                            body.add(Op.Code("${outputArray.emit()}[${index.emit()}] = ${tempVar.emit()}"))
+                        },
+                    )
+                }
+                else -> {
+                    val tempVar = ctx.builder.symbolTable.genGenericTempVar()
+                    listOf(
+                        Op.Assign(tempVar, Expr.Index(inputArray, targetIndex)),
+                        Op.Assign(
+                            outputArray,
+                            Expr.Raw(BodoArrayHelpers.sqlTypeToNullableBodoArray(ctx.len.emit(), call.type)),
+                        ),
+                        Op.For("j", Expr.Call("range", Expr.Call("len", outputArray))) { index, body ->
+                            body.add(Op.Code("${outputArray.emit()}[${index.emit()}] = ${tempVar.emit()}"))
+                        },
+                    )
+                }
+            },
+        )
 
         ctx.builder.add(
             Op.If(
                 Expr.Call("bodo.libs.array_kernels.isna", inputArray, targetIndex),
                 nullBranch,
                 evalBranch,
-            )
+            ),
         )
         return outputArray
     }

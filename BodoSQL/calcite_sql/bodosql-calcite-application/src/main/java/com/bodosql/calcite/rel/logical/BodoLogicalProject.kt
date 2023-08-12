@@ -6,7 +6,6 @@ import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelCollationTraitDef
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.RelWriter
 import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.hint.RelHint
 import org.apache.calcite.rel.metadata.RelMdCollation
@@ -21,7 +20,7 @@ class BodoLogicalProject(
     hints: List<RelHint>,
     input: RelNode,
     projects: List<RexNode>,
-    rowType: RelDataType
+    rowType: RelDataType,
 ) : ProjectBase(cluster, traitSet, hints, input, projects, rowType) {
 
     override fun copy(traitSet: RelTraitSet, input: RelNode, projects: List<RexNode>, rowType: RelDataType): Project {
@@ -47,14 +46,17 @@ class BodoLogicalProject(
 
         @JvmStatic
         fun create(
-            input: RelNode, hints: List<RelHint>,
+            input: RelNode,
+            hints: List<RelHint>,
             projects: List<RexNode>,
             fieldNames: List<String?>?,
-            ): BodoLogicalProject {
+        ): BodoLogicalProject {
             val cluster = input.cluster
             val rowType = RexUtil.createStructType(
-                cluster.typeFactory, projects,
-                fieldNames, SqlValidatorUtil.F_SUGGESTER
+                cluster.typeFactory,
+                projects,
+                fieldNames,
+                SqlValidatorUtil.F_SUGGESTER,
             )
             return create(input, hints, projects, rowType)
         }

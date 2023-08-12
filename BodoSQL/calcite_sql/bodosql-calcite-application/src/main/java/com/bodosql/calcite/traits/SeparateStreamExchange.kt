@@ -8,7 +8,7 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.SingleRel
 
-class SeparateStreamExchange(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) : SingleRel(cluster,  traits,  input), PandasRel {
+class SeparateStreamExchange(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) : SingleRel(cluster, traits, input), PandasRel {
 
     init {
         assert(convention == PandasRel.CONVENTION)

@@ -1,8 +1,5 @@
 package com.bodosql.calcite.rel.core
 
-import com.bodosql.calcite.adapter.pandas.AggCostEstimator
-import com.bodosql.calcite.adapter.pandas.PandasSort
-import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
@@ -14,12 +11,13 @@ import org.apache.calcite.rel.core.Sort
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexNode
 
-open class SortBase (cluster: RelOptCluster,
-                     traitSet: RelTraitSet,
-                     input: RelNode,
-                     collation: RelCollation,
-                     offset: RexNode?,
-                     fetch: RexNode?,
+open class SortBase(
+    cluster: RelOptCluster,
+    traitSet: RelTraitSet,
+    input: RelNode,
+    collation: RelCollation,
+    offset: RexNode?,
+    fetch: RexNode?,
 ) : Sort(cluster, traitSet, input, collation, offset, fetch) {
 
     override fun copy(
@@ -27,7 +25,7 @@ open class SortBase (cluster: RelOptCluster,
         input: RelNode,
         collation: RelCollation,
         offset: RexNode?,
-        fetch: RexNode?
+        fetch: RexNode?,
     ): SortBase {
         return SortBase(cluster, traitSet, input, collation, offset, fetch)
     }

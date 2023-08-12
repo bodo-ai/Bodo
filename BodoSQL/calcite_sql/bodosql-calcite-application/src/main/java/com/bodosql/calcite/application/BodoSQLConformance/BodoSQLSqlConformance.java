@@ -1,7 +1,5 @@
 package com.bodosql.calcite.application.BodoSQLConformance;
 
-import static org.apache.calcite.sql.validate.SqlConformanceEnum.*;
-
 import org.apache.calcite.sql.fun.SqlLibrary;
 import org.apache.calcite.sql.validate.SqlAbstractConformance;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;

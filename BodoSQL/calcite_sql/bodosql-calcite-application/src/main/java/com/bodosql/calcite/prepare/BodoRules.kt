@@ -3,15 +3,45 @@ package com.bodosql.calcite.prepare
 import com.bodosql.calcite.adapter.pandas.PandasJoin
 import com.bodosql.calcite.adapter.pandas.PandasJoinRule
 import com.bodosql.calcite.adapter.pandas.PandasRules
-import com.bodosql.calcite.application.bodo_sql_rules.*
+import com.bodosql.calcite.application.logicalRules.AliasPreservingAggregateProjectMergeRule
+import com.bodosql.calcite.application.logicalRules.AliasPreservingProjectJoinTransposeRule
+import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule
+import com.bodosql.calcite.application.logicalRules.DependencyCheckingProjectMergeRule
+import com.bodosql.calcite.application.logicalRules.FilterAggregateTransposeRuleNoWindow
+import com.bodosql.calcite.application.logicalRules.FilterExtractCaseRule
+import com.bodosql.calcite.application.logicalRules.FilterJoinRuleNoWindow
+import com.bodosql.calcite.application.logicalRules.FilterMergeRuleNoWindow
+import com.bodosql.calcite.application.logicalRules.FilterProjectTransposeNoCaseRule
+import com.bodosql.calcite.application.logicalRules.InnerJoinRemoveRule
+import com.bodosql.calcite.application.logicalRules.JoinConditionToFilterRule
+import com.bodosql.calcite.application.logicalRules.JoinReorderConditionRule
+import com.bodosql.calcite.application.logicalRules.LimitProjectTransposeRule
+import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
+import com.bodosql.calcite.application.logicalRules.LogicalFilterReorderConditionRule
+import com.bodosql.calcite.application.logicalRules.MinRowNumberFilterRule
+import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEliminationRule
+import com.bodosql.calcite.application.logicalRules.ProjectUnaliasedRemoveRule
+import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
+import com.bodosql.calcite.application.logicalRules.RexSimplificationRule
+import com.bodosql.calcite.application.logicalRules.VolcanoAcceptingAggregateProjectPullUpConstantsRule
 import com.bodosql.calcite.rel.core.RelFactories
-import com.bodosql.calcite.rel.logical.*
+import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
+import com.bodosql.calcite.rel.logical.BodoLogicalFilter
+import com.bodosql.calcite.rel.logical.BodoLogicalJoin
+import com.bodosql.calcite.rel.logical.BodoLogicalProject
+import com.bodosql.calcite.rel.logical.BodoLogicalSort
 import com.google.common.collect.Iterables
 import org.apache.calcite.plan.RelOptRule
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.core.Sort
-import org.apache.calcite.rel.rules.*
-import org.apache.calcite.tools.RelBuilderFactory
+import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
+import org.apache.calcite.rel.rules.AggregateJoinRemoveRule
+import org.apache.calcite.rel.rules.AggregateJoinTransposeRule
+import org.apache.calcite.rel.rules.FilterJoinRule
+import org.apache.calcite.rel.rules.JoinCommuteRule
+import org.apache.calcite.rel.rules.JoinPushTransitivePredicatesRule
+import org.apache.calcite.rel.rules.JoinToMultiJoinRule
+import org.apache.calcite.rel.rules.LoptOptimizeJoinRule
+import org.apache.calcite.rel.rules.ProjectAggregateMergeRule
 
 object BodoRules {
     /**
@@ -438,7 +468,7 @@ object BodoRules {
             JOIN_CONDITION_TO_FILTER_RULE,
             PANDAS_FILTER_INTO_JOIN_RULE,
             FILTER_JOIN_RULE,
-        )
+        ),
     ).toList()
 
     @JvmField

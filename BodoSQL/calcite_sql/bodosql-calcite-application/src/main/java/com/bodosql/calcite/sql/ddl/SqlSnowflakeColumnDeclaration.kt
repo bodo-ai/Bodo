@@ -1,10 +1,16 @@
 package com.bodosql.calcite.sql.ddl
 
 import org.apache.calcite.schema.ColumnStrategy
-import org.apache.calcite.sql.*
+import org.apache.calcite.sql.SqlDataTypeSpec
+import org.apache.calcite.sql.SqlIdentifier
+import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.SqlLiteral
+import org.apache.calcite.sql.SqlNode
+import org.apache.calcite.sql.SqlSpecialOperator
+import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.ddl.SqlColumnDeclaration
 import org.apache.calcite.sql.parser.SqlParserPos
-import org.apache.calcite.util.Pair;
+import org.apache.calcite.util.Pair
 
 /**
  * Subclass of SqlColumnDeclaration which includes additional qualifiers to a column
@@ -14,7 +20,7 @@ class SqlSnowflakeColumnDeclaration(
     name: SqlIdentifier,
     dataType: SqlDataTypeSpec,
     val defaultExpr: SqlNode?,
-    val incrementExpr: Pair<SqlLiteral,SqlLiteral>?,
+    val incrementExpr: Pair<SqlLiteral, SqlLiteral>?,
     strategy: ColumnStrategy?,
 ) : SqlColumnDeclaration(pos, name, dataType, defaultExpr, strategy) {
 

@@ -11,8 +11,11 @@ class PandasMinusRule private constructor(config: Config) : ConverterRule(config
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                LogicalMinus::class.java, Convention.NONE, PandasRel.CONVENTION,
-                "PandasMinusRule")
+                LogicalMinus::class.java,
+                Convention.NONE,
+                PandasRel.CONVENTION,
+                "PandasMinusRule",
+            )
             .withRuleFactory { config -> PandasMinusRule(config) }
     }
 

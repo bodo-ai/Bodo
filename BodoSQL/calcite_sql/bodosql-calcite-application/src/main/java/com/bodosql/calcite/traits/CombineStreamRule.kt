@@ -10,8 +10,11 @@ class CombineStreamRule private constructor(config: Config) : ConverterRule(conf
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                PandasRel::class.java, BatchingProperty.STREAMING,
-                BatchingProperty.SINGLE_BATCH, "CombineStreamRule")
+                PandasRel::class.java,
+                BatchingProperty.STREAMING,
+                BatchingProperty.SINGLE_BATCH,
+                "CombineStreamRule",
+            )
             .withRuleFactory { config -> CombineStreamRule(config) }
     }
 

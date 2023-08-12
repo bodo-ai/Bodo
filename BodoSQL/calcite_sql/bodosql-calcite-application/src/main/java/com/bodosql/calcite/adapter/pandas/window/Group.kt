@@ -3,13 +3,22 @@ package com.bodosql.calcite.adapter.pandas.window
 import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator
 import com.bodosql.calcite.application.BodoSQLCodegenException
-import com.bodosql.calcite.application.Utils.Utils
-import com.bodosql.calcite.ir.*
+import com.bodosql.calcite.application.utils.Utils
+import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Module
+import com.bodosql.calcite.ir.Op
+import com.bodosql.calcite.ir.Variable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.rel.RelFieldCollation
 import org.apache.calcite.rel.type.RelDataType
-import org.apache.calcite.rex.*
+import org.apache.calcite.rex.RexLocalRef
+import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexOver
+import org.apache.calcite.rex.RexUtil
+import org.apache.calcite.rex.RexWindow
+import org.apache.calcite.rex.RexWindowBound
 import org.apache.calcite.sql.SqlKind
 
 internal class Group(
@@ -50,9 +59,9 @@ internal class Group(
         // answer aggregates.
         return windowFnOutputs.map { i ->
             val expr = Expr.Call(
-                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data",
-                    windowDf,
-                    Expr.IntegerLiteral(i)
+                "bodo.hiframes.pd_dataframe_ext.get_dataframe_data",
+                windowDf,
+                Expr.IntegerLiteral(i),
             )
             val seriesVar = builder.symbolTable.genArrayVar()
             builder.add(Op.Assign(seriesVar, expr))
@@ -92,8 +101,8 @@ internal class Group(
         // have a definition that can be used with groupby.window.
         // If one is missing, we switch to using groupby.apply.
         val windowFuncs = aggregates.map {
-            val func = WindowAggregateFuncTable.get(it.op) ?:
-                // Break out of the loop and move to the apply route.
+            val func = WindowAggregateFuncTable.get(it.op)
+                ?: // Break out of the loop and move to the apply route.
                 // If we can't group them all together, we don't do it at all.
                 return emitWindowApply(ctx, partitionKeys, orderKeys, fields)
             Pair(it, func)
@@ -195,10 +204,12 @@ internal class Group(
         val (windowFnName, windowFnOutputs) = emitWindowApplyFunc(ctx, orderKeys, fields)
 
         // Keep track of the original position of each column.
-        val extraFields = listOf(Pair(
-            "ORIG_POSITION_COL",
-            Expr.Call("np.arange", Expr.Len(input))
-        ))
+        val extraFields = listOf(
+            Pair(
+                "ORIG_POSITION_COL",
+                Expr.Call("np.arange", Expr.Len(input)),
+            ),
+        )
         val input = emitGeneratedWindowDataframe(ctx, partitionKeys, orderKeys, fields, extraFields)
 
         // Construct the apply call.
@@ -326,8 +337,8 @@ internal class Group(
         // Name each of the columns that come in from the function argument.
         // Use the same variable from the input.
         val locNames = fields.map { Expr.StringLiteral(it.name) } +
-                orderKeys.map { Expr.StringLiteral(it.field) } +
-                Expr.StringLiteral("ORIG_POSITION_COL")
+            orderKeys.map { Expr.StringLiteral(it.field) } +
+            Expr.StringLiteral("ORIG_POSITION_COL")
         // If locNames has n column names in it, then column n-1 is the position column
         val position = fields.size + orderKeys.size
         // TODO(jsternberg): I think this doesn't translate the logic correctly.
@@ -339,8 +350,8 @@ internal class Group(
                     Expr.Attribute(argumentDf, "loc"),
                     Expr.Slice(),
                     Expr.List(locNames),
-                )
-            )
+                ),
+            ),
         )
 
         // Retrieve the original index for later use.
@@ -395,7 +406,7 @@ internal class Group(
         ctx: PandasRel.BuildContext,
         builder: Module.Builder,
         arrs: List<Expr>,
-        header: WindowApplyFuncHeader
+        header: WindowApplyFuncHeader,
     ): List<Int> {
         val outputFields = arrs.mapIndexed { i, _ -> "AGG_OUTPUT_$i" }
         // Generate the column names global
@@ -406,15 +417,16 @@ internal class Group(
         val retval = Variable("retval")
         builder.add(
             Op.Assign(
-                retval, Expr.Call(
+                retval,
+                Expr.Call(
                     "bodo.hiframes.pd_dataframe_ext.init_dataframe",
-                    java.util.List.of<Expr>(Expr.Tuple(arrs), header.index, colNamesMeta)
-                )
-            )
+                    java.util.List.of<Expr>(Expr.Tuple(arrs), header.index, colNamesMeta),
+                ),
+            ),
         )
 
         builder.add(Op.ReturnStatement(retval))
-        return  arrs.mapIndexed { i, _ -> i }
+        return arrs.mapIndexed { i, _ -> i }
     }
 
     /**
@@ -445,7 +457,7 @@ internal class Group(
         val originalPosition = Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_data", header.input, Expr.IntegerLiteral(header.position))
         val dfExpr = Expr.Call(
             "bodo.hiframes.pd_dataframe_ext.init_dataframe",
-            java.util.List.of<Expr>(Expr.Tuple(arrs + listOf(originalPosition)), header.index, colNamesMeta)
+            java.util.List.of<Expr>(Expr.Tuple(arrs + listOf(originalPosition)), header.index, colNamesMeta),
         )
         val sortedExpr = Expr.Call(
             Expr.Attribute(
@@ -455,13 +467,14 @@ internal class Group(
             namedArgs = listOf(
                 "by" to Expr.List(Expr.StringLiteral("ORIG_POSITION_COL")),
                 "ascending" to Expr.List(Expr.BooleanLiteral(true)),
-            )
+            ),
         )
         val retval = Variable("_tmp_sorted_df")
         builder.add(
             Op.Assign(
-                retval, sortedExpr
-            )
+                retval,
+                sortedExpr,
+            ),
         )
         // Need to return a new way of accessing the columns.
         return arrs.mapIndexed { i, _ -> Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_data", retval, Expr.IntegerLiteral(i)) }
@@ -480,20 +493,19 @@ internal class Group(
         // Initialize arguments using the combination of partition keys,
         // order keys, and fields that will be needed in the body.
         val values = ImmutableList.builder<Expr>()
-        values.addAll(partitionKeys.map { p -> p.expr } )
-        values.addAll(orderKeys.map { o -> o.expr } )
-        values.addAll(fields.map { f -> f.expr } )
-        values.addAll(extraFields.map { (_, v) -> v } )
+        values.addAll(partitionKeys.map { p -> p.expr })
+        values.addAll(orderKeys.map { o -> o.expr })
+        values.addAll(fields.map { f -> f.expr })
+        values.addAll(extraFields.map { (_, v) -> v })
         val valueList = values.build()
         val tableTuple = Expr.Tuple(valueList)
 
-
         // Generate the column names global
         val names = ImmutableList.builder<String>()
-        names.addAll(partitionKeys.map { p -> p.field } )
-        names.addAll(orderKeys.map { o -> o.field } )
-        names.addAll(fields.map { f -> f.name } )
-        names.addAll(extraFields.map { (k, _) -> k } )
+        names.addAll(partitionKeys.map { p -> p.field })
+        names.addAll(orderKeys.map { o -> o.field })
+        names.addAll(fields.map { f -> f.name })
+        names.addAll(extraFields.map { (k, _) -> k })
         val colNamesLiteral = Utils.stringsToStringLiterals(names.build())
         val colNamesTuple = Expr.Tuple(colNamesLiteral)
         val colNamesMeta = ctx.lowerAsGlobal(Expr.Call("ColNamesMetaType", colNamesTuple))
@@ -503,12 +515,12 @@ internal class Group(
         val lenCall: Expr.Call = Expr.Call("len", valueList[0])
         val indexCall = Expr.Call(
             "bodo.hiframes.pd_index_ext.init_range_index",
-            listOf(Expr.Zero, lenCall, Expr.One, Expr.None)
+            listOf(Expr.Zero, lenCall, Expr.One, Expr.None),
         )
 
         val windowDataframe: Expr = Expr.Call(
             "bodo.hiframes.pd_dataframe_ext.init_dataframe",
-            listOf(tableTuple, indexCall, colNamesMeta)
+            listOf(tableTuple, indexCall, colNamesMeta),
         )
 
         if (partitionKeys.isEmpty()) {
@@ -520,7 +532,7 @@ internal class Group(
             windowDataframe,
             keys = Expr.List(partitionKeys.map { (k, _) -> Expr.StringLiteral(k) }),
             asIndex = false,
-            dropna = false
+            dropna = false,
         )
     }
 

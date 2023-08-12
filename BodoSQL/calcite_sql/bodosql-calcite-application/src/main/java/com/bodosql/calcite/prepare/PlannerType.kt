@@ -21,7 +21,7 @@ enum class PlannerType {
             listOf(ConventionTraitDef.INSTANCE, BatchingPropertyTraitDef.INSTANCE)
 
         override fun programs(): ProgramCollection = VOLCANO.programs()
-    };
+    }, ;
 
     open fun traitDefs(): List<RelTraitDef<out RelTrait>> =
         // Override the list of standard trait definitions we are interested in.

@@ -32,6 +32,5 @@ class SqlBodoParserUtil {
                         else -> ch
                     }
                 }
-
     }
 }

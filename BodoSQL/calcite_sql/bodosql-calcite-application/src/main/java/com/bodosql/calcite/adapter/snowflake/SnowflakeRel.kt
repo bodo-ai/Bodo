@@ -33,5 +33,4 @@ interface SnowflakeRel : RelNode {
     }
 
     fun getCatalogTable(): CatalogTableImpl
-
 }

@@ -183,7 +183,7 @@ import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Util;
 import org.apache.calcite.util.trace.CalciteTrace;
 
-import com.bodosql.calcite.sql.fun.SqlBodoOperatorTable;
+import com.bodosql.calcite.sql.func.SqlBodoOperatorTable;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;

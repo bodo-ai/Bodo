@@ -13,8 +13,11 @@ class PandasTableScanRule private constructor(config: Config) : ConverterRule(co
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                LogicalTableScan::class.java, Convention.NONE, PandasRel.CONVENTION,
-                "PandasTableScanRule")
+                LogicalTableScan::class.java,
+                Convention.NONE,
+                PandasRel.CONVENTION,
+                "PandasTableScanRule",
+            )
             .withRuleFactory { config -> PandasTableScanRule(config) }
     }
 

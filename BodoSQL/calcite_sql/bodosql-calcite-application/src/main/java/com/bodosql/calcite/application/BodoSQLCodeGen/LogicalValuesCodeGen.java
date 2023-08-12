@@ -1,16 +1,14 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
-import static com.bodosql.calcite.application.Utils.Utils.integerLiteralArange;
+import static com.bodosql.calcite.application.utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
+import static com.bodosql.calcite.application.utils.Utils.integerLiteralArange;
 
-import com.bodosql.calcite.application.*;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import java.util.*;
 import java.util.Collections;
 import java.util.List;
-import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 

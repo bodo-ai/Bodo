@@ -11,7 +11,7 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         writer: SqlWriter,
         literal: SqlIntervalLiteral,
         leftPrec: Int,
-        rightPrec: Int
+        rightPrec: Int,
     ) {
         // SnowflakeSqlDialect isn't implemented properly in upstream. We
         // reimplement it here.
@@ -26,8 +26,9 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         writer.print("'")
         writer.literal(interval.intervalLiteral)
         unparseSqlIntervalQualifier(
-            writer, interval.intervalQualifier,
-            RelDataTypeSystem.DEFAULT
+            writer,
+            interval.intervalQualifier,
+            RelDataTypeSystem.DEFAULT,
         )
         writer.print("'")
     }

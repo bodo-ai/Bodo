@@ -10,12 +10,12 @@ class BodoCatalogReader(
     rootSchema: CalciteSchema,
     defaultSchemaPaths: List<List<String>>,
     typeFactory: RelDataTypeFactory,
-    config: CalciteConnectionConfig?
+    config: CalciteConnectionConfig?,
 ) :
     CalciteCatalogReader(
         rootSchema,
         SqlNameMatchers.withCaseSensitive(config != null && config.caseSensitive()),
         defaultSchemaPaths,
         typeFactory,
-        config
+        config,
     )

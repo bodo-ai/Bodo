@@ -15,7 +15,6 @@ abstract class Expr {
      */
     class Raw(val code: String) : Expr() {
         override fun emit(): String = code
-
     }
 
     open class DelegateExpr(private val delegate: Expr) : Expr() {
@@ -39,22 +38,22 @@ abstract class Expr {
     class Call(val callee: Expr, val args: kotlin.collections.List<Expr> = listOf(), val namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf()) : Expr() {
         constructor(callee: Expr, args: kotlin.collections.List<Expr>) : this(callee, args, listOf())
         constructor(callee: Expr, vararg args: Expr) : this(callee, args.toList(), listOf())
-        constructor(callee: String, args: kotlin.collections.List<Expr>, namedArgs: kotlin.collections.List<Pair<String, Expr>>)
-                : this(Raw(callee), args, namedArgs)
+        constructor(callee: String, args: kotlin.collections.List<Expr>, namedArgs: kotlin.collections.List<Pair<String, Expr>>) :
+            this(Raw(callee), args, namedArgs)
         constructor(callee: String, args: kotlin.collections.List<Expr>) : this(callee, args, listOf())
         constructor(callee: String, vararg args: Expr) : this(callee, args.toList())
 
         override fun emit(): String {
             val args = sequenceOf(
                 this.args.asSequence().map { it.emit() },
-                this.namedArgs.asSequence().map { (name, value) -> "$name=${value.emit()}" }
+                this.namedArgs.asSequence().map { (name, value) -> "$name=${value.emit()}" },
             ).flatten().joinToString(separator = ", ")
-            return "${callee.emit()}(${args})"
+            return "${callee.emit()}($args)"
         }
     }
 
     class Len(expr: Expr) : DelegateExpr(
-        Call("len", expr)
+        Call("len", expr),
     )
 
     /**
@@ -64,10 +63,9 @@ abstract class Expr {
      * @param inputVar the expression to access a field for.
      * @param attributeName the field to access.
      */
-    class Attribute(val inputVar: Expr, val attributeName: String): Expr() {
-        override fun emit(): String = "${inputVar.emit()}.${attributeName}"
+    class Attribute(val inputVar: Expr, val attributeName: String) : Expr() {
+        override fun emit(): String = "${inputVar.emit()}.$attributeName"
     }
-
 
     /**
      * Represents a taking a slice of the rows of a dataframe.
@@ -79,8 +77,8 @@ abstract class Expr {
     class DataFrameSlice(inputDf: Expr, lowerBound: Expr, upperBound: Expr) : DelegateExpr(
         Index(
             Attribute(inputDf, "iloc"),
-            Slice(lowerBound, upperBound)
-        )
+            Slice(lowerBound, upperBound),
+        ),
     )
 
     /**
@@ -94,11 +92,13 @@ abstract class Expr {
      * to ensure the order is deterministic.
      */
     class Method(
-        inputVar: Expr, methodName: String,
+        inputVar: Expr,
+        methodName: String,
         args: kotlin.collections.List<Expr> = listOf(),
-        namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf())
-        : DelegateExpr(
-            Call(Attribute(inputVar, methodName), args, namedArgs)
+        namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf(),
+    ) :
+        DelegateExpr(
+            Call(Attribute(inputVar, methodName), args, namedArgs),
         )
 
     /**
@@ -110,13 +110,18 @@ abstract class Expr {
      * @param dropna: Should NA values be dropped.
      *
      */
-    class Groupby(inputVar: Expr, keys: List, asIndex: Boolean, dropna: Boolean)
-        : DelegateExpr(
-            Method(inputVar, "groupby", listOf(keys), listOf(
-                "as_index" to BooleanLiteral(asIndex),
-                "dropna" to BooleanLiteral(dropna),
-                "_is_bodosql" to BooleanLiteral(true),
-            ))
+    class Groupby(inputVar: Expr, keys: List, asIndex: Boolean, dropna: Boolean) :
+        DelegateExpr(
+            Method(
+                inputVar,
+                "groupby",
+                listOf(keys),
+                listOf(
+                    "as_index" to BooleanLiteral(asIndex),
+                    "dropna" to BooleanLiteral(dropna),
+                    "_is_bodosql" to BooleanLiteral(true),
+                ),
+            ),
         )
 
     /**
@@ -132,7 +137,6 @@ abstract class Expr {
         }
     }
 
-
     /**
      * Represents a call to sort_values with the arguments that could change depending on the call.
      *
@@ -145,16 +149,18 @@ abstract class Expr {
 
         override fun emit(): String {
             // Generate the keyword args
-            val keywordArgs = listOf(Pair("by", by), Pair("ascending", ascending),
-                                     Pair("na_position", naPosition))
+            val keywordArgs = listOf(
+                Pair("by", by),
+                Pair("ascending", ascending),
+                Pair("na_position", naPosition),
+            )
 
             return if (by.args.isEmpty() && ascending.args.isEmpty() && naPosition.args.isEmpty()) {
-                inputVar.emit();
+                inputVar.emit()
             } else {
-                Method(inputVar, "sort_values", listOf(), keywordArgs).emit();
+                Method(inputVar, "sort_values", listOf(), keywordArgs).emit()
             }
         }
-
     }
 
     /**
@@ -165,7 +171,7 @@ abstract class Expr {
      * @param index: The index into the array/DataFrame
      */
     class GetItem(inputExpr: Expr, index: Expr) : DelegateExpr(
-        Index(inputExpr, index)
+        Index(inputExpr, index),
     )
 
     /**
@@ -180,9 +186,8 @@ abstract class Expr {
     class Unary(private val opString: String, private val inputExpr: Expr) : Expr() {
 
         override fun emit(): String {
-            return "${opString}(${inputExpr.emit()})"
+            return "$opString(${inputExpr.emit()})"
         }
-
     }
 
     /**
@@ -202,7 +207,6 @@ abstract class Expr {
             // operations with their precedence.
             return "(${input1.emit()} $opString ${input2.emit()})"
         }
-
     }
 
     /**
@@ -212,7 +216,7 @@ abstract class Expr {
      * @param step The step Expr. Null if there is no step.
      */
     class Range(start: Expr, stop: Expr, step: Expr? = null) : DelegateExpr(
-        Call("range", sequenceOf(start, stop, step).filterNotNull().toList())
+        Call("range", sequenceOf(start, stop, step).filterNotNull().toList()),
     )
 
     /**
@@ -248,9 +252,11 @@ abstract class Expr {
 
         override fun emit(): String {
             val s = "${start?.emit() ?: ""}:${stop?.emit() ?: ""}"
-            return if (step != null)
+            return if (step != null) {
                 "$s:${step.emit()}"
-            else s
+            } else {
+                s
+            }
         }
     }
 
@@ -275,7 +281,7 @@ abstract class Expr {
         constructor(items: Iterator<Map.Entry<Expr, Expr>>) : this(
             items.asSequence()
                 .map { (k, v) -> k to v }
-                .toList()
+                .toList(),
         )
 
         constructor(vararg items: Pair<Expr, Expr>) : this(items.toList())
@@ -294,7 +300,6 @@ abstract class Expr {
         private val s = arg.replace("\"\"\"", """\"\"\"""")
 
         override fun emit(): String = "\"\"\"$s\"\"\""
-
     }
 
     /**
@@ -359,7 +364,6 @@ abstract class Expr {
      */
     class IntegerLiteral(val arg: Int) : Expr() {
         override fun emit(): String = arg.toString()
-
     }
 
     /**
@@ -376,7 +380,6 @@ abstract class Expr {
      */
     class DoubleLiteral(val arg: Double) : Expr() {
         override fun emit(): String = arg.toString()
-
     }
 
     /**
@@ -392,11 +395,10 @@ abstract class Expr {
     }
 }
 
-
-fun BodoSQLKernel(callee: String, args: List<Expr> = listOf(), namedArgs: List<Pair<String, Expr>> = listOf()) : Expr {
-    return Expr.Call("bodo.libs.bodosql_array_kernels.${callee}", args, namedArgs)
+fun BodoSQLKernel(callee: String, args: List<Expr> = listOf(), namedArgs: List<Pair<String, Expr>> = listOf()): Expr {
+    return Expr.Call("bodo.libs.bodosql_array_kernels.$callee", args, namedArgs)
 }
 
-fun initRangeIndex(args: List<Expr> = listOf(), namedArgs: List<Pair<String, Expr>> = listOf()) : Expr {
+fun initRangeIndex(args: List<Expr> = listOf(), namedArgs: List<Pair<String, Expr>> = listOf()): Expr {
     return Expr.Call("bodo.hiframes.pd_index_ext.init_range_index", args, namedArgs)
 }

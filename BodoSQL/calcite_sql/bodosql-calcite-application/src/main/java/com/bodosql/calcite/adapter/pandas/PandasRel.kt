@@ -1,11 +1,11 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.application.Utils.Utils
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
-import com.bodosql.calcite.ir.*
-import com.bodosql.calcite.ir.Expr.Companion.One
-import com.bodosql.calcite.ir.Expr.Companion.Zero
-import com.bodosql.calcite.ir.Op.Assign
+import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Module
+import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.plan.RelOptUtil
@@ -51,7 +51,8 @@ interface PandasRel : RelNode {
     fun nodeDetails() = Arrays.stream(
         RelOptUtil.toString(this)
             .split("\n".toRegex()).dropLastWhile { it.isEmpty() }
-            .toTypedArray()).findFirst().get()
+            .toTypedArray(),
+    ).findFirst().get()
 
     /**
      * Determine if an operator is streaming.

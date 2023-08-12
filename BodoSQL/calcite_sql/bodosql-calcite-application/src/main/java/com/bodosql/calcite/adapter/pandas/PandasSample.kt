@@ -21,12 +21,14 @@ class PandasSample(
         assert(convention == PandasRel.CONVENTION)
     }
 
-    override fun explainTerms(pw : RelWriter) : RelWriter {
+    override fun explainTerms(pw: RelWriter): RelWriter {
         return super.explainTerms(pw)
             .item("mode", if (params.isBernoulli()) "bernoulli" else "system")
             .item("rate", params.getSamplingPercentage())
-            .item("repeatableSeed",
-                if (params.isRepeatable()) params.getRepeatableSeed() else "-");
+            .item(
+                "repeatableSeed",
+                if (params.isRepeatable()) params.getRepeatableSeed() else "-",
+            )
     }
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): PandasSample {
