@@ -27,7 +27,7 @@ internal class GroupBuilder(
      */
     fun canAdd(expr: RexOver): Boolean =
         expr.window.partitionKeys.equals(window.partitionKeys) &&
-                expr.window.orderKeys.equals(window.orderKeys)
+            expr.window.orderKeys.equals(window.orderKeys)
 
     fun add(expr: RexOver): Int {
         exprs.add(expr)

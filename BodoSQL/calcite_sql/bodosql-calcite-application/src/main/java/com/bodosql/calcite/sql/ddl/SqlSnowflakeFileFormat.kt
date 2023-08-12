@@ -5,11 +5,11 @@ import org.apache.calcite.sql.SqlWriter
 import java.util.HashMap
 
 class SqlSnowflakeFileFormat(
-    val formatName : SqlNode?,
-    val formatType : SqlNode?,
-    val formatOptions : HashMap<String, String>,
-    ) {
-    fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int)  {
+    val formatName: SqlNode?,
+    val formatType: SqlNode?,
+    val formatOptions: HashMap<String, String>,
+) {
+    fun unparse(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {
         writer.keyword("(")
         formatName?.let {
             writer.keyword("FORMAT_NAME")

@@ -17,7 +17,7 @@ class Doc private constructor(private val code: StringBuilder, private val inden
      * @param level Starting indentation level.
      */
     constructor(indent: String = "  ", level: Int = 0) :
-            this(code = StringBuilder(), indent = indent, level = level)
+        this(code = StringBuilder(), indent = indent, level = level)
 
     /**
      * Write a single line to the document.
@@ -36,7 +36,7 @@ class Doc private constructor(private val code: StringBuilder, private val inden
             line.split("\n")
                 .joinToString { "${prefix}${it.trim()}" }
         } else {
-            "${prefix}${line}"
+            "${prefix}$line"
         }
         code.append(block)
         code.append("\n")

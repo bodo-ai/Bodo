@@ -24,7 +24,6 @@ package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.plan.CostFactory
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
-import org.apache.calcite.sql.validate.implicit.BodoTypeCoercionImpl
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.avatica.util.Casing
 import org.apache.calcite.config.NullCollation
@@ -35,6 +34,7 @@ import org.apache.calcite.schema.SchemaPlus
 import org.apache.calcite.sql.parser.SqlParser
 import org.apache.calcite.sql.validate.SqlConformanceEnum
 import org.apache.calcite.sql.validate.SqlValidator
+import org.apache.calcite.sql.validate.implicit.BodoTypeCoercionImpl
 import org.apache.calcite.sql2rel.SqlToRelConverter
 import org.apache.calcite.sql2rel.StandardConvertletTableConfig
 import org.apache.calcite.tools.FrameworkConfig
@@ -51,7 +51,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                 .sqlToRelConverterConfig(
                     SqlToRelConverter.config()
                         .withExpand(false)
-                        .withInSubQueryThreshold(Integer.MAX_VALUE)
+                        .withInSubQueryThreshold(Integer.MAX_VALUE),
                 )
                 .parserConfig(
                     SqlParser.Config.DEFAULT
@@ -59,19 +59,19 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                         .withQuotedCasing(Casing.UNCHANGED)
                         .withUnquotedCasing(Casing.UNCHANGED)
                         .withConformance(SqlConformanceEnum.LENIENT)
-                        .withParserFactory(SqlBodoParserImpl.FACTORY)
+                        .withParserFactory(SqlBodoParserImpl.FACTORY),
                 )
                 .convertletTable(
                     BodoConvertletTable(
-                        StandardConvertletTableConfig(false, false)
-                    )
+                        StandardConvertletTableConfig(false, false),
+                    ),
                 )
                 .sqlValidatorConfig(
                     SqlValidator.Config.DEFAULT
                         .withNamedParamTableName(config.namedParamTableName)
                         .withDefaultNullCollation(NullCollation.LOW)
                         .withCallRewrite(false)
-                        .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
+                        .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY),
                 )
                 .costFactory(CostFactory())
                 .traitDefs(config.plannerType.traitDefs())
@@ -98,7 +98,8 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
         return BodoCatalogReader(
             CalciteSchema.from(rootSchema),
             defaultSchemaPaths.build(),
-            typeFactory, connectionConfig,
+            typeFactory,
+            connectionConfig,
         )
     }
 

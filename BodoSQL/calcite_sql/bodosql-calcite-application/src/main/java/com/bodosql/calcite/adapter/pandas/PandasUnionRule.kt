@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.rel.logical.BodoLogicalUnion
-import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
@@ -13,8 +12,11 @@ class PandasUnionRule private constructor(config: Config) : ConverterRule(config
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                BodoLogicalUnion::class.java, Convention.NONE, PandasRel.CONVENTION,
-                "PandasUnionRule")
+                BodoLogicalUnion::class.java,
+                Convention.NONE,
+                PandasRel.CONVENTION,
+                "PandasUnionRule",
+            )
             .withRuleFactory { config -> PandasUnionRule(config) }
     }
 

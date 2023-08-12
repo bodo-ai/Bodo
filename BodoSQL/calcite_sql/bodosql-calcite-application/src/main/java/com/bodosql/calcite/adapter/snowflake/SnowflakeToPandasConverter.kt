@@ -2,9 +2,16 @@ package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
-import com.bodosql.calcite.ir.*
+import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Op
+import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
-import org.apache.calcite.plan.*
+import org.apache.calcite.plan.ConventionTraitDef
+import org.apache.calcite.plan.RelOptCluster
+import org.apache.calcite.plan.RelOptCost
+import org.apache.calcite.plan.RelOptPlanner
+import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterImpl
 import org.apache.calcite.rel.metadata.RelMetadataQuery
@@ -32,11 +39,13 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     override fun operationDescriptor() = "reading table"
     override fun loggingTitle() = "IO TIMING"
 
-    override fun nodeDetails() = (if (input is SnowflakeTableScan) {
-        getTableName(input as SnowflakeRel)
-    } else {
-        getSnowflakeSQL()
-    })!!
+    override fun nodeDetails() = (
+        if (input is SnowflakeTableScan) {
+            getTableName(input as SnowflakeRel)
+        } else {
+            getSnowflakeSQL()
+        }
+        )!!
 
     override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
         val builder = ctx.builder()
@@ -78,24 +87,28 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
      * We modify that casing here by changing the field names of the derived type.
      */
     override fun deriveRowType(): RelDataType {
-        return RelRecordType(super.deriveRowType().fieldList.map { field ->
-            val name = if (field.name.equals(field.name.uppercase())) {
-                field.name.lowercase()
-            } else field.name
-            RelDataTypeFieldImpl(name, field.index, field.type)
-        })
+        return RelRecordType(
+            super.deriveRowType().fieldList.map { field ->
+                val name = if (field.name.equals(field.name.uppercase())) {
+                    field.name.lowercase()
+                } else {
+                    field.name
+                }
+                RelDataTypeFieldImpl(name, field.index, field.type)
+            },
+        )
     }
 
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable =
         if (isStreaming()) {
             implementor.createStreamingPipeline()
-            implementor.buildStreaming (
-                {ctx -> initStateVariable(ctx)},
-                {ctx, stateVar -> generateStreamingTable(ctx, stateVar)},
-                {ctx, stateVar -> deleteStateVariable(ctx, stateVar)}
+            implementor.buildStreaming(
+                { ctx -> initStateVariable(ctx) },
+                { ctx, stateVar -> generateStreamingTable(ctx, stateVar) },
+                { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
             )
         } else {
-            implementor.build { ctx -> generateNonStreamingTable(ctx)}
+            implementor.build { ctx -> generateNonStreamingTable(ctx) }
         }
 
     /**
@@ -109,8 +122,8 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         return readExpr
     }
 
-    private fun getTableName(input: SnowflakeRel)  = input.getCatalogTable().name
-    private fun getSchemaName(input: SnowflakeRel)  = input.getCatalogTable().schema.name
+    private fun getTableName(input: SnowflakeRel) = input.getCatalogTable().name
+    private fun getSchemaName(input: SnowflakeRel) = input.getCatalogTable().schema.name
 
     /**
      * Generate the code required to read a table. This path is necessary because the Snowflake
@@ -122,7 +135,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         val relInput = input as SnowflakeRel
         val args = listOf(
             Expr.StringLiteral(tableName),
-            Expr.StringLiteral(relInput.generatePythonConnStr(schemaName))
+            Expr.StringLiteral(relInput.generatePythonConnStr(schemaName)),
         )
         return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, true))
     }
@@ -151,7 +164,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
             // We don't use a schema name because we've already fully qualified
             // all table references and it's better if this doesn't have any
             // potentially unexpected behavior.
-            Expr.StringLiteral(relInput.generatePythonConnStr(""))
+            Expr.StringLiteral(relInput.generatePythonConnStr("")),
         )
         return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, false))
     }

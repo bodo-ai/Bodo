@@ -2,16 +2,28 @@ package com.bodosql.calcite.application.BodoSQLOperatorTables;
 
 import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.isOutputNullableCompile;
 
+import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
-import org.apache.calcite.rel.type.*;
-import org.apache.calcite.sql.*;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.sql.SqlFunction;
+import org.apache.calcite.sql.SqlFunctionCategory;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.SqlOperatorBinding;
+import org.apache.calcite.sql.SqlOperatorTable;
+import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
-import org.apache.calcite.sql.type.*;
+import org.apache.calcite.sql.type.OperandTypes;
+import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlOperandTypeChecker;
+import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
-
-import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 
 /**
  * Operator table which contains function definitions for functions usable in BodoSQL. This operator
@@ -227,8 +239,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
       returnType = arg0;
     } else {
       // Otherwise we output a timezone-aware Timestamp with the local timestamp.
-      returnType =
-          BodoRelDataTypeFactory.createTZAwareSqlType(binding.getTypeFactory(), null);
+      returnType = BodoRelDataTypeFactory.createTZAwareSqlType(binding.getTypeFactory(), null);
       if (runtimeFailureIsNull) {
         // Note this path includes arguments for 0 that can fail at runtime.
         // If this runtimeFailureIsNull is set then failed conversions make

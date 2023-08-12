@@ -1,7 +1,6 @@
 package com.bodosql.calcite.ir
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
-import org.apache.calcite.rel.RelNode
 import java.util.*
 
 /**
@@ -28,7 +27,7 @@ class Module(private val frame: Frame) {
 
         private var activeFrame: Frame = functionFrame
         private var parentFrames: Stack<Frame> = Stack()
-        private var assignedVariables: Set<Variable> = emptySet();
+        private var assignedVariables: Set<Variable> = emptySet()
 
         /**
          * Helper function called by add/addall. Checks that no variable is assigned too twice.
@@ -43,7 +42,7 @@ class Module(private val frame: Frame) {
                 }
                 assignedVariables.plus(targetVar)
             } else if (op is Op.TupleAssign) {
-                for (targetVar: Variable in op.targets){
+                for (targetVar: Variable in op.targets) {
                     if (assignedVariables.contains(targetVar)) {
                         throw Exception("Internal error in Assign.emit(): Attempted to perform an invalid variable shadow.")
                     }
@@ -113,7 +112,6 @@ class Module(private val frame: Frame) {
             return appendToMainFunction(code.toString())
         }
 
-
         /**
          * Construct a module from the built code.
          * @return The built module.
@@ -136,7 +134,6 @@ class Module(private val frame: Frame) {
             activeFrame = CodegenFrame()
         }
 
-
         /**
          * Updates a builder to create a new activeFrame
          * as a StreamingPipelineFrame.
@@ -149,7 +146,7 @@ class Module(private val frame: Frame) {
         /**
          * Terminates the current active frame and returns it.
          */
-        fun endFrame() : Frame {
+        fun endFrame(): Frame {
             if (parentFrames.empty()) {
                 throw BodoSQLCodegenException("Attempting to end a Frame when there are 0 remaining parent frames.")
             }
@@ -163,7 +160,7 @@ class Module(private val frame: Frame) {
          * If the current frame is not a streaming pipeline it raises
          * an exception.
          */
-        fun endCurrentStreamingPipeline() : StreamingPipelineFrame {
+        fun endCurrentStreamingPipeline(): StreamingPipelineFrame {
             if (activeFrame is StreamingPipelineFrame) {
                 return endFrame() as StreamingPipelineFrame
             }

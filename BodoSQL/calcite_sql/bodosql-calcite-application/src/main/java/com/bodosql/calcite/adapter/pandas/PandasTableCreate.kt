@@ -26,8 +26,16 @@ class PandasTableCreate(
     }
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): PandasTableCreate {
-        return PandasTableCreate(cluster, traitSet, sole(inputs),
-            schema, tableName, isReplace, createTableType, schemaPath)
+        return PandasTableCreate(
+            cluster,
+            traitSet,
+            sole(inputs),
+            schema,
+            tableName,
+            isReplace,
+            createTableType,
+            schemaPath,
+        )
     }
 
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {

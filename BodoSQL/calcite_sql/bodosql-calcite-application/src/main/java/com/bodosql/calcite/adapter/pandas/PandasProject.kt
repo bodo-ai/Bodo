@@ -1,10 +1,13 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.application.Utils.BodoArrayHelpers
-import com.bodosql.calcite.application.Utils.IsScalar
-import com.bodosql.calcite.ir.*
+import com.bodosql.calcite.application.utils.BodoArrayHelpers
+import com.bodosql.calcite.application.utils.IsScalar
+import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Op
+import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.core.ProjectBase
-import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty.Companion.projectFilterProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
@@ -14,14 +17,17 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.metadata.RelMdCollation
 import org.apache.calcite.rel.type.RelDataType
-import org.apache.calcite.rex.*
+import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexLocalRef
+import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexSlot
 
 class PandasProject(
     cluster: RelOptCluster,
     traitSet: RelTraitSet,
     input: RelNode,
     projects: List<RexNode>,
-    rowType: RelDataType
+    rowType: RelDataType,
 ) : ProjectBase(cluster, traitSet, ImmutableList.of(), input, projects, rowType), PandasRel {
 
     init {
@@ -46,14 +52,15 @@ class PandasProject(
     }
 
     private fun emitStreaming(implementor: PandasRel.Implementor, inputVar: BodoEngineTable): BodoEngineTable {
-        return implementor.buildStreaming (
-            {ctx -> initStateVariable(ctx)},
+        return implementor.buildStreaming(
+            { ctx -> initStateVariable(ctx) },
             {
                     ctx, stateVar ->
                 val (projectExprs, localRefs) = genDataFrameWindowInputs(ctx, inputVar)
                 val translator = ctx.streamingRexTranslator(inputVar, localRefs, stateVar)
-                generateDataFrame(ctx, inputVar, translator, projectExprs, localRefs)},
-            {ctx, stateVar -> deleteStateVariable(ctx, stateVar)}
+                generateDataFrame(ctx, inputVar, translator, projectExprs, localRefs)
+            },
+            { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
         )
     }
 
@@ -91,7 +98,6 @@ class PandasProject(
             throw ex
         }
     }
-
 
     override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
         val builder = ctx.builder()
@@ -141,7 +147,7 @@ class PandasProject(
     private fun generateLocCode(ctx: PandasRel.BuildContext, input: BodoEngineTable): BodoEngineTable {
         val colIndices = getProjects().map { r -> Expr.IntegerLiteral((r as RexInputRef).index) }
         val typeCall = Expr.Call("MetaType", Expr.Tuple(colIndices))
-        val colNamesMeta = ctx.lowerAsGlobal(typeCall);
+        val colNamesMeta = ctx.lowerAsGlobal(typeCall)
         val resultExpr = Expr.Call("bodo.hiframes.table.table_subset", input, colNamesMeta, Expr.False)
         return ctx.returns(resultExpr)
     }
@@ -164,13 +170,16 @@ class PandasProject(
         }
 
         return Expr.Method(
-            input, "rename",
+            input,
+            "rename",
             namedArgs = listOf(
-                "columns" to Expr.Dict(renameMap.map { (name, alias) ->
-                    Expr.StringLiteral(name) to Expr.StringLiteral(alias)
-                }),
-                "copy" to Expr.BooleanLiteral(false)
-            )
+                "columns" to Expr.Dict(
+                    renameMap.map { (name, alias) ->
+                        Expr.StringLiteral(name) to Expr.StringLiteral(alias)
+                    },
+                ),
+                "copy" to Expr.BooleanLiteral(false),
+            ),
         )
     }
 
@@ -217,7 +226,7 @@ class PandasProject(
             }
         }
         val logicalTableVar = generateLogicalTableCode(ctx, inputVar, indices, localRefs, input.rowType.fieldCount)
-        return ctx.returns(logicalTableVar);
+        return ctx.returns(logicalTableVar)
     }
 
     /**
@@ -237,10 +246,12 @@ class PandasProject(
      */
     private fun coerceScalarToArray(ctx: PandasRel.BuildContext, dataType: RelDataType, scalar: Expr, input: BodoEngineTable): Expr {
         val global = ctx.lowerAsGlobal(BodoArrayHelpers.sqlTypeToBodoArrayType(dataType, true))
-        return Expr.Call("bodo.utils.conversion.coerce_scalar_to_array",
+        return Expr.Call(
+            "bodo.utils.conversion.coerce_scalar_to_array",
             scalar,
             Expr.Call("len", input),
-            global)
+            global,
+        )
     }
 
     /**
@@ -255,21 +266,28 @@ class PandasProject(
      * @param seriesList additional series that should be included in the list of indices.
      * @param colsBeforeProject number of columns in the input table before any projection occurs.
      */
-    private fun generateLogicalTableCode(ctx: PandasRel.BuildContext, input: BodoEngineTable,
-                                         indices: List<Int>, seriesList: List<Variable>, colsBeforeProject: Int): Variable {
+    private fun generateLogicalTableCode(
+        ctx: PandasRel.BuildContext,
+        input: BodoEngineTable,
+        indices: List<Int>,
+        seriesList: List<Variable>,
+        colsBeforeProject: Int,
+    ): Variable {
         // Use the list of indices to generate a meta type with the column numbers.
         val metaType = ctx.lowerAsGlobal(
-            Expr.Call("MetaType",
-                Expr.Tuple(indices.map { Expr.IntegerLiteral(it) })
-            )
+            Expr.Call(
+                "MetaType",
+                Expr.Tuple(indices.map { Expr.IntegerLiteral(it) }),
+            ),
         )
 
         // Generate the output table with logical_table_to_table.
-        val logicalTableExpr = Expr.Call("bodo.hiframes.table.logical_table_to_table",
+        val logicalTableExpr = Expr.Call(
+            "bodo.hiframes.table.logical_table_to_table",
             input,
             Expr.Tuple(seriesList),
             metaType,
-            Expr.IntegerLiteral(colsBeforeProject)
+            Expr.IntegerLiteral(colsBeforeProject),
         )
         val builder = ctx.builder()
         val logicalTableVar = builder.symbolTable.genTableVar()

@@ -2,13 +2,13 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getAscendingExpr;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getNAPositionStringLiteral;
-import static com.bodosql.calcite.application.Utils.AggHelpers.generateGroupByCall;
-import static com.bodosql.calcite.application.Utils.AggHelpers.getCountCall;
-import static com.bodosql.calcite.application.Utils.AggHelpers.getDummyColName;
-import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.utils.AggHelpers.generateGroupByCall;
+import static com.bodosql.calcite.application.utils.AggHelpers.getCountCall;
+import static com.bodosql.calcite.application.utils.AggHelpers.getDummyColName;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.application.utils.Utils;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Variable;
@@ -267,7 +267,8 @@ public class AggCodeGen {
         aggExpr = new Expr.Call("bodo.libs.array_kernels." + aggFunc, aggExpr, quantileScalar);
 
       } else if (aggFunc.equals("approx_percentile")) {
-        assertWithErrMsg(a.getArgList().size() == 2, "APPROX_PERCENTILE requires two arguments");
+        Utils.assertWithErrMsg(
+            a.getArgList().size() == 2, "APPROX_PERCENTILE requires two arguments");
         // Currently, the scalar float argument is converted into a column. To
         // access the quantile value, extract the first row.
         Expr quantileColumn =
@@ -276,9 +277,10 @@ public class AggCodeGen {
                 List.of(inVar, new Expr.IntegerLiteral(a.getArgList().get(1))));
         Expr quantileScalar = new Expr.Index(quantileColumn, Expr.Companion.getZero());
         // TODO: confirm that the second argument is a float
-        assertWithErrMsg(true, "The second argument to APPROX_PERCENTILE must be a scalar float");
+        Utils.assertWithErrMsg(
+            true, "The second argument to APPROX_PERCENTILE must be a scalar float");
         // TODO: confirm that the second argument is between zero and one
-        assertWithErrMsg(
+        Utils.assertWithErrMsg(
             true, "The second argument to APPROX_PERCENTILE must be between 0.0 and 1.0");
         aggExpr =
             new Expr.Call("bodo.libs.array_kernels.approx_percentile", aggExpr, quantileScalar);
@@ -347,7 +349,7 @@ public class AggCodeGen {
                   new Expr.List(Expr.Companion.getZero())));
     }
     // Generate the column names global
-    List<Expr.StringLiteral> colNamesLiteral = stringsToStringLiterals(aggCallNames);
+    List<Expr.StringLiteral> colNamesLiteral = Utils.stringsToStringLiterals(aggCallNames);
     Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
     Variable colNamesMeta = pdVisitorClass.lowerAsColNamesMetaType(colNamesTuple);
     Expr dfExpr =
@@ -436,13 +438,13 @@ public class AggCodeGen {
     HashMap<String, String> renamedAggColumns = new HashMap<>();
     for (int i = 0; i < aggCallList.size(); i++) {
       AggregateCall a = aggCallList.get(i);
-      String aggCol = getInputColumn(inputColumnNames, a, group);
+      String aggCol = Utils.getInputColumn(inputColumnNames, a, group);
       String outputCol = aggCallNames.get(i);
       // Generate a dummy column to prevent syntax issues with names that aren't
       // supported by Pandas NamedAgg. If the name is a valid Python identifier
       // we don't need a rename
       String tempName = outputCol;
-      if (!isValidPythonIdentifier(outputCol)) {
+      if (!Utils.isValidPythonIdentifier(outputCol)) {
         tempName = getDummyColName(i);
         renamedAggColumns.put(tempName, outputCol);
       }
@@ -454,7 +456,7 @@ public class AggCodeGen {
         aggFunc = "first";
       }
       if (!(aggFunc.equals("np.var") || aggFunc.equals("np.std"))) {
-        aggFunc = makeQuoted(aggFunc);
+        aggFunc = Utils.makeQuoted(aggFunc);
       }
       if (aggFunc.equals("approx_percentile")) {
         throw new BodoSQLCodegenException("APPROX_PERCENTILE not supported with Group By yet");
@@ -466,7 +468,7 @@ public class AggCodeGen {
         aggString
             .append(tempName)
             .append("=pd.NamedAgg(column=")
-            .append(makeQuoted(aggCol))
+            .append(Utils.makeQuoted(aggCol))
             .append(", aggfunc=")
             .append(aggFunc)
             .append("),");
@@ -482,7 +484,7 @@ public class AggCodeGen {
         aggString
             .append(tempName)
             .append("=bodo.utils.utils.ExtendedNamedAgg(column=")
-            .append(makeQuoted(aggCol))
+            .append(Utils.makeQuoted(aggCol))
             .append(", aggfunc=")
             .append(aggFunc)
             .append(", additional_args=")
@@ -493,7 +495,7 @@ public class AggCodeGen {
     aggString.append(")");
     if (renamedAggColumns.size() > 0) {
       aggString.append(".rename(columns=");
-      aggString.append(renameColumns(renamedAggColumns));
+      aggString.append(Utils.renameColumns(renamedAggColumns));
       aggString.append(", copy=False)");
     }
     return new Expr.Raw(aggString.toString());
@@ -597,7 +599,7 @@ public class AggCodeGen {
       PandasCodeGenVisitor pdVisitorClass) {
     StringBuilder fnString = new StringBuilder();
 
-    final String indent = getBodoIndent();
+    final String indent = Utils.getBodoIndent();
     final String funcIndent = indent + indent;
 
     /*
@@ -619,7 +621,7 @@ public class AggCodeGen {
     for (int i = 0; i < aggCallList.size(); i++) {
       AggregateCall a = aggCallList.get(i);
       // Get the input column
-      String aggCol = getInputColumn(inputColumnNames, a, group);
+      String aggCol = Utils.getInputColumn(inputColumnNames, a, group);
 
       // Determine the filter column if necessary
       String filterCol = "";
@@ -646,9 +648,9 @@ public class AggCodeGen {
       fnString.append(funcIndent).append(seriesVar).append(" = ");
       // append the column and if necessary filter
       // TODO: Refactor the series to only produce unique column + filter pairs
-      fnString.append("df[").append(makeQuoted(aggCol)).append("]");
+      fnString.append("df[").append(Utils.makeQuoted(aggCol)).append("]");
       if (filterCol.length() > 0) {
-        fnString.append("[df[").append(makeQuoted(filterCol)).append("]]");
+        fnString.append("[df[").append(Utils.makeQuoted(filterCol)).append("]]");
       }
       fnString.append("\n");
       // Generate the call

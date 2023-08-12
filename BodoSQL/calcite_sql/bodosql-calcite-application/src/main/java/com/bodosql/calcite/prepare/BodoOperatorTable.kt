@@ -1,7 +1,15 @@
 package com.bodosql.calcite.prepare
 
-import com.bodosql.calcite.application.BodoSQLOperatorTables.*
-import com.bodosql.calcite.sql.`fun`.SqlBodoOperatorTable
+import com.bodosql.calcite.application.BodoSQLOperatorTables.ArrayOperatorTable
+import com.bodosql.calcite.application.BodoSQLOperatorTables.CastingOperatorTable
+import com.bodosql.calcite.application.BodoSQLOperatorTables.CondOperatorTable
+import com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable
+import com.bodosql.calcite.application.BodoSQLOperatorTables.JsonOperatorTable
+import com.bodosql.calcite.application.BodoSQLOperatorTables.NumericOperatorTable
+import com.bodosql.calcite.application.BodoSQLOperatorTables.SinceEpochFnTable
+import com.bodosql.calcite.application.BodoSQLOperatorTables.StringOperatorTable
+import com.bodosql.calcite.application.BodoSQLOperatorTables.ThreeOperatorStringTable
+import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.util.ChainedSqlOperatorTable
@@ -22,5 +30,5 @@ object BodoOperatorTable : ChainedSqlOperatorTable(
         ThreeOperatorStringTable.instance(),
         CastingOperatorTable.instance(),
         ArrayOperatorTable.instance(),
-    )
+    ),
 )

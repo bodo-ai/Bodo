@@ -1,7 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.DateTimeHelpers.convertMySQLFormatStringToPython;
-import static com.bodosql.calcite.application.Utils.DateTimeHelpers.isStringLiteral;
+import static com.bodosql.calcite.application.utils.DateTimeHelpers.convertMySQLFormatStringToPython;
+import static com.bodosql.calcite.application.utils.DateTimeHelpers.isStringLiteral;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;

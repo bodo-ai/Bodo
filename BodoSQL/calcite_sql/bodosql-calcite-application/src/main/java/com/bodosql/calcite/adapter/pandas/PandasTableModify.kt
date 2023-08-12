@@ -23,16 +23,21 @@ class PandasTableModify(
     updateColumnList: List<String>?,
     sourceExpressionList: List<RexNode>?,
     flattened: Boolean,
-) : TableModify(cluster, traitSet, table, catalogReader,
-    input, operation, updateColumnList, sourceExpressionList, flattened), PandasRel {
+) : TableModify(
+    cluster, traitSet, table, catalogReader,
+    input, operation, updateColumnList, sourceExpressionList, flattened,
+),
+    PandasRel {
 
     init {
         assert(convention == PandasRel.CONVENTION)
     }
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): PandasTableModify {
-        return PandasTableModify(cluster, traitSet, table, catalogReader,
-            sole(inputs), operation, updateColumnList, sourceExpressionList, isFlattened)
+        return PandasTableModify(
+            cluster, traitSet, table, catalogReader,
+            sole(inputs), operation, updateColumnList, sourceExpressionList, isFlattened,
+        )
     }
 
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {

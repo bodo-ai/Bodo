@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import com.bodosql.calcite.ir.*;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Variable;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.calcite.rel.RelFieldCollation;

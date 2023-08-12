@@ -10,8 +10,11 @@ class SeparateStreamsRule private constructor(config: Config) : ConverterRule(co
         @JvmField
         val DEFAULT_CONFIG: Config = Config.INSTANCE
             .withConversion(
-                PandasRel::class.java, BatchingProperty.SINGLE_BATCH,
-                BatchingProperty.STREAMING, "SeparateStreamsRule")
+                PandasRel::class.java,
+                BatchingProperty.SINGLE_BATCH,
+                BatchingProperty.STREAMING,
+                "SeparateStreamsRule",
+            )
             .withRuleFactory { config -> SeparateStreamsRule(config) }
     }
 

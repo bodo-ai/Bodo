@@ -67,14 +67,16 @@ class SingleBatchRelNodeTimer(private val builder: Module.Builder, private val i
 
         val printMessage = String.format(
             "f'''Execution time for %s {%s}: {%s}'''",
-            operationDescriptor, nodeDetailsVariable.emit(), subVar.emit()
+            operationDescriptor,
+            nodeDetailsVariable.emit(),
+            subVar.emit(),
         )
         val logMessageCall: Op = Stmt(
             Expr.Call(
                 "bodo.user_logging.log_message",
-                Expr.StringLiteral(loggingTitle),  // TODO: Add a format string op?
-                Expr.Raw(printMessage)
-            )
+                Expr.StringLiteral(loggingTitle), // TODO: Add a format string op?
+                Expr.Raw(printMessage),
+            ),
         )
         builder.add(logMessageCall)
     }
@@ -87,7 +89,7 @@ class SingleBatchRelNodeTimer(private val builder: Module.Builder, private val i
             operationDescriptor: String,
             loggingTitle: String,
             nodeDetails: String,
-            type: OperationType
+            type: OperationType,
         ): SingleBatchRelNodeTimer {
             val verboseThreshold = if (type == OperationType.BATCH) {
                 RelNodeTimingVerboseLevel
@@ -99,7 +101,7 @@ class SingleBatchRelNodeTimer(private val builder: Module.Builder, private val i
                 verboseLevel < verboseThreshold,
                 operationDescriptor,
                 loggingTitle,
-                nodeDetails
+                nodeDetails,
             )
         }
     }

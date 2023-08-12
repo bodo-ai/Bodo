@@ -1,10 +1,10 @@
 package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.ir.Variable;
-import javax.annotation.*;
+import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.sql.type.*;
+import org.apache.calcite.sql.type.BodoTZInfo;
 
 /**
  *
@@ -293,7 +293,8 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
       dtype = this.elemType;
     }
     if (this.dataType == BodoSQLColumnDataType.ARRAY) {
-      RelDataType elemRelType = this.elemType.convertToSqlType(typeFactory, nullable, tzInfo, precision);
+      RelDataType elemRelType =
+          this.elemType.convertToSqlType(typeFactory, nullable, tzInfo, precision);
       return typeFactory.createArrayType(elemRelType, -1);
     }
     return dtype.convertToSqlType(typeFactory, nullable, tzInfo, precision);

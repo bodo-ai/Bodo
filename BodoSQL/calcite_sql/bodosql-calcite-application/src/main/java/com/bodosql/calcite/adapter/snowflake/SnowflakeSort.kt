@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.table.CatalogTableImpl
-import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -26,7 +25,7 @@ class SnowflakeSort private constructor(
         newInput: RelNode,
         newCollation: RelCollation,
         offset: RexNode?,
-        fetch: RexNode?
+        fetch: RexNode?,
     ): Sort {
         return SnowflakeSort(cluster, traitSet, newInput, newCollation, offset, fetch, catalogTable)
     }
@@ -42,7 +41,7 @@ class SnowflakeSort private constructor(
             collation: RelCollation,
             offset: RexNode?,
             fetch: RexNode?,
-            catalogTable: CatalogTableImpl
+            catalogTable: CatalogTableImpl,
         ): SnowflakeSort {
             // Note: Types may be lazily computed so use getRowType() instead of rowType
             val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(input.getRowType())

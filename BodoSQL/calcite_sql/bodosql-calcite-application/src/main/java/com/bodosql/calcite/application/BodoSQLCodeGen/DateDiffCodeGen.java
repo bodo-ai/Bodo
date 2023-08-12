@@ -1,6 +1,5 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import com.bodosql.calcite.application.*;
 import com.bodosql.calcite.ir.Expr;
 
 public class DateDiffCodeGen {

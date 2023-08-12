@@ -6,10 +6,11 @@ import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 
-class BodoLogicalUnion (cluster: RelOptCluster,
-                        traitSet: RelTraitSet,
-                        inputs: List<RelNode>,
-                        all: Boolean,
+class BodoLogicalUnion(
+    cluster: RelOptCluster,
+    traitSet: RelTraitSet,
+    inputs: List<RelNode>,
+    all: Boolean,
 ) : UnionBase(cluster, traitSet, inputs, all) {
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>, all: Boolean): BodoLogicalUnion {
@@ -20,7 +21,7 @@ class BodoLogicalUnion (cluster: RelOptCluster,
         @JvmStatic
         fun create(
             inputs: List<RelNode>,
-            all: Boolean
+            all: Boolean,
         ): BodoLogicalUnion {
             val cluster = inputs[0].cluster
             val traitSet = cluster.traitSet().replace(Convention.NONE)

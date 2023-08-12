@@ -1,7 +1,7 @@
 package com.bodosql.calcite.rel.core
 
 import com.bodosql.calcite.adapter.pandas.RexCostEstimator
-import com.bodosql.calcite.application.Utils.RexNormalizer
+import com.bodosql.calcite.application.utils.RexNormalizer
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import com.google.common.collect.ImmutableSet
@@ -10,7 +10,6 @@ import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.core.CorrelationId
 import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
 import org.apache.calcite.rel.hint.RelHint
@@ -42,7 +41,6 @@ abstract class JoinBase(
         val averageBuildRowSize = mq.getAverageRowSize(this.left)
         // Add a multiplier to try ensure the build cost isn't too impactful.
         val buildCost = Cost(mem = averageBuildRowSize ?: 0.0).multiplyBy(buildRows).multiplyBy(0.3)
-
 
         // We now want to compute the expected cost of producing this join's output.
         // We do this by taking the output rows and multiplying by the number

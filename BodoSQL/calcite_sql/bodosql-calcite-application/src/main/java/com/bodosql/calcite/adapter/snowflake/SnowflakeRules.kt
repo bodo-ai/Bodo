@@ -28,7 +28,6 @@ class SnowflakeRules private constructor() {
         val SNOWFLAKE_STREAMING_LIMIT_RULE: RelOptRule =
             SnowflakeLimitRule.Config.STREAMING_CONFIG.toRule()
 
-
         @JvmField
         val SNOWFLAKE_FILTER_RULE: RelOptRule =
             SnowflakeFilterRule.Config.DEFAULT_CONFIG.toRule()
@@ -36,7 +35,6 @@ class SnowflakeRules private constructor() {
         @JvmField
         val SNOWFLAKE_NESTED_FILTER_RULE: RelOptRule =
             SnowflakeFilterRule.Config.NESTED_CONFIG.toRule()
-
 
         @JvmField
         val TO_PANDAS: RelOptRule =

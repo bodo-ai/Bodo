@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.PandasCodeGenVisitor
-import com.bodosql.calcite.application.Utils.IsScalar
+import com.bodosql.calcite.application.utils.IsScalar
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Module
@@ -24,9 +24,8 @@ class StreamingRexToPandasTranslator(
     // State information for the streaming operator that uses
     // this translator. This is used for optimizations with
     // dictionary encoding.
-    private var stateVar: StateVariable
-): RexToPandasTranslator(visitor, builder, typeSystem, nodeId, input, localRefs) {
-
+    private var stateVar: StateVariable,
+) : RexToPandasTranslator(visitor, builder, typeSystem, nodeId, input, localRefs) {
 
     /**
      * Generate the additional keyword arguments that are passed to functions that support
@@ -38,7 +37,7 @@ class StreamingRexToPandasTranslator(
     private fun genDictEncodingArgs(): List<Pair<String, Expr>> {
         return listOf(
             Pair<String, Expr>("dict_encoding_state", stateVar),
-            Pair<String, Expr>("func_id", builder.symbolTable.genFuncID())
+            Pair<String, Expr>("func_id", builder.symbolTable.genFuncID()),
         )
     }
 
@@ -66,7 +65,11 @@ class StreamingRexToPandasTranslator(
         return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, genDictEncodingArgs())
     }
 
-    override fun visitDynamicCast(arg: Expr, inputType: RelDataType, outputType: RelDataType, isScalar: Boolean
+    override fun visitDynamicCast(
+        arg: Expr,
+        inputType: RelDataType,
+        outputType: RelDataType,
+        isScalar: Boolean,
     ): Expr {
         return visitDynamicCast(arg, inputType, outputType, isScalar, genDictEncodingArgs())
     }
@@ -93,5 +96,4 @@ class StreamingRexToPandasTranslator(
     override fun visitStringFunc(fnOperation: RexCall, operands: List<Expr>): Expr {
         return visitStringFunc(fnOperation, operands, genDictEncodingArgs())
     }
-
 }

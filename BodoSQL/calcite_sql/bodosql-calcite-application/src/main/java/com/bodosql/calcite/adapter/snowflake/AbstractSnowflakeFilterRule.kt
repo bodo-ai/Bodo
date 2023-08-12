@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable
-import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable
+import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
 import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelRule
 import org.apache.calcite.rel.core.Filter
@@ -11,8 +11,6 @@ import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
-import org.apache.calcite.sql.type.SqlTypeFamily
-import org.apache.calcite.sql.type.SqlTypeUtil
 import org.immutables.value.Value
 
 @BodoSQLStyleImmutable
@@ -87,9 +85,8 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             DatetimeOperatorTable.GETDATE.name,
         )
 
-
         @JvmStatic
-        private fun isSupportedOtherFunction(call: RexCall) : Boolean {
+        private fun isSupportedOtherFunction(call: RexCall): Boolean {
             return call.kind == SqlKind.OTHER_FUNCTION && SUPPORTED_GENERIC_CALL_NAMES.contains(call.operator.name)
         }
 
@@ -109,7 +106,9 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                     return if (call != null && (SUPPORTED_CALLS.contains(call.kind) || isSupportedOtherFunction(call))) {
                         // Arguments also need to be pushable.
                         call.operands.all { op -> op.accept(this) ?: false }
-                    } else false
+                    } else {
+                        false
+                    }
                 }
             }) ?: false
         }

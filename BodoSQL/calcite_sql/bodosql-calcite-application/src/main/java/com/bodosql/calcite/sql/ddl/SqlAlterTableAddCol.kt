@@ -1,17 +1,15 @@
 package com.bodosql.calcite.sql.ddl
 
 import org.apache.calcite.sql.SqlIdentifier
-import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.parser.SqlParserPos
-import org.apache.calcite.util.ImmutableNullableList
 
 class SqlAlterTableAddCol(
     pos: SqlParserPos,
-    ifExists : Boolean,
-    table : SqlIdentifier,
-    val addCol : SqlNode,
+    ifExists: Boolean,
+    table: SqlIdentifier,
+    val addCol: SqlNode,
 ) : SqlAlterTable(pos, ifExists, table) {
 
     override fun unparseSuffix(writer: SqlWriter, leftPrec: Int, rightPrec: Int) {

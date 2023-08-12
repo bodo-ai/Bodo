@@ -1,6 +1,6 @@
 package com.bodosql.calcite.adapter.pandas;
 
-import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.traits.CombineStreamsExchange;
 import com.google.common.collect.ImmutableList;
 import javax.annotation.Nullable;
