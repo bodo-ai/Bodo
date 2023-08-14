@@ -43,7 +43,6 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_none,
 )
-from bodo.utils.utils import check_and_propagate_cpp_exception
 
 
 class SnowflakeWriterType(types.Type):
@@ -473,254 +472,267 @@ def snowflake_writer_append_table(
     sf_schema = bodo.io.snowflake.gen_snowflake_schema(
         col_names_meta.meta, table.arr_types
     )
-
+    n_cols = len(col_names_meta)
     py_table_typ = table
 
-    func_text = (
-        # This function must be called the same number of times on all ranks.
-        # This is because we only execute COPY INTO commands from rank 0, so
-        # all ranks must finish writing their respective files to Snowflake
-        # internal stage and sync with rank 0 before it issues COPY INTO.
-        "def impl(writer, table, col_names_meta, is_last, iter):\n"
-        "    if writer['finished']:\n"
-        "        return True\n"
-        "    ev = tracing.Event('snowflake_writer_append_table', is_parallel=writer['parallel'])\n"
-        "    is_last = bodo.libs.distributed_api.sync_is_last(is_last, iter)\n"
+    # This function must be called the same number of times on all ranks.
+    # This is because we only execute COPY INTO commands from rank 0, so
+    # all ranks must finish writing their respective files to Snowflake
+    # internal stage and sync with rank 0 before it issues COPY INTO.
+    def impl(writer, table, col_names_meta, is_last, iter):  # pragma: no cover
+        if writer["finished"]:
+            return True
+        ev = tracing.Event(
+            "snowflake_writer_append_table", is_parallel=writer["parallel"]
+        )
+        is_last = bodo.libs.distributed_api.sync_is_last(is_last, iter)
         # ===== Part 1: Accumulate batch in writer and compute total size
-        "    ev_append_batch = tracing.Event(f'append_batch', is_parallel=True)\n"
-        "    cpp_table = py_table_to_cpp_table(table, py_table_typ)\n"
-        "    if writer['batches_exists']:\n"
-        "        writer['batches'].append(cpp_table)\n"
-        "    else:\n"
-        "        writer['batches_exists'] = True\n"
-        "        writer['batches'] = [cpp_table]\n"
-        f"    nbytes_arr = np.empty({len(col_names_meta)}, np.int64)\n"
-        "    bodo.utils.table_utils.generate_table_nbytes(table, nbytes_arr, 0)\n"
-        "    nbytes = np.sum(nbytes_arr)\n"
-        "    writer['curr_mem_size'] += nbytes\n"
-        "    ev_append_batch.add_attribute('nbytes', nbytes)\n"
-        "    ev_append_batch.finalize()\n"
+        ev_append_batch = tracing.Event(f"append_batch", is_parallel=True)
+        cpp_table = py_table_to_cpp_table(table, py_table_typ)
+        if writer["batches_exists"]:
+            writer["batches"].append(cpp_table)
+        else:
+            writer["batches_exists"] = True
+            writer["batches"] = [cpp_table]
+        nbytes_arr = np.empty(n_cols, np.int64)
+        bodo.utils.table_utils.generate_table_nbytes(table, nbytes_arr, 0)
+        nbytes = np.sum(nbytes_arr)
+        writer["curr_mem_size"] += nbytes
+        ev_append_batch.add_attribute("nbytes", nbytes)
+        ev_append_batch.finalize()
         # ===== Part 2: Write Parquet file if file size threshold is exceeded
-        "    if is_last or writer['curr_mem_size'] >= bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE:\n"
-        "        ev_sf_write_concat = tracing.Event(f'sf_write_concat', is_parallel=False)\n"
-        "        ev_sf_write_concat.add_attribute('num_batches', len(writer['batches']))\n"
-        # Note: Using `concat` here means that our write batches are at least
-        # as large as our read batches. It may be advantageous in the future to
-        # split up large incoming batches into multiple Parquet files to write
-        "        out_table = concat_tables_cpp(writer['batches'])\n"
-        "        out_table_len = len(bodo.libs.array.array_from_cpp_table(out_table, 0, col_types_arr[0]))\n"
-        "        ev_sf_write_concat.add_attribute('out_table_len', out_table_len)\n"
-        "        ev_sf_write_concat.finalize()\n"
-        "        if out_table_len <= 0:\n"
-        "            delete_table(out_table)\n"
-        "        else:\n"
-        "            ev_upload_table = tracing.Event('upload_table', is_parallel=False)\n"
-        # Note: writer['stage_path'] already has trailing slash
-        '            chunk_path = f\'{writer["stage_path"]}{writer["copy_into_dir"]}/file{writer["file_count_local"]}_rank{bodo.get_rank()}_{bodo.io.helpers.uuid4_helper()}.parquet\'\n'
-        # To escape backslashes, we want to replace ( \ ) with ( \\ ), so the func_text
-        # should contain the string literals ( \\ ) and ( \\\\ ). To add these to func_text,
-        # we need to write ( \\\\ ) and ( \\\\\\\\ ) here.
-        # To escape quotes, we want to replace ( ' ) with ( \' ), so the func_text
-        # should contain the string literals ( ' ) and ( \\' ). To add these to func_text,
-        # we need to write ( \' ) and ( \\\\\' ) here.
-        '            chunk_path = chunk_path.replace("\\\\", "\\\\\\\\")\n'
-        '            chunk_path = chunk_path.replace("\'", "\\\\\'")\n'
-        # Copied from bodo.hiframes.pd_dataframe_ext.to_sql_overload
-        # TODO: Refactor both sections to generate this code in a helper function
-        "            ev_pq_write_cpp = tracing.Event('pq_write_cpp', is_parallel=False)\n"
-        "            ev_pq_write_cpp.add_attribute('out_table_len', out_table_len)\n"
-        "            ev_pq_write_cpp.add_attribute('chunk_idx', writer['file_count_local'])\n"
-        "            ev_pq_write_cpp.add_attribute('chunk_path', chunk_path)\n"
-        "            parquet_write_table_cpp(\n"
-        "                unicode_to_utf8(chunk_path),\n"
-        "                out_table, array_to_info(col_names_arr), 0,\n"
-        "                False,\n"  # write_index
-        "                unicode_to_utf8('null'),\n"  # metadata
-        "                unicode_to_utf8(bodo.io.snowflake.SF_WRITE_PARQUET_COMPRESSION),\n"
-        "                False,\n"  # is_parallel
-        "                0,\n"  # write_rangeindex_to_metadata
-        "                0, 0, 0,\n"  # range index start, stop, step
-        "                unicode_to_utf8('null'),\n"  # idx_name
-        "                unicode_to_utf8(writer['bucket_region']),\n"
-        "                out_table_len,\n"  # row_group_size
-        "                unicode_to_utf8('null'),\n"  # prefix
-        "                True,\n"  # Explicitly cast timedelta to int64
-        "                unicode_to_utf8('UTC'),\n"  # Explicitly set tz='UTC'
-        "                True,\n"  # Explicitly downcast nanoseconds to microseconds
-        "            )\n"
-        "            ev_pq_write_cpp.finalize()\n"
-        # In case of Snowflake PUT, upload local parquet to internal stage
-        # in a separate Python thread
-        "            if writer['upload_using_snowflake_put']:\n"
-        "                cursor = writer['cursor']\n"
-        "                file_count_local = writer['file_count_local']\n"
-        "                stage_name = writer['stage_name']\n"
-        "                copy_into_dir = writer['copy_into_dir']\n"
-        "                if bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:\n"
-        "                    with bodo.objmode(upload_thread='exception_propagating_thread_type'):\n"
-        "                        upload_thread = bodo.io.snowflake.do_upload_and_cleanup(\n"
-        "                            cursor, file_count_local, chunk_path, stage_name, copy_into_dir\n"
-        "                        )\n"
-        "                    if writer['upload_threads_exists']:\n"
-        "                        writer['upload_threads'].append(upload_thread)\n"
-        "                    else:\n"
-        "                        writer['upload_threads_exists'] = True\n"
-        "                        writer['upload_threads'] = [upload_thread]\n"
-        "                else:\n"
-        "                    with bodo.objmode():\n"
-        "                        bodo.io.snowflake.do_upload_and_cleanup(\n"
-        "                            cursor, file_count_local, chunk_path, stage_name, copy_into_dir\n"
-        "                        )\n"
-        "            writer['file_count_local'] += 1\n"
-        "            ev_upload_table.finalize()\n"
-        "        writer['batches'].clear()\n"
-        "        writer['curr_mem_size'] = 0\n"
+        if (
+            is_last
+            or writer["curr_mem_size"] >= bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE
+        ):
+            ev_sf_write_concat = tracing.Event(f"sf_write_concat", is_parallel=False)
+            ev_sf_write_concat.add_attribute("num_batches", len(writer["batches"]))
+            # Note: Using `concat` here means that our write batches are at least
+            # as large as our read batches. It may be advantageous in the future to
+            # split up large incoming batches into multiple Parquet files to write
+            out_table = concat_tables_cpp(writer["batches"])
+            out_table_len = len(
+                bodo.libs.array.array_from_cpp_table(out_table, 0, col_types_arr[0])
+            )
+            ev_sf_write_concat.add_attribute("out_table_len", out_table_len)
+            ev_sf_write_concat.finalize()
+            if out_table_len <= 0:
+                delete_table(out_table)
+            else:
+                ev_upload_table = tracing.Event("upload_table", is_parallel=False)
+                # Note: writer['stage_path'] already has trailing slash
+                chunk_path = f'{writer["stage_path"]}{writer["copy_into_dir"]}/file{writer["file_count_local"]}_rank{bodo.get_rank()}_{bodo.io.helpers.uuid4_helper()}.parquet'
+                # To escape backslashes, we want to replace ( \ ) with ( \\ ), which can
+                # be written as the string literals ( \\ ) and ( \\\\ ).
+                # To escape quotes, we want to replace ( ' ) with ( \' ), which can
+                # be written as the string literals ( ' ) and ( \\' ).
+                chunk_path = chunk_path.replace("\\", "\\\\").replace("'", "\\'")
+                # Copied from bodo.hiframes.pd_dataframe_ext.to_sql_overload
+                # TODO: Refactor both sections to generate this code in a helper function
+                ev_pq_write_cpp = tracing.Event("pq_write_cpp", is_parallel=False)
+                ev_pq_write_cpp.add_attribute("out_table_len", out_table_len)
+                ev_pq_write_cpp.add_attribute("chunk_idx", writer["file_count_local"])
+                ev_pq_write_cpp.add_attribute("chunk_path", chunk_path)
+                parquet_write_table_cpp(
+                    unicode_to_utf8(chunk_path),
+                    out_table,
+                    array_to_info(col_names_arr),
+                    0,
+                    False,  # write_index
+                    unicode_to_utf8("null"),  # metadata
+                    unicode_to_utf8(bodo.io.snowflake.SF_WRITE_PARQUET_COMPRESSION),
+                    False,  # is_parallel
+                    0,  # write_rangeindex_to_metadata
+                    0,
+                    0,
+                    0,  # range index start, stop, step
+                    unicode_to_utf8("null"),  # idx_name
+                    unicode_to_utf8(writer["bucket_region"]),
+                    out_table_len,  # row_group_size
+                    unicode_to_utf8("null"),  # prefix
+                    True,  # Explicitly cast timedelta to int64
+                    unicode_to_utf8("UTC"),  # Explicitly set tz='UTC'
+                    True,  # Explicitly downcast nanoseconds to microseconds
+                )
+                ev_pq_write_cpp.finalize()
+                # In case of Snowflake PUT, upload local parquet to internal stage
+                # in a separate Python thread
+                if writer["upload_using_snowflake_put"]:
+                    cursor = writer["cursor"]
+                    file_count_local = writer["file_count_local"]
+                    stage_name = writer["stage_name"]
+                    copy_into_dir = writer["copy_into_dir"]
+                    if bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:
+                        with bodo.objmode(
+                            upload_thread="exception_propagating_thread_type"
+                        ):
+                            upload_thread = bodo.io.snowflake.do_upload_and_cleanup(
+                                cursor,
+                                file_count_local,
+                                chunk_path,
+                                stage_name,
+                                copy_into_dir,
+                            )
+                        if writer["upload_threads_exists"]:
+                            writer["upload_threads"].append(upload_thread)
+                        else:
+                            writer["upload_threads_exists"] = True
+                            writer["upload_threads"] = [upload_thread]
+                    else:
+                        with bodo.objmode():
+                            bodo.io.snowflake.do_upload_and_cleanup(
+                                cursor,
+                                file_count_local,
+                                chunk_path,
+                                stage_name,
+                                copy_into_dir,
+                            )
+                writer["file_count_local"] += 1
+                ev_upload_table.finalize()
+            writer["batches"].clear()
+            writer["curr_mem_size"] = 0
         # Count number of newly written files. This is also an implicit barrier
         # To reduce synchronization, we do this infrequently
         # Note: This requires append() to be called the same number of times on all ranks
-        "    if writer['parallel']:\n"
-        "        if is_last or (iter % bodo.stream_loop_sync_iters == 0):\n"
-        "            sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)\n"
-        "            writer['file_count_global'] = bodo.libs.distributed_api.dist_reduce(\n"
-        "                writer['file_count_local'], sum_op\n"
-        "            )\n"
-        "    else:\n"
-        "        writer['file_count_global'] = writer['file_count_local']\n"
+        if writer["parallel"]:
+            if is_last or (iter % bodo.stream_loop_sync_iters == 0):
+                sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
+                writer["file_count_global"] = bodo.libs.distributed_api.dist_reduce(
+                    writer["file_count_local"], sum_op
+                )
+        else:
+            writer["file_count_global"] = writer["file_count_local"]
         # ===== Part 3: Execute COPY INTO from Rank 0 if file count threshold is exceeded.
         # In case of Snowflake PUT, first wait for all upload threads to finish
-        "    if is_last or writer['file_count_global'] > bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES:\n"
-        "        if writer['upload_using_snowflake_put'] and bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:\n"
-        "            parallel = writer['parallel']\n"
-        "            if writer['upload_threads_exists']:\n"
-        "                upload_threads = writer['upload_threads']\n"
-        "                with bodo.objmode():\n"
-        "                    bodo.io.helpers.join_all_threads(upload_threads, parallel)\n"
-        "                writer['upload_threads'].clear()\n"
-        "            else:\n"
-        "                with bodo.objmode():\n"
-        "                    bodo.io.helpers.join_all_threads([], parallel)\n"
-        # For the first COPY INTO, begin the transaction and create table if it doesn't exist
-        "        if not writer['is_initialized']:\n"
-        "            cursor = writer['cursor']\n"
-        "            location = writer['location']\n"
-        "            if_exists = writer['if_exists']\n"
-        "            table_type = writer['table_type']\n"
-        "            with bodo.objmode():\n"
-        "                begin_write_transaction(\n"
-        "                    cursor, location, sf_schema, if_exists, table_type\n"
-        "                )\n"
-        "            writer['is_initialized'] = True\n"
-        # If an async COPY INTO command is in progress, retrieve and validate it.
-        # Broadcast errors across ranks as needed.
-        "        parallel = writer['parallel']\n"
-        "        if (not parallel or bodo.get_rank() == 0) and writer['copy_into_prev_sfqid'] != '':\n"
-        "            cursor = writer['cursor']\n"
-        "            copy_into_prev_sfqid = writer['copy_into_prev_sfqid']\n"
-        "            file_count_global_prev = writer['file_count_global_prev']\n"
-        "            with bodo.objmode():\n"
-        "                err = bodo.io.snowflake.retrieve_async_copy_into(\n"
-        "                    cursor, copy_into_prev_sfqid, file_count_global_prev\n"
-        "                )\n"
-        "                bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)\n"
-        "        else:\n"
-        "            with bodo.objmode():\n"
-        "                bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)\n"
-        # Execute async COPY INTO form rank 0
-        "        if bodo.get_rank() == 0:\n"
-        "            cursor = writer['cursor']\n"
-        "            stage_name = writer['stage_name']\n"
-        "            location = writer['location']\n"
-        "            copy_into_dir = writer['copy_into_dir']\n"
-        "            with bodo.objmode(copy_into_new_sfqid='unicode_type'):\n"
-        "                copy_into_new_sfqid = bodo.io.snowflake.execute_copy_into(\n"
-        "                    cursor, stage_name, location, sf_schema,\n"
-        "                    synchronous=False, stage_dir=copy_into_dir,\n"
-        "                )\n"
-        "            writer['copy_into_prev_sfqid'] = copy_into_new_sfqid\n"
-        "            writer['file_count_global_prev'] = writer['file_count_global']\n"
-        # Create a new COPY INTO internal stage directory
-        "        writer['file_count_local'] = 0\n"
-        "        writer['file_count_global'] = 0\n"
-        "        writer['copy_into_dir'] = make_new_copy_into_dir(\n"
-        "            writer['upload_using_snowflake_put'],\n"
-        "            writer['stage_path'],\n"
-        "            writer['parallel'],\n"
-        "        )\n"
+        if (
+            is_last
+            or writer["file_count_global"]
+            > bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES
+        ):
+            if (
+                writer["upload_using_snowflake_put"]
+                and bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD
+            ):
+                parallel = writer["parallel"]
+                if writer["upload_threads_exists"]:
+                    upload_threads = writer["upload_threads"]
+                    with bodo.objmode():
+                        bodo.io.helpers.join_all_threads(upload_threads, parallel)
+                    writer["upload_threads"].clear()
+                else:
+                    with bodo.objmode():
+                        bodo.io.helpers.join_all_threads([], parallel)
+            # For the first COPY INTO, begin the transaction and create table if it doesn't exist
+            if not writer["is_initialized"]:
+                cursor = writer["cursor"]
+                location = writer["location"]
+                if_exists = writer["if_exists"]
+                table_type = writer["table_type"]
+                with bodo.objmode():
+                    begin_write_transaction(
+                        cursor, location, sf_schema, if_exists, table_type
+                    )
+                writer["is_initialized"] = True
+            # If an async COPY INTO command is in progress, retrieve and validate it.
+            # Broadcast errors across ranks as needed.
+            parallel = writer["parallel"]
+            if (not parallel or bodo.get_rank() == 0) and writer[
+                "copy_into_prev_sfqid"
+            ] != "":
+                cursor = writer["cursor"]
+                copy_into_prev_sfqid = writer["copy_into_prev_sfqid"]
+                file_count_global_prev = writer["file_count_global_prev"]
+                with bodo.objmode():
+                    err = bodo.io.snowflake.retrieve_async_copy_into(
+                        cursor, copy_into_prev_sfqid, file_count_global_prev
+                    )
+                    bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)
+            else:
+                with bodo.objmode():
+                    bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)
+            # Execute async COPY INTO form rank 0
+            if bodo.get_rank() == 0:
+                cursor = writer["cursor"]
+                stage_name = writer["stage_name"]
+                location = writer["location"]
+                copy_into_dir = writer["copy_into_dir"]
+                with bodo.objmode(copy_into_new_sfqid="unicode_type"):
+                    copy_into_new_sfqid = bodo.io.snowflake.execute_copy_into(
+                        cursor,
+                        stage_name,
+                        location,
+                        sf_schema,
+                        synchronous=False,
+                        stage_dir=copy_into_dir,
+                    )
+                writer["copy_into_prev_sfqid"] = copy_into_new_sfqid
+                writer["file_count_global_prev"] = writer["file_count_global"]
+            # Create a new COPY INTO internal stage directory
+            writer["file_count_local"] = 0
+            writer["file_count_global"] = 0
+            writer["copy_into_dir"] = make_new_copy_into_dir(
+                writer["upload_using_snowflake_put"],
+                writer["stage_path"],
+                writer["parallel"],
+            )
         # ===== Part 4: Snowflake Post Handling
         # Retrieve and validate the last COPY INTO command
-        "    if is_last:\n"
-        "        parallel = writer['parallel']\n"
-        "        if (not parallel or bodo.get_rank() == 0) and writer['copy_into_prev_sfqid'] != '':\n"
-        "            cursor = writer['cursor']\n"
-        "            copy_into_prev_sfqid = writer['copy_into_prev_sfqid']\n"
-        "            file_count_global_prev = writer['file_count_global_prev']\n"
-        "            with bodo.objmode():\n"
-        "                err = bodo.io.snowflake.retrieve_async_copy_into(\n"
-        "                    cursor, copy_into_prev_sfqid, file_count_global_prev\n"
-        "                )\n"
-        "                bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)\n"
-        "                cursor.execute('COMMIT /* io.snowflake_write.snowflake_writer_append_table() */')\n"
-        "        else:\n"
-        "            with bodo.objmode():\n"
-        "                bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)\n"
-        "        if bodo.get_rank() == 0:\n"
-        "            writer['copy_into_prev_sfqid'] = ''\n"
-        "            writer['file_count_global_prev'] = 0\n"
-        # Force reset the existing Hadoop filesystem instance to avoid
-        # conflicts with any future ADLS operations in the same process
-        "        if writer['azure_stage_direct_upload']:\n"
-        "            bodo.libs.distributed_api.disconnect_hdfs_njit()\n"
-        # Drop internal stage, close Snowflake connection cursor, put back
-        # environment variables, restore contents in case of ADLS stage
-        "        cursor = writer['cursor']\n"
-        "        stage_name = writer['stage_name']\n"
-        "        old_creds = writer['old_creds']\n"
-        "        tmp_folder = writer['tmp_folder']\n"
-        "        azure_stage_direct_upload = writer['azure_stage_direct_upload']\n"
-        "        old_core_site = writer['old_core_site']\n"
-        "        old_sas_token = writer['old_sas_token']\n"
-        "        with bodo.objmode():\n"
-        "            if cursor is not None:\n"
-        "                bodo.io.snowflake.drop_internal_stage(cursor, stage_name)\n"
-        "                cursor.close()\n"
-        "            bodo.io.snowflake.update_env_vars(old_creds)\n"
-        "            tmp_folder.cleanup()\n"
-        "            if azure_stage_direct_upload:\n"
-        "                bodo.io.snowflake.update_file_contents(\n"
-        "                    bodo.HDFS_CORE_SITE_LOC, old_core_site\n"
-        "                )\n"
-        "                bodo.io.snowflake.update_file_contents(\n"
-        "                    bodo.io.snowflake.SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION, old_sas_token\n"
-        "                )\n"
-        "        if writer['parallel']:\n"
-        "            bodo.barrier()\n"
-        "        writer['finished'] = True\n"
-        "    ev.finalize()\n"
-        "    return is_last"
-    )
+        if is_last:
+            parallel = writer["parallel"]
+            if (not parallel or bodo.get_rank() == 0) and writer[
+                "copy_into_prev_sfqid"
+            ] != "":
+                cursor = writer["cursor"]
+                copy_into_prev_sfqid = writer["copy_into_prev_sfqid"]
+                file_count_global_prev = writer["file_count_global_prev"]
+                with bodo.objmode():
+                    err = bodo.io.snowflake.retrieve_async_copy_into(
+                        cursor, copy_into_prev_sfqid, file_count_global_prev
+                    )
+                    bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)
+                    cursor.execute(
+                        "COMMIT /* io.snowflake_write.snowflake_writer_append_table() */"
+                    )
+            else:
+                with bodo.objmode():
+                    bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)
+            if bodo.get_rank() == 0:
+                writer["copy_into_prev_sfqid"] = ""
+                writer["file_count_global_prev"] = 0
+            # Force reset the existing Hadoop filesystem instance to avoid
+            # conflicts with any future ADLS operations in the same process
+            if writer["azure_stage_direct_upload"]:
+                bodo.libs.distributed_api.disconnect_hdfs_njit()
+            # Drop internal stage, close Snowflake connection cursor, put back
+            # environment variables, restore contents in case of ADLS stage
+            cursor = writer["cursor"]
+            stage_name = writer["stage_name"]
+            old_creds = writer["old_creds"]
+            tmp_folder = writer["tmp_folder"]
+            azure_stage_direct_upload = writer["azure_stage_direct_upload"]
+            old_core_site = writer["old_core_site"]
+            old_sas_token = writer["old_sas_token"]
+            with bodo.objmode():
+                if cursor is not None:
+                    bodo.io.snowflake.drop_internal_stage(cursor, stage_name)
+                    cursor.close()
+                bodo.io.snowflake.update_env_vars(old_creds)
+                tmp_folder.cleanup()
+                if azure_stage_direct_upload:
+                    bodo.io.snowflake.update_file_contents(
+                        bodo.HDFS_CORE_SITE_LOC, old_core_site
+                    )
+                    bodo.io.snowflake.update_file_contents(
+                        bodo.io.snowflake.SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION,
+                        old_sas_token,
+                    )
+            if writer["parallel"]:
+                bodo.barrier()
+            writer["finished"] = True
+        ev.finalize()
+        return is_last
 
-    glbls = {
-        "array_to_info": array_to_info,
-        "bodo": bodo,
-        "check_and_propagate_cpp_exception": check_and_propagate_cpp_exception,
-        "col_names_arr": col_names_arr,
-        "col_types_arr": col_types_arr,
-        "concat_tables_cpp": concat_tables_cpp,
-        "make_new_copy_into_dir": make_new_copy_into_dir,
-        "np": np,
-        "parquet_write_table_cpp": parquet_write_table_cpp,
-        "py_table_to_cpp_table": py_table_to_cpp_table,
-        "py_table_typ": py_table_typ,
-        "sf_schema": sf_schema,
-        "tracing": tracing,
-        "unicode_to_utf8": unicode_to_utf8,
-        "begin_write_transaction": begin_write_transaction,
-        "delete_table": delete_table,
-    }
-
-    l = {}
-    exec(func_text, glbls, l)
-    return l["impl"]
+    return impl
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
