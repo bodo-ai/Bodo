@@ -4124,12 +4124,19 @@ class TypingTransforms:
             )
         ]
 
-        if not _bodo_read_as_table and chunksize is None:
+        if chunksize is not None:
+            nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
+        else:
             data_args = ["table_val", "idx_arr_val", "file_list_val", "snapshot_id_val"]
             # Create the index + dataframe
             index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
+
+            if _bodo_read_as_table:
+                df_value = data_args[0]
+            else:
+                df_value = f"bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_read_sql_table)"
+
             func_text = f"def _init_df({data_args[0]}, {data_args[1]}, {data_args[2]}, {data_args[3]}):\n"
-            df_value = f"bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_read_sql_table)"
             if _bodo_merge_into:
                 # If merge_into we return a tuple of values
                 func_text += f"  return ({df_value}, {data_args[2]}, {data_args[3]})\n"
@@ -4159,8 +4166,6 @@ class TypingTransforms:
                     )
                 },
             )
-        else:
-            nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
 
         # Mark the IR as changed
         self.changed = True
