@@ -1159,7 +1159,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B" OR "C"',
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "C" OR NOT "B"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query5 = f"Select a from {table_name} where (not b) and c"
@@ -1177,7 +1177,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B" AND "C"',
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "C" AND NOT "B"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1320,7 +1320,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" >= 2 AND "B" <= 3 OR NOT "C"',
+                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "C" OR "B" >= 2 AND "B" <= 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
