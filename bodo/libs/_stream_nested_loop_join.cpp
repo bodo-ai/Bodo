@@ -13,7 +13,10 @@ void NestedLoopJoinState::FinalizeBuild() {
     if (this->build_parallel && this->probe_parallel) {
         int64_t table_size = 0;
         for (auto& table : this->build_table_buffer->chunks) {
-            // For certain data types like string, we need to load the buffers (e.g. the offset buffers for strings) in memory to be able to calculate the memory size. https://bodo.atlassian.net/browse/BSE-874 will resolve this.
+            // For certain data types like string, we need to load the buffers
+            // (e.g. the offset buffers for strings) in memory to be able to
+            // calculate the memory size.
+            // https://bodo.atlassian.net/browse/BSE-874 will resolve this.
             table->pin();
             table_size += table_local_memory_size(table);
             table->unpin();
@@ -26,8 +29,9 @@ void NestedLoopJoinState::FinalizeBuild() {
             int64_t n_chunks = this->build_table_buffer->chunks.size();
             MPI_Allreduce(MPI_IN_PLACE, &n_chunks, 1, MPI_INT64_T, MPI_MAX,
                           MPI_COMM_WORLD);
-            // Create a new chunked table which will store the chunks gathered from all ranks.
-            // This will eventually become the new build_table_buffer of this JoinState.
+            // Create a new chunked table which will store the chunks gathered
+            // from all ranks. This will eventually become the new
+            // build_table_buffer of this JoinState.
             std::unique_ptr<ChunkedTableBuilder> new_build_table_buffer =
                 std::make_unique<ChunkedTableBuilder>(
                     this->build_arr_c_types, this->build_arr_array_types,
@@ -202,9 +206,6 @@ bool nested_loop_join_probe_consume_batch(
         return true;
     }
 
-    // define the number of rows already processed as 0
-    int64_t build_table_offset = 0;
-
     // Make is_last global
     is_last = stream_sync_is_last(is_last, join_state->probe_iter,
                                   join_state->sync_iter);
@@ -230,6 +231,8 @@ bool nested_loop_join_probe_consume_batch(
                 in_table, in_table, in_table->ncols(), parallel, p);
             bcast_probe_chunk =
                 join_state->UnifyProbeTableDictionaryArrays(bcast_probe_chunk);
+            // define the number of rows already processed as 0
+            int64_t build_table_offset = 0;
             for (auto& build_table : join_state->build_table_buffer->chunks) {
                 build_table->pin();
                 nested_loop_join_local_chunk(
@@ -248,6 +251,8 @@ bool nested_loop_join_probe_consume_batch(
         // and probe_shuffle_buffer also share their dictionaries and will also
         // be unified.
         in_table = join_state->UnifyProbeTableDictionaryArrays(in_table);
+        // define the number of rows already processed as 0
+        int64_t build_table_offset = 0;
         for (auto& build_table : join_state->build_table_buffer->chunks) {
             build_table->pin();
             nested_loop_join_local_chunk(join_state, build_table, in_table,
@@ -260,7 +265,9 @@ bool nested_loop_join_probe_consume_batch(
     if (join_state->build_table_outer && is_last) {
         // Add unmatched rows from build table
         // for outer join
-        build_table_offset = 0;
+
+        // define the number of rows already processed as 0
+        int64_t build_table_offset = 0;
         bodo::vector<int64_t> build_idxs;
         bodo::vector<int64_t> probe_idxs;
 
