@@ -26,7 +26,13 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import check_func
 
-pytestmark = pytest.mark.iceberg
+pytestmark = [
+    pytest.mark.iceberg,
+    pytest.mark.skipif(
+        bodo.bodosql_use_streaming_plan,
+        reason="[BSE-952] Current MERGE INTO Algorithm Designed for Non-Streaming and Doesn't Support Filter Pushdown w/ Streaming",
+    ),
+]
 
 
 @pytest.mark.slow
