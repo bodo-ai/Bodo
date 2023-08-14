@@ -23,6 +23,7 @@ from bodo.libs.array import (
 from bodo.utils.typing import (
     BodoError,
     MetaType,
+    error_on_nested_arrays,
     get_common_bodosql_integer_arr_type,
     get_overload_const_bool,
     get_overload_const_str,
@@ -66,6 +67,10 @@ class JoinStateType(types.Type):
         build_table_type=types.unknown,
         probe_table_type=types.unknown,
     ):
+        # TODO[BSE-937]: support nested arrays in streaming
+        error_on_nested_arrays(build_table_type)
+        error_on_nested_arrays(probe_table_type)
+
         self.build_key_inds = build_key_inds
         self.probe_key_inds = probe_key_inds
         self.build_column_names = build_column_names

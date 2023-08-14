@@ -18,7 +18,12 @@ from bodo.libs.array import (
     py_data_to_cpp_table,
 )
 from bodo.libs.array import table_type as cpp_table_type
-from bodo.utils.typing import MetaType, is_overload_none, unwrap_typeref
+from bodo.utils.typing import (
+    MetaType,
+    error_on_nested_arrays,
+    is_overload_none,
+    unwrap_typeref,
+)
 from bodo.utils.utils import numba_to_c_array_type, numba_to_c_type
 
 ll.add_symbol(
@@ -42,6 +47,8 @@ class TableBuilderStateType(types.Type):
         self,
         build_table_type=types.unknown,
     ):
+        # TODO[BSE-937]: support nested arrays in streaming
+        error_on_nested_arrays(build_table_type)
         self.build_table_type = build_table_type
         super().__init__(f"TableBuilderStateType(build_table={build_table_type})")
 
