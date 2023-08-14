@@ -1659,10 +1659,10 @@ def test_batched_write_agg(
             )  # type: ignore
             writer = snowflake_writer_init(
                 conn_w,
-                table_name=table_w,
-                schema="PUBLIC",
-                if_exists="replace",
-                table_type="",
+                table_w,
+                "PUBLIC",
+                "replace",
+                "",
             )
             total0 = 0
 
