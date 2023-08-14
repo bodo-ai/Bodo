@@ -1116,7 +1116,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Second, append the Table to the writer
     timerInfo.insertLoopOperationStartTimer();
-    BodoEngineTable tableVar = ctx.convertDfToTable(castedAndRenamedDfVar, node);
+    BodoEngineTable tableVar = ctx.convertDfToTable(castedAndRenamedDfVar, node.getInput());
 
     // Get column names for write append call
     Variable colNamesGlobal =
