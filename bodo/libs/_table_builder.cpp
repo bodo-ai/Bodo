@@ -772,6 +772,8 @@ table_info* table_builder_finalize(TableBuilderState* state) {
     return rettable;
 }
 
+void delete_table_builder_state(TableBuilderState* state) { delete state; }
+
 PyMODINIT_FUNC PyInit_table_builder_cpp(void) {
     PyObject* m;
     MOD_DEF(m, "table_builder_cpp", "No docs", NULL);
@@ -784,5 +786,6 @@ PyMODINIT_FUNC PyInit_table_builder_cpp(void) {
     SetAttrStringFromVoidPtr(m, table_builder_state_init_py_entry);
     SetAttrStringFromVoidPtr(m, table_builder_append_py_entry);
     SetAttrStringFromVoidPtr(m, table_builder_finalize);
+    SetAttrStringFromVoidPtr(m, delete_table_builder_state);
     return m;
 }

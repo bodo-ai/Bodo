@@ -3171,6 +3171,9 @@ class TypingTransforms:
         if func_mod == "bodo.libs.table_builder":
             return self._run_call_table_builder(assign, rhs, func_name, label)
 
+        if func_mod == "bodo.io.snowflake_write":
+            return self._run_call_stream_write(assign, rhs, func_name, label)
+
         return [assign]
 
     def _run_call_pd_datetime_array(self, assign, rhs, func_name, label):
@@ -4634,6 +4637,92 @@ class TypingTransforms:
                     args,
                     builder_state,
                     builder_def,
+                    label,
+                )
+        return [assign]
+
+    def _run_call_stream_write(self, assign, rhs, func_name, label):  # pragma: no cover
+        """
+        Handle the typing pass information needed for updating the type of the
+        input table for SnowflakeWriterType
+        """
+        if func_name == "snowflake_writer_init":
+            expected_arg = get_call_expr_arg(
+                "snowflake_writer_init",
+                rhs.args,
+                dict(rhs.kws),
+                5,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+                else:
+                    output_type = unwrap_typeref(expected_type)
+                    if output_type.input_table_type == types.unknown:
+                        self.needs_transform = True
+        elif func_name == "snowflake_writer_append_table":
+            write_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(write_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            writer_init_def = guard(
+                self._get_state_defining_call,
+                write_state,
+                ("snowflake_writer_init", "bodo.io.snowflake_write"),
+            )
+            if writer_init_def is None:
+                self.needs_transform = True
+                return [assign]
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "snowflake_writer_init",
+                writer_init_def.args,
+                dict(writer_init_def.kws),
+                5,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            # Check that the build/probe type match.
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            if input_table_type != output_type.input_table_type:
+                args = writer_init_def.args[:5]
+                new_type = bodo.io.snowflake_write.SnowflakeWriterType(input_table_type)
+                func_text = (
+                    "def impl(conn, table_name, schema, if_exists, table_type):\n"
+                    "  return bodo.io.snowflake_write.snowflake_writer_init(\n"
+                    "    conn, table_name, schema, if_exists, table_type, \n"
+                    "    expected_state_type=_expected_state_type\n"
+                    "  )\n"
+                )
+
+                self._replace_state_definition(
+                    func_text,
+                    "impl",
+                    {"_expected_state_type": new_type},
+                    args,
+                    write_state,
+                    writer_init_def,
                     label,
                 )
         return [assign]

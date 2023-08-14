@@ -26,14 +26,9 @@ from bodo.io.snowflake import (
     snowflake_connector_cursor_type,
     temporary_directory_type,
 )
-from bodo.libs.array import (
-    array_to_info,
-    concat_tables_cpp,
-    delete_table,
-    py_table_to_cpp_table,
-    table_type,
-)
+from bodo.libs.array import array_to_info, py_table_to_cpp_table
 from bodo.libs.str_ext import unicode_to_utf8
+from bodo.libs.table_builder import TableBuilderStateType
 from bodo.utils import tracing
 from bodo.utils.typing import (
     BodoError,
@@ -42,17 +37,16 @@ from bodo.utils.typing import (
     is_overload_bool,
     is_overload_constant_str,
     is_overload_none,
+    unwrap_typeref,
 )
 
 
 class SnowflakeWriterType(types.Type):
     """Data type for streaming Snowflake writer's internal state"""
 
-    def __init__(self):
-        super().__init__(name="SnowflakeWriterType")
-
-
-snowflake_writer_type = SnowflakeWriterType()
+    def __init__(self, input_table_type=types.unknown):
+        self.input_table_type = input_table_type
+        super().__init__(name=f"SnowflakeWriterType({input_table_type})")
 
 
 class SnowflakeWriterPayloadType(types.Type):
@@ -131,10 +125,7 @@ snowflake_writer_payload_members = (
     # restored later after copy into
     ("old_sas_token", types.unicode_type),
     # Batches collected to write
-    ("batches", types.List(table_type)),
-    # Whether the `batches` list exists. Needed for typing purposes, as
-    # initializing an empty list in `init()` causes an error
-    ("batches_exists", types.boolean),
+    ("batches", TableBuilderStateType()),
     # Uncompressed memory usage of batches
     ("curr_mem_size", types.int64),
 )
@@ -187,12 +178,28 @@ def define_snowflake_writer_dtor(
     for attr, fe_type in snowflake_writer_payload_members:
         context.nrt.decref(builder, fe_type, getattr(payload, attr))
 
+    # Delete table builder state
+    c_fnty = lir.FunctionType(
+        lir.VoidType(),
+        [lir.IntType(8).as_pointer()],
+    )
+    fn_tp = cgutils.get_or_insert_function(
+        builder.module, c_fnty, name="delete_table_builder_state"
+    )
+    builder.call(fn_tp, [payload.batches])
+
     builder.ret_void()
     return fn
 
 
 @intrinsic
-def sf_writer_alloc(typingctx):  # pragma: no cover
+def sf_writer_alloc(typingctx, expected_state_type_t):  # pragma: no cover
+    expected_state_type = unwrap_typeref(expected_state_type_t)
+    if is_overload_none(expected_state_type):
+        snowflake_writer_type = SnowflakeWriterType()
+    else:
+        snowflake_writer_type = expected_state_type
+
     def codegen(context, builder, sig, args):  # pragma: no cover
         """Creates meminfo and sets dtor for Snowflake writer"""
         # Create payload type
@@ -222,7 +229,7 @@ def sf_writer_alloc(typingctx):  # pragma: no cover
         snowflake_writer.meminfo = meminfo
         return snowflake_writer._getvalue()
 
-    return snowflake_writer_type(), codegen
+    return snowflake_writer_type(expected_state_type_t), codegen
 
 
 def _get_snowflake_writer_payload(
@@ -254,6 +261,8 @@ def sf_writer_getattr(typingctx, writer_typ, attr_typ):  # pragma: no cover
     )
     attr = get_overload_const_str(attr_typ)
     val_typ = snowflake_writer_payload_members_dict[attr]
+    if attr == "batches":
+        val_typ = TableBuilderStateType(writer_typ.input_table_type)
 
     def codegen(context, builder, sig, args):  # pragma: no cover
         writer, _ = args
@@ -357,10 +366,26 @@ def begin_write_transaction(cursor, location, sf_schema, if_exists, table_type):
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def snowflake_writer_init(
-    conn, table_name, schema, if_exists, table_type, _is_parallel=False
+    conn,
+    table_name,
+    schema,
+    if_exists,
+    table_type,
+    expected_state_type=None,
+    _is_parallel=False,
 ):  # pragma: no cover
+    expected_state_type = unwrap_typeref(expected_state_type)
+    if is_overload_none(expected_state_type):
+        snowflake_writer_type = SnowflakeWriterType()
+    else:
+        snowflake_writer_type = expected_state_type
+
+    table_builder_state_type = TableBuilderStateType(
+        snowflake_writer_type.input_table_type
+    )
+
     func_text = (
-        "def impl(conn, table_name, schema, if_exists, table_type, _is_parallel=False):\n"
+        "def impl(conn, table_name, schema, if_exists, table_type, expected_state_type=None, _is_parallel=False):\n"
         "    ev = tracing.Event('snowflake_writer_init', is_parallel=_is_parallel)\n"
         "    location = ''\n"
     )
@@ -371,7 +396,7 @@ def snowflake_writer_init(
     func_text += (
         "    location += table_name\n"
         # Initialize writer
-        "    writer = sf_writer_alloc()\n"
+        "    writer = sf_writer_alloc(expected_state_type)\n"
         "    writer['conn'] = conn\n"
         "    writer['location'] = location\n"
         "    writer['if_exists'] = if_exists\n"
@@ -383,7 +408,7 @@ def snowflake_writer_init(
         "    writer['copy_into_prev_sfqid'] = ''\n"
         "    writer['file_count_global_prev'] = 0\n"
         "    writer['upload_threads_exists'] = False\n"
-        "    writer['batches_exists'] = False\n"
+        "    writer['batches'] = bodo.libs.table_builder.init_table_builder_state(table_builder_state_type)\n"
         "    writer['curr_mem_size'] = 0\n"
         # Connect to Snowflake on rank 0 and get internal stage credentials
         # Note: Identical to the initialization code in df.to_sql()
@@ -426,6 +451,7 @@ def snowflake_writer_init(
 
     # Passing in all globals is for some reason required for caching.
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
+    glbls["table_builder_state_type"] = table_builder_state_type
     l = {}
     exec(func_text, glbls, l)
     return l["impl"]
@@ -474,6 +500,7 @@ def snowflake_writer_append_table(
     )
     n_cols = len(col_names_meta)
     py_table_typ = table
+    table_builder_state_type = TableBuilderStateType(writer.input_table_type)
 
     # This function must be called the same number of times on all ranks.
     # This is because we only execute COPY INTO commands from rank 0, so
@@ -488,12 +515,7 @@ def snowflake_writer_append_table(
         is_last = bodo.libs.distributed_api.sync_is_last(is_last, iter)
         # ===== Part 1: Accumulate batch in writer and compute total size
         ev_append_batch = tracing.Event(f"append_batch", is_parallel=True)
-        cpp_table = py_table_to_cpp_table(table, py_table_typ)
-        if writer["batches_exists"]:
-            writer["batches"].append(cpp_table)
-        else:
-            writer["batches_exists"] = True
-            writer["batches"] = [cpp_table]
+        bodo.libs.table_builder.table_builder_append(writer["batches"], table)
         nbytes_arr = np.empty(n_cols, np.int64)
         bodo.utils.table_utils.generate_table_nbytes(table, nbytes_arr, 0)
         nbytes = np.sum(nbytes_arr)
@@ -506,19 +528,16 @@ def snowflake_writer_append_table(
             or writer["curr_mem_size"] >= bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE
         ):
             ev_sf_write_concat = tracing.Event(f"sf_write_concat", is_parallel=False)
-            ev_sf_write_concat.add_attribute("num_batches", len(writer["batches"]))
             # Note: Using `concat` here means that our write batches are at least
             # as large as our read batches. It may be advantageous in the future to
             # split up large incoming batches into multiple Parquet files to write
-            out_table = concat_tables_cpp(writer["batches"])
-            out_table_len = len(
-                bodo.libs.array.array_from_cpp_table(out_table, 0, col_types_arr[0])
+            out_table = bodo.libs.table_builder.table_builder_finalize(
+                writer["batches"]
             )
+            out_table_len = len(out_table)
             ev_sf_write_concat.add_attribute("out_table_len", out_table_len)
             ev_sf_write_concat.finalize()
-            if out_table_len <= 0:
-                delete_table(out_table)
-            else:
+            if out_table_len > 0:
                 ev_upload_table = tracing.Event("upload_table", is_parallel=False)
                 # Note: writer['stage_path'] already has trailing slash
                 chunk_path = f'{writer["stage_path"]}{writer["copy_into_dir"]}/file{writer["file_count_local"]}_rank{bodo.get_rank()}_{bodo.io.helpers.uuid4_helper()}.parquet'
@@ -535,7 +554,7 @@ def snowflake_writer_append_table(
                 ev_pq_write_cpp.add_attribute("chunk_path", chunk_path)
                 parquet_write_table_cpp(
                     unicode_to_utf8(chunk_path),
-                    out_table,
+                    py_table_to_cpp_table(out_table, py_table_typ),
                     array_to_info(col_names_arr),
                     0,
                     False,  # write_index
@@ -589,7 +608,9 @@ def snowflake_writer_append_table(
                             )
                 writer["file_count_local"] += 1
                 ev_upload_table.finalize()
-            writer["batches"].clear()
+            writer["batches"] = bodo.libs.table_builder.init_table_builder_state(
+                table_builder_state_type
+            )
             writer["curr_mem_size"] = 0
         # Count number of newly written files. This is also an implicit barrier
         # To reduce synchronization, we do this infrequently
