@@ -192,10 +192,10 @@ def test_streaming_write(
             )  # type: ignore
             writer = snowflake_writer_init(
                 conn_w,
-                table_name=table_w,
-                schema="PUBLIC",
-                if_exists="replace",
-                table_type="",
+                table_w,
+                "PUBLIC",
+                "replace",
+                "",
             )
 
             all_is_last = False

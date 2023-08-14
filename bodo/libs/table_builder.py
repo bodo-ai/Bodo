@@ -38,6 +38,10 @@ ll.add_symbol(
     "table_builder_finalize",
     table_builder_cpp.table_builder_finalize,
 )
+ll.add_symbol(
+    "delete_table_builder_state",
+    table_builder_cpp.delete_table_builder_state,
+)
 
 
 class TableBuilderStateType(types.Type):
