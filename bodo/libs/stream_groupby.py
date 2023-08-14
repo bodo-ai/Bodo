@@ -24,6 +24,7 @@ from bodo.libs.array import table_type as cpp_table_type
 from bodo.utils.typing import (
     BodoError,
     MetaType,
+    error_on_nested_arrays,
     is_overload_none,
     unwrap_typeref,
 )
@@ -55,6 +56,9 @@ class GroupbyStateType(types.Type):
         f_in_cols,
         build_table_type=types.unknown,
     ):
+        # TODO[BSE-937]: support nested arrays in streaming
+        error_on_nested_arrays(build_table_type)
+
         self.key_inds = key_inds
         self.fnames = fnames
         self.f_in_offsets = f_in_offsets

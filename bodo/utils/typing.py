@@ -2567,3 +2567,34 @@ def get_common_bodosql_integer_arr_type(
     if to_nullable:
         arr_typ = to_nullable_type(arr_typ)
     return arr_typ
+
+
+def error_on_nested_arrays(table_type):
+    """Raises an error if input table type has nested arrays
+
+    Args:
+        table_type (TableType|unknown): input table type or unknown
+
+    Raises:
+        BodoError: error on nested arrays in input table type
+    """
+    # ignore unresolved types in typing pass
+    if table_type in (None, types.unknown, types.undefined):
+        return
+
+    assert isinstance(
+        table_type, bodo.TableType
+    ), "error_on_nested_arrays: TableType expected"
+
+    for arr_type in table_type.arr_types:
+        if isinstance(
+            arr_type,
+            (
+                bodo.ArrayItemArrayType,
+                bodo.MapArrayType,
+                bodo.StructArrayType,
+                bodo.TupleArrayType,
+                bodo.IntervalArrayType,
+            ),
+        ):
+            raise BodoError(f"Array type {arr_type} not supported in streaming yet")
