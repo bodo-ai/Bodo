@@ -86,6 +86,63 @@ bool KeyEqualHashJoinTable::operator()(const int64_t iRowA,
 
 /* ---------------------------- JoinPartition ----------------------------- */
 
+JoinPartition::JoinPartition(
+    size_t num_top_bits_, uint32_t top_bitmask_,
+    const std::vector<int8_t>& build_arr_c_types,
+    const std::vector<int8_t>& build_arr_array_types,
+    const std::vector<int8_t>& probe_arr_c_types,
+    const std::vector<int8_t>& probe_arr_array_types, const uint64_t n_keys_,
+    bool build_table_outer_, bool probe_table_outer_,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>&
+        build_table_dict_builders,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>&
+        probe_table_dict_builders,
+    const uint64_t batch_size_, bool is_active_,
+    bodo::OperatorBufferPool* op_pool_,
+    const std::shared_ptr<::arrow::MemoryManager> op_mm_)
+    : build_table_buffer(build_arr_c_types, build_arr_array_types,
+                         build_table_dict_builders, op_pool_, op_mm_),
+      build_table_join_hashes(bodo::STLBufferPoolAllocator<uint32_t>(op_pool_)),
+      build_table_buffer_chunked(
+          build_arr_c_types, build_arr_array_types, build_table_dict_builders,
+          batch_size_, DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
+      build_hash_table(
+          {}, HashHashJoinTable(this), KeyEqualHashJoinTable(this, n_keys_),
+          bodo::STLBufferPoolAllocator<std::pair<int64_t, size_t>>(op_pool_)),
+      num_rows_in_group(std::make_unique<bodo::vector<size_t>>(op_pool_)),
+      build_row_to_group_map(std::make_unique<bodo::vector<size_t>>(op_pool_)),
+      groups(op_pool_),
+      groups_offsets(op_pool_),
+      build_table_matched(bodo::STLBufferPoolAllocator<uint8_t>(op_pool_)),
+      probe_table_buffer_chunked(
+          probe_arr_c_types, probe_arr_array_types, probe_table_dict_builders,
+          batch_size_, DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
+      batch_size(batch_size_),
+      dummy_probe_table(alloc_table(probe_arr_c_types, probe_arr_array_types)),
+      num_top_bits(num_top_bits_),
+      top_bitmask(top_bitmask_),
+      build_table_outer(build_table_outer_),
+      probe_table_outer(probe_table_outer_),
+      n_keys(n_keys_),
+      op_pool(op_pool_),
+      op_mm(op_mm_),
+      is_active(is_active_) {
+    // Reserve some space in num_rows_in_group and build_row_to_group_map
+    // for active partitions.
+    // For partitions that will be activated later, we can reserve much more
+    // accurately at that time.
+    if (is_active_) {
+        // Allocate the smallest size-class to start off.
+        // TODO Tune this and/or use hints from optimizer/compiler about
+        // expected build table size and number of groups.
+        const size_t init_reserve_size =
+            bodo::BufferPool::Default()->GetSmallestSizeClassSize() /
+            sizeof(size_t);
+        this->num_rows_in_group->reserve(init_reserve_size);
+        this->build_row_to_group_map->reserve(init_reserve_size);
+    }
+}
+
 inline bool JoinPartition::is_in_partition(const uint32_t& hash) {
     if (this->num_top_bits == 0) {
         // Shifting uint32_t by 32 bits is undefined behavior.
@@ -284,12 +341,85 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
     return {new_part1, new_part2};
 }
 
-void JoinPartition::BuildHashTable() {
-    for (size_t i_row = this->curr_build_size;
-         i_row < this->build_table_buffer.data_table->nrows(); i_row++) {
-        this->InsertLastRowIntoMap();
+inline void JoinPartition::BuildHashTable() {
+    // Create reference variables for easier usage.
+    auto& num_rows_in_group_ = *(this->num_rows_in_group);
+    auto& build_row_to_group_map_ = *(this->build_row_to_group_map);
+
+    // Add all the rows in the build_table_buffer that haven't
+    // already been added to the hash table.
+    while (this->curr_build_size <
+           this->build_table_buffer.data_table->nrows()) {
+        size_t& group_id = this->build_hash_table[this->curr_build_size];
+        // group_id==0 means key doesn't exist in map
+        if (group_id == 0) {
+            // Update the value of group_id stored in the hash map
+            // as well since its passed by reference.
+            group_id = num_rows_in_group_.size() + 1;
+            // Initialize group size to 0.
+            num_rows_in_group_.emplace_back(0);
+        }
+        // Increment count for the group
+        num_rows_in_group_[group_id - 1]++;
+        // Store the group id for this row. This will allow us to avoid an
+        // expensive hashmap lookup during 'FinalizeGroups'.
+        build_row_to_group_map_.emplace_back(group_id);
         this->curr_build_size++;
     }
+}
+
+void JoinPartition::FinalizeGroups() {
+    // Check if groups are already finalized. If so,
+    // we can return immediately.
+    if (this->finalized_groups) {
+        return;
+    }
+
+    // Number of groups is the same as the size of num_rows_in_group.
+    size_t num_groups = this->num_rows_in_group->size();
+    // Resize offsets vector based on the number of groups
+    this->groups_offsets.resize(num_groups + 1);
+    // First offset should always be 0
+    this->groups_offsets[0] = 0;
+    // Do a cumulative sum and fill the rest of groups_offsets:
+    if (num_groups > 0) {
+        std::partial_sum(this->num_rows_in_group->cbegin(),
+                         this->num_rows_in_group->cend(),
+                         this->groups_offsets.begin() + 1);
+    }
+    // Free num_rows_in_group memory
+    this->num_rows_in_group.reset();
+
+    // Resize groups based on how many total elements are in all groups
+    // (same as build table size essentially):
+    this->groups.resize(this->groups_offsets[this->groups_offsets.size() - 1]);
+
+    /// Fill the groups vector. The build_row_to_group_map vector is already
+    /// populated from the first iteration.
+
+    // Store counters for each group, so we can put the row-id in the correct
+    // location.
+    bodo::vector<size_t> group_fill_counter(num_groups, 0);
+    auto& build_row_to_group_map_ = *(this->build_row_to_group_map);
+    size_t build_table_rows = this->build_table_buffer.data_table->nrows();
+    for (size_t i_build = 0; i_build < build_table_rows; i_build++) {
+        // Get this row's group_id from build_row_to_group_map
+        const size_t group_id = build_row_to_group_map_[i_build];
+        // Find next available index for this group:
+        size_t groups_idx = this->groups_offsets[group_id - 1] +
+                            group_fill_counter[group_id - 1];
+        // Insert and update group_fill_counter:
+        this->groups[groups_idx] = i_build;
+        group_fill_counter[group_id - 1]++;
+    }
+    // Free build_row_to_group_map memory
+    this->build_row_to_group_map.reset();
+
+    // Mark the groups as finalized.
+    this->finalized_groups = true;
+
+    // group_fill_counter will go out of scope and its memory will be freed
+    // automatically.
 }
 
 void JoinPartition::ReserveBuildTable(
@@ -307,19 +437,6 @@ void JoinPartition::ReserveProbeTable(
     // and ChunkedTableBuilder doesn't need reserve
 }
 
-inline void JoinPartition::InsertLastRowIntoMap() {
-    std::vector<std::vector<size_t>>& groups = this->groups;
-    size_t& group_id = this->build_hash_table[this->curr_build_size];
-    // group_id==0 means key doesn't exist in map
-    if (group_id == 0) {
-        // Update the value of group_id stored in the hash map
-        // as well since its pass by reference.
-        group_id = groups.size() + 1;
-        groups.emplace_back();
-    }
-    groups[group_id - 1].emplace_back(this->curr_build_size);
-}
-
 template <bool is_active>
 void JoinPartition::UnsafeAppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
@@ -329,10 +446,7 @@ void JoinPartition::UnsafeAppendBuildBatch(
                                          join_hashes.get() + in_table->nrows());
     if (is_active) {
         this->build_table_buffer.UnsafeAppendBatch(in_table);
-        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            this->InsertLastRowIntoMap();
-            this->curr_build_size++;
-        }
+        this->BuildHashTable();
     } else {
         this->build_table_buffer_chunked.AppendBatch(in_table);
     }
@@ -348,10 +462,9 @@ void JoinPartition::UnsafeAppendBuildBatch(
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             if (append_rows[i_row]) {
                 this->build_table_join_hashes.push_back(join_hashes[i_row]);
-                this->InsertLastRowIntoMap();
-                this->curr_build_size++;
             }
         }
+        this->BuildHashTable();
     } else {
         this->build_table_buffer_chunked.AppendBatch(in_table, append_rows);
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
@@ -366,11 +479,23 @@ void JoinPartition::FinalizeBuild() {
     // TODO Add steps to pin the buffers.
     // TODO Add logic to identify that the buffer is too large
     // and that we need to re-partition.
-    if (!this->is_active) {
-        // Make sure this partition is active
-        this->ActivatePartition();
-    }
+
+    // TODO For inactive partitions, we know the required size
+    // of build_row_to_group_map (number of rows), so maybe we can reserve that
+    // altogether during either ActivatePartition or BuildHashTable.
+    // Size of num_rows_in_group is not known, but we could reserve
+    // build table size in that case as well as an upper bound.
+
+    // Make sure this partition is active. This is idempotent
+    // and hence a NOP if the partition is already active.
+    this->ActivatePartition();
+    // Make sure all rows from build_table_buffer have been inserted
+    // into the hash table. This is idempotent.
+    this->BuildHashTable();
+    // Finalize the groups. This step is idempotent.
+    this->FinalizeGroups();
     if (this->build_table_outer) {
+        // This step is idempotent by definition.
         this->build_table_matched.resize(
             arrow::bit_util::BytesForBits(
                 this->build_table_buffer.data_table->nrows()),
@@ -440,11 +565,14 @@ inline void handle_probe_input_for_partition(
         }
         return;
     }
-    const std::vector<size_t>& group = partition->groups[iter->second - 1];
+    const size_t group_start_idx = partition->groups_offsets[iter->second - 1];
+    const size_t group_end_idx =
+        partition->groups_offsets[iter->second - 1 + 1];
     // Initialize to true for pure hash join so the final branch
     // is non-equality condition only.
     bool has_match = !non_equi_condition;
-    for (size_t j_build : group) {
+    for (size_t idx = group_start_idx; idx < group_end_idx; idx++) {
+        const size_t j_build = partition->groups[idx];
         if (non_equi_condition) {
             // Check for matches with the non-equality portion.
             bool match =
@@ -604,9 +732,6 @@ void JoinPartition::ActivatePartition() {
             this->build_table_buffer.ReserveTable(build_table_chunk);
             this->build_table_buffer.UnsafeAppendBatch(build_table_chunk);
         }
-
-        // Rebuild hash table for new active partition
-        this->BuildHashTable();
     }
 }
 

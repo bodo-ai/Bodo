@@ -81,35 +81,7 @@ class JoinPartition {
             probe_table_dict_builders,
         const uint64_t batch_size_, bool is_active_,
         bodo::OperatorBufferPool* op_pool_,
-        const std::shared_ptr<::arrow::MemoryManager> op_mm_)
-        : build_table_buffer(build_arr_c_types, build_arr_array_types,
-                             build_table_dict_builders, op_pool_, op_mm_),
-          build_table_join_hashes(
-              bodo::STLBufferPoolAllocator<uint32_t>(op_pool_)),
-          build_table_buffer_chunked(
-              build_arr_c_types, build_arr_array_types,
-              build_table_dict_builders, batch_size_,
-              DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
-          build_hash_table(
-              {}, HashHashJoinTable(this), KeyEqualHashJoinTable(this, n_keys_),
-              bodo::STLBufferPoolAllocator<std::pair<int64_t, size_t>>(
-                  op_pool_)),
-          build_table_matched(bodo::STLBufferPoolAllocator<uint8_t>(op_pool_)),
-          probe_table_buffer_chunked(
-              probe_arr_c_types, probe_arr_array_types,
-              probe_table_dict_builders, batch_size_,
-              DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
-          batch_size(batch_size_),
-          dummy_probe_table(
-              alloc_table(probe_arr_c_types, probe_arr_array_types)),
-          num_top_bits(num_top_bits_),
-          top_bitmask(top_bitmask_),
-          build_table_outer(build_table_outer_),
-          probe_table_outer(probe_table_outer_),
-          n_keys(n_keys_),
-          op_pool(op_pool_),
-          op_mm(op_mm_),
-          is_active(is_active_) {}
+        const std::shared_ptr<::arrow::MemoryManager> op_mm_);
 
     // Build state
     // Contiguous append-only buffer, used if a partition is active or after
@@ -130,9 +102,26 @@ class JoinPartition {
     bodo::unord_map_container<int64_t, size_t, HashHashJoinTable,
                               KeyEqualHashJoinTable>
         build_hash_table;
-    // Use std::vector to avoid allocation overhead of bodo::vector.
-    // TODO: use bodo::vector when we support spilling
-    std::vector<std::vector<size_t>> groups;
+
+    // Temporary array to track the group sizes of build table
+    // rows. It will be released in FinalizeGroups once groups and
+    // groups_offsets are populated.
+    std::unique_ptr<bodo::vector<size_t>> num_rows_in_group;
+    // Temporary array to track the group id of every row in the build table.
+    // This will be used in 'FinalizeGroups' to populate 'groups' and
+    // 'groups_offsets'. Its memory will be released once this is done.
+    // This array allows us to avoid a hash-map lookup. This does require more
+    // memory, but the performance benefits of a simple vector lookup are
+    // sufficient to warrant it.
+    std::unique_ptr<bodo::vector<size_t>> build_row_to_group_map;
+
+    // 'groups' is single contiguous buffer of row ids arranged by groups.
+    // 'group_offsets' store the offsets for the individual groups within the
+    // 'groups' buffer (similar to how we store strings in array_info). We will
+    // resize these to the exact required sizes and populate them using
+    // 'num_rows_in_group' and 'build_row_to_group_map' during 'FinalizeGroups'.
+    bodo::vector<size_t> groups;
+    bodo::vector<size_t> groups_offsets;
 
     // Probe state (for outer joins). Note we don't use
     // vector<bool> because we may need to do an allreduce
@@ -216,13 +205,28 @@ class JoinPartition {
      */
     void ReserveProbeTable(const std::shared_ptr<table_info>& in_table);
 
-    /// @brief Add rows from build_table_buffer into the
-    /// hash table. This adds rows starting from curr_build_size.
-    /// This is useful for rebuilding the hash table after
-    /// repartitioning and for building hash tables of inactive
-    /// partitions at the end of the build step (after we've
-    /// seen all the data).
-    void BuildHashTable();
+    /**
+     * @brief Add rows from build_table_buffer into the hash table. This adds
+     * rows starting from curr_build_size, up to the size of the
+     * build_table_buffer. It will also populate 'num_rows_in_groups' and
+     * 'build_row_to_group_map' vectors.
+     * This function is idempotent.
+     *
+     */
+    inline void BuildHashTable();
+
+    /**
+     * @brief This will populate 'groups' and 'groups_offsets' using
+     * 'num_rows_in_groups' and 'build_row_to_group_map'. Once this
+     * is done, it will free 'num_rows_in_groups' and
+     * 'build_row_to_group_map'.
+     * This function is idempotent, but not incremental, i.e.
+     * it must be called after we have seen all the data for this
+     * partition and have populated the hash table.
+     * This is meant to be called during FinalizeBuild.
+     *
+     */
+    void FinalizeGroups();
 
     /**
      * @brief Add all rows from in_table to this partition.
@@ -238,13 +242,6 @@ class JoinPartition {
     template <bool is_active>
     void UnsafeAppendBuildBatch(const std::shared_ptr<table_info>& in_table,
                                 const std::shared_ptr<uint32_t[]>& join_hashes);
-
-    /**
-     * @brief Inserts the last row of build buffer
-     * (build_table_buffer[curr_build_size]) into build hash map
-     *
-     */
-    inline void InsertLastRowIntoMap();
 
     /**
      * @brief Add all rows from in_table to this partition.
@@ -266,8 +263,12 @@ class JoinPartition {
 
     /**
      * @brief Finalize the build step for this partition.
-     * At this time, this just initializes the build_table_matched
-     * bitmap in the build_table_outer case.
+     * This will activate the partition (if not already active), i.e.
+     * transfer data from the chunked build table to the contiguous
+     * build table, build the hash table, finalize the groups
+     * and initialize the 'build_table_matched' bitmap in the
+     * build_table_outer case.
+     * This function and its steps are idempotent.
      *
      */
     void FinalizeBuild();
@@ -340,6 +341,10 @@ class JoinPartition {
     // Memory manager instance for op_pool.
     const std::shared_ptr<::arrow::MemoryManager> op_mm;
     bool is_active = false;
+    // Whether the 'groups' and 'groups_offsets' for this partition are already
+    // populated and finalized. This is used in FinalizeGroups to make it
+    // idempotent.
+    bool finalized_groups = false;
 };
 
 /**
