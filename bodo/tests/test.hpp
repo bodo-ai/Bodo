@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <functional>
 #include <map>
 #include <source_location>
 #include <string>
