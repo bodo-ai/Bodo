@@ -7,7 +7,7 @@ import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.type.SqlTypeName
 import kotlin.math.min
 
-class PandasRelMdSize : RelMdSize() {
+class BodoRelMdSize : RelMdSize() {
     /**
      * The default for this is to report that it doesn't know the size.
      *

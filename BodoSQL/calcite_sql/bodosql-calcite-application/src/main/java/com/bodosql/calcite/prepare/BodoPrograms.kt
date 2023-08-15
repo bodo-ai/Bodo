@@ -11,7 +11,7 @@ import com.bodosql.calcite.rel.logical.BodoLogicalJoin
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import com.bodosql.calcite.rel.logical.BodoLogicalSort
 import com.bodosql.calcite.rel.logical.BodoLogicalUnion
-import com.bodosql.calcite.rel.metadata.PandasRelMetadataProvider
+import com.bodosql.calcite.rel.metadata.BodoRelMetadataProvider
 import com.google.common.collect.Iterables
 import org.apache.calcite.plan.Context
 import org.apache.calcite.plan.RelOptLattice
@@ -80,7 +80,7 @@ object BodoPrograms {
                     .addRuleInstance(BodoRules.JOIN_TO_MULTI_JOIN)
                     .build(),
                 false,
-                PandasRelMetadataProvider(),
+                BodoRelMetadataProvider(),
             )
         } else {
             NoopProgram
@@ -165,7 +165,7 @@ object BodoPrograms {
             materializations: List<RelOptMaterialization>,
             lattices: List<RelOptLattice>,
         ): RelNode {
-            val metadataProvider = PandasRelMetadataProvider()
+            val metadataProvider = BodoRelMetadataProvider()
             rel.cluster.invalidateMetadataQuery()
             rel.cluster.metadataProvider = metadataProvider
             return program.run(planner, rel, requiredOutputTraits, materializations, lattices)
@@ -202,7 +202,7 @@ object BodoPrograms {
                 )
                 .build(),
             true,
-            PandasRelMetadataProvider(),
+            BodoRelMetadataProvider(),
         ),
         // Remove correlations.
         DecorrelateProgram(),

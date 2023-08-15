@@ -3,6 +3,7 @@ package com.bodosql.calcite.catalog;
 import static java.lang.Math.min;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
+import com.bodosql.calcite.adapter.snowflake.BodoSnowflakeSqlDialect;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
@@ -37,7 +38,6 @@ import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
-import org.apache.calcite.sql.dialect.SnowflakeSqlDialect;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BodoTZInfo;
@@ -132,6 +132,9 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     this.totalProperties.put("password", password);
     // Add the catalog name as the default database.
     this.totalProperties.put("db", catalogName);
+    // Add the warehouse for any complex metadata queries.
+    // TODO: Have the ability to have a smaller compilation warehouse.
+    this.totalProperties.put("warehouse", warehouseName);
     this.totalProperties.putAll(this.accountInfo);
     this.conn = null;
     this.dbMeta = null;
@@ -845,7 +848,22 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     SqlSelect select = rowCountQuery(tableName);
     SqlString sql =
         select.toSqlString(
-            (c) -> c.withClauseStartsLine(false).withDialect(SnowflakeSqlDialect.DEFAULT));
+            (c) -> c.withClauseStartsLine(false).withDialect(BodoSnowflakeSqlDialect.DEFAULT));
+
+    @Nullable Double output = (double) trySubmitIntegerMetadataQuery(sql);
+    return output;
+  }
+
+  /**
+   * Submits the specified query to Snowflake for evaluation. Expects the return to contain exactly
+   * one value integer, which is returned by this function. Returns null in the event of a timeout,
+   * which is 30 seconds by default. May cause undefined behavior if the supplied sql string does
+   * not return exactly one integer value.
+   *
+   * @param sql The SQL query to submit to snowflake
+   * @return The integer value returned by the sql query
+   */
+  public @Nullable Integer trySubmitIntegerMetadataQuery(SqlString sql) {
 
     // TODO(jsternberg): This class mostly doesn't handle connections correctly.
     // This should be inside of a try/resource block, but it will likely cause
@@ -854,11 +872,17 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     try {
       Connection conn = getConnection();
       try (PreparedStatement stmt = conn.prepareStatement(sql.getSql())) {
+        // Value is in seconds
+        String defaultTimeout = "30";
+        stmt.setQueryTimeout(
+            Integer.parseInt(
+                System.getenv()
+                    .getOrDefault(
+                        "BODOSQL_METADATA_QUERY_TIMEOUT_TIME_IN_SECONDS", defaultTimeout)));
         try (ResultSet rs = stmt.executeQuery()) {
           // Only one row matters.
           if (rs.next()) {
-            int rows = rs.getInt(1);
-            return (double) rows;
+            return rs.getInt(1);
           }
         }
       }
