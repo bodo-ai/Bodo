@@ -37,7 +37,7 @@ if TYPE_CHECKING:  # pragma: no cover
 # How long the schema / typeof probe query should run for in the worst case.
 # This is to guard against increasing compilation time prohibitively in case there are
 # issues with Snowflake, the data, etc.
-SF_READ_SCHEMA_PROBE_TIMEOUT = 5
+SF_READ_SCHEMA_PROBE_TIMEOUT = 10
 
 # Whether to do a probe query to determine whether string columns should be
 # dictionary-encoded. This doesn't effect the _bodo_read_as_dict argument.
@@ -537,6 +537,7 @@ def get_schema_from_metadata(
         probe_res = execute_query(
             cursor, schema_probe_query, timeout=SF_READ_SCHEMA_PROBE_TIMEOUT
         )
+        schema_timeout_info: Optional[List[str]] = None
         if (
             probe_res is not None
             and (typing_table := probe_res.fetch_arrow_all()) is not None
@@ -571,6 +572,8 @@ def get_schema_from_metadata(
                 else:
                     out_type = arrow_fields[idx].type
                 arrow_fields[idx] = arrow_fields[idx].with_type(out_type)
+        else:
+            schema_timeout_info = col_names_to_check
 
     # Convert Arrow Types to Bodo Types
     col_types = []
@@ -595,6 +598,7 @@ def get_schema_from_metadata(
         check_dict_encoding,
         unsupported_columns,
         unsupported_arrow_types,
+        schema_timeout_info,
     )
 
 
@@ -773,6 +777,7 @@ def get_schema(
         check_dict_encoding,
         unsupported_columns,
         unsupported_arrow_types,
+        schema_timeout_info,
     ) = get_schema_from_metadata(
         cursor, sql_query, is_select_query, is_table_input, downcast_decimal_to_double
     )
@@ -848,6 +853,7 @@ def get_schema(
         unsupported_columns,
         unsupported_arrow_types,
         pa.schema(pa_fields),
+        schema_timeout_info,
         dict_encode_timeout_info,
     )
 
