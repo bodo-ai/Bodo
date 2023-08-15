@@ -1205,7 +1205,7 @@ double percentile_util(const std::unique_ptr<array_info> &arr,
     using T = typename dtype_to_type<DType>::type;
     // Place all of the non-null entries in a vector as doubles
     std::vector<double> vect;
-    for (int64_t i = 0; i < arr->length; i++) {
+    for (uint64_t i = 0; i < arr->length; i++) {
         if (non_null_at<ArrType, T, DType>(*arr, i)) {
             T val = get_arr_item<ArrType, T, DType>(*arr, i);
             vect.emplace_back(to_double<T, DType>(val));
