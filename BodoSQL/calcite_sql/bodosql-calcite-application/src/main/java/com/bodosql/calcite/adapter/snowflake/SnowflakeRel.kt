@@ -1,9 +1,21 @@
 package com.bodosql.calcite.adapter.snowflake
 
+import com.bodosql.calcite.catalog.BodoSQLCatalog
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
 import com.bodosql.calcite.table.CatalogTableImpl
+import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.rel2sql.BodoRelToSqlConverter
+import org.apache.calcite.sql.SqlIdentifier
+import org.apache.calcite.sql.SqlNodeList
+import org.apache.calcite.sql.SqlSelect
+import org.apache.calcite.sql.SqlWriterConfig
+import org.apache.calcite.sql.dialect.SnowflakeSqlDialect
+import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
+import org.apache.calcite.sql.parser.SqlParserPos
+import org.apache.calcite.sql.util.SqlString
+import java.util.function.UnaryOperator
 
 /**
  * Temporary convention for Snowflake relations.
@@ -30,6 +42,60 @@ interface SnowflakeRel : RelNode {
         // to convert over.
         val catalog = getCatalogTable().catalog as SnowflakeCatalogImpl
         return catalog.generatePythonConnStr(schema)
+    }
+
+    /**
+     * If the node is simple enough to push down to snowflake, then this function will push the query to snowflake,
+     * and return the output row count. Returns null if the query is too complex, or the query times out in SF.
+     *
+     * "simple enough" in this case is determined by shouldPushDownMetadataQueryHelper.shouldPushAsMetaDataQuery.
+     *
+     * @return the row count according to SF, or null
+     */
+    fun tryGetExpectedRowCountFromSFQuery(): Double? {
+        // We're disabling getting the expected row count from SF for non-streaming cases,
+        // since we don't want to enable this in production until we have memoization,
+        // and the kinks have been ironed out.
+        val streamingEnabled = this.traitSet.contains(BatchingProperty.STREAMING)
+
+        if (!(streamingEnabled && shouldPushDownMetadataQueryHelper.shouldPushAsMetaDataQuery(this))) {
+            return null
+        }
+
+        val rel2sql = BodoRelToSqlConverter(BodoSnowflakeSqlDialect.DEFAULT)
+        val baseSqlNode = rel2sql.visitRoot(this).asFrom()
+
+        // Add the count(*)
+        val selectList = SqlNodeList.of(SqlStdOperatorTable.COUNT.createCall(SqlParserPos.ZERO, SqlIdentifier.STAR))
+
+        val metadataSelectQuery = SqlSelect(
+            SqlParserPos.ZERO,
+            SqlNodeList.EMPTY,
+            selectList,
+            baseSqlNode,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+        )
+
+        val baseCatalog: BodoSQLCatalog = this.getCatalogTable().catalog
+        assert(baseCatalog is SnowflakeCatalogImpl) { "Internal error in SnowflakeToPandasConverter.getExpectedRowCountFromQuery: Catalog is not a snowflake catalog" }
+        val baseCatalogAsSFCatalog: SnowflakeCatalogImpl = baseCatalog as SnowflakeCatalogImpl
+
+        val metadataSelectQueryString: SqlString = metadataSelectQuery.toSqlString(
+            UnaryOperator { c: SqlWriterConfig ->
+                c.withClauseStartsLine(false)
+                    .withDialect(SnowflakeSqlDialect.DEFAULT)
+            },
+        )
+
+        return baseCatalogAsSFCatalog.trySubmitIntegerMetadataQuery(metadataSelectQueryString)?.toDouble()
     }
 
     fun getCatalogTable(): CatalogTableImpl

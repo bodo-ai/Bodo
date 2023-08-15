@@ -15,7 +15,7 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterImpl
 import org.apache.calcite.rel.metadata.RelMetadataQuery
-import org.apache.calcite.rel.rel2sql.RelToSqlConverter
+import org.apache.calcite.rel.rel2sql.BodoRelToSqlConverter
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl
 import org.apache.calcite.rel.type.RelRecordType
@@ -142,7 +142,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
 
     private fun getSnowflakeSQL(): String {
         // Use the snowflake dialect for generating the sql string.
-        val rel2sql = RelToSqlConverter(BodoSnowflakeSqlDialect.DEFAULT)
+        val rel2sql = BodoRelToSqlConverter(BodoSnowflakeSqlDialect.DEFAULT)
         return rel2sql.visitRoot(input)
             .asSelect()
             .toSqlString { c ->

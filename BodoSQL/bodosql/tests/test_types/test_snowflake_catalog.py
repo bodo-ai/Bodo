@@ -2028,6 +2028,36 @@ def test_snowflake_catalog_create_table_like(
         drop_snowflake_table(output_table_name, db, schema)
 
 
+def test_sf_filter_pushdown_rowcount_estimate(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that filter pushdown cost estimate works for snowflake catalog.
+    Note that we can't do this in the maven unit tests, as the TPCH table/row counts
+    are Mocked, and therefore we won't actually push any snowflake queries to snowflake.
+    """
+
+    if bodo.get_size() > 1:
+        pytest.skip("This test should only run on a single rank")
+    if not bodo.bodosql_use_streaming_plan:
+        pytest.skip(
+            "This filter pushdown cost estimate is only enabled with the streaming plan"
+        )
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    # This is a specifically exteneded version of the TPCH Table.
+    # The table has 1.5M rows, and the filter will return 1 row.
+    # Assuming we're using some heuristic to estimate the number of rows,
+    # it's almost certain that the expected ammount will be greater than 1 row.
+    # if we're pushing the filter directly to snowflake, we should only
+    # see 1 row in the cost estimate.
+    sql = "SELECT * FROM TPCH_SF10_CUSTOMER_WITH_ADDITIONS WHERE C_COMMENT = 'I am the inserted dummy row. I am the only row with this comment'"
+
+    plan = bc.generate_plan(sql, show_cost=True)
+    assert "1 rows" in plan, "Plan should have 1 row in the cost estimate"
+
+
 @pytest.mark.slow
 def test_snowflake_catalog_string_format(test_db_snowflake_catalog):
     """Tests a specific issue with the unparsing of strings for snowflake query submission."""
