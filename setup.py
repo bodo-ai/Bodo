@@ -103,8 +103,10 @@ lid = [PREFIX_DIR + "/lib"]
 # ela = ["-std=c++20", "-fsanitize=address"]
 
 # Pass --debug flag to setup.py to compile with debug symbols
+opt_flag = "-O3"
 if "--debug" in sys.argv:
     debug_flag = "-g"
+    opt_flag = "-O1"  # This makes many c++ features easier to debug
     sys.argv.remove("--debug")
 else:
     debug_flag = "-g0"
@@ -126,17 +128,17 @@ if is_win:
 else:
     if is_mac:
         # Mac on CI can't support AVX2
-        eca = ["-std=c++20", debug_flag, "-O3"] + address_sanitizer_flag
+        eca = ["-std=c++20", debug_flag, opt_flag] + address_sanitizer_flag
     else:
         # -march=haswell is used to enable AVX2 support (required by SIMD bloom
         # filter implementation)
         eca = [
             "-std=c++20",
             debug_flag,
-            "-O3",
+            opt_flag,
             "-march=haswell",
         ] + address_sanitizer_flag
-    eca_c = [debug_flag, "-O3"]
+    eca_c = [debug_flag, opt_flag]
     ela = ["-std=c++20"]
 
 if develop_mode:
@@ -337,14 +339,16 @@ ext_metadata["depends"] += [
     "bodo/libs/_window_aggfuncs.h",
     "bodo/libs/_window_compute.h",
     "bodo/libs/_stream_dict_encoding.h",
+    "bodo/libs/_pinnable.h",
 ]
 
 if is_testing:
     ext_metadata["sources"].extend(
         [
-            "bodo/tests/test_dict_builder.cpp",
-            "bodo/tests/test_example.cpp",
             "bodo/tests/test_framework.cpp",
+            "bodo/tests/test_example.cpp",
+            "bodo/tests/test_pinnable.cpp",
+            "bodo/tests/test_dict_builder.cpp",
             "bodo/tests/test_table_builder.cpp",
             "bodo/tests/test_table_generator.cpp",
         ]
