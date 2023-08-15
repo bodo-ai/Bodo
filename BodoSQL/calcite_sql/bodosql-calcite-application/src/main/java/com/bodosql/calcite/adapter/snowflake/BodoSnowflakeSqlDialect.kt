@@ -33,6 +33,36 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         writer.print("'")
     }
 
+    // This is directly copied from SqlDialect
+    private val HEXITS = charArrayOf(
+        '0', '1', '2', '3', '4', '5', '6', '7',
+        '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',
+    )
+
+    /**
+     * Converts a string into a unicode string literal that is interpretable by python.
+     */
+    override fun quoteStringLiteralUnicode(buf: StringBuilder, unicode_str: String) {
+        buf.append("'")
+        for (i in 0 until unicode_str.length) {
+            val c = unicode_str[i]
+            if (c.code < 32 || c.code >= 128) {
+                buf.append('\\')
+                buf.append('u')
+                buf.append(HEXITS[c.code shr 12 and 0xf])
+                buf.append(HEXITS[c.code shr 8 and 0xf])
+                buf.append(HEXITS[c.code shr 4 and 0xf])
+                buf.append(HEXITS[c.code and 0xf])
+            } else if (c == '\'' || c == '\\') {
+                buf.append(c)
+                buf.append(c)
+            } else {
+                buf.append(c)
+            }
+        }
+        buf.append("'")
+    }
+
     companion object {
         @JvmField
         val DEFAULT_CONTEXT: Context = org.apache.calcite.sql.dialect.SnowflakeSqlDialect.DEFAULT_CONTEXT
