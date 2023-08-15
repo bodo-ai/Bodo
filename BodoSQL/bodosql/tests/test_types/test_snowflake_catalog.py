@@ -2026,3 +2026,27 @@ def test_snowflake_catalog_create_table_like(
         raise e
     else:
         drop_snowflake_table(output_table_name, db, schema)
+
+
+@pytest.mark.slow
+def test_snowflake_catalog_string_format(test_db_snowflake_catalog):
+    """Tests a specific issue with the unparsing of strings for snowflake query submission."""
+    bodo.bodosql_use_streaming_plan = True
+
+    if bodo.get_size() > 1:
+        pytest.skip("This test should only run on a single rank")
+
+    # Created a special table with a single addition to the lineitem table
+    # should be a single row ouput
+    query = """
+        select
+            count(*) as output_count
+        from
+            TPCH_SF1_LINEITEM_WITH_ADDITIONS
+        where
+            l_comment = '♪ ♫ ♬ ♭ ♮ \n\r\t À È Ì © € ∞ ½⅓¼⅕⅙⅐'
+    """
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    out = bc.sql(query)
+    assert out.iloc[0, 0] == 1, f"Expected one row in output, found {out.iloc[0,0]}"
