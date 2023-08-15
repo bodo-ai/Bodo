@@ -523,6 +523,8 @@ def get_schema_from_metadata(
             col_names_to_check.append(field_meta.name)
             col_idxs_to_check.append(i)
 
+    schema_timeout_info: Optional[List[str]] = None
+
     # For any NUMBER columns, fetch SYSTEM$TYPEOF metadata to determine
     # the smallest viable integer type (number of bytes)
     if is_select_query and len(col_names_to_check) != 0:
@@ -537,7 +539,6 @@ def get_schema_from_metadata(
         probe_res = execute_query(
             cursor, schema_probe_query, timeout=SF_READ_SCHEMA_PROBE_TIMEOUT
         )
-        schema_timeout_info: Optional[List[str]] = None
         if (
             probe_res is not None
             and (typing_table := probe_res.fetch_arrow_all()) is not None
