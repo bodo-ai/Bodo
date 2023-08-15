@@ -383,10 +383,9 @@ class SnowflakeReader : public ArrowReader {
             if (out_batches.size() > 0) {
                 next_batch = out_batches.front();
                 out_batches.pop();
-                total_read_rows = next_batch->nrows();
+                this->rows_left -= next_batch->nrows();
+                total_read_rows += next_batch->nrows();
             }
-
-            this->rows_left -= total_read_rows;
 
             ev.add_attribute("out_batch_size",
                              next_batch == nullptr ? 0 : next_batch->nrows());
