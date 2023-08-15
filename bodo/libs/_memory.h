@@ -1027,11 +1027,11 @@ std::shared_ptr<::arrow::MemoryManager> buffer_memory_manager(
  */
 std::shared_ptr<::arrow::MemoryManager> default_buffer_memory_manager();
 
-template <typename Spillable>
+template <typename Spillable, typename... Args>
 class pin_guard;
 
-template <typename Spillable>
-pin_guard<Spillable> pin(Spillable& s);
+template <typename Spillable, typename... Args>
+pin_guard<Spillable, Args...> pin(Spillable& s, Args&&... args);
 
 /**
  * @brief The pin() methods of a pinnable type can return a pointer-like value
@@ -1052,6 +1052,21 @@ struct pinned_storage<void> {
     struct type {};
 };
 
+/**
+ * @brief This is an annoying template specialization so that we don't return
+ * void()
+ *
+ * The template is specialized on the element_type of pin_guard<Spillable>.
+ *
+ * It takes a function that pins the spillable and simply calls it, and if not
+ * void, returns the value.
+ *
+ * The function cannot take the spillable because it is not a friend of the
+ * Spillable class and thus may not be able to call pin().
+ *
+ * on the other hand, pin_guard is allowed to create a lambda to access pin()
+ * within its definition since pin_guard<Spillable> is a friend of Spillable.
+ */
 template <typename ElTy>
 inline typename pinned_storage<ElTy>::type do_pin(std::function<ElTy()> pin) {
     return pin();
@@ -1073,36 +1088,26 @@ inline typename pinned_storage<void>::type do_pin<void>(
  * This class lets you automatically manage pinning for any class that has a
  * pin() method.
  */
-template <typename Spillable>
+template <typename Spillable, typename... Args>
 class pin_guard {
    public:
     ~pin_guard() { release(); }
 
     using element_type =
         std::invoke_result<decltype(&Spillable::pin), Spillable*>::type;
-    using reference_type = std::remove_pointer<element_type>::type&;
-    using const_reference_type = typename std::add_const<reference_type>::type;
+    using reference_type = typename std::add_lvalue_reference<
+        typename std::remove_pointer<element_type>::type>::type;
+    using const_reference_type = typename std::add_lvalue_reference<
+        typename std::add_const<reference_type>::type>::type;
 
-    std::enable_if_t<!std::is_void_v<element_type>, element_type> operator->()
-        const {
-        return val_;
-    }
-    std::enable_if_t<!std::is_void_v<element_type>, element_type> get() const {
-        return val_;
-    }
+    element_type operator->() const { return val_; }
+    element_type get() const { return val_; }
 
-    std::enable_if_t<!std::is_void_v<element_type>, reference_type>
-    operator*() {
-        return *val_;
-    }
-    std::enable_if_t<!std::is_void_v<element_type>, reference_type> operator*()
-        const {
-        return *val_;
-    }
+    reference_type operator*() { return *val_; }
+    element_type operator*() const { return *val_; }
 
     template <typename Sz>
-    std::enable_if_t<!std::is_void_v<element_type>, reference_type> operator[](
-        Sz sz) const {
+    reference_type operator[](Sz sz) const {
         return get()[sz];
     }
 
@@ -1112,21 +1117,27 @@ class pin_guard {
     void release() {
         if (!released_) {
             released_ = true;
-            underlying_.unpin();
+            std::apply(
+                &Spillable::unpin,
+                std::tuple_cat(std::make_tuple(&underlying_), pin_args_));
         }
     }
 
    private:
-    inline pin_guard(Spillable& s)
+    inline pin_guard(Spillable& s, Args&&... args)
         : underlying_(s),
-          val_(do_pin<element_type>(std::bind(&Spillable::pin, underlying_))),
-          released_(false) {}
+          val_(do_pin<element_type>(
+              std::bind(&Spillable::pin, &s, std::forward<Args>(args)...))),
+          released_(false),
+          pin_args_(std::forward<Args>(args)...) {}
 
     Spillable& underlying_;
     typename pinned_storage<element_type>::type val_;
     bool released_;
 
-    friend pin_guard<Spillable> pin<Spillable>(Spillable& s);
+    std::tuple<Args&&...> pin_args_;
+
+    friend pin_guard<Spillable, Args...> pin<Spillable>(Spillable& s);
 };
 
 /**
@@ -1153,9 +1164,9 @@ class pin_guard {
  * @param s The thing you want to pin
  * @return pin_guard<Spillable>
  */
-template <typename Spillable>
-pin_guard<Spillable> pin(Spillable& s) {
-    return pin_guard<Spillable>(s);
+template <typename Spillable, typename... Args>
+pin_guard<Spillable, Args...> pin(Spillable& s, Args&&... args) {
+    return pin_guard<Spillable, Args...>(s, std::forward<Args>(args)...);
 }
 
 }  // namespace bodo

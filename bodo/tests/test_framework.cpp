@@ -94,15 +94,45 @@ PyObject *PyTestCase_call(PyObject *tc, PyObject *args, PyObject *kwargs) {
 }
 
 PyTypeObject PyTestCase::TYPE = {
-    PyVarObject_HEAD_INIT(NULL, 0).tp_name = "TestCase",
-    .tp_basicsize = sizeof(PyTestCase),
-    .tp_dealloc = &PyTestCase::destroy,
-    .tp_getattr = &PyTestCase_getattr,
-    .tp_repr = &PyTestCase_as_str,
-    .tp_call = &PyTestCase_call,
-    .tp_str = &PyTestCase_as_str,
-    .tp_flags = Py_TPFLAGS_DEFAULT,
-    .tp_base = nullptr,
+    PyVarObject_HEAD_INIT(NULL, 0)
+
+        "TestCase",                   /* tp_name */
+    sizeof(PyTestCase),               /* tp_basicsize */
+    0,                                /* tp_itemsize */
+    (destructor)&PyTestCase::destroy, /* tp_dealloc */
+    0,                                /* tp_print */
+    &PyTestCase_getattr,              /* tp_getattr */
+    0,                                /* tp_setattr */
+    0,                                /* tp_compare */
+    &PyTestCase_as_str,               /* tp_repr */
+    0,                                /* tp_as_number */
+    0,                                /* tp_as_sequence */
+    0,                                /* tp_as_mapping */
+    0,                                /* tp_hash  */
+    &PyTestCase_call,                 /* tp_call */
+    &PyTestCase_as_str,               /* tp_str */
+    0,                                /* tp_getattro */
+    0,                                /* tp_setattro */
+    0,                                /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT,               /* tp_flags */
+    "PyTest C++ test case",           /* tp_doc */
+    0,                                /* tp_traverse */
+    0,                                /* tp_clear */
+    0,                                /* tp_richcompare */
+    0,                                /* tp_weaklistoffset */
+    0,                                /* tp_iter */
+    0,                                /* tp_iternext */
+    0,                                /* tp_methods */
+    0,                                /* tp_members */
+    0,                                /* tp_getset */
+    0,                                /* tp_base */
+    0,                                /* tp_dict */
+    0,                                /* tp_descr_get */
+    0,                                /* tp_descr_set */
+    0,                                /* tp_dictoffset */
+    0,                                /* tp_init */
+    0,                                /* tp_alloc */
+    0,                                /* tp_new */
 };
 
 PyMODINIT_FUNC PyInit_test_cpp(void) {

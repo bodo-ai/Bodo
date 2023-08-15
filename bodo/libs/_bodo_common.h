@@ -223,7 +223,7 @@ class BodoBuffer : public arrow::ResizableBuffer {
     /// @brief Wrapper for Unpinning Buffers
     inline void unpin() { NRT_MemInfo_Unpin(this->meminfo); }
 
-    template <typename X>
+    template <typename X, typename... Args>
     friend class ::bodo::pin_guard;
 
    private:
@@ -792,7 +792,7 @@ struct array_info {
         }
     }
 
-    template <typename X>
+    template <typename X, typename... Args>
     friend class ::bodo::pin_guard;
 
     /**
@@ -1099,7 +1099,7 @@ struct table_info {
         }
     }
 
-    template <typename X>
+    template <typename X, typename... Args>
     friend class ::bodo::pin_guard;
 };
 
