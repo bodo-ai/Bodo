@@ -3416,6 +3416,7 @@ def _get_sql_df_type_from_db(
                     unsupported_columns,
                     unsupported_arrow_types,
                     pyarrow_table_schema,
+                    schema_timeout_info,
                     dict_encode_timeout,
                 ) = get_schema(
                     con_const,
@@ -3427,28 +3428,44 @@ def _get_sql_df_type_from_db(
                 )
 
                 # Log the chosen dict-encoding timeout behavior
-                if bodo.user_logging.get_verbose_level() >= 2 and dict_encode_timeout:
-                    probe_limit, query_args = dict_encode_timeout
-
-                    msg = (
-                        "Timeout occured during probing query at:\n%s\n"
-                        "Maximum number of rows queried: %d\n"
-                    )
-                    if SF_READ_DICT_ENCODING_IF_TIMEOUT:
-                        msg += "The following columns will be dictionary encoded: %s\n"
-                    else:
-                        msg += (
-                            "The following columns will not be dictionary encoded: %s\n"
+                if bodo.user_logging.get_verbose_level() >= 2 and (
+                    schema_timeout_info or dict_encode_timeout
+                ):
+                    if schema_timeout_info:
+                        msg = (
+                            "Timeout occurred during schema probing query for Number types:\n%s\n"
+                            "The following columns will be kept as decimal which may impact performance: %s\n"
                         )
-                    read_src = loc.strformat()
-                    string_col_names = ",".join(query_args)
-                    bodo.user_logging.log_message(
-                        "Dictionary Encoding Probe Query",
-                        msg,
-                        read_src,
-                        probe_limit,
-                        string_col_names,
-                    )
+                        read_src = loc.strformat()
+                        string_col_names = ",".join(schema_timeout_info)
+                        bodo.user_logging.log_message(
+                            "Decimal Schema Probe Query",
+                            msg,
+                            read_src,
+                            string_col_names,
+                        )
+                    if dict_encode_timeout:
+                        probe_limit, query_args = dict_encode_timeout
+
+                        msg = (
+                            "Timeout occurred during probing query at:\n%s\n"
+                            "Maximum number of rows queried: %d\n"
+                        )
+                        if SF_READ_DICT_ENCODING_IF_TIMEOUT:
+                            msg += (
+                                "The following columns will be dictionary encoded: %s\n"
+                            )
+                        else:
+                            msg += "The following columns will not be dictionary encoded: %s\n"
+                        read_src = loc.strformat()
+                        string_col_names = ",".join(query_args)
+                        bodo.user_logging.log_message(
+                            "Dictionary Encoding Probe Query",
+                            msg,
+                            read_src,
+                            probe_limit,
+                            string_col_names,
+                        )
 
             else:
                 # Any columns that had their name converted. These need to be reverted
