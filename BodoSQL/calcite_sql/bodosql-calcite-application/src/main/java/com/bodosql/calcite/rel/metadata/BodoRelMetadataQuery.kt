@@ -1,5 +1,6 @@
 package com.bodosql.calcite.rel.metadata
 
+import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.metadata.MetadataHandlerProvider
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 
@@ -18,6 +19,20 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery
  *https://github.com/dremio/dremio-oss/blob/be47367c523e4eded35df4e8fff725f53160558e/sabot/kernel/src/main/java/com/dremio/exec/planner/cost/DremioRelMetadataQuery.java#L32
  */
 class BodoRelMetadataQuery(provider: MetadataHandlerProvider) : RelMetadataQuery(provider) {
+
+    private var columnDistinctCountHandler: ColumnDistinctCount.Handler = handler(ColumnDistinctCount.Handler::class.java)
+
+    fun getColumnDistinctCount(r: RelNode, column: Int): Double? {
+        // Note: This pattern is copied from Calcite. I'm not sure what situations require
+        // revise, but I copied the pattern to be conservative.
+        while (true) {
+            try {
+                return columnDistinctCountHandler.getColumnDistinctCount(r, this, column)
+            } catch (e: MetadataHandlerProvider.NoHandler) {
+                columnDistinctCountHandler = revise(ColumnDistinctCount.Handler::class.java)
+            }
+        }
+    }
     companion object {
         /**
          * Ensures only one instance of BodoRelMetadataQuery is created for statistics
