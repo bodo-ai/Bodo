@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.Testing;
 
 import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
+import com.bodosql.calcite.application.utils.RelCostWriter;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
 import com.bodosql.calcite.schema.LocalSchemaImpl;
@@ -10,20 +11,45 @@ import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
 import com.bodosql.calcite.traits.BatchingProperty;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Properties;
-import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
 
 /** Class for locally testing codegen using a snowflake catalog */
 public class SnowflakeGenTest {
   public static void main(String[] args) throws Exception {
-    String sql = " select * from LINEITEM1 r limit 10";
+    String sql =
+        "select\n"
+            + "    n_name,\n"
+            + "    sum(l_extendedprice * (1 - l_discount)) as revenue\n"
+            + "from\n"
+            + "    customer,\n"
+            + "    orders,\n"
+            + "    lineitem,\n"
+            + "    supplier,\n"
+            + "    nation,\n"
+            + "    region\n"
+            + "where\n"
+            + "    c_custkey = o_custkey\n"
+            + "    and l_orderkey = o_orderkey\n"
+            + "    and l_suppkey = s_suppkey\n"
+            + "    and c_nationkey = s_nationkey\n"
+            + "    and s_nationkey = n_nationkey\n"
+            + "    and n_regionkey = r_regionkey\n"
+            + "    and r_name = 'ASIA'\n"
+            + "    and o_orderdate >= '1994-01-01'\n"
+            + "    and o_orderdate < '1995-01-01'\n"
+            + "group by\n"
+            + "    n_name\n"
+            + "order by\n"
+            + "    revenue desc\n";
     Map envVars = System.getenv();
     Properties prop = new Properties();
-    prop.put("schema", "PUBLIC");
-    prop.put("queryTimeout", 5);
+    prop.put("schema", "TPCH_SF10");
     BodoSQLCatalog catalog =
         new SnowflakeCatalogImpl(
             (String) envVars.get("SF_USERNAME"),
@@ -53,15 +79,12 @@ public class SnowflakeGenTest {
             catalog,
             schema,
             "dummy_param_table_name",
-            0,
+            RelationalAlgebraGenerator.STREAMING_PLANNER,
             0,
             BatchingProperty.defaultBatchSize,
             false);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
-    String unOptimizedPlanStr = getRelationalAlgebraString(generator, sql, false);
-    System.out.println("UnOptimized plan:");
-    System.out.println(unOptimizedPlanStr + "\n");
     String optimizedPlanStr = getRelationalAlgebraString(generator, sql, true);
     System.out.println("Optimized plan:");
     System.out.println(optimizedPlanStr + "\n");
@@ -74,7 +97,11 @@ public class SnowflakeGenTest {
       RelationalAlgebraGenerator generator, String sql, boolean optimizePlan) {
     try {
       RelRoot root = generator.getRelationalAlgebra(sql, optimizePlan);
-      return RelOptUtil.toString(PandasUtilKt.pandasProject(root));
+      RelNode newRoot = PandasUtilKt.pandasProject(root);
+      StringWriter sw = new StringWriter();
+      RelCostWriter costWriter = new RelCostWriter(new PrintWriter(sw), newRoot);
+      newRoot.explain(costWriter);
+      return sw.toString();
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
