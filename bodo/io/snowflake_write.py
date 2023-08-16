@@ -457,6 +457,19 @@ def snowflake_writer_init(
     return l["impl"]
 
 
+@numba.njit(no_cpython_wrapper=True)
+def get_upload_thread(cursor, file_count_local, chunk_path, stage_name, copy_into_dir):
+    with bodo.objmode(upload_thread="exception_propagating_thread_type"):
+        upload_thread = bodo.io.snowflake.do_upload_and_cleanup(
+            cursor,
+            file_count_local,
+            chunk_path,
+            stage_name,
+            copy_into_dir,
+        )
+    return upload_thread
+
+
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def snowflake_writer_append_table(
     writer, table, col_names_meta, is_last, iter
@@ -582,16 +595,13 @@ def snowflake_writer_append_table(
                     stage_name = writer["stage_name"]
                     copy_into_dir = writer["copy_into_dir"]
                     if bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:
-                        with bodo.objmode(
-                            upload_thread="exception_propagating_thread_type"
-                        ):
-                            upload_thread = bodo.io.snowflake.do_upload_and_cleanup(
-                                cursor,
-                                file_count_local,
-                                chunk_path,
-                                stage_name,
-                                copy_into_dir,
-                            )
+                        upload_thread = get_upload_thread(
+                            cursor,
+                            file_count_local,
+                            chunk_path,
+                            stage_name,
+                            copy_into_dir,
+                        )
                         if writer["upload_threads_exists"]:
                             writer["upload_threads"].append(upload_thread)
                         else:
