@@ -121,7 +121,6 @@ public class DatetimeFnCodeGen {
   /**
    * Generate code for computing a time value for the current time in the default timezone.
    *
-   * @param opName The name of the function. Several functions map to the same operation.
    * @param tzInfo The Timezone information with which to create the Time.
    * @return
    */
