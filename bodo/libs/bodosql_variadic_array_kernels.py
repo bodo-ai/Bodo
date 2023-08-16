@@ -547,16 +547,9 @@ def decode_util(A, dict_encoding_state, func_id):
     if out_dtype == bodo.none:
         out_dtype = in_dtype
 
-    # Only allow the output to be dictionary encoded under the following
-    # circumstances:
-    #   1. The first argument is the array
-    #   2. None of the inputs are bodo.none
-    #   3. There is no default argument
-    support_dict_encoding = (
-        bodo.utils.utils.is_array_typ(A[0])
-        and bodo.none not in input_types
-        and len(arg_types) % 2 == 1
-    )
+    # Only allow the output to be dictionary encoded if the first argument is
+    # the array
+    support_dict_encoding = bodo.utils.utils.is_array_typ(A[0])
 
     use_dict_caching = support_dict_encoding and not is_overload_none(
         dict_encoding_state

@@ -500,6 +500,19 @@ def gen_vectorized(
         # If using dictionary encoding, construct the output from the
         # new dictionary + the indices
         if use_dict_encoding:
+            if (
+                out_dtype == bodo.string_array_type
+                and not propagate_null[dict_encoded_arg]
+            ):
+                # If NULL was transformed to a non-NULL value, then we need to
+                # update `indices` (which is a copy for bodo.string_array_type
+                # and therefore safe to modify) so that NULL entries map to the
+                # newly added transformed NULL value.
+                func_text += "   if not bodo.libs.array_kernels.isna(res, n):\n"
+                func_text += "     numba.parfors.parfor.init_prange()\n"
+                func_text += "     for i in numba.parfors.parfor.internal_prange(len(indices)):\n"
+                func_text += "       if bodo.libs.array_kernels.isna(indices, i):\n"
+                func_text += "         indices[i] = n\n"
             # Flush the nulls back to the index array, if necessary
             if use_null_flushing:
                 func_text += "   numba.parfors.parfor.init_prange()\n"

@@ -569,3 +569,39 @@ def test_multi_function_gen_vectorize(memory_leak_check):
         py_output=py_output,
         use_dict_encoded_strings=True,
     )
+
+
+def test_decode_with_none_type(memory_leak_check):
+    impl1 = _build_1_arg_streaming_function(
+        'bodo.libs.bodosql_array_kernels.decode((section, "a", "one", "b", "two", None, "None"), dict_encoding_state, func_id)'
+    )
+    arr = pd.array(["a", "b", None, "c", None, "d", "v"] * 2)
+    py_output = (
+        pd.array(["one", "two", "None", None, "None", None, None] * 2),
+        # Number of cache misses. Should be 1 for the first iteration.
+        1,
+    )
+    check_func(
+        impl1,
+        (pd.Series(arr),),
+        py_output=py_output,
+        use_dict_encoded_strings=True,
+    )
+
+
+def test_decode_with_default_arg(memory_leak_check):
+    impl1 = _build_1_arg_streaming_function(
+        'bodo.libs.bodosql_array_kernels.decode((section, "a", "one", "b", "two", "three"), dict_encoding_state, func_id)'
+    )
+    arr = pd.array(["a", "b", None, "c", None, "d", "v"] * 2)
+    py_output = (
+        pd.array(["one", "two", "three", "three", "three", "three", "three"] * 2),
+        # Number of cache misses. Should be 1 for the first iteration.
+        1,
+    )
+    check_func(
+        impl1,
+        (pd.Series(arr),),
+        py_output=py_output,
+        use_dict_encoded_strings=True,
+    )
