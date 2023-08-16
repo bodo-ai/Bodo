@@ -45,9 +45,9 @@ import com.bodosql.calcite.adapter.pandas.PandasValues;
 import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.pandas.StreamingRexToPandasTranslator;
-import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer;
 import com.bodosql.calcite.application.timers.StreamingRelNodeTimer;
+import com.bodosql.calcite.application.utils.RelationalOperatorCache;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
@@ -96,11 +96,10 @@ import org.jetbrains.annotations.NotNull;
 /** Visitor class for parsed SQL nodes to generate Pandas code from SQL code. */
 public class PandasCodeGenVisitor extends RelVisitor {
 
-  /** Stack of generated tabkes T1, T2, etc. */
+  /** Stack of generated tables T1, T2, etc. */
   private final Stack<BodoEngineTable> tableGenStack = new Stack<>();
 
-  /* Reserved column name for generating dummy columns. */
-  // TODO: Add this to the docs as banned
+  /* The builder responsible for code emission */
   private final Module.Builder generatedCode;
 
   // Note that a given query can only have one MERGE INTO statement. Therefore,
@@ -114,16 +113,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
   private static final String ROW_ID_COL_NAME = "_bodo_row_id";
   private static final String MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change";
-
-  // Map of RelNode ID -> <Table variable name>
-  // Because the logical plan is a tree, Nodes that are at the bottom of
-  // the tree must be repeated, even if they are identical. However, when
-  // calcite produces identical nodes, it gives them the same node ID. As a
-  // result, when finding nodes we wish to cache, we log variable names in this
-  // map and load them inplace of segments of generated code.
-  // This is currently only implemented for a subset of nodes.
-
-  private final HashMap<Integer, BodoEngineTable> tableCache;
 
   /*
   Hashmap containing globals that need to be lowered into the output func_text. Used for lowering
@@ -176,7 +165,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
       int verboseLevel,
       int batchSize) {
     super();
-    this.tableCache = new HashMap<>();
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
     this.typeSystem = typeSystem;
@@ -563,8 +551,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void visitPandasRel(PandasRel node) {
     // Determine if this node has already been cached.
     // If it has, just return that immediately.
-    if (node.canUseNodeCache() && isNodeCached(node)) {
-      tableGenStack.push(tableCache.get(node.getId()));
+    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+    if (operatorCache.isNodeCached(node)) {
+      tableGenStack.push(operatorCache.getCachedTable(node));
       return;
     }
 
@@ -572,7 +561,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     BodoEngineTable out = node.emit(new Implementor(node));
 
     // Place the output variable in the tableCache and tableGenStack.
-    tableCache.put(node.getId(), out);
+    operatorCache.tryCacheNode(node, out);
     tableGenStack.push(out);
   }
 
@@ -1318,9 +1307,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     List<String> expectedOutputCols = node.getRowType().getFieldNames();
 
-    int nodeId = node.getId();
-    if (isNodeCached(node)) {
-      tableGenStack.push(tableCache.get(nodeId));
+    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+    if (operatorCache.isNodeCached(node)) {
+      tableGenStack.push(operatorCache.getCachedTable(node));
     } else {
       Variable outVar = this.genDfVar();
       final List<AggregateCall> aggCallList = node.getAggCallList();
@@ -1442,7 +1431,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               finalOutVar = new Variable(outputDfNames.get(0));
             }
             BodoEngineTable outTable = ctx.convertDfToTable(finalOutVar, node);
-            tableCache.put(nodeId, outTable);
+            operatorCache.tryCacheNode(node, outTable);
             tableGenStack.push(outTable);
           });
     }
@@ -1579,16 +1568,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitPandasTableScan(PandasTableScan node, boolean canLoadFromCache) {
     // Determine if this node has already been cached.
     // If it has, just return that immediately.
-    if (canLoadFromCache && node.canUseNodeCache() && isNodeCached(node)) {
-      tableGenStack.push(tableCache.get(node.getId()));
+    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+    if (canLoadFromCache && operatorCache.isNodeCached(node)) {
+      tableGenStack.push(operatorCache.getCachedTable(node));
       return;
     }
 
     // Note: All timer handling is done in emit
     BodoEngineTable out = node.emit(new Implementor(node));
 
-    // Place the output variable in the tableCache and tableGenStack.
-    tableCache.put(node.getId(), out);
+    // Place the output variable in the tableCache (if possible) and tableGenStack.
+    operatorCache.tryCacheNode(node, out);
+
     tableGenStack.push(out);
   }
 
@@ -1610,9 +1601,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
         (PandasRel) node,
         () -> {
           BodoEngineTable outTable;
-          int nodeId = node.getId();
-          if (canLoadFromCache && this.isNodeCached(node)) {
-            outTable = tableCache.get(nodeId);
+          RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+          if (canLoadFromCache && operatorCache.isNodeCached(node)) {
+            outTable = operatorCache.getCachedTable(node);
           } else {
             BodoSqlTable table;
 
@@ -1623,23 +1614,23 @@ public class PandasCodeGenVisitor extends RelVisitor {
             RelOptTableImpl relTable = (RelOptTableImpl) node.getTable();
             table = (BodoSqlTable) relTable.table();
 
-            outTable = visitSingleBatchTableScanCommon(node, table, isTargetTableScan, nodeId);
+            outTable = visitSingleBatchTableScanCommon(node, table, isTargetTableScan);
           }
+          operatorCache.tryCacheNode(node, outTable);
           tableGenStack.push(outTable);
         });
   }
 
   /**
-   * Helper function that contains the code needed to perform a read of the specified
+   * Helper function that contains the code needed to perform a read of the specified table.
    *
    * @param node The rel node for the scan
    * @param table The BodoSqlTable to read
    * @param isTargetTableScan Is the read a TargetTableScan (used in MERGE INTO)
-   * @param nodeId node id
    * @return outVar The returned dataframe variable
    */
   public BodoEngineTable visitSingleBatchTableScanCommon(
-      TableScan node, BodoSqlTable table, boolean isTargetTableScan, int nodeId) {
+      TableScan node, BodoSqlTable table, boolean isTargetTableScan) {
     Expr readCode;
     Op readAssign;
 
@@ -1685,12 +1676,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
       outTable = new BodoEngineTable(readVar.emit(), node);
     }
 
-    if (!isTargetTableScan) {
-      // Add the table to cached values. We only support this for regular
-      // tables and not the target table in merge into.
-      tableCache.put(nodeId, new BodoEngineTable(outTable.emit(), node));
-    }
-
     return outTable;
   }
 
@@ -1715,10 +1700,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void visitBatchedPandasJoin(PandasJoin node) {
     BuildContext ctx = new BuildContext(node);
     /* get left/right tables */
-    int nodeId = node.getId();
+
     List<String> outputColNames = node.getRowType().getFieldNames();
-    if (this.isNodeCached(node)) {
-      BodoEngineTable tableVar = tableCache.get(nodeId);
+    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+    if (operatorCache.isNodeCached(node)) {
+      BodoEngineTable tableVar = operatorCache.getCachedTable(node);
       tableGenStack.push(tableVar);
     } else {
       Variable outDfVar = this.genDfVar();
@@ -1760,8 +1746,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
                     mergeCols,
                     tryRebalanceOutput);
             this.generatedCode.add(joinCode);
+
             BodoEngineTable outTable = ctx.convertDfToTable(outDfVar, node);
-            tableCache.put(nodeId, outTable);
+            operatorCache.tryCacheNode(node, outTable);
             tableGenStack.push(outTable);
           });
     }
@@ -1957,37 +1944,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
           BodoEngineTable outTable = ctx.convertDfToTable(outVar, node);
           tableGenStack.push(outTable);
         });
-  }
-
-  /**
-   * Determine if the given node is cached. We check if a node is cached by checking if its id is
-   * stored in the cache. In case a particular node does not support caching (or only supports
-   * caching in certain cases), we check if all children are cached as well.
-   *
-   * @param node the node that may be cached
-   * @return If the node and all children are cached
-   */
-  private boolean isNodeCached(RelNode node) {
-    // Perform BFS to search all children
-    Stack<RelNode> nodeStack = new Stack<>();
-    nodeStack.add(node);
-    // TODO[BSE-534] : Avoid visiting all the children. This was done as a precaution and
-    // shouldn't be necessary.
-    while (!nodeStack.isEmpty()) {
-      RelNode n = nodeStack.pop();
-      if (!tableCache.containsKey(n.getId())) {
-        return false;
-      }
-      if (n instanceof SnowflakeToPandasConverter) {
-        continue;
-      }
-      nodeStack.addAll(n.getInputs());
-      for (RelNode child : n.getInputs()) {
-        nodeStack.add(child);
-      }
-    }
-
-    return true;
   }
 
   private void singleBatchTimer(PandasRel node, Runnable fn) {
