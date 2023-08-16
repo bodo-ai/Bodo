@@ -28,6 +28,10 @@ ChainedRelMetadataProvider.of(
             BodoRelMdSize(),
             BuiltInMetadata.Size.Handler::class.java,
         ),
+        ReflectiveRelMetadataProvider.reflectiveSource(
+            BodoRelMdDistinctRowCount(),
+            BuiltInMetadata.DistinctRowCount.Handler::class.java,
+        ),
         DefaultRelMetadataProvider.INSTANCE,
     ),
 ) {
