@@ -1,11 +1,12 @@
 package com.bodosql.calcite.ir
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
+import com.bodosql.calcite.application.utils.RelationalOperatorCache
 import java.util.*
 
 /**
  * Module is the top level compilation unit for code generation.
- * @param main The main function for this module.
+ * @param frame The main function frame for this module.
  */
 class Module(private val frame: Frame) {
 
@@ -29,6 +30,11 @@ class Module(private val frame: Frame) {
         private var parentFrames: Stack<Frame> = Stack()
         private var assignedVariables: Set<Variable> = emptySet()
 
+        // relationalOperatorCache handles caching intermediate outputs of Relation Operators (RelNodes)
+        // When possible
+        private val relationalOperatorCache: RelationalOperatorCache =
+            RelationalOperatorCache()
+
         /**
          * Helper function called by add/addall. Checks that no variable is assigned too twice.
          * This is needed due to a bug when inlining BodoSQL code into python. Throws
@@ -49,6 +55,13 @@ class Module(private val frame: Frame) {
                     assignedVariables.plus(targetVar)
                 }
             }
+        }
+
+        /**
+         * getter for relationalOperatorCache
+         */
+        fun getRelationalOperatorCache(): RelationalOperatorCache {
+            return relationalOperatorCache
         }
 
         /**
