@@ -1,6 +1,5 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.bodosql.calcite.catalog.BodoSQLCatalog
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
 import com.bodosql.calcite.table.CatalogTableImpl
 import com.bodosql.calcite.traits.BatchingProperty
@@ -84,10 +83,6 @@ interface SnowflakeRel : RelNode {
             null,
         )
 
-        val baseCatalog: BodoSQLCatalog = this.getCatalogTable().catalog
-        assert(baseCatalog is SnowflakeCatalogImpl) { "Internal error in SnowflakeToPandasConverter.getExpectedRowCountFromQuery: Catalog is not a snowflake catalog" }
-        val baseCatalogAsSFCatalog: SnowflakeCatalogImpl = baseCatalog as SnowflakeCatalogImpl
-
         val metadataSelectQueryString: SqlString = metadataSelectQuery.toSqlString(
             UnaryOperator { c: SqlWriterConfig ->
                 c.withClauseStartsLine(false)
@@ -95,7 +90,7 @@ interface SnowflakeRel : RelNode {
             },
         )
 
-        return baseCatalogAsSFCatalog.trySubmitIntegerMetadataQuery(metadataSelectQueryString)?.toDouble()
+        return this.getCatalogTable().trySubmitIntegerMetadataQuerySnowflake(metadataSelectQueryString)?.toDouble()
     }
 
     fun getCatalogTable(): CatalogTableImpl

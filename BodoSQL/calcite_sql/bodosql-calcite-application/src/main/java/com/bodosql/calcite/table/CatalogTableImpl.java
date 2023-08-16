@@ -2,6 +2,7 @@ package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
+import com.bodosql.calcite.application.utils.Memoizer;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
 import com.bodosql.calcite.ir.Expr;
@@ -10,6 +11,7 @@ import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.google.common.base.Suppliers;
 import java.util.*;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.annotation.Nullable;
 import org.apache.calcite.plan.RelOptTable;
@@ -21,6 +23,7 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.TZAwareSqlType;
+import org.apache.calcite.sql.util.SqlString;
 
 /**
  *
@@ -248,12 +251,41 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
 
   @Override
   public RelNode toRel(RelOptTable.ToRelContext toRelContext, RelOptTable relOptTable) {
-    // TODO(jsternberg): We should refactor the catalog table types to specific adapters.
+    // TODO(jsternberg): We should refactor the catalog table types to specific adapters (see also,
+    // trySubmitIntegerMetadataQuerySnowflake).
     // This catalog is only used for snowflake though so we're going to cheat a little
     // bit before the refactor and directly create it here rather than refactor the entire
     // chain. That should reduce the scope of the code change to make it more easily reviewed
     // and separate the new feature from the refactor.
     return SnowflakeTableScan.create(toRelContext.getCluster(), relOptTable, this);
+  }
+
+  /**
+   * Wrappers around submitRowCountQueryEstimateInternal that handles memoization. See
+   * submitRowCountQueryEstimateInternal for documentation.
+   */
+  public @Nullable Integer trySubmitIntegerMetadataQuerySnowflake(SqlString sql) {
+    return trySubmitIntegerMetadataQuerySnowflakeMemoizedFn.apply(sql);
+  }
+
+  private final Function<SqlString, Integer> trySubmitIntegerMetadataQuerySnowflakeMemoizedFn =
+      Memoizer.memoize(this::trySubmitIntegerMetadataQuerySnowflakeInternal);
+
+  /**
+   * Submits a Submits the specified query to Snowflake for evaluation, with a timeout. See
+   * SnowflakeCatalogImpl#trySubmitIntegerMetadataQuery for the full documentation.
+   *
+   * <p>This should only ever be used for snowflake catalog tables, it will throw an error
+   * otherwise.
+   *
+   * <p>TODO(Keaton): refactor the catalog table types to specific adapters (see also, toRel)
+   *
+   * @return
+   */
+  public @Nullable Integer trySubmitIntegerMetadataQuerySnowflakeInternal(
+      SqlString metadataSelectQueryString) {
+    SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
+    return catalog.trySubmitIntegerMetadataQuery(metadataSelectQueryString);
   }
 
   private class StatisticImpl implements Statistic {
