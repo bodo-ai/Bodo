@@ -659,7 +659,7 @@ def test_invalid_syntax_fn(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
     with pytest.raises(
         BodoError,
-        match=r"[\s | .]*Incorrect syntax near the keyword 'INT' at line 1, column 8[\s | .]*Was expecting one of[\s | .]*",
+        match=r"[\s | .]*No match found for function signature INT\(<NUMERIC>, <NUMERIC>\)[\s | .]*",
     ):
         impl(df)
 
@@ -678,7 +678,7 @@ def test_invalid_syntax_fn_jit(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
     with pytest.raises(
         BodoError,
-        match=r"[\s | .]*Incorrect syntax near the keyword 'INT' at line 1, column 8[\s | .]*Was expecting one of[\s | .]*",
+        match=r"[\s | .]*No match found for function signature INT\(<NUMERIC>, <NUMERIC>\)[\s | .]*",
     ):
         impl(df)
 
