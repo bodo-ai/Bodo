@@ -74,6 +74,28 @@ class Module(private val frame: Frame) {
         }
 
         /**
+         * Adds an assignment that can be safely hoisted from
+         * a loop (is both pure and scalar). This is intended
+         * as a generic API that will hoist a statement out
+         * of the loop for streaming but act as normal for
+         * non-streaming.
+         *
+         * TODO(njriasan): Consider adding type requirements/make this
+         * less manual.
+         *
+         * @param op Operation to add to the active Frame. If
+         * we are streaming this should be hoisted from the loop.
+         */
+        fun addPureScalarAssign(op: Op.Assign) {
+            checkNoVariableShadowing(op)
+            if (isStreamingFrame()) {
+                getCurrentStreamingPipeline().addInitialization(op)
+            } else {
+                activeFrame.add(op)
+            }
+        }
+
+        /**
          * Adds the list of operations to the end of the module.
          * @param ops Operations to add to the module.
          */
@@ -98,31 +120,6 @@ class Module(private val frame: Frame) {
 
         fun append(code: StringBuilder): Builder {
             return append(code.toString())
-        }
-
-        /**
-         * Adds the operation to the end of the main Function.
-         * This is used when we need to create state in the main function body,
-         * either in streaming or case statements.
-         * @param op Operation to add to the main Function's Frame.
-         */
-        fun addToMainFunction(op: Op) {
-            functionFrame.add(op)
-        }
-
-        /**
-         * This simulates appending directly to the main functions. This is used when we
-         * need to create state in the main function body, either in streaming or
-         * case statements.
-         */
-
-        fun appendToMainFunction(code: String): Builder {
-            functionFrame.append(code)
-            return this
-        }
-
-        fun appendToMainFunction(code: StringBuilder): Builder {
-            return appendToMainFunction(code.toString())
         }
 
         /**
@@ -174,7 +171,7 @@ class Module(private val frame: Frame) {
          * an exception.
          */
         fun endCurrentStreamingPipeline(): StreamingPipelineFrame {
-            if (activeFrame is StreamingPipelineFrame) {
+            if (isStreamingFrame()) {
                 return endFrame() as StreamingPipelineFrame
             }
             throw BodoSQLCodegenException("Attempting to end the current streaming pipeline from outside a streaming context.")
@@ -185,10 +182,17 @@ class Module(private val frame: Frame) {
          * Otherwise, this raises an exception.
          */
         fun getCurrentStreamingPipeline(): StreamingPipelineFrame {
-            if (activeFrame is StreamingPipelineFrame) {
+            if (isStreamingFrame()) {
                 return activeFrame as StreamingPipelineFrame
             }
             throw BodoSQLCodegenException("Attempting to fetch the current streaming pipeline from outside a streaming context.")
+        }
+
+        /**
+         * Returns if we are in a streaming frame.
+         */
+        private fun isStreamingFrame(): Boolean {
+            return activeFrame is StreamingPipelineFrame
         }
     }
 }
