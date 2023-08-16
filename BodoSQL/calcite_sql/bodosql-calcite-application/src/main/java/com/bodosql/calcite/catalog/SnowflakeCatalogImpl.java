@@ -850,7 +850,26 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         select.toSqlString(
             (c) -> c.withClauseStartsLine(false).withDialect(BodoSnowflakeSqlDialect.DEFAULT));
 
-    @Nullable Double output = (double) trySubmitIntegerMetadataQuery(sql);
+    @Nullable Integer snowflakeResult = trySubmitIntegerMetadataQuery(sql);
+    @Nullable Double output = snowflakeResult == null ? null : (double) snowflakeResult;
+    return output;
+  }
+
+  /**
+   * Estimate the number of distinct entries of the given column for a given fully qualified table.
+   *
+   * @param tableName qualified table name.
+   * @return estimated distinct count.
+   */
+  public @Nullable Double estimateColumnDistinctCount(List<String> tableName, String columnName) {
+    // This function calls approx_count_distinct on the given column name.
+    SqlSelect select = approxCountDistinctQuery(tableName, columnName);
+    SqlString sql =
+        select.toSqlString(
+            (c) -> c.withClauseStartsLine(false).withDialect(BodoSnowflakeSqlDialect.DEFAULT));
+
+    @Nullable Integer snowflakeResult = trySubmitIntegerMetadataQuery(sql);
+    @Nullable Double output = snowflakeResult == null ? null : (double) snowflakeResult;
     return output;
   }
 
@@ -899,6 +918,28 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   private SqlSelect rowCountQuery(List<String> tableName) {
     SqlNodeList selectList =
         SqlNodeList.of(SqlStdOperatorTable.COUNT.createCall(SqlParserPos.ZERO, SqlIdentifier.STAR));
+    SqlNodeList from = SqlNodeList.of(new SqlIdentifier(tableName, SqlParserPos.ZERO));
+    return new SqlSelect(
+        SqlParserPos.ZERO,
+        SqlNodeList.EMPTY,
+        selectList,
+        from,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  private SqlSelect approxCountDistinctQuery(List<String> tableName, String columnName) {
+    SqlNodeList selectList =
+        SqlNodeList.of(
+            SqlStdOperatorTable.APPROX_COUNT_DISTINCT.createCall(
+                SqlParserPos.ZERO, new SqlIdentifier(columnName, SqlParserPos.ZERO)));
     SqlNodeList from = SqlNodeList.of(new SqlIdentifier(tableName, SqlParserPos.ZERO));
     return new SqlSelect(
         SqlParserPos.ZERO,

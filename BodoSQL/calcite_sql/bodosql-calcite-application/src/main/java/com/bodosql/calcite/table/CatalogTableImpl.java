@@ -1,5 +1,7 @@
 package com.bodosql.calcite.table;
 
+import static java.lang.Double.min;
+
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.application.utils.Memoizer;
@@ -258,6 +260,41 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     // chain. That should reduce the scope of the code change to make it more easily reviewed
     // and separate the new feature from the refactor.
     return SnowflakeTableScan.create(toRelContext.getCluster(), relOptTable, this);
+  }
+
+  private final Function<Integer, Double> columnDistinctCount =
+      Memoizer.memoize(this::estimateColumnDistinctCount);
+
+  /**
+   * Determine the estimated approximate number of distinct values for the column. This value is
+   * memoized.
+   *
+   * @return Estimated distinct count for this table.
+   */
+  public @Nullable Double getColumnDistinctCount(int column) {
+    return columnDistinctCount.apply(column);
+  }
+
+  /**
+   * Estimate the distinct count for a column by submitting an APPROX_COUNT_DISTINCT call to
+   * Snowflake. This value is capped to be no greater than the row count, which Snowflake can
+   * violate.
+   *
+   * @param column The column to check.
+   * @return The approximate distinct count. Returns null if there is a timeout.
+   */
+  private @Nullable Double estimateColumnDistinctCount(int column) {
+    List<String> qualifiedName = List.of(getSchema().getName(), getName());
+    String columnName = getColumnNames().get(column).toUpperCase(Locale.ROOT);
+    SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
+    Double distinctCount = catalog.estimateColumnDistinctCount(qualifiedName, columnName);
+    if (distinctCount == null) {
+      return distinctCount;
+    }
+    // Avoid ever returning more than the row count. This can happen because
+    // Snowflake returns an estimate.
+    double maxCount = statistic.getRowCount();
+    return min(distinctCount, maxCount);
   }
 
   /**

@@ -142,8 +142,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
     }
 
     fun getColumnDistinctCount(rel: SnowflakeTableScan, mq: RelMetadataQuery, column: Int): Double? {
-        // TODO: Implement
-        return null
+        return rel.getCatalogTable().getColumnDistinctCount(column)
     }
 
     companion object {
