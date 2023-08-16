@@ -165,9 +165,6 @@ object BodoPrograms {
             materializations: List<RelOptMaterialization>,
             lattices: List<RelOptLattice>,
         ): RelNode {
-            val metadataProvider = BodoRelMetadataProvider()
-            rel.cluster.invalidateMetadataQuery()
-            rel.cluster.metadataProvider = metadataProvider
             return program.run(planner, rel, requiredOutputTraits, materializations, lattices)
         }
     }

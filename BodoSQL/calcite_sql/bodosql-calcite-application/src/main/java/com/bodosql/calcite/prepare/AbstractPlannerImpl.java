@@ -255,7 +255,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
             this.validatedSqlNode, "validatedSqlNode is null. Need to call #validate() first");
     final RexBuilder rexBuilder = createRexBuilder();
     final RelOptCluster cluster =
-        RelOptCluster.create(requireNonNull(planner, "planner"), rexBuilder);
+        BodoRelOptClusterSetup.create(requireNonNull(planner, "planner"), rexBuilder);
     final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
     final SqlToRelConverter sqlToRelConverter =
         new BodoSqlToRelConverter(
@@ -291,7 +291,8 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
     final SqlValidator validator = createSqlValidator(catalogReader);
 
     final RexBuilder rexBuilder = createRexBuilder();
-    final RelOptCluster cluster = RelOptCluster.create(planner, rexBuilder);
+    final RelOptCluster cluster =
+        BodoRelOptClusterSetup.create(requireNonNull(planner, "planner"), rexBuilder);
     final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
     final SqlToRelConverter sqlToRelConverter =
         new SqlToRelConverter(this, validator, catalogReader, cluster, convertletTable, config);
