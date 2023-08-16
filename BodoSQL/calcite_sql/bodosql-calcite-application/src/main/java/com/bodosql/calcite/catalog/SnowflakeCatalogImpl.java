@@ -864,6 +864,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @return The integer value returned by the sql query
    */
   public @Nullable Integer trySubmitIntegerMetadataQuery(SqlString sql) {
+    String sqlString = sql.getSql();
 
     // TODO(jsternberg): This class mostly doesn't handle connections correctly.
     // This should be inside of a try/resource block, but it will likely cause
@@ -871,7 +872,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     // closing this is likely to result in more confusion.
     try {
       Connection conn = getConnection();
-      try (PreparedStatement stmt = conn.prepareStatement(sql.getSql())) {
+      try (PreparedStatement stmt = conn.prepareStatement(sqlString)) {
         // Value is in seconds
         String defaultTimeout = "30";
         stmt.setQueryTimeout(

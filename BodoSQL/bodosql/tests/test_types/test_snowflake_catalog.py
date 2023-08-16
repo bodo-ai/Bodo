@@ -8,6 +8,7 @@ import datetime
 import io
 import os
 import random
+import time
 
 import bodosql
 import numpy as np
@@ -2058,7 +2059,102 @@ def test_sf_filter_pushdown_rowcount_estimate(
     assert "1 rows" in plan, "Plan should have 1 row in the cost estimate"
 
 
-@pytest.mark.slow
+def test_filter_pushdown_row_count_caching(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """E2E test that checks that we don't ping snowflake more
+    than once when getting the row count for a duplicate filter"""
+    bodo.bodosql_use_streaming_plan = True
+    comm = MPI.COMM_WORLD
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn_str = get_snowflake_connection_string(db, schema)
+
+    if bodo.get_size() > 1:
+        pytest.skip("This test should only run on a single rank")
+    if not bodo.bodosql_use_streaming_plan:
+        pytest.skip(
+            "This filter pushdown cost estimate is only enabled with the streaming plan"
+        )
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    # See test_sf_filter_pushdown_rowcount_estimate for the full
+    # Explanation of the TPCH_SF10_CUSTOMER_WITH_ADDITIONS table
+    # TLDR we should only see 1 row in the cost estimate. For the
+    # Filter1 = "WHERE C_COMMENT = 'I am the inserted dummy row. I am the only row with this comment'"
+    # We expect to see 1 row in the cost estimate.
+    # Filter2 = "WHERE C_NATIONKEY = 3"
+    # We expect to see 59849 rows in the cost estimate.
+
+    sql = """
+    with filter1_table1 as (
+        SELECT * FROM TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY WHERE C_COMMENT = 'I am the inserted dummy row. I am the only row with this comment'
+    ),
+    filter2_table1 as (
+        SELECT * FROM TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY WHERE C_NATIONKEY = 3
+    ),
+    filter1_table2 as (
+        SELECT * FROM TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY WHERE C_COMMENT = 'I am the inserted dummy row. I am the only row with this comment'
+    ),
+    filter2_table2 as (
+        SELECT * FROM TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY WHERE C_NATIONKEY = 3
+    ),
+    filter1_table3 as (
+        SELECT * FROM TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY WHERE C_COMMENT = 'I am the inserted dummy row. I am the only row with this comment'
+    ),
+    filter1_table4 as (
+        SELECT * FROM TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY WHERE C_COMMENT = 'I am the inserted dummy row. I am the only row with this comment'
+    )
+
+    Select *
+    from
+    filter1_table1,
+    filter2_table1,
+    filter1_table2,
+    filter2_table2,
+    filter1_table3,
+    filter1_table4
+    """
+
+    plan = bc.generate_plan(sql, show_cost=True)
+    # Since TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY should only
+    # be called by this function, and should ONLY be called
+    # in the 1 row case on nighlty
+    # we can be fairly certain that the any queries to this table in the recent
+    # query history stem from this test.
+    assert "1 rows" in plan, "Plan should have 1 row in the cost estimate"
+    assert "59.849e3 rows" in plan, "Plan should have 59849 rows in the cost estimate"
+
+    # Empirically, it takes a moment for the query history to update,
+    # so we sleep for a few seconds to ensure that the query history is updated
+    time.sleep(2)
+
+    # This query will get the list of all queries that match the specified pattern
+    # in the past minute
+    metadata_query = """select * from table(information_schema.QUERY_HISTORY_BY_WAREHOUSE(
+                            WAREHOUSE_NAME=>'DEMO_WH',
+                            END_TIME_RANGE_START=>dateadd('minutes',-1,current_timestamp()),
+                            END_TIME_RANGE_END=>current_timestamp()
+                        )
+                    ) WHERE CONTAINS(QUERY_TEXT, 'SELECT COUNT(*) FROM (SELECT * FROM "TEST_DB"."PUBLIC"."TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY" WHERE "C_NATIONKEY" = 3)') OR
+                            CONTAINS(QUERY_TEXT, 'SELECT COUNT(*) FROM (SELECT * FROM "TEST_DB"."PUBLIC"."TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY" WHERE "C_COMMENT" = ')
+                    """
+
+    df = pd.read_sql(metadata_query, conn_str)
+    # We expect two rows, one for each filter
+    assert len(df) == 2, "We should have two rows in the query history"
+    assert (
+        df["query_text"].str.contains("SELECT COUNT(*)", regex=False).all()
+    ), "We should have two queries for the row count"
+    assert (
+        df["query_text"].str.contains('WHERE "C_NATIONKEY" = 3', regex=False).sum() == 1
+    ), "We should have one query for the C_NATIONKEY row estimate"
+    assert (
+        df["query_text"].str.contains('WHERE "C_COMMENT" = ', regex=False).sum() == 1
+    ), "We should have one query for the C_COMMENT row estimate"
+
+
 def test_snowflake_catalog_string_format(test_db_snowflake_catalog):
     """Tests a specific issue with the unparsing of strings for snowflake query submission."""
     bodo.bodosql_use_streaming_plan = True
