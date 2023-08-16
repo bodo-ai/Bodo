@@ -1186,6 +1186,58 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
   }
 
+  /**
+   * Implementation for functions that match or resemble Snowflake General context functions.
+   *
+   * <p>https://docs.snowflake.com/en/sql-reference/functions-context
+   *
+   * <p>These function are typically non-deterministic, so they must be called outside any loop to
+   * give consistent results and should be required to hold the same value on all ranks.
+   *
+   * @param fnOperation The RexCall that is producing a system operation.
+   * @return A variable holding the result. This function always writes its result to an
+   *     intermediate variable because it needs to insert the code into the Builder without being
+   *     caught in the body of a loop for streaming.
+   */
+  private Variable visitGeneralContextFunction(RexCall fnOperation) {
+    String fnName = fnOperation.getOperator().getName().toUpperCase(Locale.ROOT);
+    Expr systemCall;
+    switch (fnName) {
+      case "GETDATE":
+      case "CURRENT_TIMESTAMP":
+      case "NOW":
+      case "LOCALTIMESTAMP":
+      case "SYSTIMESTAMP":
+        assert fnOperation.getType() instanceof TZAwareSqlType;
+        BodoTZInfo tzTimestampInfo = ((TZAwareSqlType) fnOperation.getType()).getTZInfo();
+        systemCall = generateCurrTimestampCode(fnName, tzTimestampInfo);
+        break;
+      case "CURRENT_TIME":
+      case "LOCALTIME":
+        BodoTZInfo tzTimeInfo = BodoTZInfo.getDefaultTZInfo(this.typeSystem);
+        systemCall = generateCurrTimeCode(tzTimeInfo);
+        break;
+      case "SYSDATE":
+      case "UTC_TIMESTAMP":
+        systemCall = generateUTCTimestampCode();
+        break;
+      case "UTC_DATE":
+        systemCall = generateUTCDateCode();
+        break;
+      case "CURRENT_DATE":
+      case "CURDATE":
+        systemCall = generateCurrentDateCode(BodoTZInfo.getDefaultTZInfo(this.typeSystem));
+        break;
+      default:
+        throw new BodoSQLCodegenException(
+            String.format(Locale.ROOT, "Unsupported System function: %s", fnName));
+    }
+    Variable var = builder.getSymbolTable().genGenericTempVar();
+    Assign assign = new Assign(var, systemCall);
+    builder.addPureScalarAssign(assign);
+    return var;
+  }
+
   protected Expr visitGenericFuncOp(RexCall fnOperation, boolean isSingleRow) {
     String fnName = fnOperation.getOperator().toString();
     // Handle functions that do not care about nulls separately
@@ -1523,22 +1575,15 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "NOW":
           case "LOCALTIMESTAMP":
           case "SYSTIMESTAMP":
-            assert operands.size() == 0;
-            assert fnOperation.getType() instanceof TZAwareSqlType;
-            BodoTZInfo tzTimestampInfo = ((TZAwareSqlType) fnOperation.getType()).getTZInfo();
-            return generateCurrTimestampCode(fnName, tzTimestampInfo);
           case "CURRENT_TIME":
           case "LOCALTIME":
-            assert operands.size() == 0;
-            BodoTZInfo tzTimeInfo = BodoTZInfo.getDefaultTZInfo(this.typeSystem);
-            return generateCurrTimeCode(tzTimeInfo);
           case "SYSDATE":
           case "UTC_TIMESTAMP":
-            assert operands.size() == 0;
-            return generateUTCTimestampCode();
           case "UTC_DATE":
+          case "CURRENT_DATE":
+          case "CURDATE":
             assert operands.size() == 0;
-            return generateUTCDateCode();
+            return visitGeneralContextFunction(fnOperation);
           case "MAKEDATE":
             assert operands.size() == 2;
             return generateMakeDateInfo(operands.get(0), operands.get(1));
@@ -1556,10 +1601,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             assert operands.size() == 2 || operands.size() == 3;
             return generateConvertTimezoneCode(
                 operands, BodoTZInfo.getDefaultTZInfo(this.typeSystem));
-          case "CURRENT_DATE":
-          case "CURDATE":
-            assert operands.size() == 0;
-            return generateCurrentDateCode(BodoTZInfo.getDefaultTZInfo(this.typeSystem));
           case "YEARWEEK":
             assert operands.size() == 1;
             return getYearWeekFnInfo(operands.get(0));
