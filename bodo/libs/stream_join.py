@@ -1098,9 +1098,11 @@ def _join_probe_consume_batch(
     kept_probe_cols,
     total_rows,
     is_last,
+    produce_output,
 ):
     def codegen(context, builder, sig, args):
         out_is_last = cgutils.alloca_once(builder, lir.IntType(1))
+        request_input = cgutils.alloca_once(builder, lir.IntType(1))
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
@@ -1111,6 +1113,8 @@ def _join_probe_consume_batch(
                 lir.IntType(64).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),  # total_rows
+                lir.IntType(1),
+                lir.IntType(1).as_pointer(),
                 lir.IntType(1),
                 lir.IntType(1).as_pointer(),
             ],
@@ -1134,13 +1138,19 @@ def _join_probe_consume_batch(
             args[4],
             args[5],
             out_is_last,
+            args[6],
+            request_input,
         ]
         table_ret = builder.call(fn_tp, func_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        items = [table_ret, builder.load(out_is_last)]
+        items = [
+            table_ret,
+            builder.load(out_is_last),
+            builder.load(request_input),
+        ]
         return context.make_tuple(builder, sig.return_type, items)
 
-    ret_type = types.Tuple([cpp_table, types.bool_])
+    ret_type = types.Tuple([cpp_table, types.bool_, types.bool_])
     sig = ret_type(
         join_state,
         cpp_table,
@@ -1148,12 +1158,19 @@ def _join_probe_consume_batch(
         kept_probe_cols,
         types.voidptr,
         is_last,
+        produce_output,
     )
     return sig, codegen
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def join_probe_consume_batch(join_state, table, is_last, used_cols=None):
+def join_probe_consume_batch(
+    join_state,
+    table,
+    is_last,
+    produce_output,
+    used_cols=None,
+):
     """Consume a probe table batch in streaming join (probe hash table and produce
     output rows)
 
@@ -1161,12 +1178,14 @@ def join_probe_consume_batch(join_state, table, is_last, used_cols=None):
         join_state (JoinState): C++ JoinState pointer
         table (table_type): probe table batch
         is_last (bool): is last batch
+        produce_output (bool): whether to produce output rows
         used_cols (MetaType(tuple(int))): Indices of used columns in the output table.
             This should only be set by the compiler.
-        parallel (bool): Is this a parallel join. This should only be set by the compiler.
 
     Returns:
         table_type: output table batch
+        bool: global is last batch
+        bool: whether preceding operators should produce output rows (this is only a hint, not a requirement)
     """
     in_col_inds = MetaType(join_state.probe_indices)
     n_table_cols = join_state.num_probe_input_arrs
@@ -1182,26 +1201,33 @@ def join_probe_consume_batch(join_state, table, is_last, used_cols=None):
         out_cols_arr,
     ) = join_state.get_output_live_col_arrs(used_cols)
 
-    def impl(join_state, table, is_last, used_cols=None):  # pragma: no cover
+    def impl(
+        join_state, table, is_last, produce_output, used_cols=None
+    ):  # pragma: no cover
         cast_table = bodo.utils.table_utils.table_astype(
             table, cast_table_type, False, False
         )
         cpp_table = py_data_to_cpp_table(cast_table, (), in_col_inds, n_table_cols)
         # Store the total rows in the output table in case all columns are dead.
         total_rows_np = np.array([0], dtype=np.int64)
-        out_cpp_table, out_is_last = _join_probe_consume_batch(
+        (
+            out_cpp_table,
+            out_is_last,
+            request_input,
+        ) = _join_probe_consume_batch(
             join_state,
             cpp_table,
             kept_build_cols,
             kept_probe_cols,
             total_rows_np.ctypes,
             is_last,
+            produce_output,
         )
         out_table = cpp_table_to_py_table(
             out_cpp_table, out_cols_arr, out_table_type, total_rows_np[0]
         )
         delete_table(out_cpp_table)
-        return out_table, out_is_last
+        return out_table, out_is_last, request_input
 
     return impl
 

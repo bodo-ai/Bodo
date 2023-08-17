@@ -239,7 +239,7 @@ def impl(conn_str):  # Codegen change: add conn_str
         (
             T9,
             __bodo_is_last_streaming_output_1,
-        ) = bodo.io.arrow_reader.read_arrow_next(__bodo_streaming_reader_1)
+        ) = bodo.io.arrow_reader.read_arrow_next(__bodo_streaming_reader_1, True)
         _temp10 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T9), 1, None)
         df11 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T9,), _temp10, global_1)
         _temp12 = time.time()
@@ -306,12 +306,15 @@ def impl(conn_str):  # Codegen change: add conn_str
     # Codegen change: timer for probe step
     probe_time = 0.0
     __bodo_streaming_batches_list_1 = []
+    input_request1 = True
     while not (_temp46):
         _temp30 = time.time()
         (
             T33,
             __bodo_is_last_streaming_output_2,
-        ) = bodo.io.arrow_reader.read_arrow_next(__bodo_streaming_reader_2)
+        ) = bodo.io.arrow_reader.read_arrow_next(
+            __bodo_streaming_reader_2, input_request1
+        )
         _temp34 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T33), 1, None)
         df35 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T33,), _temp34, global_7)
         _temp36 = time.time()
@@ -352,11 +355,8 @@ def impl(conn_str):  # Codegen change: add conn_str
         )
         # Codegen change: track probe time
         t_probe = time.time()
-        (
-            T48,
-            _temp46,
-        ) = bodo.libs.stream_join.join_probe_consume_batch(
-            _temp22, T47, __bodo_is_last_streaming_output_2
+        (T48, _temp46, input_request1) = bodo.libs.stream_join.join_probe_consume_batch(
+            _temp22, T47, __bodo_is_last_streaming_output_2, True
         )
         probe_time += time.time() - t_probe
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T48), 1, None)
@@ -482,7 +482,7 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
         (
             T9,
             __bodo_is_last_streaming_output_1,
-        ) = bodo.io.arrow_reader.read_arrow_next(__bodo_streaming_reader_1)
+        ) = bodo.io.arrow_reader.read_arrow_next(__bodo_streaming_reader_1, True)
         _temp10 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T9), 1, None)
         df11 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T9,), _temp10, global_1)
         _temp12 = time.time()
@@ -542,12 +542,15 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
     # Codegen change: timer for probe step
     probe_time = 0.0
     __bodo_streaming_batches_list_1 = []
+    input_request2 = True
     while not (_temp46):
         _temp30 = time.time()
         (
             T33,
             __bodo_is_last_streaming_output_2,
-        ) = bodo.io.arrow_reader.read_arrow_next(__bodo_streaming_reader_2)
+        ) = bodo.io.arrow_reader.read_arrow_next(
+            __bodo_streaming_reader_2, input_request2
+        )
         _temp34 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T33), 1, None)
         df35 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T33,), _temp34, global_7)
         _temp36 = time.time()
@@ -580,11 +583,8 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
             global_8_2,
             5,
         )
-        (
-            T48,
-            _temp46,
-        ) = bodo.libs.stream_join.join_probe_consume_batch(
-            _temp22, T47, __bodo_is_last_streaming_output_2
+        (T48, _temp46, input_request2) = bodo.libs.stream_join.join_probe_consume_batch(
+            _temp22, T47, __bodo_is_last_streaming_output_2, True
         )
         probe_time += time.time() - t_probe
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T48), 1, None)
@@ -723,7 +723,7 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
         (
             T9,
             __bodo_is_last_streaming_output_1,
-        ) = bodo.io.arrow_reader.read_arrow_next(__bodo_streaming_reader_1)
+        ) = bodo.io.arrow_reader.read_arrow_next(__bodo_streaming_reader_1, True)
         _temp10 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T9), 1, None)
         df11 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T9,), _temp10, global_1)
         _temp12 = time.time()
@@ -792,12 +792,15 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
     # Codegen change: timer for probe step
     probe_time = 0.0
     __bodo_streaming_batches_list_1 = []
+    input_request3 = True
     while not (_temp46):
         _temp30 = time.time()
         (
             T33,
             __bodo_is_last_streaming_output_2,
-        ) = bodo.io.arrow_reader.read_arrow_next(__bodo_streaming_reader_2)
+        ) = bodo.io.arrow_reader.read_arrow_next(
+            __bodo_streaming_reader_2, input_request3
+        )
         _temp34 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T33), 1, None)
         df35 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T33,), _temp34, global_7)
         _temp36 = time.time()
@@ -841,8 +844,9 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
         (
             T48,
             _temp46,
+            input_request3,
         ) = bodo.libs.stream_join.join_probe_consume_batch(
-            _temp22, T47, __bodo_is_last_streaming_output_2
+            _temp22, T47, __bodo_is_last_streaming_output_2, True
         )
         probe_time += time.time() - t_probe
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T48), 1, None)

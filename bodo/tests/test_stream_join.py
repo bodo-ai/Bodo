@@ -9,7 +9,7 @@ import pytest
 import bodo
 import bodo.io.snowflake
 import bodo.tests.utils
-from bodo.io.arrow_reader import read_arrow_next
+from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.libs.memory import BufferPool
 from bodo.libs.stream_join import (
     delete_join_state,
@@ -291,7 +291,7 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
             _bodo_chunksize=4000,
         )
         while True:
-            table1, is_last1 = read_arrow_next(reader1)
+            table1, is_last1 = read_arrow_next(reader1, True)
             is_last1 = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
@@ -304,8 +304,10 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
         )
         out_dfs = []
         while True:
-            table2, is_last2 = read_arrow_next(reader2)
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            table2, is_last2 = read_arrow_next(reader2, True)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -316,6 +318,8 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
             if is_last3:
                 break
         delete_join_state(join_state)
+        arrow_reader_del(reader1)
+        arrow_reader_del(reader2)
         return pd.concat(out_dfs)
 
     out_df = test_hash_join(conn_str)
@@ -546,7 +550,9 @@ def test_nested_loop_join(
         out_dfs = []
         while True:
             table2, is_last2 = read_arrow_next(reader2)
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -556,6 +562,8 @@ def test_nested_loop_join(
             out_dfs.append(df)
             if is_last3:
                 break
+        arrow_reader_del(reader1)
+        arrow_reader_del(reader2)
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
@@ -671,7 +679,9 @@ def test_broadcast_nested_loop_join(use_dict_encoding, broadcast, memory_leak_ch
         out_dfs = []
         while True:
             table2, is_last2 = read_arrow_next(reader2)
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -681,6 +691,8 @@ def test_broadcast_nested_loop_join(use_dict_encoding, broadcast, memory_leak_ch
             out_dfs.append(df)
             if is_last3:
                 break
+        arrow_reader_del(reader1)
+        arrow_reader_del(reader2)
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
@@ -787,7 +799,9 @@ def test_hash_join_reorder(memory_leak_check):
         out_dfs = []
         while True:
             table2, is_last2 = read_arrow_next(reader2)
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -798,6 +812,8 @@ def test_hash_join_reorder(memory_leak_check):
             if is_last3:
                 break
         delete_join_state(join_state)
+        arrow_reader_del(reader1)
+        arrow_reader_del(reader2)
         return pd.concat(out_dfs)
 
     out_df = test_hash_join(conn_str)
@@ -912,7 +928,9 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
                 kept_cols,
                 2,
             )
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -1052,7 +1070,9 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
                 kept_cols,
                 2,
             )
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -1182,7 +1202,9 @@ def test_non_equi_join_cond(build_outer, probe_outer, broadcast, memory_leak_che
                 kept_cols,
                 2,
             )
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -1319,7 +1341,9 @@ def test_join_key_prune(memory_leak_check):
                 kept_cols,
                 2,
             )
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -1418,7 +1442,9 @@ def test_key_multicast(memory_leak_check):
                 kept_cols2,
                 2,
             )
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -1548,7 +1574,9 @@ def test_only_one_distributed(
                 kept_cols,
                 2,
             )
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -1698,7 +1726,9 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
                 kept_cols,
                 2,
             )
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -2027,7 +2057,9 @@ def test_prune_na(build_outer, memory_leak_check):
                 kept_cols,
                 2,
             )
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -2166,7 +2198,9 @@ def test_outer_join_na_one_dist(build_dist, broadcast, memory_leak_check):
                 kept_cols,
                 2,
             )
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -2326,7 +2360,9 @@ def test_hash_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
                 kept_cols,
                 2,
             )
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -2471,7 +2507,9 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
                 kept_cols,
                 2,
             )
-            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -2495,3 +2533,214 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
             sort_output=True,
             check_dtype=False,
         )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("df_size", [10, 1000], ids=["small", "large"])
+def test_request_input(df_size, memory_leak_check):
+    """
+    Test that the request_input return value is true
+    if the outputbuffer is smaller than two batches and false otherwise
+    """
+    df1 = pd.DataFrame(
+        {
+            "A": np.arange(df_size),
+            "B": np.arange(df_size),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": np.arange(df_size),
+            "D": np.arange(df_size),
+        }
+    )
+    build_keys_inds = bodo.utils.typing.MetaType(())
+    probe_keys_inds = bodo.utils.typing.MetaType(())
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+
+    @bodo.jit
+    def test_request_input(df1, df2):
+        join_state = init_join_state(
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            True,
+            True,
+        )
+        _temp1 = 0
+        is_last1 = False
+        while not is_last1:
+            batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
+            is_last1 = (_temp1 * 4000) >= len(df1)
+            _temp1 += 1
+            table1 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
+                (),
+                kept_cols,
+                2,
+            )
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
+
+        _temp2 = 0
+        is_last2 = False
+        is_last3 = False
+        out_tables = []
+        request_input = True
+        always_requested_input = True
+        while not is_last3:
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + int(request_input)) * 4000)]
+            _temp2 += int(request_input)
+
+            table2 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
+                (),
+                kept_cols,
+                2,
+            )
+            out_table, is_last3, request_input = join_probe_consume_batch(
+                join_state, table2, is_last2, True
+            )
+            out_tables.append(out_table)
+            always_requested_input &= request_input
+        out_table = bodo.utils.table_utils.concat_tables(out_tables)
+        delete_join_state(join_state)
+
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        return always_requested_input, bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+
+    always_requested_input, _ = test_request_input(df1, df2)
+    if 2 * (df_size**2) > bodo.bodosql_streaming_batch_size:
+        assert not always_requested_input
+    else:
+        assert always_requested_input
+
+
+@pytest.mark.slow
+def test_produce_output(memory_leak_check):
+    """
+    Test that output len is 0 if the produce_output flag is False
+    """
+    df1 = pd.DataFrame(
+        {
+            "A": np.arange(1000),
+            "B": np.arange(1000),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": np.arange(1000),
+            "D": np.arange(1000),
+        }
+    )
+    build_keys_inds = bodo.utils.typing.MetaType(())
+    probe_keys_inds = bodo.utils.typing.MetaType(())
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+
+    @bodo.jit
+    def test_request_input(df1, df2):
+        join_state = init_join_state(
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            True,
+            True,
+        )
+        _temp1 = 0
+        is_last1 = False
+        while not is_last1:
+            batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
+            is_last1 = (_temp1 * 4000) >= len(df1)
+            _temp1 += 1
+            table1 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
+                (),
+                kept_cols,
+                2,
+            )
+            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
+
+        _temp2 = 0
+        is_last2 = False
+        is_last3 = False
+        out_tables = []
+        output_when_not_request_input = False
+        while not is_last3:
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
+            _temp2 += 1
+
+            table2 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
+                (),
+                kept_cols,
+                2,
+            )
+            produce_output = _temp2 != 1
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, table2, is_last2, produce_output
+            )
+            if 1 == _temp2 and len(out_table) != 0:
+                output_when_not_request_input = True
+            out_tables.append(out_table)
+        out_table = bodo.utils.table_utils.concat_tables(out_tables)
+        delete_join_state(join_state)
+
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        return (
+            bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            ),
+            output_when_not_request_input,
+        )
+
+    # Ensure that the output is empty if produce_output is False
+    assert not (test_request_input(df1, df2)[1])

@@ -526,11 +526,16 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
  * @brief return output of groupby computation
  *
  * @param groupby_state groupby state pointer
+ * @param produce_output flag to indicate if output should be produced
  * @return std::tuple<std::shared_ptr<table_info>, bool> output data batch and
  * flag for last batch
  */
 std::tuple<std::shared_ptr<table_info>, bool> groupby_produce_output_batch(
-    GroupbyState* groupby_state) {
+    GroupbyState* groupby_state, bool produce_output) {
+    if (!produce_output) {
+        return std::tuple(groupby_state->output_buffer->dummy_output_chunk,
+                          false);
+    }
     // TODO[BSE-645]: Prune unused columns at this point.
     // Note: We always finalize the active chunk the build step so we don't
     // need to finalize here.
@@ -573,14 +578,17 @@ bool groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
  *
  * @param groupby_state groupby state pointer
  * @param[out] out_is_last is last batch
+ * @param produce_output whether to produce output
  * @return table_info* output table batch
  */
 table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
-                                                  bool* out_is_last) {
+                                                  bool* out_is_last,
+                                                  bool produce_output) {
     try {
         bool is_last;
         std::shared_ptr<table_info> out;
-        std::tie(out, is_last) = groupby_produce_output_batch(groupby_state);
+        std::tie(out, is_last) =
+            groupby_produce_output_batch(groupby_state, produce_output);
         *out_is_last = is_last;
         return new table_info(*out);
     } catch (const std::exception& e) {

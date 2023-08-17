@@ -2839,7 +2839,7 @@ def test_batched_read_agg(datapath, memory_leak_check):
         reader = pd.read_parquet(path, _bodo_use_index=False, _bodo_chunksize=4096)  # type: ignore
 
         while not is_last_global:
-            T1, is_last = read_arrow_next(reader)
+            T1, is_last = read_arrow_next(reader, True)
             T2 = T1[pd.Series(bodo.hiframes.table.get_table_data(T1, 0)) > 10]
             # Perform more compute in between to see caching speedup
             local_max = pd.Series(bodo.hiframes.table.get_table_data(T2, 1)).max()
@@ -2871,10 +2871,9 @@ def test_batched_read_only_len(datapath, memory_leak_check):
     def impl(path):
         total_len = 0
         is_last_global = False
-
         reader = pd.read_parquet(path, _bodo_use_index=False, _bodo_chunksize=4096)  # type: ignore
         while not is_last_global:
-            T1, is_last = read_arrow_next(reader)
+            T1, is_last = read_arrow_next(reader, True)
             total_len += len(T1)
 
             is_last_global = bodo.libs.distributed_api.dist_reduce(

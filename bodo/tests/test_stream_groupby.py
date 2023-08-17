@@ -53,7 +53,7 @@ def test_groupby_basic(func_name, memory_leak_check):
         out_dfs = []
         is_last2 = False
         while not is_last2:
-            out_table, is_last2 = groupby_produce_output_batch(groupby_state)
+            out_table, is_last2 = groupby_produce_output_batch(groupby_state, True)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -122,7 +122,7 @@ def test_groupby_drop_duplicates(memory_leak_check):
         out_dfs = []
         is_last2 = False
         while not is_last2:
-            out_table, is_last2 = groupby_produce_output_batch(groupby_state)
+            out_table, is_last2 = groupby_produce_output_batch(groupby_state, True)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -188,7 +188,7 @@ def test_groupby_key_reorder(memory_leak_check):
         out_dfs = []
         is_last2 = False
         while not is_last2:
-            out_table, is_last2 = groupby_produce_output_batch(groupby_state)
+            out_table, is_last2 = groupby_produce_output_batch(groupby_state, True)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -254,7 +254,7 @@ def test_groupby_dict_str(func_name, memory_leak_check):
         out_dfs = []
         is_last2 = False
         while not is_last2:
-            out_table, is_last2 = groupby_produce_output_batch(groupby_state)
+            out_table, is_last2 = groupby_produce_output_batch(groupby_state, True)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -280,3 +280,64 @@ def test_groupby_dict_str(func_name, memory_leak_check):
         sort_output=True,
         reset_index=True,
     )
+
+
+@pytest.mark.slow
+def test_produce_output(memory_leak_check):
+    """
+    Test output len is 0 if produce_output parameter is False
+    """
+    keys_inds = bodo.utils.typing.MetaType((0,))
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    batch_size = 3
+    fnames = bodo.utils.typing.MetaType(("max",))
+    f_in_offsets = bodo.utils.typing.MetaType((0, 1))
+    f_in_cols = bodo.utils.typing.MetaType((1,))
+
+    @bodo.jit
+    def test_groupby(df):
+        groupby_state = init_groupby_state(keys_inds, fnames, f_in_offsets, f_in_cols)
+        _temp1 = 0
+        is_last1 = False
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df), (), kept_cols, 2
+        )
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_temp1 * batch_size), ((_temp1 + 1) * batch_size))
+            )
+            is_last1 = (_temp1 * batch_size) >= len(df)
+            _temp1 = _temp1 + 1
+            is_last1 = groupby_build_consume_batch(groupby_state, T2, is_last1)
+
+        out_dfs = []
+        is_last2 = False
+        _temp2 = 0
+        output_when_not_request_input = False
+        while not is_last2:
+            out_table, is_last2 = groupby_produce_output_batch(
+                groupby_state, _temp2 != 0
+            )
+            if _temp2 == 0 and len(out_table) != 0:
+                output_when_not_request_input = True
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df_final = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            )
+
+            out_dfs.append(df_final)
+            _temp2 = _temp2 + 1
+
+        delete_groupby_state(groupby_state)
+        return pd.concat(out_dfs), output_when_not_request_input
+
+    # Ensure that the output is empty if produce_output is False
+    assert not test_groupby(pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}))[1]
