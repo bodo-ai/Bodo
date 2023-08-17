@@ -204,7 +204,7 @@ def test_streaming_write(
 
             while not all_is_last:
                 t_read_next = time.time()
-                table, is_last = read_arrow_next(reader0)
+                table, is_last = read_arrow_next(reader0, True)
                 t_read_next = time.time() - t_read_next
                 if verbose and t_read_next >= 5e-4:
                     print(

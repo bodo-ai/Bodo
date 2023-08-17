@@ -536,7 +536,7 @@ def test_nested_loop_join(
             _bodo_chunksize=4000,
         )
         while True:
-            table1, is_last1 = read_arrow_next(reader1)
+            table1, is_last1 = read_arrow_next(reader1, True)
             is_last1 = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
@@ -549,7 +549,7 @@ def test_nested_loop_join(
         )
         out_dfs = []
         while True:
-            table2, is_last2 = read_arrow_next(reader2)
+            table2, is_last2 = read_arrow_next(reader2, True)
             out_table, is_last3, _ = join_probe_consume_batch(
                 join_state, table2, is_last2, True
             )
@@ -665,7 +665,7 @@ def test_broadcast_nested_loop_join(use_dict_encoding, broadcast, memory_leak_ch
             _bodo_chunksize=4000,
         )
         while True:
-            table1, is_last1 = read_arrow_next(reader1)
+            table1, is_last1 = read_arrow_next(reader1, True)
             is_last1 = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
@@ -678,7 +678,7 @@ def test_broadcast_nested_loop_join(use_dict_encoding, broadcast, memory_leak_ch
         )
         out_dfs = []
         while True:
-            table2, is_last2 = read_arrow_next(reader2)
+            table2, is_last2 = read_arrow_next(reader2, True)
             out_table, is_last3, _ = join_probe_consume_batch(
                 join_state, table2, is_last2, True
             )
@@ -785,7 +785,7 @@ def test_hash_join_reorder(memory_leak_check):
             _bodo_chunksize=4000,
         )
         while True:
-            table1, is_last1 = read_arrow_next(reader1)
+            table1, is_last1 = read_arrow_next(reader1, True)
             is_last1 = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
@@ -798,7 +798,7 @@ def test_hash_join_reorder(memory_leak_check):
         )
         out_dfs = []
         while True:
-            table2, is_last2 = read_arrow_next(reader2)
+            table2, is_last2 = read_arrow_next(reader2, True)
             out_table, is_last3, _ = join_probe_consume_batch(
                 join_state, table2, is_last2, True
             )
