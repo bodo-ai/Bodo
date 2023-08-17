@@ -13,11 +13,18 @@ jobs:
   pool: ScalingVMSet
 
   steps:
+  - script: |
+      set -eo pipefail
+      sudo apt-get update
+      sudo apt-get install maven -y
+    displayName: 'Install Maven'
+    # [BSE-837] This step known to fail. Temp solution
+    # See https://learn.microsoft.com/en-us/azure/devops/pipelines/yaml-schema/steps-task?view=azure-pipelines
+    retryCountOnTaskFailure: 5
 
   - script: |
       set -eo pipefail
       cd $(System.DefaultWorkingDirectory)/BodoSQL/calcite_sql/
-      sudo apt-get install maven -y
       sudo mvn -B -U test
     displayName: 'Run maven tests for BodoSQL'
 
