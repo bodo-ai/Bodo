@@ -363,6 +363,10 @@ no_side_effect_call_tuples = {
     # TODO(njriasan): Move all "pure" datetime_date_ext functions
     # to the same file so can have file level DCE.
     ("now_date", "datetime_date_ext", "hiframes", bodo),
+    ("now_date_wrapper", "datetime_date_ext", "hiframes", bodo),
+    ("now_date_wrapper_consistent", "datetime_date_ext", "hiframes", bodo),
+    ("today_rank_consistent", "datetime_date_ext", "hiframes", bodo),
+    ("now_impl_consistent", "pd_timestamp_ext", "hiframes", bodo),
 }
 
 

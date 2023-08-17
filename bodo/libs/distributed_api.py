@@ -2689,7 +2689,7 @@ def bcast_scalar(val, root=MPI_ROOT):
     # Optional type
 
     if not (
-        isinstance(val, (types.Integer, types.Float))
+        isinstance(val, (types.Integer, types.Float, bodo.PandasTimestampType))
         or val
         in [
             bodo.datetime64ns,
@@ -2697,6 +2697,7 @@ def bcast_scalar(val, root=MPI_ROOT):
             bodo.string_type,
             types.none,
             types.bool_,
+            bodo.datetime_date_type,
         ]
     ):
         raise BodoError(
@@ -2705,6 +2706,48 @@ def bcast_scalar(val, root=MPI_ROOT):
 
     if val == types.none:
         return lambda val, root=MPI_ROOT: None
+
+    if val == bodo.datetime_date_type:
+        c_type = numba_to_c_type(types.int32)
+
+        # Note: There are issues calling this function with recursion.
+        # As a result we just implement it directly.
+        def impl(val, root=MPI_ROOT):  # pragma: no cover
+            send = np.empty(1, np.int32)
+            send[0] = bodo.hiframes.datetime_date_ext.cast_datetime_date_to_int(val)
+            c_bcast(
+                send.ctypes,
+                np.int32(1),
+                np.int32(c_type),
+                np.array([-1]).ctypes,
+                0,
+                np.int32(root),
+            )
+            return bodo.hiframes.datetime_date_ext.cast_int_to_datetime_date(send[0])
+
+        return impl
+
+    if isinstance(val, bodo.PandasTimestampType):
+        c_type = numba_to_c_type(types.int64)
+        tz = val.tz
+
+        # Note: There are issues calling this function with recursion.
+        # As a result we just implement it directly.
+        def impl(val, root=MPI_ROOT):  # pragma: no cover
+            send = np.empty(1, np.int64)
+            send[0] = val.value
+            c_bcast(
+                send.ctypes,
+                np.int32(1),
+                np.int32(c_type),
+                np.array([-1]).ctypes,
+                0,
+                np.int32(root),
+            )
+            # Use convert_val_to_timestamp to other modifying the value
+            return pd.Timestamp(send[0], tz=tz)
+
+        return impl
 
     if val == bodo.string_type:
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
