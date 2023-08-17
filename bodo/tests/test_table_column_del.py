@@ -2779,7 +2779,7 @@ def test_streaming_read_sql(memory_leak_check):
 
     def impl(conn):
         reader = pd.read_sql("SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70", conn, _bodo_chunksize=4000)  # type: ignore
-        table, is_last = bodo.io.arrow_reader.read_arrow_next(reader)
+        table, is_last = bodo.io.arrow_reader.read_arrow_next(reader, True)
         index_var = bodo.hiframes.pd_index_ext.init_range_index(0, len(table), 1, None)
         df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
             (table,), index_var, col_meta

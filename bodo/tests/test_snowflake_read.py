@@ -1887,7 +1887,7 @@ def test_streaming_read_filter(memory_leak_check):
         reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000, _bodo_read_as_table=True)  # type: ignore
         is_last_global = False
         while not is_last_global:
-            T1, is_last = read_arrow_next(reader)
+            T1, is_last = read_arrow_next(reader, True)
             T2 = T1[
                 bodo.libs.bodosql_array_kernels.equal(
                     bodo.hiframes.table.get_table_data(T1, 14), "AIR"
@@ -1926,7 +1926,7 @@ def test_streaming_read_agg(memory_leak_check):
         reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000, _bodo_read_as_table=True)  # type: ignore
         is_last_global = False
         while not is_last_global:
-            table, is_last = read_arrow_next(reader)
+            table, is_last = read_arrow_next(reader, True)
             filtered_table = table[(bodo.hiframes.table.get_table_data(table, 0) > 10)]
             # Perform more compute in between to see caching speedup
             local_max = pd.Series(
@@ -1963,7 +1963,7 @@ def test_batched_read_only_len(memory_leak_check):
 
         reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000)  # type: ignore
         while True:
-            table, is_last = read_arrow_next(reader)
+            table, is_last = read_arrow_next(reader, True)
             total_len += len(table)
 
             is_last_global = bodo.libs.distributed_api.dist_reduce(
@@ -1997,7 +1997,7 @@ def test_batched_read_limit_pushdown_query(memory_leak_check):
 
         reader = pd.read_sql("SELECT * FROM LINEITEM ORDER BY L_PARTKEY LIMIT 100", conn, _bodo_chunksize=4000)  # type: ignore
         while True:
-            table, is_last = read_arrow_next(reader)
+            table, is_last = read_arrow_next(reader, True)
             total_sum += pd.Series(bodo.hiframes.table.get_table_data(table, 1)).sum()
 
             is_last_global = bodo.libs.distributed_api.dist_reduce(
@@ -2156,7 +2156,7 @@ def test_batched_read_dict_encoding(memory_leak_check):
 
         reader = pd.read_sql("SELECT l_shipmode FROM LINEITEM", conn, _bodo_chunksize=4000)  # type: ignore
         while not is_last_global:
-            table, is_last = read_arrow_next(reader)
+            table, is_last = read_arrow_next(reader, True)
             total_length += (
                 pd.Series(bodo.hiframes.table.get_table_data(table, 0)).str.len().sum()
             )
