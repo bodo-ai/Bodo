@@ -527,16 +527,16 @@ def snowflake_writer_append_table(
             is_last
             or writer["curr_mem_size"] >= bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE
         ):
-            ev_sf_write_concat = tracing.Event(f"sf_write_concat", is_parallel=False)
-            # Note: Using `concat` here means that our write batches are at least
-            # as large as our read batches. It may be advantageous in the future to
-            # split up large incoming batches into multiple Parquet files to write
-            out_table = bodo.libs.table_builder.table_builder_finalize(
+            # Note: Our write batches are at least as large as our read batches. It may
+            # be advantageous in the future to split up large incoming batches into
+            # multiple Parquet files to write.
+
+            # NOTE: table_builder_reset() below affects the table builder state so
+            # out_table should be used immediately and not be stored.
+            out_table = bodo.libs.table_builder.table_builder_get_data(
                 writer["batches"]
             )
             out_table_len = len(out_table)
-            ev_sf_write_concat.add_attribute("out_table_len", out_table_len)
-            ev_sf_write_concat.finalize()
             if out_table_len > 0:
                 ev_upload_table = tracing.Event("upload_table", is_parallel=False)
                 # Note: writer['stage_path'] already has trailing slash
@@ -606,9 +606,7 @@ def snowflake_writer_append_table(
                             )
                 writer["file_count_local"] += 1
                 ev_upload_table.finalize()
-            writer["batches"] = bodo.libs.table_builder.init_table_builder_state(
-                table_builder_state_type
-            )
+            bodo.libs.table_builder.table_builder_reset(writer["batches"])
             writer["curr_mem_size"] = 0
         # Count number of newly written files. This is also an implicit barrier
         # To reduce synchronization, we do this infrequently
