@@ -2599,3 +2599,51 @@ def test_now_date_wrapper(memory_leak_check):
     check_func(
         impl, (tz_str,), py_output=datetime.datetime.now(pytz.timezone(tz_str)).date()
     )
+
+
+def test_today_rank_consistent(memory_leak_check):
+    """Test today_rank_consistent by ensuring all ranks return
+    the same data.
+    """
+
+    @bodo.jit
+    def impl():
+        return bodo.hiframes.datetime_date_ext.today_rank_consistent()
+
+    res = impl()
+    results = bodo.allgatherv(np.array([res]))
+    assert all(
+        [r == results[0] for r in results]
+    ), "Results are not consistent across ranks"
+
+
+def test_now_date_wrapper_rank_consistent(memory_leak_check):
+    """Test now_date_wrapper_consistent by ensuring all ranks return
+    the same data.
+    """
+
+    @bodo.jit
+    def impl():
+        return bodo.hiframes.datetime_date_ext.now_date_wrapper_consistent("US/Pacific")
+
+    res = impl()
+    results = bodo.allgatherv(np.array([res]))
+    assert all(
+        [r == results[0] for r in results]
+    ), "Results are not consistent across ranks"
+
+
+def test_now_impl_consistent(memory_leak_check):
+    """Test now_impl_consistent by ensuring all ranks return
+    the same data.
+    """
+
+    @bodo.jit
+    def impl():
+        return bodo.hiframes.pd_timestamp_ext.now_impl_consistent("US/Eastern")
+
+    res = impl()
+    results = bodo.allgatherv(np.array([res]))
+    assert all(
+        [r == results[0] for r in results]
+    ), "Results are not consistent across ranks"

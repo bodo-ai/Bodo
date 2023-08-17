@@ -1401,7 +1401,7 @@ def compute_val_for_timestamp(
 @numba.generated_jit(nopython=True)
 def convert_val_to_timestamp(ts_input, tz=None, is_convert=True):
     """
-    Converts value given in seconds to timestamp with appropriate timezone.
+    Converts value given in nanoseconds to timestamp with appropriate timezone.
     If is_convert, ts_input's value is taken to be in UTC and is stored directly.
     Otherwise a new value in the appropriate tz is calculated (e.g. tz_localize).
     """
@@ -2882,6 +2882,19 @@ def now_impl_overload(tz=None):
         return d
 
     return impl
+
+
+@register_jitable
+def now_impl_consistent(tz_value_or_none=None):  # pragma: no cover
+    """Wrapper around now_impl that ensure the result
+    is consistent on all ranks.
+    """
+    if bodo.get_rank() == 0:
+        ts = now_impl(tz_value_or_none)
+    else:
+        # Give a dummy date for type stability
+        ts = pd.Timestamp(0, tz=tz_value_or_none)
+    return bodo.libs.distributed_api.bcast_scalar(ts)
 
 
 # -- builtin operators for dt64 ----------------------------------------------

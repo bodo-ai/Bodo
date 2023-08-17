@@ -1192,14 +1192,17 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    * <p>https://docs.snowflake.com/en/sql-reference/functions-context
    *
    * <p>These function are typically non-deterministic, so they must be called outside any loop to
-   * give consistent results and should be required to hold the same value on all ranks.
+   * give consistent results and should be required to hold the same value on all ranks. If called
+   * inside a Case statement then we won't make the results consistent.
    *
    * @param fnOperation The RexCall that is producing a system operation.
+   * @param makeConsistent Should the function be made consistent. This influences the generated
+   *     function call.
    * @return A variable holding the result. This function always writes its result to an
    *     intermediate variable because it needs to insert the code into the Builder without being
    *     caught in the body of a loop for streaming.
    */
-  private Variable visitGeneralContextFunction(RexCall fnOperation) {
+  protected Variable visitGeneralContextFunction(RexCall fnOperation, boolean makeConsistent) {
     String fnName = fnOperation.getOperator().getName().toUpperCase(Locale.ROOT);
     Expr systemCall;
     switch (fnName) {
@@ -1210,23 +1213,24 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "SYSTIMESTAMP":
         assert fnOperation.getType() instanceof TZAwareSqlType;
         BodoTZInfo tzTimestampInfo = ((TZAwareSqlType) fnOperation.getType()).getTZInfo();
-        systemCall = generateCurrTimestampCode(fnName, tzTimestampInfo);
+        systemCall = generateCurrTimestampCode(tzTimestampInfo, makeConsistent);
         break;
       case "CURRENT_TIME":
       case "LOCALTIME":
         BodoTZInfo tzTimeInfo = BodoTZInfo.getDefaultTZInfo(this.typeSystem);
-        systemCall = generateCurrTimeCode(tzTimeInfo);
+        systemCall = generateCurrTimeCode(tzTimeInfo, makeConsistent);
         break;
       case "SYSDATE":
       case "UTC_TIMESTAMP":
-        systemCall = generateUTCTimestampCode();
+        systemCall = generateUTCTimestampCode(makeConsistent);
         break;
       case "UTC_DATE":
-        systemCall = generateUTCDateCode();
+        systemCall = generateUTCDateCode(makeConsistent);
         break;
       case "CURRENT_DATE":
       case "CURDATE":
-        systemCall = generateCurrentDateCode(BodoTZInfo.getDefaultTZInfo(this.typeSystem));
+        systemCall =
+            generateCurrentDateCode(BodoTZInfo.getDefaultTZInfo(this.typeSystem), makeConsistent);
         break;
       default:
         throw new BodoSQLCodegenException(
@@ -1236,6 +1240,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     Assign assign = new Assign(var, systemCall);
     builder.addPureScalarAssign(assign);
     return var;
+  }
+
+  protected Variable visitGeneralContextFunction(RexCall fnOperation) {
+    return visitGeneralContextFunction(fnOperation, true);
   }
 
   protected Expr visitGenericFuncOp(RexCall fnOperation, boolean isSingleRow) {
@@ -1266,7 +1274,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     boolean isTime;
     boolean isDate;
     String unit;
-    String tzStr;
     switch (fnOperation.getOperator().kind) {
       case MOD:
         return getNumericFnCode(fnName, operands);
@@ -1907,6 +1914,13 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     @Override
     protected Expr visitInternalOp(RexCall node) {
       return visitInternalOp(node, true);
+    }
+
+    @Override
+    protected Variable visitGeneralContextFunction(RexCall fnOperation) {
+      // Case statements are not called consistently on all ranks, so we cannot
+      // generate code that tries to make all ranks generate a consistent output.
+      return visitGeneralContextFunction(fnOperation, false);
     }
 
     @Override
