@@ -429,6 +429,9 @@ class Obfuscator(ast.NodeTransformer):
     # The code is numba specific and that is bad.
     # We need a better solution for this problem.
     def visit_withitem(self, node):
+        # Specifies that any variables defined as a result of
+        # "with numba.objmode(var=...)" are not to be obfuscated.
+        # Note: do NOT use bodo.objmode internally, for this reason
         is_numba = False
         if node.context_expr != None:
             if isinstance(node.context_expr, ast.Call):
