@@ -474,7 +474,7 @@ def get_schema_from_metadata(
     is_table_input: bool,
     downcast_decimal_to_double: bool,
 ) -> Tuple[
-    List[pa.Field], List, List[bool], List[int], List[pa.DataType]
+    List[pa.Field], List, List[bool], List[int], List[pa.DataType], Optional[List[str]]
 ]:  # pragma: no cover
     """
     Determine the Arrow schema and Bodo types of the query output

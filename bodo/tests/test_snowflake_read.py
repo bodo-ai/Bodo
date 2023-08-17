@@ -163,7 +163,7 @@ def test_decimal_metadata_handling():
     cursor = snowflake_connect(conn).cursor()
 
     # Test an int, double, maybe decimal, and decimal col for typing
-    pa_fields, _, _, _, _ = bodo.io.snowflake.get_schema_from_metadata(
+    pa_fields, _, _, _, _, _ = bodo.io.snowflake.get_schema_from_metadata(
         cursor,
         "SELECT 10, 10.11, 1.1010101::decimal(30, 8), 12345678901234567890.0987654321",
         True,
