@@ -1674,7 +1674,7 @@ def test_batched_write_agg(
             and_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value)
             iter_val = 0
             while not all_is_last:
-                table, is_last = read_arrow_next(reader0)
+                table, is_last = read_arrow_next(reader0, True)
                 total0 += get_table_data(table, 1).sum()
                 all_is_last = snowflake_writer_append_table(
                     writer, table, col_meta, is_last, iter_val
@@ -1692,7 +1692,7 @@ def test_batched_write_agg(
             all_is_last = False
             and_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value)
             while not all_is_last:
-                table, is_last = read_arrow_next(reader1)
+                table, is_last = read_arrow_next(reader1, True)
                 all_is_last = bodo.libs.distributed_api.dist_reduce(is_last, and_op)
 
                 total1 += get_table_data(table, 1).sum()  # column 1: "l_partkey"
