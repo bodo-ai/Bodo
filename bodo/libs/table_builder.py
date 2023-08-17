@@ -39,6 +39,14 @@ ll.add_symbol(
     table_builder_cpp.table_builder_finalize,
 )
 ll.add_symbol(
+    "table_builder_get_data",
+    table_builder_cpp.table_builder_get_data,
+)
+ll.add_symbol(
+    "table_builder_reset",
+    table_builder_cpp.table_builder_reset,
+)
+ll.add_symbol(
     "delete_table_builder_state",
     table_builder_cpp.delete_table_builder_state,
 )
@@ -269,3 +277,72 @@ def table_builder_finalize(builder_state):
         return out_table
 
     return impl
+
+
+@intrinsic
+def _table_builder_get_data(
+    typingctx,
+    builder_state,
+):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [lir.IntType(8).as_pointer()],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="table_builder_get_data"
+        )
+        table_ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return table_ret
+
+    ret_type = cpp_table_type
+    sig = ret_type(builder_state)
+    return sig, codegen
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def table_builder_get_data(builder_state):
+    """Get builder data as a Python table without finalizing or affecting state"""
+    out_table_type = builder_state.build_table_type
+
+    if out_table_type == types.unknown:
+        out_cols_arr = np.array([], dtype=np.int64)
+    else:
+        num_cols = len(out_table_type.arr_types)
+        out_cols_arr = np.array(range(num_cols), dtype=np.int64)
+
+    def impl(
+        builder_state,
+    ):  # pragma: no cover
+        out_cpp_table = _table_builder_get_data(builder_state)
+        out_table = cpp_table_to_py_table(
+            out_cpp_table, out_cols_arr, out_table_type, 0
+        )
+        delete_table(out_cpp_table)
+        return out_table
+
+    return impl
+
+
+@intrinsic
+def table_builder_reset(
+    typingctx,
+    builder_state,
+):
+    """Reset table builder's buffer (sets array buffer sizes to zero but keeps capacity the same)"""
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [lir.IntType(8).as_pointer()],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="table_builder_reset"
+        )
+        table_ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return table_ret
+
+    sig = types.none(builder_state)
+    return sig, codegen

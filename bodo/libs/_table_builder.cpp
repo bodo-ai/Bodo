@@ -772,6 +772,24 @@ table_info* table_builder_finalize(TableBuilderState* state) {
     return rettable;
 }
 
+/**
+ * @brief Get the internal data table of table builder without affecting state.
+ *
+ * @param state table builder state
+ * @return table_info* builder's data table
+ */
+table_info* table_builder_get_data(TableBuilderState* state) {
+    return new table_info(*state->builder.data_table);
+}
+
+/**
+ * @brief Reset table builder's buffer (sets array buffer sizes to zero but
+ * keeps capacity the same)
+ *
+ * @param state table builder state
+ */
+void table_builder_reset(TableBuilderState* state) { state->builder.Reset(); }
+
 void delete_table_builder_state(TableBuilderState* state) { delete state; }
 
 PyMODINIT_FUNC PyInit_table_builder_cpp(void) {
@@ -786,6 +804,8 @@ PyMODINIT_FUNC PyInit_table_builder_cpp(void) {
     SetAttrStringFromVoidPtr(m, table_builder_state_init_py_entry);
     SetAttrStringFromVoidPtr(m, table_builder_append_py_entry);
     SetAttrStringFromVoidPtr(m, table_builder_finalize);
+    SetAttrStringFromVoidPtr(m, table_builder_get_data);
+    SetAttrStringFromVoidPtr(m, table_builder_reset);
     SetAttrStringFromVoidPtr(m, delete_table_builder_state);
     return m;
 }
