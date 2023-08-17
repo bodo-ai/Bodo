@@ -428,6 +428,19 @@ def today_impl():  # pragma: no cover
 
 
 @register_jitable
+def today_rank_consistent():  # pragma: no cover
+    """Internal wrapper around today_impl that is used to ensure all
+    ranks return the same value.
+    """
+    if bodo.get_rank() == 0:
+        d = today_impl()
+    else:
+        # Give a dummy date for type stability
+        d = datetime.date(2023, 1, 1)
+    return bodo.libs.distributed_api.bcast_scalar(d)
+
+
+@register_jitable
 def fromordinal_impl(n):  # pragma: no cover
     """Internal call to support datetime.date.fromordinal().
     Untyped pass replaces datetime.date.fromordinal() with this call since class methods are
@@ -1276,3 +1289,16 @@ def now_date_wrapper(tz_value_or_none=None):
         return d
 
     return impl
+
+
+@register_jitable
+def now_date_wrapper_consistent(tz_value_or_none=None):  # pragma: no cover
+    """Wrapper around now_date_wrapper that ensure the result
+    is consistent on all ranks.
+    """
+    if bodo.get_rank() == 0:
+        d = now_date_wrapper(tz_value_or_none)
+    else:
+        # Give a dummy date for type stability
+        d = datetime.date(2023, 1, 1)
+    return bodo.libs.distributed_api.bcast_scalar(d)

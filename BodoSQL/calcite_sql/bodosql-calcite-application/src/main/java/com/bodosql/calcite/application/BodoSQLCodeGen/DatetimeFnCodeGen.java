@@ -110,23 +110,38 @@ public class DatetimeFnCodeGen {
   /**
    * Generate code for computing a timestamp for the current time in the default timezone.
    *
-   * @param opName The name of the function. Several functions map to the same operation.
    * @param tzInfo The Timezone information with which to create the Timestamp.
-   * @return
+   * @param makeConsistent Should a function call be generated that ensures the data is consistent
+   *     on all ranks. This is False if used within a case statement.
+   * @return The generated code.
    */
-  public static Expr generateCurrTimestampCode(String opName, BodoTZInfo tzInfo) {
-    return new Expr.Call("pd.Timestamp.now", tzInfo.getZoneExpr());
+  public static Expr generateCurrTimestampCode(BodoTZInfo tzInfo, boolean makeConsistent) {
+    String fnName;
+    if (makeConsistent) {
+      fnName = "bodo.hiframes.pd_timestamp_ext.now_impl_consistent";
+    } else {
+      fnName = "pd.Timestamp.now";
+    }
+    return new Expr.Call(fnName, tzInfo.getZoneExpr());
   }
 
   /**
    * Generate code for computing a time value for the current time in the default timezone.
    *
    * @param tzInfo The Timezone information with which to create the Time.
-   * @return
+   * @param makeConsistent Should a function call be generated that ensures the data is consistent
+   *     on all ranks. This is False if used within a case statement.
+   * @return The generated code.
    */
-  public static Expr generateCurrTimeCode(BodoTZInfo tzInfo) {
+  public static Expr generateCurrTimeCode(BodoTZInfo tzInfo, boolean makeConsistent) {
     Expr tzArg = tzInfo == null ? Expr.None.INSTANCE : tzInfo.getZoneExpr();
-    Expr nowCall = new Expr.Call("pd.Timestamp.now", tzArg);
+    String fnName;
+    if (makeConsistent) {
+      fnName = "bodo.hiframes.pd_timestamp_ext.now_impl_consistent";
+    } else {
+      fnName = "pd.Timestamp.now";
+    }
+    Expr nowCall = new Expr.Call(fnName, tzArg);
     List<Pair<String, Expr>> namedArgs =
         List.of(
             new Pair<>("format_str", Expr.None.INSTANCE),
@@ -134,12 +149,38 @@ public class DatetimeFnCodeGen {
     return new Expr.Call("bodo.libs.bodosql_array_kernels.to_time", List.of(nowCall), namedArgs);
   }
 
-  public static Expr generateUTCTimestampCode() {
-    return new Expr.Call("pd.Timestamp.now", new Expr.StringLiteral("UTC"));
+  /**
+   * Generate the code for the Timestamp in UTC.
+   *
+   * @param makeConsistent Should a function call be generated that ensures the data is consistent
+   *     on all ranks. This is False if used within a case statement.
+   * @return The generated code.
+   */
+  public static Expr generateUTCTimestampCode(boolean makeConsistent) {
+    String fnName;
+    if (makeConsistent) {
+      fnName = "bodo.hiframes.pd_timestamp_ext.now_impl_consistent";
+    } else {
+      fnName = "pd.Timestamp.now";
+    }
+    return new Expr.Call(fnName, new Expr.StringLiteral("UTC"));
   }
 
-  public static Expr generateUTCDateCode() {
-    return new Expr.Call("datetime.date.today");
+  /**
+   * Generate the code for the current date in UTC.
+   *
+   * @param makeConsistent Should a function call be generated that ensures the data is consistent
+   *     on all ranks. This is False if used within a case statement.
+   * @return The generated code.
+   */
+  public static Expr generateUTCDateCode(boolean makeConsistent) {
+    String fnName;
+    if (makeConsistent) {
+      fnName = "bodo.hiframes.datetime_date_ext.today_rank_consistent";
+    } else {
+      fnName = "datetime.date.today";
+    }
+    return new Expr.Call(fnName);
   }
 
   /**
@@ -203,18 +244,19 @@ public class DatetimeFnCodeGen {
    *
    * <p>As a result, if the timezone isn't in UTC we need to pass that information.
    *
+   * @param defaultTZInfo The timezone to use for the date information.
+   * @param makeConsistent Should a function call be generated that ensures the data is consistent
+   *     on all ranks. This is False if used within a case statement.
    * @return The Expr corresponding to the function call
    */
-  public static Expr generateCurrentDateCode(BodoTZInfo defaultTZInfo) {
-    if (defaultTZInfo.equals(BodoTZInfo.UTC)) {
-      // UTC doesn't need timezone info.
-      return new Expr.Call("datetime.date.today");
+  public static Expr generateCurrentDateCode(BodoTZInfo defaultTZInfo, boolean makeConsistent) {
+    String fnName;
+    if (makeConsistent) {
+      fnName = "bodo.hiframes.datetime_date_ext.now_date_wrapper_consistent";
     } else {
-      // Wrap in a BodoSQL function we can't directly
-      // pass Timezone objects
-      return new Expr.Call(
-          "bodo.hiframes.datetime_date_ext.now_date_wrapper", defaultTZInfo.getZoneExpr());
+      fnName = "bodo.hiframes.datetime_date_ext.now_date_wrapper";
     }
+    return new Expr.Call(fnName, defaultTZInfo.getZoneExpr());
   }
 
   /**
