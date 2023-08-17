@@ -3299,7 +3299,7 @@ def test_batched_read_agg(iceberg_database, iceberg_table_conn, memory_leak_chec
         reader = pd.read_sql_table(table_name, conn, db_schema, _bodo_chunksize=4096)  # type: ignore
 
         while not is_last_global:
-            table, is_last = read_arrow_next(reader)
+            table, is_last = read_arrow_next(reader, True)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(table), 1, None
             )
@@ -3355,7 +3355,7 @@ def test_batched_read_only_len(iceberg_database, iceberg_table_conn, memory_leak
 
         reader = pd.read_sql_table(table_name, conn, db_schema, _bodo_chunksize=4096)  # type: ignore
         while not is_last_global:
-            table, is_last = read_arrow_next(reader)
+            table, is_last = read_arrow_next(reader, True)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(table), 1, None
             )

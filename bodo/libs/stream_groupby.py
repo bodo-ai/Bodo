@@ -511,12 +511,13 @@ def groupby_build_consume_batch(groupby_state, table, is_last):
 def _groupby_produce_output_batch(
     typingctx,
     groupby_state,
+    produce_output,
 ):
     def codegen(context, builder, sig, args):
         out_is_last = cgutils.alloca_once(builder, lir.IntType(1))
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer(), lir.IntType(1).as_pointer()],
+            [lir.IntType(8).as_pointer(), lir.IntType(1).as_pointer(), lir.IntType(1)],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="groupby_produce_output_batch_py_entry"
@@ -524,6 +525,7 @@ def _groupby_produce_output_batch(
         func_args = [
             args[0],
             out_is_last,
+            args[1],
         ]
         table_ret = builder.call(fn_tp, func_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -533,19 +535,22 @@ def _groupby_produce_output_batch(
     ret_type = types.Tuple([cpp_table_type, types.bool_])
     sig = ret_type(
         groupby_state,
+        produce_output,
     )
     return sig, codegen
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def groupby_produce_output_batch(groupby_state):
+def groupby_produce_output_batch(groupby_state, produce_output):
     """Produce output batches of groupby operation
 
     Args:
         groupby_state (GroupbyState): C++ GroupbyState pointer
+        produce_output (bool): whether to produce output
 
     Returns:
         table_type: output table batch
+        bool: global is last batch with possiblity of false negatives due to iterations between syncs
     """
     out_table_type = groupby_state.out_table_type
 
@@ -558,8 +563,11 @@ def groupby_produce_output_batch(groupby_state):
 
     def impl(
         groupby_state,
+        produce_output,
     ):  # pragma: no cover
-        out_cpp_table, out_is_last = _groupby_produce_output_batch(groupby_state)
+        out_cpp_table, out_is_last = _groupby_produce_output_batch(
+            groupby_state, produce_output
+        )
         out_table = cpp_table_to_py_table(
             out_cpp_table, out_cols_arr, out_table_type, 0
         )

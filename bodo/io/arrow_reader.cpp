@@ -1292,14 +1292,17 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
  * @param[out] is_last_out Bool to pass to Python if is last batch
  * @param[out] total_rows_out uint64 to pass to Python for the # of rows
  *        in the output batch
+ * @param produce_output Bool to indicate whether to produce output
  * @return table_info* Output Bodo table representing the batch
  */
 table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
-                                       uint64_t* total_rows_out) {
+                                       uint64_t* total_rows_out,
+                                       bool produce_output) {
     bool is_last_out_ = false;
     uint64_t total_rows_out_ = 0;
 
-    table_info* table = reader->read_batch(is_last_out_, total_rows_out_);
+    table_info* table =
+        reader->read_batch(is_last_out_, total_rows_out_, produce_output);
 
     *total_rows_out = total_rows_out_;
     *is_last_out = is_last_out_;

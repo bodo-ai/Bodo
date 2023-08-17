@@ -232,6 +232,24 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
+   * Generate a new output control variable for step by step pandas codegen
+   *
+   * @return variable
+   */
+  public Variable genOutputControlVar() {
+    return generatedCode.getSymbolTable().genOutputControlVar();
+  }
+
+  /**
+   * Generate a new input request variable for step by step pandas codegen
+   *
+   * @return variable
+   */
+  public Variable genInputRequestVar() {
+    return generatedCode.getSymbolTable().genInputRequestVar();
+  }
+
+  /**
    * Generate the new temporary variable for step by step pandas codegen.
    *
    * @return variable
@@ -1483,9 +1501,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     StreamingPipelineFrame outputPipeline = generatedCode.getCurrentStreamingPipeline();
     // Add the output side
     Variable outTable = genTableVar();
+    Variable outputControl = genOutputControlVar();
+    outputPipeline.addOutputControl(outputControl);
     Expr.Call outputCall =
         new Expr.Call(
-            "bodo.libs.stream_groupby.groupby_produce_output_batch", List.of(groupbyStateVar));
+            "bodo.libs.stream_groupby.groupby_produce_output_batch",
+            List.of(groupbyStateVar, outputControl));
     generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), outputCall));
 
     // Append the code to delete the state
@@ -1869,11 +1890,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
     probePipeline.endSection(newFlag);
     // Add the probe side
     Variable outTable = genTableVar();
+    Variable outputControl = genOutputControlVar();
+    Variable inputRequest = genInputRequestVar();
     Expr.Call probeCall =
         new Expr.Call(
             "bodo.libs.stream_join.join_probe_consume_batch",
-            List.of(joinStateVar, probeTable, oldFlag));
-    generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), probeCall));
+            List.of(joinStateVar, probeTable, oldFlag, outputControl));
+    generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag, inputRequest), probeCall));
+    probePipeline.addInputRequest(inputRequest);
+    probePipeline.addOutputControl(outputControl);
+
     timerInfo.insertLoopOperationEndTimer();
     // Append the code to delete the state
     Op.Stmt deleteState =

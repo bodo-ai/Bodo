@@ -219,7 +219,11 @@ void ParquetReader::init_pq_scanner() {
     Py_DECREF(scanner_batches_tup);
 }
 
-table_info* ParquetReader::empty_out_table() {
+table_info* ParquetReader::get_empty_out_table() {
+    if (this->empty_out_table != nullptr) {
+        return this->empty_out_table;
+    }
+
     TableBuilder builder(schema, selected_fields, 0, is_nullable,
                          str_as_dict_colnames,
                          create_dict_encoding_from_strings);
@@ -237,6 +241,7 @@ table_info* ParquetReader::empty_out_table() {
                                   batch_part_cols.begin(),
                                   batch_part_cols.end());
     }
+    this->empty_out_table = out_table;
 
     return out_table;
 }
@@ -248,7 +253,8 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
         // TODO: Consolidate behavior with SnowflakeReader
         // Specifically, what does SnowflakeReader do in zero-col case?
         if (rows_left == 0) {
-            return std::make_tuple(empty_out_table(), true, 0);
+            return std::make_tuple(new table_info(*get_empty_out_table()), true,
+                                   0);
         }
 
         auto batch_res = this->reader->Next();

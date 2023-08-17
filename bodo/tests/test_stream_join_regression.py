@@ -150,7 +150,7 @@ def impl(conn_str):  # Codegen change: add conn_str
         (
             T1,
             __bodo_is_last_streaming_output_1,
-        ) = bodo.io.arrow_reader.read_arrow_next(state_1)
+        ) = bodo.io.arrow_reader.read_arrow_next(state_1, True)
         _temp9 = time.time()
         _temp10 = _temp9 - _temp6
         _temp4 = _temp4 + _temp10
@@ -212,12 +212,13 @@ def impl(conn_str):  # Codegen change: add conn_str
     # Codegen change: timer for probe step
     probe_time = 0.0
     __bodo_streaming_batches_list_1 = []
+    input_request = True
     while not (_temp41):
         _temp27 = time.time()
         (
             T3,
             __bodo_is_last_streaming_output_2,
-        ) = bodo.io.arrow_reader.read_arrow_next(state_4)
+        ) = bodo.io.arrow_reader.read_arrow_next(state_4, input_request)
         _temp30 = time.time()
         _temp31 = _temp30 - _temp27
         _temp25 = _temp25 + _temp31
@@ -229,11 +230,8 @@ def impl(conn_str):  # Codegen change: add conn_str
         _temp3 = time.time()
         # Codegen change: track probe time
         t_probe = time.time()
-        (
-            T5,
-            _temp41,
-        ) = bodo.libs.stream_join.join_probe_consume_batch(
-            state_3, T4, __bodo_is_last_streaming_output_2
+        (T5, _temp41, input_request) = bodo.libs.stream_join.join_probe_consume_batch(
+            state_3, T4, __bodo_is_last_streaming_output_2, True
         )
         probe_time += time.time() - t_probe
         _temp42 = time.time()

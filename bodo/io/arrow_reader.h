@@ -177,11 +177,13 @@ class ArrowReader {
      * @param[out] is_last_out Either this is the last batch or
      *  the last batch has already been returned
      * @param[out] total_rows_out Number of rows in the output batch
+     * @param produce_output If false, will not produce any output
      * @return table_info* Out table returned to Python where it will be deleted
      * after use. If there are no rows remaining to be read in, will return
      * an empty table.
      */
-    table_info* read_batch(bool& is_last, uint64_t& total_rows_out) {
+    table_info* read_batch(bool& is_last, uint64_t& total_rows_out,
+                           bool produce_output) {
         if (!initialized) {
             throw std::runtime_error(
                 "ArrowReader::read_batch(): not initialized");
@@ -200,7 +202,15 @@ class ArrowReader {
             total_rows_out = 0;
             ev.finalize();
 
-            return this->empty_out_table();
+            return new table_info(*this->get_empty_out_table());
+        }
+
+        if (!produce_output) {
+            is_last = rows_left == 0;
+            total_rows_out = 0;
+            ev.finalize();
+
+            return new table_info(*this->get_empty_out_table());
         }
 
         auto [out_table, is_last_, total_rows_out_] = read_inner();
@@ -312,7 +322,7 @@ class ArrowReader {
      *
      * @return table_info* Output table with correct format
      */
-    virtual table_info* empty_out_table() = 0;
+    virtual table_info* get_empty_out_table() = 0;
 
    private:
     // XXX needed to call into Python?

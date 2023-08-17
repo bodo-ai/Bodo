@@ -2177,3 +2177,58 @@ def test_batched_read_dict_encoding(memory_leak_check):
         check_func(impl, (conn,), py_output=25717034)
         check_logger_msg(stream, "Columns ['l_shipmode'] using dictionary encoding")
     print(stream.getvalue())
+
+
+@pytest.mark.slow
+def test_batched_read_produce_output(memory_leak_check):
+    """
+    Test that no output is produced if produce_output=False
+    """
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "l_orderkey",
+            "l_partkey",
+            "l_suppkey",
+            "l_linenumber",
+            "l_quantity",
+            "l_extendedprice",
+            "l_discount",
+            "l_tax",
+            "l_returnflag",
+            "l_linestatus",
+            "l_shipdate",
+            "l_commitdate",
+            "l_receiptdate",
+            "l_shipinstruct",
+            "l_shipmode",
+            "l_comment",
+        )
+    )
+
+    @bodo.jit
+    def impl(conn):
+        reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000)  # type: ignore
+        is_last = False
+        _temp1 = 0
+        out_tables = []
+        output_when_not_request_input = False
+        while not is_last:
+            produce_output = _temp1 != 0
+            table, is_last = read_arrow_next(reader, produce_output)
+            output_when_not_request_input = output_when_not_request_input or (
+                _temp1 == 0 and len(table) != 0
+            )
+            _temp1 += 1
+            is_last = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            out_tables.append(table)
+        arrow_reader_del(reader)
+        return output_when_not_request_input
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    # Ensure that the output is empty if produce_output is False
+    assert not impl(conn)

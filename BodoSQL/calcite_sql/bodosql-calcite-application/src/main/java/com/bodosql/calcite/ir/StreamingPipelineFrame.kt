@@ -15,6 +15,12 @@ class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar
     /** Statements to execute after the loop termination. **/
     private var terminations: MutableList<Op> = mutableListOf()
 
+    /** Variables to control whether operators output data and the index of input request to use for their values **/
+    private var outputControls: MutableList<Pair<Variable, Int>> = mutableListOf()
+
+    /** Variables for operators to request input through outputControls **/
+    private var inputRequests: MutableList<Variable> = mutableListOf()
+
     /** Segment of code that will be updated for each operation. **/
     private var code: CodegenFrame = CodegenFrame()
 
@@ -36,6 +42,8 @@ class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar
         }
         /** Add variable tracking iteration number **/
         code.add(Op.Assign(iterVar, Expr.Binary("+", iterVar, Expr.IntegerLiteral(1))))
+        /** Add operator IO control logic **/
+        code.addAll(this.generateIOFlags())
         /** Generate the condition. **/
         val cond = Expr.Unary("not", exitCond)
         /** Emit the while loop. **/
@@ -86,10 +94,27 @@ class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar
     /**
      * Adds a new Op to be executed after the loop
      * This is intended if we need to "clean up" state.
-     * @param assign Assignment to add.
+     * @param term Operation to add.
      */
     fun addTermination(term: Op) {
         terminations.add(term)
+    }
+
+    /**
+     * Adds a new Variable for controlling whether operators output data
+     * @param control Variable to add
+     */
+    fun addOutputControl(control: Variable) {
+        addInitialization(Op.Assign(control, Expr.True))
+        outputControls.add(Pair(control, inputRequests.size))
+    }
+
+    /**
+     * Adds a new variable for requesting input data
+     * @param request Variable to add
+     */
+    fun addInputRequest(request: Variable) {
+        inputRequests.add(request)
     }
 
     /**
@@ -133,5 +158,31 @@ class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar
      */
     private fun initIterVar() {
         initializations.add(Op.Assign(iterVar, Expr.IntegerLiteral(0)))
+    }
+
+    /**
+     * Generates the code for the IO flags.
+     * @return The code for the IO flags.
+     */
+    private fun generateIOFlags(): List<Op> {
+        if (inputRequests.isEmpty()) {
+            return listOf()
+        }
+
+        val ops = mutableListOf<Op>()
+        for ((outputControl, i) in outputControls) {
+            // If there's no input requests for this output control, skip it.
+            if (i >= inputRequests.size) {
+                continue
+            }
+
+            var base: Expr = inputRequests[i]
+            val inputRequestSlice = inputRequests.subList(i + 1, inputRequests.size)
+            for (inputRequest in inputRequestSlice) {
+                base = Expr.Binary("and", inputRequest, base)
+            }
+            ops.add(Op.Assign(outputControl, base))
+        }
+        return ops
     }
 }

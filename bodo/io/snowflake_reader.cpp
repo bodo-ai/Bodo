@@ -115,7 +115,12 @@ class SnowflakeReader : public ArrowReader {
         init_arrow_reader(str_as_dict_cols, true);
     }
 
-    virtual ~SnowflakeReader() { Py_XDECREF(sf_conn); }
+    virtual ~SnowflakeReader() {
+        Py_XDECREF(sf_conn);
+        if (this->empty_out_table != nullptr) {
+            delete empty_out_table;
+        }
+    }
 
     /// A piece is a snowflake.connector.result_batch.ArrowResultBatch
     virtual size_t get_num_pieces() const {
@@ -183,11 +188,16 @@ class SnowflakeReader : public ArrowReader {
         return ds;
     }
 
-    virtual table_info* empty_out_table() {
-        TableBuilder builder(schema, selected_fields, 0, is_nullable,
-                             str_as_dict_colnames, false);
-        return builder.get_table();
+    virtual table_info* get_empty_out_table() override {
+        if (this->empty_out_table == nullptr) {
+            TableBuilder builder(schema, selected_fields, 0, is_nullable,
+                                 str_as_dict_colnames, false);
+            this->empty_out_table = builder.get_table();
+        }
+        return this->empty_out_table;
     }
+
+    table_info* empty_out_table = nullptr;
 
     /**
      * @brief Convert a ResultBatch piece object the current rank should read
