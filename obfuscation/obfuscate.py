@@ -426,23 +426,17 @@ class Obfuscator(ast.NodeTransformer):
         node.arg = self.mapping_var(True, node.arg)
         return node
 
-    # The code is numba specific and that is bad.
-    # We need a better solution for this problem.
     def visit_withitem(self, node):
-        # Specifies that any variables defined as a result of
-        # "with numba.objmode(var=...)" are not to be obfuscated.
-        # Note: do NOT use bodo.objmode internally, for this reason
-        is_numba = False
+        # The code is needed due to "with objmode()" requiring consistent variable
+        # names in the with statement and in the body. Currently, we avoid doing any
+        # obfuscation for any calls in the with clause
+        # which is overly conservative. We probably need a better solution for
+        # this problem in the long term
         if node.context_expr != None:
             if isinstance(node.context_expr, ast.Call):
-                if isinstance(node.context_expr.func, ast.Attribute):
-                    if isinstance(node.context_expr.func.value, ast.Name):
-                        if node.context_expr.func.value.id == "numba":
-                            is_numba = True
-        if is_numba:
-            for xkey in node.context_expr.keywords:
-                # In numba withitem case, the value itself must be fixed.
-                self.insert_fixed_names(xkey.arg)
+                for xkey in node.context_expr.keywords:
+                    # In withitem case, the value itself must be fixed.
+                    self.insert_fixed_names(xkey.arg)
 
         node = self.generic_visit(node)
         return node
