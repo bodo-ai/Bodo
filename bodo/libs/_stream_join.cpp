@@ -2044,13 +2044,19 @@ bool join_build_consume_batch_py_entry(JoinState* join_state_,
  * @param[out] total_rows Store the number of rows in the output batch in case
  *        all columns are dead.
  * @param is_last is last batch
+ * @param produce_output whether to produce output rows
+ * @param[out] request_input whether to request input rows from preceding
+ * operators
  * @return table_info* output table batch
  */
 table_info* join_probe_consume_batch_py_entry(
     JoinState* join_state_, table_info* in_table, uint64_t* kept_build_col_nums,
     int64_t num_kept_build_cols, uint64_t* kept_probe_col_nums,
     int64_t num_kept_probe_cols, int64_t* total_rows, bool is_last,
-    bool* out_is_last) {
+    bool* out_is_last, bool produce_output, bool* request_input) {
+    // Request input rows from preceding operators by default
+    *request_input = true;
+
     // Step 1: Initialize output buffer
     try {
         std::vector<uint64_t> build_kept_cols(
@@ -2158,15 +2164,31 @@ table_info* join_probe_consume_batch_py_entry(
 #undef CONSUME_PROBE_BATCH
         }
 
-        auto [out_table, chunk_size] =
-            join_state_->output_buffer->PopChunk(/*force_return*/ is_last);
-        *total_rows = chunk_size;
+        // If after emitting the next batch we'll have more than a full batch
+        // left then we don't need to request input. This is to avoid allocating
+        // more memory than necessary and increasing cache coherence
+        if (join_state_->output_buffer->total_remaining >
+            (2 * join_state_->output_buffer->active_chunk_capacity)) {
+            *request_input = false;
+        }
+
+        table_info* out_table;
+        if (!produce_output) {
+            *total_rows = 0;
+            out_table =
+                new table_info(*join_state_->output_buffer->dummy_output_chunk);
+        } else {
+            auto [out_table_shared, chunk_size] =
+                join_state_->output_buffer->PopChunk(/*force_return*/ is_last);
+            *total_rows = chunk_size;
+            out_table = new table_info(*out_table_shared);
+        }
         // This is the last output if we've already seen all input (i.e.
         // is_last) and there's no more output remaining in the output_buffer:
         *out_is_last = stream_sync_is_last(
             is_last && join_state_->output_buffer->total_remaining == 0,
             join_state_->probe_iter - 1, join_state_->sync_iter);
-        return new table_info(*out_table);
+        return out_table;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;

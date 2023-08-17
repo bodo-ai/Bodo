@@ -1031,9 +1031,7 @@ std::tuple<std::shared_ptr<table_info>, int64_t> ChunkedTableBuilder::PopChunk(
         this->total_remaining -= chunk_nrows;
         return std::tuple(chunk, chunk_nrows);
     }
-    return std::tuple(alloc_table_like(this->dummy_output_chunk,
-                                       /*reuse_dictionaries*/ true),
-                      0);
+    return std::tuple(this->dummy_output_chunk, 0);
 }
 
 void ChunkedTableBuilder::Reset() {

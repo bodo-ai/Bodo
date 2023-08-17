@@ -8,7 +8,8 @@
 #include "arrow_reader.h"
 
 table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
-                                       uint64_t* total_rows_out);
+                                       uint64_t* total_rows_out,
+                                       bool produce_output);
 
 void arrow_reader_del_py_entry(ArrowReader* reader);
 

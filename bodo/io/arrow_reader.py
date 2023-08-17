@@ -40,11 +40,14 @@ register_model(ArrowReaderType)(models.OpaqueModel)
 
 
 @intrinsic
-def arrow_reader_read_py_entry(typingctx, arrow_reader_t):  # pragma: no cover
+def arrow_reader_read_py_entry(
+    typingctx, arrow_reader_t, produce_output
+):  # pragma: no cover
     """
     Get the next batch from a C++ ArrowReader object
     """
     assert isinstance(arrow_reader_t, ArrowReaderType)
+    assert isinstance(produce_output, numba.types.Boolean)
     ret_type = types.Tuple([table_type, types.boolean, types.int64])
 
     def codegen(context: "BaseContext", builder: "IRBuilder", signature, args):
@@ -54,6 +57,7 @@ def arrow_reader_read_py_entry(typingctx, arrow_reader_t):  # pragma: no cover
                 lir.IntType(8).as_pointer(),  # void*
                 lir.IntType(1).as_pointer(),  # bool*
                 lir.IntType(64).as_pointer(),  # uint64*
+                lir.IntType(1),  # bool
             ],
         )
 
@@ -64,7 +68,7 @@ def arrow_reader_read_py_entry(typingctx, arrow_reader_t):  # pragma: no cover
         # Allocate values to point to
         is_last_out_ptr = cgutils.alloca_once(builder, lir.IntType(1))
         num_rows_ptr = cgutils.alloca_once(builder, lir.IntType(64))
-        total_args = args + (is_last_out_ptr, num_rows_ptr)
+        total_args = (args[0], is_last_out_ptr, num_rows_ptr, args[1])
         table = builder.call(fn_tp, total_args)
         inlined_check_and_propagate_cpp_exception(context, builder)
 
@@ -77,12 +81,12 @@ def arrow_reader_read_py_entry(typingctx, arrow_reader_t):  # pragma: no cover
         # Return the tuple
         return context.make_tuple(builder, ret_type, items)
 
-    sig = ret_type(arrow_reader_t)
+    sig = ret_type(arrow_reader_t, produce_output)
     return sig, codegen
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def read_arrow_next(arrow_reader, used_cols=None):  # pragma: no cover
+def read_arrow_next(arrow_reader, produce_output, used_cols=None):  # pragma: no cover
     if not isinstance(arrow_reader, ArrowReaderType):
         raise BodoError(
             f"read_arrow_next(): First argument arrow_reader must be an ArrowReader type, not {arrow_reader}"
@@ -104,8 +108,8 @@ def read_arrow_next(arrow_reader, used_cols=None):  # pragma: no cover
 
     func_text = dedent(
         f"""\
-    def func(arrow_reader, used_cols=None):
-        out_table, is_last_out, num_rows = arrow_reader_read_py_entry(arrow_reader)
+    def func(arrow_reader, produce_output, used_cols=None):
+        out_table, is_last_out, num_rows = arrow_reader_read_py_entry(arrow_reader, produce_output)
         table_var = cpp_table_to_py_table(out_table, {table_idx_var}, {py_table_type_var}, num_rows)
         delete_table(out_table)
         table_var = set_table_len(table_var, num_rows)

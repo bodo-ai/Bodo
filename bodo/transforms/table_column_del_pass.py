@@ -1498,7 +1498,7 @@ def remove_dead_columns(
 
                     nodes = compile_func_single_block(
                         eval(
-                            "lambda arrow_reader: bodo.io.arrow_reader.read_arrow_next(arrow_reader, used_cols=used_columns)"
+                            "lambda arrow_reader, produce_output: bodo.io.arrow_reader.read_arrow_next(arrow_reader, produce_output, used_cols=used_columns)"
                         ),
                         rhs.args,
                         stmt.target,
@@ -1542,7 +1542,7 @@ def remove_dead_columns(
 
                     nodes = compile_func_single_block(
                         eval(
-                            "lambda join_state, table, is_last: bodo.libs.stream_join.join_probe_consume_batch(join_state, table, is_last, used_cols=used_columns)"
+                            "lambda join_state, table, is_last, produce_output: bodo.libs.stream_join.join_probe_consume_batch(join_state, table, is_last, produce_output, used_cols=used_columns)"
                         ),
                         rhs.args,
                         stmt.target,

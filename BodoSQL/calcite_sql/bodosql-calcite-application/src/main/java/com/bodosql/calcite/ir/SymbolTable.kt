@@ -25,6 +25,8 @@ class SymbolTable {
     private var globalVarId: Int = 1
     private var idxVarId: Int = 1
     private var iterVarId: Int = 1
+    private var outputControlId: Int = 1
+    private var inputRequestId: Int = 1
     private var stateVarId: Int = 1
     private var funcIdCounter: Int = 1
     private var closureVarId: Int = 1
@@ -55,6 +57,14 @@ class SymbolTable {
 
     fun genIterVar(): Variable {
         return Variable("_iter_${iterVarId++}")
+    }
+
+    fun genOutputControlVar(): Variable {
+        return Variable("_produce_output_${outputControlId++}")
+    }
+
+    fun genInputRequestVar(): Variable {
+        return Variable("_input_request_${inputRequestId++}")
     }
 
     fun genReaderVar(): Variable {
