@@ -9,6 +9,7 @@
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_shuffle.h"
+#include "_table_builder.h"
 #include "gfx/timsort.hpp"
 
 //
@@ -2341,13 +2342,33 @@ array_info* get_replace_regex_dict_state_py_entry(array_info* p_in_arr,
     std::shared_ptr<array_info> new_dict;
     int64_t new_id;
     int64_t old_id = dict_arr->array_id;
+    int64_t old_size = 0;
     if (state->contains(func_id, old_id)) {
-        std::tie(new_dict, new_id) = state->get_array(func_id, old_id);
+        std::tie(new_dict, new_id, old_size) =
+            state->get_array(func_id, old_id);
+        if (static_cast<uint64_t>(old_size) < dict_arr->length) {
+            auto data_to_append = get_replace_regex_slice(
+                dict_arr, pat, replacement, old_size, dict_arr->length);
+
+            std::shared_ptr<array_info> combined_arr =
+                alloc_string_array(Bodo_CTypes::STRING, 0, 0, new_id);
+
+            ArrayBuildBuffer builder(combined_arr);
+            builder.ReserveArray(new_dict);
+            builder.UnsafeAppendBatch<bodo_array_type::STRING,
+                                      Bodo_CTypes::STRING>(new_dict);
+            builder.ReserveArray(data_to_append);
+            builder.UnsafeAppendBatch<bodo_array_type::STRING,
+                                      Bodo_CTypes::STRING>(data_to_append);
+
+            new_dict = builder.data_array;
+        }
     } else {
         new_dict = get_replace_regex_slice(dict_arr, pat, replacement, 0,
                                            dict_arr->length);
         new_id = new_dict->array_id;
-        state->set_array(func_id, old_id, new_dict, new_id);
+        state->set_array(func_id, old_id, std::numeric_limits<size_t>::max(),
+                         new_dict, new_id);
     }
 
     std::shared_ptr<array_info> indices_arr = in_arr->child_arrays[1];

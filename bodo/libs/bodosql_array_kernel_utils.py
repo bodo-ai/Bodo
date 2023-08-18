@@ -403,29 +403,50 @@ def gen_vectorized(
             # to output array.
             # See test_bool.py::test_equal_null[vector_scalar_string]
             dict_len = "n" if propagate_null[dict_encoded_arg] else "(n + 1)"
+            arr_name = arg_names[dict_encoded_arg]
+            func_text += "   vec_iter_start = 0\n"
+            func_text += f"   vec_iter_end = {dict_len}\n"
             if cache_dict_arrays:
                 # Insert code to check the dictionary encoding state for possible caching.
                 # If a kernel supports cache_dict_arrays then the same dictionary may be reused
                 # for multiple iterations (based on cache_dict_id). If so, we check the state to
                 # see if we can skip the computation. Otherwise we generate the result as normal
                 # and update the dictionary encoding state.
-                func_text += f"   if bodo.libs.stream_dict_encoding.state_contains_dict_array({dict_encoding_state_name}, {func_id_name}, cache_dict_id):\n"
-                func_text += "      res, new_dict_id = bodo.libs.stream_dict_encoding.get_array(\n"
+                func_text += f"   use_cached_value = False\n"
+                func_text += f"   cached_dict_length = bodo.libs.stream_dict_encoding.state_contains_dict_array({dict_encoding_state_name}, {func_id_name}, cache_dict_id)\n"
+                func_text += f"   if cached_dict_length == n:\n"
+                func_text += "      res, new_dict_id, _ = bodo.libs.stream_dict_encoding.get_array(\n"
                 func_text += f"         {dict_encoding_state_name},\n"
                 func_text += f"         {func_id_name},\n"
                 func_text += "         cache_dict_id,\n"
                 func_text += "         out_dtype,\n"
                 func_text += "      )\n"
                 func_text += "   else:\n"
-            if not propagate_null[dict_encoded_arg]:
-                arr_name = arg_names[dict_encoded_arg]
-                non_cached_text += f"   {arr_name} = bodo.libs.array_kernels.concat([{arr_name}, bodo.libs.array_kernels.gen_na_array(1, {arr_name})])\n"
+                # If the cached length is non 0, it means we have some prefix of
+                # the input data already computed
+                non_cached_text += "   vec_iter_start = max(cached_dict_length, 0)\n"
+                # How many elements do we iterate over? If we're not propogating
+                # nulls, we need to account for the fact that the cached length is
+                # off by 1 since we prepended a NULL the first time.
+                non_cached_text += f"   vec_iter_end = vec_iter_end - vec_iter_start\n"
+                if not propagate_null[dict_encoded_arg]:
+                    non_cached_text += "   if cached_dict_length >= 0:\n"
+                    non_cached_text += "     vec_iter_end -= 1\n"
+                    non_cached_text += "   if cached_dict_length < 0:\n"
+                    non_cached_text += f"     {arr_name} = bodo.libs.array_kernels.concat([bodo.libs.array_kernels.gen_na_array(1, {arr_name}), {arr_name}])\n"
+                # We're only computing over the suffix here
+                non_cached_text += "   if cached_dict_length > 0:\n"
+                non_cached_text += f"     {arr_name} = {arr_name}[vec_iter_start:]\n"
+            else:
+                if not propagate_null[dict_encoded_arg]:
+                    non_cached_text += f"   {arr_name} = bodo.libs.array_kernels.concat([bodo.libs.array_kernels.gen_na_array(1, {arr_name}), {arr_name}])\n"
             # adding one extra element in dictionary for null output if necessary
             if out_dtype == bodo.string_array_type:
-                non_cached_text += f"   res = bodo.libs.str_arr_ext.pre_alloc_string_array({dict_len}, -1)\n"
+                non_cached_text += f"   res = bodo.libs.str_arr_ext.pre_alloc_string_array(vec_iter_end, -1)\n"
             else:
-                non_cached_text += f"   res = bodo.utils.utils.alloc_type({dict_len}, out_dtype, (-1,))\n"
-            non_cached_text += f"   for i in range({dict_len}):\n"
+                non_cached_text += f"   res = bodo.utils.utils.alloc_type(vec_iter_end, out_dtype, (-1,))\n"
+
+            non_cached_text += f"   for i in range(vec_iter_end):\n"
         else:
             if res_list:
                 non_cached_text += "   res = []\n"
@@ -478,18 +499,34 @@ def gen_vectorized(
                 non_cached_text += indent_block(synthesize_dict_scalar_text, 6)
 
         if cache_dict_arrays:
-            # Generate the new dict id and insert the set_array call. This populates
-            # the cache with the result for the next time this kernel is called.
+            # Add suffix to precomputed prefix (if the prefix exists)
+            non_cached_text += "   if cached_dict_length > 0:\n"
+            non_cached_text += "      old_res, new_dict_id, _ = bodo.libs.stream_dict_encoding.get_array(\n"
+            non_cached_text += f"         {dict_encoding_state_name},\n"
+            non_cached_text += f"         {func_id_name},\n"
+            non_cached_text += "         cache_dict_id,\n"
+            non_cached_text += "         out_dtype,\n"
+            non_cached_text += "      )\n"
+            non_cached_text += (
+                f"      res = bodo.libs.array_kernels.concat([old_res, res])\n"
+            )
+
+            # If we're not extending an old dictionary, generate the new dict id
+            # and insert the set_array call. This populates the cache with the
+            # result for the next time this kernel is called.
+            non_cached_text += f"   else:\n"
             if out_dtype == bodo.string_array_type:
                 non_cached_text += (
-                    f"   new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(n)\n"
+                    f"      new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(n)\n"
                 )
             else:
-                non_cached_text += f"   new_dict_id = -1\n"
+                non_cached_text += f"      new_dict_id = -1\n"
+            # Cache the newly computed results
             non_cached_text += "   bodo.libs.stream_dict_encoding.set_array(\n"
             non_cached_text += f"      {dict_encoding_state_name},\n"
             non_cached_text += f"      {func_id_name},\n"
             non_cached_text += f"      cache_dict_id,\n"
+            non_cached_text += f"      n,\n"
             non_cached_text += f"      res,\n"
             non_cached_text += f"      new_dict_id,\n"
             non_cached_text += "   )\n"
@@ -500,19 +537,22 @@ def gen_vectorized(
         # If using dictionary encoding, construct the output from the
         # new dictionary + the indices
         if use_dict_encoding:
-            if (
-                out_dtype == bodo.string_array_type
-                and not propagate_null[dict_encoded_arg]
-            ):
+            if not propagate_null[dict_encoded_arg]:
                 # If NULL was transformed to a non-NULL value, then we need to
                 # update `indices` (which is a copy for bodo.string_array_type
                 # and therefore safe to modify) so that NULL entries map to the
                 # newly added transformed NULL value.
-                func_text += "   if not bodo.libs.array_kernels.isna(res, n):\n"
-                func_text += "     numba.parfors.parfor.init_prange()\n"
-                func_text += "     for i in numba.parfors.parfor.internal_prange(len(indices)):\n"
-                func_text += "       if bodo.libs.array_kernels.isna(indices, i):\n"
-                func_text += "         indices[i] = n\n"
+                # TODO(aneesh) in the case where NULL was mapped to NULL, it
+                # would be faster if we could just "pop" the first element off of
+                # the dictionary instead.
+                func_text += "   numba.parfors.parfor.init_prange()\n"
+                func_text += (
+                    "   for i in numba.parfors.parfor.internal_prange(len(indices)):\n"
+                )
+                func_text += "     if bodo.libs.array_kernels.isna(indices, i):\n"
+                func_text += "       indices[i] = 0\n"
+                func_text += "     else:\n"
+                func_text += "       indices[i] += 1\n"
             # Flush the nulls back to the index array, if necessary
             if use_null_flushing:
                 func_text += "   numba.parfors.parfor.init_prange()\n"

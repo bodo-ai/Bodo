@@ -1856,6 +1856,7 @@ def concat_overload(arr_list):
                 has_unique_local_dictionary_if_same = (
                     first_arr._has_unique_local_dictionary
                 )
+                largest_dict_data = arr_list[0]._data
                 num_strs = 0
                 num_chars = 0
                 num_elems = 0
@@ -1870,15 +1871,29 @@ def concat_overload(arr_list):
                     has_global_dictionary = (
                         has_global_dictionary and arr._has_global_dictionary
                     )
-                    has_unique_local_dictionary_if_same = (
-                        has_unique_local_dictionary_if_same
-                        or arr._has_unique_local_dictionary
-                    )
                     all_same_id = all_same_id and arr._dict_id == initial_id
 
+                    # we want to determine if the dictionary is locally unique
+                    # only if some largest dictionary is marked as locally
+                    # unique. This is because if there are two dictionaries
+                    # with the same data, one might be marked non-unique because
+                    # we don't know that is unique, while the other one has been
+                    # more recently checked and is verified to be unique.
+                    if len(data_arr) > len(largest_dict_data):
+                        largest_dict_data = data_arr
+                        has_unique_local_dictionary_if_same = (
+                            arr._has_unique_local_dictionary
+                        )
+                    elif len(data_arr) == len(largest_dict_data):
+                        has_unique_local_dictionary_if_same = (
+                            has_unique_local_dictionary_if_same
+                            or arr._has_unique_local_dictionary
+                        )
+
                 if all_same_id:
-                    # If all the dictionaries shared the same id we can reuse the same dictionary.
-                    out_dict_arr = first_arr._data
+                    # If all the dictionaries shared the same ID we can use the
+                    # largest dictionary data (shared ID implies shared prefix)
+                    out_dict_arr = largest_dict_data
                     # Check the indices
                     out_ind_arr = bodo.libs.int_arr_ext.alloc_int_array(
                         num_elems, np.int32

@@ -103,8 +103,12 @@ def state_contains_dict_array(typingctx, dict_encoding_state, func_id, dict_id):
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.IntType(1),
-            [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(64)],
+            lir.IntType(64),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64),
+            ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="state_contains_dict_array"
@@ -113,7 +117,7 @@ def state_contains_dict_array(typingctx, dict_encoding_state, func_id, dict_id):
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
-    sig = types.bool_(dict_encoding_state, types.int64, types.int64)
+    sig = types.int64(dict_encoding_state, types.int64, types.int64)
     return sig, codegen
 
 
@@ -121,10 +125,12 @@ def state_contains_dict_array(typingctx, dict_encoding_state, func_id, dict_id):
 def get_array(
     dict_encoding_state, func_id, cache_dict_id, array_ref_type
 ):  # pragma: no cover
-    arr_info, new_dict_id = _get_array(dict_encoding_state, func_id, cache_dict_id)
+    arr_info, new_dict_id, cached_dict_length = _get_array(
+        dict_encoding_state, func_id, cache_dict_id
+    )
     arr = info_to_array(arr_info, array_ref_type)
     delete_info(arr_info)
-    return (arr, new_dict_id)
+    return (arr, new_dict_id, cached_dict_length)
 
 
 @intrinsic
@@ -135,6 +141,9 @@ def _get_array(typingctx, dict_encoding_state, func_id, cache_dict_id):
         new_dict_id_ptr = cgutils.alloca_once_value(
             builder, context.get_constant(types.int64, -1)
         )
+        cached_dict_length_ptr = cgutils.alloca_once_value(
+            builder, context.get_constant(types.int64, -1)
+        )
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
@@ -142,18 +151,28 @@ def _get_array(typingctx, dict_encoding_state, func_id, cache_dict_id):
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="get_array_py_entry"
         )
-        call_args = [dict_encoding_state, func_id, dict_id, new_dict_id_ptr]
+        call_args = [
+            dict_encoding_state,
+            func_id,
+            dict_id,
+            new_dict_id_ptr,
+            cached_dict_length_ptr,
+        ]
         arr_info = builder.call(fn_tp, call_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         new_dict_id = builder.load(new_dict_id_ptr)
-        return context.make_tuple(builder, sig.return_type, [arr_info, new_dict_id])
+        cached_dict_length = builder.load(cached_dict_length_ptr)
+        return context.make_tuple(
+            builder, sig.return_type, [arr_info, new_dict_id, cached_dict_length]
+        )
 
-    sig = types.Tuple([array_info_type, types.int64])(
+    sig = types.Tuple([array_info_type, types.int64, types.int64])(
         dict_encoding_state, types.int64, types.int64
     )
     return sig, codegen
@@ -161,21 +180,35 @@ def _get_array(typingctx, dict_encoding_state, func_id, cache_dict_id):
 
 @register_jitable
 def set_array(
-    dict_encoding_state, func_id, cache_dict_id, arr, new_dict_id
+    dict_encoding_state, func_id, cache_dict_id, cache_dict_length, arr, new_dict_id
 ):  # pragma: no cover
     arr_info = array_to_info(arr)
-    _set_array(dict_encoding_state, func_id, cache_dict_id, arr_info, new_dict_id)
+    _set_array(
+        dict_encoding_state,
+        func_id,
+        cache_dict_id,
+        cache_dict_length,
+        arr_info,
+        new_dict_id,
+    )
 
 
 @intrinsic
 def _set_array(
-    typingctx, dict_encoding_state, func_id, cache_dict_id, arr_info, new_dict_id
+    typingctx,
+    dict_encoding_state,
+    func_id,
+    cache_dict_id,
+    cache_dict_length,
+    arr_info,
+    new_dict_id,
 ):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
                 lir.IntType(8).as_pointer(),
+                lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
@@ -189,7 +222,12 @@ def _set_array(
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     sig = types.void(
-        dict_encoding_state, types.int64, types.int64, arr_info, types.int64
+        dict_encoding_state,
+        types.int64,
+        types.int64,
+        types.int64,
+        arr_info,
+        types.int64,
     )
     return sig, codegen
 
@@ -205,7 +243,7 @@ def _get_list_payload(context, builder, list_type, list_value):
 
 @intrinsic
 def state_contains_multi_input_dict_array(
-    typingctx, dict_encoding_state, func_id, dict_ids
+    typingctx, dict_encoding_state, func_id, dict_ids, dict_lens
 ):
     """Return if the given dictionary encoding state has cached
     the result of the given function with the given multi-dictionary
@@ -224,14 +262,18 @@ def state_contains_multi_input_dict_array(
     assert (
         isinstance(dict_ids, types.List) and dict_ids.dtype == types.int64
     ), "dict_ids must a be list of int64"
+    assert (
+        isinstance(dict_lens, types.List) and dict_lens.dtype == types.int64
+    ), "dict_lens must a be list of int64"
 
     def codegen(context, builder, sig, args):
-        dict_encoding_state, func_id, dict_ids = args
+        dict_encoding_state, func_id, dict_ids, dict_lens = args
         fnty = lir.FunctionType(
             lir.IntType(1),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
+                lir.IntType(64).as_pointer(),
                 lir.IntType(64).as_pointer(),
                 lir.IntType(64),
             ],
@@ -240,27 +282,31 @@ def state_contains_multi_input_dict_array(
             builder.module, fnty, name="state_contains_multi_input_dict_array"
         )
 
-        payload_struct = _get_list_payload(context, builder, sig.args[2], dict_ids)
+        ids_payload_struct = _get_list_payload(context, builder, sig.args[2], dict_ids)
+        lens_payload_struct = _get_list_payload(
+            context, builder, sig.args[3], dict_lens
+        )
         call_args = [
             dict_encoding_state,
             func_id,
-            payload_struct._get_ptr_by_name("data"),
-            payload_struct.size,
+            ids_payload_struct._get_ptr_by_name("data"),
+            lens_payload_struct._get_ptr_by_name("data"),
+            ids_payload_struct.size,
         ]
         ret = builder.call(fn_tp, call_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
-    sig = types.bool_(dict_encoding_state, types.int64, dict_ids)
+    sig = types.bool_(dict_encoding_state, types.int64, dict_ids, dict_lens)
     return sig, codegen
 
 
 @register_jitable
 def get_array_multi_input(
-    dict_encoding_state, func_id, cache_dict_ids, array_ref_type
+    dict_encoding_state, func_id, cache_dict_ids, cache_dict_lens, array_ref_type
 ):  # pragma: no cover
     arr_info, new_dict_id = _get_array_multi_input(
-        dict_encoding_state, func_id, cache_dict_ids
+        dict_encoding_state, func_id, cache_dict_ids, cache_dict_lens
     )
     arr = info_to_array(arr_info, array_ref_type)
     delete_info(arr_info)
@@ -268,13 +314,18 @@ def get_array_multi_input(
 
 
 @intrinsic
-def _get_array_multi_input(typingctx, dict_encoding_state, func_id, cache_dict_ids):
+def _get_array_multi_input(
+    typingctx, dict_encoding_state, func_id, cache_dict_ids, cache_dict_lens
+):
     assert (
         isinstance(cache_dict_ids, types.List) and cache_dict_ids.dtype == types.int64
     ), "dict_ids must a be list of int64"
+    assert (
+        isinstance(cache_dict_lens, types.List) and cache_dict_lens.dtype == types.int64
+    ), "dict_len must a be list of int64"
 
     def codegen(context, builder, sig, args):
-        dict_encoding_state, func_id, cache_dict_ids = args
+        dict_encoding_state, func_id, cache_dict_ids, cache_dict_lens = args
         # Generate pointer for loading data from C++
         new_dict_id_ptr = cgutils.alloca_once_value(
             builder, context.get_constant(types.int64, -1)
@@ -285,6 +336,7 @@ def _get_array_multi_input(typingctx, dict_encoding_state, func_id, cache_dict_i
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(64).as_pointer(),
             ],
@@ -292,14 +344,18 @@ def _get_array_multi_input(typingctx, dict_encoding_state, func_id, cache_dict_i
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="get_array_multi_input_py_entry"
         )
-        payload_struct = _get_list_payload(
+        ids_payload_struct = _get_list_payload(
             context, builder, sig.args[2], cache_dict_ids
+        )
+        lens_payload_struct = _get_list_payload(
+            context, builder, sig.args[3], cache_dict_lens
         )
         call_args = [
             dict_encoding_state,
             func_id,
-            payload_struct._get_ptr_by_name("data"),
-            payload_struct.size,
+            ids_payload_struct._get_ptr_by_name("data"),
+            lens_payload_struct._get_ptr_by_name("data"),
+            ids_payload_struct.size,
             new_dict_id_ptr,
         ]
         arr_info = builder.call(fn_tp, call_args)
@@ -308,50 +364,76 @@ def _get_array_multi_input(typingctx, dict_encoding_state, func_id, cache_dict_i
         return context.make_tuple(builder, sig.return_type, [arr_info, new_dict_id])
 
     sig = types.Tuple([array_info_type, types.int64])(
-        dict_encoding_state, types.int64, cache_dict_ids
+        dict_encoding_state, types.int64, cache_dict_ids, cache_dict_lens
     )
     return sig, codegen
 
 
 @register_jitable
 def set_array_multi_input(
-    dict_encoding_state, func_id, cache_dict_ids, arr, new_dict_id
+    dict_encoding_state, func_id, cache_dict_ids, cache_dict_lens, arr, new_dict_id
 ):  # pragma: no cover
     arr_info = array_to_info(arr)
     _set_array_multi_input(
-        dict_encoding_state, func_id, cache_dict_ids, arr_info, new_dict_id
+        dict_encoding_state,
+        func_id,
+        cache_dict_ids,
+        cache_dict_lens,
+        arr_info,
+        new_dict_id,
     )
 
 
 @intrinsic
 def _set_array_multi_input(
-    typingctx, dict_encoding_state, func_id, cache_dict_ids, arr_info, new_dict_id
+    typingctx,
+    dict_encoding_state,
+    func_id,
+    cache_dict_ids,
+    cache_dict_lens,
+    arr_info,
+    new_dict_id,
 ):
     assert (
         isinstance(cache_dict_ids, types.List) and cache_dict_ids.dtype == types.int64
     ), "dict_ids must a be list of int64"
+    assert (
+        isinstance(cache_dict_lens, types.List) and cache_dict_lens.dtype == types.int64
+    ), "dict_len must a be list of int64"
 
     def codegen(context, builder, sig, args):
-        dict_encoding_state, func_id, cache_dict_ids, arr_info, new_dict_id = args
+        (
+            dict_encoding_state,
+            func_id,
+            cache_dict_ids,
+            cache_dict_lens,
+            arr_info,
+            new_dict_id,
+        ) = args
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
             ],
         )
-        payload_struct = _get_list_payload(
+        ids_payload_struct = _get_list_payload(
             context, builder, sig.args[2], cache_dict_ids
+        )
+        lens_payload_struct = _get_list_payload(
+            context, builder, sig.args[3], cache_dict_lens
         )
         call_args = [
             dict_encoding_state,
             func_id,
-            payload_struct._get_ptr_by_name("data"),
-            payload_struct.size,
+            ids_payload_struct._get_ptr_by_name("data"),
+            lens_payload_struct._get_ptr_by_name("data"),
+            ids_payload_struct.size,
             arr_info,
             new_dict_id,
         ]
@@ -362,7 +444,12 @@ def _set_array_multi_input(
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     sig = types.void(
-        dict_encoding_state, types.int64, cache_dict_ids, arr_info, types.int64
+        dict_encoding_state,
+        types.int64,
+        cache_dict_ids,
+        cache_dict_lens,
+        arr_info,
+        types.int64,
     )
     return sig, codegen
 
