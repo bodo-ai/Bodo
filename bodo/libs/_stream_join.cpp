@@ -952,7 +952,8 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
       build_na_key_buffer(build_arr_c_types, build_arr_array_types,
                           this->build_table_dict_builders, output_batch_size_,
                           DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
-      join_event("HashJoin") {
+      build_event("HashJoinBuild"),
+      probe_event("HashJoinProbe") {
     // Disable the threshold enforcement in the buffer pool for now:
     this->op_pool->DisableThresholdEnforcement();
 
@@ -1167,12 +1168,38 @@ void HashJoinState::FinalizeBuild() {
     // TODO Add logic to check if partition is too big and needs to be
     // repartitioned.
     // TODO Free shuffle buffer, etc.
+    size_t total_rows = 0;
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
         this->partitions[i_part]->FinalizeBuild();
+        total_rows +=
+            this->partitions[i_part]->build_table_buffer.data_table->nrows();
     }
     // Finalize the NA buffer now that we've seen all the input.
     this->build_na_key_buffer.Finalize();
+    // Add the tracing information.
+    this->build_event.add_attribute("num_partitions", this->partitions.size());
+    this->build_event.add_attribute("g_use_bloom_filters",
+                                    this->global_bloom_filter != nullptr);
+    this->build_event.add_attribute("build_table_nrows", total_rows);
+    // Note: These fields can change because of broadcast decisions.
+    this->build_event.add_attribute("g_build_parallel", this->build_parallel);
+    this->build_event.add_attribute("g_probe_parallel", this->probe_parallel);
     JoinState::FinalizeBuild();
+}
+
+void HashJoinState::FinalizeProbe() {
+    // Add the tracing information.
+    this->probe_event.add_attribute("num_bloom_filter_misses",
+                                    this->num_bloom_filter_misses);
+    this->probe_event.add_attribute("num_processed_probe_table_rows",
+                                    this->num_processed_probe_table_rows);
+    this->probe_event.add_attribute("num_input_probe_table_rows",
+                                    this->num_input_probe_table_rows);
+    this->probe_event.add_attribute("num_output_rows",
+                                    this->output_buffer->total_size);
+    this->probe_event.add_attribute("max_output_buffer_rows",
+                                    this->output_buffer->max_reached_size);
+    JoinState::FinalizeProbe();
 }
 
 void HashJoinState::ReserveProbeTableForInactivePartitions(
@@ -1338,8 +1365,8 @@ bool join_build_consume_batch(HashJoinState* join_state,
         // additional synchronization
         return true;
     }
+    auto buildEvent(join_state->build_event.iteration());
     int n_pes, myrank;
-    auto iterationEvent(join_state->join_event.iteration());
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
@@ -1627,8 +1654,8 @@ bool join_build_consume_batch(HashJoinState* join_state,
  * side.
  * @param is_last is last batch
  * @param parallel parallel flag
- * @return updated global is_last with the possiblity of false positives dues to
- * iterations between syncs
+ * @return updated global is_last with the possibility of false positives due
+ * to iterations between syncs
  */
 template <bool build_table_outer, bool probe_table_outer,
           bool non_equi_condition, bool use_bloom_filter>
@@ -1648,7 +1675,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         // additional synchronization
         return true;
     }
-
+    auto probeEvent(join_state->probe_event.iteration());
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -1656,6 +1683,9 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     // Make is_last global
     is_last =
         join_stream_sync_is_last(is_last, join_state->probe_iter, join_state);
+
+    // Update the number of received input rows
+    join_state->num_input_probe_table_rows += in_table->nrows();
 
     // Update active partition state (temporarily) for hashing and
     // comparison functions.
@@ -1736,6 +1766,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             // ranks for dict-encoded string arrays
             if (!join_state->global_bloom_filter->Find(
                     batch_hashes_partition[i_row])) {
+                join_state->num_bloom_filter_misses++;
                 if (probe_table_outer) {
                     // Add unmatched rows from probe table to output table
                     build_idxs.push_back(-1);
@@ -1745,6 +1776,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             }
         }
         if (process_on_rank) {
+            join_state->num_processed_probe_table_rows++;
             // TODO Add a fast path without this check for the single partition
             // case.
             if (active_partition->is_in_partition(
@@ -1783,7 +1815,6 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     join_state->output_buffer->AppendJoinOutput(
         active_partition->build_table_buffer.data_table, std::move(in_table),
         build_idxs, probe_idxs, build_kept_cols, probe_kept_cols);
-
     build_idxs.clear();
     probe_idxs.clear();
 
@@ -1860,26 +1891,13 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                      probe_null_bitmaps) =
                 get_gen_cond_data_ptrs(active_partition->probe_table);
         }
+        join_state->num_processed_probe_table_rows += new_data->nrows();
 
         // XXX This is temporary until we have proper buffers.
         join_state->ReserveProbeTableForInactivePartitions(new_data);
 
         append_to_probe_inactive_partition.resize(new_data->nrows(), false);
         for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
-            if (use_bloom_filter) {
-                // We use partition hashes to use consistent hashing across
-                // ranks for dict-encoded string arrays
-                if (!join_state->global_bloom_filter->Find(
-                        batch_hashes_partition[i_row])) {
-                    if (probe_table_outer) {
-                        // Add unmatched rows from probe table to output
-                        // table
-                        build_idxs.push_back(-1);
-                        probe_idxs.push_back(i_row);
-                    }
-                    continue;
-                }
-            }
             // TODO Add a fast path without this check for the single
             // partition case and another one which uses AppendBatch
             // for the single partition non bloom filter case.
@@ -1934,7 +1952,6 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             active_partition->build_table_buffer.data_table,
             join_state->dummy_probe_table, build_idxs, probe_idxs,
             build_kept_cols, probe_kept_cols);
-
         build_idxs.clear();
         probe_idxs.clear();
     }

@@ -603,6 +603,8 @@ void ChunkedTableBuilder::AppendBatch(
         this->active_chunk_size += batch_length;
         this->total_size += batch_length;
         this->total_remaining += batch_length;
+        this->max_reached_size =
+            std::max(this->max_reached_size, this->total_remaining);
         // Update the curr_row
         curr_row += batch_length;
         // Check if we need to finalize
@@ -974,6 +976,8 @@ void ChunkedTableBuilder::AppendJoinOutput(
         this->active_chunk_size += batch_length;
         this->total_size += batch_length;
         this->total_remaining += batch_length;
+        this->max_reached_size =
+            std::max(this->max_reached_size, this->total_remaining);
         // Update the curr_row
         curr_row += batch_length;
         // Check if we need to finalize
@@ -1042,6 +1046,7 @@ void ChunkedTableBuilder::Reset() {
     this->active_chunk_size = 0;
     this->total_size = 0;
     this->total_remaining = 0;
+    this->max_reached_size = 0;
 }
 
 /* ------------------------------------------------------------------------
