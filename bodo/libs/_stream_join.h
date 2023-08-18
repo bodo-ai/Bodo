@@ -432,7 +432,7 @@ class JoinState {
 
     virtual void FinalizeBuild() { this->build_input_finalized = true; }
 
-    void FinalizeProbe() {
+    virtual void FinalizeProbe() {
         this->output_buffer->Finalize(/*shrink_to_fit*/ true);
         this->probe_input_finalized = true;
     }
@@ -493,6 +493,13 @@ class HashJoinState : public JoinState {
     // Global bloom-filter. This is built during the build step
     // and used during the probe step.
     std::unique_ptr<BloomFilter> global_bloom_filter;
+    // Track the number of misses pruned by the bloom filter.
+    size_t num_bloom_filter_misses = 0;
+    // Track the total probe table rows processed on this rank.
+    size_t num_processed_probe_table_rows = 0;
+    // Track the number of probe rows received from the input operator.
+    // These may or may not be processed on this rank.
+    size_t num_input_probe_table_rows = 0;
 
     // Keep a table of NA keys for bypassing the hash table
     // if we have an outer join and any keys can contain NAs.
@@ -622,6 +629,13 @@ class HashJoinState : public JoinState {
     void FinalizeBuild() override;
 
     /**
+     * @brief Finalize any statistic information
+     * needed when the probe step is finished.
+     *
+     */
+    void FinalizeProbe() override;
+
+    /**
      * @brief Reserve enough space to accommodate in_table
      * in probe buffers of each of the inactive partitions.
      *
@@ -677,8 +691,9 @@ class HashJoinState : public JoinState {
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
     GetDictionaryHashesForKeys();
 
-    /// @brief Tracing event for this operator.
-    tracing::ResumableEvent join_event;
+    // Join events used to track build and probe
+    tracing::ResumableEvent build_event;
+    tracing::ResumableEvent probe_event;
 };
 
 class NestedLoopJoinState : public JoinState {
