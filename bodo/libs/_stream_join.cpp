@@ -1344,8 +1344,8 @@ bool join_build_consume_batch(HashJoinState* join_state,
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     // Make is_last global
-    is_last = stream_sync_is_last(is_last, join_state->build_iter,
-                                  join_state->sync_iter);
+    is_last =
+        join_stream_sync_is_last(is_last, join_state->build_iter, join_state);
 
     // Unify dictionaries to allow consistent hashing and fast key comparison
     // using indices
@@ -1654,8 +1654,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     // Make is_last global
-    is_last = stream_sync_is_last(is_last, join_state->probe_iter,
-                                  join_state->sync_iter);
+    is_last =
+        join_stream_sync_is_last(is_last, join_state->probe_iter, join_state);
 
     // Update active partition state (temporarily) for hashing and
     // comparison functions.
@@ -2185,9 +2185,9 @@ table_info* join_probe_consume_batch_py_entry(
         }
         // This is the last output if we've already seen all input (i.e.
         // is_last) and there's no more output remaining in the output_buffer:
-        *out_is_last = stream_sync_is_last(
+        *out_is_last = join_stream_sync_is_last(
             is_last && join_state_->output_buffer->total_remaining == 0,
-            join_state_->probe_iter - 1, join_state_->sync_iter);
+            join_state_->probe_iter - 1, join_state_);
         return out_table;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
