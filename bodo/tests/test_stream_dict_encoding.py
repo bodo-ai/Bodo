@@ -5,6 +5,7 @@ and any SQL APIs requiring additional testing.
 import textwrap
 from typing import Tuple
 
+import numpy as np
 import pandas as pd
 
 import bodo
@@ -67,10 +68,11 @@ def test_basic_caching(memory_leak_check):
         while not finished:
             section = arr[batch_num * slice_size : (batch_num + 1) * slice_size]
             finished = ((batch_num + 1) * slice_size) >= arr_size
-            if bodo.libs.stream_dict_encoding.state_contains_dict_array(
+            cached_length = bodo.libs.stream_dict_encoding.state_contains_dict_array(
                 dict_encoding_state, func_id, section._dict_id
-            ):
-                new_dict, new_dict_id = bodo.libs.stream_dict_encoding.get_array(
+            )
+            if cached_length >= 0:
+                new_dict, new_dict_id, _ = bodo.libs.stream_dict_encoding.get_array(
                     dict_encoding_state,
                     func_id,
                     section._dict_id,
@@ -84,6 +86,7 @@ def test_basic_caching(memory_leak_check):
                     dict_encoding_state,
                     func_id,
                     section._dict_id,
+                    len(section._data),
                     new_dict,
                     new_dict_id,
                 )
@@ -129,11 +132,14 @@ def test_multi_dictionary(memory_leak_check):
             while not finished:
                 section = arr[batch_num * slice_size : (batch_num + 1) * slice_size]
                 finished = ((batch_num + 1) * slice_size) >= arr_size
-                if bodo.libs.stream_dict_encoding.state_contains_dict_array(
-                    dict_encoding_state, func_id, section._dict_id
+                if (
+                    bodo.libs.stream_dict_encoding.state_contains_dict_array(
+                        dict_encoding_state, func_id, section._dict_id
+                    )
+                    >= 0
                 ):
                     # Cache hit
-                    new_dict, new_dict_id = bodo.libs.stream_dict_encoding.get_array(
+                    new_dict, new_dict_id, _ = bodo.libs.stream_dict_encoding.get_array(
                         dict_encoding_state,
                         func_id,
                         section._dict_id,
@@ -147,6 +153,7 @@ def test_multi_dictionary(memory_leak_check):
                         dict_encoding_state,
                         func_id,
                         section._dict_id,
+                        len(section._data),
                         new_dict,
                         new_dict_id,
                     )
@@ -210,10 +217,13 @@ def test_multi_function(memory_leak_check):
         while not finished:
             section = arr[batch_num * slice_size : (batch_num + 1) * slice_size]
             finished = ((batch_num + 1) * slice_size) >= arr_size
-            if bodo.libs.stream_dict_encoding.state_contains_dict_array(
-                dict_encoding_state, func_id1, section._dict_id
+            if (
+                bodo.libs.stream_dict_encoding.state_contains_dict_array(
+                    dict_encoding_state, func_id1, section._dict_id
+                )
+                >= 0
             ):
-                new_dict, new_dict_id = bodo.libs.stream_dict_encoding.get_array(
+                new_dict, new_dict_id, _ = bodo.libs.stream_dict_encoding.get_array(
                     dict_encoding_state,
                     func_id1,
                     section._dict_id,
@@ -227,6 +237,7 @@ def test_multi_function(memory_leak_check):
                     dict_encoding_state,
                     func_id1,
                     section._dict_id,
+                    len(section._data),
                     new_dict,
                     new_dict_id,
                 )
@@ -237,10 +248,13 @@ def test_multi_function(memory_leak_check):
                 False,
                 new_dict_id,
             )
-            if bodo.libs.stream_dict_encoding.state_contains_dict_array(
-                dict_encoding_state, func_id2, out_arr1._dict_id
+            if (
+                bodo.libs.stream_dict_encoding.state_contains_dict_array(
+                    dict_encoding_state, func_id2, out_arr1._dict_id
+                )
+                >= 0
             ):
-                new_dict, new_dict_id = bodo.libs.stream_dict_encoding.get_array(
+                new_dict, new_dict_id, _ = bodo.libs.stream_dict_encoding.get_array(
                     dict_encoding_state,
                     func_id2,
                     out_arr1._dict_id,
@@ -254,6 +268,7 @@ def test_multi_function(memory_leak_check):
                     dict_encoding_state,
                     func_id2,
                     out_arr1._dict_id,
+                    len(out_arr1._data),
                     new_dict,
                     new_dict_id,
                 )
@@ -604,4 +619,102 @@ def test_decode_with_default_arg(memory_leak_check):
         (pd.Series(arr),),
         py_output=py_output,
         use_dict_encoded_strings=True,
+    )
+
+
+def _test_decode_only_recomputes_over_new_data(data, indices, new_data, new_indices):
+    """
+    This test will do the following:
+       create a dictionary (`dict_arr`) from `data` and `indicies`
+       run decode((A, "a"->"one", "b"->"two", _->"three)
+       append to `dict_arr`, `new_data`, `new_indices`
+       run decode((A, "a"->"one_modified", "b"->"two_modifed", _->"three)
+           we run this with the same `func_id`, because we want to prove that
+           only the appended data is computed. This means that "a"'s and "b"'s
+           in `new_data` will be remapped to "one_modified"/"two_modified", but all
+           data mapping to `data` should remain as "one", "two"
+    """
+
+    # some function id to remain constant for all kernel operations
+    func_id = 1
+
+    # Create a dictionary from data/indices
+    data_arr = bodo.hiframes.pd_series_ext.get_series_data(data)
+    indices_arr = bodo.libs.int_arr_ext.alloc_int_array(len(indices), np.int32)
+    for i in range(len(indices)):
+        indices_arr[i] = indices[i]
+    dict_arr = bodo.libs.dict_arr_ext.init_dict_arr(
+        data_arr, indices_arr, True, True, None
+    )
+
+    dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
+    batches = []
+
+    # do the kernel
+    out_batch = bodo.libs.bodosql_array_kernels.decode(
+        (dict_arr, "a", "one", "b", "two", "three"), dict_encoding_state, func_id
+    )
+    batches.append(out_batch)
+
+    # Append new_data/new_indices to the dictionary - we keep the dictionary
+    # ID constant because we are not violating the fact that shared
+    # dictionary ID implies shared prefix. Note that after this append the
+    # dictionary is not unique.
+    new_data_arr = bodo.hiframes.pd_series_ext.get_series_data(new_data)
+    new_indices_arr = bodo.libs.int_arr_ext.alloc_int_array(len(new_indices), np.int32)
+    for i in range(len(new_indices)):
+        new_indices_arr[i] = new_indices[i] + len(data_arr)
+    final_dict = bodo.libs.array_kernels.concat([data_arr, new_data_arr])
+    dict_arr = bodo.libs.dict_arr_ext.init_dict_arr(
+        final_dict, new_indices_arr, False, False, dict_arr._dict_id
+    )
+
+    # Run a slightly modified operation on the appended dictionary. Note
+    # that because the dictionary ID and the function ID is kept constant in
+    # this test, even though "a", and "b" now map to new values, that should
+    # only affect newly appended data - this is generally unsafe, and in
+    # practice a function ID should only ever correspond to a single kernel.
+    out_batch = bodo.libs.bodosql_array_kernels.decode(
+        (dict_arr, "a", "one_modified", "b", "two_modified", "three"),
+        dict_encoding_state,
+        func_id,
+    )
+    batches.append(out_batch)
+
+    # Count the number of cache misses
+    num_sets = bodo.libs.stream_dict_encoding.get_state_num_set_calls(
+        dict_encoding_state
+    )
+    bodo.libs.stream_dict_encoding.delete_dict_encoding_state(dict_encoding_state)
+
+    # concat all results into a single array
+    out_arr = bodo.libs.array_kernels.concat(batches)
+    return out_arr, num_sets
+
+
+def test_decode_only_recomputes_over_new_data(memory_leak_check):
+    dictionary = pd.array(["a", "b", "c", "d"])
+    indices = pd.array([0, 1, 2, 3] * 2)
+    new_dictionary = pd.array(["a", "b", "c", "d", "e"])
+    new_indices = pd.array([0, 1, 2, 3, 4])
+
+    py_output = (
+        pd.array(
+            ["one", "two", "three", "three"] * 2
+            + ["one_modified", "two_modified", "three", "three", "three"]
+        ),
+        # Number of cache misses. Should be 1 for the first iteration.
+        2,
+    )
+    check_func(
+        _test_decode_only_recomputes_over_new_data,
+        (
+            pd.Series(dictionary),
+            pd.Series(indices),
+            pd.Series(new_dictionary),
+            pd.Series(new_indices),
+        ),
+        py_output=py_output,
+        only_seq=True,
+        use_dict_encoded_strings=False,
     )

@@ -2,83 +2,96 @@
 
 DictEncodingState::DictEncodingState() : num_set_calls(0) {}
 
-std::tuple<bool, std::tuple<std::shared_ptr<array_info>, int64_t>>
+std::optional<DictEncodingState::CacheEntry>
 DictEncodingState::contains_and_value(int64_t func_id, int64_t dict_id) {
     if (dict_id < 0) {
-        return std::tuple(false, std::tuple(nullptr, -1));
+        return std::nullopt;
     }
     auto result = this->one_input_map.find(func_id);
     if (result != this->one_input_map.end()) {
-        return std::tuple(std::get<0>(result->second) == dict_id,
-                          std::tuple(std::get<1>(result->second),
-                                     std::get<2>(result->second)));
+        if (result->second.dict_id == dict_id) {
+            return result->second;
+        }
     }
-    return std::tuple(false, std::tuple(nullptr, -1));
+    return std::nullopt;
 }
 
-std::tuple<bool, std::tuple<std::shared_ptr<array_info>, int64_t>>
+std::optional<DictEncodingState::MultiCacheEntry>
 DictEncodingState::contains_and_value_multi_input(
-    int64_t func_id, std::vector<int64_t> dict_ids) {
+    int64_t func_id, std::vector<int64_t> dict_ids,
+    std::vector<int64_t> dict_lengths) {
     auto result = this->multi_input_map.find(func_id);
     if (result != this->multi_input_map.end()) {
-        std::vector<int64_t>& cached_ids = std::get<0>(result->second);
+        std::vector<int64_t>& cached_ids = result->second.dict_ids;
+        std::vector<int64_t>& cached_lengths = result->second.dict_lengths;
         if (dict_ids.size() == cached_ids.size()) {
             for (size_t i = 0; i < dict_ids.size(); i++) {
                 if (dict_ids[i] < 0 || (dict_ids[i] != cached_ids[i])) {
-                    return std::tuple(false, std::tuple(nullptr, -1));
+                    return std::nullopt;
+                }
+                if (dict_lengths[i] != cached_lengths[i]) {
+                    return std::nullopt;
                 }
             }
-            return std::tuple(true, std::tuple(std::get<1>(result->second),
-                                               std::get<2>(result->second)));
+            return result->second;
         }
     }
-    return std::tuple(false, std::tuple(nullptr, -1));
+    return std::nullopt;
 }
 
-bool DictEncodingState::contains(int64_t func_id, int64_t dict_id) {
-    return std::get<0>(this->contains_and_value(func_id, dict_id));
-}
-
-std::tuple<std::shared_ptr<array_info>, int64_t> DictEncodingState::get_array(
-    int64_t func_id, int64_t cache_dict_id) {
-    auto [is_valid, payload] = this->contains_and_value(func_id, cache_dict_id);
-    if (!is_valid) {
-        throw std::runtime_error(
-            "DictEncodingState::get_array: Missing cache entry");
+std::optional<size_t> DictEncodingState::contains(int64_t func_id,
+                                                  int64_t dict_id) {
+    if (auto payload = this->contains_and_value(func_id, dict_id)) {
+        return payload->dict_len;
     }
-    return payload;
+    return std::nullopt;
+}
+
+std::tuple<std::shared_ptr<array_info>, int64_t, int64_t>
+DictEncodingState::get_array(int64_t func_id, int64_t cache_dict_id) {
+    if (auto payload = this->contains_and_value(func_id, cache_dict_id)) {
+        return std::make_tuple(payload->array, payload->output_dict_id,
+                               payload->dict_len);
+    }
+    throw std::runtime_error(
+        "DictEncodingState::get_array: Missing cache entry");
 }
 
 void DictEncodingState::set_array(int64_t func_id, int64_t cache_dict_id,
+                                  size_t cache_dict_len,
                                   std::shared_ptr<array_info> arr,
                                   int64_t new_dict_id) {
     this->one_input_map.insert_or_assign(
-        func_id, std::tuple(cache_dict_id, arr, new_dict_id));
+        func_id, CacheEntry{arr, new_dict_id, cache_dict_id, cache_dict_len});
     this->num_set_calls += 1;
 }
 
-bool DictEncodingState::contains_multi_input(int64_t func_id,
-                                             std::vector<int64_t> dict_ids) {
-    return std::get<0>(this->contains_and_value_multi_input(func_id, dict_ids));
+bool DictEncodingState::contains_multi_input(
+    int64_t func_id, std::vector<int64_t> dict_ids,
+    std::vector<int64_t> dict_lengths) {
+    return this->contains_and_value_multi_input(func_id, dict_ids, dict_lengths)
+        .has_value();
 }
 
 std::tuple<std::shared_ptr<array_info>, int64_t>
-DictEncodingState::get_array_multi_input(int64_t func_id,
-                                         std::vector<int64_t> cache_dict_ids) {
-    auto [is_valid, payload] =
-        this->contains_and_value_multi_input(func_id, cache_dict_ids);
-    if (!is_valid) {
-        throw std::runtime_error(
-            "DictEncodingState::get_array_multi_input: Missing cache entry");
+DictEncodingState::get_array_multi_input(
+    int64_t func_id, std::vector<int64_t> cache_dict_ids,
+    std::vector<int64_t> cache_dict_lengths) {
+    if (auto payload = this->contains_and_value_multi_input(
+            func_id, cache_dict_ids, cache_dict_lengths)) {
+        return std::make_tuple(payload->array, payload->output_dict_id);
     }
-    return payload;
+    throw std::runtime_error(
+        "DictEncodingState::get_array_multi_input: Missing cache entry");
 }
 
 void DictEncodingState::set_array_multi_input(
     int64_t func_id, std::vector<int64_t> cache_dict_ids,
-    std::shared_ptr<array_info> arr, int64_t new_dict_id) {
+    std::vector<int64_t> cache_dict_lengths, std::shared_ptr<array_info> arr,
+    int64_t new_dict_id) {
     this->multi_input_map.insert_or_assign(
-        func_id, std::tuple(cache_dict_ids, arr, new_dict_id));
+        func_id,
+        MultiCacheEntry{arr, cache_dict_ids, cache_dict_lengths, new_dict_id});
     this->num_set_calls += 1;
 }
 
@@ -102,9 +115,9 @@ DictEncodingState* dict_encoding_state_init_py_entry() {
  * @param dict_id The dictionary id to check.
  * @return Has the state definitely cached this dictionary array.
  */
-bool state_contains_dict_array(DictEncodingState* state, int64_t func_id,
-                               int64_t dict_id) {
-    return state->contains(func_id, dict_id);
+int64_t state_contains_dict_array(DictEncodingState* state, int64_t func_id,
+                                  int64_t dict_id) {
+    return state->contains(func_id, dict_id).value_or(-1);
 }
 
 /**
@@ -119,10 +132,13 @@ bool state_contains_dict_array(DictEncodingState* state, int64_t func_id,
  * @return array_info* The array to return.
  */
 array_info* get_array_py_entry(DictEncodingState* state, int64_t func_id,
-                               int64_t cache_dict_id, int64_t* new_dict_id) {
+                               int64_t cache_dict_id, int64_t* new_dict_id,
+                               int64_t* cached_dict_length) {
     try {
-        auto [arr, out_dict_id] = state->get_array(func_id, cache_dict_id);
+        auto [arr, out_dict_id, out_dict_length] =
+            state->get_array(func_id, cache_dict_id);
         *new_dict_id = out_dict_id;
+        *cached_dict_length = out_dict_length;
         return new array_info(*arr);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -140,10 +156,11 @@ array_info* get_array_py_entry(DictEncodingState* state, int64_t func_id,
  * @param new_dict_id id of the new array. -1 if this is not a string array.
  */
 void set_array_py_entry(DictEncodingState* state, int64_t func_id,
-                        int64_t cache_dict_id, array_info* arr,
-                        int64_t new_dict_id) {
-    state->set_array(func_id, cache_dict_id, std::shared_ptr<array_info>(arr),
-                     new_dict_id);
+                        int64_t cache_dict_id, int64_t cache_dict_length,
+                        array_info* arr, int64_t new_dict_id) {
+    state->set_array(func_id, cache_dict_id,
+                     static_cast<size_t>(cache_dict_length),
+                     std::shared_ptr<array_info>(arr), new_dict_id);
 }
 
 /**
@@ -158,9 +175,12 @@ void set_array_py_entry(DictEncodingState* state, int64_t func_id,
  */
 bool state_contains_multi_input_dict_array(DictEncodingState* state,
                                            int64_t func_id, int64_t* dict_ids,
+                                           int64_t* dict_lens,
                                            uint64_t num_dict_ids) {
     std::vector<int64_t> dict_ids_copy(dict_ids, dict_ids + num_dict_ids);
-    return state->contains_multi_input(func_id, std::move(dict_ids_copy));
+    std::vector<int64_t> dict_lengths_copy(dict_lens, dict_lens + num_dict_ids);
+    return state->contains_multi_input(func_id, std::move(dict_ids_copy),
+                                       std::move(dict_lengths_copy));
 }
 
 /**
@@ -179,13 +199,17 @@ bool state_contains_multi_input_dict_array(DictEncodingState* state,
 array_info* get_array_multi_input_py_entry(DictEncodingState* state,
                                            int64_t func_id,
                                            int64_t* cache_dict_ids,
+                                           int64_t* cache_dict_lengths,
                                            uint64_t num_cached_dict_ids,
                                            int64_t* new_dict_id) {
     try {
         std::vector<int64_t> cache_dict_ids_copy(
             cache_dict_ids, cache_dict_ids + num_cached_dict_ids);
+        std::vector<int64_t> cache_dict_lengths_copy(
+            cache_dict_lengths, cache_dict_lengths + num_cached_dict_ids);
         auto [arr, out_dict_id] = state->get_array_multi_input(
-            func_id, std::move(cache_dict_ids_copy));
+            func_id, std::move(cache_dict_ids_copy),
+            std::move(cache_dict_lengths_copy));
         *new_dict_id = out_dict_id;
         return new array_info(*arr);
     } catch (const std::exception& e) {
@@ -206,11 +230,15 @@ array_info* get_array_multi_input_py_entry(DictEncodingState* state,
  */
 void set_array_multi_input_py_entry(DictEncodingState* state, int64_t func_id,
                                     int64_t* cache_dict_ids,
+                                    int64_t* cache_dict_lengths,
                                     uint64_t num_cached_dict_ids,
                                     array_info* arr, int64_t new_dict_id) {
     std::vector<int64_t> cache_dict_ids_copy(
         cache_dict_ids, cache_dict_ids + num_cached_dict_ids);
+    std::vector<int64_t> cache_dict_lengths_copy(
+        cache_dict_lengths, cache_dict_lengths + num_cached_dict_ids);
     state->set_array_multi_input(func_id, std::move(cache_dict_ids_copy),
+                                 std::move(cache_dict_lengths_copy),
                                  std::shared_ptr<array_info>(arr), new_dict_id);
 }
 
