@@ -11,6 +11,7 @@ import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.schema.Schema
 import org.apache.calcite.sql.type.ArraySqlType
+import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.ImmutableBitSet
 
 /**
@@ -37,17 +38,20 @@ class ExpectedBatchingProperty {
          * @param rowType The input row type
          * @return A list of the fields as a list of types.
          */
-        private fun rowTypeToTypes(rowType: RelDataType): List<RelDataType> {
+        fun rowTypeToTypes(rowType: RelDataType): List<RelDataType> {
             // Note: Types may be lazily computed so use getType() instead of type
             return rowType.fieldList.map { f -> f.getType() }
         }
 
         /**
          * Is the given type a type that cannot be supported in streaming.
+         *
          * @param type Column type in question.
          */
         private fun isUnsupportedStreamingType(type: RelDataType): Boolean {
-            return type is ArraySqlType
+            // Note we don't support arrays in streaming, but Snowflake tables may contain arrays,
+            // so we must ignore them. We don't support reading arrays yet anyways.
+            return (type is ArraySqlType) && (type.componentType!!.sqlTypeName != SqlTypeName.UNKNOWN)
         }
 
         /**
