@@ -4,6 +4,7 @@
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 #include "_chunked_table_builder.h"
+#include "_distributed.h"
 #include "_join.h"
 #include "_nested_loop_join.h"
 #include "_operator_pool.h"
@@ -784,3 +785,26 @@ get_dict_builders_from_table_build_buffer(
 std::vector<std::shared_ptr<DictionaryBuilder>>
 get_dict_builders_from_chunked_table_builder(
     const ChunkedTableBuilder& chunked_table_builder);
+
+/**
+ * @brief Wrapper around stream_sync_is_last to avoid synchronization
+ * if we have a broadcast join or a replicated input.
+ *
+ * @param local_is_last Whether we're done on this rank.
+ * @param iter Current iteration counter.
+ * @param[in] join_state Join state used to get the distributed information
+ * and the sync_iter.
+ * @return true We don't need to have any more iterations on this rank.
+ * @return false We may need to have more iterations on this rank.
+ */
+static inline bool join_stream_sync_is_last(bool local_is_last,
+                                            const uint64_t iter,
+                                            JoinState* join_state) {
+    if (join_state->build_parallel && join_state->probe_parallel) {
+        return stream_sync_is_last(local_is_last, iter, join_state->sync_iter);
+    } else {
+        // If we have a broadcast join or a replicated input we don't need to be
+        // synchronized because there is no shuffle.
+        return local_is_last;
+    }
+}

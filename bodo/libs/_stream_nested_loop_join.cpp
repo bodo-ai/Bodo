@@ -207,8 +207,8 @@ bool nested_loop_join_probe_consume_batch(
     }
 
     // Make is_last global
-    is_last = stream_sync_is_last(is_last, join_state->probe_iter,
-                                  join_state->sync_iter);
+    is_last =
+        join_stream_sync_is_last(is_last, join_state->probe_iter, join_state);
 
     // We only need to take the parallel path if both tables are parallel
     // and the build table wasn't broadcast.
