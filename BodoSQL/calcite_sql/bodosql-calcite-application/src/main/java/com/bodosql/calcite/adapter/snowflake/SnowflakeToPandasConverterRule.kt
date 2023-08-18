@@ -24,7 +24,7 @@ class SnowflakeToPandasConverterRule private constructor(config: Config) : Conve
         val converter: RelNode = SnowflakeToPandasConverter(rel.cluster, newTraitSet, rel)
         // In addition to the converter, add a projection to return the type
         // to the original type of the input relation.
-        val projects = rel.rowType.fieldList.mapIndexed { index, field ->
+        val projects = rel.getRowType().fieldList.mapIndexed { index, field ->
             RexInputRef(index, field.type)
         }
         return PandasProject.create(converter, projects, rel.rowType)
