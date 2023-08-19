@@ -782,14 +782,14 @@ bool select_build_table(int64_t n_rows_left, int64_t n_rows_right,
     } else {
         // In the case of is_left_outer <> is_right_outer we must decide if the
         // size of the tables or the outer join property are more important. To
-        // do this, we set a threshhold K (CritQuotientNrows) and compare the
+        // do this, we set a threshold K (CritQuotientNrows) and compare the
         // size of the table. If either table has K times more rows we will
         // always make the smaller table the table that populates the hash map,
         // regardless of if that table needs an outer join. If the ratio of rows
         // is less than K, then populate the hash map with the table that
         // doesn't require an outer join.
         //
-        // TODO: Justify our threshhold of 1 table being 6x larger than
+        // TODO: Justify our threshold of 1 table being 6x larger than
         // the other.
         double CritQuotientNrows = 6.0;
         // Compute the ratio of the table sizes on the current rank.
