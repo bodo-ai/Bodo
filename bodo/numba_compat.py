@@ -1872,10 +1872,11 @@ def CacheImpl__init__(self, py_func):
 
     # bodo change: use bodo's version to invalidate cache
     from bodo import __version__ as bodo_version
+    from bodo import bodosql_use_streaming_plan as use_streaming
 
-    self._filename_base = (
-        self.get_filename_base(fullname, abiflags) + "bodo" + bodo_version
-    )
+    streaming_suffix = "streaming" if use_streaming else "nonstreaming"
+
+    self._filename_base = f"{self.get_filename_base(fullname, abiflags)}bodo{bodo_version}-{streaming_suffix}"
 
 
 if _check_numba_change:  # pragma: no cover
