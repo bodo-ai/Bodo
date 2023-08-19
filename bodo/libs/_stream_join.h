@@ -815,7 +815,10 @@ get_dict_builders_from_chunked_table_builder(
 static inline bool join_stream_sync_is_last(bool local_is_last,
                                             const uint64_t iter,
                                             JoinState* join_state) {
-    if (join_state->build_parallel && join_state->probe_parallel) {
+    // We must synchronize if either we have a distributed build or an
+    // LEFT/FULL OUTER JOIN where probe is distributed.
+    if (join_state->build_parallel ||
+        (join_state->build_table_outer && join_state->probe_parallel)) {
         return stream_sync_is_last(local_is_last, iter, join_state->sync_iter);
     } else {
         // If we have a broadcast join or a replicated input we don't need to be
