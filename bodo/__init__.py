@@ -85,6 +85,26 @@ sys.excepthook = _global_except_hook
 import os
 import platform
 
+#### START STREAMING CONFIGURATION ####
+
+# Flag to track if we should use the volcano plan in BodoSQL.
+bodosql_use_volcano_plan = os.environ.get("BODO_VOLCANO_ENABLED", "0") == "1"
+# Flag to track if we should use the streaming plan in BodoSQL.
+# Takes precedence over bodosql_use_volcano_plan and potentially
+# implies bodosql_use_volcano_plan.
+bodosql_use_streaming_plan = os.environ.get("BODO_STREAMING_ENABLED", "0") == "1"
+# Number of rows to process at once for BodoSQL. This is used to test
+# the streaming plan in BodoSQL on the existing unit tests that may only
+# have one batch worth of data.
+bodosql_streaming_batch_size = 4096
+# Flag to track if we should enable groupby streaming in BodoSQL when the streaming plan is enabled
+enable_groupby_streaming = False
+# How many iterations to run a streaming loop for before synchronizing
+stream_loop_sync_iters = int(os.environ.get("BODO_STREAM_LOOP_SYNC_ITERS", 100))
+
+#### END STREAMING CONFIGURATION ####
+
+
 # For pip version of Bodo:
 # Bodo needs to use the same libraries as Arrow (the same library files that pyarrow
 # loads at runtime). We don't know what the path to these could be, so we have to
@@ -319,18 +339,3 @@ from bodo.libs.memory import (
 
 set_default_buffer_pool_as_arrow_memory_pool()
 atexit.register(default_buffer_pool().cleanup)
-
-# Flag to track if we should use the volcano plan in BodoSQL.
-bodosql_use_volcano_plan = os.environ.get("BODO_VOLCANO_ENABLED", "0") == "1"
-# Flag to track if we should use the streaming plan in BodoSQL.
-# Takes precedence over bodosql_use_volcano_plan and potentially
-# implies bodosql_use_volcano_plan.
-bodosql_use_streaming_plan = os.environ.get("BODO_STREAMING_ENABLED", "0") == "1"
-# Number of rows to process at once for BodoSQL. This is used to test
-# the streaming plan in BodoSQL on the existing unit tests that may only
-# have one batch worth of data.
-bodosql_streaming_batch_size = 4096
-# Flag to track if we should enable groupby streaming in BodoSQL when the streaming plan is enabled
-enable_groupby_streaming = False
-# How many iterations to run a streaming loop for before synchronizing
-stream_loop_sync_iters = int(os.environ.get("BODO_STREAM_LOOP_SYNC_ITERS", 100))
