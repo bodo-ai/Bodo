@@ -40,7 +40,12 @@ abstract class JoinBase(
         val buildRows = mq.getRowCount(this.left)
         val averageBuildRowSize = mq.getAverageRowSize(this.left)
         // Add a multiplier to try ensure the build cost isn't too impactful.
-        val buildCost = Cost(mem = averageBuildRowSize ?: 0.0).multiplyBy(buildRows).multiplyBy(0.3)
+        // If we have a LEFT JOIN increase this threshold so if its close we do
+        // a right join instead.
+        // TODO: Decide on the actual size threshold.
+        val baseMultiplier = 0.3
+        val multiplier = if (this.joinType == JoinRelType.LEFT) { baseMultiplier * 1.0 } else { baseMultiplier }
+        val buildCost = Cost(mem = averageBuildRowSize ?: 0.0).multiplyBy(buildRows).multiplyBy(multiplier)
 
         // We now want to compute the expected cost of producing this join's output.
         // We do this by taking the output rows and multiplying by the number
