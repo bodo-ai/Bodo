@@ -6216,3 +6216,322 @@ if _check_numba_change:  # pragma: no cover
 numba.cpython.unicode._find = _find
 numba.cpython.unicode._rfind = _rfind
 #### END PATCH TO COPY BOYER-MOORE STRING SEARCH ALGORITHM FROM NUMBA ####
+
+
+#### BEGIN PATCH TO SUPPORT CHECKING REDUCTIONS FOR PARFOR FUSION ####
+# Apply Todd's fix from https://github.com/numba/numba/pull/8338.
+# TODO: Remove when we upgrade to Numba 0.57.
+
+
+def parfor_pass_run(self):
+    """run parfor conversion pass: replace Numpy calls
+    with Parfors when possible and optimize the IR."""
+    self._pre_run()
+    # run stencil translation to parfor
+    if self.options.stencil:
+        stencil_pass = numba.parfors.parfor.StencilPass(
+            self.func_ir,
+            self.typemap,
+            self.calltypes,
+            self.array_analysis,
+            self.typingctx,
+            self.targetctx,
+            self.flags,
+        )
+        stencil_pass.run()
+    if self.options.setitem:
+        numba.parfors.parfor.ConvertSetItemPass(self).run(self.func_ir.blocks)
+    if self.options.numpy:
+        numba.parfors.parfor.ConvertNumpyPass(self).run(self.func_ir.blocks)
+    if self.options.reduction:
+        numba.parfors.parfor.ConvertReducePass(self).run(self.func_ir.blocks)
+    if self.options.prange:
+        numba.parfors.parfor.ConvertLoopPass(self).run(self.func_ir.blocks)
+    if self.options.inplace_binop:
+        numba.parfors.parfor.ConvertInplaceBinop(self).run(self.func_ir.blocks)
+
+    # setup diagnostics now parfors are found
+    self.diagnostics.setup(self.func_ir, self.options.fusion)
+
+    numba.parfors.parfor.dprint_func_ir(self.func_ir, "after parfor pass")
+
+    # simplify CFG of parfor body loops since nested parfors with extra
+    # jumps can be created with prange conversion
+    n_parfors = simplify_parfor_body_CFG(self.func_ir.blocks)
+    # simplify before fusion
+    numba.parfors.parfor.simplify(
+        self.func_ir, self.typemap, self.calltypes, self.metadata["parfors"]
+    )
+    # need two rounds of copy propagation to enable fusion of long sequences
+    # of parfors like test_fuse_argmin (some PYTHONHASHSEED values since
+    # apply_copies_parfor depends on set order for creating dummy assigns)
+    numba.parfors.parfor.simplify(
+        self.func_ir, self.typemap, self.calltypes, self.metadata["parfors"]
+    )
+
+    if self.options.fusion and n_parfors >= 2:
+        self.func_ir._definitions = build_definitions(self.func_ir.blocks)
+        self.array_analysis.equiv_sets = dict()
+        self.array_analysis.run(self.func_ir.blocks)
+
+        # BODO CHANGE: Apply https://github.com/numba/numba/pull/8338
+        # Get parfor params to calculate reductions below.
+        _, parfors = numba.parfors.parfor.get_parfor_params(
+            self.func_ir.blocks, self.options.fusion, self.nested_fusion_info
+        )
+
+        # Find reductions so that fusion can be disallowed if a
+        # subsequent parfor read a reduction variable.
+        for p in parfors:
+            p.redvars, p.reddict = numba.parfors.parfor.get_parfor_reductions(
+                self.func_ir, p, p.params, self.calltypes
+            )
+
+        # reorder statements to maximize fusion
+        # push non-parfors down
+        numba.parfors.parfor.maximize_fusion(
+            self.func_ir, self.func_ir.blocks, self.typemap, up_direction=False
+        )
+        numba.parfors.parfor.dprint_func_ir(self.func_ir, "after maximize fusion down")
+        self.fuse_parfors(
+            self.array_analysis, self.func_ir.blocks, self.func_ir, self.typemap
+        )
+        numba.parfors.parfor.dprint_func_ir(self.func_ir, "after first fuse")
+        # push non-parfors up
+        numba.parfors.parfor.maximize_fusion(
+            self.func_ir, self.func_ir.blocks, self.typemap
+        )
+        numba.parfors.parfor.dprint_func_ir(self.func_ir, "after maximize fusion up")
+        # try fuse again after maximize
+        self.fuse_parfors(
+            self.array_analysis, self.func_ir.blocks, self.func_ir, self.typemap
+        )
+        numba.parfors.parfor.dprint_func_ir(self.func_ir, "after fusion")
+        # remove dead code after fusion to remove extra arrays and variables
+        numba.parfors.parfor.simplify(
+            self.func_ir, self.typemap, self.calltypes, self.metadata["parfors"]
+        )
+
+    # push function call variables inside parfors so gufunc function
+    # wouldn't need function variables as argument
+    numba.parfors.parfor.push_call_vars(self.func_ir.blocks, {}, {}, self.typemap)
+    numba.parfors.parfor.dprint_func_ir(self.func_ir, "after push call vars")
+    # simplify again
+    numba.parfors.parfor.simplify(
+        self.func_ir, self.typemap, self.calltypes, self.metadata["parfors"]
+    )
+    numba.parfors.parfor.dprint_func_ir(self.func_ir, "after optimization")
+    if numba.parfors.parfor.config.DEBUG_ARRAY_OPT >= 1:
+        print("variable types: ", sorted(self.typemap.items()))
+        print("call types: ", self.calltypes)
+
+    if numba.parfors.parfor.config.DEBUG_ARRAY_OPT >= 3:
+        for block_label, block in self.func_ir.blocks.items():
+            new_block = []
+            scope = block.scope
+            for stmt in block.body:
+                new_block.append(stmt)
+                if isinstance(stmt, ir.Assign):
+                    loc = stmt.loc
+                    lhs = stmt.target
+                    rhs = stmt.value
+                    lhs_typ = self.typemap[lhs.name]
+                    print(
+                        "Adding print for assignment to ",
+                        lhs.name,
+                        lhs_typ,
+                        type(lhs_typ),
+                    )
+                    if lhs_typ in types.number_domain or isinstance(
+                        lhs_typ, types.Literal
+                    ):
+                        str_var = ir.Var(scope, mk_unique_var("str_var"), loc)
+                        self.typemap[str_var.name] = types.StringLiteral(lhs.name)
+                        lhs_const = ir.Const(lhs.name, loc)
+                        str_assign = ir.Assign(lhs_const, str_var, loc)
+                        new_block.append(str_assign)
+                        str_print = ir.Print([str_var], None, loc)
+                        self.calltypes[str_print] = signature(
+                            types.none, self.typemap[str_var.name]
+                        )
+                        new_block.append(str_print)
+                        ir_print = ir.Print([lhs], None, loc)
+                        self.calltypes[ir_print] = signature(types.none, lhs_typ)
+                        new_block.append(ir_print)
+            block.body = new_block
+
+    if self.func_ir.is_generator:
+        numba.parfors.parfor.fix_generator_types(
+            self.func_ir.generator_info, self.return_type, self.typemap
+        )
+    if numba.parfors.parfor.sequential_parfor_lowering:
+        numba.parfors.parfor.lower_parfor_sequential(
+            self.typingctx, self.func_ir, self.typemap, self.calltypes, self.metadata
+        )
+    else:
+        # prepare for parallel lowering
+        # add parfor params to parfors here since lowering is destructive
+        # changing the IR after this is not allowed
+        parfor_ids, parfors = get_parfor_params(
+            self.func_ir.blocks, self.options.fusion, self.nested_fusion_info
+        )
+
+        # Validate reduction in parfors.
+        for p in parfors:
+            p.redvars, p.reddict = numba.parfors.parfor.get_parfor_reductions(
+                self.func_ir, p, p.params, self.calltypes
+            )
+
+        # Validate parameters:
+        for p in parfors:
+            p.validate_params(self.typemap)
+
+        if numba.parfors.parfor.config.DEBUG_ARRAY_OPT_STATS:
+            name = self.func_ir.func_id.func_qualname
+            n_parfors = len(parfor_ids)
+            if n_parfors > 0:
+                after_fusion = (
+                    "After fusion" if self.options.fusion else "With fusion disabled"
+                )
+                print(
+                    ("{}, function {} has " "{} parallel for-loop(s) #{}.").format(
+                        after_fusion, name, n_parfors, parfor_ids
+                    )
+                )
+            else:
+                print("Function {} has no Parfor.".format(name))
+
+    return
+
+
+def try_fuse(equiv_set, parfor1, parfor2, metadata, func_ir, typemap):
+    """try to fuse parfors and return a fused parfor, otherwise return None"""
+    numba.parfors.parfor.dprint("try_fuse: trying to fuse \n", parfor1, "\n", parfor2)
+
+    # default report is None
+    report = None
+
+    # fusion of parfors with different dimensions not supported yet
+    if len(parfor1.loop_nests) != len(parfor2.loop_nests):
+        numba.parfors.parfor.dprint("try_fuse: parfors number of dimensions mismatch")
+        msg = "- fusion failed: number of loops mismatched, %s, %s."
+        fmt = "parallel loop #%s has a nest of %s loops"
+        l1 = fmt % (parfor1.id, len(parfor1.loop_nests))
+        l2 = fmt % (parfor2.id, len(parfor2.loop_nests))
+        report = numba.parfors.parfor.FusionReport(
+            parfor1.id, parfor2.id, msg % (l1, l2)
+        )
+        return None, report
+
+    ndims = len(parfor1.loop_nests)
+    # all loops should be equal length
+
+    def is_equiv(x, y):
+        return x == y or equiv_set.is_equiv(x, y)
+
+    def get_user_varname(v):
+        """get original variable name by user if possible"""
+        if not isinstance(v, ir.Var):
+            return v
+        v = v.name
+        if "var_rename_map" in metadata and v in metadata["var_rename_map"]:
+            user_varname = metadata["var_rename_map"][v]
+            return user_varname
+        return v
+
+    for i in range(ndims):
+        nest1 = parfor1.loop_nests[i]
+        nest2 = parfor2.loop_nests[i]
+        if not (
+            is_equiv(nest1.start, nest2.start)
+            and is_equiv(nest1.stop, nest2.stop)
+            and is_equiv(nest1.step, nest2.step)
+        ):
+            numba.parfors.parfor.dprint(
+                "try_fuse: parfor dimension correlation mismatch", i
+            )
+            msg = "- fusion failed: loop dimension mismatched in axis %s. "
+            msg += "slice(%s, %s, %s) != " % (
+                get_user_varname(nest1.start),
+                get_user_varname(nest1.stop),
+                get_user_varname(nest1.step),
+            )
+            msg += "slice(%s, %s, %s)" % (
+                get_user_varname(nest2.start),
+                get_user_varname(nest2.stop),
+                get_user_varname(nest2.step),
+            )
+            report = numba.parfors.parfor.FusionReport(parfor1.id, parfor2.id, msg % i)
+            return None, report
+
+    func_ir._definitions = build_definitions(func_ir.blocks)
+    p1_cross_dep, p1_ip, p1_ia, p1_non_ia = has_cross_iter_dep(
+        parfor1, func_ir, typemap
+    )
+    if not p1_cross_dep:
+        p2_cross_dep = has_cross_iter_dep(
+            parfor2, func_ir, typemap, p1_ip, p1_ia, p1_non_ia
+        )[0]
+    else:
+        p2_cross_dep = True
+
+    if p1_cross_dep or p2_cross_dep:
+        numba.parfors.parfor.dprint("try_fuse: parfor cross iteration dependency found")
+        msg = (
+            "- fusion failed: cross iteration dependency found "
+            "between loops #%s and #%s"
+        )
+        report = numba.parfors.parfor.FusionReport(
+            parfor1.id, parfor2.id, msg % (parfor1.id, parfor2.id)
+        )
+        return None, report
+
+    # find parfor1's defs, only body is considered since init_block will run
+    # first after fusion as well
+    p1_body_usedefs = numba.parfors.parfor.compute_use_defs(parfor1.loop_body)
+    p1_body_defs = set()
+    for defs in p1_body_usedefs.defmap.values():
+        p1_body_defs |= defs
+
+    # BODO CHANGE: Apply https://github.com/numba/numba/pull/8338
+    # Add reduction variables from parfor1 to the set of body defs
+    # so that if parfor2 reads the reduction variable it won't fuse.
+    p1_body_defs |= set(parfor1.redvars)
+
+    p2_usedefs = numba.parfors.parfor.compute_use_defs(parfor2.loop_body)
+    p2_uses = numba.parfors.parfor.compute_use_defs({0: parfor2.init_block}).usemap[0]
+    for uses in p2_usedefs.usemap.values():
+        p2_uses |= uses
+
+    if not p1_body_defs.isdisjoint(p2_uses):
+        numba.parfors.parfor.dprint("try_fuse: parfor2 depends on parfor1 body")
+        msg = (
+            "- fusion failed: parallel loop %s has a dependency on the "
+            "body of parallel loop %s. "
+        )
+        report = numba.parfors.parfor.FusionReport(
+            parfor1.id, parfor2.id, msg % (parfor1.id, parfor2.id)
+        )
+        return None, report
+
+    return numba.parfors.parfor.fuse_parfors_inner(parfor1, parfor2)
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.parfors.parfor.ParforPass.run)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "d1aaf42e6e0cd7f96efc06d2a0c51eb49d8da9f79e26c1e301a0c8026e063b81"
+    ):
+        warnings.warn("numba.parfors.parfor.ParforPass.run has changed")
+    lines = inspect.getsource(numba.parfors.parfor.try_fuse)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "3ec26e40da4e483594bba811d8a9051f4a18c274516392343a7d69efa7d15511"
+    ):
+        warnings.warn("numba.parfors.parfor.try_fuse has changed")
+
+numba.parfors.parfor.ParforPass.run = parfor_pass_run
+numba.parfors.parfor.try_fuse = try_fuse
+
+#### END PATCH TO SUPPORT CHECKING REDUCTIONS FOR PARFOR FUSION ####
