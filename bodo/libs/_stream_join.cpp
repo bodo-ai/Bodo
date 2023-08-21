@@ -2202,9 +2202,8 @@ table_info* join_probe_consume_batch_py_entry(
         }
         // This is the last output if we've already seen all input (i.e.
         // is_last) and there's no more output remaining in the output_buffer:
-        *out_is_last = join_stream_sync_is_last(
-            is_last && join_state_->output_buffer->total_remaining == 0,
-            join_state_->probe_iter - 1, join_state_);
+        *out_is_last =
+            is_last && join_state_->output_buffer->total_remaining == 0;
         return out_table;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
