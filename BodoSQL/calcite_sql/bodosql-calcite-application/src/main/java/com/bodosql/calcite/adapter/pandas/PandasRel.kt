@@ -30,9 +30,7 @@ interface PandasRel : RelNode {
     /**
      * Returns true if this node can be cached with another call to the same node.
      */
-    fun canUseNodeCache(): Boolean =
-        // Do not use node caching with streaming until we identify how to properly do this.
-        !traitSet.contains(BatchingProperty.STREAMING)
+    fun canUseNodeCache(): Boolean = true
 
     /**
      * Allows a PandasRel to override the number of ranks it will utilize.

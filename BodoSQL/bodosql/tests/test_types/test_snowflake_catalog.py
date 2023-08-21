@@ -16,6 +16,7 @@ import pandas as pd
 import pytest
 from bodosql.tests.test_datetime_fns import compute_valid_times
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
+    snowflake_sample_data_snowflake_catalog,
     test_db_snowflake_catalog,
 )
 from mpi4py import MPI
@@ -62,30 +63,6 @@ def dummy_snowflake_catalogs(request):
     """
     List of table paths that should be supported.
     None of these actually point to valid data
-    """
-    return request.param
-
-
-@pytest.fixture(
-    params=[
-        bodosql.SnowflakeCatalog(
-            os.environ.get("SF_USERNAME", ""),
-            os.environ.get("SF_PASSWORD", ""),
-            "bodopartner.us-east-1",
-            "DEMO_WH",
-            "SNOWFLAKE_SAMPLE_DATA",
-            connection_params={
-                "schema": "TPCH_SF1",
-                "query_tag": "folder=folder1+ folder2&",
-            },
-        )
-    ]
-)
-def snowflake_sample_data_snowflake_catalog(request):
-    """
-    The snowflake_sample_data snowflake catalog used for most tests.
-    Although this is a fixture there is intentionally a
-    single element.
     """
     return request.param
 

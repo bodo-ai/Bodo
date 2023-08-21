@@ -33,7 +33,7 @@ class Module(private val frame: Frame) {
         // relationalOperatorCache handles caching intermediate outputs of Relation Operators (RelNodes)
         // When possible
         private val relationalOperatorCache: RelationalOperatorCache =
-            RelationalOperatorCache()
+            RelationalOperatorCache(this)
 
         /**
          * Helper function called by add/addall. Checks that no variable is assigned too twice.

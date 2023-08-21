@@ -1200,7 +1200,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Expr outputExpr = inVar;
     Variable intermediateDf = this.genDfVar();
     this.generatedCode.add(new Op.Assign(intermediateDf, outputExpr));
-    // Update column names to the write names.
+
+    // Update column names to their write names.
     outputExpr = handleRename(intermediateDf, colNames, bodoSqlTable.getWriteColumnNames());
     return outputExpr;
   }
@@ -1587,7 +1588,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Place the output variable in the tableCache (if possible) and tableGenStack.
     operatorCache.tryCacheNode(node, out);
-
     tableGenStack.push(out);
   }
 
@@ -1604,14 +1604,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
       throw new BodoSQLCodegenException(
           "Internal error: unsupported tableScan node generated:" + node.toString());
     }
+    PandasTargetTableScan nodeCasted = (PandasTargetTableScan) node;
 
     singleBatchTimer(
-        (PandasRel) node,
+        nodeCasted,
         () -> {
           BodoEngineTable outTable;
           RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-          if (canLoadFromCache && operatorCache.isNodeCached(node)) {
-            outTable = operatorCache.getCachedTable(node);
+          if (canLoadFromCache && operatorCache.isNodeCached(nodeCasted)) {
+            outTable = operatorCache.getCachedTable(nodeCasted);
           } else {
             BodoSqlTable table;
 
@@ -1619,12 +1620,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
             // handle the code generation. Due to the way the code generation is constructed,
             // we can't really do that so we're just going to hack around it for now to avoid
             // a large refactor
-            RelOptTableImpl relTable = (RelOptTableImpl) node.getTable();
+            RelOptTableImpl relTable = (RelOptTableImpl) nodeCasted.getTable();
             table = (BodoSqlTable) relTable.table();
 
-            outTable = visitSingleBatchTableScanCommon(node, table, isTargetTableScan);
+            // IsTargetTableScan is always true, we check for this at the start of the function.
+            outTable = visitSingleBatchTableScanCommon(nodeCasted, table, isTargetTableScan);
           }
-          operatorCache.tryCacheNode(node, outTable);
+          operatorCache.tryCacheNode(nodeCasted, outTable);
           tableGenStack.push(outTable);
         });
   }
