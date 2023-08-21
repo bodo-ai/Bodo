@@ -2381,13 +2381,7 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
                 check_dtype=False,
             )
             check_logger_msg(stream, "Filter pushdown successfully performed.")
-            # The volcano planner may not lead to the same simplification yet.
-            if bodo.bodosql_use_volcano_plan:
-                check_logger_msg(
-                    stream, r"COALESCE(TO_CHAR(\"L_COMMITDATE\"), {f1}) >= {f2} )"
-                )
-            else:
-                check_logger_msg(stream, r"COALESCE(\"L_COMMITDATE\", {f0}) >= {f1} )")
+            check_logger_msg(stream, r"COALESCE(\"L_COMMITDATE\", {f0}) >= {f1} )")
 
 
 @pytest.mark.parametrize(

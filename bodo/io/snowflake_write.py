@@ -494,13 +494,11 @@ def snowflake_writer_append_table(
         )
 
     col_names_arr = pd.array(col_names_meta.meta)
-    col_types_arr = table.arr_types
     sf_schema = bodo.io.snowflake.gen_snowflake_schema(
         col_names_meta.meta, table.arr_types
     )
     n_cols = len(col_names_meta)
     py_table_typ = table
-    table_builder_state_type = TableBuilderStateType(writer.input_table_type)
 
     # This function must be called the same number of times on all ranks.
     # This is because we only execute COPY INTO commands from rank 0, so
@@ -515,7 +513,8 @@ def snowflake_writer_append_table(
         is_last = bodo.libs.distributed_api.sync_is_last(is_last, iter)
         # ===== Part 1: Accumulate batch in writer and compute total size
         ev_append_batch = tracing.Event(f"append_batch", is_parallel=True)
-        bodo.libs.table_builder.table_builder_append(writer["batches"], table)
+        table_builder_state = writer["batches"]
+        bodo.libs.table_builder.table_builder_append(table_builder_state, table)
         nbytes_arr = np.empty(n_cols, np.int64)
         bodo.utils.table_utils.generate_table_nbytes(table, nbytes_arr, 0)
         nbytes = np.sum(nbytes_arr)
@@ -534,7 +533,7 @@ def snowflake_writer_append_table(
             # NOTE: table_builder_reset() below affects the table builder state so
             # out_table should be used immediately and not be stored.
             out_table = bodo.libs.table_builder.table_builder_get_data(
-                writer["batches"]
+                table_builder_state
             )
             out_table_len = len(out_table)
             if out_table_len > 0:
@@ -608,7 +607,7 @@ def snowflake_writer_append_table(
                             )
                 writer["file_count_local"] += 1
                 ev_upload_table.finalize()
-            bodo.libs.table_builder.table_builder_reset(writer["batches"])
+            bodo.libs.table_builder.table_builder_reset(table_builder_state)
             writer["curr_mem_size"] = 0
         # Count number of newly written files. This is also an implicit barrier
         # To reduce synchronization, we do this infrequently
