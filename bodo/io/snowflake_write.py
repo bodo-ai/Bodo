@@ -582,7 +582,9 @@ def snowflake_writer_append_table(
                     stage_name = writer["stage_name"]
                     copy_into_dir = writer["copy_into_dir"]
                     if bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:
-                        with numba.objmode(upload_thread="exception_propagating_thread_type"):
+                        with numba.objmode(
+                            upload_thread="exception_propagating_thread_type"
+                        ):
                             upload_thread = bodo.io.snowflake.do_upload_and_cleanup(
                                 cursor,
                                 file_count_local,
