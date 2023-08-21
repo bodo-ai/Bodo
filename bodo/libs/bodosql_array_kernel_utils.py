@@ -327,11 +327,19 @@ def gen_vectorized(
             # In this path the output is still dictionary encoded, so the indices
             # and other attributes need to be copied
             func_text += f"   cache_dict_id = {arg_names[dict_encoded_arg]}._dict_id\n"
-            if out_dtype == bodo.string_array_type:
+            # If we are outputting a dictionary we need a copy of the indices for the new
+            # array. Alternatively if we have not propagate_null[dict_encoded_arg] then we
+            # will be modifying the indices in place so we must make a copy.
+            if (
+                out_dtype == bodo.string_array_type
+                or not propagate_null[dict_encoded_arg]
+            ):
                 func_text += (
                     f"   indices = {arg_names[dict_encoded_arg]}._indices.copy()\n"
                 )
-
+            else:
+                func_text += f"   indices = {arg_names[dict_encoded_arg]}._indices\n"
+            if out_dtype == bodo.string_array_type:
                 # In Bodo, if has _has_unique_local_dictionary is True, there are no duplicate values in the
                 # dictionary. Therefore, if we're performing an operation that may create duplicate values,
                 # we need to set the values appropriately.
@@ -345,9 +353,8 @@ def gen_vectorized(
                     f"   {arg_names[i]} = {arg_names[dict_encoded_arg]}._data\n"
                 )
             # In this path the output is not dictionary encoded, so the data
-            # and indices are needed but no copies are required
+            # is needed but won't be copied.
             else:
-                func_text += f"   indices = {arg_names[dict_encoded_arg]}._indices\n"
                 func_text += (
                     f"   {arg_names[i]} = {arg_names[dict_encoded_arg]}._data\n"
                 )
@@ -580,10 +587,8 @@ def gen_vectorized(
                     func_text += "      if bodo.libs.array_kernels.isna(indices, i):\n"
                     func_text += "         bodo.libs.array_kernels.setna(res2, i)\n"
                     func_text += "         continue\n"
-                    func_text += "      loc = indices[i]\n"
-                else:
-                    # last dictionary value in res is null's output for the kernel
-                    func_text += "      loc = n if bodo.libs.array_kernels.isna(indices, i) else indices[i]\n"
+                # For not propagate_null[dict_encoded_arg] we have maps nulls to 0
+                func_text += "      loc = indices[i]\n"
                 # Copy nulls from the smaller array to the output array
                 func_text += "      if bodo.libs.array_kernels.isna(res, loc):\n"
                 func_text += "         bodo.libs.array_kernels.setna(res2, i)\n"
