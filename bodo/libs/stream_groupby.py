@@ -550,7 +550,7 @@ def groupby_produce_output_batch(groupby_state, produce_output):
 
     Returns:
         table_type: output table batch
-        bool: global is last batch with possiblity of false negatives due to iterations between syncs
+        bool: global is last batch with possibility of false negatives due to iterations between syncs
     """
     out_table_type = groupby_state.out_table_type
 

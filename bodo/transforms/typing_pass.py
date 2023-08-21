@@ -4527,7 +4527,7 @@ class TypingTransforms:
         label_of_replacee = self.rhs_labels[def_to_replace]
         assert (
             label_of_replacer != label_of_replacee
-        ), "Invalid replacement of definition"
+        ), "Invalid replacement of definition: replacer and replaceee must belong to different code block"
 
         block = self.func_ir.blocks[label_of_replacee]
         remove_line = -1
@@ -4624,21 +4624,48 @@ class TypingTransforms:
                 return [assign]
 
             if input_table_type != output_type.build_table_type:
-                args = builder_def.args[:1]
+                should_use_chunked_builder_arg = get_call_expr_arg(
+                    "init_table_builder_state",
+                    builder_def.args,
+                    dict(builder_def.kws),
+                    1,
+                    "use_chunked_builder",
+                    default=None,
+                    use_default=True,
+                )
+                if should_use_chunked_builder_arg == None:
+                    should_use_chunked_builder_arg = False
+                else:
+                    should_use_chunked_builder_type = self.typemap.get(
+                        should_use_chunked_builder_arg.name, None
+                    )
+                    if not is_overload_constant_bool(should_use_chunked_builder_type):
+                        raise BodoError(
+                            "init_table_builder_state(): use_chunked_builder must be a constant boolean value"
+                        )
+                    should_use_chunked_builder_arg = get_overload_const_bool(
+                        should_use_chunked_builder_type
+                    )
+
+                args = []
                 new_type = bodo.libs.table_builder.TableBuilderStateType(
-                    input_table_type
+                    input_table_type, should_use_chunked_builder_arg
                 )
                 func_text = (
                     "def impl():\n"
                     "  return bodo.libs.table_builder.init_table_builder_state(\n"
-                    "    expected_state_type=_expected_state_type\n"
+                    "    expected_state_type=_expected_state_type,\n"
+                    "    use_chunked_builder=_should_use_chunked_builder_arg\n"
                     "  )\n"
                 )
 
                 self._replace_state_definition(
                     func_text,
                     "impl",
-                    {"_expected_state_type": new_type},
+                    {
+                        "_expected_state_type": new_type,
+                        "_should_use_chunked_builder_arg": should_use_chunked_builder_arg,
+                    },
                     args,
                     builder_state,
                     builder_def,

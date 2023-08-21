@@ -125,3 +125,88 @@ def test_table_builder_with_strings(memory_leak_check):
     check_func(
         test, (), py_output=expected_df, convert_to_nullable_float=False, only_seq=True
     )
+
+
+def test_table_builder(memory_leak_check):
+    """Simple test for table builder"""
+
+    df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+    col_names_meta = ColNamesMetaType(tuple(df.columns))
+
+    def f(df):
+        idx = df.index
+        state = bodo.libs.table_builder.init_table_builder_state()
+        # Note that the for loop is necessary,
+        # _replace_state_definition requires that the init_table_builder_state
+        # is not in the same basic block as the append.
+        for i in range(1):
+            table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
+            bodo.libs.table_builder.table_builder_append(state, table)
+        out_table = bodo.libs.table_builder.table_builder_finalize(state)
+        out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), idx, col_names_meta
+        )
+        return out_df
+
+    check_func(f, (df,), py_output=df, use_table_format=True)
+
+
+def test_chunked_table_builder_simple(memory_leak_check):
+    """Simple test for the chunked table builder"""
+
+    df = pd.DataFrame({"A": [1, 2, 3] * 10, "B": ["A", "B", "C"] * 10})
+    col_names_meta = ColNamesMetaType(tuple(df.columns))
+
+    def f(df):
+        idx = df.index
+        state = bodo.libs.table_builder.init_table_builder_state(
+            use_chunked_builder=True
+        )
+        for i in range(1):
+            table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
+            bodo.libs.table_builder.table_builder_append(state, table)
+        out_table, is_last = bodo.libs.table_builder.table_builder_pop_chunk(state)
+        bodo.libs.table_builder.delete_table_builder_state(state)
+        out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), idx, col_names_meta
+        )
+        return out_df
+
+    check_func(f, (df,), py_output=df, use_table_format=True)
+
+
+def test_chunked_table_builder_multiple_chunks(memory_leak_check):
+    """test for the chunked table builder with multiple appends/pops of chunks"""
+    chunk_size = bodo.bodosql_streaming_batch_size
+    num_iters = 5
+
+    df = pd.DataFrame({"A": np.arange(chunk_size), "B": ["A"] * chunk_size})
+    col_names_meta = ColNamesMetaType(tuple(df.columns))
+
+    def f(df):
+        idx = df.index
+        state = bodo.libs.table_builder.init_table_builder_state(
+            use_chunked_builder=True
+        )
+        for i in range(num_iters):
+            table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
+            bodo.libs.table_builder.table_builder_append(state, table)
+
+        out_list = []
+        for i in range(num_iters):
+            out_table, is_last = bodo.libs.table_builder.table_builder_pop_chunk(state)
+            out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), idx, col_names_meta
+            )
+            out_list.append(out_df)
+
+        bodo.libs.table_builder.delete_table_builder_state(state)
+        return pd.concat(out_list)
+
+    check_func(
+        f,
+        (df,),
+        py_output=pd.concat([df] * num_iters),
+        use_table_format=True,
+        sort_output=True,
+    )

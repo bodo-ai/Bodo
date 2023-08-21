@@ -792,6 +792,74 @@ void table_builder_reset(TableBuilderState* state) { state->builder.Reset(); }
 
 void delete_table_builder_state(TableBuilderState* state) { delete state; }
 
+struct ChunkedTableBuilderState {
+    std::vector<int8_t> arr_c_types;
+    std::vector<int8_t> arr_array_types;
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    std::unique_ptr<ChunkedTableBuilder> builder;
+
+    ChunkedTableBuilderState(std::vector<int8_t> _arr_c_types,
+                             std::vector<int8_t> _arr_array_types,
+                             size_t chunk_size)
+        : arr_c_types(std::move(_arr_c_types)),
+          arr_array_types(std::move(_arr_array_types)) {
+        // Create dictionary builders for all columns
+        for (size_t i = 0; i < arr_array_types.size(); i++) {
+            if (arr_array_types[i] == bodo_array_type::DICT) {
+                std::shared_ptr<array_info> dict = alloc_array(
+                    0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
+                dict_builders.emplace_back(
+                    std::make_shared<DictionaryBuilder>(dict, false));
+            } else {
+                dict_builders.emplace_back(nullptr);
+            }
+        }
+        builder = std::make_unique<ChunkedTableBuilder>(ChunkedTableBuilder(
+            arr_c_types, arr_array_types, dict_builders, chunk_size,
+            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES));
+    }
+};
+
+ChunkedTableBuilderState* chunked_table_builder_state_init_py_entry(
+    int8_t* arr_c_types, int8_t* arr_array_types, int n_arrs,
+    int64_t chunk_size) {
+    std::vector<int8_t> ctype_vec(n_arrs);
+    std::vector<int8_t> ctype_arr_vec(n_arrs);
+    for (int i = 0; i < n_arrs; i++) {
+        ctype_vec[i] = arr_c_types[i];
+        ctype_arr_vec[i] = arr_array_types[i];
+    }
+
+    return new ChunkedTableBuilderState(ctype_vec, ctype_arr_vec,
+                                        (size_t)chunk_size);
+}
+
+void chunked_table_builder_append_py_entry(ChunkedTableBuilderState* state,
+                                           table_info* in_table) {
+    const std::shared_ptr<table_info> tmp_table(in_table);
+    std::shared_ptr<table_info> unified_table = unify_dictionary_arrays_helper(
+        tmp_table, state->dict_builders, 0, false);
+    state->builder->AppendBatch(unified_table);
+}
+
+table_info* chunked_table_builder_pop_chunk(ChunkedTableBuilderState* state,
+                                            bool produce_output,
+                                            bool force_return,
+                                            bool* is_last_output_chunk) {
+    std::shared_ptr<table_info> ret_table;
+    if (!produce_output) {
+        ret_table = state->builder->dummy_output_chunk;
+    } else {
+        ret_table = get<0>(state->builder->PopChunk(force_return));
+    }
+    *is_last_output_chunk = (state->builder->total_remaining == 0);
+    return new table_info(*ret_table);
+}
+
+void delete_chunked_table_builder_state(ChunkedTableBuilderState* state) {
+    delete state;
+}
+
 PyMODINIT_FUNC PyInit_table_builder_cpp(void) {
     PyObject* m;
     MOD_DEF(m, "table_builder_cpp", "No docs", NULL);
@@ -807,5 +875,10 @@ PyMODINIT_FUNC PyInit_table_builder_cpp(void) {
     SetAttrStringFromVoidPtr(m, table_builder_get_data);
     SetAttrStringFromVoidPtr(m, table_builder_reset);
     SetAttrStringFromVoidPtr(m, delete_table_builder_state);
+
+    SetAttrStringFromVoidPtr(m, chunked_table_builder_state_init_py_entry);
+    SetAttrStringFromVoidPtr(m, chunked_table_builder_append_py_entry);
+    SetAttrStringFromVoidPtr(m, chunked_table_builder_pop_chunk);
+    SetAttrStringFromVoidPtr(m, delete_chunked_table_builder_state);
     return m;
 }

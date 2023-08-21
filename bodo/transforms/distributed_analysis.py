@@ -1667,6 +1667,25 @@ class DistributedAnalysis:
             return
 
         if fdef == (
+            "table_builder_pop_chunk",
+            "bodo.libs.table_builder",
+        ):  # pragma: no cover
+            if lhs not in array_dists:
+                # We can pop unequal chunks on each rank. As a result we must
+                # initialize everything to 1DVar.
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+            lhs_dist = array_dists[lhs][0]
+            out_dist = Distribution(
+                min(
+                    lhs_dist.value,
+                    array_dists[rhs.args[0].name].value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, out_dist)
+            self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+            return
+
+        if fdef == (
             "table_builder_append",
             "bodo.libs.table_builder",
         ):  # pragma: no cover
