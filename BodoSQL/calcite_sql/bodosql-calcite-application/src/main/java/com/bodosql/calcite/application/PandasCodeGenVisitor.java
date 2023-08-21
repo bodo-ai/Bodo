@@ -448,7 +448,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else if (node instanceof PandasValues) {
       this.visitLogicalValues((PandasValues) node);
     } else if (node instanceof PandasTableModify) {
-      this.visitLogicalTableModify((PandasTableModify) node);
+      this.visitPandasTableModify((PandasTableModify) node);
     } else if (node instanceof PandasTableCreate) {
       this.visitLogicalTableCreate((PandasTableCreate) node);
     } else if (node instanceof PandasRowSample) {
@@ -913,11 +913,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Visitor for LogicalTableModify, which is used to support certain SQL write operations.
+   * Visitor for PandasTableModify, which is used to support certain SQL write operations.
    *
-   * @param node LogicalTableModify node to be visited
+   * @param node PandasTableModify node to be visited
    */
-  public void visitLogicalTableModify(PandasTableModify node) {
+  public void visitPandasTableModify(PandasTableModify node) {
     switch (node.getOperation()) {
       case INSERT:
         this.visitInsertInto(node);
@@ -1042,12 +1042,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
                         deltaDf)));
 
             // TODO: this can just be cast, since we handled rename
-            Expr castedAndRenamedWriteBackDfExpr =
-                handleCastAndRenameBeforeWrite(
-                    writebackDf, targetTableFinalColumnNames, bodoSqlTable);
+            Expr renamedWriteBackDfExpr =
+                handleRenameBeforeWrite(writebackDf, targetTableFinalColumnNames, bodoSqlTable);
             Variable castedAndRenamedWriteBackDfVar = this.genDfVar();
             this.generatedCode.add(
-                new Op.Assign(castedAndRenamedWriteBackDfVar, castedAndRenamedWriteBackDfExpr));
+                new Op.Assign(castedAndRenamedWriteBackDfVar, renamedWriteBackDfExpr));
             this.generatedCode.add(
                 new Op.Stmt(
                     bodoSqlTable.generateWriteCode(
@@ -1060,17 +1059,21 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * Generate Code for Single Batch, Non-Streaming INSERT INTO
    *
    * @param node LogicalTableModify node to be visited
-   * @param inVar Input Var containing table to write
+   * @param inputTable Input Var containing table to write
    * @param colNames List of column names
    * @param bodoSqlTable Reference to Table to Write to
    */
   void genSingleBatchInsertInto(
-      PandasTableModify node, Variable inVar, List<String> colNames, BodoSqlTable bodoSqlTable) {
+      PandasTableModify node,
+      BodoEngineTable inputTable,
+      List<String> colNames,
+      BodoSqlTable bodoSqlTable) {
     singleBatchTimer(
         node,
         () -> {
-          Expr castedAndRenamedDfExpr =
-              handleCastAndRenameBeforeWrite(inVar, colNames, bodoSqlTable);
+          BuildContext ctx = new BuildContext(node);
+          Variable inDf = ctx.convertTableToDf(inputTable);
+          Expr castedAndRenamedDfExpr = handleRenameBeforeWrite(inDf, colNames, bodoSqlTable);
           Variable castedAndRenamedDfVar = this.genDfVar();
           this.generatedCode.add(new Op.Assign(castedAndRenamedDfVar, castedAndRenamedDfExpr));
           this.generatedCode.add(
@@ -1082,18 +1085,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * Generate Code for Streaming INSERT INTO
    *
    * @param node LogicalTableModify node to be visited
-   * @param inVar Input Var containing table to write
+   * @param inputTable Input Var containing table to write
    * @param colNames List of column names
    * @param bodoSqlTable Reference to Table to Write to
    */
   void genStreamingInsertInto(
-      PandasTableModify node, Variable inVar, List<String> colNames, BodoSqlTable bodoSqlTable) {
-    BuildContext ctx = new BuildContext(node);
-
-    Expr castedAndRenamedDfExpr = handleCastAndRenameBeforeWrite(inVar, colNames, bodoSqlTable);
-    Variable castedAndRenamedDfVar = this.genDfVar();
-    this.generatedCode.add(new Op.Assign(castedAndRenamedDfVar, castedAndRenamedDfExpr));
-
+      PandasTableModify node,
+      BodoEngineTable inputTable,
+      List<String> colNames,
+      BodoSqlTable bodoSqlTable) {
     // Generate Streaming Code in this case
     // Get or create current streaming pipeline
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
@@ -1123,8 +1123,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Second, append the Table to the writer
     timerInfo.insertLoopOperationStartTimer();
-    BodoEngineTable tableVar = ctx.convertDfToTable(castedAndRenamedDfVar, node.getInput());
-
     // Get column names for write append call
     Variable colNamesGlobal =
         lowerAsColNamesMetaType(new Expr.Tuple(stringsToStringLiterals(colNames)));
@@ -1133,7 +1131,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Expr writerAppendCall =
         bodoSqlTable.generateStreamingWriteAppendCode(
             writerVar,
-            tableVar,
+            inputTable,
             colNamesGlobal,
             currentPipeline.getExitCond(),
             currentPipeline.getIterVar());
@@ -1166,14 +1164,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
     //
     // At this time we don't make any additional optimizations, such as omitting
     // NULL columns.
-    BuildContext ctx = new BuildContext(node);
-
     // Generate code for a projection.
     this.visit(node.getInput(), 0, node);
     // Generate the to_sql code
     List<String> colNames = node.getInput().getRowType().getFieldNames();
     BodoEngineTable inTable = tableGenStack.pop();
-    Variable inDf = ctx.convertTableToDf(inTable);
     RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
     BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
     if (!bodoSqlTable.isWriteable()) {
@@ -1183,9 +1178,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
 
     if (node.getInput().getTraitSet().containsIfApplicable(BatchingProperty.SINGLE_BATCH)) {
-      genSingleBatchInsertInto(node, inDf, colNames, bodoSqlTable);
+      genSingleBatchInsertInto(node, inTable, colNames, bodoSqlTable);
     } else {
-      genStreamingInsertInto(node, inDf, colNames, bodoSqlTable);
+      genStreamingInsertInto(node, inTable, colNames, bodoSqlTable);
     }
   }
 
@@ -1200,19 +1195,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param bodoSqlTable The table to be written to.
    * @return
    */
-  public Expr handleCastAndRenameBeforeWrite(
+  public Expr handleRenameBeforeWrite(
       Variable inVar, List<String> colNames, BodoSqlTable bodoSqlTable) {
     Expr outputExpr = inVar;
-
-    // Do the cast and update outputExpr if needed
-    Expr castExpr = bodoSqlTable.generateWriteCastCode(inVar);
-    if (!castExpr.emit().equals("")) {
-      outputExpr = castExpr;
-    }
-
     Variable intermediateDf = this.genDfVar();
     this.generatedCode.add(new Op.Assign(intermediateDf, outputExpr));
-
     // Update column names to the write names.
     outputExpr = handleRename(intermediateDf, colNames, bodoSqlTable.getWriteColumnNames());
     return outputExpr;

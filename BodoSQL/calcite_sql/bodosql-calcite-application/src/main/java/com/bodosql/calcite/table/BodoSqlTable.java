@@ -137,18 +137,6 @@ public abstract class BodoSqlTable implements ExtensibleTable {
       String colName, SqlCall sc, SqlNode sn, CalciteConnectionConfig ccc) {
     throw new UnsupportedOperationException("rolledUpColumnValidInsideAgg Not supported yet.");
   }
-
-  /**
-   * Generates the code needed to cast a table currently in memory for BodoSQL into the output types
-   * of the source table. This is done using the cast information in the columns and generates
-   * appropriate Python to convert to the desired output types.
-   *
-   * <p>If there are no casts that need to be performed this returns the empty string.
-   *
-   * @param varName Name of the variable containing the data to write.
-   * @return Generated code used to cast the Table being written.
-   */
-
   /**
    * Generates the code needed to cast a read table into types that can be supported by BodoSQL.
    * This is done using the cast information in the columns and generates appropriate Python to
@@ -160,41 +148,12 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * @return Generated code used to cast the Table being read.
    */
   public Expr generateReadCastCode(Variable varName) {
-    return generateCommonCastCode(varName, false);
-  }
-
-  /**
-   * Generates the code needed to cast a BodoSQL table into types that are used when writing the
-   * DataFrame back to its destination. This is done using the cast information in the columns and
-   * generates appropriate Python to convert to the desired output types.
-   *
-   * <p>If there are no casts that need to be performed this returns the empty string.
-   *
-   * @param varName Name of the variable containing the data to write.
-   * @return Generated code used to cast the Table being written.
-   */
-  public Expr generateWriteCastCode(Variable varName) {
-    return generateCommonCastCode(varName, true);
-  }
-
-  /**
-   * Generate common code shared by the cast operations for converting data being read in or about
-   * to be written. This generates code using __bodosql_replace_columns_dummy to convert data while
-   * maintaining table format if possible.
-   *
-   * <p>If there are no columns to cast this returns the input variable
-   *
-   * @param varName Name of the variable to cast.
-   * @param isWrite Is the cast for a read or write. This determines the cast direction.
-   * @return The generated Python code or the empty string.
-   */
-  private Expr generateCommonCastCode(Variable varName, boolean isWrite) {
     // Name of the columns to cast
     List<String> castColNames = new ArrayList<>();
     // List of string to use to perform the cast
     List<String> castExprs = new ArrayList<>();
     for (BodoSQLColumn col : this.columns) {
-      if (!isWrite && col.requiresReadCast()) {
+      if (col.requiresReadCast()) {
         castColNames.add(col.getColumnName());
         castExprs.add(col.getReadCastExpr(varName));
       }
