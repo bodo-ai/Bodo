@@ -1,11 +1,19 @@
 #### Package tests ################
-import pytest
 import os
 import time
 
+import pytest
+
 
 @pytest.mark.parametrize(
-    "package", ["bodo", "snowflake-connector-python", "bodo-platform-utils", "bodo-platform-extensions", "httpie"]
+    "package",
+    [
+        "bodo",
+        "snowflake-connector-python",
+        "bodo-platform-utils",
+        "bodo-platform-extensions",
+        "httpie",
+    ],
 )
 def test_packages(package, pip_packages, conda_packages, remote_dir, host):
     assert (
@@ -92,6 +100,16 @@ def test_mpich_not_installed(package, pip_packages, conda_packages):
     ), "Extra MPI packages installed, DELETE them!"
 
 
+def test_ucx_not_installed(pip_packages, conda_packages):
+    # UCX can interfere with Intel MPI, causing it to use Mellanox for
+    # communication, particularly on Azure. For now, since we don't
+    # install the Mellanox drivers, we should remove UCX entirely
+    # so Intel MPI doesn't find it
+    assert not (
+        "ucx" in conda_packages or "ucx" in pip_packages
+    ), "UCX Package Installed in Python, DELETE them!"
+
+
 @pytest.mark.parametrize(
     "package",
     [
@@ -115,7 +133,9 @@ def test_ipy_packages(host, package, pip_packages, conda_packages, remote_dir):
             assert r.succeeded
 
         def test_mock_engine_start(host):
-            run = host.run("timeout -s SIGTERM --preserve-status 55s ipcluster start -n 2")
+            run = host.run(
+                "timeout -s SIGTERM --preserve-status 55s ipcluster start -n 2"
+            )
             time.sleep(60)
             # why stderr? because we are manually sending a sigterm to cancel this run, so the output shows up at stderr
             out = run.stderr
@@ -205,7 +225,7 @@ def test_bodo_azurefs_sas_token_provider(host, remote_dir):
     test_jar_in_CLASSPATH(host)
 
 
-#def test_slurm_install(host):
+# def test_slurm_install(host):
 #    """make sure Slurm is installed properly"""
 #    SLURM_VERSION = os.environ["SLURM_VERSION"]
 #    # make sure slurmctld and slurmd are available
@@ -216,9 +236,9 @@ def test_bodo_azurefs_sas_token_provider(host, remote_dir):
 #    assert slurmctld.is_installed, "slurmctld not installed properly"
 #    assert slurmctld.version == SLURM_VERSION, "invalid slurmctld version"
 
-def test_goofys_install(host):
-    """make sure goofys is installed properly
-    """
 
-    r = host.run('which goofys')
+def test_goofys_install(host):
+    """make sure goofys is installed properly"""
+
+    r = host.run("which goofys")
     assert r.succeeded, "Goofys not installed"

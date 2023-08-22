@@ -1,11 +1,22 @@
 ---
-- name: INTEL MPI | Uninstall mpich if it's installed
+- name: INTEL MPI | Uninstall MPICH if it's installed
   shell: |
     /opt/conda/bin/conda list mpich | grep -q mpich
     if [[ $? -eq 0 ]]; then
       /opt/conda/bin/conda remove mpich mpi --force --quiet --yes
     else
       echo "mpich not found. Skipping..."
+    fi
+  tags:
+    - intel-mpi
+
+- name: INTEL MPI | Uninstall UCX from Conda
+  shell: |
+    /opt/conda/bin/conda list ucx | grep -q ucx
+    if [[ $? -eq 0 ]]; then
+      /opt/conda/bin/conda remove ucx --force --quiet --yes
+    else
+      echo "ucx not found. Skipping..."
     fi
   tags:
     - intel-mpi
