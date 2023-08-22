@@ -3,7 +3,9 @@ name: Publish images
 on:
   pull_request:
     branches:
-      - master
+      - develop
+    paths:
+      - 'bodo-platform-image/**'
 
   workflow_dispatch:
     inputs:
