@@ -341,7 +341,14 @@ supported_window_funcs = [
     "size",
     "count",
     "count_if",
+    "var",
+    "var_pop",
+    "std",
+    "std_pop",
+    "mean",
     "any_value",
+    "first",
+    "last",
 ]
 
 

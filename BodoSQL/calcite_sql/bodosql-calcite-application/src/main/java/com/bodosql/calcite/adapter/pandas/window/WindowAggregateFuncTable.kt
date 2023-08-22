@@ -12,7 +12,6 @@ import org.apache.calcite.sql.SqlOperator
  * through the window function.
  */
 internal object WindowAggregateFuncTable {
-
     /**
      * Mapping of [SqlKind] values to [WindowAggregateFunc].
      *
@@ -26,7 +25,14 @@ internal object WindowAggregateFuncTable {
         SqlKind.CUME_DIST to define("cume_dist"),
         SqlKind.NTILE to define("ntile", ExprType.SCALAR),
         SqlKind.COUNT to WindowAggregateFunc(::count),
+        SqlKind.VAR_POP to defineBounded("var_pop", ExprType.SERIES),
+        SqlKind.VAR_SAMP to defineBounded("var", ExprType.SERIES),
+        SqlKind.STDDEV_POP to defineBounded("std_pop", ExprType.SERIES),
+        SqlKind.STDDEV_SAMP to defineBounded("std", ExprType.SERIES),
+        SqlKind.AVG to defineBounded("mean", ExprType.SERIES),
         SqlKind.ANY_VALUE to define("any_value", ExprType.SERIES),
+        SqlKind.FIRST_VALUE to defineBounded("first", ExprType.SERIES),
+        SqlKind.LAST_VALUE to defineBounded("last", ExprType.SERIES),
     )
 
     /**
@@ -43,6 +49,8 @@ internal object WindowAggregateFuncTable {
         CondOperatorTable.CONDITIONAL_TRUE_EVENT to define("conditional_true_event", ExprType.SERIES),
         CondOperatorTable.CONDITIONAL_CHANGE_EVENT to define("conditional_change_event", ExprType.SERIES),
         CondOperatorTable.COUNT_IF to defineBounded("count_if", ExprType.SERIES),
+        NumericOperatorTable.VARIANCE_POP to defineBounded("var_pop", ExprType.SERIES),
+        NumericOperatorTable.VARIANCE_SAMP to defineBounded("var", ExprType.SERIES),
     ).mapKeys { it.key.name }
 
     /**

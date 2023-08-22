@@ -1438,7 +1438,14 @@ def extract_window_args(
         "size": ["scalar", "scalar"],
         "count": ["vector", "scalar", "scalar"],
         "count_if": ["vector", "scalar", "scalar"],
+        "var": ["vector", "scalar", "scalar"],
+        "var_pop": ["vector", "scalar", "scalar"],
+        "std": ["vector", "scalar", "scalar"],
+        "std_pop": ["vector", "scalar", "scalar"],
+        "mean": ["vector", "scalar", "scalar"],
         "any_value": ["vector"],
+        "first": ["vector", "scalar", "scalar"],
+        "last": ["vector", "scalar", "scalar"],
     }
     func_arg_typ = func_arg_typs.get(func_name, [])
     # Verify that the input tuple has the correct length
@@ -1544,9 +1551,16 @@ def resolve_window_funcs(
         "count_if": dtype_to_array_type(types.uint64),
         "percent_rank": dtype_to_array_type(types.float64),
         "cume_dist": dtype_to_array_type(types.float64),
+        "var": to_nullable_type(dtype_to_array_type(types.float64)),
+        "var_pop": to_nullable_type(dtype_to_array_type(types.float64)),
+        "std": to_nullable_type(dtype_to_array_type(types.float64)),
+        "std_pop": to_nullable_type(dtype_to_array_type(types.float64)),
+        "mean": to_nullable_type(dtype_to_array_type(types.float64)),
         "min_row_number_filter": bodo.boolean_array_type,
         # None = output dtype matches input dtype
         "any_value": None,
+        "first": None,
+        "last": None,
     }
 
     for window_func in window_funcs:
@@ -1566,6 +1580,10 @@ def resolve_window_funcs(
             ind = grp.df_type.column_index[vector_args[0]]
             in_arr_type = grp.df_type.data[ind]
             out_dtype = in_arr_type
+            # If the function allows frames, the output can be nullable
+            # even if the input is not
+            if func_name in {"first", "last"}:
+                out_dtype = to_nullable_type(out_dtype)
         out_data.append(out_dtype)
 
     # Generate the gb_info
