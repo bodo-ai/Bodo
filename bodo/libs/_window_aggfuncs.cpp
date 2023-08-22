@@ -96,9 +96,9 @@ void window_frame_sliding_computation(std::shared_ptr<array_info> in_arr,
                                       std::shared_ptr<array_info> sorted_idx,
                                       int64_t lo, int64_t hi,
                                       const int64_t group_start_idx,
-                                      const int64_t group_end_idx) {
-    // Create and initialize the accumulator.
-    WindowAggfunc aggfunc(in_arr, out_arr, sorted_idx);
+                                      const int64_t group_end_idx,
+                                      WindowAggfunc& aggfunc) {
+    // Initialize the accumulator.
     aggfunc
         .init<window_func, ArrayType, T, DType, window_frame_enum::SLIDING>();
     // Entering = the index where the next value to enter the window frame
@@ -179,9 +179,9 @@ void window_frame_prefix_computation(std::shared_ptr<array_info> in_arr,
                                      std::shared_ptr<array_info> sorted_idx,
                                      const int64_t hi,
                                      const int64_t group_start_idx,
-                                     const int64_t group_end_idx) {
-    // Create and initialize the accumulator.
-    WindowAggfunc aggfunc(in_arr, out_arr, sorted_idx);
+                                     const int64_t group_end_idx,
+                                     WindowAggfunc& aggfunc) {
+    // Initialize the accumulator.
     aggfunc.init<window_func, ArrayType, T, DType,
                  window_frame_enum::CUMULATIVE>();
     // Entering = the index where the next value to enter the window frame
@@ -251,9 +251,9 @@ void window_frame_suffix_computation(std::shared_ptr<array_info> in_arr,
                                      std::shared_ptr<array_info> sorted_idx,
                                      const int64_t lo,
                                      const int64_t group_start_idx,
-                                     const int64_t group_end_idx) {
-    // Create and initialize the accumulator.
-    WindowAggfunc aggfunc(in_arr, out_arr, sorted_idx);
+                                     const int64_t group_end_idx,
+                                     WindowAggfunc& aggfunc) {
+    // Initialize the accumulator.
     aggfunc.init<window_func, ArrayType, T, DType,
                  window_frame_enum::CUMULATIVE>();
     // Entering = the index where the next value to enter the window frame
@@ -262,7 +262,7 @@ void window_frame_suffix_computation(std::shared_ptr<array_info> in_arr,
     // Add all of the values into the accumulator that are part of the
     // suffix frame for the last row.
     for (int64_t i = group_end_idx - 1;
-         i >= std::max(group_start_idx, group_end_idx + lo); i--) {
+         i >= std::max(group_start_idx, group_end_idx + lo - 1); i--) {
         aggfunc.enter<window_func, ArrayType, T, DType,
                       window_frame_enum::CUMULATIVE>(i);
     }
@@ -327,6 +327,7 @@ void window_frame_computation_with_frame(
     int64_t n = in_arr->length;
     int64_t prev_group = -1;
     int64_t group_start_idx = 0;
+    WindowAggfunc aggfunc(in_arr, out_arr, sorted_idx);
     for (int64_t i = 0; i < n; i++) {
         // If i = 0 (curr_group != prev_group) will always be true since
         // prev_group is a dummy value. We are only interested in rows
@@ -338,19 +339,21 @@ void window_frame_computation_with_frame(
                 // the partition to some row relative to the current row
                 window_frame_prefix_computation<window_func, ArrayType, T,
                                                 DType>(
-                    in_arr, out_arr, sorted_idx, *frame_hi, group_start_idx, i);
+                    in_arr, out_arr, sorted_idx, *frame_hi, group_start_idx, i,
+                    aggfunc);
             } else if (frame_hi == nullptr) {
                 // Case 2: cumulative window frame from the end of
                 // the partition to some row relative to the current row
                 window_frame_suffix_computation<window_func, ArrayType, T,
                                                 DType>(
-                    in_arr, out_arr, sorted_idx, *frame_lo, group_start_idx, i);
+                    in_arr, out_arr, sorted_idx, *frame_lo, group_start_idx, i,
+                    aggfunc);
             } else {
                 // Case 3: sliding window frame relative to the current row
                 window_frame_sliding_computation<window_func, ArrayType, T,
                                                  DType>(
                     in_arr, out_arr, sorted_idx, *frame_lo, *frame_hi,
-                    group_start_idx, i);
+                    group_start_idx, i, aggfunc);
             }
             group_start_idx = i;
         }
@@ -359,14 +362,16 @@ void window_frame_computation_with_frame(
     // Repeat the process one more time on the final group
     if (frame_lo == nullptr) {
         window_frame_prefix_computation<window_func, ArrayType, T, DType>(
-            in_arr, out_arr, sorted_idx, *frame_hi, group_start_idx, n);
+            in_arr, out_arr, sorted_idx, *frame_hi, group_start_idx, n,
+            aggfunc);
     } else if (frame_hi == nullptr) {
         window_frame_suffix_computation<window_func, ArrayType, T, DType>(
-            in_arr, out_arr, sorted_idx, *frame_lo, group_start_idx, n);
+            in_arr, out_arr, sorted_idx, *frame_lo, group_start_idx, n,
+            aggfunc);
     } else {
         window_frame_sliding_computation<window_func, ArrayType, T, DType>(
             in_arr, out_arr, sorted_idx, *frame_lo, *frame_hi, group_start_idx,
-            n);
+            n, aggfunc);
     }
 }
 
@@ -455,6 +460,41 @@ void window_frame_computation_ftype_handler(
             break;
         case Bodo_FTypes::count_if:
             window_frame_computation_bounds_handler<Bodo_FTypes::count_if,
+                                                    ArrayType, T, DType>(
+                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi);
+            break;
+        case Bodo_FTypes::first:
+            window_frame_computation_bounds_handler<Bodo_FTypes::first,
+                                                    ArrayType, T, DType>(
+                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi);
+            break;
+        case Bodo_FTypes::last:
+            window_frame_computation_bounds_handler<Bodo_FTypes::last,
+                                                    ArrayType, T, DType>(
+                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi);
+            break;
+        case Bodo_FTypes::var:
+            window_frame_computation_bounds_handler<Bodo_FTypes::var, ArrayType,
+                                                    T, DType>(
+                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi);
+            break;
+        case Bodo_FTypes::var_pop:
+            window_frame_computation_bounds_handler<Bodo_FTypes::var_pop,
+                                                    ArrayType, T, DType>(
+                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi);
+            break;
+        case Bodo_FTypes::std:
+            window_frame_computation_bounds_handler<Bodo_FTypes::std, ArrayType,
+                                                    T, DType>(
+                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi);
+            break;
+        case Bodo_FTypes::std_pop:
+            window_frame_computation_bounds_handler<Bodo_FTypes::std_pop,
+                                                    ArrayType, T, DType>(
+                in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi);
+            break;
+        case Bodo_FTypes::mean:
+            window_frame_computation_bounds_handler<Bodo_FTypes::mean,
                                                     ArrayType, T, DType>(
                 in_arr, out_arr, sorted_groups, sorted_idx, frame_lo, frame_hi);
             break;

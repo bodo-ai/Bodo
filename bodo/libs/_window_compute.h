@@ -9,7 +9,6 @@
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
-#include "_window_aggfuncs.h"
 
 /**
  * @brief Handles the update step for the supported window functions.

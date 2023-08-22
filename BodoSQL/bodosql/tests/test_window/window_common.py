@@ -2,7 +2,6 @@ import datetime
 import math
 import os
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -99,7 +98,7 @@ datetime64_col = pd.Series(
     [
         None
         if 1 / math.cos(i) < -1
-        else np.datetime64(f"201{(i**2)%10}-{1+(i**3)%12:02}-{1+(i**4)%15:02}")
+        else pd.Timestamp(f"201{(i**2)%10}-{1+(i**3)%12:02}-{1+(i**4)%15:02}")
         for i in range(window_col_size)
     ]
 )

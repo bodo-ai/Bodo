@@ -1528,7 +1528,7 @@ WindowColSet::~WindowColSet() {}
 
 void WindowColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
-    int64_t window_col_offset = 0;
+    int64_t window_col_offset = input_cols.size() - n_input_cols;
     // Allocate one output coumn for each window function call
     for (int64_t window_func : window_funcs) {
         // arr_type and dtype are assigned dummy default values.
@@ -1542,15 +1542,32 @@ void WindowColSet::alloc_running_value_columns(
         if (window_func == Bodo_FTypes::conditional_true_event ||
             window_func == Bodo_FTypes::conditional_change_event ||
             window_func == Bodo_FTypes::ratio_to_report ||
-            window_func == Bodo_FTypes::size ||
+            window_func == Bodo_FTypes::mean ||
+            window_func == Bodo_FTypes::var ||
+            window_func == Bodo_FTypes::std ||
+            window_func == Bodo_FTypes::var_pop ||
+            window_func == Bodo_FTypes::std_pop ||
             window_func == Bodo_FTypes::count_if ||
+            window_func == Bodo_FTypes::first ||
+            window_func == Bodo_FTypes::last ||
             window_func == Bodo_FTypes::any_value) {
             arr_type = input_cols[window_col_offset]->arr_type;
             dtype = input_cols[window_col_offset]->dtype;
             window_col_offset++;
         }
-        // calling this modifies arr_type and dtype
-        // Output dtype is based on the window function.
+        // Certain functions can have numpy input arrays but
+        // nullable output arrays because of window frames
+        if (window_func == Bodo_FTypes::first ||
+            window_func == Bodo_FTypes::last ||
+            window_func == Bodo_FTypes::mean ||
+            window_func == Bodo_FTypes::var ||
+            window_func == Bodo_FTypes::std ||
+            window_func == Bodo_FTypes::var_pop ||
+            window_func == Bodo_FTypes::std_pop) {
+            if (arr_type == bodo_array_type::NUMPY) {
+                arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+            }
+        }
         std::tie(arr_type, dtype) =
             get_groupby_output_dtype(window_func, arr_type, dtype);
         std::shared_ptr<array_info> c;
