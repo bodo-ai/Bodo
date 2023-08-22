@@ -16,19 +16,18 @@
  */
 package com.bodosql.calcite.sql.validate;
 
-import com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate;
+import static org.apache.calcite.sql.validate.SqlValidatorImpl.*;
+import static org.apache.calcite.util.Static.RESOURCE;
 
+import com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate;
+import java.util.*;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeUtil;
-import org.apache.calcite.sql.validate.SqlValidator;
-import org.apache.calcite.sql.validate.SqlValidatorImpl;
-import org.apache.calcite.sql.validate.SqlValidatorScope;
-
-import static org.apache.calcite.util.Static.RESOURCE;
+import org.apache.calcite.sql.validate.*;
 
 /** Duplication of the CalciteSqlValidator class from Calcite. */
 public class BodoSqlValidator extends SqlValidatorImpl {
@@ -84,7 +83,8 @@ public class BodoSqlValidator extends SqlValidatorImpl {
     // Validate the select.
     super.validateSelect(select, targetRowType);
 
-    // Handle fetch and offset directly. The super call only handles literals and dynamic parameters.
+    // Handle fetch and offset directly. The super call only handles literals and dynamic
+    // parameters.
     // It does not handle named parameters.
     handleFetchOffset(select);
   }
@@ -109,5 +109,35 @@ public class BodoSqlValidator extends SqlValidatorImpl {
         throw newValidationError(offset, RESOURCE.typeNotSupported(type.getFullTypeString()));
       }
     }
+  }
+
+  /**
+   * @brief Checks whether a SqlNode is a function call containing a star operand that should be
+   *     expanded to variadic arguments, e.g. HASH(*).
+   * @param call A SqlCall object being checked for the property.
+   * @return True if the node is a call in the desired format.
+   */
+  @Override
+  protected boolean isStarCall(SqlCall call) {
+    if (call.getOperator().getName().equals("HASH")) {
+      for (SqlNode operand : call.getOperandList()) {
+        if (operand instanceof SqlIdentifier && ((SqlIdentifier) operand).isStar()) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * @brief Rewrites a SqlCall with a new argument list after it has had its original arguments
+   *     expanded due to the presence of * terms.
+   * @param call A SqlCall object being transformed.
+   * @param newArgs The expanded arguments to the original SqlCall.
+   * @return A transformed SqlCall object.
+   */
+  @Override
+  protected SqlCall rewriteStarCall(SqlCall call, List<SqlNode> newArgs) {
+    return new SqlBasicCall(call.getOperator(), newArgs, call.getParserPosition());
   }
 }
