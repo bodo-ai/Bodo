@@ -278,6 +278,7 @@ import bodo.libs.bodosql_trig_array_kernels
 import bodo.libs.bodosql_window_agg_array_kernels
 import bodo.libs.bodosql_json_array_kernels
 import bodo.libs.bodosql_array_kernels
+from bodo.libs.bodosql_lead_lag import lead_lag_seq
 from bodo.hiframes.pd_index_ext import (
     DatetimeIndexType,
     NumericIndexType,
