@@ -242,7 +242,7 @@ internal object WindowAggregateApplyFuncTable {
 
     private fun lead(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr {
         val operands = when (operands.size) {
-            1 -> listOf(operands[0], Expr.IntegerLiteral(-1))
+            1 -> listOf(operands[0], Expr.Unary("-", Expr.Call("np.int32", Expr.One)))
             else -> {
                 // Replace the second argument with one that uses
                 // the unary negative.
@@ -261,26 +261,16 @@ internal object WindowAggregateApplyFuncTable {
 
     private fun lag(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr {
         val column = operands[0]
-        val shift = operands.getOrElse(1) { Expr.One }
+        val shift = operands.getOrElse(1) { Expr.Call("np.int32", Expr.One) }
         val fill = operands.getOrElse(2) { Expr.None }
-        return if (call.ignoreNulls()) {
-            Expr.Call(
-                "bodo.libs.bodosql_array_kernels.null_ignoring_shift",
-                column,
-                shift,
-                fill,
-            )
-        } else {
-            Expr.Call(
-                "bodo.hiframes.pd_series_ext.get_series_data",
-                Expr.Method(
-                    column,
-                    "shift",
-                    args = listOf(shift),
-                    namedArgs = listOf("fill_value" to fill),
-                ),
-            )
-        }
+        val ignoreNulls = Expr.BooleanLiteral(call.ignoreNulls())
+        return Expr.Call(
+            "bodo.libs.bodosql_lead_lag.lead_lag_seq",
+            column,
+            shift,
+            fill,
+            ignoreNulls,
+        )
     }
 
     fun skew(ctx: WindowAggregateContext, call: RexOver, operands: List<Expr>): Expr =
