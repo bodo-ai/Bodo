@@ -27,6 +27,10 @@ class Cost private constructor(
     cost: Double?,
 ) : RelOptCost {
 
+    // Assign a fixed cost, so we prioritize fewer operators
+    // in the case of a tie.
+    private val FIXED_OPERATOR_COST = 0.1
+
     /**
      * Initializes a cost with the given resources.
      *
@@ -55,13 +59,18 @@ class Cost private constructor(
      * the cpu, io, and memory components. Row count is not considered.
      * This is because row count is mostly represented in the other
      * metrics.
+     *
+     * For actual comparisons we wrap this behind totalCost so
+     * we can assign a fixed value to each operator.
      */
-    val value = cost ?: (cpu + io + mem)
+    val value = cost ?: cpu + io + mem
+
+    fun totalCost(): Double = value + FIXED_OPERATOR_COST
 
     /**
      * Visually shows the cost value as a formatted string.
      */
-    val valueString: String get() = df(value)
+    val valueString: String get() = df(totalCost())
 
     override fun equals(other: RelOptCost): Boolean {
         return if (other is Cost) {
@@ -80,19 +89,19 @@ class Cost private constructor(
 
     override fun getIo(): Double = io
 
-    override fun isInfinite(): Boolean = value.isInfinite()
+    override fun isInfinite(): Boolean = totalCost().isInfinite()
 
     override fun isEqWithEpsilon(other: RelOptCost): Boolean = isEqWithEpsilon(convert(other))
 
-    private fun isEqWithEpsilon(other: Cost): Boolean = abs(other.value - this.value) < RelOptUtil.EPSILON
+    private fun isEqWithEpsilon(other: Cost): Boolean = abs(other.totalCost() - this.totalCost()) < RelOptUtil.EPSILON
 
     override fun isLe(other: RelOptCost): Boolean = isLe(convert(other))
 
-    private fun isLe(other: Cost): Boolean = this.value <= other.value
+    private fun isLe(other: Cost): Boolean = this.totalCost() <= other.totalCost()
 
     override fun isLt(other: RelOptCost): Boolean = isLt(convert(other))
 
-    private fun isLt(other: Cost): Boolean = this.value < other.value
+    private fun isLt(other: Cost): Boolean = this.totalCost() < other.totalCost()
 
     override fun plus(other: RelOptCost): RelOptCost {
         return convert(other).let { c ->
