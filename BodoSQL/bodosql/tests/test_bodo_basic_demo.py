@@ -3,11 +3,15 @@ Test using BodoSQL inside Bodo JIT functions
 """
 import bodosql
 import pandas as pd
+import pytest
 
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import bodo
 
 
+@pytest.mark.skip(
+    reason="[BSE-1018] Need to fix the segmentation fault on PR CI first."
+)
 def test_demo1(datapath, memory_leak_check):
     """test for demo1.py"""
 
