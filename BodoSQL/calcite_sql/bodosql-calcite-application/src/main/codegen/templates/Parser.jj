@@ -994,6 +994,11 @@ void Arg(List list, ExprContext exprContext) :
         e = Default()
     |
         e = Expression(exprContext)
+    |
+        <STAR> {
+            list.add(SqlIdentifier.star(getPos()));
+            return;
+        }
     )
     {
         if (e != null) {

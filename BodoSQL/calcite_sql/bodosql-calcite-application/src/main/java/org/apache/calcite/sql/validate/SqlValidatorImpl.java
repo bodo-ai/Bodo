@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.sql.validate;
 
+import net.snowflake.client.jdbc.internal.google.api.gax.rpc.UnimplementedException;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.linq4j.function.Functions;
 import org.apache.calcite.plan.RelOptTable;
@@ -122,6 +123,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 
+import org.apache.commons.lang3.NotImplementedException;
 import org.apiguardian.api.API;
 import org.checkerframework.checker.nullness.qual.KeyFor;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -717,6 +719,115 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       }
       return true;
     }
+  }
+
+  /**
+   * @brief Checks whether a SqlNode is a function call containing a star
+   * operand that should be expanded to variadic arguments, e.g. HASH(*).
+   * @param call A SqlCall object being checked for the property.
+   * @return True if the node is a call in the desired format.
+   */
+  protected boolean isStarCall(SqlCall call) { return false; }
+
+  /**
+   * @brief Rewrites a SqlCall with a new argument list after it has
+   * had its original arguments expanded due to the presence of * terms.
+   * @param call A SqlCall object being transformed.
+   * @param newArgs The expanded arguments to the original SqlCall.
+   * @return A transformed SqlCall object.
+   */
+  protected SqlCall rewriteStarCall(SqlCall call, List<SqlNode> newArgs) {
+    throw new NotImplementedException("Need to implement rewriteStarCall to use star expansion");
+  }
+
+  /**
+   * Expands the a "*" term into the columns of all tables in scope, e.g. HASH(*) becomes
+   * HASH(T1.A, T1.B, T2.A, T2.E, T2.I, T3.X, T3.Y)
+   * @param outList The list where new operands are appended to.
+   * @param scope The scope containing all tables that a "*" term could refer to
+   * @param starNode The node being expanded
+   */
+  private void expandStarTermWithoutTable(List<SqlNode> outList, ListScope scope, SqlIdentifier starNode) {
+    final SqlParserPos startPosition = starNode.getParserPosition();
+    for (int c = 0; c < scope.children.size(); c++) {
+      final SqlValidatorNamespace fromNs = scope.getChildren().get(c);
+      final String fromName = scope.getChildNames().get(c);
+      final RelDataType rowType = fromNs.getRowType();
+      for (RelDataTypeField field : rowType.getFieldList()) {
+        String columnName = field.getName();
+        final SqlIdentifier exp =
+                new SqlIdentifier(ImmutableList.of(fromName, columnName), startPosition);
+        outList.add(exp);
+      }
+    }
+  }
+
+  /**
+   * Expands the a "t.*" term into the columns of a specified table, e.g. HASH(T1.*) becomes
+   * HASH(T1.A, T1.B)
+   * @param outList The list where new operands are appended to.
+   * @param scope The scope containing all tables that a "*" term could refer to
+   * @param starNode The node being expanded
+   */
+  private void expandStarTermWithTable(List<SqlNode> outList, ListScope scope, SqlIdentifier starNode) {
+    final SqlParserPos startPosition = starNode.getParserPosition();
+    final SqlIdentifier prefixId = starNode.skipLast(1);
+    final SqlValidatorScope.ResolvedImpl resolved = new SqlValidatorScope.ResolvedImpl();
+    final SqlNameMatcher nameMatcher = scope.getValidator().getCatalogReader().nameMatcher();
+    scope.resolve(prefixId.names, nameMatcher, true, resolved);
+    if (resolved.count() == 0) {
+      // e.g. "select s.t.* from e" or "select r.* from e"
+      throw newValidationError(prefixId, RESOURCE.unknownIdentifier(prefixId.toString()));
+    }
+    final RelDataType rowType = resolved.only().rowType();
+    if (rowType.isDynamicStruct()) {
+      outList.add(prefixId.plus(DynamicRecordType.DYNAMIC_STAR_PREFIX, startPosition));
+    } else if (rowType.isStruct()) {
+      for (RelDataTypeField field : rowType.getFieldList()) {
+        String columnName = field.getName();
+        outList.add(prefixId.plus(columnName, startPosition));
+      }
+    } else {
+      throw newValidationError(prefixId, RESOURCE.starRequiresRecordType());
+    }
+  }
+
+
+  /**
+   * @brief Expands the operands to a SqlCall that can use "*" or "t.*"
+   * as syntactic sugar to refer to multiple columns.
+   * @param call The call that is being expanded.
+   * @param scope The scope of the function call.
+   * @return The call transformed to have any "*" or "t.*" terms expanded.
+   */
+  private SqlCall starExpansion(SqlCall call, SqlValidatorScope scope) {
+    while (!(scope instanceof ListScope)) {
+      if (scope instanceof DelegatingScope && ((DelegatingScope)scope).parent != null) {
+        scope = ((DelegatingScope)scope).parent;
+      } else {
+        throw new RuntimeException("Error: Call to function with * arguments must happen inside of a scope whose operand scope is a ListScope or whose ancestry contains a ListScope.");
+      }
+    }
+    ListScope trueScope = (ListScope) scope;
+    List<SqlNode> newArguments = new ArrayList<SqlNode>();
+    for (SqlNode operand : call.getOperandList()) {
+      if ((operand instanceof SqlIdentifier) && ((SqlIdentifier) operand).isStar()) {
+        SqlIdentifier starNode = (SqlIdentifier)operand;
+        switch (starNode.names.size()) {
+          case 1: {
+            expandStarTermWithoutTable(newArguments, trueScope, starNode);
+            break;
+          }
+          default: {
+            expandStarTermWithTable(newArguments, trueScope, starNode);
+            break;
+          }
+        }
+      } else {
+        newArguments.add(operand);
+      }
+    }
+    return rewriteStarCall(call, newArguments);
   }
 
   private SqlNode maybeCast(SqlNode node, RelDataType currentType,
@@ -7667,6 +7778,9 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
         return call;
       default:
         break;
+      }
+      if (validator.isStarCall(call)) {
+        call = validator.starExpansion(call, getScope());
       }
       // Only visits arguments which are expressions. We don't want to
       // qualify non-expressions such as 'x' in 'empno * 5 AS x'.

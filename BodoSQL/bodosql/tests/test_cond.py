@@ -100,10 +100,7 @@ def test_coalesce_timestamp_date(memory_leak_check):
     check_query(query, ctx, None, expected_output=answer, check_names=False)
 
 
-@pytest.mark.parametrize(
-    "use_case",
-    [True, False]
-)
+@pytest.mark.parametrize("use_case", [True, False])
 def test_coalesce_time(use_case, memory_leak_check):
     """Tests the coalesce function on time columns"""
     if use_case:
@@ -130,7 +127,7 @@ def test_coalesce_time(use_case, memory_leak_check):
                         None,
                         bodo.Time(15, 26, 3, 44),
                     ]
-                )
+                ),
             }
         )
     }
@@ -514,7 +511,7 @@ def test_if_null_column(bodosql_nullable_numeric_types, spark_info, memory_leak_
     [
         "IF",
         pytest.param("IFF", marks=pytest.mark.slow),
-    ]
+    ],
 )
 def test_if_time_column(bodosql_time_types, func_name, memory_leak_check):
     """Checks IF/IFF function with time columns"""
@@ -526,7 +523,8 @@ def test_if_time_column(bodosql_time_types, func_name, memory_leak_check):
                     None,
                     bodo.Time(13, 37, 45),
                     bodo.Time(1, 47, 59, 290, 574, 817),
-                ] * 4
+                ]
+                * 4
             )
         }
     )
@@ -586,7 +584,6 @@ def test_ifnull_scalar(basic_df, spark_info, ifnull_equivalent_fn, memory_leak_c
 def test_ifnull_mixed(
     bodosql_nullable_numeric_types, spark_info, ifnull_equivalent_fn, memory_leak_check
 ):
-
     if bodosql_nullable_numeric_types["table1"].A.dtype.name == "UInt64":
         pytest.skip("Currently a bug in fillna for Uint64, see BE-1380")
 
@@ -729,7 +726,7 @@ def test_nullif_time(memory_leak_check):
                         bodo.Time(22, 56, 41),
                         bodo.Time(15, 26, 3, 44),
                     ]
-                )
+                ),
             }
         )
     }
@@ -998,7 +995,9 @@ def test_decode_time(bodosql_time_types, memory_leak_check):
 
 def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check):
     """Test NVL and IFNULL with time columns and CASE statement"""
-    query = "SELECT CASE WHEN HOUR(A) < 12 THEN NVL(A, B) ELSE IFNULL(B, C) END FROM table1"
+    query = (
+        "SELECT CASE WHEN HOUR(A) < 12 THEN NVL(A, B) ELSE IFNULL(B, C) END FROM table1"
+    )
     answer = pd.DataFrame(
         {
             "output": pd.Series(
@@ -1026,4 +1025,64 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
         check_names=False,
         check_dtype=False,
         expected_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "raw_query, expected_hashes",
+    [
+        pytest.param("SELECT HASH(A) AS H FROM T", 14, id="one_col_A"),
+        pytest.param(
+            "SELECT HASH(X) AS H FROM S", 5, id="one_col_B", marks=pytest.mark.slow
+        ),
+        pytest.param("SELECT HASH(*) AS H FROM T", 21, id="star"),
+        pytest.param("SELECT HASH(S.*) AS H FROM S", 37, id="dot_star"),
+        pytest.param(
+            "SELECT HASH(*) AS H FROM T INNER JOIN S ON T.A=S.A", 44, id="join_star"
+        ),
+        pytest.param(
+            "SELECT HASH(T.*) AS H FROM T INNER JOIN S ON T.A=S.A",
+            19,
+            id="join_dot_star_A",
+        ),
+        pytest.param(
+            "SELECT HASH(S.*) AS H FROM T INNER JOIN S ON T.A=S.A",
+            29,
+            id="join_dot_star_B",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT HASH(T.*, 16, *, S.*) AS H FROM T INNER JOIN S ON T.A=S.A",
+            44,
+            id="join_star_multiple",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_hash(raw_query, expected_hashes, memory_leak_check):
+    """
+    Tests HASH, HASH(*) and HASH(T.*) syntaxes to ensure that the correct
+    number of distinct hash values are produced. Takes in a query that
+    hashes the input tables into a column named H and creates a query
+    that will count how many distinct hashes were produced.
+    """
+    query = f"SELECT COUNT(DISTINCT(H)) FROM ({raw_query})"
+    ctx = {
+        "S": pd.DataFrame(
+            {
+                "A": list("ALPHABETAGAMMADELTAEPSILONZETAETATHETAIOTAKAPPALAMBDAMU"),
+                "X": pd.Series([0, 1, None, 3, 4] * 11, dtype=pd.Int32Dtype()),
+            }
+        ),
+        "T": pd.DataFrame({"A": list("ALPHABETSOUPISDELICIOUS!"), "B": [0, 1] * 12}),
+    }
+    expected_output = pd.DataFrame({0: expected_hashes}, index=np.arange(1))
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+        is_out_distributed=False,
     )
