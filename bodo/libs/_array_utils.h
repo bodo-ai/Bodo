@@ -154,6 +154,17 @@ concept float_dtype =
 template <Bodo_CTypes::CTypeEnum DType>
 concept bool_dtype = DType == Bodo_CTypes::_BOOL;
 
+template <Bodo_CTypes::CTypeEnum DType>
+concept integer_dtype =
+    (DType == Bodo_CTypes::UINT8) || (DType == Bodo_CTypes::INT8) ||
+    (DType == Bodo_CTypes::UINT16) || (DType == Bodo_CTypes::INT16) ||
+    (DType == Bodo_CTypes::UINT32) || (DType == Bodo_CTypes::INT32) ||
+    (DType == Bodo_CTypes::UINT64) || (DType == Bodo_CTypes::INT64);
+
+template <Bodo_CTypes::CTypeEnum DType>
+concept numeric_dtype =
+    decimal<DType> || float_dtype<DType> || integer_dtype<DType>;
+
 // ------------------------------------------------
 
 // select dtypes that can have sentinel nulls

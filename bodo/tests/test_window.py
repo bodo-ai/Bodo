@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from bodo import Time
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, nullable_float_arr_maker
 
 
 @pytest.fixture
@@ -35,6 +35,9 @@ def test_window_df():
     L: Random strings with multiple characters and some nulls.
     M: Decimal array.
     N: Date array.
+    O: Time array.
+    P: Nullable uint8 array which when grouped by D will have an all-null partition.
+    Q: Nullable float array which when grouped by D will have a partition containing NaNs.
     """
     return pd.DataFrame(
         {
@@ -82,6 +85,11 @@ def test_window_df():
                 for i in range(15)
             ],
             "O": [None if i % 8 == 4 else Time(nanosecond=10**i) for i in range(15)],
+            "P": pd.Series(
+                [None if i > 10 else (i + 3) ** 2 for i in range(15)],
+                dtype=pd.UInt8Dtype(),
+            ),
+            "Q": nullable_float_arr_maker(list(range(15)), [12, 14], [5, 7]),
         }
     )
 
@@ -421,6 +429,257 @@ def test_window_df():
         pytest.param(
             ["D"],
             (
+                # Sample variance on a nullable integer array, no frame
+                ("var", "B", "None", "None"),
+                # Population variance on a nullable integer array, no frame
+                ("var_pop", "B", "None", "None"),
+                # Sample standard deviation on a nullable integer array, no frame
+                ("std", "B", "None", "None"),
+                # Population standard deviation on a nullable integer array, no frame
+                ("std_pop", "B", "None", "None"),
+                # Sample variance on a nullable float array, no frame
+                ("var", "Q", "None", "None"),
+                # Population variance on a nullable float array, no frame
+                ("var_pop", "Q", "None", "None"),
+                # Sample standard deviation on a nullable float array, no frame
+                ("std", "Q", "None", "None"),
+                # Population standard deviation on a nullable float array, no frame
+                ("std_pop", "Q", "None", "None"),
+            ),
+            (),
+            (),
+            (),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": pd.Series([563799.694444] * 12 + [1801.333333] * 3),
+                    "AGG_OUTPUT_1": pd.Series([501155.283951] * 12 + [1200.888889] * 3),
+                    "AGG_OUTPUT_2": pd.Series([750.865963] * 12 + [42.442117] * 3),
+                    "AGG_OUTPUT_3": pd.Series([707.923219] * 12 + [34.653844] * 3),
+                    "AGG_OUTPUT_4": nullable_float_arr_maker(
+                        [0.0] * 15, [12, 13, 14], list(range(12))
+                    ),
+                    "AGG_OUTPUT_5": nullable_float_arr_maker(
+                        [0.0] * 15, [-1], list(range(12))
+                    ),
+                    "AGG_OUTPUT_6": nullable_float_arr_maker(
+                        [0.0] * 15, [12, 13, 14], list(range(12))
+                    ),
+                    "AGG_OUTPUT_7": nullable_float_arr_maker(
+                        [0.0] * 15, [-1], list(range(12))
+                    ),
+                }
+            ),
+            id="var_std-no_frame",
+        ),
+        pytest.param(
+            ["D"],
+            (
+                # Sample variance on a nullable integer array, prefix frame
+                ("var", "B", "None", 0),
+                # Population variance on a nullable float array, suffix frame
+                ("var_pop", "Q", 0, "None"),
+                # Sample standard deviation on a numpy float array, sliding frame
+                ("std", "J", -1, 1),
+                # Population standard deviation on a numpy integer array, prefix frame
+                ("std_pop", "H", "None", -1),
+            ),
+            (),
+            (),
+            (),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": nullable_float_arr_maker(
+                        [
+                            0.0,
+                            0.0,
+                            648.0,
+                            325.33333333333337,
+                            261.3333333333333,
+                            261.3333333333333,
+                            197.79999999999998,
+                            167.8666666666667,
+                            813.4761904761905,
+                            699.4107142857143,
+                            699.4107142857143,
+                            563799.6944444444,
+                            0.0,
+                            50.0,
+                            1801.3333333333335,
+                        ],
+                        [0, 1, 12],
+                        [-1],
+                    ),
+                    "AGG_OUTPUT_1": nullable_float_arr_maker(
+                        [0.0] * 8 + [1.25, 0.6666666666666666, 0.25, 0.0, 0.0, 0.0],
+                        [-1],
+                        list(range(8)),
+                    ),
+                    "AGG_OUTPUT_2": nullable_float_arr_maker(
+                        [0.70710677] * 15, [0, 1, 3, 5, 7, 9, 11, 12, 13, 14], [-1]
+                    ),
+                    "AGG_OUTPUT_3": nullable_float_arr_maker(
+                        [
+                            0.0,
+                            0.0,
+                            0.5,
+                            0.816496580927726,
+                            1.118033988749895,
+                            1.4142135623730951,
+                            1.707825127659933,
+                            2.0,
+                            2.29128784747792,
+                            2.581988897471611,
+                            2.8722813232690143,
+                            3.1622776601683795,
+                            0.0,
+                            0.0,
+                            0.5,
+                        ],
+                        [0, 12],
+                        [-1],
+                    ),
+                }
+            ),
+            id="var_std-with_frame",
+        ),
+        pytest.param(
+            ["D"],
+            (
+                # AVG on a nullable integer array, no frame
+                ("mean", "B", "None", "None"),
+                # AVG on a numpy integer array, no frame
+                ("mean", "H", "None", "None"),
+                # AVG on a nullable float array, no frame
+                ("mean", "Q", "None", "None"),
+                # AVG on a numpy float array, no frame
+                ("mean", "J", "None", "None"),
+                # AVG on a nullable integer array with an all-null partition, no frame
+                ("mean", "P", "None", "None"),
+            ),
+            (),
+            (),
+            (),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": pd.Series([-257.777778] * 12 + [23.333333] * 3),
+                    "AGG_OUTPUT_1": pd.Series([5.5] * 12 + [13.0] * 3),
+                    "AGG_OUTPUT_2": nullable_float_arr_maker(
+                        [13.0] * 15, [-1], list(range(12))
+                    ),
+                    "AGG_OUTPUT_3": pd.Series([3.0] * 12 + [6.5] * 3),
+                    "AGG_OUTPUT_4": pd.Series([74.0] * 12 + [None] * 3),
+                }
+            ),
+            id="avg-no_frame",
+        ),
+        pytest.param(
+            ["D"],
+            (
+                # AVG on a nullable float array, prefix frame
+                ("mean", "Q", "None", 0),
+                # AVG on a nullable float array, sliding frame
+                ("mean", "Q", 1, 4),
+                # AVG on a nullable integer array, suffix frame
+                ("mean", "B", 0, "None"),
+                # AVG on a numpy integer array, prefix frame
+                ("mean", "H", "None", -1),
+                # AVG on a numpy float array, suffix frame
+                ("mean", "J", -1, "None"),
+                # AVG on a nullable integer array with an all-null partition, sliding frame
+                ("mean", "P", -2, 1),
+            ),
+            (),
+            (),
+            (),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": nullable_float_arr_maker(
+                        [0.0, 0.5, 1.0, 1.5, 2.0] + [-1.0] * 8 + [13.0, 13.0],
+                        [12],
+                        list(range(5, 12)),
+                    ),
+                    "AGG_OUTPUT_1": nullable_float_arr_maker(
+                        [2.5]
+                        + [-1.0] * 6
+                        + [9.5, 10.0, 10.5, 11.0, -1.0, 13.0, -1.0, -1.0],
+                        [11, 13, 14],
+                        list(range(1, 7)),
+                    ),
+                    "AGG_OUTPUT_2": [
+                        -257.77777777777777,
+                        -257.77777777777777,
+                        -291.875,
+                        -330.57142857142856,
+                        -385.5,
+                        -464.8,
+                        -464.8,
+                        -580.5,
+                        -776.6666666666666,
+                        -1131.5,
+                        -2259.0,
+                        -2259.0,
+                        23.333333333333332,
+                        38.0,
+                        72.0,
+                    ],
+                    "AGG_OUTPUT_3": [
+                        None,
+                        0.0,
+                        0.5,
+                        1.0,
+                        1.5,
+                        2.0,
+                        2.5,
+                        3.0,
+                        3.5,
+                        4.0,
+                        4.5,
+                        5.0,
+                        None,
+                        12.0,
+                        12.5,
+                    ],
+                    "AGG_OUTPUT_4": [
+                        3.0,
+                        3.0,
+                        3.0,
+                        3.5,
+                        3.5,
+                        4.0,
+                        4.0,
+                        4.5,
+                        4.5,
+                        5.0,
+                        5.0,
+                        5.5,
+                        6.5,
+                        6.5,
+                        6.5,
+                    ],
+                    "AGG_OUTPUT_5": [
+                        12.5,
+                        16.666666666666668,
+                        21.5,
+                        31.5,
+                        43.5,
+                        57.5,
+                        73.5,
+                        91.5,
+                        111.5,
+                        133.5,
+                        144.66666666666666,
+                        156.5,
+                        None,
+                        None,
+                        None,
+                    ],
+                }
+            ),
+            id="avg-with_frame",
+        ),
+        pytest.param(
+            ["D"],
+            (
                 # ANY_VALUE on a nullable integer array
                 ("any_value", "B"),
                 # ANY_VALUE on a non-nullable array of booleans
@@ -461,10 +720,10 @@ def test_window_df():
                 ("first", "H", "None", "None"),
                 # FIRST_VALUE on a nullable integer array with no order / frame
                 ("first", "G", "None", "None"),
+                # FIRST_VALUE on a nullable boolean with no order / frame
+                ("first", "E", "None", "None"),
                 # FIRST_VALUE on a string array with no order / frame
                 ("first", "C", "None", "None"),
-                # FIRST_VALUE on a nullable boolean with no order / frame
-                ("first", "B", "None", "None"),
             ),
             (),
             (),
@@ -473,28 +732,25 @@ def test_window_df():
                 {
                     "AGG_OUTPUT_0": [0] * 12 + [12] * 3,
                     "AGG_OUTPUT_1": pd.Series([None] * 15, dtype=pd.Int32Dtype()),
-                    "AGG_OUTPUT_2": ["A"] * 12 + ["M"] * 3,
-                    "AGG_OUTPUT_3": pd.Series(
+                    "AGG_OUTPUT_2": pd.Series(
                         [True] * 12 + [None] * 3, dtype=pd.BooleanDtype()
                     ),
+                    "AGG_OUTPUT_3": ["A"] * 12 + ["M"] * 3,
                 }
             ),
             id="first_value-no_frame",
-            marks=pytest.mark.skip(
-                "[BSE-724] TODO: support first_value in groupby.window"
-            ),
         ),
         pytest.param(
             ["D"],
             (
                 # FIRST_VALUE on a non-nullable integer array with a prefix frame
                 ("first", "H", "None", -1),
-                # FIRST_VALUE on a naive timestamp array with a suffix frame
-                ("first", "I", 0, "None"),
-                # FIRST_VALUE on a string array with a sliding frame
-                ("first", "C", -5, -2),
                 # FIRST_VALUE on a float array with a sliding frame
                 ("first", "J", -1, 1),
+                # FIRST_VALUE on a decimal array with a suffix frame
+                ("first", "M", 0, "None"),
+                # FIRST_VALUE on a string array with a sliding frame
+                ("first", "C", -5, -2),
             ),
             ("H",),
             (True,),
@@ -502,36 +758,9 @@ def test_window_df():
             pd.DataFrame(
                 {
                     "AGG_OUTPUT_0": pd.Series(
-                        [None] + [1] * 11 + [None] + [12, 12], dtype=pd.Int32Dtype()
+                        [None] + [0] * 11 + [None] + [12, 12], dtype=pd.Int32Dtype()
                     ),
-                    # This answer is identical to the input column
                     "AGG_OUTPUT_1": pd.Series(
-                        [
-                            None
-                            if i % 4 == 0
-                            else pd.Timestamp("1999-12-31")
-                            + pd.Timedelta(weeks=100 * i)
-                            for i in range(15)
-                        ]
-                    ),
-                    "AGG_OUTPUT_2": [
-                        None,
-                        None,
-                        "A",
-                        "A",
-                        "A",
-                        "A",
-                        "L",
-                        "P",
-                        "H",
-                        "A",
-                        "T",
-                        "H",
-                        None,
-                        None,
-                        "M",
-                    ],
-                    "AGG_OUTPUT_3": pd.Series(
                         [
                             None,
                             None,
@@ -551,12 +780,17 @@ def test_window_df():
                         ],
                         dtype=np.float32,
                     ),
+                    # This answer is identical to the input column M
+                    "AGG_OUTPUT_2": pd.Series(
+                        [
+                            None if i % 7 == 5 else Decimal(2 ** (4 - i % 8))
+                            for i in range(15)
+                        ]
+                    ),
+                    "AGG_OUTPUT_3": [None] * 2 + list("AAAALPHATH") + [None, None, "M"],
                 }
             ),
             id="first_value-with_frame",
-            marks=pytest.mark.skip(
-                "[BSE-724] TODO: support first_value in groupby.window"
-            ),
         ),
         pytest.param(
             ["D"],
@@ -565,10 +799,10 @@ def test_window_df():
                 ("last", "H", "None", "None"),
                 # LAST_VALUE on a float array  with no order / frame
                 ("last", "J", "None", "None"),
+                # LAST_VALUE on a date array  with no order / frame
+                ("last", "N", "None", "None"),
                 # LAST_VALUE on a string array with no order / frame
                 ("last", "L", "None", "None"),
-                # LAST_VALUE on a date array  with no order / frame
-                ("last", "B", "None", "None"),
             ),
             (),
             (),
@@ -579,14 +813,11 @@ def test_window_df():
                     "AGG_OUTPUT_1": pd.Series(
                         [5.5] * 12 + [None] * 3, dtype=np.float32
                     ),
-                    "AGG_OUTPUT_2": ["LMNO"] * 12 + ["OP"] * 3,
-                    "AGG_OUTPUT_3": [datetime.date(1999, 12, 31)] * 12 + [None] * 3,
+                    "AGG_OUTPUT_2": [datetime.date(1999, 12, 31)] * 12 + [None] * 3,
+                    "AGG_OUTPUT_3": ["LMNO"] * 12 + ["OP"] * 3,
                 }
             ),
             id="last_value-no_frame",
-            marks=pytest.mark.skip(
-                "[BSE-724] TODO: support last_value in groupby.window"
-            ),
         ),
         pytest.param(
             ["D"],
@@ -595,10 +826,10 @@ def test_window_df():
                 ("last", "E", "None", 0),
                 # LAST_VALUE on a decimal array with a suffix frame
                 ("last", "M", 0, "None"),
-                # LAST_VALUE on a string array with a sliding frame
-                ("last", "L", 5, 10),
                 # LAST_VALUE on a time array  with with a sliding frame
-                ("last", "B", -5, 0),
+                ("last", "O", -5, 0),
+                # LAST_VALUE on a string array with a sliding frame
+                ("last", "L", 3, 5),
             ),
             (),
             (),
@@ -611,19 +842,17 @@ def test_window_df():
                         dtype=pd.BooleanDtype(),
                     ),
                     "AGG_OUTPUT_1": [Decimal("2")] * 12 + [Decimal("0.25")] * 3,
-                    "AGG_OUTPUT_2": ["FGHI", "GH", None, "IJKL", "JK", "KLM", "LMNO"]
-                    + [None] * 8,
                     # This answer is identical to the input column
-                    "AGG_OUTPUT_3": [
+                    "AGG_OUTPUT_2": [
                         None if i % 8 == 4 else Time(nanosecond=10**i)
                         for i in range(15)
                     ],
+                    "AGG_OUTPUT_3": ["FGHI", "GH", None, "IJKL", "JK", "KLM"]
+                    + ["LMNO"] * 3
+                    + [None] * 6,
                 }
             ),
             id="last_value-with_frame",
-            marks=pytest.mark.skip(
-                "[BSE-724] TODO: support last_value in groupby.window"
-            ),
         ),
         pytest.param(
             ["D"],
@@ -654,7 +883,7 @@ def test_window_df():
             ),
             id="nth_value-no_frame",
             marks=pytest.mark.skip(
-                "[BSE-724] TODO: support nth_value in groupby.window"
+                reason="[BSE-903] TODO: support nth_value in groupby.window"
             ),
         ),
         pytest.param(
@@ -687,7 +916,7 @@ def test_window_df():
             ),
             id="nth_value-with_frame",
             marks=pytest.mark.skip(
-                "[BSE-724] TODO: support nth_value in groupby.window"
+                reason="[BSE-903] TODO: support nth_value in groupby.window"
             ),
         ),
     ],

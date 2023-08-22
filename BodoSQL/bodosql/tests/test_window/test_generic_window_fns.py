@@ -16,11 +16,6 @@ from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
     "funcs",
     [
         pytest.param(["SUM", "AVG"], id="sum_avg"),
-        pytest.param(["STDDEV", "STDDEV_POP", "STDDEV_SAMP"], id="stddev_variants"),
-        pytest.param(
-            ["VARIANCE", "VARIANCE_POP", "VAR_SAMP", "VARIANCE_SAMP", "VAR_POP"],
-            id="variance_variants",
-        ),
     ],
 )
 @pytest.mark.timeout(1300)
@@ -147,40 +142,52 @@ def test_non_numeric_window_functions(
     count_window_applies(pandas_code, window_frames[1], funcs)
 
 
-@pytest.mark.timeout(700)
-@pytest.mark.slow
-def test_first_last_any_nth(
-    all_window_df, all_window_col_names, window_frames, spark_info
-):
-    """Tests first_value, last_value, any_value and nth_value with various
-    combinations of window frames to test correctness, fusion and optimization"""
-    window_calls = [
-        "FIRST_VALUE(I64)",
-        "FIRST_VALUE(ST)",
-        "LAST_VALUE(DA)",
-        "LAST_VALUE(ST)",
-        "LAST_VALUE(BI)",
-        "ANY_VALUE(TZ)",
-        "NTH_VALUE(DT, 2)",
-        "NTH_VALUE(BI, 7)",
-        "NTH_VALUE(I64, 25)",
-    ]
+@pytest.mark.parametrize(
+    "window_calls",
+    [
+        pytest.param(
+            [
+                ("FIRST_VALUE(I64)", "UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING"),
+                ("FIRST_VALUE(BI)", "UNBOUNDED PRECEDING", "3 PRECEDING"),
+                ("FIRST_VALUE(ST)", "1 PRECEDING", "UNBOUNDED FOLLOWING"),
+                ("FIRST_VALUE(F64)", "1 FOLLOWING", "10 FOLLOWING"),
+            ],
+            id="first_value",
+        ),
+        pytest.param(
+            [
+                ("LAST_VALUE(ST)", "UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING"),
+                ("LAST_VALUE(DT)", "UNBOUNDED PRECEDING", "2 FOLLOWING"),
+                ("LAST_VALUE(F64)", "1 FOLLOWING", "UNBOUNDED FOLLOWING"),
+                ("LAST_VALUE(BI)", "3 PRECEDING", "3 FOLLOWING"),
+            ],
+            id="last_value",
+        ),
+        pytest.param(
+            [
+                ("NTH_VALUE(ST, 10)", "UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING"),
+                ("NTH_VALUE(DT, 5)", "UNBOUNDED PRECEDING", "CURRENT ROW"),
+                ("NTH_VALUE(I64, 3)", "1 FOLLOWING", "UNBOUNDED FOLLOWING"),
+                ("NTH_VALUE(BI, 3)", "3 PRECEDING", "3 FOLLOWING"),
+            ],
+            id="nth_value",
+        ),
+    ],
+)
+def test_first_last_nth(window_calls, all_window_df, spark_info):
+    """Tests first_value, last_value and nth_value."""
     selects = []
     convert_columns_bytearray = []
-    convert_columns_tz_naive = []
     for i in range(len(window_calls)):
-        if "BI" in window_calls[i]:
+        window_call, lower, upper = window_calls[i]
+        selects.append(
+            f"{window_call} OVER (PARTITION BY W3 ORDER BY W4 ROWS BETWEEN {lower} AND {upper}) AS C_{i}"
+        )
+        if "BI" in window_call:
             convert_columns_bytearray.append(f"C_{i}")
-        if "TZ" in window_calls[i]:
-            convert_columns_tz_naive.append(f"C_{i}")
-        frame = window_frames[0][i % len(window_frames[0])]
-        # If the function is ANY_VALUE, remove the frame
-        if window_calls[i].startswith("ANY_VALUE") and "ROWS BETWEEN" in frame:
-            frame = frame[: frame.find("ROWS BETWEEN")]
-        selects.append(f"{window_calls[i]} OVER ({frame}) AS C_{i}")
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
     spark_query = get_equivalent_spark_agg_query(query)
-    pandas_code = check_query(
+    check_query(
         query,
         all_window_df,
         spark_info,
@@ -188,56 +195,9 @@ def test_first_last_any_nth(
         sort_output=True,
         check_dtype=False,
         check_names=False,
-        return_codegen=True,
         only_jit_1DVar=True,
         convert_columns_bytearray=convert_columns_bytearray,
-        convert_columns_tz_naive=convert_columns_tz_naive,
-    )["pandas_code"]
-
-    # Verify that fusion is working correctly. The term window_frames[1] refers
-    # to how many distinct groupby-apply calls are expected after fusion.
-    count_window_applies(
-        pandas_code,
-        window_frames[1],
-        ["FIRST_VALUE", "LAST_VALUE", "ANY_VALUE", "NTH_VALUE"],
     )
-
-
-@pytest.mark.slow
-def test_first_value_last_value_optimized(
-    all_window_df, all_window_col_names, spark_info
-):
-    """Tests first_value, last_value, any_value and nth_value with various
-    combinations of window frames to test correctness, fusion and optimization"""
-    selects = []
-    window = "PARTITION BY U8 ORDER BY DT ASC NULLS FIRST"
-    for col in ["I64", "ST", "BI", "DA"]:
-        selects.append(
-            f"FIRST_VALUE({col}) OVER ({window} ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS {col}_FV"
-        )
-        selects.append(
-            f"LAST_VALUE({col}) OVER ({window} ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS {col}_LV"
-        )
-    query = f"SELECT W4, {', '.join(selects)} FROM table1"
-    convert_columns_bytearray = ["BI_FV", "BI_LV"]
-    pandas_code = check_query(
-        query,
-        all_window_df,
-        spark_info,
-        sort_output=True,
-        check_dtype=False,
-        check_names=False,
-        return_codegen=True,
-        only_jit_1DVar=True,
-        convert_columns_bytearray=convert_columns_bytearray,
-    )["pandas_code"]
-
-    # Verify that fusion is working correctly. The term window_frames[1] refers
-    # to how many distinct groupby-apply calls are expected after fusion.
-    count_window_applies(pandas_code, 1, ["FIRST_VALUE", "LAST_VALUE"])
-
-    # Verify that there are only the initial sorts, not the reverse sorts
-    assert pandas_code.count("sort_values") == 1
 
 
 @pytest.mark.slow
@@ -297,6 +257,56 @@ def test_blended_fusion(memory_leak_check):
     # to how many distinct groupby-apply calls are expected after fusion.
     count_window_applies(
         pandas_code, 1, ["RANK", "AVG", "MEDIAN", "MODE", "CONDITIONAL_CHANGE_EVENT"]
+    )
+
+
+@pytest.mark.parametrize(
+    "func",
+    [
+        pytest.param("AVG"),
+        pytest.param("STDDEV"),
+        pytest.param("STDDEV_POP"),
+        pytest.param("STDDEV_SAMP"),
+        pytest.param("VARIANCE"),
+        pytest.param("VARIANCE_POP"),
+        pytest.param("VAR_SAMP"),
+        pytest.param("VARIANCE_SAMP"),
+        pytest.param("VAR_POP"),
+    ],
+)
+def test_optimized_numeric_window_functions(func, all_numeric_window_df, spark_info):
+    """Tests numeric window functions that can use groupby.window"""
+    selects = []
+    combinations = [
+        ("U8", "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"),
+        ("U8", "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"),
+        ("U8", "ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING"),
+        ("U8", "ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING"),
+        ("I64", "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"),
+        ("I64", "ROWS BETWEEN UNBOUNDED PRECEDING AND 2 PRECEDING"),
+        ("I64", "ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING"),
+        ("I64", "ROWS BETWEEN CURRENT ROW AND 3 FOLLOWING"),
+        ("F64", "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"),
+        ("F64", "ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING"),
+        ("F64", "ROWS BETWEEN 3 PRECEDING AND UNBOUNDED FOLLOWING"),
+        ("F64", "ROWS BETWEEN 10 PRECEDING AND CURRENT ROW"),
+    ]
+    for i, (col, frame) in enumerate(combinations):
+        selects.append(
+            f"{func}({col}) OVER (PARTITION BY W3 ORDER BY W4 {frame}) AS C{i}"
+        )
+    query = f"SELECT W4, {', '.join(selects)} FROM table1"
+    spark_query = get_equivalent_spark_agg_query(query)
+    check_query(
+        query,
+        all_numeric_window_df,
+        spark_info,
+        equivalent_spark_query=spark_query,
+        sort_output=True,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+        convert_expected_output_to_nullable_float=False,
     )
 
 

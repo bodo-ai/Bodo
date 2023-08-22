@@ -706,19 +706,7 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 // Window functions that do not require the sorted table
                 break;
             }
-            case Bodo_FTypes::ratio_to_report:
-            case Bodo_FTypes::any_value:
-            case Bodo_FTypes::row_number:
-            case Bodo_FTypes::rank:
-            case Bodo_FTypes::dense_rank:
-            case Bodo_FTypes::percent_rank:
-            case Bodo_FTypes::cume_dist:
-            case Bodo_FTypes::ntile:
-            case Bodo_FTypes::conditional_true_event:
-            case Bodo_FTypes::conditional_change_event:
-            case Bodo_FTypes::size:
-            case Bodo_FTypes::count:
-            case Bodo_FTypes::count_if: {
+            default: {
                 needs_sort = true;
                 /* If this is the first function encountered that requires,
                  * a sort, populate sort_table with the following columns:
@@ -771,10 +759,6 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 }
                 break;
             }
-            default:
-                throw std::runtime_error(
-                    "Invalid window function: " +
-                    std::string(get_name_for_Bodo_FTypes(window_funcs[i])));
         }
     }
     if (needs_sort) {
@@ -871,9 +855,9 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 window_col_offset++;
                 break;
             }
+            // Size has no column argument so the output column
+            // is used as a dummy value
             case Bodo_FTypes::size: {
-                // Size has no column argument so the output column
-                // is used as a dummy value
                 frame_lo = (int64_t*)window_args[window_arg_offset];
                 window_arg_offset++;
                 frame_hi = (int64_t*)window_args[window_arg_offset];
@@ -885,8 +869,15 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 break;
             }
             // Window functions that optionally allow a window frame
+            case Bodo_FTypes::first:
+            case Bodo_FTypes::last:
             case Bodo_FTypes::count:
-            case Bodo_FTypes::count_if: {
+            case Bodo_FTypes::count_if:
+            case Bodo_FTypes::var:
+            case Bodo_FTypes::var_pop:
+            case Bodo_FTypes::std:
+            case Bodo_FTypes::std_pop:
+            case Bodo_FTypes::mean: {
                 frame_lo = (int64_t*)window_args[window_arg_offset];
                 window_arg_offset++;
                 frame_hi = (int64_t*)window_args[window_arg_offset];
