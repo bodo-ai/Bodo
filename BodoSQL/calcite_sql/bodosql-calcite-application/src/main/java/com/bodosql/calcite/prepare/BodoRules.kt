@@ -20,7 +20,6 @@ import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
 import com.bodosql.calcite.application.logicalRules.LogicalFilterReorderConditionRule
 import com.bodosql.calcite.application.logicalRules.MinRowNumberFilterRule
 import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEliminationRule
-import com.bodosql.calcite.application.logicalRules.ProjectUnaliasedRemoveRule
 import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.RexSimplificationRule
 import com.bodosql.calcite.application.logicalRules.VolcanoAcceptingAggregateProjectPullUpConstantsRule
@@ -42,6 +41,7 @@ import org.apache.calcite.rel.rules.JoinPushTransitivePredicatesRule
 import org.apache.calcite.rel.rules.JoinToMultiJoinRule
 import org.apache.calcite.rel.rules.LoptOptimizeJoinRule
 import org.apache.calcite.rel.rules.ProjectAggregateMergeRule
+import org.apache.calcite.rel.rules.ProjectRemoveRule
 
 object BodoRules {
     /**
@@ -49,8 +49,8 @@ object BodoRules {
      * converts the node into its child.
      */
     @JvmField
-    val PROJECT_UNALIASED_REMOVE_RULE: RelOptRule =
-        ProjectUnaliasedRemoveRule.Config.DEFAULT
+    val PROJECT_REMOVE_RULE: RelOptRule =
+        ProjectRemoveRule.Config.DEFAULT
             .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
             .toRule()
 
@@ -431,7 +431,7 @@ object BodoRules {
 
     @JvmField
     val HEURISTIC_RULE_SET: List<RelOptRule> = listOf(
-        PROJECT_UNALIASED_REMOVE_RULE,
+        PROJECT_REMOVE_RULE,
         FILTER_MERGE_RULE,
         DEPENDENCY_CHECKING_PROJECT_MERGE_RULE,
         FILTER_AGGREGATE_TRANSPOSE_RULE,
@@ -473,7 +473,7 @@ object BodoRules {
 
     @JvmField
     val VOLCANO_OPTIMIZE_RULE_SET: List<RelOptRule> = listOf(
-        PROJECT_UNALIASED_REMOVE_RULE,
+        PROJECT_REMOVE_RULE,
         FILTER_MERGE_RULE,
         DEPENDENCY_CHECKING_PROJECT_MERGE_RULE,
         FILTER_AGGREGATE_TRANSPOSE_RULE,
