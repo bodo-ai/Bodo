@@ -1,8 +1,7 @@
 #pragma once
-#include "_array_utils.h"
-#include "_bodo_common.h"
-#include "_bodo_to_arrow.h"
+#include "_chunked_table_builder.h"
 #include "_dict_builder.h"
+#include "_table_builder_utils.h"
 
 /**
  * @brief Wrapper around array_info to turn it into build buffer.
@@ -616,6 +615,18 @@ struct ArrayBuildBuffer {
     void ReserveArray(const std::shared_ptr<array_info>& in_arr);
 
     /**
+     * @brief Reserve enough space to be able to append the selected column
+     * of all finalized chunks of a ChunkedTableBuilder.
+     * NOTE: This requires reserving space for variable-sized elements like
+     * strings and nested arrays.
+     *
+     * @param chunked_tb The ChunkedTableBuilder whose chunks we must copy over.
+     * @param array_idx Index of the array to reserve space for.
+     */
+    void ReserveArray(const ChunkedTableBuilder& chunked_tb,
+                      const size_t array_idx);
+
+    /**
      * @brief Reserve enough space to potentially append new_data_len new rows
      * to buffer.
      * NOTE: This does not reserve space for variable-sized
@@ -656,6 +667,8 @@ struct TableBuildBuffer {
     std::shared_ptr<table_info> data_table;
     // buffer wrappers around arrays of data table
     std::vector<ArrayBuildBuffer> array_buffers;
+    /// @brief Whether the table is currently pinned.
+    bool pinned_ = true;
 
     // Only used for temporary objects. In particular,
     // in HashJoinState constructor, we cannot initialize
@@ -697,7 +710,19 @@ struct TableBuildBuffer {
      * @brief Append a batch of data to the buffer, assuming
      * there is already enough space reserved (with ReserveTable).
      *
-     * @param in_table input table with the new row
+     * @param in_table Input table with the new rows
+     * @param append_rows Bit vector indicating which rows to append
+     * @param append_rows_sum Total number of rows to append. This is just the
+     * number of 'true' values in append_rows.
+     */
+    void UnsafeAppendBatch(const std::shared_ptr<table_info>& in_table,
+                           const std::vector<bool>& append_rows,
+                           uint64_t append_rows_sum);
+    /**
+     * @brief Append a batch of data to the buffer, assuming
+     * there is already enough space reserved (with ReserveTable).
+     *
+     * @param in_table input table with the new rows
      * @param append_rows bit vector indicating which rows to append
      */
     void UnsafeAppendBatch(const std::shared_ptr<table_info>& in_table,
@@ -725,17 +750,47 @@ struct TableBuildBuffer {
     void IncrementSizeDataColumns(uint64_t n_keys);
 
     /**
-     * @brief Reserve enough space to potentially append all contents of input
-     * table to buffer. NOTE: This requires reserving space for variable-sized
-     * elements like strings and nested arrays.
+     * @brief Reserve enough space to potentially append rows from
+     * in_table (based on reserve_rows bitmap).
+     * NOTE: This requires reserving space for
+     * variable-sized elements like strings and nested arrays.
      *
-     * @param in_table input table used for finding new buffer sizes to reserve
+     * @param in_table input table used for finding new buffer sizes to
+     * reserve
+     * @param reserve_rows bit vector indicating which rows to reserve
+     * @param reserve_rows_sum Total number of rows. This is just the number of
+     * 'true' values in reserve_rows.
+     */
+    void ReserveTable(const std::shared_ptr<table_info>& in_table,
+                      const std::vector<bool>& reserve_rows,
+                      uint64_t reserve_rows_sum);
+
+    /**
+     * @brief Reserve enough space to potentially append all columns of
+     * input table to buffer (the rows specified using the 'reserve_rows'
+     * bitmap).
+     * NOTE: This requires reserving space for
+     * variable-sized elements like strings and nested arrays.
+     *
+     * @param in_table input table used for finding new buffer sizes to
+     * reserve
      * @param reserve_rows bit vector indicating which rows to reserve
      */
     void ReserveTable(const std::shared_ptr<table_info>& in_table,
                       const std::vector<bool>& reserve_rows);
 
     void ReserveTable(const std::shared_ptr<table_info>& in_table);
+
+    /**
+     * @brief Reserve enough space to be able to append all the
+     * finalized chunks of a ChunkedTableBuilder.
+     * NOTE: This requires reserving space for
+     * variable-sized elements like strings and nested arrays.
+     *
+     * @param chunked_tb ChunkedTableBuilder whose chunks we want to append to
+     * this TableBuildBuffer.
+     */
+    void ReserveTable(const ChunkedTableBuilder& chunked_tb);
 
     /**
      * @brief Same as ReserveTable but reserves space only for key columns
@@ -765,37 +820,20 @@ struct TableBuildBuffer {
      * creation.
      */
     void Reset();
+
+    /**
+     * @brief Pin this table buffer. This is idempotent.
+     * Currently, this simply calls 'pin' on the underlying
+     * table_info.
+     *
+     */
+    void pin();
+
+    /**
+     * @brief Unpin this table buffer. This is idempotent.
+     * Currently, this simply calls 'unpin' on the underlying
+     * table_info.
+     *
+     */
+    void unpin();
 };
-
-/// Helper functions
-
-/**
- * @brief allocate an empty table with provided column types
- *
- * @param arr_c_types vector of ints for column dtypes (in Bodo_CTypes format)
- * @param arr_array_types vector of ints for colmun array types (in
- * bodo_array_type format)
- * @param pool IBufferPool to use for allocating the underlying data
- * buffers.
- * @param mm MemoryManager for the 'pool'.
- * @return std::shared_ptr<table_info> allocated table
- */
-std::shared_ptr<table_info> alloc_table(
-    const std::vector<int8_t>& arr_c_types,
-    const std::vector<int8_t>& arr_array_types,
-    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
-    std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
-
-/**
- * @brief Allocate an empty table with the same schema
- * (arr_types and dtypes) as 'table'.
- *
- * @param table Reference table
- * @param reuse_dictionaries Whether we should reuse the
- * dictionaries from the input table in the new table.
- * @return std::shared_ptr<table_info> Allocated table
- */
-std::shared_ptr<table_info> alloc_table_like(
-    const std::shared_ptr<table_info>& table,
-    const bool reuse_dictionaries = true);

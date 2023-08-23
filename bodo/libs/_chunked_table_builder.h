@@ -1,9 +1,7 @@
 #pragma once
 
-#include "_array_utils.h"
-#include "_bodo_common.h"
-#include "_bodo_to_arrow.h"
-#include "_table_builder.h"
+#include "_dict_builder.h"
+#include "_table_builder_utils.h"
 
 // Pre-allocate 32 bytes per string for now.
 // Keep in sync with value in

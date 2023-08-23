@@ -1,4 +1,5 @@
 #include "_chunked_table_builder.h"
+#include "_table_builder.h"
 
 /* --------------------------- Helper Functions --------------------------- */
 
@@ -61,6 +62,7 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
                 std::max(data_buffer_alloc_size, min_buffer_allocation_size);
             null_bitmap_buffer_alloc_size = std::max(
                 null_bitmap_buffer_alloc_size, min_buffer_allocation_size);
+            // TODO XXX Use Reserve here instead of Resize?
             CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
                                 data_buffer_alloc_size, false),
                             "Resize Failed!");
@@ -210,6 +212,7 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
             CHECK_ARROW_MEM(this->data_array->buffers[2]->Resize(
                                 null_bitmap_buffer_alloc_size, shrink_to_fit),
                             "Resize Failed!");
+            // TODO Replace these Resize calls with SetSize
             CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
                                 data_buffer_req_size, /*shrink_to_fit*/ false),
                             "Resize Failed!");
@@ -252,6 +255,7 @@ void ChunkedTableArrayBuilder::Reset() {
     this->resize_count = 0;
     this->data_array->length = 0;
     switch (this->data_array->arr_type) {
+        // TODO XXX Use SetSize here instead of Resize?
         case bodo_array_type::NULLABLE_INT_BOOL: {
             CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
                             "Resize failed!");
