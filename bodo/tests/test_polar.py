@@ -462,12 +462,14 @@ def test_nan_to_num(shape, memory_leak_check):
     check_func(impl, (data.reshape(shape),))
 
 
-@pytest.mark.skip(reason="[BSE-946] TODO: Support np.interp gaps forworkload")
 @pytest.mark.parametrize(
     "bound_args",
     [
-        pytest.param(True, id="bound_args"),
-        pytest.param(False, id="no_bound_args"),
+        pytest.param("neither", id="no_bounds"),
+        pytest.param("both", id="double_bounds"),
+        pytest.param("left", id="left_bound"),
+        pytest.param("right", id="right_bound"),
+        pytest.param("custom", id="custom_bounds"),
     ],
 )
 def test_np_interp(bound_args, memory_leak_check):
@@ -475,23 +477,41 @@ def test_np_interp(bound_args, memory_leak_check):
     Tests np.interp both without and with the clipping bounds.
     """
 
-    def impl_nobound(x, xp, fp):
+    def impl_neither(x, xp, fp):
         return np.interp(x, xp, fp)
 
-    def impl_bound(x, xp, fp):
+    def impl_left(x, xp, fp):
+        return np.interp(x, xp, fp, left=0)
+
+    def impl_right(x, xp, fp):
+        return np.interp(x, xp, fp, right=0)
+
+    def impl_both(x, xp, fp):
         return np.interp(x, xp, fp, left=0, right=0)
 
-    impl = impl_bound if bound_args else impl_nobound
+    def impl_custom(x, xp, fp, left, right):
+        return np.interp(x, xp, fp, left=left, right=right)
+
+    impls = {
+        "neither": impl_both,
+        "left": impl_left,
+        "right": impl_right,
+        "both": impl_neither,
+        "custom": impl_custom,
+    }
+
+    impl = impls[bound_args]
 
     x = np.linspace(0, 10, 101)
     xp = np.linspace(2.5, 7.5, 5)
     fp = np.tan(xp)
+    args = (x, xp, fp)
+    if bound_args == "custom":
+        args += (-1, 10.5)
     check_func(
         impl,
-        (
-            x,
-            fp,
-            xp,
-        ),
+        args,
         convert_to_nullable_float=False,
+        # TODO: support in parallel (requires a parallel binary search for interp_bin_search)
+        only_seq=True,
     )

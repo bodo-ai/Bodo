@@ -73,6 +73,8 @@ from bodo.utils.typing import (
     get_overload_const_str,
     is_bin_arr_type,
     is_overload_constant_bool,
+    is_overload_constant_float,
+    is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
     is_overload_true,
@@ -4057,6 +4059,117 @@ def _overload_validate_multivar_norm(cov):
                 "np.random.multivariate_normal() cov must be a 2 dimensional square, numpy array"
             )
 
+    return impl
+
+
+@numba.generated_jit
+def interp_bin_search(x, xp, fp, parallel=False):
+    """
+    Given a number x and arrays xp/fp corresponding to
+    x and y coordinates where xp is assumed to be sorted
+    in increasing order, returns a tuple (x_a, f_a, x_b, f_p)
+    with the following properties:
+    - x_a and x_b are adjacent elements in xp (or identical, if necessary)
+    - x_a <= x <= x_b
+    - f_a is the y coordinate corresponding to x_a
+    - f_b is the y coordinate corresponding to x_b
+    Note: it is assumed that min(xp) <= x <= max(xp) before this function is called.
+    """
+    if is_overload_true(parallel):  # pragma: no cover
+        raise_bodo_error("interp_bin_search: currently unsupported in parallel")
+    else:
+
+        def impl(x, xp, fp, parallel=False):  # pragma: no cover
+            lo = 0
+            hi = len(xp) - 1
+            while lo < hi - 1:
+                mid = (lo + hi) // 2
+                x_mid = xp[mid]
+                if x <= x_mid:
+                    hi = mid
+                else:
+                    lo = mid
+            return (xp[lo], fp[lo], xp[hi], fp[hi])
+
+        return impl
+
+
+@overload(np.interp, inline="always", no_unliteral=True)
+def np_interp(x, xp, fp, left=None, right=None, period=None):
+    if not (
+        bodo.utils.utils.is_array_typ(x, False)
+        and x.ndim == 1
+        and x.dtype == types.float64
+        and bodo.utils.utils.is_array_typ(xp, False)
+        and xp.ndim == 1
+        and xp.dtype == types.float64
+        and bodo.utils.utils.is_array_typ(fp, False)
+        and fp.ndim == 1
+        and fp.dtype == types.float64
+        and (
+            is_overload_none(left)
+            or is_overload_constant_int(left)
+            or is_overload_constant_float(left)
+            or isinstance(left, types.Integer)
+            or isinstance(left, types.Float)
+        )
+        and (
+            is_overload_none(right)
+            or is_overload_constant_int(right)
+            or is_overload_constant_float(right)
+            or isinstance(right, types.Integer)
+            or isinstance(right, types.Float)
+        )
+        and is_overload_none(period)
+    ):  # pragma: no cover
+        return
+
+    if is_overload_none(left):
+        too_small_val = "f_lo"
+    else:
+        too_small_val = "left"
+    if is_overload_none(right):
+        too_large_val = "f_hi"
+    else:
+        too_large_val = "right"
+
+    func_text = "def impl(x, xp, fp, left=None, right=None, period=None):\n"
+    func_text += "   n = len(x)\n"
+    func_text += "   m = len(xp)\n"
+    func_text += "   if m < 1 or len(fp) != m: raise ValueError('np.interp: xp and fp arguments must be same length and have least 1 element')\n"
+    func_text += "   res = bodo.utils.utils.alloc_type(n, np.float64, (-1,))\n"
+    func_text += "   numba.parfors.parfor.init_prange()\n"
+    func_text += "   x_lo = xp[0]\n"
+    func_text += "   x_hi = xp[-1]\n"
+    func_text += "   f_lo = fp[0]\n"
+    func_text += "   f_hi = fp[-1]\n"
+    func_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
+    func_text += "      x_i = x[i]\n"
+    func_text += f"      if x_i < x_lo: res[i] = {too_small_val}\n"
+    func_text += f"      elif x_i > x_hi: res[i] = {too_large_val}\n"
+    func_text += "      elif x_i == x_lo: res[i] = f_lo\n"
+    func_text += "      elif x_i == x_hi: res[i] = f_hi\n"
+    func_text += "      else:\n"
+    func_text += "         x_a, f_a, x_b, f_b = interp_bin_search(x_i, xp, fp)\n"
+    func_text += "         if x_i == x_a: res[i] = f_a\n"
+    func_text += "         elif x_i == x_b: res[i] = f_b\n"
+    func_text += (
+        "         else: res[i] = f_a + (f_b - f_a) * (x_i - x_a) / (x_b - x_a)\n"
+    )
+    func_text += "   return res"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "numba": numba,
+            "np": np,
+            "interp_bin_search": interp_bin_search,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
     return impl
 
 

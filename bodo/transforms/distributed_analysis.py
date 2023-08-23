@@ -1816,6 +1816,10 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("interp_bin_search", "bodo.libs.array_kernels"):
+            self._meet_array_dists(rhs.args[1].name, rhs.args[2].name, array_dists)
+            return
+
         if fdef == ("unique", "bodo.libs.array_kernels"):
             # doesn't affect distribution of input since input can stay 1D
             if lhs not in array_dists:
@@ -3362,6 +3366,12 @@ class DistributedAnalysis:
                     "output of np.asarray() call on non-array is REP",
                     loc,
                 )
+            return
+
+        if func_name == "interp":
+            # Output matches 1st input, and 2nd/3rd must match each other
+            self._meet_array_dists(lhs, args[0].name, array_dists)
+            self._meet_array_dists(args[1].name, args[2].name, array_dists)
             return
 
         # handle array.sum() with axis
