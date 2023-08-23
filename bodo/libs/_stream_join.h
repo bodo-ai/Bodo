@@ -578,8 +578,8 @@ class HashJoinState : public JoinState {
     const size_t max_partition_depth = 6;
 
     // Shuffle state
-    TableBuildBuffer build_shuffle_buffer;
-    TableBuildBuffer probe_shuffle_buffer;
+    std::unique_ptr<TableBuildBuffer> build_shuffle_buffer;
+    std::unique_ptr<TableBuildBuffer> probe_shuffle_buffer;
 
     // Global bloom-filter. This is built during the build step
     // and used during the probe step.
