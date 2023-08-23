@@ -284,23 +284,23 @@ void ArrayBuildBuffer::Reset() {
     data_array->length = 0;
     switch (data_array->arr_type) {
         case bodo_array_type::NULLABLE_INT_BOOL: {
-            CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
-                            "Resize failed!");
-            CHECK_ARROW_MEM(data_array->buffers[1]->Resize(0, false),
-                            "Resize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
+                            "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(0),
+                            "ArrayBuildBuffer::Reset: SetSize failed!");
         } break;
         case bodo_array_type::NUMPY: {
-            CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
-                            "Resize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
+                            "ArrayBuildBuffer::Reset: SetSize failed!");
 
         } break;
         case bodo_array_type::STRING: {
-            CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
-                            "Resize failed!");
-            CHECK_ARROW_MEM(data_array->buffers[1]->Resize(0, false),
-                            "Resize failed!");
-            CHECK_ARROW_MEM(data_array->buffers[2]->Resize(0, false),
-                            "Resize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
+                            "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(0),
+                            "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[2]->SetSize(0),
+                            "ArrayBuildBuffer::Reset: SetSize failed!");
         } break;
         case bodo_array_type::DICT: {
             this->dict_indices->Reset();
@@ -311,7 +311,7 @@ void ArrayBuildBuffer::Reset() {
         } break;
         default: {
             throw std::runtime_error(
-                "invalid array type in Clear " +
+                "ArrayBuildBuffer::Reset: Invalid array type " +
                 GetArrType_as_string(data_array->arr_type));
         }
     }

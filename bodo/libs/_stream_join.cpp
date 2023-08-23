@@ -1050,10 +1050,12 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
           JOIN_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD)),
       op_mm(bodo::buffer_memory_manager(op_pool.get())),
       max_partition_depth(max_partition_depth_),
-      build_shuffle_buffer(build_arr_c_types, build_arr_array_types,
-                           this->build_table_dict_builders),
-      probe_shuffle_buffer(probe_arr_c_types, probe_arr_array_types,
-                           this->probe_table_dict_builders),
+      build_shuffle_buffer(std::make_unique<TableBuildBuffer>(
+          build_arr_c_types, build_arr_array_types,
+          this->build_table_dict_builders)),
+      probe_shuffle_buffer(std::make_unique<TableBuildBuffer>(
+          probe_arr_c_types, probe_arr_array_types,
+          this->probe_table_dict_builders)),
       // Create a build buffer for NA values to skip the hash table.
       build_na_key_buffer(build_arr_c_types, build_arr_array_types,
                           this->build_table_dict_builders, output_batch_size_,
@@ -1331,8 +1333,13 @@ void HashJoinState::InitOutputBuffer(
 }
 
 void HashJoinState::FinalizeBuild() {
-    // TODO Free build shuffle buffer
+    // Free build shuffle buffer
+    this->build_shuffle_buffer.reset();
 
+    // Finalize the NA buffer now that we've seen all the input.
+    this->build_na_key_buffer.Finalize();
+
+    // Finalize all the partitions and split them as needed:
     size_t total_rows = 0;
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
         // TODO Add logic to check if partition is too big (build_table_buffer
@@ -1367,8 +1374,7 @@ void HashJoinState::FinalizeBuild() {
             }
         }
     }
-    // Finalize the NA buffer now that we've seen all the input.
-    this->build_na_key_buffer.Finalize();
+
     // Add the tracing information.
     this->build_event.add_attribute("num_partitions", this->partitions.size());
     this->build_event.add_attribute("g_use_bloom_filters",
@@ -1381,6 +1387,9 @@ void HashJoinState::FinalizeBuild() {
 }
 
 void HashJoinState::FinalizeProbe() {
+    // Free the probe shuffle buffer's memory:
+    this->probe_shuffle_buffer.reset();
+
     // Add the tracing information.
     this->probe_event.add_attribute("num_bloom_filter_misses",
                                     this->num_bloom_filter_misses);
@@ -1639,8 +1648,8 @@ bool join_build_consume_batch(HashJoinState* join_state,
 
     append_row_to_build_table.flip();
     std::vector<bool>& append_row_to_shuffle_table = append_row_to_build_table;
-    join_state->build_shuffle_buffer.ReserveTable(in_table);
-    join_state->build_shuffle_buffer.UnsafeAppendBatch(
+    join_state->build_shuffle_buffer->ReserveTable(in_table);
+    join_state->build_shuffle_buffer->UnsafeAppendBatch(
         in_table, append_row_to_shuffle_table);
 
     batch_hashes_partition.reset();
@@ -1662,7 +1671,7 @@ bool join_build_consume_batch(HashJoinState* join_state,
             int64_t global_table_size = table_global_memory_size(
                 join_state->partitions[0]->build_table_buffer.data_table);
             global_table_size += table_global_memory_size(
-                join_state->build_shuffle_buffer.data_table);
+                join_state->build_shuffle_buffer->data_table);
             if (global_table_size < get_bcast_join_threshold()) {
                 // Mark the build side as replicated.
                 join_state->build_parallel = false;
@@ -1695,16 +1704,16 @@ bool join_build_consume_batch(HashJoinState* join_state,
                 // for the partitioning hashes:
                 dict_hashes = join_state->GetDictionaryHashesForKeys();
 
-                batch_hashes_partition =
-                    hash_keys_table(join_state->build_shuffle_buffer.data_table,
-                                    join_state->n_keys, SEED_HASH_PARTITION,
-                                    false, false, dict_hashes);
-                batch_hashes_join =
-                    hash_keys_table(join_state->build_shuffle_buffer.data_table,
-                                    join_state->n_keys, SEED_HASH_JOIN, false,
-                                    /*global_dict_needed*/ false);
+                batch_hashes_partition = hash_keys_table(
+                    join_state->build_shuffle_buffer->data_table,
+                    join_state->n_keys, SEED_HASH_PARTITION, false, false,
+                    dict_hashes);
+                batch_hashes_join = hash_keys_table(
+                    join_state->build_shuffle_buffer->data_table,
+                    join_state->n_keys, SEED_HASH_JOIN, false,
+                    /*global_dict_needed*/ false);
                 join_state->AppendBuildBatch(
-                    join_state->build_shuffle_buffer.data_table,
+                    join_state->build_shuffle_buffer->data_table,
                     batch_hashes_join, batch_hashes_partition);
 
                 // Free the hashes
@@ -1714,7 +1723,7 @@ bool join_build_consume_batch(HashJoinState* join_state,
                 // reset the dictionaries to point to the shared dictionaries
                 // and reset the dictionary related flags.
                 // This is crucial for correctness.
-                join_state->build_shuffle_buffer.Reset();
+                join_state->build_shuffle_buffer->Reset();
 
                 // Step 2: Broadcast the table.
 
@@ -1764,11 +1773,11 @@ bool join_build_consume_batch(HashJoinState* join_state,
     }
 
     if (shuffle_this_iter(join_state->build_parallel, is_last,
-                          join_state->build_shuffle_buffer.data_table,
+                          join_state->build_shuffle_buffer->data_table,
                           join_state->build_iter, join_state->sync_iter)) {
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
-            join_state->build_shuffle_buffer.data_table;
+            join_state->build_shuffle_buffer->data_table;
         // NOTE: shuffle hashes need to be consistent with partition hashes
         // above. Since we're using dict_hashes, global dictionaries are not
         // required.
@@ -1795,7 +1804,7 @@ bool join_build_consume_batch(HashJoinState* join_state,
         // reset the dictionaries to point to the shared dictionaries
         // and reset the dictionary related flags.
         // This is crucial for correctness.
-        join_state->build_shuffle_buffer.Reset();
+        join_state->build_shuffle_buffer->Reset();
 
         // unify dictionaries to allow consistent hashing and fast key
         // comparison using indices
@@ -1915,7 +1924,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         hash_keys_table(in_table, join_state->n_keys, SEED_HASH_PARTITION,
                         shuffle_possible, true, dict_hashes);
 
-    join_state->probe_shuffle_buffer.ReserveTable(in_table);
+    join_state->probe_shuffle_buffer->ReserveTable(in_table);
 
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
@@ -1990,7 +1999,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     join_state->AppendProbeBatchToInactivePartition(
         in_table, batch_hashes_join, batch_hashes_partition,
         append_to_probe_inactive_partition);
-    join_state->probe_shuffle_buffer.UnsafeAppendBatch(
+    join_state->probe_shuffle_buffer->UnsafeAppendBatch(
         in_table, append_to_probe_shuffle_buffer);
     append_to_probe_inactive_partition.clear();
     append_to_probe_shuffle_buffer.clear();
@@ -2011,11 +2020,11 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     probe_idxs.clear();
 
     if (shuffle_this_iter(shuffle_possible, is_last,
-                          join_state->probe_shuffle_buffer.data_table,
+                          join_state->probe_shuffle_buffer->data_table,
                           join_state->probe_iter, join_state->sync_iter)) {
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
-            join_state->probe_shuffle_buffer.data_table;
+            join_state->probe_shuffle_buffer->data_table;
         // NOTE: shuffle hashes need to be consistent with partition hashes
         // above
         std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
@@ -2040,7 +2049,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         // reset the dictionaries to point to the shared dictionaries
         // and reset the dictionary related flags.
         // This is crucial for correctness.
-        join_state->probe_shuffle_buffer.Reset();
+        join_state->probe_shuffle_buffer->Reset();
 
         // Unify dictionaries to allow consistent hashing and fast key
         // comparison using indices.
