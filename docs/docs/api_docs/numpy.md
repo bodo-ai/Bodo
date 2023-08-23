@@ -183,6 +183,7 @@ optimize and parallelize.
 - `numpy.median`
 - `numpy.mean`
 - `numpy.std`
+- `numpy.interp` no distributed support yet.
 
 ## Random number generator functions
 

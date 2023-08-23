@@ -508,6 +508,10 @@ class DistributedPass:
             del self.calltypes[rhs]
             return nodes + new_nodes + [new_assign]
 
+        if fdef == ("interp_bin_search", "bodo.libs.array_kernels"):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                self._set_last_arg_to_true(assign.value)
+
         if fdef == ("bodosql_listagg", "bodo.libs.bodosql_listagg"):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 self._set_last_arg_to_true(assign.value)
