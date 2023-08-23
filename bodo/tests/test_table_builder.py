@@ -28,10 +28,7 @@ def test_table_builder_empty(memory_leak_check):
         )
         table_builder = bodo.libs.table_builder.init_table_builder_state()
 
-        loop = True
-        while loop:
-            bodo.libs.table_builder.table_builder_append(table_builder, T1)
-            loop = False
+        bodo.libs.table_builder.table_builder_append(table_builder, T1)
         T2 = bodo.libs.table_builder.table_builder_finalize(table_builder)
         idx = bodo.hiframes.pd_index_ext.init_range_index(0, len(T2), 1, None)
         out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T2,), idx, col_names)
@@ -59,11 +56,8 @@ def test_table_builder(df1_len, df2_len, memory_leak_check):
         )
         table_builder = bodo.libs.table_builder.init_table_builder_state()
 
-        loop = True
-        while loop:
-            bodo.libs.table_builder.table_builder_append(table_builder, T1)
-            bodo.libs.table_builder.table_builder_append(table_builder, T2)
-            loop = False
+        bodo.libs.table_builder.table_builder_append(table_builder, T1)
+        bodo.libs.table_builder.table_builder_append(table_builder, T2)
         T3 = bodo.libs.table_builder.table_builder_finalize(table_builder)
         idx = bodo.hiframes.pd_index_ext.init_range_index(0, len(T3), 1, None)
         out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T3,), idx, col_names)
@@ -109,11 +103,8 @@ def test_table_builder_with_strings(memory_leak_check):
         )
         table_builder = bodo.libs.table_builder.init_table_builder_state()
 
-        loop = True
-        while loop:
-            bodo.libs.table_builder.table_builder_append(table_builder, T1)
-            bodo.libs.table_builder.table_builder_append(table_builder, T2)
-            loop = False
+        bodo.libs.table_builder.table_builder_append(table_builder, T1)
+        bodo.libs.table_builder.table_builder_append(table_builder, T2)
         T3 = bodo.libs.table_builder.table_builder_finalize(table_builder)
         idx = bodo.hiframes.pd_index_ext.init_range_index(0, len(T3), 1, None)
         out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T3,), idx, col_names)
@@ -122,6 +113,33 @@ def test_table_builder_with_strings(memory_leak_check):
     t1 = ["a", "b", "a", "b", "c", "a", "b", "c", "d"]
     t2 = ["a", "b", "c", "d", "e", "e", "e", "e", "e"]
     expected_df = pd.DataFrame({"A": t1 + t2})
+    check_func(
+        test, (), py_output=expected_df, convert_to_nullable_float=False, only_seq=True
+    )
+
+
+def test_table_builder_types_across_scopes(memory_leak_check):
+    """Test that table_builder will infer it's input types even if the append is
+    in a different block from the init call"""
+    global_1 = MetaType((0,))
+    col_names = ColNamesMetaType(("A",))
+
+    def test():
+        df1 = pd.DataFrame({"A": [1, 2, 3, 4]})
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), global_1, 1
+        )
+        table_builder = bodo.libs.table_builder.init_table_builder_state()
+
+        while True:
+            bodo.libs.table_builder.table_builder_append(table_builder, T1)
+            break
+        T3 = bodo.libs.table_builder.table_builder_finalize(table_builder)
+        idx = bodo.hiframes.pd_index_ext.init_range_index(0, len(T3), 1, None)
+        out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T3,), idx, col_names)
+        return out_df
+
+    expected_df = pd.DataFrame({"A": [1, 2, 3, 4]})
     check_func(
         test, (), py_output=expected_df, convert_to_nullable_float=False, only_seq=True
     )
