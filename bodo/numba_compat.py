@@ -5044,7 +5044,13 @@ def _typeof_matrix(val, c):
     from bodo.libs.matrix_ext import MatrixType
 
     dtype = numba.from_dtype(val.dtype)
-    return MatrixType(dtype)
+    if val.flags.c_contiguous:
+        layout = "C"
+    elif val.flags.f_contiguous:
+        layout = "F"
+    else:
+        layout = "A"
+    return MatrixType(dtype, layout)
 
 
 # replace Dict unboxing to support regular dictionaries as well
