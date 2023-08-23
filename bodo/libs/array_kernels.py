@@ -46,6 +46,7 @@ from bodo.libs.array import (
     sample_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType, offset_type
+from bodo.libs.bodosql_array_kernel_utils import is_valid_float_arg
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import DictionaryArrayType, init_dict_arr
@@ -4302,3 +4303,103 @@ def overload_dataframe_index(A):
     """get number of bytes in Numpy array"""
     # TODO(ehsan): contribute to Numba
     return lambda A: A.size * bodo.io.np_io.get_dtype_size(A.dtype)  # pragma: no cover
+
+
+@overload(np.nan_to_num, inline="always", no_unliteral=True)
+def np_nan_to_num(x, copy=True, nan=0.0, posinf=None, neginf=None):
+    """
+    Replace NaN with zero and infinity with large finite numbers
+    (default behaviour) or with the numbers defined by the user
+    using the nan, posinf and/or neginf keywords.
+
+    Args:
+        x (scalar or array): the array/scalar to be converted.
+        copy (bool, optional): create a new array or replace the element in place.
+            copy=False is not supported yet due to some boxing issue.
+        nan (int, float, optional): Value to be used to fill NaN values.
+            If no value is passed then NaN values will be replaced with 0.0.
+        posinf (int, float, optional): Value to be used to fill positive infinity values.
+            If no value is passed then positive infinity values will be replaced with
+            the largest float number of that type.
+        neginf (int, float, optional): Value to be used to fill negative infinity values.
+            If no value is passed then negative infinity values will be replaced with
+            the smallest float number of that type.
+
+    Returns:
+        scalar/array: x, with the non-finite values replaced.
+    """
+    if not is_valid_float_arg(x):  # pragma: no cover
+        # for non-float scalar/array just return the input
+        return lambda x, copy=True, nan=0.0, posinf=None, neginf=None: x
+
+    args_dict = {"copy": copy}
+    args_default_dict = {"copy": True}
+    check_unsupported_args("np.nan_to_num", args_dict, args_default_dict, "numpy")
+
+    if bodo.utils.utils.is_array_typ(x, False):
+        scalar = x.dtype
+    else:
+        scalar = x
+    if scalar == types.float16:
+        dtype = np.float16
+    elif scalar == types.float32:
+        dtype = np.float32
+    else:
+        dtype = np.float64
+
+    # When posinf/neginf is not specified, the default value is the largest/smallest
+    # float number of that type.
+    # e.g. 6.55e+04 for float16, 3.4028235e+38 for float32 and 1.79769313e+308 for float64.
+    finfo = np.core.getlimits.finfo(dtype)
+    largest_float = finfo.max
+    smallest_float = finfo.min
+    pos_val = largest_float if posinf == bodo.none or posinf is None else "posinf"
+    neg_val = smallest_float if neginf == bodo.none or neginf is None else "neginf"
+    calculation_text = f"scalar_nan_to_num({{}}, nan, {pos_val}, {neg_val})"
+
+    func_text = "def impl(x, copy=True, nan=0.0, posinf=None, neginf=None):\n"
+    if bodo.utils.utils.is_array_typ(x, False):
+        func_text += "  res = x.copy()\n"
+        func_text += "  numba.parfors.parfor.init_prange()\n"
+        if x.ndim == 1:
+            func_text += "  for i in numba.parfors.parfor.internal_prange(len(x)):\n"
+            func_text += f"    res[i] = {calculation_text.format('x[i]')}\n"
+        elif x.ndim == 2:
+            func_text += "  rows, cols = x.shape\n"
+            func_text += "  for i in numba.parfors.parfor.internal_prange(rows):\n"
+            func_text += "    for j in range(cols):\n"
+            func_text += f"      res[i, j] = {calculation_text.format('x[i, j]')}\n"
+        else:
+            raise_bodo_error(f"nan_to_num not supported on {x.ndim}d array")
+        func_text += f"  return res"
+    else:
+        func_text += f"  return {calculation_text.format('x')}"
+    loc_vars = {}
+    exec(
+        func_text,
+        {"np": np, "numba": numba, "scalar_nan_to_num": scalar_nan_to_num},
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
+@register_jitable
+def scalar_nan_to_num(scalar, nan, posinf, neginf):  # pragma: no cover
+    """
+    Helper function for nan_to_num to transform a scalar float
+    from NaN/±∞ to a regular float.
+
+    Args:
+        scalar: the scalar float that is to be converted.
+        nan: the value to return if scalar is NaN
+        posinf: the value to return if scalar is +∞
+        neginf: the value to return if scalar is -∞
+    """
+    if np.isnan(scalar):
+        return nan
+    if scalar == np.inf:
+        return posinf
+    if scalar == -np.inf:
+        return neginf
+    return scalar
