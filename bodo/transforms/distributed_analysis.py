@@ -1269,6 +1269,13 @@ class DistributedAnalysis:
             self._analyze_call_np(lhs, func_name, args, kws, array_dists, rhs.loc)
             return
 
+        if fdef == ("norm", "numpy.linalg"):
+            if "axis" in kws:
+                # With axis=1 (the only version supported at the moment), the
+                # input and the output have the same distribution.
+                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("accum_func", "bodo.libs.array_kernels"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
