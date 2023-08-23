@@ -437,29 +437,62 @@ def test_polar_format_matrix_subset(memory_leak_check):
     check_func(impl, (r_hat, u_hat, v_hat, k, 13))
 
 
-@pytest.mark.skip(reason="[BSE-945] TODO: Support np.nan_to_num for workload")
 @pytest.mark.parametrize(
     "shape",
     [
+        pytest.param((), id="scalar"),
         pytest.param((60,), id="1d"),
         pytest.param((12, 5), id="2d"),
     ],
 )
-def test_nan_to_num(shape, memory_leak_check):
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        pytest.param(np.int32, id="int32"),
+        pytest.param(
+            np.float16,
+            id="float16",
+            marks=pytest.mark.skip("[BSE-984] TODO: support np.isnan on np.float16"),
+        ),
+        pytest.param(np.float32, id="float32"),
+        pytest.param(np.float64, id="float64"),
+        pytest.param(
+            np.complex128,
+            id="complex128",
+            marks=pytest.mark.skip(
+                "[BSE-985] TODO: support np.nan_to_num on complex data"
+            ),
+        ),
+    ],
+)
+def test_nan_to_num(shape, dtype, memory_leak_check):
     """
     Tests np.nan_to_num on a float array of various dimensions
     without any additional arguments.
     """
 
-    def impl(A):
+    def impl1(A):
         return np.nan_to_num(A)
+
+    def impl2(A):
+        return np.nan_to_num(A, nan=-3.14, posinf=-2, neginf=-1)
 
     a = np.arange(60)
     data = np.tan(a) ** 5
     data[a % 7 == 3] = np.inf
     data[a % 13 == 12] = -np.inf
     data[a % 7 == 5] = np.nan
-    check_func(impl, (data.reshape(shape),))
+    if dtype == np.complex128:
+        data = data + 1j * data[::-1]
+    else:
+        data = data.astype(dtype)
+    if len(shape) == 0:
+        for val in data:
+            check_func(impl1, (val,))
+            check_func(impl2, (val,))
+    else:
+        check_func(impl1, (data.reshape(shape),), convert_to_nullable_float=False)
+        check_func(impl2, (data.reshape(shape),), convert_to_nullable_float=False)
 
 
 @pytest.mark.parametrize(
