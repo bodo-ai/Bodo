@@ -4775,7 +4775,7 @@ class TypingTransforms:
                 "init_join_state",
                 rhs.args,
                 dict(rhs.kws),
-                6,
+                7,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -4818,7 +4818,7 @@ class TypingTransforms:
                 "init_join_state",
                 join_def.args,
                 dict(join_def.kws),
-                6,
+                7,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -4869,12 +4869,32 @@ class TypingTransforms:
                     "probe_outer",
                 ]
                 args = join_def.args[:6]
+
+                # Fetch the op_pool_size_bytes argument
+                op_pool_size_bytes_var = get_call_expr_arg(
+                    "init_join_state",
+                    join_def.args,
+                    dict(join_def.kws),
+                    6,
+                    "op_pool_size_bytes",
+                    default=None,
+                    use_default=True,
+                )
+                # If there is a op_pool_size_bytes we need to include it in
+                # the function.
+                if op_pool_size_bytes_var is not None:
+                    params.append("op_pool_size_bytes")
+                    args.append(op_pool_size_bytes_var)
+                    op_pool_size_bytes_val = "op_pool_size_bytes"
+                else:
+                    op_pool_size_bytes_val = "-1"
+
                 # Fetch the non-equality condition argument
                 non_equi_cond_var = get_call_expr_arg(
                     "init_join_state",
                     join_def.args,
                     dict(join_def.kws),
-                    7,
+                    8,
                     "non_equi_condition",
                     default=None,
                     use_default=True,
@@ -4887,6 +4907,7 @@ class TypingTransforms:
                     non_equi_val = "non_equi_condition"
                 else:
                     non_equi_val = "None"
+
                 # Compile a new function.
                 func_text = f"""def impl({", ".join(params)}):
                     return bodo.libs.stream_join.init_join_state(
@@ -4896,6 +4917,7 @@ class TypingTransforms:
                         probe_column_names,
                         build_outer,
                         probe_outer,
+                        op_pool_size_bytes={op_pool_size_bytes_val},
                         expected_state_type=_expected_state_type,
                         non_equi_condition={non_equi_val},
                     )

@@ -445,7 +445,7 @@ void insert_build_table_equi_join_all_equality(
  * @return int threshold value
  */
 int get_bcast_join_threshold() {
-    // We default to 10MB, which matches Spark, unless to user specifies a
+    // We default to 10MB, which matches Spark, unless the user specifies a
     // threshold manually.
     int bcast_join_threshold = 10 * 1024 * 1024;  // in bytes
     char* bcast_threshold = std::getenv("BODO_BCAST_JOIN_THRESHOLD");

@@ -9,12 +9,16 @@
 #include "_nested_loop_join.h"
 #include "_operator_pool.h"
 #include "_pinnable.h"
+#include "_table_builder.h"
 #include "simd-block-fixed-fpp.h"
 
 using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
 
 // Default threshold for Join operator's OperatorBufferPool
 #define JOIN_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD 0.5
+
+// Use all available memory by default
+#define JOIN_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL 1.0
 
 class JoinPartition;
 struct HashHashJoinTable {
@@ -72,34 +76,39 @@ class JoinPartition {
     using hash_table_t =
         bodo::unord_map_container<int64_t, size_t, HashHashJoinTable,
                                   KeyEqualHashJoinTable>;
-
     explicit JoinPartition(
         size_t num_top_bits_, uint32_t top_bitmask_,
-        const std::vector<int8_t>& build_arr_c_types,
-        const std::vector<int8_t>& build_arr_array_types,
-        const std::vector<int8_t>& probe_arr_c_types,
-        const std::vector<int8_t>& probe_arr_array_types,
+        const std::vector<int8_t>& build_arr_c_types_,
+        const std::vector<int8_t>& build_arr_array_types_,
+        const std::vector<int8_t>& probe_arr_c_types_,
+        const std::vector<int8_t>& probe_arr_array_types_,
         const uint64_t n_keys_, bool build_table_outer_,
         bool probe_table_outer_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
-            build_table_dict_builders,
+            build_table_dict_builders_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
-            probe_table_dict_builders,
+            probe_table_dict_builders_,
         const uint64_t batch_size_, bool is_active_,
         bodo::OperatorBufferPool* op_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_mm_);
 
-    // Build state
+    // The types of the columns in the build table and probe tables.
+    const std::vector<int8_t> build_arr_c_types;
+    const std::vector<int8_t> build_arr_array_types;
+    const std::vector<int8_t> probe_arr_c_types;
+    const std::vector<int8_t> probe_arr_array_types;
+    // Dictionary builders for build and probe tables
+    std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
+    std::vector<std::shared_ptr<DictionaryBuilder>> probe_table_dict_builders;
 
     // Contiguous append-only buffer, used if a partition is active or after
     // the Finalize step for inactive partitions
     TableBuildBuffer build_table_buffer;
-    // TODO Open issue to convert this into a chunked buffer in the inactive
-    // partition case.
     // These allocations will go through the OperatorBufferPool
     // so that we can enforce limits and trigger re-partitioning.
     bodo::pinnable<bodo::vector<uint32_t>> build_table_join_hashes;
-    // TODO Explain
+    // Pin guard which is populated and stored in pin(). This is what
+    // will be used for all access to this vector.
     std::optional<bodo::pin_guard<decltype(build_table_join_hashes)>>
         build_table_join_hashes_guard;
 
@@ -110,7 +119,9 @@ class JoinPartition {
     // Join hash table (key row number -> matching row numbers).
     // These allocations will go through the OperatorBufferPool
     // so that we can enforce limits and trigger re-partitioning.
-    bodo::pinnable<hash_table_t> build_hash_table;
+    std::unique_ptr<bodo::pinnable<hash_table_t>> build_hash_table;
+    // Pin guard which is populated and stored in pin(). This is what
+    // will be used for all access to this hash table.
     std::optional<bodo::pin_guard<bodo::pinnable<hash_table_t>>>
         build_hash_table_guard;
 
@@ -149,15 +160,28 @@ class JoinPartition {
     // so that we can enforce limits and trigger re-partitioning.
     bodo::pinnable<bodo::vector<uint8_t>>
         build_table_matched;  // state for building output table
+    // Pin guard which is populated and stored in pin(). This is what
+    // will be used for all access to this vector.
     std::optional<bodo::pin_guard<decltype(build_table_matched)>>
         build_table_matched_guard;
+
+    /// @brief This is the number of rows that have been "safely"
+    /// appended to the build_table_buffer. This is only relevant
+    /// when the partition is active. This is used in SplitPartition
+    /// to only split the first build_safely_appended_nrows rows
+    /// of the build_table_buffer. This is required since there might
+    /// be a memory error during "AppendBatch" which might happen
+    /// _after_ we've appended to the build_table_buffer. In those
+    /// cases, the append will be retried, so we need to ensure that
+    /// previous incomplete append is invalidated.
+    size_t build_safely_appended_nrows = 0;
 
     // Probe state (only used when this partition is inactive).
     // We don't need partitioning hashes since we should never
     // need to repartition.
 
     ChunkedTableBuilder probe_table_buffer_chunked;
-    // TODO Open issue to convert this into a chunked buffer
+    // TODO Convert this into a chunked buffer
     bodo::pinnable<bodo::vector<uint32_t>> probe_table_buffer_join_hashes;
     const int64_t batch_size;
 
@@ -182,16 +206,7 @@ class JoinPartition {
     /// partition hash.
     /// @param hash Partition hash for the row
     /// @return True if row is part of partition, False otherwise.
-    inline bool is_in_partition(const uint32_t& hash);
-
-    /// @brief Is the partition near full? This is used
-    /// to determine whether this partition should be
-    /// split into multiple partitions.
-    inline bool is_near_full() const {
-        // TODO Replace with proper implementation based
-        // on buffer sizes, memory budget and Allocator statistics.
-        return false;
-    }
+    inline bool is_in_partition(const uint32_t& hash) const;
 
     /// @brief Is the partition active?
     inline bool is_active_partition() const { return this->is_active; }
@@ -200,8 +215,13 @@ class JoinPartition {
      * @brief Split the partition into 2^num_levels partitions.
      * This will produce a new set of partitions, each with their
      * new build_table_buffer and build_table_join_hashes.
-     * The caller must explicitly rebuild the build_table on
+     * The caller must explicitly rebuild the hash table on
      * the partition.
+     * If the partition is active, this create one active and 2^num_levels - 1
+     * inactive partitions. If the partition is inactive, this
+     * creates 2^num_levels inactive partitions.
+     * NOTE: The function assumes that the partition is pinned
+     * when it's called.
      *
      * @param num_levels Number of levels to split the partition. Only '1' is
      * supported at this point.
@@ -212,27 +232,13 @@ class JoinPartition {
         size_t num_levels = 1);
 
     /**
-     * @brief Reserve space in build_table_buffer and build_table_join_hashes to
-     * add all rows from in_table.
-     *
-     * @param in_table Table to reserve based on.
-     */
-    void ReserveBuildTable(const std::shared_ptr<table_info>& in_table);
-
-    /**
-     * @brief Reserve space in probe_table_buffer and
-     * probe_table_join_hashes to add all rows from in_table.
-     *
-     * @param in_table Table to reserve based on.
-     */
-    void ReserveProbeTable(const std::shared_ptr<table_info>& in_table);
-
-    /**
      * @brief Add rows from build_table_buffer into the hash table. This adds
      * rows starting from curr_build_size, up to the size of the
      * build_table_buffer. It will also populate 'num_rows_in_groups' and
      * 'build_row_to_group_map' vectors.
      * This function is idempotent.
+     * NOTE: The function assumes that the partition is pinned
+     * when it's called.
      *
      */
     inline void BuildHashTable();
@@ -245,16 +251,35 @@ class JoinPartition {
      * This function is idempotent, but not incremental, i.e.
      * it must be called after we have seen all the data for this
      * partition and have populated the hash table.
-     * This is meant to be called during FinalizeBuild.
+     * This is meant to be called during FinalizeBuild and after
+     * the partition has been activated and all rows have been added
+     * to the hash table.
+     * NOTE: The function assumes that the partition is pinned
+     * when it's called.
      *
      */
     void FinalizeGroups();
 
     /**
      * @brief Add all rows from in_table to this partition.
-     * This includes populating the hash table.
-     * This API assumes that ReserveBuildTable was
-     * called beforehand.
+     * For inactive partitions, this function simply appends
+     * the rows to the chunked build buffer and the hashes
+     * to the hashes vector.
+     * For active partitions, we first reserve space in the
+     * build_table_buffer and then append the rows into it.
+     * We also append the join hashes and populate the hash table.
+     * To make this function "retry-able", we also
+     * build the hash table as the first step. In most cases,
+     * this will be a NOP. However, in the case that the function
+     * is being retried due to a threshold enforcement error,
+     * this will act as a way to get the partition to the correct
+     * state before appending new entries.
+     * To make it transactional, we update build_safely_appended_nrows
+     * only after the rows have been added to the build_table_buffer,
+     * the hashes vector _and_ the hash table.
+     *
+     * NOTE: The function assumes that the partition is pinned
+     * when it's called.
      *
      * @tparam is_active Is this the active partition.
      * @param in_table Table to insert.
@@ -262,14 +287,17 @@ class JoinPartition {
      * @param partitioning_hashes Partitioning hashes for the table records.
      */
     template <bool is_active>
-    void UnsafeAppendBuildBatch(const std::shared_ptr<table_info>& in_table,
-                                const std::shared_ptr<uint32_t[]>& join_hashes);
+    void AppendBuildBatch(const std::shared_ptr<table_info>& in_table,
+                          const std::shared_ptr<uint32_t[]>& join_hashes);
 
     /**
-     * @brief Add all rows from in_table to this partition.
-     * This includes populating the hash table.
-     * This API assumes that ReserveBuildTable was
-     * called beforehand.
+     * @brief Same as the other function, except this time we
+     * also supply a bitmap for the rows to append. Note that
+     * we reserve space for the entire table before appending,
+     * and not just for the required rows.
+     *
+     * NOTE: The function assumes that the partition is pinned
+     * when it's called.
      *
      * @tparam is_active Is this the active partition.
      * @param in_table Table to insert.
@@ -279,9 +307,9 @@ class JoinPartition {
      * row
      */
     template <bool is_active>
-    void UnsafeAppendBuildBatch(const std::shared_ptr<table_info>& in_table,
-                                const std::shared_ptr<uint32_t[]>& join_hashes,
-                                const std::vector<bool>& append_rows);
+    void AppendBuildBatch(const std::shared_ptr<table_info>& in_table,
+                          const std::shared_ptr<uint32_t[]>& join_hashes,
+                          const std::vector<bool>& append_rows);
 
     /**
      * @brief Finalize the build step for this partition.
@@ -291,6 +319,9 @@ class JoinPartition {
      * and initialize the 'build_table_matched' bitmap in the
      * build_table_outer case.
      * This function and its steps are idempotent.
+     *
+     * NOTE: The function assumes that the partition is pinned
+     * when it's called.
      *
      */
     void FinalizeBuild();
@@ -330,6 +361,9 @@ class JoinPartition {
      * @param[in, out] output_buffer The output buffer of the join state that
      * we should append the output to.
      *
+     * NOTE: The function assumes that the partition is pinned
+     * when it's called.
+     *
      */
     template <bool build_table_outer, bool probe_table_outer,
               bool non_equi_condition>
@@ -340,11 +374,32 @@ class JoinPartition {
         const std::shared_ptr<ChunkedTableBuilder>& output_buffer);
 
     /**
-     * @brief Activate this partition.
-     * At this time, this concatenates the chunked table buffer into a
-     * contiguous table buffer and builds the hashmap.
+     * @brief Activate this partition as part of the FinalizeBuild process.
+     * If the partition is inactive, this simply moves the data from
+     * build_table_buffer_chunked to build_table_buffer. We then mark the
+     * partition as active and update build_safely_appended_nrows.
+     * NOTE: This does not populate the hash map.
+     * NOTE: The function assumes that the partition is pinned when it's called.
      */
     void ActivatePartition();
+
+    /**
+     * @brief Pin this partition into memory.
+     * This essentially pins the build table buffer
+     * and creates pin guards (and therefore pinning)
+     * for the hash table, the join hashes, the groups
+     * and group offsets vectors and the other temporary
+     * vectors like num_rows_in_group and build_row_to_group_map.
+     *
+     */
+    void pin();
+
+    /**
+     * @brief Unpin this partition. This essentially unpins
+     * the build table buffer and releases the pin guards for
+     * the hash table, join hashes, etc.
+     */
+    void unpin();
 
    private:
     const size_t num_top_bits = 0;
@@ -352,17 +407,30 @@ class JoinPartition {
     const bool build_table_outer = false;
     const bool probe_table_outer = false;
     const uint64_t n_keys;
-    // Tracks the current size of the build table, i.e.
-    // the number of rows from the build_table_buffer
-    // that have been added to the hash table.
-    int64_t curr_build_size = 0;
     // OperatorBufferPool of the HashJoin operator that this is a partition in.
     // The pool is owned by the parent HashJoinState, so we keep a raw pointer
     // for simplicity.
     bodo::OperatorBufferPool* const op_pool;
     // Memory manager instance for op_pool.
     const std::shared_ptr<::arrow::MemoryManager> op_mm;
+    /// @brief Whether the partition is active / has been activated yet.
+    /// The 0th partition is active to begin with, and other partitions
+    /// are activated at the end of the build step.
+    /// When false, this means that the build data is still in the
+    /// 'build_table_buffer_chunked'. When true, this means that the data has
+    /// been moved to the 'build_table_buffer', but the hash table
+    /// may or may not have been populated yet. To populate the hash table
+    /// use BuildHashTable, which is an idempotent function and hence safe to
+    /// call it multiple times.
     bool is_active = false;
+    // Tracks the current size of the build hash table, i.e.
+    // the number of rows from the build_table_buffer
+    // that have been added to the hash table.
+    // This is only meaningful once the partition has been
+    // activated (i.e. is_active = true).
+    int64_t curr_build_size = 0;
+    /// Whether the partition is currently pinned.
+    bool pinned_ = false;
     // Whether the 'groups' and 'groups_offsets' for this partition are already
     // populated and finalized. This is used in FinalizeGroups to make it
     // idempotent.
@@ -505,7 +573,9 @@ class HashJoinState : public JoinState {
     // Partitioning information.
     std::vector<std::shared_ptr<JoinPartition>> partitions;
 
-    const size_t max_partition_depth = 5;
+    // TODO Decide this dynamically using a heuristic based
+    // on total available memory, total disk space, etc.
+    const size_t max_partition_depth = 6;
 
     // Shuffle state
     TableBuildBuffer build_shuffle_buffer;
@@ -539,6 +609,9 @@ class HashJoinState : public JoinState {
                   bool probe_table_outer_, cond_expr_fn_t cond_func_,
                   bool build_parallel_, bool probe_parallel_,
                   int64_t output_batch_size_, uint64_t sync_iter,
+                  // If -1, we'll use 100% of the total buffer
+                  // pool size. Else we'll use the provided size.
+                  int64_t op_pool_size_bytes = -1,
                   size_t max_partition_depth_ = 5);
 
     /**
@@ -567,13 +640,6 @@ class HashJoinState : public JoinState {
     }
 
     /**
-     * @brief Split the partition at index 'idx' into two partitions.
-     *
-     * @param idx Index of the partition (in this->partitions) to split.
-     */
-    void SplitPartition(size_t idx);
-
-    /**
      * @brief Clear the existing partition(s) and replace with a single
      * partition with the correct type information. This creates equivalent
      * partition state as when HashJoinState is initialized except there
@@ -583,17 +649,7 @@ class HashJoinState : public JoinState {
     void ResetPartitions();
 
     /**
-     * @brief Reserve space in build_table_buffer, build_table_join_hashes, etc.
-     * of all partitions to add all rows from 'in_table'.
-     * XXX This will likely change to only allocate required memory (or do away
-     * with upfront reserve altogether -- at least for inactive partitions)
-     *
-     * @param in_table Reference table to reserve memory based on.
-     */
-    void ReserveBuildTable(const std::shared_ptr<table_info>& in_table);
-
-    /**
-     * @brief Append a build row. It will figure out the correct
+     * @brief Append a batch of rows. It will figure out the correct
      * partition based on the partitioning hash. If the record
      * is in the "active" (i.e. index 0) partition, it will be
      * added to the hash table of that active partition
@@ -601,29 +657,23 @@ class HashJoinState : public JoinState {
      * will be simply added to the build buffer of the partition.
      * It is slightly optimized for the single partition case.
      *
-     * NOTE: This assumes that ReserveBuildTable has been called
-     * beforehand.
+     * In case of a threshold enforcement error, this process is retried after
+     * splitting the 0th partition (which is only one that the enforcement error
+     * could've come from). This is done until we successfully append the batch
+     * or we go over max partition depth while splitting the 0th partition.
      *
      * @param in_table Table to add the rows from.
      * @param join_hashes Join hashes for the records.
      * @param partitioning_hashes Partitioning hashes for the records.
      */
-    void UnsafeAppendBuildBatch(
+    void AppendBuildBatch(
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& join_hashes,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes);
 
     /**
-     * @brief Append a build row. It will figure out the correct
-     * partition based on the partitioning hash. If the record
-     * is in the "active" (i.e. index 0) partition, it will be
-     * added to the hash table of that active partition
-     * as well. If record belongs to an inactive partition, it
-     * will be simply added to the build buffer of the partition.
-     * It is slightly optimized for the single partition case.
-     *
-     * NOTE: This assumes that ReserveBuildTable has been called
-     * beforehand.
+     * @brief Same as the function above, except we will only
+     * append rows for which append_rows bit vector is true.
      *
      * @param in_table Table to add the rows from.
      * @param join_hashes Join hashes for the records.
@@ -631,7 +681,7 @@ class HashJoinState : public JoinState {
      * @param append_rows Vector of booleans indicating whether to append the
      * row
      */
-    void UnsafeAppendBuildBatch(
+    void AppendBuildBatch(
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& join_hashes,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes,
@@ -645,6 +695,12 @@ class HashJoinState : public JoinState {
      * @brief Finalize build step for all partitions.
      * This will process the partitions one by one (only one is pinned in memory
      * at one time), build hash tables, split partitions as necessary, etc.
+     * We call JoinPartition::FinalizeBuild on each of the partitions.
+     * In case we encounter a threshold enforcement error during FinalizeBuild
+     * of a partition, that partition is split until it can be finalized
+     * without going over the pinned memory threshold. This process will be
+     * repeated until we are successful or until we reach the max partition
+     * depth.
      *
      */
     void FinalizeBuild() override;
@@ -657,13 +713,16 @@ class HashJoinState : public JoinState {
     void FinalizeProbe() override;
 
     /**
-     * @brief Reserve enough space to accommodate in_table
-     * in probe buffers of each of the inactive partitions.
+     * @brief Disable partitioning by disabling threshold
+     * enforcement in the OperatorBufferPool.
      *
-     * @param in_table Reference table to reserve space based on.
+     * If threshold enforcement is disabled, the
+     * OperatorPoolThresholdExceededError error will never
+     * be thrown and we will never trigger a partition
+     * split.
+     *
      */
-    void ReserveProbeTableForInactivePartitions(
-        const std::shared_ptr<table_info>& in_table);
+    void DisablePartitioning();
 
     /**
      * @brief Append probe batch to the probe table buffer of the
@@ -712,9 +771,42 @@ class HashJoinState : public JoinState {
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
     GetDictionaryHashesForKeys();
 
+    /// @brief Get the number of bytes allocated through this Join operator's
+    /// OperatorBufferPool that are currently pinned.
+    uint64_t op_pool_bytes_pinned() const;
+
+    /// @brief Get the number of bytes that are currently allocated through this
+    /// Join operator's OperatorBufferPool.
+    uint64_t op_pool_bytes_allocated() const;
+
     // Join events used to track build and probe
     tracing::ResumableEvent build_event;
     tracing::ResumableEvent probe_event;
+
+   private:
+    /**
+     * @brief Split the partition at index 'idx' into two partitions.
+     * This must only be called in the event of a threshold enforcement error.
+     *
+     * @param idx Index of the partition (in this->partitions) to split.
+     */
+    void SplitPartition(size_t idx);
+
+    /// @brief Helpers for AppendBuildBatch with most of the core logic
+    /// for appending a build side batch to the Join state. These are the
+    /// functions that are retried in AppendBuildBatch in case the 0th partition
+    /// needs to be split to fit within the memory threshold assigned to this
+    /// partition.
+    void AppendBuildBatchHelper(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& join_hashes,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes);
+
+    void AppendBuildBatchHelper(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& join_hashes,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+        const std::vector<bool>& append_rows);
 };
 
 class NestedLoopJoinState : public JoinState {
@@ -802,26 +894,6 @@ bool nested_loop_join_probe_consume_batch(
  */
 std::tuple<std::vector<int8_t>, std::vector<int8_t>>
 get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table);
-
-/**
- * @brief Get the dict builders from a table build buffer object.
- *
- * @param table_build_buffer TableBuildBuffer to get the dict builders from.
- * @return std::vector<std::shared_ptr<DictionaryBuilder>>
- */
-std::vector<std::shared_ptr<DictionaryBuilder>>
-get_dict_builders_from_table_build_buffer(
-    const TableBuildBuffer& table_build_buffer);
-
-/**
- * @brief Get the dict builders from a chunked table builder object.
- *
- * @param chunked_table_builder ChunkedTableBuilder to get dict builders from
- * @return std::vector<std::shared_ptr<DictionaryBuilder>>
- */
-std::vector<std::shared_ptr<DictionaryBuilder>>
-get_dict_builders_from_chunked_table_builder(
-    const ChunkedTableBuilder& chunked_table_builder);
 
 /**
  * @brief Wrapper around stream_sync_is_last to avoid synchronization

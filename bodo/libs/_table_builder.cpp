@@ -172,6 +172,50 @@ void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr) {
     }
 }
 
+void ArrayBuildBuffer::ReserveArray(const ChunkedTableBuilder& chunked_tb,
+                                    const size_t array_idx) {
+    if (chunked_tb.chunks.empty()) {
+        return;
+    }
+    // Verify array and ctype
+    const std::shared_ptr<array_info>& in_arr_first_chunk =
+        chunked_tb.chunks[0]->columns[array_idx];
+
+    this->ReserveArrayTypeCheck(in_arr_first_chunk);
+
+    size_t total_length = 0;
+    for (auto& table : chunked_tb.chunks) {
+        total_length += table->columns[array_idx]->length;
+    }
+
+    this->ReserveSize(total_length);
+
+    // In case of strings, calculate required size of characters buffer:
+    if (in_arr_first_chunk->arr_type == bodo_array_type::STRING) {
+        // update data buffer
+        int64_t capacity_chars = this->data_array->buffers[0]->capacity();
+
+        int64_t min_capacity_chars = this->data_array->n_sub_elems();
+        for (auto& table : chunked_tb.chunks) {
+            const std::shared_ptr<array_info>& arr = table->columns[array_idx];
+            // TODO Remove pin/unpin requirement to get this information.
+            // Looking at size_ of the buffers[0] might be sufficient
+            // since we maintain that information correctly.
+            arr->pin();
+            min_capacity_chars += arr->n_sub_elems();
+            arr->unpin();
+        }
+
+        if (min_capacity_chars > capacity_chars) {
+            int64_t new_capacity_chars =
+                std::max(min_capacity_chars, capacity_chars * 2);
+            CHECK_ARROW_MEM(this->data_array->buffers[0]->Reserve(
+                                new_capacity_chars * sizeof(int8_t)),
+                            "ArrayBuilder::ReserveArray: Reserve failed!");
+        }
+    }
+}
+
 void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
     int64_t min_capacity = size + new_data_len;
     switch (this->data_array->arr_type) {
@@ -317,10 +361,7 @@ void TableBuildBuffer::UnifyTablesAndAppend(
 
 void TableBuildBuffer::UnsafeAppendBatch(
     const std::shared_ptr<table_info>& in_table,
-    const std::vector<bool>& append_rows) {
-    uint64_t append_rows_sum =
-        std::accumulate(append_rows.begin(), append_rows.end(), (uint64_t)0);
-
+    const std::vector<bool>& append_rows, uint64_t append_rows_sum) {
 #ifndef APPEND_BATCH
 #define APPEND_BATCH(arr_type_exp, dtype_exp)                    \
     array_buffers[i].UnsafeAppendBatch<arr_type_exp, dtype_exp>( \
@@ -472,6 +513,14 @@ void TableBuildBuffer::UnsafeAppendBatch(
         }
     }
 #undef APPEND_BATCH
+}
+
+void TableBuildBuffer::UnsafeAppendBatch(
+    const std::shared_ptr<table_info>& in_table,
+    const std::vector<bool>& append_rows) {
+    uint64_t append_rows_sum =
+        std::accumulate(append_rows.begin(), append_rows.end(), (uint64_t)0);
+    this->UnsafeAppendBatch(in_table, append_rows, append_rows_sum);
 }
 
 void TableBuildBuffer::UnsafeAppendBatch(
@@ -644,14 +693,20 @@ void TableBuildBuffer::IncrementSizeDataColumns(uint64_t n_keys) {
 }
 
 void TableBuildBuffer::ReserveTable(const std::shared_ptr<table_info>& in_table,
-                                    const std::vector<bool>& reserve_rows) {
+                                    const std::vector<bool>& reserve_rows,
+                                    uint64_t reserve_rows_sum) {
     assert(in_table->nrows() == reserve_rows.size());
-    uint64_t reserve_rows_sum =
-        std::accumulate(reserve_rows.begin(), reserve_rows.end(), (uint64_t)0);
     for (size_t i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info>& in_arr = in_table->columns[i];
         array_buffers[i].ReserveArray(in_arr, reserve_rows, reserve_rows_sum);
     }
+}
+
+void TableBuildBuffer::ReserveTable(const std::shared_ptr<table_info>& in_table,
+                                    const std::vector<bool>& reserve_rows) {
+    uint64_t reserve_rows_sum =
+        std::accumulate(reserve_rows.begin(), reserve_rows.end(), (uint64_t)0);
+    this->ReserveTable(in_table, reserve_rows, reserve_rows_sum);
 }
 
 void TableBuildBuffer::ReserveTable(
@@ -659,6 +714,12 @@ void TableBuildBuffer::ReserveTable(
     for (size_t i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info>& in_arr = in_table->columns[i];
         array_buffers[i].ReserveArray(in_arr);
+    }
+}
+
+void TableBuildBuffer::ReserveTable(const ChunkedTableBuilder& chunked_tb) {
+    for (size_t i = 0; i < this->data_table->ncols(); i++) {
+        array_buffers[i].ReserveArray(chunked_tb, i);
     }
 }
 
@@ -683,41 +744,26 @@ void TableBuildBuffer::Reset() {
     }
 }
 
-/* ------------------------------------------------------------------------ */
-
-/* --------------------------- Helper Functions --------------------------- */
-
-std::shared_ptr<table_info> alloc_table(
-    const std::vector<int8_t>& arr_c_types,
-    const std::vector<int8_t>& arr_array_types, bodo::IBufferPool* const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm) {
-    std::vector<std::shared_ptr<array_info>> arrays;
-
-    for (size_t i = 0; i < arr_c_types.size(); i++) {
-        bodo_array_type::arr_type_enum arr_type =
-            (bodo_array_type::arr_type_enum)arr_array_types[i];
-        Bodo_CTypes::CTypeEnum dtype = (Bodo_CTypes::CTypeEnum)arr_c_types[i];
-
-        arrays.push_back(alloc_array(0, 0, 0, arr_type, dtype, -1, 0, 0, false,
-                                     false, false, pool, mm));
+void TableBuildBuffer::pin() {
+    if (!this->pinned_) {
+        // This will automatically pin the underlying arrays.
+        // XXX We could expand it to be more explicit in
+        // the future, i.e. call pin on the individual
+        // ArrayBuildBuffers.
+        this->data_table->pin();
+        this->pinned_ = true;
     }
-    return std::make_shared<table_info>(arrays);
 }
 
-std::shared_ptr<table_info> alloc_table_like(
-    const std::shared_ptr<table_info>& table, const bool reuse_dictionaries) {
-    std::vector<std::shared_ptr<array_info>> arrays;
-    for (size_t i = 0; i < table->ncols(); i++) {
-        bodo_array_type::arr_type_enum arr_type = table->columns[i]->arr_type;
-        Bodo_CTypes::CTypeEnum dtype = table->columns[i]->dtype;
-        arrays.push_back(alloc_array(0, 0, 0, arr_type, dtype));
-        // For dict encoded columns, re-use the same dictionary
-        // if reuse_dictionaries = true
-        if (reuse_dictionaries && (arr_type == bodo_array_type::DICT)) {
-            arrays[i]->child_arrays[0] = table->columns[i]->child_arrays[0];
-        }
+void TableBuildBuffer::unpin() {
+    if (this->pinned_) {
+        // This will automatically unpin the underlying arrays.
+        // XXX We could expand it to be more explicit in
+        // the future, i.e. call unpin on the individual
+        // ArrayBuildBuffers.
+        this->data_table->unpin();
+        this->pinned_ = false;
     }
-    return std::make_shared<table_info>(arrays);
 }
 
 /* ------------------------------------------------------------------------ */
