@@ -82,6 +82,7 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         int64_t get_max_memory" max_memory"()
         c_string get_backend_name" backend_name"()
         size_t num_size_classes()
+        c_bool is_spilling_enabled()
         CSizeClass* GetSizeClass_Unsafe(uint64_t idx)
         uint64_t GetSmallestSizeClassSize()
 
