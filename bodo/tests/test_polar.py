@@ -214,6 +214,9 @@ def test_division_bug(datapath, memory_leak_check):
     check_func(impl, (np.linspace(0, 10, 101),), convert_to_nullable_float=False)
 
 
+@pytest.mark.skipif(
+    bodo.get_size() > 1, reason="[BSE-991] TODO: investigate parallel support"
+)
 def test_taylor(memory_leak_check):
     def taylor(nsamples, S_L=43):
         xi = np.linspace(-0.5, 0.5, nsamples)

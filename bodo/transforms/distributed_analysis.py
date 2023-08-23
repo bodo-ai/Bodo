@@ -3901,8 +3901,6 @@ class DistributedAnalysis:
         arg1 = args[1].name
         ndim0 = self.typemap[arg0].ndim
         ndim1 = self.typemap[arg1].ndim
-        dist0 = array_dists[arg0]
-        dist1 = array_dists[arg1]
         # Fortran layout is caused by X.T and means transpose
         t0 = arg0 in self._T_arrs
         t1 = arg1 in self._T_arrs

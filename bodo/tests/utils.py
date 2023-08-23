@@ -1034,7 +1034,7 @@ def _test_equal(
                 )
         else:
             # parallel reduction can result in floating point differences
-            if py_out.dtype in (np.float32, np.float64):
+            if py_out.dtype in (np.float32, np.float64, np.complex128):
                 np.testing.assert_allclose(bodo_out, py_out, atol=atol, rtol=rtol)
             elif isinstance(bodo_out, pd.arrays.ArrowStringArray):
                 pd.testing.assert_extension_array_equal(
