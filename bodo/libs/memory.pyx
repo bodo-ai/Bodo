@@ -526,6 +526,9 @@ cdef class BufferPool(IBufferPool):
         at any point in its lifetime.
         """
         return deref(self.c_pool).get_max_memory()
+
+    def is_spilling_enabled(self) -> c_bool:
+        return deref(self.c_pool).is_spilling_enabled()
     
     def release_unused(self):
         """

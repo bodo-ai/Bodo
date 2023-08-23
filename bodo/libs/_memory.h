@@ -642,9 +642,12 @@ class BufferPool final : public IBufferPool {
     /// @brief Get peak memory allocation in this memory pool
     virtual int64_t max_memory() const override;
 
-    /// @brief The name of the backend used by this MemoryPool.
+    /// @brief The name of the backend used by this memory pool.
     /// Always returns 'bodo'.
     virtual std::string backend_name() const override;
+
+    /// @brief If spilling is enabled for this memory pool.
+    bool is_spilling_enabled() const;
 
     // ------------------ New functions ------------------ //
 

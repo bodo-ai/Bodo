@@ -136,6 +136,10 @@ std::string OperatorBufferPool::backend_name() const {
     return this->parent_pool_->backend_name();
 }
 
+bool OperatorBufferPool::is_spilling_enabled() const {
+    return this->parent_pool_->is_spilling_enabled();
+}
+
 uint64_t OperatorBufferPool::get_max_pinned_size_bytes() const {
     return this->max_pinned_size_bytes_;
 }

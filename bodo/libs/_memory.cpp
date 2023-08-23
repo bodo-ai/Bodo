@@ -533,28 +533,40 @@ std::shared_ptr<StorageOptions> StorageOptions::Defaults(uint8_t tier) {
 BufferPoolOptions BufferPoolOptions::Defaults() {
     BufferPoolOptions options;
 
+    // Disable Storage Manager Parsing
+    // Useful for debugging purposes
+    const char* disable_spilling_env_ =
+        std::getenv("BODO_BUFFER_POOL_DISABLE_SPILLING");
+    if (!disable_spilling_env_ || std::strcmp(disable_spilling_env_, "1")) {
+        // Parse Storage Managers
+        for (uint8_t i = 1; i <= MAX_NUM_STORAGE_MANAGERS; i++) {
+            auto storage_option = StorageOptions::Defaults(i);
+            if (storage_option != nullptr) {
+                options.storage_options.push_back(storage_option);
+            } else {
+                break;
+            }
+        }
+    }
+
     // Read memory_size from env_var if provided.
-    // This will be the common case on the platform.
     // If env var is not set, we will get the memory
     // information from the OS.
-    char* memory_size_env_ = std::getenv("BODO_BUFFER_POOL_MEMORY_SIZE_MiB");
-
-    if (memory_size_env_) {
+    if (char* memory_size_env_ =
+            std::getenv("BODO_BUFFER_POOL_MEMORY_SIZE_MiB")) {
         options.memory_size = std::stoi(memory_size_env_);
     } else {
-        // Fraction of total memory we should actually assign to the
-        // buffer pool. We will read this from an environment variable
-        // if it's set, but will default to 95% if it isn't.
-        // This has been temporarily set to 5.0 in order to to avoid
-        // memory issues in the upcoming release.
-        double mem_fraction = 5.0;
+        // Fraction of total memory we should actually assign to the buffer
+        // pool. We will read this from an environment variable if it's set, but
+        // will default to 95% if spilling is available and enabled, and to 500%
+        // otherwise.
+        double mem_fraction = options.storage_options.empty() ? 5. : .95;
 
         // We expect this to be in percentages and not fraction,
         // i.e. it should be set to 45 if we want to use 45% (or 0.45)
         // of the total available space.
-        char* mem_percent_env_ =
-            std::getenv("BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT");
-        if (mem_percent_env_) {
+        if (char* mem_percent_env_ =
+                std::getenv("BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT")) {
             mem_fraction =
                 static_cast<double>(std::stoi(mem_percent_env_) / 100.0);
         }
@@ -573,27 +585,14 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
             static_cast<uint64_t>(mem_per_rank * mem_fraction);
     }
 
-    char* min_size_class_env_ =
-        std::getenv("BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB");
-    if (min_size_class_env_) {
+    if (char* min_size_class_env_ =
+            std::getenv("BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB")) {
         options.min_size_class = std::stoi(min_size_class_env_);
     }
 
-    char* max_num_size_classes_env_ =
-        std::getenv("BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES");
-    if (max_num_size_classes_env_) {
+    if (char* max_num_size_classes_env_ =
+            std::getenv("BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES")) {
         options.max_num_size_classes = std::stoi(max_num_size_classes_env_);
-    }
-
-    // Disable Storage Manager Parsing
-    // Useful for debugging purposes
-    bool disable_spilling = false;
-    if (const char* disable_spilling_env_ =
-            std::getenv("BODO_BUFFER_POOL_DISABLE_SPILLING")) {
-        if (std::strcmp(disable_spilling_env_, "1") == 0) {
-            options.ignore_max_limit_during_allocation = true;
-            disable_spilling = true;
-        }
     }
 
     // BufferPool's equal allocation per rank
@@ -604,23 +603,8 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
     // allocation even if it's beyond the allocated limit.
     if (const char* ignore_max_limit_env_ =
             std::getenv("BODO_BUFFER_POOL_IGNORE_MAX_ALLOCATION_LIMIT")) {
-        if (std::strcmp(ignore_max_limit_env_, "1") == 0) {
-            options.ignore_max_limit_during_allocation = true;
-        } else {
-            options.ignore_max_limit_during_allocation = false;
-        }
-    }
-
-    if (!disable_spilling) {
-        // Parse Storage Managers
-        for (uint8_t i = 1; i <= MAX_NUM_STORAGE_MANAGERS; i++) {
-            auto storage_option = StorageOptions::Defaults(i);
-            if (storage_option != nullptr) {
-                options.storage_options.push_back(storage_option);
-            } else {
-                break;
-            }
-        }
+        options.ignore_max_limit_during_allocation =
+            !std::strcmp(ignore_max_limit_env_, "1");
     }
 
     return options;
@@ -749,6 +733,10 @@ inline void BufferPool::update_pinned_bytes(int64_t diff) {
 }
 
 std::string BufferPool::backend_name() const { return "bodo"; }
+
+bool BufferPool::is_spilling_enabled() const {
+    return !this->options_.storage_options.empty();
+}
 
 int64_t BufferPool::find_size_class_idx(int64_t size) const {
     if (static_cast<uint64_t>(size) > this->size_class_bytes_.back()) {
