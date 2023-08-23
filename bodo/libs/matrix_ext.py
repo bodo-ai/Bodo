@@ -27,14 +27,17 @@ class MatrixType(types.ArrayCompatible):
 
     ndim = 2
 
-    def __init__(self, dtype):
+    def __init__(self, dtype, layout):
         self.dtype = dtype
-        super(MatrixType, self).__init__(name=f"MatrixType({dtype})")
+        self.layout = layout
+        super(MatrixType, self).__init__(
+            name=f"MatrixType({dtype}, {repr(self.layout)})"
+        )
 
     @property
     def as_array(self):
         # using types.undefined to avoid Array templates for binary ops
-        return types.Array(types.undefined, 2, "C")
+        return types.Array(types.undefined, 2, self.layout)
 
     def copy(self):
         return MatrixType(self.dtype)
@@ -46,7 +49,7 @@ class MatrixModel(models.StructModel):
 
     def __init__(self, dmm, fe_type):
         members = [
-            ("data", types.Array(fe_type.dtype, 2, "C")),
+            ("data", types.Array(fe_type.dtype, 2, fe_type.layout)),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -59,10 +62,9 @@ def unbox_matrix(typ, val, c):
     """
     Unbox a np.matrix from a Python object.
     """
-    nativearycls = c.context.make_array(types.Array(typ.dtype, 2, "C"))
+    nativearycls = c.context.make_array(types.Array(typ.dtype, 2, typ.layout))
     nativeary = nativearycls(c.context, c.builder)
     aryptr = nativeary._getpointer()
-
     ptr = c.builder.bitcast(aryptr, c.pyapi.voidptr)
     if c.context.enable_nrt:
         errcode = c.pyapi.nrt_adapt_ndarray_from_python(val, ptr)
@@ -108,7 +110,7 @@ def init_np_matrix(typingctx, data_t):
         context.nrt.incref(builder, signature.args[0], data)
         return matrix._getvalue()
 
-    ret_typ = MatrixType(data_t.dtype)
+    ret_typ = MatrixType(data_t.dtype, data_t.layout)
     sig = ret_typ(data_t)
     return sig, codegen
 
@@ -131,7 +133,7 @@ def overload_matrix_ndim(A):  # pragma: no cover
 
 @overload_attribute(MatrixType, "T")
 def overload_matrix_transpose(A):  # pragma: no cover
-    return lambda A: init_np_matrix(np.ascontiguousarray(A.data.T))
+    return lambda A: init_np_matrix(A.data.T)
 
 
 @overload(operator.getitem)
@@ -149,13 +151,13 @@ def overload_matrix_setitem(A, key, val):  # pragma: no cover
 @overload(operator.add)
 def overload_matrix_add(A, B):  # pragma: no cover
     if isinstance(A, MatrixType) and isinstance(B, MatrixType):
-        raise_bodo_error("TODO: support addition of np.matrix")
+        return lambda A, B: init_np_matrix(A.data + B.data)
 
 
 @overload(operator.sub)
 def overload_matrix_sub(A, B):  # pragma: no cover
     if isinstance(A, MatrixType) and isinstance(B, MatrixType):
-        raise_bodo_error("TODO: support subtraction of np.matrix")
+        return lambda A, B: init_np_matrix(A.data - B.data)
 
 
 @overload(operator.mul)
@@ -164,4 +166,8 @@ def overload_matrix_sub(A, B):  # pragma: no cover
 @overload(np.matmul)
 def overload_matrix_mul(A, B):  # pragma: no cover
     if isinstance(A, MatrixType) and isinstance(B, MatrixType):
-        raise_bodo_error("TODO: support multiplication of np.matrix")
+
+        def impl(A, B):
+            return init_np_matrix(np.dot(A.data, B.data))
+
+        return impl
