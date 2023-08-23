@@ -4525,13 +4525,16 @@ class TypingTransforms:
             extra_globals=extra_globals,
         )
         label_of_replacee = self.rhs_labels[def_to_replace]
-        assert (
-            label_of_replacer != label_of_replacee
-        ), "Invalid replacement of definition: replacer and replaceee must belong to different code block"
-
-        block = self.func_ir.blocks[label_of_replacee]
+        # This should only be true for tests. Generated code will usually have
+        # the replacer expression in a loop while the replacee is in the outer
+        # scope.
+        same_label = label_of_replacee == label_of_replacer
+        if same_label:
+            body = self._working_body
+        else:
+            body = self.func_ir.blocks[label_of_replacee].body
         remove_line = -1
-        for i, stmt in enumerate(block.body):
+        for i, stmt in enumerate(body):
             # Find the instruction
             if is_assign(stmt) and stmt.target.name == retvar.name:
                 # Just want to set i here
@@ -4540,9 +4543,12 @@ class TypingTransforms:
         assert (
             remove_line != -1
         ), "Could not find original table builder state to replace"
-        block.body = (
-            block.body[:remove_line] + new_nodes + block.body[remove_line + 1 :]
-        )
+        body = body[:remove_line] + new_nodes + body[remove_line + 1 :]
+
+        if same_label:
+            self._working_body = body
+        else:
+            self.func_ir.blocks[label_of_replacee].body = body
         # Replicate the changes that would occur to defintions and labels if this was
         # done in the active block.
 
