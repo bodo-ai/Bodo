@@ -101,8 +101,7 @@ struct pinnable_ptr_base {
 template <typename T>
 struct pinnable_ptr {
     // Standard STL container definitions for smart pointers / iterators
-    using element_type = T;
-    using value_type = T;
+    using element_type = std::remove_extent_t<T>;
     using pointer = T *;
     using reference = T &;
     using const_reference = const T &;
@@ -512,11 +511,11 @@ template <typename T,
           typename = std::enable_if_t<pinning_allocator_traits<
               typename pinning_traits<T>::allocator_type>::is_pinnable>,
           typename = std::enable_if_t<pinning_traits<T>::is_pinnable>>
+
 struct pinnable {
    public:
     using allocator_type = typename pinning_traits<T>::allocator_type;
     using element_type = typename pinning_traits<T>::pinnable_type;
-
     /// @brief Convenience function so that you don't have to pin() std::vector
     /// to get the size()
     /// @return The size of the underlying std::vector
@@ -524,6 +523,8 @@ struct pinnable {
     size() const {
         return underlying_.size();
     }
+
+    int32_t pin_count() const { return pincnt_; }
 
     allocator_type allocator() { return underlying_.get_allocator(); }
 
@@ -545,7 +546,7 @@ struct pinnable {
 #endif
 
    private:
-    int pincnt_;
+    int32_t pincnt_ = 0;
 
     /// Pin the data into memory and get a pinned guard that automatically
     /// handles unpinning.

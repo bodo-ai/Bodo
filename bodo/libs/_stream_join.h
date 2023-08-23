@@ -8,6 +8,7 @@
 #include "_join.h"
 #include "_nested_loop_join.h"
 #include "_operator_pool.h"
+#include "_pinnable.h"
 #include "simd-block-fixed-fpp.h"
 
 using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
@@ -68,6 +69,10 @@ struct KeyEqualHashJoinTable {
  */
 class JoinPartition {
    public:
+    using hash_table_t =
+        bodo::unord_map_container<int64_t, size_t, HashHashJoinTable,
+                                  KeyEqualHashJoinTable>;
+
     explicit JoinPartition(
         size_t num_top_bits_, uint32_t top_bitmask_,
         const std::vector<int8_t>& build_arr_c_types,
@@ -85,6 +90,7 @@ class JoinPartition {
         const std::shared_ptr<::arrow::MemoryManager> op_mm_);
 
     // Build state
+
     // Contiguous append-only buffer, used if a partition is active or after
     // the Finalize step for inactive partitions
     TableBuildBuffer build_table_buffer;
@@ -92,7 +98,11 @@ class JoinPartition {
     // partition case.
     // These allocations will go through the OperatorBufferPool
     // so that we can enforce limits and trigger re-partitioning.
-    bodo::vector<uint32_t> build_table_join_hashes;
+    bodo::pinnable<bodo::vector<uint32_t>> build_table_join_hashes;
+    // TODO Explain
+    std::optional<bodo::pin_guard<decltype(build_table_join_hashes)>>
+        build_table_join_hashes_guard;
+
     // Chunked append-only buffer, only used if a partition is inactive and
     // not yet finalized
     ChunkedTableBuilder build_table_buffer_chunked;
@@ -100,44 +110,55 @@ class JoinPartition {
     // Join hash table (key row number -> matching row numbers).
     // These allocations will go through the OperatorBufferPool
     // so that we can enforce limits and trigger re-partitioning.
-    bodo::unord_map_container<int64_t, size_t, HashHashJoinTable,
-                              KeyEqualHashJoinTable>
-        build_hash_table;
+    bodo::pinnable<hash_table_t> build_hash_table;
+    std::optional<bodo::pin_guard<bodo::pinnable<hash_table_t>>>
+        build_hash_table_guard;
 
     // Temporary array to track the group sizes of build table
     // rows. It will be released in FinalizeGroups once groups and
     // groups_offsets are populated.
-    std::unique_ptr<bodo::vector<size_t>> num_rows_in_group;
+    std::unique_ptr<bodo::pinnable<bodo::vector<size_t>>> num_rows_in_group;
+    std::optional<bodo::pin_guard<bodo::pinnable<bodo::vector<size_t>>>>
+        num_rows_in_group_guard;
     // Temporary array to track the group id of every row in the build table.
     // This will be used in 'FinalizeGroups' to populate 'groups' and
     // 'groups_offsets'. Its memory will be released once this is done.
     // This array allows us to avoid a hash-map lookup. This does require more
     // memory, but the performance benefits of a simple vector lookup are
     // sufficient to warrant it.
-    std::unique_ptr<bodo::vector<size_t>> build_row_to_group_map;
+    std::unique_ptr<bodo::pinnable<bodo::vector<size_t>>>
+        build_row_to_group_map;
+    std::optional<bodo::pin_guard<bodo::pinnable<bodo::vector<size_t>>>>
+        build_row_to_group_map_guard;
 
     // 'groups' is single contiguous buffer of row ids arranged by groups.
     // 'group_offsets' store the offsets for the individual groups within the
     // 'groups' buffer (similar to how we store strings in array_info). We will
     // resize these to the exact required sizes and populate them using
     // 'num_rows_in_group' and 'build_row_to_group_map' during 'FinalizeGroups'.
-    bodo::vector<size_t> groups;
-    bodo::vector<size_t> groups_offsets;
+    bodo::pinnable<bodo::vector<size_t>> groups;
+    bodo::pinnable<bodo::vector<size_t>> groups_offsets;
+    std::optional<bodo::pin_guard<decltype(groups)>> groups_guard;
+    std::optional<bodo::pin_guard<decltype(groups_offsets)>>
+        groups_offsets_guard;
 
     // Probe state (for outer joins). Note we don't use
     // vector<bool> because we may need to do an allreduce
     // on the data directly and that can't be accessed for bool.
     // These allocations will go through the OperatorBufferPool
     // so that we can enforce limits and trigger re-partitioning.
-    bodo::vector<uint8_t>
+    bodo::pinnable<bodo::vector<uint8_t>>
         build_table_matched;  // state for building output table
+    std::optional<bodo::pin_guard<decltype(build_table_matched)>>
+        build_table_matched_guard;
 
     // Probe state (only used when this partition is inactive).
     // We don't need partitioning hashes since we should never
     // need to repartition.
+
     ChunkedTableBuilder probe_table_buffer_chunked;
     // TODO Open issue to convert this into a chunked buffer
-    bodo::vector<uint32_t> probe_table_buffer_join_hashes;
+    bodo::pinnable<bodo::vector<uint32_t>> probe_table_buffer_join_hashes;
     const int64_t batch_size;
 
     // Temporary state during probe step. These will be
@@ -700,9 +721,10 @@ class NestedLoopJoinState : public JoinState {
    public:
     // Build state
     std::unique_ptr<ChunkedTableBuilder>
-        build_table_buffer;                     // Append only buffer.
-    bodo::vector<uint8_t> build_table_matched;  // state for building output
-                                                // table (for outer joins)
+        build_table_buffer;  // Append only buffer.
+    bodo::pinnable<bodo::vector<uint8_t>>
+        build_table_matched;  // state for building output
+                              // table (for outer joins)
 
     NestedLoopJoinState(const std::vector<int8_t>& build_arr_c_types,
                         const std::vector<int8_t>& build_arr_array_types,

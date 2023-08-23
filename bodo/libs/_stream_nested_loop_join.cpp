@@ -1,4 +1,6 @@
 #include "_distributed.h"
+#include "_join.h"
+#include "_nested_loop_join_impl.h"
 #include "_shuffle.h"
 #include "_stream_join.h"
 
@@ -52,7 +54,8 @@ void NestedLoopJoinState::FinalizeBuild() {
     }
 
     if (this->build_table_outer) {
-        build_table_matched.resize(
+        auto build_table_matched_pin(bodo::pin(build_table_matched));
+        build_table_matched_pin->resize(
             arrow::bit_util::BytesForBits(
                 this->build_table_buffer->total_remaining),
             0);
@@ -109,15 +112,18 @@ bool nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
  * build side.
  * @param probe_kept_cols Which columns to generate in the output on the
  * probe side.
+ * @param build_table_matched_guard TODO
  * @param build_table_offset the number of bits from the start of
  * build_table_matched that belongs to previous chunks of the build table buffer
  */
-void nested_loop_join_local_chunk(NestedLoopJoinState* join_state,
-                                  std::shared_ptr<table_info> build_table,
-                                  std::shared_ptr<table_info> probe_table,
-                                  const std::vector<uint64_t>& build_kept_cols,
-                                  const std::vector<uint64_t>& probe_kept_cols,
-                                  int64_t build_table_offset) {
+void nested_loop_join_local_chunk(
+    NestedLoopJoinState* join_state, std::shared_ptr<table_info> build_table,
+    std::shared_ptr<table_info> probe_table,
+    const std::vector<uint64_t>& build_kept_cols,
+    const std::vector<uint64_t>& probe_kept_cols,
+    bodo::pin_guard<decltype(NestedLoopJoinState::build_table_matched)>&
+        build_table_matched_guard,
+    int64_t build_table_offset) {
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
 
@@ -128,18 +134,18 @@ void nested_loop_join_local_chunk(NestedLoopJoinState* join_state,
     }
 
 #ifndef JOIN_TABLE_LOCAL
-#define JOIN_TABLE_LOCAL(build_table_outer, probe_table_outer,                \
-                         non_equi_condition, build_table_outer_exp,           \
-                         probe_table_outer_exp, non_equi_condition_exp)       \
-    if (build_table_outer == build_table_outer_exp &&                         \
-        probe_table_outer == probe_table_outer_exp &&                         \
-        non_equi_condition == non_equi_condition_exp) {                       \
-        nested_loop_join_table_local<build_table_outer_exp,                   \
-                                     probe_table_outer_exp,                   \
-                                     non_equi_condition_exp>(                 \
-            build_table, probe_table, cond_func, false, build_idxs,           \
-            probe_idxs, join_state->build_table_matched, probe_table_matched, \
-            build_table_offset);                                              \
+#define JOIN_TABLE_LOCAL(build_table_outer, probe_table_outer,              \
+                         non_equi_condition, build_table_outer_exp,         \
+                         probe_table_outer_exp, non_equi_condition_exp)     \
+    if (build_table_outer == build_table_outer_exp &&                       \
+        probe_table_outer == probe_table_outer_exp &&                       \
+        non_equi_condition == non_equi_condition_exp) {                     \
+        nested_loop_join_table_local<                                       \
+            build_table_outer_exp, probe_table_outer_exp,                   \
+            non_equi_condition_exp, bodo::PinnableAllocator<std::uint8_t>>( \
+            build_table, probe_table, cond_func, false, build_idxs,         \
+            probe_idxs, *build_table_matched_guard, probe_table_matched,    \
+            build_table_offset);                                            \
     }
 #endif
 
@@ -226,6 +232,8 @@ bool nested_loop_join_probe_consume_batch(
             }
         }
 
+        auto build_table_matched_guard(
+            bodo::pin(join_state->build_table_matched));
         for (int p = 0; p < n_pes; p++) {
             std::shared_ptr<table_info> bcast_probe_chunk = broadcast_table(
                 in_table, in_table, in_table->ncols(), parallel, p);
@@ -237,7 +245,8 @@ bool nested_loop_join_probe_consume_batch(
                 build_table->pin();
                 nested_loop_join_local_chunk(
                     join_state, build_table, bcast_probe_chunk, build_kept_cols,
-                    probe_kept_cols, build_table_offset);
+                    probe_kept_cols, build_table_matched_guard,
+                    build_table_offset);
                 build_table_offset += build_table->nrows();
                 build_table->unpin();
             }
@@ -251,13 +260,16 @@ bool nested_loop_join_probe_consume_batch(
         // and probe_shuffle_buffer also share their dictionaries and will also
         // be unified.
         in_table = join_state->UnifyProbeTableDictionaryArrays(in_table);
+
+        auto build_table_matched_guard(
+            bodo::pin(join_state->build_table_matched));
         // define the number of rows already processed as 0
         int64_t build_table_offset = 0;
         for (auto& build_table : join_state->build_table_buffer->chunks) {
             build_table->pin();
-            nested_loop_join_local_chunk(join_state, build_table, in_table,
-                                         build_kept_cols, probe_kept_cols,
-                                         build_table_offset);
+            nested_loop_join_local_chunk(
+                join_state, build_table, in_table, build_kept_cols,
+                probe_kept_cols, build_table_matched_guard, build_table_offset);
             build_table_offset += build_table->nrows();
             build_table->unpin();
         }
@@ -270,12 +282,14 @@ bool nested_loop_join_probe_consume_batch(
         int64_t build_table_offset = 0;
         bodo::vector<int64_t> build_idxs;
         bodo::vector<int64_t> probe_idxs;
+        auto build_table_matched_pin(
+            bodo::pin(join_state->build_table_matched));
 
         for (auto& build_table : join_state->build_table_buffer->chunks) {
             build_table->pin();
             add_unmatched_rows(
-                join_state->build_table_matched, build_table->nrows(),
-                build_idxs, probe_idxs,
+                *build_table_matched_pin, build_table->nrows(), build_idxs,
+                probe_idxs,
                 !join_state->build_parallel && join_state->probe_parallel,
                 build_table_offset);
             join_state->output_buffer->AppendJoinOutput(

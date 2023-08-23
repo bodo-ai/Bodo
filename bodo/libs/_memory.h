@@ -1123,7 +1123,8 @@ class pin_guard {
         }
     }
 
-   private:
+    pin_guard(const pin_guard& p) = delete;
+
     inline pin_guard(Spillable& s, Args&&... args)
         : underlying_(s),
           val_(do_pin<element_type>(
@@ -1131,6 +1132,7 @@ class pin_guard {
           released_(false),
           pin_args_(std::forward<Args>(args)...) {}
 
+   private:
     Spillable& underlying_;
     typename pinned_storage<element_type>::type val_;
     bool released_;

@@ -230,19 +230,19 @@ int get_bcast_join_threshold();
 std::shared_ptr<table_info> rebalance_join_output(
     std::shared_ptr<table_info> original_output);
 
-template <bool is_left_outer, bool is_right_outer, bool non_equi_condition>
-void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
-                                  std::shared_ptr<table_info> right_table,
-                                  cond_expr_fn_batch_t cond_func,
-                                  bool parallel_trace,
-                                  bodo::vector<int64_t>& left_idxs,
-                                  bodo::vector<int64_t>& right_idxs,
-                                  bodo::vector<uint8_t>& left_row_is_matched,
-                                  bodo::vector<uint8_t>& right_row_is_matched,
-                                  int64_t left_offset = 0);
+template <bool is_left_outer, bool is_right_outer, bool non_equi_condition,
+          typename Allocator>
+void nested_loop_join_table_local(
+    std::shared_ptr<table_info> left_table,
+    std::shared_ptr<table_info> right_table, cond_expr_fn_batch_t cond_func,
+    bool parallel_trace, bodo::vector<int64_t>& left_idxs,
+    bodo::vector<int64_t>& right_idxs,
+    bodo::vector<uint8_t, Allocator>& left_row_is_matched,
+    bodo::vector<uint8_t>& right_row_is_matched, int64_t left_offset = 0);
 
-void add_unmatched_rows(bodo::vector<uint8_t>& bit_map, size_t n_rows,
-                        bodo::vector<int64_t>& table_idxs,
+template <typename BitMapAllocator>
+void add_unmatched_rows(bodo::vector<uint8_t, BitMapAllocator>& bit_map,
+                        size_t n_rows, bodo::vector<int64_t>& table_idxs,
                         bodo::vector<int64_t>& other_table_idxs,
                         bool needs_reduction, int64_t offset = 0);
 
