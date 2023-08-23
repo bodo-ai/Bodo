@@ -255,14 +255,11 @@ def complex_arr():
     return (real_component + imag_component).reshape((5, 5))
 
 
-@pytest.mark.skip(
-    reason="[BSE-943] TODO: Support scipy.fftpack.fftshift for workload"
-)
 def test_fftshift(complex_arr, memory_leak_check):
     def impl(data):
         return fftshift(data)
 
-    check_func(impl, (complex_arr,), convert_to_nullable_float=False)
+    check_func(impl, (complex_arr,), convert_to_nullable_float=False, only_seq=True)
 
 
 @pytest.mark.skip(reason="[BSE-944] TODO: Support scipy.fftpack.fft2 for workload")
