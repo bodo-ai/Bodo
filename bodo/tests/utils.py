@@ -1092,7 +1092,7 @@ def _test_equal(
             atol=atol,
             rtol=rtol,
         )
-    elif isinstance(py_out, float):
+    elif isinstance(py_out, (float, np.floating)):
         # avoid equality check since paralellism can affect floating point operations
         np.testing.assert_allclose(py_out, bodo_out, rtol=rtol, atol=atol)
     elif isinstance(py_out, tuple):

@@ -169,6 +169,7 @@ optimize and parallelize.
                   `choicelist` are nullable, or the default is `pd.NA` or `None`, the
                   output will be a nullable pandas array instead of a numpy
                   array.  
+- `numpy.nan_to_num` converts infinity/NaN values to regular floats.
 - `numpy.union1d`
 - `numpy.intersect1d`  no distributed support yet
 - `numpy.setdiff1d`  no distributed support yet
