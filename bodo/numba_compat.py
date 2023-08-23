@@ -5035,6 +5035,18 @@ def _typeof_dict(val, c):
     return types.DictType(key_type, value_type)
 
 
+import numpy as np
+
+
+@typeof_impl.register(np.matrix)
+def _typeof_matrix(val, c):
+    """get Numba type for matrix object"""
+    from bodo.libs.matrix_ext import MatrixType
+
+    dtype = numba.from_dtype(val.dtype)
+    return MatrixType(dtype)
+
+
 # replace Dict unboxing to support regular dictionaries as well
 def unbox_dicttype(typ, val, c):
     from llvmlite import ir as lir
