@@ -452,8 +452,7 @@ std::shared_ptr<StorageOptions> StorageOptions::Defaults(uint8_t tier) {
 
             // TODO: Check for StorageType
             if (substr.starts_with("s3://") || substr.starts_with("abfs://")) {
-                std::cerr << "Spilling to S3 or ABFS is not supported yet"
-                          << std::endl;
+                // Spilling to S3 or ABFS is not supported yet.
                 return nullptr;
             }
 
