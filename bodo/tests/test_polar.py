@@ -548,3 +548,44 @@ def test_np_interp(bound_args, memory_leak_check):
         # TODO: support in parallel (requires a parallel binary search for interp_bin_search)
         only_seq=True,
     )
+
+
+@pytest.mark.parametrize(
+    "arg0, arg1",
+    [
+        pytest.param("I", "F", id="int-float"),
+        pytest.param("F", "I", id="float-int"),
+    ],
+)
+def test_np_dot_heterogeneous(arg0, arg1, memory_leak_check):
+    """
+    Tests np.dot where both arguments are arrays but they have
+    different dtypes.
+    """
+
+    def impl(A, B):
+        return np.dot(A, B)
+
+    arrs = {
+        "I": np.array([1, 2, 3, 4, 5], dtype=np.int64),
+        "F": np.array([0.5, 0, -1.0, 3.5, 2.25], dtype=np.float64),
+    }
+    A, B = arrs[arg0], arrs[arg1]
+    check_func(impl, (A, B), convert_to_nullable_float=False)
+
+
+def test_norm_axis(memory_leak_check):
+    """
+    Tests the use of np.linalg.norm with the keyword argument
+    axis=1.
+    """
+
+    def impl1(A):
+        return norm(A, axis=1)
+
+    def impl2(A):
+        return norm(A)
+
+    A = np.linspace(-3.0, 8.8, 60).reshape((5, 12)).T
+    check_func(impl1, (A,), convert_to_nullable_float=False)
+    check_func(impl2, (A,), convert_to_nullable_float=False, only_seq=True)
