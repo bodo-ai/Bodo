@@ -52,6 +52,23 @@ ll.add_symbol(
 )
 ll.add_symbol("delete_join_state", stream_join_cpp.delete_join_state)
 
+# The following are used for debugging and testing purposes only:
+ll.add_symbol("get_op_pool_bytes_pinned", stream_join_cpp.get_op_pool_bytes_pinned)
+ll.add_symbol(
+    "get_op_pool_bytes_allocated", stream_join_cpp.get_op_pool_bytes_allocated
+)
+ll.add_symbol(
+    "get_num_partitions",
+    stream_join_cpp.get_num_partitions,
+)
+ll.add_symbol(
+    "get_partition_num_top_bits_by_idx",
+    stream_join_cpp.get_partition_num_top_bits_by_idx,
+)
+ll.add_symbol(
+    "get_partition_top_bitmask_by_idx", stream_join_cpp.get_partition_top_bitmask_by_idx
+)
+
 
 class JoinStateType(types.Type):
     """Type for C++ JoinState pointer"""
@@ -772,6 +789,7 @@ def _init_join_state(
     probe_arr_dtypes,
     probe_arr_array_types,
     n_probe_arrs,
+    op_pool_size_bytes_t,
     output_state_type,
     cfunc_cond_t,
     build_parallel_t,
@@ -790,6 +808,9 @@ def _init_join_state(
         probe_arr_array_types (int8*): pointer to array of ints representing array types
                                    (as provided by numba_to_c_array_type)
         n_probe_arrs (int32): number of probe columns
+        op_pool_size_bytes_t (int64): Number of pinned bytes that this operator is allowed
+            to use. Set this to -1 to let the operator use a pre-determined portion of
+            the total available memory.
         output_state_type (TypeRef[JoinStateType]): The output type for the state that should be
                                                     generated.
         cfunc_cond_t (void *): Non-equality condition function. Nullptr if the join only has equality
@@ -807,6 +828,7 @@ def _init_join_state(
             probe_arr_dtypes,
             probe_arr_array_types,
             n_probe_arrs,
+            op_pool_size_bytes,
             _,
             cfunc_cond,
             build_parallel,
@@ -836,6 +858,7 @@ def _init_join_state(
                 lir.IntType(1),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(64),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -856,6 +879,7 @@ def _init_join_state(
             probe_parallel,
             output_batch_size,
             sync_iter,
+            op_pool_size_bytes,
         )
         ret = builder.call(fn_tp, input_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -868,6 +892,7 @@ def _init_join_state(
         types.voidptr,
         types.voidptr,
         types.int32,
+        types.int64,  # op_pool_size_bytes_t
         output_state_type,
         types.voidptr,
         build_parallel_t,
@@ -884,6 +909,7 @@ def init_join_state(
     probe_colnames,
     build_outer,
     probe_outer,
+    op_pool_size_bytes=-1,
     expected_state_type=None,
     # The non-equality portion of the join condition. If None then
     # the join is a pure hash join. Otherwise this is a string similar
@@ -983,6 +1009,7 @@ def init_join_state(
             probe_colnames,
             build_outer,
             probe_outer,
+            op_pool_size_bytes=-1,
             expected_state_type=None,
             non_equi_condition=None,
             build_parallel=False,
@@ -999,6 +1026,7 @@ def init_join_state(
                 probe_arr_dtypes.ctypes,
                 probe_arr_array_types.ctypes,
                 n_probe_arrs,
+                op_pool_size_bytes,
                 output_type,
                 cfunc_cond,
                 build_parallel,
@@ -1014,6 +1042,7 @@ def init_join_state(
         probe_colnames,
         build_outer,
         probe_outer,
+        op_pool_size_bytes=-1,
         expected_state_type=None,
         non_equi_condition=None,
         build_parallel=False,
@@ -1026,6 +1055,7 @@ def init_join_state(
             probe_arr_dtypes.ctypes,
             probe_arr_array_types.ctypes,
             n_probe_arrs,
+            op_pool_size_bytes,
             output_type,
             0,
             build_parallel,
@@ -1252,3 +1282,158 @@ def delete_join_state(
 
     sig = types.void(join_state)
     return sig, codegen
+
+
+@intrinsic
+def get_op_pool_bytes_pinned(
+    typingctx,
+    join_state,
+):
+    """
+    Get the number of bytes currently pinned by the
+    OperatorBufferPool of this join operator.
+    This is only used for testing and debugging purposes.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(64),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="get_op_pool_bytes_pinned"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.uint64(join_state)
+    return sig, codegen
+
+
+@intrinsic
+def get_op_pool_bytes_allocated(
+    typingctx,
+    join_state,
+):
+    """
+    Get the number of bytes currently allocated by the
+    OperatorBufferPool of this join operator.
+    This is only used for testing and debugging purposes.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(64),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="get_op_pool_bytes_allocated"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.uint64(join_state)
+    return sig, codegen
+
+
+@intrinsic
+def get_num_partitions(
+    typingctx,
+    join_state,
+):
+    """
+    Get the number of partitions of this join operator.
+    This is only used for testing and debugging purposes.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(32),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="get_num_partitions"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.uint32(join_state)
+    return sig, codegen
+
+
+@intrinsic
+def get_partition_num_top_bits_by_idx(typingctx, join_state, idx):
+    """
+    Get the number of bits in the 'top_bitmask' of a partition of this join
+    operator by the partition index.
+    This is only used for testing and debugging purposes.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(32),
+            [lir.IntType(8).as_pointer(), lir.IntType(64)],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="get_partition_num_top_bits_by_idx"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.uint32(join_state, idx)
+    return sig, codegen
+
+
+@intrinsic
+def get_partition_top_bitmask_by_idx(typingctx, join_state, idx):
+    """
+    Get the 'top_bitmask' of a partition of this join operator by the partition index.
+    This is only used for testing and debugging purposes.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(32),
+            [lir.IntType(8).as_pointer(), lir.IntType(64)],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="get_partition_top_bitmask_by_idx"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.uint32(join_state, idx)
+    return sig, codegen
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_partition_state(join_state):
+    """
+    Get the partition state (the number of bits in the 'top_bitmask' and 'top_bitmask')
+    of all partitions of this join operator.
+    This is only used for testing and debugging purposes.
+    """
+
+    def impl(join_state):  # pragma: no cover
+        partition_state = []
+        for idx in range(get_num_partitions(join_state)):
+            partition_state.append(
+                (
+                    get_partition_num_top_bits_by_idx(join_state, idx),
+                    get_partition_top_bitmask_by_idx(join_state, idx),
+                )
+            )
+        return partition_state
+
+    return impl

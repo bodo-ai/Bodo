@@ -139,7 +139,13 @@ def impl(conn_str):  # Codegen change: add conn_str
     _temp2 = time.time()
     # Codegen change: Use global flags for build-outer and probe-outer
     state_3 = bodo.libs.stream_join.init_join_state(
-        global_2, global_2, global_3, global_4, global_build_outer, global_probe_outer
+        global_2,
+        global_2,
+        global_3,
+        global_4,
+        global_build_outer,
+        global_probe_outer,
+        -1,
     )
     _temp20 = time.time()
     _temp21 = _temp20 - _temp2
@@ -182,6 +188,14 @@ def impl(conn_str):  # Codegen change: add conn_str
     )
     # Codegen change: print build timer
     bodo.user_logging.log_message("RELNODE_TIMING", f"Join build took {build_time}s")
+    print(
+        "Join OperatorPool bytes_pinned: ",
+        bodo.libs.stream_join.get_op_pool_bytes_pinned(state_3),
+    )
+    print(
+        "Join OperatorPool bytes_allocated: ",
+        bodo.libs.stream_join.get_op_pool_bytes_allocated(state_3),
+    )
     __bodo_is_last_streaming_output_2 = False
     _iter_2 = 0
     _temp25 = 0.0
@@ -255,6 +269,14 @@ def impl(conn_str):  # Codegen change: add conn_str
     _temp40 = "PandasProject(L_ORDERKEY=[$0], L_EXTENDEDPRICE=[$5], L_SHIPINSTRUCT=[$13], L_SHIPMODE=[$14], L_COMMENT=[$15])"
     bodo.user_logging.log_message(
         "RELNODE_TIMING", f"""Execution time for RelNode {_temp40}: {_temp33}"""
+    )
+    print(
+        "Join OperatorPool bytes_pinned: ",
+        bodo.libs.stream_join.get_op_pool_bytes_pinned(state_3),
+    )
+    print(
+        "Join OperatorPool bytes_allocated: ",
+        bodo.libs.stream_join.get_op_pool_bytes_allocated(state_3),
     )
     bodo.libs.stream_join.delete_join_state(state_3)
     _temp44 = "PandasJoin(condition=[=($4, $0)], joinType=[inner])"

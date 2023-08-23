@@ -13,6 +13,7 @@ from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.libs.memory import BufferPool
 from bodo.libs.stream_join import (
     delete_join_state,
+    get_partition_state,
     init_join_state,
     join_build_consume_batch,
     join_probe_consume_batch,
@@ -282,6 +283,7 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
             probe_col_meta,
             build_outer,
             probe_outer,
+            16 * 1024 * 1024,
         )
 
         # read PART table and build join hash table
@@ -295,6 +297,8 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
             is_last1 = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
+
+        partition_state = get_partition_state(join_state)
 
         # read LINEITEM table and probe
         reader2 = pd.read_sql(
@@ -327,9 +331,10 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
         df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
             (out_table,), index_var, col_meta
         )
-        return df
+        return df, partition_state
 
-    out_df = test_hash_join(conn_str)
+    out_df, partition_state = test_hash_join(conn_str)
+    assert partition_state == [(0, 0)]
     out_df = bodo.allgatherv(out_df)
     _test_equal(
         out_df,
