@@ -95,8 +95,8 @@ def test_polar_format_e2e(datapath, memory_leak_check):
 
         # Compute r_hat, the diretion of k_r, for each pulse
         r_norm = norm(pos, axis=1)
-        # BODO CHANGE: replace np.array([r_norm]).T with r_norm.reshape((len(r_norm), 1))
-        r_norm = r_norm.reshape((len(r_norm), 1))
+        # BODO CHANGE: replace r_norm = np.array([r_norm]).T with r_norm.reshape((len(r_norm), 1))
+        r_norm.reshape((len(r_norm), 1))
         r_norm = np.tile(r_norm, (1, 3))
 
         r_hat = pos / r_norm
@@ -124,7 +124,7 @@ def test_polar_format_e2e(datapath, memory_leak_check):
         # BODO CHANGE: replace np.zeroes([a, b]) with np.zeros((a, b))
         real_rad_interp = np.zeros((npulses, nu))
         imag_rad_interp = np.zeros((npulses, nu))
-        ky_new = np.zeros((npulses, nu))
+        ky_new = np.zeros([npulses, nu])
         for i in range(npulses):
             real_rad_interp[i, :] = np.interp(
                 k_ui, ku[i, :], phs.real[i, :] * win1, left=0, right=0
