@@ -70,6 +70,7 @@ from bodo.utils.typing import (
     element_type,
     find_common_np_dtype,
     get_overload_const_bool,
+    get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
     is_bin_arr_type,
@@ -4303,6 +4304,62 @@ def overload_dataframe_index(A):
     """get number of bytes in Numpy array"""
     # TODO(ehsan): contribute to Numba
     return lambda A: A.size * bodo.io.np_io.get_dtype_size(A.dtype)  # pragma: no cover
+
+
+@overload(np.dot, inline="always")
+def np_dot_heterogeneous(A, B):
+    """
+    Implementations of np.dot when the arguments are different types but
+    both still numeric dtypes.
+
+    [BSE-1024] TODO: add support for complex numbers (requires dist_reduce support).
+    """
+    if bodo.utils.utils.is_array_typ(A, False) and bodo.utils.utils.is_array_typ(
+        B, False
+    ):  # pragma: no cover
+        if isinstance(A.dtype, types.Integer) and isinstance(B.dtype, types.Float):
+            return lambda A, B: np.dot(A.astype(np.float64), B)  # pragma: no cover
+        if isinstance(A.dtype, types.Float) and isinstance(B.dtype, types.Integer):
+            return lambda A, B: np.dot(A, B.astype(np.float64))  # pragma: no cover
+    # If not in one of those two cases, this overload will return None indicating
+    # to numba that it should try a different candidate implementation (e.g.
+    # the original one for when the types are homogeneous).
+
+
+@overload(np.linalg.norm, no_unliteral=True)
+def np_linalg_norm_axis(x, ord=None, axis=None, keepdims=False):
+    """
+    Implementations of np.linalg.norm for when the axis keyword argument is provided.
+    If not provided, fall back to the numba implementation.
+    """
+    args_dict = {
+        "ord": ord,
+        "keepdims": keepdims,
+    }
+    args_default_dict = {
+        "ord": None,
+        "keepdims": False,
+    }
+    check_unsupported_args("np.linalg.norm", args_dict, args_default_dict, "numpy")
+    if axis != None:
+        if is_overload_constant_int(axis) and get_overload_const_int(axis) == 1:
+            if x.ndim != 2:  # pragma: no cover
+                raise_bodo_error(
+                    f"np.linalg.norm: axis=1 only currently supported with 2d arrays, not {x.ndim}d arrays"
+                )
+
+            def impl(x, ord=None, axis=None, keepdims=False):  # pragma: no cover
+                n = len(x)
+                res = np.empty((n,), dtype=np.float64)
+                numba.parfors.parfor.init_prange()
+                for i in numba.parfors.parfor.internal_prange(n):
+                    res[i] = np.linalg.norm(x[i])
+                return res
+
+            return impl
+        raise_bodo_error(
+            f"np.linalg.norm: unsupported argument for axis argument '{axis}'"
+        )
 
 
 @overload(np.nan_to_num, inline="always", no_unliteral=True)
