@@ -102,6 +102,9 @@ class OperatorBufferPool final : public IBufferPool {
     /// @brief The name of the backend used by the parent pool.
     virtual std::string backend_name() const override;
 
+    /// @brief If spilling is supported by the parent pool.
+    bool is_spilling_enabled() const;
+
     /**
      * @brief Getter for max_pinned_size_bytes
      * attribute.

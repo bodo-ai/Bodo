@@ -114,7 +114,11 @@ def test_default_buffer_pool_options():
         assert options.memory_size > 0
         assert not options.ignore_max_limit_during_allocation
 
-    ## Test that BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT works as expected.
+
+def test_default_memory_options(tmp_path: Path):
+    """
+    Test that BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT works as expected.
+    """
 
     # We will first get the full memory amount by setting it to 100.
     total_mem = 0
@@ -141,7 +145,23 @@ def test_default_buffer_pool_options():
         options = BufferPoolOptions.defaults()
         assert options.memory_size == int(0.65 * total_mem)
 
-    # Now check that the default is 95%
+    # Now check that the default is 95% when spilling is available
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
+            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
+            "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
+            "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+        }
+    ):
+        options = BufferPoolOptions.defaults()
+        assert options.memory_size == int(0.95 * total_mem)
+        assert len(options.storage_options) == 1
+
+    # Now check that the default is 500% when spilling is not available
     with temp_env_override(
         {
             "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
@@ -151,9 +171,45 @@ def test_default_buffer_pool_options():
         }
     ):
         options = BufferPoolOptions.defaults()
-        # This has been temporarily changed to 95% to 500% to
-        # unblock issues in the latest release
         assert options.memory_size == int(5.0 * total_mem)
+        assert len(options.storage_options) == 0
+
+    # Now check that the default is 500% when spilling is disabled
+    # Also check that disabling spilling through env vars works as expected
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
+            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
+            "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
+            "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+            "BODO_BUFFER_POOL_DISABLE_SPILLING": "1",
+        }
+    ):
+        options = BufferPoolOptions.defaults()
+        assert options.memory_size == int(5.0 * total_mem)
+        assert len(options.storage_options) == 0
+        assert not BufferPool.from_options(options).is_spilling_enabled()
+
+    # Check that not disabling spilling through env vars works as expected
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
+            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
+            "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
+            "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+            "BODO_BUFFER_POOL_DISABLE_SPILLING": "0",
+        }
+    ):
+        options = BufferPoolOptions.defaults()
+        assert options.memory_size == int(0.95 * total_mem)
+        assert len(options.storage_options) == 1
+        assert BufferPool.from_options(options).is_spilling_enabled()
 
 
 def test_default_storage_options(tmp_path: Path):
@@ -294,41 +350,6 @@ def test_default_storage_options(tmp_path: Path):
         assert options.storage_options[1].location == bytes(tmp_path / "inner")
         assert options.storage_options[2].location == bytes(tmp_path / "inner2")
         assert options.storage_options[3].location == bytes(tmp_path / "inner3")
-
-    # Check that the disable spilling flag works and enables
-    # ignore_max_limit_during_allocation
-    with temp_env_override(
-        {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
-            "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
-            "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
-            "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
-            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
-            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "4",
-            "BODO_BUFFER_POOL_DISABLE_SPILLING": "1",
-        }
-    ):
-        options = BufferPoolOptions.defaults()
-        assert len(options.storage_options) == 0
-        assert options.ignore_max_limit_during_allocation
-
-    # Check that the disable spilling flag works and can override
-    # ignore_max_limit_during_allocation
-    with temp_env_override(
-        {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
-            "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
-            "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
-            "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
-            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
-            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "4",
-            "BODO_BUFFER_POOL_DISABLE_SPILLING": "1",
-            "BODO_BUFFER_POOL_IGNORE_MAX_ALLOCATION_LIMIT": "0",
-        }
-    ):
-        options = BufferPoolOptions.defaults()
-        assert len(options.storage_options) == 0
-        assert not options.ignore_max_limit_during_allocation
 
 
 def test_malloc_allocation():
