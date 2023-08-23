@@ -66,6 +66,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
+import org.apache.calcite.rex.BodoRexSimplify;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCallBinding;
@@ -197,7 +198,7 @@ public class RelBuilder {
                     RexUtil.EXECUTOR));
     final RelOptPredicateList predicates = RelOptPredicateList.EMPTY;
     this.simplifier =
-        new RexSimplify(cluster.getRexBuilder(), predicates, executor);
+        new BodoRexSimplify(cluster.getRexBuilder(), predicates, executor);
   }
 
   /**
