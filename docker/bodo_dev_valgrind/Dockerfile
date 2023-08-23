@@ -3,7 +3,7 @@
 
 # A initial version
 # TODO: hava Python compiled from source to work with conda
-FROM --platform=linux/amd64 buildpack-deps:stretch
+FROM --platform=linux/amd64 buildpack-deps:stable
 ARG PYTHON_VERSION=3.10.1
 
 ENV PYTHONMALLOC malloc

@@ -4,6 +4,7 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
+#include "_nested_loop_join_impl.h"
 #include "_shuffle.h"
 
 // design overview:
@@ -121,9 +122,10 @@ table_info* nested_loop_join_table(
                     left_idxs, right_idxs, bcast_row_is_matched,               \
                     other_row_is_matched);                                     \
             } else {                                                           \
-                nested_loop_join_table_local<left_table_outer_exp,             \
-                                             right_table_outer_exp,            \
-                                             non_equi_condition_exp>(          \
+                nested_loop_join_table_local<                                  \
+                    left_table_outer_exp, right_table_outer_exp,               \
+                    non_equi_condition_exp,                                    \
+                    bodo::STLBufferPoolAllocator<std::uint8_t>>(               \
                     other_table, bcast_table_chunk, cond_func, parallel_trace, \
                     left_idxs, right_idxs, other_row_is_matched,               \
                     bcast_row_is_matched);                                     \
@@ -378,54 +380,6 @@ std::shared_ptr<table_info> create_out_table(
     right_table.reset();
 
     return std::make_shared<table_info>(out_arrs);
-}
-
-/**
- * @brief Find unmatched outer join rows (using reduction over bit map if
- * necessary) and add them to list of output row indices.
- *
- * @param bit_map bitmap of matched rows
- * @param n_rows number of rows in input table
- * @param table_idxs indices in input table used for output generation
- * @param other_table_idxs indices in the other table used for output generation
- * @param needs_reduction : whether the bitmap needs a reduction (the
- * corresponding table is replicated, but the other table is distributed).
- * @param offset number of bits from the start of bit_map that belongs to
- * previous chunks. Default is 0
- */
-void add_unmatched_rows(bodo::vector<uint8_t>& bit_map, size_t n_rows,
-                        bodo::vector<int64_t>& table_idxs,
-                        bodo::vector<int64_t>& other_table_idxs,
-                        bool needs_reduction, int64_t offset) {
-    if (needs_reduction) {
-        int n_pes, myrank;
-        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-
-        MPI_Allreduce_bool_or(bit_map);
-        int pos = 0;
-        for (size_t i = 0; i < n_rows; i++) {
-            bool bit = GetBit(bit_map.data(), i + offset);
-            // distribute the replicated input table rows across ranks
-            // to load balance the output
-            if (!bit) {
-                int node = pos % n_pes;
-                if (node == myrank) {
-                    table_idxs.emplace_back(i);
-                    other_table_idxs.emplace_back(-1);
-                }
-                pos++;
-            }
-        }
-    } else {
-        for (size_t i = 0; i < n_rows; i++) {
-            bool bit = GetBit(bit_map.data(), i + offset);
-            if (!bit) {
-                table_idxs.emplace_back(i);
-                other_table_idxs.emplace_back(-1);
-            }
-        }
-    }
 }
 
 // Header and docstring are defined in _join.h

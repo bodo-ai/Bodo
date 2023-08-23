@@ -48,7 +48,8 @@ get_dict_builders_from_chunked_table_builder(
 
 uint32_t HashHashJoinTable::operator()(const int64_t iRow) const {
     if (iRow >= 0) {
-        return this->join_partition->build_table_join_hashes[iRow];
+        return (*(
+            this->join_partition->build_table_join_hashes_guard.value()))[iRow];
     } else {
         return this->join_partition->probe_table_hashes[-iRow - 1];
     }
@@ -102,18 +103,19 @@ JoinPartition::JoinPartition(
     const std::shared_ptr<::arrow::MemoryManager> op_mm_)
     : build_table_buffer(build_arr_c_types, build_arr_array_types,
                          build_table_dict_builders, op_pool_, op_mm_),
-      build_table_join_hashes(bodo::STLBufferPoolAllocator<uint32_t>(op_pool_)),
+      build_table_join_hashes(op_pool_),
       build_table_buffer_chunked(
           build_arr_c_types, build_arr_array_types, build_table_dict_builders,
           batch_size_, DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
-      build_hash_table(
-          {}, HashHashJoinTable(this), KeyEqualHashJoinTable(this, n_keys_),
-          bodo::STLBufferPoolAllocator<std::pair<int64_t, size_t>>(op_pool_)),
-      num_rows_in_group(std::make_unique<bodo::vector<size_t>>(op_pool_)),
-      build_row_to_group_map(std::make_unique<bodo::vector<size_t>>(op_pool_)),
+      build_hash_table(0, HashHashJoinTable(this),
+                       KeyEqualHashJoinTable(this, n_keys_), op_pool_),
+      num_rows_in_group(
+          std::make_unique<bodo::pinnable<bodo::vector<size_t>>>(op_pool_)),
+      build_row_to_group_map(
+          std::make_unique<bodo::pinnable<bodo::vector<size_t>>>(op_pool_)),
       groups(op_pool_),
       groups_offsets(op_pool_),
-      build_table_matched(bodo::STLBufferPoolAllocator<uint8_t>(op_pool_)),
+      build_table_matched(op_pool_),
       probe_table_buffer_chunked(
           probe_arr_c_types, probe_arr_array_types, probe_table_dict_builders,
           batch_size_, DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
@@ -127,6 +129,16 @@ JoinPartition::JoinPartition(
       op_pool(op_pool_),
       op_mm(op_mm_),
       is_active(is_active_) {
+    // Pin everything.
+    // TODO XXX Move into a pin() function.
+    this->build_table_join_hashes_guard.emplace(this->build_table_join_hashes);
+    this->build_hash_table_guard.emplace(this->build_hash_table);
+    this->num_rows_in_group_guard.emplace(*this->num_rows_in_group);
+    this->build_row_to_group_map_guard.emplace(*this->build_row_to_group_map);
+    this->groups_guard.emplace(this->groups);
+    this->groups_offsets_guard.emplace(this->groups_offsets);
+    this->build_table_matched_guard.emplace(this->build_table_matched);
+
     // Reserve some space in num_rows_in_group and build_row_to_group_map
     // for active partitions.
     // For partitions that will be activated later, we can reserve much more
@@ -138,8 +150,8 @@ JoinPartition::JoinPartition(
         const size_t init_reserve_size =
             bodo::BufferPool::Default()->GetSmallestSizeClassSize() /
             sizeof(size_t);
-        this->num_rows_in_group->reserve(init_reserve_size);
-        this->build_row_to_group_map->reserve(init_reserve_size);
+        this->num_rows_in_group_guard.value()->reserve(init_reserve_size);
+        this->build_row_to_group_map_guard.value()->reserve(init_reserve_size);
     }
 }
 
@@ -238,15 +250,15 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         new_part1->build_table_buffer.ReserveTable(
             this->build_table_buffer.data_table);
     }
-    new_part1->build_table_join_hashes.reserve(
-        this->build_table_join_hashes.size());
-    new_part2->build_table_join_hashes.reserve(
-        this->build_table_join_hashes.size());
+    new_part1->build_table_join_hashes_guard.value()->reserve(
+        this->build_table_join_hashes_guard.value()->size());
+    new_part2->build_table_join_hashes_guard.value()->reserve(
+        this->build_table_join_hashes_guard.value()->size());
 
     std::vector<bool> append_partition1;
     if (is_active) {
         // In the active case, partition this->build_table_buffer directly
-        size_t build_table_nrows = this->build_table_buffer.data_table->nrows();
+        size_t build_table_nrows = build_table_buffer.data_table->nrows();
 
         // Compute partitioning hashes
         std::shared_ptr<uint32_t[]> build_table_partitioning_hashes =
@@ -266,11 +278,11 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         // Copy the hash values to the new partitions.
         for (size_t i_row = 0; i_row < build_table_nrows; i_row++) {
             if (append_partition1[i_row]) {
-                new_part1->build_table_join_hashes.push_back(
-                    this->build_table_join_hashes[i_row]);
+                new_part1->build_table_join_hashes_guard.value()->push_back(
+                    (*this->build_table_join_hashes_guard.value())[i_row]);
             } else {
-                new_part2->build_table_join_hashes.push_back(
-                    this->build_table_join_hashes[i_row]);
+                new_part2->build_table_join_hashes_guard.value()->push_back(
+                    (*this->build_table_join_hashes_guard.value())[i_row]);
             }
         }
 
@@ -285,7 +297,7 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
     } else {
         // In the inactive case, partition build_table_buffer chunk by chunk
         uint32_t* build_table_join_hashes_chunk =
-            this->build_table_join_hashes.data();
+            this->build_table_join_hashes_guard.value()->data();
         this->build_table_buffer_chunked.Finalize();
         while (!this->build_table_buffer_chunked.chunks.empty()) {
             auto [build_table_chunk, build_table_nrows_chunk] =
@@ -309,10 +321,10 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
             // Copy the hash values to the new partitions.
             for (int64_t i_row = 0; i_row < build_table_nrows_chunk; i_row++) {
                 if (append_partition1[i_row]) {
-                    new_part1->build_table_join_hashes.push_back(
+                    new_part1->build_table_join_hashes_guard.value()->push_back(
                         build_table_join_hashes_chunk[i_row]);
                 } else {
-                    new_part2->build_table_join_hashes.push_back(
+                    new_part2->build_table_join_hashes_guard.value()->push_back(
                         build_table_join_hashes_chunk[i_row]);
                 }
             }
@@ -343,27 +355,28 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
 
 inline void JoinPartition::BuildHashTable() {
     // Create reference variables for easier usage.
-    auto& num_rows_in_group_ = *(this->num_rows_in_group);
-    auto& build_row_to_group_map_ = *(this->build_row_to_group_map);
+    auto& num_rows_in_group_ = this->num_rows_in_group_guard.value();
+    auto& build_row_to_group_map_ = this->build_row_to_group_map_guard.value();
+    auto& build_hash_table_ = this->build_hash_table_guard.value();
 
     // Add all the rows in the build_table_buffer that haven't
     // already been added to the hash table.
     while (this->curr_build_size <
            this->build_table_buffer.data_table->nrows()) {
-        size_t& group_id = this->build_hash_table[this->curr_build_size];
+        size_t& group_id = (*build_hash_table_)[this->curr_build_size];
         // group_id==0 means key doesn't exist in map
         if (group_id == 0) {
             // Update the value of group_id stored in the hash map
             // as well since its passed by reference.
-            group_id = num_rows_in_group_.size() + 1;
+            group_id = num_rows_in_group_->size() + 1;
             // Initialize group size to 0.
-            num_rows_in_group_.emplace_back(0);
+            num_rows_in_group_->emplace_back(0);
         }
         // Increment count for the group
-        num_rows_in_group_[group_id - 1]++;
+        (*num_rows_in_group_)[group_id - 1]++;
         // Store the group id for this row. This will allow us to avoid an
         // expensive hashmap lookup during 'FinalizeGroups'.
-        build_row_to_group_map_.emplace_back(group_id);
+        build_row_to_group_map_->emplace_back(group_id);
         this->curr_build_size++;
     }
 }
@@ -375,24 +388,30 @@ void JoinPartition::FinalizeGroups() {
         return;
     }
 
+    auto& num_rows_in_group_ = this->num_rows_in_group_guard.value();
+    auto& groups_offsets_ = this->groups_offsets_guard.value();
     // Number of groups is the same as the size of num_rows_in_group.
-    size_t num_groups = this->num_rows_in_group->size();
+    size_t num_groups = num_rows_in_group_->size();
     // Resize offsets vector based on the number of groups
-    this->groups_offsets.resize(num_groups + 1);
+    groups_offsets_->resize(num_groups + 1);
     // First offset should always be 0
-    this->groups_offsets[0] = 0;
+    (*groups_offsets_)[0] = 0;
     // Do a cumulative sum and fill the rest of groups_offsets:
     if (num_groups > 0) {
-        std::partial_sum(this->num_rows_in_group->cbegin(),
-                         this->num_rows_in_group->cend(),
-                         this->groups_offsets.begin() + 1);
+        std::partial_sum(num_rows_in_group_->cbegin(),
+                         num_rows_in_group_->cend(),
+                         groups_offsets_->begin() + 1);
     }
+
+    // Release the pin guard
+    this->num_rows_in_group_guard.reset();
     // Free num_rows_in_group memory
     this->num_rows_in_group.reset();
 
     // Resize groups based on how many total elements are in all groups
     // (same as build table size essentially):
-    this->groups.resize(this->groups_offsets[this->groups_offsets.size() - 1]);
+    auto& groups_ = this->groups_guard.value();
+    groups_->resize((*groups_offsets_)[groups_offsets_->size() - 1]);
 
     /// Fill the groups vector. The build_row_to_group_map vector is already
     /// populated from the first iteration.
@@ -400,18 +419,20 @@ void JoinPartition::FinalizeGroups() {
     // Store counters for each group, so we can put the row-id in the correct
     // location.
     bodo::vector<size_t> group_fill_counter(num_groups, 0);
-    auto& build_row_to_group_map_ = *(this->build_row_to_group_map);
+    auto& build_row_to_group_map_ = this->build_row_to_group_map_guard.value();
     size_t build_table_rows = this->build_table_buffer.data_table->nrows();
     for (size_t i_build = 0; i_build < build_table_rows; i_build++) {
         // Get this row's group_id from build_row_to_group_map
-        const size_t group_id = build_row_to_group_map_[i_build];
+        const size_t group_id = (*build_row_to_group_map_)[i_build];
         // Find next available index for this group:
-        size_t groups_idx = this->groups_offsets[group_id - 1] +
-                            group_fill_counter[group_id - 1];
+        size_t groups_idx =
+            (*groups_offsets_)[group_id - 1] + group_fill_counter[group_id - 1];
         // Insert and update group_fill_counter:
-        this->groups[groups_idx] = i_build;
+        (*groups_)[groups_idx] = i_build;
         group_fill_counter[group_id - 1]++;
     }
+    // Release the guard
+    this->build_row_to_group_map_guard.reset();
     // Free build_row_to_group_map memory
     this->build_row_to_group_map.reset();
 
@@ -441,9 +462,9 @@ template <bool is_active>
 void JoinPartition::UnsafeAppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& join_hashes) {
-    this->build_table_join_hashes.insert(this->build_table_join_hashes.end(),
-                                         join_hashes.get(),
-                                         join_hashes.get() + in_table->nrows());
+    this->build_table_join_hashes_guard.value()->insert(
+        this->build_table_join_hashes_guard.value()->end(), join_hashes.get(),
+        join_hashes.get() + in_table->nrows());
     if (is_active) {
         this->build_table_buffer.UnsafeAppendBatch(in_table);
         this->BuildHashTable();
@@ -461,7 +482,8 @@ void JoinPartition::UnsafeAppendBuildBatch(
         this->build_table_buffer.UnsafeAppendBatch(in_table, append_rows);
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             if (append_rows[i_row]) {
-                this->build_table_join_hashes.push_back(join_hashes[i_row]);
+                this->build_table_join_hashes_guard.value()->push_back(
+                    join_hashes[i_row]);
             }
         }
         this->BuildHashTable();
@@ -469,7 +491,8 @@ void JoinPartition::UnsafeAppendBuildBatch(
         this->build_table_buffer_chunked.AppendBatch(in_table, append_rows);
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             if (append_rows[i_row]) {
-                this->build_table_join_hashes.push_back(join_hashes[i_row]);
+                this->build_table_join_hashes_guard.value()->push_back(
+                    join_hashes[i_row]);
             }
         }
     }
@@ -496,7 +519,7 @@ void JoinPartition::FinalizeBuild() {
     this->FinalizeGroups();
     if (this->build_table_outer) {
         // This step is idempotent by definition.
-        this->build_table_matched.resize(
+        this->build_table_matched_guard.value()->resize(
             arrow::bit_util::BytesForBits(
                 this->build_table_buffer.data_table->nrows()),
             0);
@@ -508,9 +531,11 @@ void JoinPartition::AppendInactiveProbeBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& join_hashes,
     const std::vector<bool>& append_rows) {
+    auto probe_table_buffer_join_hashes(
+        bodo::pin(this->probe_table_buffer_join_hashes));
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         if (append_rows[i_row]) {
-            this->probe_table_buffer_join_hashes.push_back(join_hashes[i_row]);
+            probe_table_buffer_join_hashes->push_back(join_hashes[i_row]);
         }
     }
     this->probe_table_buffer_chunked.AppendBatch(in_table, append_rows);
@@ -556,8 +581,8 @@ inline void handle_probe_input_for_partition(
     std::vector<void*>& build_col_ptrs, std::vector<void*>& probe_col_ptrs,
     std::vector<void*>& build_null_bitmaps,
     std::vector<void*>& probe_null_bitmaps) {
-    auto iter = partition->build_hash_table.find(-i_row - 1);
-    if (iter == partition->build_hash_table.end()) {
+    auto iter = partition->build_hash_table_guard.value()->find(-i_row - 1);
+    if (iter == partition->build_hash_table_guard.value()->end()) {
         if (probe_table_outer) {
             // Add unmatched rows from probe table to output table
             build_idxs.push_back(-1);
@@ -565,14 +590,22 @@ inline void handle_probe_input_for_partition(
         }
         return;
     }
-    const size_t group_start_idx = partition->groups_offsets[iter->second - 1];
+    // TODO Pass pinned groups_offsets vector instead of pinning for each row.
+    auto& partition_groups_offsets_ = partition->groups_offsets_guard.value();
+    const size_t group_start_idx =
+        (*partition_groups_offsets_)[iter->second - 1];
     const size_t group_end_idx =
-        partition->groups_offsets[iter->second - 1 + 1];
+        (*partition_groups_offsets_)[iter->second - 1 + 1];
     // Initialize to true for pure hash join so the final branch
     // is non-equality condition only.
     bool has_match = !non_equi_condition;
+    // TODO Pass pinned groups vector instead of pinning every time.
+    auto& partition_groups_ = partition->groups_guard.value();
+    // TODO Pass pinned build_table_matched instead of pinning every time.
+    auto& partition_build_table_matched_ =
+        partition->build_table_matched_guard.value();
     for (size_t idx = group_start_idx; idx < group_end_idx; idx++) {
-        const size_t j_build = partition->groups[idx];
+        const size_t j_build = (*partition_groups_)[idx];
         if (non_equi_condition) {
             // Check for matches with the non-equality portion.
             bool match =
@@ -586,7 +619,7 @@ inline void handle_probe_input_for_partition(
             has_match = true;
         }
         if (build_table_outer) {
-            SetBitTo(partition->build_table_matched, j_build, 1);
+            SetBitTo(partition_build_table_matched_->data(), j_build, 1);
         }
         build_idxs.push_back(j_build);
         probe_idxs.push_back(i_row);
@@ -617,8 +650,9 @@ template <bool requires_reduction>
 void generate_build_table_outer_rows_for_partition(
     JoinPartition* partition, bodo::vector<int64_t>& build_idxs,
     bodo::vector<int64_t>& probe_idxs) {
+    auto& build_table_matched_ = partition->build_table_matched_guard.value();
     if (requires_reduction) {
-        MPI_Allreduce_bool_or(partition->build_table_matched);
+        MPI_Allreduce_bool_or(*build_table_matched_);
     }
     int n_pes, my_rank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -628,7 +662,7 @@ void generate_build_table_outer_rows_for_partition(
     for (size_t i_row = 0;
          i_row < partition->build_table_buffer.data_table->nrows(); i_row++) {
         if ((!requires_reduction || ((i_row % n_pes) == my_rank))) {
-            bool has_match = GetBit(partition->build_table_matched, i_row);
+            bool has_match = GetBit(build_table_matched_->data(), i_row);
             if (!has_match) {
                 build_idxs.push_back(i_row);
                 probe_idxs.push_back(-1);
@@ -655,13 +689,16 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     std::vector<void*> build_null_bitmaps;
     std::vector<void*> probe_null_bitmaps;
 
+    auto probe_table_buffer_join_hashes(
+        bodo::pin(this->probe_table_buffer_join_hashes));
+
     // Loop over chunked probe table's buffers/hashes and process one at a time
     // At each loop iteration we mutate `this->probe_table`, so all `i_row` and
     // `probe_idxs` indices refer only to the local chunk.
     // Therefore, adding unmatched rows from the probe table to the output
     // must be done at each iteration, while that probe table is in memory.
     // Adding unmatched rows from the build table should be done at the end.
-    this->probe_table_hashes = this->probe_table_buffer_join_hashes.data();
+    this->probe_table_hashes = probe_table_buffer_join_hashes->data();
     this->probe_table_buffer_chunked.Finalize();
     while (!this->probe_table_buffer_chunked.chunks.empty()) {
         auto [probe_table_chunk, probe_table_nrows] =
@@ -696,6 +733,7 @@ void JoinPartition::FinalizeProbeForInactivePartition(
 
         this->probe_table_hashes += probe_table_nrows;
     }
+
     // Add unmatched rows from build table to output table
     if (build_table_outer) {
         if (build_needs_reduction) {
