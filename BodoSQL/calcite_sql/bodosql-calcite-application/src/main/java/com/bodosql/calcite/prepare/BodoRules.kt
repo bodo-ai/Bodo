@@ -41,6 +41,7 @@ import org.apache.calcite.rel.rules.JoinPushTransitivePredicatesRule
 import org.apache.calcite.rel.rules.JoinToMultiJoinRule
 import org.apache.calcite.rel.rules.LoptOptimizeJoinRule
 import org.apache.calcite.rel.rules.ProjectAggregateMergeRule
+import org.apache.calcite.rel.rules.ProjectFilterTransposeRule
 import org.apache.calcite.rel.rules.ProjectRemoveRule
 
 object BodoRules {
@@ -145,6 +146,16 @@ object BodoRules {
     val PROJECT_JOIN_TRANSPOSE_RULE: RelOptRule =
         TrivialProjectJoinTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalProject::class.java, BodoLogicalJoin::class.java)
+            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .toRule()
+
+    /**
+     * Push only field references past a filter.
+     */
+    @JvmField
+    val TRIVIAL_PROJECT_FILTER_TRANSPOSE: RelOptRule =
+        ProjectFilterTransposeRule.Config.DEFAULT
+            .withOperandFor(BodoLogicalProject::class.java, BodoLogicalFilter::class.java)
             .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
             .toRule()
 
@@ -501,5 +512,6 @@ object BodoRules {
         JOIN_COMMUTE_RULE,
         LOPT_OPTIMIZE_JOIN_RULE,
         AGGREGATE_CONSTANT_PULL_UP_RULE,
+        TRIVIAL_PROJECT_FILTER_TRANSPOSE,
     )
 }
