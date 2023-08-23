@@ -330,6 +330,15 @@
 										<exclude>org/apache/calcite/rex/RexCall.class</exclude>
 										<exclude>org/apache/calcite/rex/RexLiteral$1.class</exclude>
 										<exclude>org/apache/calcite/rex/RexLiteral.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexSimplify$1.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexSimplify$CaseBranch.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexSimplify$Comparison.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexSimplify$IsPredicate.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexSimplify$Predicate.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexSimplify$RexSargBuilder.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexSimplify$SafeRexVisitor.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexSimplify$SargCollector.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexSimplify.class</exclude>
 										<exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable$EquivConvertlet.class</exclude>
 										<exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable.class</exclude>
 										<exclude>org/apache/calcite/runtime/CalciteResource.class</exclude>

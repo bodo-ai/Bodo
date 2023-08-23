@@ -42,6 +42,7 @@ import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rules.SubstitutionRule;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rex.BodoRexSimplify;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
@@ -363,7 +364,7 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
     final RexBuilder rexBuilder = cluster.getRexBuilder();
     final List<RexNode> originExpList = Lists.newArrayList(expList);
     final RexExecutor executor = Util.first(cluster.getPlanner().getExecutor(), RexUtil.EXECUTOR);
-    final RexSimplify simplify = new RexSimplify(rexBuilder, predicates, executor);
+    final RexSimplify simplify = new BodoRexSimplify(rexBuilder, predicates, executor);
 
     // Simplify predicates in place
     final RexUnknownAs unknownAs = RexUnknownAs.falseIf(unknownAsFalse);
