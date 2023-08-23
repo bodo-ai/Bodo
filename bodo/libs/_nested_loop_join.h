@@ -2,6 +2,7 @@
 #define _NESTED_LOOP_JOIN_H_INCLUDED
 #endif
 #include "_join.h"
+#include "_pinnable.h"
 
 /**
  * @brief nested loop join two tables locally with a simple nested loop join.
@@ -24,16 +25,15 @@
  * @param left_offset the number of bits already used from the start of the
  * left_row_is_matched. Default is 0
  */
-template <bool is_left_outer, bool is_right_outer, bool non_equi_condition>
-void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
-                                  std::shared_ptr<table_info> right_table,
-                                  cond_expr_fn_batch_t cond_func,
-                                  bool parallel_trace,
-                                  bodo::vector<int64_t>& left_idxs,
-                                  bodo::vector<int64_t>& right_idxs,
-                                  bodo::vector<uint8_t>& left_row_is_matched,
-                                  bodo::vector<uint8_t>& right_row_is_matched,
-                                  int64_t left_offset) {
+template <bool is_left_outer, bool is_right_outer, bool non_equi_condition,
+          typename Allocator>
+void nested_loop_join_table_local(
+    std::shared_ptr<table_info> left_table,
+    std::shared_ptr<table_info> right_table, cond_expr_fn_batch_t cond_func,
+    bool parallel_trace, bodo::vector<int64_t>& left_idxs,
+    bodo::vector<int64_t>& right_idxs,
+    bodo::vector<uint8_t, Allocator>& left_row_is_matched,
+    bodo::vector<uint8_t>& right_row_is_matched, int64_t left_offset) {
     tracing::Event ev("nested_loop_join_table_local", parallel_trace);
     size_t n_rows_left = left_table->nrows();
     size_t n_rows_right = right_table->nrows();

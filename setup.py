@@ -104,6 +104,7 @@ lid = [PREFIX_DIR + "/lib"]
 
 # Pass --debug flag to setup.py to compile with debug symbols
 opt_flag = "-O3"
+profile_flag = []
 if "--debug" in sys.argv:
     debug_flag = "-g"
     opt_flag = "-O1"  # This makes many c++ features easier to debug
@@ -116,10 +117,17 @@ if "--no-test" in sys.argv:
     is_testing = False
     sys.argv.remove("--no-test")
 
+if "--profile" in sys.argv:
+    profile_flag = ["-pg"]
+    if debug_flag == "-g0":
+        debug_flag = "-g"
+    sys.argv.remove("--profile")
+
 address_sanitizer_flag = []
 if "--address-sanitizer" in sys.argv:
     sys.argv.remove("--address-sanitizer")
     address_sanitizer_flag = ["-fsanitize=address"]
+    opt_flag = "-O1"
 
 if is_win:
     eca = ["/std:c++20", "/O2"]
@@ -132,13 +140,17 @@ else:
     else:
         # -march=haswell is used to enable AVX2 support (required by SIMD bloom
         # filter implementation)
-        eca = [
-            "-std=c++20",
-            debug_flag,
-            opt_flag,
-            "-march=haswell",
-        ] + address_sanitizer_flag
-    eca_c = [debug_flag, opt_flag]
+        eca = (
+            [
+                "-std=c++20",
+                debug_flag,
+                opt_flag,
+                "-march=haswell",
+            ]
+            + address_sanitizer_flag
+            + profile_flag
+        )
+    eca_c = [debug_flag, opt_flag] + profile_flag
     ela = ["-std=c++20"]
 
 if develop_mode:
@@ -340,6 +352,7 @@ ext_metadata["depends"] += [
     "bodo/libs/_window_compute.h",
     "bodo/libs/_stream_dict_encoding.h",
     "bodo/libs/_pinnable.h",
+    "bodo/libs/_nested_loop_join_impl.h",
 ]
 
 if is_testing:
