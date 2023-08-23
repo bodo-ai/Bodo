@@ -4,7 +4,6 @@ import com.bodosql.calcite.adapter.pandas.PandasJoin
 import com.bodosql.calcite.adapter.pandas.PandasJoinRule
 import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.application.logicalRules.AliasPreservingAggregateProjectMergeRule
-import com.bodosql.calcite.application.logicalRules.AliasPreservingProjectJoinTransposeRule
 import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule
 import com.bodosql.calcite.application.logicalRules.DependencyCheckingProjectMergeRule
 import com.bodosql.calcite.application.logicalRules.FilterAggregateTransposeRuleNoWindow
@@ -22,6 +21,7 @@ import com.bodosql.calcite.application.logicalRules.MinRowNumberFilterRule
 import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.RexSimplificationRule
+import com.bodosql.calcite.application.logicalRules.TrivialProjectJoinTransposeRule
 import com.bodosql.calcite.application.logicalRules.VolcanoAcceptingAggregateProjectPullUpConstantsRule
 import com.bodosql.calcite.rel.core.RelFactories
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
@@ -143,7 +143,7 @@ object BodoRules {
      */
     @JvmField
     val PROJECT_JOIN_TRANSPOSE_RULE: RelOptRule =
-        AliasPreservingProjectJoinTransposeRule.Config.DEFAULT
+        TrivialProjectJoinTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalProject::class.java, BodoLogicalJoin::class.java)
             .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
             .toRule()

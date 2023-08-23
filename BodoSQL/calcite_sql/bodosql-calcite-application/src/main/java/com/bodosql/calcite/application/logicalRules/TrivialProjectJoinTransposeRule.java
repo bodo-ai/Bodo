@@ -6,9 +6,7 @@ import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin;
 import com.bodosql.calcite.rel.logical.BodoLogicalProject;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.NavigableSet;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptUtil;
@@ -25,8 +23,6 @@ import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.rex.RexShuttle;
-import org.apache.calcite.tools.RelBuilder;
-import org.apache.calcite.tools.RelBuilderFactory;
 import org.immutables.value.Value;
 
 /**
@@ -37,7 +33,7 @@ import org.immutables.value.Value;
  * @see org.apache.calcite.rel.rules.CoreRules#PROJECT_JOIN_TRANSPOSE
  *     <p>This code is a modified version of the default ProjectJoinTransposeRule found at:
  *     https://github.com/apache/calcite/blob/fd6ffc901ef28bf8408cca28b57eba9f8a204749/core/src/main/java/org/apache/calcite/rel/rules/ProjectJoinTransposeRule.java
- *     However, the original rule does not preserve aliases in some conditions
+ *     This code ensures that we only push trivial projections
  */
 
 // This style ensures that the get/set methods match the naming conventions of those in the calcite
@@ -47,11 +43,11 @@ import org.immutables.value.Value;
 // add this annotation to ensure that the style is applied
 @BodoSQLStyleImmutable
 @Value.Enclosing
-public class AliasPreservingProjectJoinTransposeRule
-    extends RelRule<AliasPreservingProjectJoinTransposeRule.Config> implements TransformationRule {
+public class TrivialProjectJoinTransposeRule extends RelRule<TrivialProjectJoinTransposeRule.Config>
+    implements TransformationRule {
 
   /** Creates a ProjectJoinTransposeRule. */
-  protected AliasPreservingProjectJoinTransposeRule(Config config) {
+  protected TrivialProjectJoinTransposeRule(Config config) {
     super(config);
   }
 
@@ -80,7 +76,6 @@ public class AliasPreservingProjectJoinTransposeRule
    * @return A projection that contains all of the used columns but only inputRefs.
    */
   private static Project convertProjectToInputRefs(Project node, RelDataType originalType) {
-    Map<Integer, RexInputRef> inputRefMap = new HashMap<>();
     // Find all of the inputRefs that are used
     RelOptUtil.InputReferencedVisitor finder = new RelOptUtil.InputReferencedVisitor();
     finder.visitEach(node.getProjects());
@@ -96,20 +91,6 @@ public class AliasPreservingProjectJoinTransposeRule
     }
     // Create the new projects. Here we reuse the hints.
     return BodoLogicalProject.create(node.getInput(), node.getHints(), inputRefs, keptFieldNames);
-  }
-
-  @Deprecated // to be removed before 2.0
-  public AliasPreservingProjectJoinTransposeRule(
-      Class<? extends Project> projectClass,
-      Class<? extends Join> joinClass,
-      PushProjector.ExprCondition preserveExprCondition,
-      RelBuilderFactory relBuilderFactory) {
-    this(
-        Config.DEFAULT
-            .withRelBuilderFactory(relBuilderFactory)
-            .as(Config.class)
-            .withOperandFor(projectClass, joinClass)
-            .withPreserveExprCondition(preserveExprCondition));
   }
 
   // ~ Methods ----------------------------------------------------------------
@@ -207,28 +188,6 @@ public class AliasPreservingProjectJoinTransposeRule
     // put the original project on top of the join, converting it to
     // reference the modified projection list
     RelNode topProject = pushProjector.createNewProject(newJoin, adjustments);
-
-    // There is currently a bug wherein the alias information is lost
-    // In order to correct this, we check if top project is a join node
-    // If it is, check that the fieldnames of topProject == the original projection
-    // If not, add a new projection Node that projects the values to the correct names
-    if (topProject instanceof Join) {
-      if (!topProject.getRowType().getFieldList().equals(origProject.getRowType().getFieldList())) {
-        // Create a list of projections from input 0 -> fieldname 0, input 1 -> fieldname 1... and
-        // so on
-        List<RexInputRef> projections = new ArrayList<>();
-        List<RelDataTypeField> fieldList = origProject.getRowType().getFieldList();
-        for (int i = 0; i < fieldList.size(); i++) {
-          RexInputRef cur_input = new RexInputRef(i, fieldList.get(i).getType());
-          projections.add(cur_input);
-        }
-
-        final RelBuilder relBuilder = call.builder();
-        relBuilder.push(topProject);
-        relBuilder.project(projections, origProject.getRowType().getFieldNames(), true);
-        topProject = relBuilder.build();
-      }
-    }
     call.transformTo(topProject);
   }
 
@@ -236,14 +195,14 @@ public class AliasPreservingProjectJoinTransposeRule
   @Value.Immutable(singleton = false)
   public interface Config extends RelRule.Config {
     Config DEFAULT =
-        ImmutableAliasPreservingProjectJoinTransposeRule.Config.builder()
+        ImmutableTrivialProjectJoinTransposeRule.Config.builder()
             .withPreserveExprCondition(expr -> !(expr instanceof RexOver))
             .build()
             .withOperandFor(BodoLogicalProject.class, BodoLogicalJoin.class);
 
     @Override
-    default AliasPreservingProjectJoinTransposeRule toRule() {
-      return new AliasPreservingProjectJoinTransposeRule(this);
+    default TrivialProjectJoinTransposeRule toRule() {
+      return new TrivialProjectJoinTransposeRule(this);
     }
 
     /** Defines when an expression should not be pushed. */
