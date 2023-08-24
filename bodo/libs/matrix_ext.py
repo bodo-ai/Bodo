@@ -171,3 +171,73 @@ def overload_matrix_mul(A, B):  # pragma: no cover
             return init_np_matrix(np.dot(A.data, B.data))
 
         return impl
+
+
+@overload(np.asmatrix)
+def overload_np_asmatrix(A):
+    """Implementation of np.asmatrix for various supported input formats:
+        - Matrix -> returns the input unchanged
+        - 1D array -> converts into a matrix with 1 row
+        - 2D array -> wraps in a matrix
+        - List of 1D arrays -> converts into a matrix with 1 row per element in the list
+        - List of integer/float/complex -> Converts into a matrix with 1 row
+        - Scalar integer/float/complex -> Converts into a 1x1 matrix
+
+    Args:
+        A (any scalar/np.ndarray/np.matrix): The input that is to be transformed into a matrix
+
+    Returns:
+        (np.matrix) A matrix of the input data.
+
+    """
+    if isinstance(A, MatrixType):
+        return lambda A: A  # pragma: no cover
+    if isinstance(A, types.Array) and A.ndim == 1:
+        return lambda A: init_np_matrix(A.reshape((1, len(A))))  # pragma: no cover
+    if isinstance(A, types.Array) and A.ndim == 2:
+        return lambda A: init_np_matrix(A)  # pragma: no cover
+    if (
+        isinstance(A, types.List)
+        and isinstance(A.dtype, types.Array)
+        and A.dtype.ndim == 1
+    ):
+        dtype = A.dtype.dtype
+
+        def impl(A):  # pragma: no cover
+            rows = len(A)
+            cols = 0
+            for i in range(len(A)):
+                if i == 0:
+                    cols = len(A[i])
+                elif len(A[i]) != cols:
+                    print(i, cols, len(A[i]))
+                    raise ValueError(
+                        "np.asmatrix(List[array]) only valid when all arrays in the list have the same length"
+                    )
+            res = np.empty((rows, cols), dtype=dtype)
+            for i in range(len(A)):
+                res[i, :] = A[i]
+            return init_np_matrix(res)
+
+        return impl
+    if isinstance(A, types.List) and isinstance(
+        A.dtype, (types.Integer, types.Float, types.Complex)
+    ):
+        return lambda A: init_np_matrix(
+            np.array([A]).reshape((1, len(A)))
+        )  # pragma: no cover
+    if isinstance(A, (types.Integer, types.Float, types.Complex)):
+        return lambda A: np.asmatrix(np.array([A]))  # pragma: no cover
+    raise_bodo_error(
+        f"np.asmatrix unsupported on input of type {A}"
+    )  # pragma: no cover
+
+
+@overload(np.asarray)
+def overload_np_asarray(A):  # pragma: no cover
+    """
+    An extra candidate overload for np.asarray to handle cases where
+    the input is a Matrix. In this case, we return the underlying array.
+    """
+    if isinstance(A, MatrixType):
+        return lambda A: A.data  # pragma: no cover

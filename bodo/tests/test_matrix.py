@@ -307,19 +307,88 @@ def test_mixed_type_arithmetic(dtype_a, dtype_b):
     check_func(impl, (A, B.T))
 
 
-@pytest.mark.skip(
-    reason="[BSE-966] Ensure that np.asmatrix and np.asarray correctly convert between the two types"
-)
-def test_conversion(memory_leak_check):
+def test_conv_matrix(matrix_layout, memory_leak_check):
+    """
+    Tests converting an array to a matrix and back to an array, with
+    multiplications interleaved along the way to ensure that the
+    correct type of multiplication is used at each step.
+    """
+
     def impl(A1):
         # This multiplication should be element-wise
         A2 = A1 * A1
         M1 = np.asmatrix(A2)
         # The second multiplication should be true matrix multiplication
-        M2 = M1 * M1
+        M2 = M1 * M1 * M1
         A3 = np.asarray(M2)
         # And the final multiplication should be element-wise
         A4 = A3 * A3
         return A4
 
-    check_func(impl, (np.arange(9).reshape(3, 3),))
+    A, _ = make_matrix(np.float64, (3, 3), matrix_layout)
+    # [BSE-986] TODO: investigate parallel support
+    check_func(impl, (A,), only_seq=True)
+
+
+@pytest.mark.parametrize(
+    "A",
+    [
+        pytest.param(np.asmatrix(np.arange(10).reshape(2, 5)), id="matrix"),
+        pytest.param(np.linspace(0, 1, 5), id="1d_arr"),
+        pytest.param(np.arange(12).reshape(4, 3), id="2d_arr-C"),
+        pytest.param(np.linspace(0, 15.5, 32).reshape(8, 4).T, id="2d_arr-F"),
+        pytest.param(np.linspace(0, 15.5, 32).reshape(8, 4)[1:, 1:], id="2d_arr-A"),
+        pytest.param(np.int64(-1), id="scalar_int"),
+        pytest.param(np.float32(3.14), id="scalar_float"),
+        pytest.param(np.complex128(1 - 2j), id="scalar_complex"),
+    ],
+)
+def test_asmatrix(A, memory_leak_check):
+    """
+    Tests calling np.asmatrix directly on a scalar, 1D array, 2D array
+    or another matrix.
+    """
+
+    def impl(A):
+        return np.asmatrix(A)
+
+    # [BSE-986] TODO: investigate parallel support
+    check_func(impl, (A,), convert_to_nullable_float=False, only_seq=True)
+
+
+@pytest.mark.parametrize(
+    "A",
+    [
+        pytest.param(np.linspace(0, 1, 5), id="1d_arr"),
+        pytest.param(np.int64(-1), id="scalar_int"),
+        pytest.param(np.float32(3.14), id="scalar_float"),
+        pytest.param(np.complex128(1 - 2j), id="scalar_complex"),
+    ],
+)
+def test_asmatrix_list(A, memory_leak_check):
+    """
+    Tests calling np.asmatrix on a scalar or 1D array wrapped in a list.
+    """
+
+    def impl1(A):
+        return np.asmatrix([A])
+
+    def impl2(A):
+        return np.asmatrix([A, A, A])
+
+    # [BSE-986] TODO: investigate parallel support
+    check_func(impl1, (A,), convert_to_nullable_float=False, only_seq=True)
+    check_func(impl2, (A,), convert_to_nullable_float=False, only_seq=True)
+
+
+def test_asarray(testing_matrices, memory_leak_check):
+    """
+    Tests calling np.asmatrix on a scalar or 1D array wrapped in a list.
+    """
+
+    def impl(M):
+        return np.asarray(M)
+
+    # [BSE-986] TODO: investigate parallel support
+    M, _ = testing_matrices
+    check_func(impl, (M,), only_seq=True)
