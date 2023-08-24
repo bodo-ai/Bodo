@@ -477,7 +477,6 @@ def test_matrix_multiply(r0, c0, r1, c1, already_matrix, memory_leak_check):
     check_func(impl, (A, B), convert_to_nullable_float=False)
 
 
-@pytest.mark.skip(reason="[BSE-949] TODO: Support np.asmatrix for workload")
 def test_asmatrix_2d(memory_leak_check):
     """
     Tests calling np.asmatrix on a 2d numpy array.
@@ -487,10 +486,9 @@ def test_asmatrix_2d(memory_leak_check):
         return np.asmatrix(A)
 
     A = np.arange(20).reshape(5, 4)
-    check_func(impl, (A,), convert_to_nullable_float=False)
+    check_func(impl, (A,), convert_to_nullable_float=False, only_seq=True)
 
 
-@pytest.mark.skip(reason="[BSE-949] TODO: Support np.asmatrix for workload")
 def test_asmatrix_1d_no_list(memory_leak_check):
     """
     Tests calling np.asmatrix on a 1d numpy array.
@@ -500,10 +498,9 @@ def test_asmatrix_1d_no_list(memory_leak_check):
         return np.asmatrix(A)
 
     A = np.arange(20)
-    check_func(impl, (A,), convert_to_nullable_float=False)
+    check_func(impl, (A,), convert_to_nullable_float=False, only_seq=True)
 
 
-@pytest.mark.skip(reason="[BSE-949] TODO: Support np.asmatrix for workload")
 def test_asmatrix_1d_with_list(memory_leak_check):
     """
     Tests calling np.asmatrix on a 1d numpy array stored in a singleton list.
@@ -513,12 +510,9 @@ def test_asmatrix_1d_with_list(memory_leak_check):
         return np.asmatrix([A])
 
     A = np.arange(8)
-    check_func(impl, (A,), convert_to_nullable_float=False)
+    check_func(impl, (A,), convert_to_nullable_float=False, only_seq=True)
 
 
-@pytest.mark.skip(
-    reason="[BSE-949] TODO: Support np.asmatrix and matrix multiplication with * operator for workload"
-)
 def test_polar_format_matrix_subset(memory_leak_check):
     """
     Tests the full subset of polar_format that goes through numpy matrices. Indexes into
@@ -541,7 +535,12 @@ def test_polar_format_matrix_subset(memory_leak_check):
     u_hat = np.array([1.00000000e00, 6.56211017e-19, 0.00000000e00])
     v_hat = np.array([6.56211017e-19, -1.00000000e00, 0.00000000e00])
     k = np.linspace(0, 1, 2048)
-    check_func(impl, (r_hat, u_hat, v_hat, k, 13))
+    check_func(
+        impl,
+        (r_hat, u_hat, v_hat, k, 13),
+        convert_to_nullable_float=False,
+        only_seq=True,
+    )
 
 
 @pytest.mark.parametrize(
