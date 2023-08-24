@@ -1823,6 +1823,15 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("tile_transpose_upcast_helper", "bodo.libs.array_kernels"):
+            # Case #2 of np.tile: Upcasting 1D array into 2D array where the elements of the
+            # original array become columns in the output array. Rows of the input become columns
+            # of the output. Rows of the output are scattered evenly between the various ranks,
+            # with the final rank getting all of the excess rows.
+            if lhs not in array_dists:  # pragma: no cover
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+            return
+
         if fdef == ("interp_bin_search", "bodo.libs.array_kernels"):
             self._meet_array_dists(rhs.args[1].name, rhs.args[2].name, array_dists)
             return

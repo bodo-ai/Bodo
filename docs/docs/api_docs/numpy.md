@@ -174,6 +174,8 @@ optimize and parallelize.
 - `numpy.intersect1d`  no distributed support yet
 - `numpy.setdiff1d`  no distributed support yet
 - `numpy.hstack`  concatenates elements on each rank without maintaining order
+- `numpy.tile`  Supported in 2 cases: the array is 2D and `reps` is in the form `(1, x)`, or
+                the array is 1D and `reps` is in the form `(x, 1)`.   
 
 ## Numpy mathematical and statistics functions
 
