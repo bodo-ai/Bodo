@@ -3,8 +3,23 @@ package com.bodosql.calcite.adapter.pandas
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelRoot
+import org.apache.calcite.rel.core.LogicalTableCreate
 import org.apache.calcite.sql.SqlKind
 import java.lang.AssertionError
+
+/**
+ * Create a Pandas Project Node at the top of the tree for the given input.
+ */
+private fun RelRoot.createPandasProjectNode(input: RelNode): RelNode {
+    if (!input.traitSet.contains(PandasRel.CONVENTION)) {
+        throw AssertionError("input rel must have pandas convention")
+    }
+    val rexBuilder = input.cluster.rexBuilder
+    val projects = fields.map { (i, _) ->
+        rexBuilder.makeInputRef(input, i)
+    }
+    return PandasProject(input.cluster, input.traitSet, input, projects, validatedRowType)
+}
 
 /**
  * Transforms a [RelRoot] to a [RelNode] that can be used for code generation.
@@ -25,18 +40,32 @@ fun RelRoot.pandasProject(): RelNode =
         // DML operations are special in that the validated node type
         // is for the inner SELECT and is not related to the output.
         this.rel
+    } else if (kind == SqlKind.CREATE_TABLE) {
+        // Create table is special because the validated type is for the actual
+        // select. We need to check that the names and columns match the expectations
+        // for the RelRoot.
+        // TODO: Add other DDL operations?
+        if (this.rel !is LogicalTableCreate) {
+            throw AssertionError("Input create sqlkind doesn't match a supported node")
+        }
+        // Insert the projection before the CREATE_TABLE
+        val newInput = createPandasProjectNode(this.rel.getInput(0))
+        this.rel.copy(this.rel.traitSet, listOf(newInput))
     } else {
         // Either the name or some change has been made
-        // to the type. Insert a PandasProject to fix everything.
-        if (!this.rel.traitSet.contains(PandasRel.CONVENTION)) {
-            throw AssertionError("input rel must have pandas convention")
-        }
-        val rexBuilder = this.rel.cluster.rexBuilder
-        val projects = fields.map { (i, _) ->
-            rexBuilder.makeInputRef(this.rel, i)
-        }
-        PandasProject(this.rel.cluster, this.rel.traitSet, this.rel, projects, validatedRowType)
+        createPandasProjectNode(this.rel)
     }
+
+/**
+ * Create a BodoLogicalProject Node at the top of the tree for the given input.
+ */
+private fun RelRoot.createLogicalProjectNode(input: RelNode): RelNode {
+    val rexBuilder = input.cluster.rexBuilder
+    val projects = fields.map { (i, _) ->
+        rexBuilder.makeInputRef(input, i)
+    }
+    return BodoLogicalProject.create(input, listOf(), projects, validatedRowType)
+}
 
 /**
  * Transforms a [RelRoot] to a [RelNode] that can be used for output plan
@@ -60,10 +89,17 @@ fun RelRoot.logicalProject(): RelNode =
         // DML operations are special in that the validated node type
         // is for the inner SELECT and is not related to the output.
         this.rel
-    } else {
-        val rexBuilder = this.rel.cluster.rexBuilder
-        val projects = fields.map { (i, _) ->
-            rexBuilder.makeInputRef(this.rel, i)
+    } else if (kind == SqlKind.CREATE_TABLE) {
+        // Create table is special because the validated type is for the actual
+        // select. We need to check that the names and columns match the expectations
+        // for the RelRoot.
+        // TODO: Add other DDL operations?
+        if (this.rel !is LogicalTableCreate) {
+            throw AssertionError("Input create sqlkind doesn't match a supported node")
         }
-        BodoLogicalProject.create(this.rel, listOf(), projects, validatedRowType)
+        // Insert the projection before the CREATE_TABLE
+        val newInput = createLogicalProjectNode(this.rel.getInput(0))
+        this.rel.copy(this.rel.traitSet, listOf(newInput))
+    } else {
+        createLogicalProjectNode(this.rel)
     }
