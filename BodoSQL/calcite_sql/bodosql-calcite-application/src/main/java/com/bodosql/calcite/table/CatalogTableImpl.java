@@ -287,13 +287,15 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     List<String> qualifiedName = List.of(getSchema().getName(), getName());
     String columnName = getColumnNames().get(column).toUpperCase(Locale.ROOT);
     SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
-    Double distinctCount = catalog.estimateColumnDistinctCount(qualifiedName, columnName);
-    if (distinctCount == null) {
-      return distinctCount;
-    }
     // Avoid ever returning more than the row count. This can happen because
     // Snowflake returns an estimate.
-    double maxCount = statistic.getRowCount();
+    Double distinctCount = catalog.estimateColumnDistinctCount(qualifiedName, columnName);
+    // Important: We must use getStatistic() here to allow subclassing, which we use for
+    // our mocking infrastructure.
+    Double maxCount = getStatistic().getRowCount();
+    if (distinctCount == null || maxCount == null) {
+      return null;
+    }
     return min(distinctCount, maxCount);
   }
 
