@@ -4064,6 +4064,125 @@ def _overload_validate_multivar_norm(cov):
     return impl
 
 
+def tile_transpose_upcast_helper(
+    A, replicated_rows, parallel=False
+):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(tile_transpose_upcast_helper)
+def overload_tile_transpose_upcast_helper(A, replicated_rows, parallel=False):
+    """Helper for np.tile in case #2 (A is 1D, reps = (n, 1))
+
+    Args:
+        A (np.ndarray) 1D array of integers
+        replicated_rows (integer) How many total rows should the output have.
+        parallel (boolean) Is the operation happening across multiple ranks?
+    """
+    dtype = A.dtype
+
+    def impl(A, replicated_rows, parallel=False):  # pragma: no cover
+        r = bodo.get_rank()
+        s = bodo.get_size()
+        if parallel:
+            # Each rank needs to have all of the rows since they become columns
+            # in the new array
+            A = bodo.allgatherv(A)
+            # Calculate the number of rows the current rank should possess so
+            # that all the ranks combined have replicated_rows rows
+            start = bodo.libs.distributed_api.get_start(replicated_rows, s, r)
+            end = bodo.libs.distributed_api.get_end(replicated_rows, s, r)
+            local_rows = end - start
+        else:
+            local_rows = replicated_rows
+        n = len(A)
+        res = np.empty((local_rows, n), dtype=dtype)
+        for r in range(local_rows):
+            res[r, :] = A
+        return res
+
+    return impl
+
+
+@overload(np.tile, inline="always", no_unliteral=True)
+def np_tile(A, reps):
+    """Performs the operation np.tile(A, reps) under limited cases:
+
+    1. A is a 2D array and reps is in the form (1, n). This form
+       corresponds to duplicating the columns of a 2D array n times.
+
+    2. A is a 1D array and reps is in the form (n, 1). This form
+       corresponds to turning a 1D array into a 2D array where the
+       columns of the 2D array are the rows of the 1D array, and the
+       rows are n identical copies.
+
+    [BSE-1029] TODO: add support for more np.tile cases
+
+    Args:
+        A (np.ndarray) Array of data that is to be tiled in the specified manner.
+        reps (integer tuple): tuple of integers describing how the data should be tiled.
+
+    Returns:
+        (np.ndarray) A copy of input A with the data transformed in the manner specified
+        by the combination of A.ndim and the reps tuple.
+    """
+    if not isinstance(reps, (types.Tuple, types.UniTuple)):  # pragma: no cover
+        raise_bodo_error("np.tile: reps argument must be a tuple")
+    if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
+        A, bodo.FloatingArrayType
+    ):  # pragma: no cover
+        raise_bodo_error("np.tile: A argument must be a numpy array")
+    ndims = A.ndim
+    n_reps = 0
+    for typ in reps.types:
+        if not isinstance(typ, types.Integer):  # pragma: no cover
+            raise_bodo_error("np.tile: all elements in reps tuple must be integers")
+        n_reps += 1
+    if (
+        ndims == 2
+        and n_reps == 2
+        and is_overload_constant_int(reps[0])
+        and get_overload_const_int(reps[0]) == 1
+    ):
+        # Case 1 [2D array with reps = (1, n)]: replicating the columns of a 2D array
+        dtype = A.dtype
+
+        def impl(A, reps):  # pragma: no cover
+            n, m = A.shape
+            replicated_cols = reps[1]
+            res = np.empty((n, m * replicated_cols), dtype=dtype)
+            numba.parfors.parfor.init_prange()
+            # Loop over each row in the original 2D array
+            for r in numba.parfors.parfor.internal_prange(n):
+                # Loop over the number of times we want to replicate the columns
+                for i in range(replicated_cols):
+                    # For each row, replicate the columns in the row that many times
+                    for c in range(m):
+                        res[r][c + i * m] = A[r][c]
+            return res
+
+        return impl
+    elif (
+        ndims == 1
+        and n_reps
+        and is_overload_constant_int(reps[1])
+        and get_overload_const_int(reps[1]) == 1
+    ):
+        # Case 2 [1D array with reps = (n, 1)]: Upcasting 1D array into 2D array where the elements of the
+        # original array become columns in the output array.
+        dtype = A.dtype
+
+        def impl(A, reps):  # pragma: no cover
+            return bodo.libs.array_kernels.tile_transpose_upcast_helper(A, reps[0])
+
+        return impl
+    else:  # pragma: no cover
+        raise_bodo_error(
+            f"np.tile: array with dimension {ndims} and reps tuple {reps} is not currently supported"
+        )
+
+
 @numba.generated_jit
 def interp_bin_search(x, xp, fp, parallel=False):
     """
