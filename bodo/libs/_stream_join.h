@@ -232,13 +232,13 @@ class JoinPartition {
         size_t num_levels = 1);
 
     /**
-     * @brief Add rows from build_table_buffer into the hash table. This adds
-     * rows starting from curr_build_size, up to the size of the
-     * build_table_buffer. It will also populate 'num_rows_in_groups' and
-     * 'build_row_to_group_map' vectors.
-     * This function is idempotent.
-     * NOTE: The function assumes that the partition is pinned
-     * when it's called.
+     * @brief Add rows from build_table_buffer into the hash table. This
+     * computes hashes for all rows in the build_table_buffer that don't already
+     * have hashes and then adds rows starting from curr_build_size, up to the
+     * size of the build_table_buffer to the hash table.
+     * It will also populate 'num_rows_in_groups' and 'build_row_to_group_map'
+     * vectors. This function is idempotent.
+     * NOTE: The function assumes that the partition is pinned when it's called.
      *
      */
     inline void BuildHashTable();
@@ -267,7 +267,7 @@ class JoinPartition {
      * to the hashes vector.
      * For active partitions, we first reserve space in the
      * build_table_buffer and then append the rows into it.
-     * We also append the join hashes and populate the hash table.
+     * We also populate the hash table using BuildHashTable.
      * To make this function "retry-able", we also
      * build the hash table as the first step. In most cases,
      * this will be a NOP. However, in the case that the function
@@ -283,12 +283,9 @@ class JoinPartition {
      *
      * @tparam is_active Is this the active partition.
      * @param in_table Table to insert.
-     * @param join_hashes Join hashes for the table records.
-     * @param partitioning_hashes Partitioning hashes for the table records.
      */
     template <bool is_active>
-    void AppendBuildBatch(const std::shared_ptr<table_info>& in_table,
-                          const std::shared_ptr<uint32_t[]>& join_hashes);
+    void AppendBuildBatch(const std::shared_ptr<table_info>& in_table);
 
     /**
      * @brief Same as the other function, except this time we
@@ -301,14 +298,11 @@ class JoinPartition {
      *
      * @tparam is_active Is this the active partition.
      * @param in_table Table to insert.
-     * @param join_hashes Join hashes for the table records.
-     * @param partitioning_hashes Partitioning hashes for the table records.
      * @param append_rows Vector of booleans indicating whether to append the
      * row
      */
     template <bool is_active>
     void AppendBuildBatch(const std::shared_ptr<table_info>& in_table,
-                          const std::shared_ptr<uint32_t[]>& join_hashes,
                           const std::vector<bool>& append_rows);
 
     /**
@@ -663,12 +657,10 @@ class HashJoinState : public JoinState {
      * or we go over max partition depth while splitting the 0th partition.
      *
      * @param in_table Table to add the rows from.
-     * @param join_hashes Join hashes for the records.
      * @param partitioning_hashes Partitioning hashes for the records.
      */
     void AppendBuildBatch(
         const std::shared_ptr<table_info>& in_table,
-        const std::shared_ptr<uint32_t[]>& join_hashes,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes);
 
     /**
@@ -676,14 +668,12 @@ class HashJoinState : public JoinState {
      * append rows for which append_rows bit vector is true.
      *
      * @param in_table Table to add the rows from.
-     * @param join_hashes Join hashes for the records.
      * @param partitioning_hashes Partitioning hashes for the records.
      * @param append_rows Vector of booleans indicating whether to append the
      * row
      */
     void AppendBuildBatch(
         const std::shared_ptr<table_info>& in_table,
-        const std::shared_ptr<uint32_t[]>& join_hashes,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes,
         const std::vector<bool>& append_rows);
 
@@ -799,12 +789,10 @@ class HashJoinState : public JoinState {
     /// partition.
     void AppendBuildBatchHelper(
         const std::shared_ptr<table_info>& in_table,
-        const std::shared_ptr<uint32_t[]>& join_hashes,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes);
 
     void AppendBuildBatchHelper(
         const std::shared_ptr<table_info>& in_table,
-        const std::shared_ptr<uint32_t[]>& join_hashes,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes,
         const std::vector<bool>& append_rows);
 };
