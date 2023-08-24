@@ -10,6 +10,7 @@ from scipy.fftpack import fft2, fftshift
 
 import bodo
 from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError
 
 
 @pytest.mark.skip(reason="[BSE-912] TODO: complete coverage for polar_format function")
@@ -245,46 +246,104 @@ def test_taylor(memory_leak_check):
         w = w / w.max()
         return w
 
-    # [BSE-991] TODO: investigate parallel support
     check_func(taylor, (2048, 17), only_seq=True)
     check_func(taylor, (1950, 17), only_seq=True)
 
 
-@pytest.fixture
-def complex_arr():
-    """Returns a 5x5 grid of complex numbers used for testing various fft functions"""
-    real_component = np.sin(np.arange(25))
-    imag_component = 1j * np.cos(np.arange(25) ** 2)
-    return (real_component + imag_component).reshape((5, 5))
+@pytest.fixture(
+    params=[
+        pytest.param((np.int64, "C"), id="int-C", marks=pytest.mark.slow),
+        pytest.param((np.int64, "F"), id="int-F", marks=pytest.mark.slow),
+        pytest.param((np.int64, "A"), id="int-A", marks=pytest.mark.slow),
+        pytest.param((np.float64, "C"), id="float64-C", marks=pytest.mark.slow),
+        pytest.param((np.float64, "F"), id="float64-F", marks=pytest.mark.slow),
+        pytest.param((np.float64, "A"), id="float64-A", marks=pytest.mark.slow),
+        pytest.param((np.complex128, "C"), id="complex-C"),
+        pytest.param((np.complex128, "F"), id="complex-F", marks=pytest.mark.slow),
+        pytest.param((np.complex128, "A"), id="complex-A", marks=pytest.mark.slow),
+    ]
+)
+def grid_layouts(request):
+    return request.param
 
 
-def test_fftshift(complex_arr, memory_leak_check):
+@pytest.fixture(
+    params=[
+        pytest.param((5, 5), id="odd_dims"),
+        pytest.param((10, 10), id="even_dims"),
+    ]
+)
+def fft_arr(request, grid_layouts):
+    """Returns a grid of numbers used for testing various fft functions
+    with various dimensions, layouts and dtypes."""
+    rows, cols = request.param
+    dtype, layout = grid_layouts
+    real_component = 3 * np.sin(np.arange(rows * cols))
+    imag_component = 2.5j * np.cos(np.arange(rows * cols) ** 2)
+    combined = (real_component + imag_component).reshape((rows, cols))
+    if dtype != np.complex128:
+        combined = combined.astype(dtype)
+    if layout == "F":
+        combined = combined.T
+    if layout == "A":
+        combined = np.hstack(
+            [np.vstack([combined, combined]), np.vstack([combined, combined])]
+        )[rows:, cols:]
+    return combined
+
+
+def test_fftshift(fft_arr, memory_leak_check):
+    """
+    Tests scipy.fftpack.fftshift. Currently only supported
+    on sequential data.
+    """
+
     def impl(data):
         return fftshift(data)
 
-    check_func(impl, (complex_arr,), convert_to_nullable_float=False, only_seq=True)
+    check_func(impl, (fft_arr,), convert_to_nullable_float=False, only_seq=True)
 
 
-@pytest.mark.skip(reason="[BSE-944] TODO: Support scipy.fftpack.fft2 forworkload")
-def test_fft2(complex_arr, memory_leak_check):
+def test_fft2(fft_arr, memory_leak_check):
+    """
+    Tests scipy.fftpack.fft2. Currently only supported
+    on sequential data. The output is further transformed to check that
+    the array layout is being handled correctly. Assumes that the input
+    array has more than 1 row and more than 2 columns.
+    """
+
     def impl(data):
-        return fft2(data)
+        res = fft2(data)
+        return res, res[0], res[:, 0], res[1, 2]
 
-    check_func(impl, (complex_arr,), convert_to_nullable_float=False)
+    check_func(impl, (fft_arr,), convert_to_nullable_float=False, only_seq=True)
 
 
-@pytest.mark.skip(
-    reason="[BSE-943] / [BSE-944] TODO: Support scipy.fftpack.fftshift / scipy.fftpack.fft2 forworkload"
-)
-def test_ft2(complex_arr, memory_leak_check):
+def test_ft2(fft_arr, memory_leak_check):
+    """
+    Tests the combination of fftshift and fft2 used in the polar_format workload.
+    """
+
     def ft2(f, delta=1):
         F = fftshift(fft2(fftshift(f))) * delta**2
         return F
 
-    real_component = np.sin(np.arange(25))
-    imag_component = 1j * np.cos(np.arange(25) ** 2)
-    complex_arr = (real_component + imag_component).reshape((5, 5))
-    check_func(ft2, (complex_arr,), convert_to_nullable_float=False)
+    check_func(ft2, (fft_arr,), convert_to_nullable_float=False, only_seq=True)
+
+
+def test_fft_error(memory_leak_check):
+    """
+    Verifies that fft2 raises an error on unsupported types.
+    """
+
+    def impl(A):
+        return fft2(A)
+
+    with pytest.raises(
+        BodoError,
+        match="fft2 currently unsupported on input of type .*",
+    ):
+        bodo.jit(impl)(np.array([1, 2, 3, 4, 5], dtype=np.int64))
 
 
 @pytest.mark.skip(reason="[BSE-938] TODO: Support np.tile forworkload")
