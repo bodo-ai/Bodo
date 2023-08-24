@@ -294,14 +294,10 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
     // TODO[BSE-616]: support variable size output like strings
     groupby_state->local_table_buffer.ReserveSizeDataColumns(
         in_table->nrows(), groupby_state->n_keys);
-    groupby_state->local_table_groupby_hashes.reserve(
-        groupby_state->local_table_groupby_hashes.size() + in_table->nrows());
     groupby_state->shuffle_table_buffer.ReserveTableKeys(in_table,
                                                          groupby_state->n_keys);
     groupby_state->shuffle_table_buffer.ReserveSizeDataColumns(
         in_table->nrows(), groupby_state->n_keys);
-    groupby_state->shuffle_table_groupby_hashes.reserve(
-        groupby_state->shuffle_table_groupby_hashes.size() + in_table->nrows());
 
     // Fill row group numbers in grouping_info to reuse existing infrastructure.
     // We set group=-1 for rows that don't belong to the current buffer (e.g.
@@ -378,9 +374,6 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
         groupby_state->in_table_hashes = batch_hashes_groupby;
 
         groupby_state->local_table_buffer.ReserveTable(new_data);
-        groupby_state->local_table_groupby_hashes.reserve(
-            groupby_state->local_table_groupby_hashes.size() +
-            new_data->nrows());
 
         grouping_info local_grp_info;
         local_grp_info.row_to_group.resize(new_data->nrows());
