@@ -338,6 +338,13 @@ void SizeClass::UnpinFrame(uint64_t idx) {
     }
 
     this->markFrameAsUnpinned(idx);
+
+#ifdef SPILL_ON_UNPIN
+    // Force spill the frame to disk:
+    CHECK_ARROW_MEM(this->EvictFrame(idx),
+                    "SizeClass::UnpinFrame: Error during EvictFrame which was "
+                    "used because SPILL_ON_UNPIN is set: ");
+#endif  // SPILL_ON_UNPIN
 }
 
 arrow::Status SizeClass::EvictFrame(uint64_t idx) {
@@ -547,6 +554,16 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
             }
         }
     }
+
+#ifdef SPILL_ON_UNPIN
+    // Since we will spill every unpinned allocation, the user
+    // must provide at least one valid storage location to spill to.
+    if (options.storage_options.size() == 0) {
+        throw std::runtime_error(
+            "BufferPoolOptions::Defaults: Must specify at least one storage "
+            "location when building with SPILL_ON_UNPIN");
+    }
+#endif  // SPILL_ON_UNPIN
 
     // Read memory_size from env_var if provided.
     // If env var is not set, we will get the memory
@@ -1331,6 +1348,12 @@ void BufferPool::Unpin(uint8_t* ptr, int64_t size, int64_t alignment) {
     if (this->size_classes_[size_class_idx]->isFramePinned(frame_idx)) {
         this->size_classes_[size_class_idx]->UnpinFrame(frame_idx);
         this->update_pinned_bytes(-this->size_class_bytes_[size_class_idx]);
+#ifdef SPILL_ON_UNPIN
+        // When SPILL_ON_UNPIN is set, we will spill any unpinned frames.
+        // We must update the statistics to match this action.
+        this->stats_.UpdateAllocatedBytes(
+            -this->size_class_bytes_[size_class_idx]);
+#endif  // SPILL_ON_UNPIN
     }
 }
 
