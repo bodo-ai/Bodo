@@ -213,8 +213,8 @@ def test_split_during_finalize_build(build_probe_outer, memory_leak_check):
     """
     build_df = pd.DataFrame(
         {
-            "A": pd.array(([1, 2] * 2500) + ([34, 67, 35] * 3000), dtype="Int64"),
-            "B": np.array(([1, 2] * 2500) + ([3, 4, 5] * 3000), dtype=np.int32),
+            "A": pd.array(([1, 2] * 2500) + ([34, 67, 35] * 3500), dtype="Int64"),
+            "B": np.array(([1, 2] * 2500) + ([3, 4, 5] * 3500), dtype=np.int32),
         }
     )
 
@@ -227,11 +227,11 @@ def test_split_during_finalize_build(build_probe_outer, memory_leak_check):
 
     build_outer, probe_outer = build_probe_outer
 
-    expected_partition_state = [(1, 0), (2, 2), (2, 3)]
+    expected_partition_state = [(1, 0), (2, 2), (3, 6), (3, 7)]
     expected_output_size = 2500 * 2500
     if build_outer:
         expected_output_size += (1 * 2500) + (
-            3 * 3000
+            3 * 3500
         )  # 4 unmatched keys on the build side
     if probe_outer:
         expected_output_size += 2_500  # 1 unmatched keys on the probe side

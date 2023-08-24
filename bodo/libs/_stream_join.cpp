@@ -225,35 +225,38 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
                 build_table_partitioning_hashes[i_row]);
         }
 
+        // Calculate number of rows going to 1st new partition
         uint64_t append_partition1_sum = std::accumulate(
             append_partition1.begin(), append_partition1.end(), (uint64_t)0);
         uint64_t append_partition2_sum =
             this->build_safely_appended_nrows - append_partition1_sum;
 
-        // Reserve space in hash vectors for both partitions.
+        // Reserve space in hashes vector. This doesn't inhibit
+        // exponential growth since we're only doing it at the start.
+        // Future appends will still allow for regular exponential growth.
         new_part1->build_table_join_hashes_guard.value()->reserve(
             append_partition1_sum);
-        new_part2->build_table_join_hashes_guard.value()->reserve(
-            append_partition2_sum);
 
-        // Copy the hash values to the new partitions.
-        for (size_t i_row = 0; i_row < this->build_safely_appended_nrows;
-             i_row++) {
+        // Copy the hash values to the new active partition. We might
+        // not have hashes for every row, so copy over whatever we can.
+        // Subsequent BuildHashTable steps will compute the rest.
+        // We drop the hashes that would go to the new inactive partition
+        // for now and will re-compute them later when needed.
+        size_t n_hashes_to_copy_over =
+            std::min(this->build_safely_appended_nrows,
+                     this->build_table_join_hashes_guard.value()->size());
+        for (size_t i_row = 0; i_row < n_hashes_to_copy_over; i_row++) {
             if (append_partition1[i_row]) {
                 new_part1->build_table_join_hashes_guard.value()->push_back(
-                    (*this->build_table_join_hashes_guard.value())[i_row]);
-            } else {
-                new_part2->build_table_join_hashes_guard.value()->push_back(
                     (*this->build_table_join_hashes_guard.value())[i_row]);
             }
         }
 
-        // append_partition1 already accounts for
-        // build_safely_appended_nrows.
+        // Reserve space for append (append_partition1 already accounts for
+        // build_safely_appended_nrows)
         new_part1->build_table_buffer.ReserveTable(
             this->build_table_buffer.data_table, append_partition1,
             append_partition1_sum);
-
         new_part1->build_table_buffer.UnsafeAppendBatch(
             this->build_table_buffer.data_table, append_partition1,
             append_partition1_sum);
@@ -279,16 +282,7 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
 
     } else {
         // In the inactive case, partition build_table_buffer chunk by chunk
-        uint32_t* build_table_join_hashes_chunk =
-            this->build_table_join_hashes_guard.value()->data();
         this->build_table_buffer_chunked.Finalize();
-
-        // Reserve space in hash vectors for both partitions.
-        // XXX This will go away once we have lazy hashing.
-        new_part1->build_table_join_hashes_guard.value()->reserve(
-            this->build_table_join_hashes_guard.value()->size());
-        new_part2->build_table_join_hashes_guard.value()->reserve(
-            this->build_table_join_hashes_guard.value()->size());
 
         while (!this->build_table_buffer_chunked.chunks.empty()) {
             auto [build_table_chunk, build_table_nrows_chunk] =
@@ -309,17 +303,6 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
                     build_table_partitioning_hashes_chunk[i_row]);
             }
 
-            // Copy the hash values to the new partitions.
-            for (int64_t i_row = 0; i_row < build_table_nrows_chunk; i_row++) {
-                if (append_partition1[i_row]) {
-                    new_part1->build_table_join_hashes_guard.value()->push_back(
-                        build_table_join_hashes_chunk[i_row]);
-                } else {
-                    new_part2->build_table_join_hashes_guard.value()->push_back(
-                        build_table_join_hashes_chunk[i_row]);
-                }
-            }
-
             new_part1->build_table_buffer_chunked.AppendBatch(
                 build_table_chunk, append_partition1);
 
@@ -328,8 +311,6 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
 
             new_part2->build_table_buffer_chunked.AppendBatch(
                 build_table_chunk, append_partition2);
-
-            build_table_join_hashes_chunk += build_table_nrows_chunk;
         }
     }
 
@@ -341,6 +322,29 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
 
 inline void JoinPartition::BuildHashTable() {
     assert(this->pinned_);
+    // First compute the join hashes:
+    auto& build_table_join_hashes_ =
+        this->build_table_join_hashes_guard.value();
+    size_t build_table_nrows = this->build_table_buffer.data_table->nrows();
+    size_t join_hashes_cur_len = build_table_join_hashes_->size();
+
+    // TODO: Do this processing in batches of 4K rows (for handling inactive
+    // partition case where we will do this for the entire table)!!
+
+    size_t n_unhashed_rows = build_table_nrows - join_hashes_cur_len;
+    if (n_unhashed_rows > 0) {
+        // Compute hashes for the batch:
+        std::unique_ptr<uint32_t[]> join_hashes = hash_keys_table(
+            this->build_table_buffer.data_table, this->n_keys, SEED_HASH_JOIN,
+            /*is_parallel*/ false,
+            /*global_dict_needed*/ false, /*dict_hashes*/ nullptr,
+            /*start_row_offset*/ join_hashes_cur_len);
+        // Append the hashes:
+        build_table_join_hashes_->insert(build_table_join_hashes_->end(),
+                                         join_hashes.get(),
+                                         join_hashes.get() + n_unhashed_rows);
+    }
+
     // Create reference variables for easier usage.
     auto& num_rows_in_group_ = this->num_rows_in_group_guard.value();
     auto& build_row_to_group_map_ = this->build_row_to_group_map_guard.value();
@@ -433,14 +437,13 @@ void JoinPartition::FinalizeGroups() {
 
 template <bool is_active>
 void JoinPartition::AppendBuildBatch(
-    const std::shared_ptr<table_info>& in_table,
-    const std::shared_ptr<uint32_t[]>& join_hashes) {
+    const std::shared_ptr<table_info>& in_table) {
     assert(this->pinned_);
     if (is_active) {
         /// Start "transaction":
 
-        // Idempotent. This will be a NOP unless we're re-trying this step after
-        // a partition split.
+        // Idempotent. This will be a NOP unless we're re-trying this step
+        // after a partition split.
         this->BuildHashTable();
         // Reserve space. This will be a NOP if we already
         // have sufficient space.
@@ -448,11 +451,7 @@ void JoinPartition::AppendBuildBatch(
         // Now append the rows. This will always succeed since we've
         // reserved space upfront.
         this->build_table_buffer.UnsafeAppendBatch(in_table);
-        // Add the hashes:
-        this->build_table_join_hashes_guard.value()->insert(
-            this->build_table_join_hashes_guard.value()->end(),
-            join_hashes.get(), join_hashes.get() + in_table->nrows());
-        // Add rows to the hash table now.
+        // Compute the hashes and add rows to the hash table now.
         this->BuildHashTable();
 
         /// Commit "transaction". Only update this after all the rows have
@@ -462,25 +461,19 @@ void JoinPartition::AppendBuildBatch(
     } else {
         // Append into the ChunkedTableBuilder
         this->build_table_buffer_chunked.AppendBatch(in_table);
-        // Add the hashes.
-        // XXX We can get rid of this step once we have lazy hashing.
-        this->build_table_join_hashes_guard.value()->insert(
-            this->build_table_join_hashes_guard.value()->end(),
-            join_hashes.get(), join_hashes.get() + in_table->nrows());
     }
 }
 
 template <bool is_active>
 void JoinPartition::AppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
-    const std::shared_ptr<uint32_t[]>& join_hashes,
     const std::vector<bool>& append_rows) {
     assert(this->pinned_);
     if (is_active) {
         /// Start "transaction":
 
-        // Idempotent. This will be a NOP unless we're re-trying this step after
-        // a partition split.
+        // Idempotent. This will be a NOP unless we're re-trying this step
+        // after a partition split.
         this->BuildHashTable();
         // Reserve space. This will be a NOP if we already
         // have sufficient space.
@@ -488,32 +481,16 @@ void JoinPartition::AppendBuildBatch(
         // Now append the rows. This will always succeed since we've
         // reserved space upfront.
         this->build_table_buffer.UnsafeAppendBatch(in_table, append_rows);
-        // Add the hashes:
-        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            if (append_rows[i_row]) {
-                this->build_table_join_hashes_guard.value()->push_back(
-                    join_hashes[i_row]);
-            }
-        }
-        // Add rows to the hash table now.
+        // Compute the hashes and add rows to the hash table now.
         this->BuildHashTable();
 
         /// Commit "transaction". Only update this after all the rows have
         /// been appended to build_table_buffer, the hash table _and_
         /// build_table_join_hashes.
         this->build_safely_appended_nrows = this->curr_build_size;
-
     } else {
         // Append into the ChunkedTableBuilder
         this->build_table_buffer_chunked.AppendBatch(in_table, append_rows);
-        // Add the hashes.
-        // XXX We can get rid of this step once we have lazy hashing.
-        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            if (append_rows[i_row]) {
-                this->build_table_join_hashes_guard.value()->push_back(
-                    join_hashes[i_row]);
-            }
-        }
     }
 }
 
@@ -568,18 +545,20 @@ void JoinPartition::AppendInactiveProbeBatch(
  * @tparam build_table_outer
  * @tparam probe_table_outer
  * @tparam non_equi_condition
- * @param cond_func Condition function to use. `nullptr` for the all-equality
- * conditions case.
+ * @param cond_func Condition function to use. `nullptr` for the
+ * all-equality conditions case.
  * @param[in, out] partition Partition that this row belongs to.
  *  NOTE: This function assumes that the partition is already pinned.
- * @param i_row Row index in partition->probe_table to produce the output for,
- * @param[in, out] build_idxs Build table indices for the output. This will be
- * updated in place.
- * @param[in, out] probe_idxs Probe table indices for the output. This will be
- * updated in place.
+ * @param i_row Row index in partition->probe_table to produce the output
+ * for,
+ * @param[in, out] build_idxs Build table indices for the output. This will
+ * be updated in place.
+ * @param[in, out] probe_idxs Probe table indices for the output. This will
+ * be updated in place.
  *
- * The rest of the parameters are output of get_gen_cond_data_ptrs on the build
- * and probe table and are only relevant for the condition function case:
+ * The rest of the parameters are output of get_gen_cond_data_ptrs on the
+ * build and probe table and are only relevant for the condition function
+ * case:
  * @param build_table_info_ptrs
  * @param probe_table_info_ptrs
  * @param build_col_ptrs
@@ -606,7 +585,8 @@ inline void handle_probe_input_for_partition(
         }
         return;
     }
-    // TODO Pass pinned groups_offsets vector instead of pinning for each row.
+    // TODO Pass pinned groups_offsets vector instead of pinning for each
+    // row.
     auto& partition_groups_offsets_ = partition->groups_offsets_guard.value();
     const size_t group_start_idx =
         (*partition_groups_offsets_)[iter->second - 1];
@@ -651,17 +631,17 @@ inline void handle_probe_input_for_partition(
 /**
  * @brief Generate output build and probe table indices
  * for the `build_table_outer` case. Essentially finds
- * all the build records that didn't match, and adds them to the output (with
- * NULL on the probe side).
+ * all the build records that didn't match, and adds them to the output
+ * (with NULL on the probe side).
  * @tparam requires_reduction Whether the build matches require a reduction
  * because the probe table is distributed but the build table is replicated.
  *
  * @param partition Join partition to produce the output for.
  *  NOTE: This function assumes that the partition is pinned.
- * @param[in, out] build_idxs Build table indices for the output. This will be
- * updated in place.
- * @param[in, out] probe_idxs Probe table indices for the output. This will be
- * updated in place.
+ * @param[in, out] build_idxs Build table indices for the output. This will
+ * be updated in place.
+ * @param[in, out] probe_idxs Probe table indices for the output. This will
+ * be updated in place.
  */
 template <bool requires_reduction>
 void generate_build_table_outer_rows_for_partition(
@@ -701,7 +681,8 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     // Raw array pointers from arrays for passing to non-equijoin condition
     std::vector<array_info*> build_table_info_ptrs;
     std::vector<array_info*> probe_table_info_ptrs;
-    // Vectors for data and null bitmaps for fast null checking from the cfunc
+    // Vectors for data and null bitmaps for fast null checking from the
+    // cfunc
     std::vector<void*> build_col_ptrs;
     std::vector<void*> probe_col_ptrs;
     std::vector<void*> build_null_bitmaps;
@@ -710,9 +691,9 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     auto probe_table_buffer_join_hashes_(
         bodo::pin(this->probe_table_buffer_join_hashes));
 
-    // Loop over chunked probe table's buffers/hashes and process one at a time
-    // At each loop iteration we mutate `this->probe_table`, so all `i_row` and
-    // `probe_idxs` indices refer only to the local chunk.
+    // Loop over chunked probe table's buffers/hashes and process one at a
+    // time At each loop iteration we mutate `this->probe_table`, so all
+    // `i_row` and `probe_idxs` indices refer only to the local chunk.
     // Therefore, adding unmatched rows from the probe table to the output
     // must be done at each iteration, while that probe table is in memory.
     // Adding unmatched rows from the build table should be done at the end.
@@ -802,10 +783,10 @@ void JoinPartition::pin() {
         this->build_table_buffer.pin();
         this->build_table_join_hashes_guard.emplace(
             this->build_table_join_hashes);
-        // 'build_hash_table', 'num_rows_in_group' and 'build_row_to_group_map'
-        // are unique_ptrs and may be reset during execution, so we
-        // shouldn't try to pin them unless they're pointing to
-        // something.
+        // 'build_hash_table', 'num_rows_in_group' and
+        // 'build_row_to_group_map' are unique_ptrs and may be reset during
+        // execution, so we shouldn't try to pin them unless they're
+        // pointing to something.
         if (this->build_hash_table.get() != nullptr) {
             this->build_hash_table_guard.emplace(*this->build_hash_table);
         }
@@ -1104,11 +1085,12 @@ void HashJoinState::SplitPartition(size_t idx) {
     }
 
     // Threshold enforcement should already be disabled in the
-    // replicated build case, so SplitPartition should never get called. We're
-    // adding this check to protect against edge cases.
+    // replicated build case, so SplitPartition should never get called.
+    // We're adding this check to protect against edge cases.
     if (!this->build_parallel) {
         throw std::runtime_error(
-            "HashJoinState::SplitPartition: We cannot split a partition when "
+            "HashJoinState::SplitPartition: We cannot split a partition "
+            "when "
             "the build table is replicated!");
     }
 
@@ -1152,11 +1134,10 @@ void HashJoinState::ResetPartitions() {
 
 void HashJoinState::AppendBuildBatchHelper(
     const std::shared_ptr<table_info>& in_table,
-    const std::shared_ptr<uint32_t[]>& join_hashes,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes) {
     if (this->partitions.size() == 1) {
-        // Fast path for the single partition case:
-        this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes);
+        // Fast path for the single partition case
+        this->partitions[0]->AppendBuildBatch<true>(in_table);
         return;
     }
     std::vector<std::vector<bool>> append_rows_by_partition(
@@ -1168,8 +1149,9 @@ void HashJoinState::AppendBuildBatchHelper(
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         bool found_partition = false;
 
-        // TODO (https://bodo.atlassian.net/browse/BSE-472) Optimize partition
-        // search by storing a tree representation of the partition space.
+        // TODO (https://bodo.atlassian.net/browse/BSE-472) Optimize
+        // partition search by storing a tree representation of the
+        // partition space.
         for (size_t i_part = 0;
              (i_part < this->partitions.size() && !found_partition); i_part++) {
             if (this->partitions[i_part]->is_in_partition(
@@ -1184,33 +1166,29 @@ void HashJoinState::AppendBuildBatchHelper(
                 "any matching partition for row!");
         }
     }
-
-    // Insert into partition 0:
-    this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes,
+    this->partitions[0]->AppendBuildBatch<true>(in_table,
                                                 append_rows_by_partition[0]);
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
         this->partitions[i_part]->AppendBuildBatch<false>(
-            in_table, join_hashes, append_rows_by_partition[i_part]);
+            in_table, append_rows_by_partition[i_part]);
     }
 }
 
 void HashJoinState::AppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
-    const std::shared_ptr<uint32_t[]>& join_hashes,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes) {
     while (true) {
         try {
-            this->AppendBuildBatchHelper(in_table, join_hashes,
-                                         partitioning_hashes);
+            this->AppendBuildBatchHelper(in_table, partitioning_hashes);
             break;
         } catch (
             bodo::OperatorBufferPool::OperatorPoolThresholdExceededError&) {
             // Split the 0th partition into 2 in case of an
             // OperatorPoolThresholdExceededError. This will always succeed
-            // since it creates one active and another inactive partition. The
-            // new active partition can only be as large as the original
-            // partition, and since threshold enforcement is disabled, it should
-            // fit in memory.
+            // since it creates one active and another inactive partition.
+            // The new active partition can only be as large as the original
+            // partition, and since threshold enforcement is disabled, it
+            // should fit in memory.
             this->SplitPartition(0);
         }
     }
@@ -1218,13 +1196,11 @@ void HashJoinState::AppendBuildBatch(
 
 void HashJoinState::AppendBuildBatchHelper(
     const std::shared_ptr<table_info>& in_table,
-    const std::shared_ptr<uint32_t[]>& join_hashes,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes,
     const std::vector<bool>& append_rows) {
     if (this->partitions.size() == 1) {
         // Fast path for the single partition case
-        this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes,
-                                                    append_rows);
+        this->partitions[0]->AppendBuildBatch<true>(in_table, append_rows);
         return;
     }
 
@@ -1257,34 +1233,31 @@ void HashJoinState::AppendBuildBatchHelper(
             }
         }
     }
-
-    this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes,
+    this->partitions[0]->AppendBuildBatch<true>(in_table,
                                                 append_rows_by_partition[0]);
-
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
         this->partitions[i_part]->AppendBuildBatch<false>(
-            in_table, join_hashes, append_rows_by_partition[i_part]);
+            in_table, append_rows_by_partition[i_part]);
     }
 }
 
 void HashJoinState::AppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
-    const std::shared_ptr<uint32_t[]>& join_hashes,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes,
     const std::vector<bool>& append_rows) {
     while (true) {
         try {
-            this->AppendBuildBatchHelper(in_table, join_hashes,
-                                         partitioning_hashes, append_rows);
+            this->AppendBuildBatchHelper(in_table, partitioning_hashes,
+                                         append_rows);
             break;
         } catch (
             bodo::OperatorBufferPool::OperatorPoolThresholdExceededError&) {
             // Split the 0th partition into 2 in case of an
             // OperatorPoolThresholdExceededError. This will always succeed
-            // since it creates one active and another inactive partition. The
-            // new active partition can only be as large as the original
-            // partition, and since threshold enforcement is disabled, it should
-            // fit in memory.
+            // since it creates one active and another inactive partition.
+            // The new active partition can only be as large as the original
+            // partition, and since threshold enforcement is disabled, it
+            // should fit in memory.
             this->SplitPartition(0);
         }
     }
@@ -1324,7 +1297,8 @@ void HashJoinState::InitOutputBuffer(
                 build_na_table_chunk, this->dummy_probe_table, build_idxs,
                 probe_idxs, build_kept_cols, probe_kept_cols);
             // We don't need to clear probe_idxs since in the next iteration
-            // we will just resize it (and contents don't need to be changed).
+            // we will just resize it (and contents don't need to be
+            // changed).
             build_idxs.clear();
             // 'build_na_table_chunk' will go out of scope and be freed
             // automatically here.
@@ -1342,9 +1316,9 @@ void HashJoinState::FinalizeBuild() {
     // Finalize all the partitions and split them as needed:
     size_t total_rows = 0;
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
-        // TODO Add logic to check if partition is too big (build_table_buffer
-        // size + approximate hash table size) and needs to be repartitioned
-        // upfront.
+        // TODO Add logic to check if partition is too big
+        // (build_table_buffer size + approximate hash table size) and needs
+        // to be repartitioned upfront.
 
         while (true) {
             try {
@@ -1354,7 +1328,8 @@ void HashJoinState::FinalizeBuild() {
                 this->partitions[i_part]->pin();
                 // Finalize the partition (transfer data from
                 // Chunked buffer to contiguous buffer, build
-                // hash table, build groups, create matched_outer bitmap, etc.)
+                // hash table, build groups, create matched_outer bitmap,
+                // etc.)
                 this->partitions[i_part]->FinalizeBuild();
                 total_rows += this->partitions[i_part]
                                   ->build_table_buffer.data_table->nrows();
@@ -1363,13 +1338,14 @@ void HashJoinState::FinalizeBuild() {
                 break;
             } catch (
                 bodo::OperatorBufferPool::OperatorPoolThresholdExceededError&) {
-                // Split the partition into 2. This will always succeed. If the
-                // partition is inactive, we create 2 new inactive partitions
-                // that take up no memory from the OperatorBufferPool. If the
-                // partition is active, it creates one active and another
-                // inactive partition. The new active partition can only be as
-                // large as the original partition, and since threshold
-                // enforcement is disabled, it should fit in memory just fine.
+                // Split the partition into 2. This will always succeed. If
+                // the partition is inactive, we create 2 new inactive
+                // partitions that take up no memory from the
+                // OperatorBufferPool. If the partition is active, it
+                // creates one active and another inactive partition. The
+                // new active partition can only be as large as the original
+                // partition, and since threshold enforcement is disabled,
+                // it should fit in memory just fine.
                 this->SplitPartition(i_part);
             }
         }
@@ -1516,8 +1492,8 @@ std::shared_ptr<table_info> filter_na_values(
     // For appending NAs in outer join.
     std::vector<bool> append_nas(in_table->nrows(), false);
     // If we have a replicated build table without a replicated probe table.
-    // then we only add a fraction of NA rows to the output. Otherwise we add
-    // all rows.
+    // then we only add a fraction of NA rows to the output. Otherwise we
+    // add all rows.
     const bool add_all =
         join_state->build_parallel || !join_state->probe_parallel;
     int n_pes, myrank;
@@ -1539,8 +1515,8 @@ std::shared_ptr<table_info> filter_na_values(
         return in_table;
     } else {
         if (build_table_outer) {
-            // If have an outer join we must push the NA values directly to the
-            // output, not just filter them.
+            // If have an outer join we must push the NA values directly to
+            // the output, not just filter them.
             join_state->build_na_key_buffer.AppendBatch(in_table, append_nas);
         }
         return RetrieveTable(std::move(in_table), std::move(idx_list));
@@ -1568,12 +1544,13 @@ bool join_build_consume_batch(HashJoinState* join_state,
     if (join_state->build_input_finalized) {
         if (in_table->nrows() != 0) {
             throw std::runtime_error(
-                "join_build_consume_batch: Received non-empty in_table after "
+                "join_build_consume_batch: Received non-empty in_table "
+                "after "
                 "the build was already finalized!");
         }
         // Nothing left to do for build
-        // When build is finalized global is_last has been seen so no need for
-        // additional synchronization
+        // When build is finalized global is_last has been seen so no need
+        // for additional synchronization
         return true;
     }
     auto buildEvent(join_state->build_event.iteration());
@@ -1585,13 +1562,13 @@ bool join_build_consume_batch(HashJoinState* join_state,
     is_last =
         join_stream_sync_is_last(is_last, join_state->build_iter, join_state);
 
-    // Unify dictionaries to allow consistent hashing and fast key comparison
-    // using indices
-    // NOTE: key columns in build_table_buffer (of all partitions),
-    // probe_table_buffers (of all partitions), build_shuffle_buffer and
-    // probe_shuffle_buffer use the same dictionary object for consistency.
-    // Non-key DICT columns of build_table_buffer and build_shuffle_buffer also
-    // share their dictionaries and will also be unified.
+    // Unify dictionaries to allow consistent hashing and fast key
+    // comparison using indices NOTE: key columns in build_table_buffer (of
+    // all partitions), probe_table_buffers (of all partitions),
+    // build_shuffle_buffer and probe_shuffle_buffer use the same dictionary
+    // object for consistency. Non-key DICT columns of build_table_buffer
+    // and build_shuffle_buffer also share their dictionaries and will also
+    // be unified.
     in_table = join_state->UnifyBuildTableDictionaryArrays(in_table);
 
     // Dictionary hashes for the key columns which will be used for
@@ -1601,8 +1578,9 @@ bool join_build_consume_batch(HashJoinState* join_state,
 
     // Prune any rows with NA keys. If this is an build_table_outer = False,
     // then we can prune these rows from the table entirely. If
-    // build_table_outer = True then we can skip adding these rows to the hash
-    // table (as they can't match), but must write them to the Join output.
+    // build_table_outer = True then we can skip adding these rows to the
+    // hash table (as they can't match), but must write them to the Join
+    // output.
     // TODO: Have outer join skip the build table/avoid shuffling.
     if (join_state->build_table_outer) {
         in_table = filter_na_values<true>(join_state, std::move(in_table),
@@ -1612,19 +1590,15 @@ bool join_build_consume_batch(HashJoinState* join_state,
                                            join_state->n_keys);
     }
 
-    // Get hashes of the new batch (different hashes for partitioning and hash
-    // table to reduce conflict)
+    // Get hashes of the new batch (different hashes for partitioning and
+    // hash table to reduce conflict)
     // NOTE: Partition hashes need to be consistent across ranks so need to use
-    // dictionary hashes. Since we are using dictionary hashes, we don't
-    // need dictionaries to be global. In fact, hash_keys_table will ignore
-    // the dictionaries entirely when dict_hashes are provided.
+    // dictionary hashes. Since we are using dictionary hashes, we don't need
+    // dictionaries to be global. In fact, hash_keys_table will ignore the
+    // dictionaries entirely when dict_hashes are provided.
     std::shared_ptr<uint32_t[]> batch_hashes_partition =
         hash_keys_table(in_table, join_state->n_keys, SEED_HASH_PARTITION,
                         join_state->build_parallel, false, dict_hashes);
-    std::shared_ptr<uint32_t[]> batch_hashes_join =
-        hash_keys_table(in_table, join_state->n_keys, SEED_HASH_JOIN,
-                        join_state->build_parallel,
-                        /*global_dict_needed*/ false);
 
     // Add to the bloom filter.
     if (use_bloom_filter) {
@@ -1642,8 +1616,7 @@ bool join_build_consume_batch(HashJoinState* join_state,
     // Insert batch into the correct partition.
     // TODO[BSE-441]: tune initial buffer buffer size and expansion strategy
     // using heuristics (e.g. SQL planner statistics)
-    join_state->AppendBuildBatch(in_table, batch_hashes_join,
-                                 batch_hashes_partition,
+    join_state->AppendBuildBatch(in_table, batch_hashes_partition,
                                  append_row_to_build_table);
 
     append_row_to_build_table.flip();
@@ -1653,7 +1626,6 @@ bool join_build_consume_batch(HashJoinState* join_state,
         in_table, append_row_to_shuffle_table);
 
     batch_hashes_partition.reset();
-    batch_hashes_join.reset();
     in_table.reset();
 
     // If the build table is small enough, broadcast it to all ranks
@@ -1681,17 +1653,19 @@ bool join_build_consume_batch(HashJoinState* join_state,
                 // AppendBuildTable or FinalizeBuild calls.
                 join_state->DisablePartitioning();
 
-                // We have decided to do a broadcast join. To do this we will
-                // execute the following steps:
+                // We have decided to do a broadcast join. To do this we
+                // will execute the following steps:
                 //
-                // 1. Combine the shuffle buffer into the existing partition.
-                // This is necessary so we can shuffle a single table.
+                // 1. Combine the shuffle buffer into the existing
+                // partition. This is necessary so we can shuffle a single
+                // table.
                 //
                 // 2. Broadcast the table across all ranks with allgatherv.
                 //
-                // 3. Clear the existing JoinPartition state. This is necessary
-                // because the allgatherv includes rows that we have already
-                // processed and we need to avoid processing them twice.
+                // 3. Clear the existing JoinPartition state. This is
+                // necessary because the allgatherv includes rows that we
+                // have already processed and we need to avoid processing
+                // them twice.
                 //
                 // 4. Insert the entire table into the new partition.
 
@@ -1708,21 +1682,16 @@ bool join_build_consume_batch(HashJoinState* join_state,
                     join_state->build_shuffle_buffer->data_table,
                     join_state->n_keys, SEED_HASH_PARTITION, false, false,
                     dict_hashes);
-                batch_hashes_join = hash_keys_table(
-                    join_state->build_shuffle_buffer->data_table,
-                    join_state->n_keys, SEED_HASH_JOIN, false,
-                    /*global_dict_needed*/ false);
                 join_state->AppendBuildBatch(
                     join_state->build_shuffle_buffer->data_table,
-                    batch_hashes_join, batch_hashes_partition);
+                    batch_hashes_partition);
 
                 // Free the hashes
                 batch_hashes_partition.reset();
-                batch_hashes_join.reset();
                 // Reset the build shuffle buffer. This will also
-                // reset the dictionaries to point to the shared dictionaries
-                // and reset the dictionary related flags.
-                // This is crucial for correctness.
+                // reset the dictionaries to point to the shared
+                // dictionaries and reset the dictionary related flags. This
+                // is crucial for correctness.
                 join_state->build_shuffle_buffer->Reset();
 
                 // Step 2: Broadcast the table.
@@ -1755,18 +1724,14 @@ bool join_build_consume_batch(HashJoinState* join_state,
                 batch_hashes_partition = hash_keys_table(
                     gathered_table, join_state->n_keys, SEED_HASH_PARTITION,
                     false, false, dict_hashes);
-                batch_hashes_join = hash_keys_table(
-                    gathered_table, join_state->n_keys, SEED_HASH_JOIN, false,
-                    /*global_dict_needed*/ false);
 
                 if (use_bloom_filter) {
                     join_state->global_bloom_filter->AddAll(
                         batch_hashes_partition, 0, gathered_table->nrows());
                 }
-                join_state->AppendBuildBatch(gathered_table, batch_hashes_join,
+                join_state->AppendBuildBatch(gathered_table,
                                              batch_hashes_partition);
                 batch_hashes_partition.reset();
-                batch_hashes_join.reset();
                 gathered_table.reset();
             }
         }
@@ -1809,24 +1774,19 @@ bool join_build_consume_batch(HashJoinState* join_state,
         // unify dictionaries to allow consistent hashing and fast key
         // comparison using indices
         new_data = join_state->UnifyBuildTableDictionaryArrays(new_data);
-        // compute hashes of the new data
-        std::shared_ptr<uint32_t[]> batch_hashes_join =
-            hash_keys_table(new_data, join_state->n_keys, SEED_HASH_JOIN,
-                            join_state->build_parallel, false);
         dict_hashes = join_state->GetDictionaryHashesForKeys();
-        // NOTE: Partition hashes need to be consistent across ranks, so need to
-        // use dictionary hashes. Since we are using dictionary hashes, we don't
-        // need dictionaries to be global. In fact, hash_keys_table will ignore
-        // the dictionaries entirely when dict_hashes are provided.
+        // NOTE: Partition hashes need to be consistent across ranks, so
+        // need to use dictionary hashes. Since we are using dictionary
+        // hashes, we don't need dictionaries to be global. In fact,
+        // hash_keys_table will ignore the dictionaries entirely when
+        // dict_hashes are provided.
         std::shared_ptr<uint32_t[]> batch_hashes_partition =
             hash_keys_table(new_data, join_state->n_keys, SEED_HASH_PARTITION,
                             join_state->build_parallel,
                             /*global_dict_needed*/ false, dict_hashes);
 
         // Add new batch of data to partitions (bulk insert)
-        join_state->AppendBuildBatch(new_data, batch_hashes_join,
-                                     batch_hashes_partition);
-        batch_hashes_join.reset();
+        join_state->AppendBuildBatch(new_data, batch_hashes_partition);
         batch_hashes_partition.reset();
     }
 
@@ -1847,14 +1807,14 @@ bool join_build_consume_batch(HashJoinState* join_state,
  *
  * @param join_state join state pointer
  * @param in_table probe table batch
- * @param build_kept_cols Which columns to generate in the output on the build
- * side.
- * @param probe_kept_cols Which columns to generate in the output on the probe
- * side.
+ * @param build_kept_cols Which columns to generate in the output on the
+ * build side.
+ * @param probe_kept_cols Which columns to generate in the output on the
+ * probe side.
  * @param is_last is last batch
  * @param parallel parallel flag
- * @return updated global is_last with the possibility of false positives due
- * to iterations between syncs
+ * @return updated global is_last with the possibility of false positives
+ * due to iterations between syncs
  */
 template <bool build_table_outer, bool probe_table_outer,
           bool non_equi_condition, bool use_bloom_filter>
@@ -1866,12 +1826,13 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     if (join_state->probe_input_finalized) {
         if (in_table->nrows() != 0) {
             throw std::runtime_error(
-                "join_probe_consume_batch: Received non-empty in_table after "
+                "join_probe_consume_batch: Received non-empty in_table "
+                "after "
                 "the probe was already finalized!");
         }
         // No processing left.
-        // When probe is finalized global is_last has been seen so no need for
-        // additional synchronization
+        // When probe is finalized global is_last has been seen so no need
+        // for additional synchronization
         return true;
     }
     auto probeEvent(join_state->probe_event.iteration());
@@ -1895,8 +1856,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     // in the first iteration and is a NOP in all future iterations.
     active_partition->pin();
 
-    // Unify dictionaries to allow consistent hashing and fast key comparison
-    // using indices
+    // Unify dictionaries to allow consistent hashing and fast key
+    // comparison using indices.
     // NOTE: key columns in build_table_buffer (of all partitions),
     // probe_table_buffers (of all partitions), build_shuffle_buffer and
     // probe_shuffle_buffer use the same dictionary object for consistency.
@@ -1949,8 +1910,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     std::vector<bool> append_to_probe_inactive_partition(in_table->nrows(),
                                                          false);
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-        // If just build_parallel = False then we have a broadcast join on the
-        // build side. So process all rows.
+        // If just build_parallel = False then we have a broadcast join on
+        // the build side. So process all rows.
         //
         // If just probe_parallel = False and build_parallel = True then we
         // still need to check batch_hashes_partition to know which rows to
@@ -1963,8 +1924,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         bool check_bloom_filter = shuffle_possible || process_on_rank;
         // Check bloom filter
         if (use_bloom_filter && check_bloom_filter) {
-            // We use batch_hashes_partition to use consistent hashing across
-            // ranks for dict-encoded string arrays
+            // We use batch_hashes_partition to use consistent hashing
+            // across ranks for dict-encoded string arrays
             if (!join_state->global_bloom_filter->Find(
                     batch_hashes_partition[i_row])) {
                 join_state->num_bloom_filter_misses++;
@@ -1978,8 +1939,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         }
         if (process_on_rank) {
             join_state->num_processed_probe_table_rows++;
-            // TODO Add a fast path without this check for the single partition
-            // case.
+            // TODO Add a fast path without this check for the single
+            // partition case.
             if (active_partition->is_in_partition(
                     batch_hashes_partition[i_row])) {
                 handle_probe_input_for_partition<
@@ -2034,7 +1995,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         for (size_t i = 0; i < shuffle_table->ncols(); i++) {
             std::shared_ptr<array_info> arr = shuffle_table->columns[i];
             if (arr->arr_type == bodo_array_type::DICT) {
-                make_dictionary_global_and_unique(arr, /*is_parallel*/ true);
+                make_dictionary_global_and_unique(arr,
+                                                  /*is_parallel*/ true);
             }
         }
 
@@ -2161,8 +2123,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         join_state->partitions[0].reset();
         active_partition.reset();
         // Finalize and produce output from the inactive partitions.
-        // This will pin the partitions (one at a time), generate all the output
-        // from it and then free it.
+        // This will pin the partitions (one at a time), generate all the
+        // output from it and then free it.
         join_state->FinalizeProbeForInactivePartitions<
             build_table_outer, probe_table_outer, non_equi_condition>(
             build_kept_cols, probe_kept_cols);
@@ -2173,23 +2135,23 @@ bool join_probe_consume_batch(HashJoinState* join_state,
 }
 
 /**
- * @brief Initialize a new streaming join state for specified array types and
- * number of keys (called from Python)
+ * @brief Initialize a new streaming join state for specified array types
+ * and number of keys (called from Python)
  *
  * @param arr_c_types array types of build table columns (Bodo_CTypes ints)
  * @param n_arrs number of build table columns
  * @param n_keys number of join keys
  * @param build_table_outer whether to produce left outer join
  * @param probe_table_outer whether to produce right outer join
- * @param cond_func pointer to function that evaluates non-equality condition.
- *                  If there is no non-equality condition, this should be NULL.
+ * @param cond_func pointer to function that evaluates non-equality
+ * condition. If there is no non-equality condition, this should be NULL.
  * @param build_parallel whether the build table is distributed
  * @param probe_parallel whether the probe table is distributed
  * @param output_batch_size Batch size for reading output.
  * @param op_pool_size_bytes Size of the operator buffer pool for this join
  * operator. This is only applicable for the hash join case at this time.
- * If it's set to -1, we will use a fixed portion of the total available memory
- * (based on JOIN_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL).
+ * If it's set to -1, we will use a fixed portion of the total available
+ * memory (based on JOIN_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL).
  * @return JoinState* join state to return to Python
  */
 JoinState* join_state_init_py_entry(
@@ -2257,8 +2219,8 @@ bool join_build_consume_batch_py_entry(JoinState* join_state_,
 }
 
 /**
- * @brief Python wrapper to consume probe table batch and produce output table
- * batch
+ * @brief Python wrapper to consume probe table batch and produce output
+ * table batch
  *
  * @param join_state_ join state pointer
  * @param in_table probe table batch
@@ -2266,8 +2228,8 @@ bool join_build_consume_batch_py_entry(JoinState* join_state_,
  * @param num_kept_build_cols Length of kept_build_col_nums
  * @param kept_probe_col_nums indices of kept columns in probe table
  * @param num_kept_probe_cols Length of kept_probe_col_nums
- * @param[out] total_rows Store the number of rows in the output batch in case
- *        all columns are dead.
+ * @param[out] total_rows Store the number of rows in the output batch in
+ * case all columns are dead.
  * @param is_last is last batch
  * @param produce_output whether to produce output rows
  * @param[out] request_input whether to request input rows from preceding
@@ -2389,9 +2351,10 @@ table_info* join_probe_consume_batch_py_entry(
 #undef CONSUME_PROBE_BATCH
         }
 
-        // If after emitting the next batch we'll have more than a full batch
-        // left then we don't need to request input. This is to avoid allocating
-        // more memory than necessary and increasing cache coherence
+        // If after emitting the next batch we'll have more than a full
+        // batch left then we don't need to request input. This is to avoid
+        // allocating more memory than necessary and increasing cache
+        // coherence
         if (join_state_->output_buffer->total_remaining >
             (2 * join_state_->output_buffer->active_chunk_capacity)) {
             *request_input = false;
@@ -2404,7 +2367,8 @@ table_info* join_probe_consume_batch_py_entry(
                 new table_info(*join_state_->output_buffer->dummy_output_chunk);
         } else {
             auto [out_table_shared, chunk_size] =
-                join_state_->output_buffer->PopChunk(/*force_return*/ is_last);
+                join_state_->output_buffer->PopChunk(
+                    /*force_return*/ is_last);
             *total_rows = chunk_size;
             out_table = new table_info(*out_table_shared);
         }
@@ -2420,7 +2384,8 @@ table_info* join_probe_consume_batch_py_entry(
 }
 
 /**
- * @brief delete join state (called from Python after probe loop is finished)
+ * @brief delete join state (called from Python after probe loop is
+ * finished)
  *
  * @param join_state join state pointer to delete
  */

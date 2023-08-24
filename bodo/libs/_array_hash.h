@@ -18,7 +18,8 @@ void hash_array_combine(
     std::unique_ptr<uint32_t[]>& out_hashes, std::shared_ptr<array_info> array,
     size_t n_rows, const uint32_t seed, bool global_dict_needed,
     bool is_parallel,
-    std::shared_ptr<bodo::vector<uint32_t>> dict_hashes = nullptr);
+    std::shared_ptr<bodo::vector<uint32_t>> dict_hashes = nullptr,
+    size_t start_row_offset = 0);
 
 /**
  * Function for the computation of hashes for keys
@@ -35,6 +36,9 @@ void hash_array_combine(
  * arrays with incompatible dictionaries).
  * NOTE: dict_hashes vector has nullptr elements for other array types (length
  * is number of key columns).
+ * @param start_row_offset Index of the first row to hash. Defaults to 0. This
+ * is useful in streaming hash join when we want to compute hashes incrementally
+ * on the tables.
  * @return hash keys
  *
  */
@@ -42,7 +46,8 @@ std::unique_ptr<uint32_t[]> hash_keys(
     std::vector<std::shared_ptr<array_info>> const& key_arrs,
     const uint32_t seed, bool is_parallel, bool global_dict_needed = true,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
-        dict_hashes = nullptr);
+        dict_hashes = nullptr,
+    size_t start_row_offset = 0);
 
 std::unique_ptr<uint32_t[]> coherent_hash_keys(
     std::vector<std::shared_ptr<array_info>> const& key_arrs,
@@ -53,7 +58,8 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
                 std::shared_ptr<array_info> array, size_t n_rows,
                 const uint32_t seed, bool is_parallel, bool global_dict_needed,
                 bool use_murmurhash = false,
-                std::shared_ptr<bodo::vector<uint32_t>> dict_hashes = nullptr);
+                std::shared_ptr<bodo::vector<uint32_t>> dict_hashes = nullptr,
+                size_t start_row_offset = 0);
 
 /**
  * Function for the getting table keys and returning its hashes
@@ -72,6 +78,9 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
  * arrays with incompatible dictionaries).
  * NOTE: dict_hashes vector has nullptr elements for other array types (length
  * is number of key columns).
+ * @param start_row_offset Index of the first row to hash. Defaults to 0. This
+ * is useful in streaming hash join when we want to compute hashes incrementally
+ * on the tables.
  * @return hash keys
  *
  */
@@ -79,12 +88,13 @@ inline std::unique_ptr<uint32_t[]> hash_keys_table(
     std::shared_ptr<table_info> in_table, size_t num_keys, uint32_t seed,
     bool is_parallel, bool global_dict_needed = true,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
-        dict_hashes = nullptr) {
+        dict_hashes = nullptr,
+    size_t start_row_offset = 0) {
     tracing::Event ev("hash_keys_table", is_parallel);
     std::vector<std::shared_ptr<array_info>> key_arrs(
         in_table->columns.begin(), in_table->columns.begin() + num_keys);
     return hash_keys(key_arrs, seed, is_parallel, global_dict_needed,
-                     dict_hashes);
+                     dict_hashes, start_row_offset);
 }
 
 inline std::unique_ptr<uint32_t[]> coherent_hash_keys_table(
