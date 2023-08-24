@@ -346,17 +346,46 @@ def test_fft_error(memory_leak_check):
         bodo.jit(impl)(np.array([1, 2, 3, 4, 5], dtype=np.int64))
 
 
-@pytest.mark.skip(reason="[BSE-938] TODO: Support np.tile for workload")
 @pytest.mark.parametrize(
     "A, reps",
     [
         pytest.param(
-            np.array([[i] for i in range(1950)]), (1, 3), id="column_replication"
+            np.array([[i] for i in range(1950)]), (1, 3), id="column_repeat-single"
+        ),
+        pytest.param(
+            np.array(np.array(range(1950)).reshape((390, 5))),
+            (1, 3),
+            id="column_repeat-multiple",
+        ),
+        pytest.param(
+            np.array([i for i in range(2048)]),
+            (1, 1),
+            id="dimension_upcast_with_transpose-a",
+        ),
+        pytest.param(
+            np.array([i for i in range(2048)]),
+            (2, 1),
+            id="dimension_upcast_with_transpose-b",
+        ),
+        pytest.param(
+            np.array([i for i in range(2048)]),
+            (3, 1),
+            id="dimension_upcast_with_transpose-c",
+        ),
+        pytest.param(
+            np.array([i for i in range(2048)]),
+            (13, 1),
+            id="dimension_upcast_with_transpose-d",
+        ),
+        pytest.param(
+            np.array([i for i in range(2048)]),
+            (47, 1),
+            id="dimension_upcast_with_transpose-e",
         ),
         pytest.param(
             np.array([i for i in range(2048)]),
             (1950, 1),
-            id="dimension_upcast_with_transpose",
+            id="dimension_upcast_with_transpose-f",
         ),
     ],
 )
@@ -368,11 +397,30 @@ def test_tile(A, reps, memory_leak_check):
     - Turning an (n, 1) array into an (n, 3) array
     - Turning an array of n elements into an array with dimension (m, n)
     """
+    func_text = "def impl(A):\n"
+    func_text += f"  return np.tile(A, {reps})\n"
+    loc_vars = {}
+    exec(func_text, {"np": np}, loc_vars)
+    impl = loc_vars["impl"]
+    check_func(impl, (A,), convert_to_nullable_float=False)
 
-    def impl(A, reps):
-        return np.tile(A, reps)
 
-    check_func(impl, (A, reps), convert_to_nullable_float=False)
+def test_tile_non_constant(memory_leak_check):
+    """
+    Tests the correctness of np.tile on the dimension/tuple cases tested
+    by test_tile, but where one of the elements is non-constant.
+    """
+
+    def impl1(A, n):
+        return np.tile(A, (1, n))
+
+    def impl2(A, n):
+        return np.tile(A, (n, 1))
+
+    A1 = np.linspace(0, 1, 11).reshape((11, 1))
+    check_func(impl1, (A1, 7), convert_to_nullable_float=False)
+    A2 = np.linspace(0, 1, 11)
+    check_func(impl2, (A2, 7), convert_to_nullable_float=False)
 
 
 @pytest.mark.skip(
