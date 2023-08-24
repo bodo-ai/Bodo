@@ -1,8 +1,5 @@
 package org.apache.calcite.rex
 
-import java.math.BigDecimal
-import java.util.*
-import java.util.regex.Pattern
 import org.apache.calcite.plan.RelOptPredicateList
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.type.BasicSqlType
@@ -11,26 +8,41 @@ import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.Bug
 import org.apache.calcite.util.DateString
 import org.apache.calcite.util.TimestampString
+import java.math.BigDecimal
+import java.util.*
+import java.util.regex.Pattern
 
 /**
  * Bodo's implementation of RexSimplifier
  * with extended support for Bodo specific functions. This must be placed
  * in the same package, so we can override package private methods.
  */
-class BodoRexSimplify(rexBuilder: RexBuilder, predicates: RelOptPredicateList,
-                      defaultUnknownAs: RexUnknownAs, predicateElimination: Boolean,
-                      paranoid: Boolean, executor: RexExecutor
-): RexSimplify(rexBuilder, predicates, defaultUnknownAs, predicateElimination, paranoid, executor) {
+class BodoRexSimplify(
+    rexBuilder: RexBuilder,
+    predicates: RelOptPredicateList,
+    defaultUnknownAs: RexUnknownAs,
+    predicateElimination: Boolean,
+    paranoid: Boolean,
+    executor: RexExecutor,
+) : RexSimplify(rexBuilder, predicates, defaultUnknownAs, predicateElimination, paranoid, executor) {
 
     constructor(rexBuilder: RexBuilder, predicates: RelOptPredicateList, executor: RexExecutor) : this(rexBuilder, predicates, RexUnknownAs.UNKNOWN, true, false, executor)
 
     /** Returns a RexSimplify the same as this but with a specified
      * [.predicates] value.  */
     override fun withPredicates(predicates: RelOptPredicateList): RexSimplify {
-        return if (predicates === this.predicates) this else BodoRexSimplify(
-            rexBuilder, predicates, defaultUnknownAs,
-            predicateElimination, paranoid, executor
-        )
+        return if (predicates === this.predicates) {
+            this
+        } else {
+            BodoRexSimplify(
+                rexBuilder,
+                predicates,
+                defaultUnknownAs,
+                predicateElimination,
+                paranoid,
+                executor,
+            )
+        }
     }
 
     /** Returns a RexSimplify the same as this but which verifies that
@@ -39,10 +51,18 @@ class BodoRexSimplify(rexBuilder: RexBuilder, predicates: RelOptPredicateList,
      * @see .verify
      */
     override fun withParanoid(paranoid: Boolean): RexSimplify {
-        return if (paranoid == this.paranoid) this else BodoRexSimplify(
-            rexBuilder, predicates, defaultUnknownAs,
-            predicateElimination, paranoid, executor
-        )
+        return if (paranoid == this.paranoid) {
+            this
+        } else {
+            BodoRexSimplify(
+                rexBuilder,
+                predicates,
+                defaultUnknownAs,
+                predicateElimination,
+                paranoid,
+                executor,
+            )
+        }
     }
 
     /** Returns a RexSimplify the same as this but with a specified
@@ -52,11 +72,19 @@ class BodoRexSimplify(rexBuilder: RexBuilder, predicates: RelOptPredicateList,
      * This is introduced temporarily, until
      * [[CALCITE-2401] is fixed][Bug.CALCITE_2401_FIXED].
      */
-     override fun withPredicateElimination(predicateElimination: Boolean): RexSimplify {
-        return if (predicateElimination == this.predicateElimination) this else BodoRexSimplify(
-            rexBuilder, predicates, defaultUnknownAs,
-            predicateElimination, paranoid, executor
-        )
+    override fun withPredicateElimination(predicateElimination: Boolean): RexSimplify {
+        return if (predicateElimination == this.predicateElimination) {
+            this
+        } else {
+            BodoRexSimplify(
+                rexBuilder,
+                predicates,
+                defaultUnknownAs,
+                predicateElimination,
+                paranoid,
+                executor,
+            )
+        }
     }
 
     private fun stringLiteralToDate(call: RexCall, literal: RexLiteral): RexNode {
@@ -243,7 +271,6 @@ class BodoRexSimplify(rexBuilder: RexBuilder, predicates: RelOptPredicateList,
             call
         }
     }
-
 
     /**
      * Implementation of simplifyUnknownAs where we simplify custom Bodo functions
