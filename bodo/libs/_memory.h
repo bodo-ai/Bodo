@@ -225,7 +225,7 @@ class StorageManager {
      * @return true If allocation can be spilled to it
      * @return false If allocation can not be spilled here
      */
-    bool CanSpillTo(uint64_t amount) {
+    bool CanSpillTo(uint64_t amount) const {
         return options->usable_size < 0 ||
                (curr_spilled_bytes + amount) <=
                    static_cast<uint64_t>(options->usable_size);
@@ -238,7 +238,7 @@ class StorageManager {
      * @param diff The number of bytes added or removed from this
      * storage location.
      */
-    void UpdateSpilledBytes(int64_t diff) { curr_spilled_bytes += diff; }
+    void UpdateSpilledBytes(int64_t diff) { this->curr_spilled_bytes += diff; }
 
     /// @brief Get the next available block id for this storage location
     uint64_t GetNewBlockID() { return this->block_id_counter++; }
