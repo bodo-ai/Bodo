@@ -195,9 +195,12 @@ def overload_null_astype(A, dtype, copy=True):
         nb_dtype = new_dtype
     else:
         nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
-    if isinstance(
-        nb_dtype,
-        (bodo.libs.int_arr_ext.IntDtype, bodo.libs.float_arr_ext.FloatDtype),
+    if (
+        isinstance(
+            nb_dtype,
+            (bodo.libs.int_arr_ext.IntDtype, bodo.libs.float_arr_ext.FloatDtype),
+        )
+        or nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype
     ):
         dtype = nb_dtype.dtype
     else:
