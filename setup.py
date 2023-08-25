@@ -292,6 +292,7 @@ ext_metadata["sources"] += [
     "bodo/libs/_lead_lag.cpp",
     "bodo/libs/_crypto_funcs.cpp",
     "bodo/libs/_memory.cpp",
+    "bodo/libs/_memory_budget.cpp",
     "bodo/libs/_murmurhash3.cpp",
     "bodo/libs/_quantile_alg.cpp",
     "bodo/libs/_shuffle.cpp",

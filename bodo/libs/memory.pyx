@@ -33,24 +33,24 @@ cdef class BufferPoolAllocation:
     """
 
     # Pointer to the allocated memory region
-    cdef uint8_t* ptr    
+    cdef uint8_t* ptr
     # Size of the allocation
     cdef int size
     # Alignment for the allocation
     cdef int alignment
-    
+
     def __init__(self):
         """
         Empty constructor.
         """
         pass
-    
+
     cdef void set_ptr(self, uint8_t* ptr):
         """
         Set the pointer to the memory region.
         """
         self.ptr = ptr
-    
+
     cdef void set_size(self, int size):
         """
         Set allocation size.
@@ -74,7 +74,7 @@ cdef class BufferPoolAllocation:
         new_object.set_size(other.size)
         new_object.set_alignment(other.alignment)
         return new_object
-    
+
     @staticmethod
     def copy(other: BufferPoolAllocation) -> BufferPoolAllocation:
         """
@@ -84,7 +84,7 @@ cdef class BufferPoolAllocation:
         cdef:
             new_object = BufferPoolAllocation.ccopy(other)
         return new_object
-    
+
     @property
     def alignment(self):
         return self.alignment
@@ -115,7 +115,7 @@ cdef class BufferPoolAllocation:
         in memory (by checking the swip ptr)
         """
         return self.get_ptr_as_int() > 0
-    
+
     cdef int64_t c_swip_as_int(self):
         return <int64_t> &self.ptr
 
@@ -142,7 +142,7 @@ cdef class BufferPoolAllocation:
         Inverse of __eq__.
         """
         return not self.__eq__(other)
-    
+
     def has_same_ptr(self, other: BufferPoolAllocation) -> bool:
         """
         Check if this and 'other' and point to the same memory region.
@@ -160,7 +160,7 @@ cdef class BufferPoolAllocation:
 
     def read_bytes(self, n_bytes: int) -> bytes:
         """
-        Read n bytes of the allocation 
+        Read n bytes of the allocation
         """
         contents = self.read(n_bytes)
         return contents
@@ -189,14 +189,14 @@ cdef class SizeClass(_Weakrefable):
     # All APIs will use this to build wrappers
     # around the C++ class.
     cdef CSizeClass* c_size_class
-    
+
     cdef void cinit(self, CSizeClass* c_size_class):
         """
         Cython helper to set the pointer to the
         C++ class.
         """
         self.c_size_class = c_size_class
-    
+
     def __init__(self, capacity, block_size):
         """
         Since this is for unit-testing purposes only,
@@ -205,7 +205,7 @@ cdef class SizeClass(_Weakrefable):
         BufferPool instance.
         """
         raise NotImplementedError
-    
+
     cdef bint c_is_in_range(self, uint8_t* ptr):
         return self.c_size_class.isInRange(ptr)
 
@@ -225,7 +225,7 @@ cdef class SizeClass(_Weakrefable):
         allocation.set_ptr(self.c_size_class.getFrameAddress(idx))
         allocation.set_size(self.c_size_class.getBlockSize())
         return allocation
-    
+
     def build_alloc_for_frame(self, idx: int) -> BufferPoolAllocation:
         """
         Create a BufferPoolAllocation instance that has the
@@ -271,7 +271,7 @@ cdef class SizeClass(_Weakrefable):
         cdef:
             int size = self.c_size_class.getBlockSize()
         return size
-    
+
     def get_num_blocks(self) -> int:
         """
         Get number of blocks/frames in this SizeClass.
@@ -279,7 +279,7 @@ cdef class SizeClass(_Weakrefable):
         cdef:
             int num_blocks = self.c_size_class.getNumBlocks()
         return num_blocks
-    
+
     def is_frame_mapped(self, idx: int) -> bool:
         """
         Check if frame at index 'idx' is mapped.
@@ -287,7 +287,7 @@ cdef class SizeClass(_Weakrefable):
         cdef:
             bint is_mapped = self.c_size_class.isFrameMapped(idx)
         return is_mapped
-    
+
     def is_frame_pinned(self, idx: int) -> bool:
         """
         Check if frame at index 'idx' is pined.
@@ -295,7 +295,7 @@ cdef class SizeClass(_Weakrefable):
         cdef:
             bint is_pinned = self.c_size_class.isFramePinned(idx)
         return is_pinned
-        
+
 
 cdef class StorageOptions(_Weakrefable):
     """
@@ -324,7 +324,7 @@ cdef class StorageOptions(_Weakrefable):
     @property
     def location(self):
         return deref(self.options).location
-    
+
     @property
     def usable_size(self):
         return deref(self.options).usable_size
@@ -351,7 +351,7 @@ cdef class BufferPoolOptions(_Weakrefable):
         CBufferPoolOptions options
 
     def __init__(self, *,
-                 memory_size=None, 
+                 memory_size=None,
                  min_size_class=None,
                  max_num_size_classes=None,
                  ignore_max_limit_during_allocation=None,
@@ -389,15 +389,15 @@ cdef class BufferPoolOptions(_Weakrefable):
 
     cdef void cinit(self, CBufferPoolOptions options):
         self.options = options
-    
+
     @property
     def memory_size(self):
         return self.options.memory_size
-    
+
     @property
     def min_size_class(self):
         return self.options.min_size_class
-    
+
     @property
     def max_num_size_classes(self):
         return self.options.max_num_size_classes
@@ -512,14 +512,14 @@ cdef class BufferPool(IBufferPool):
         BufferPool.
         """
         return deref(self.c_pool).get_bytes_allocated()
-    
+
     def num_size_classes(self) -> int:
         """
         Get the number of SizeClass-es created by the
         BufferPool.
         """
         return deref(self.c_pool).num_size_classes()
-    
+
     def max_memory(self) -> int:
         """
         Get the max-memory usage of the BufferPool
@@ -529,23 +529,23 @@ cdef class BufferPool(IBufferPool):
 
     def is_spilling_enabled(self) -> c_bool:
         return deref(self.c_pool).is_spilling_enabled()
-    
+
     def release_unused(self):
         """
         NOP in this case
         """
         pass
-    
+
     @property
     def backend_name(self) -> str:
         """
         Get the memory backend. Returns 'bodo'.
         """
         return frombytes(deref(self.c_pool).get_backend_name())
-    
+
     cdef CBufferPool* get_pool_ptr(self):
         return self.c_pool.get()
-    
+
     ## The functions below are only for unit-testing purposes
     ## and might not be safe for regular usage.
 
@@ -577,10 +577,10 @@ cdef class BufferPool(IBufferPool):
         allocation.size = size
         allocation.alignment = alignment
         return allocation
-    
+
     cdef void c_free(self, BufferPoolAllocation allocation) noexcept:
         deref(self.c_pool).Free(allocation.ptr, allocation.size, allocation.alignment)
-    
+
     cdef void c_reallocate(self, int new_size, BufferPoolAllocation allocation) except *:
         check_status(deref(self.c_pool).Reallocate(allocation.size, new_size, allocation.alignment, &(allocation.ptr)))
         allocation.size = new_size
@@ -590,14 +590,14 @@ cdef class BufferPool(IBufferPool):
 
     cdef void c_unpin(self, BufferPoolAllocation allocation) noexcept:
         deref(self.c_pool).Unpin(allocation.ptr, allocation.size, allocation.alignment)
-    
+
     cdef c_bool c_is_pinned(self, BufferPoolAllocation allocation) except *:
         return deref(self.c_pool).IsPinned(allocation.ptr, allocation.size, allocation.alignment)
 
     def allocate(self, size, alignment=64) -> BufferPoolAllocation:
         """
         Wrapper around c_allocate. We encode the information
-        from the allocation in a BufferPoolAllocation object. 
+        from the allocation in a BufferPoolAllocation object.
         """
         return self.c_allocate(size, alignment)
 
@@ -609,7 +609,7 @@ cdef class BufferPool(IBufferPool):
         and allocated size.
         """
         self.c_free(allocation)
-    
+
     def reallocate(self, new_size: int, allocation: BufferPoolAllocation):
         """
         Resize a previous allocation to 'new_size' bytes.
@@ -629,7 +629,7 @@ cdef class BufferPool(IBufferPool):
         it to be spilled if storage managers are provided
         """
         self.c_unpin(allocation)
-    
+
     def is_pinned(self, allocation: BufferPoolAllocation) -> bool:
         """
         Check if an allocation is pinned.
@@ -639,7 +639,7 @@ cdef class BufferPool(IBufferPool):
 
     cdef uint64_t c_get_smallest_size_class_size(self):
         return deref(self.c_pool).GetSmallestSizeClassSize()
-    
+
     def get_smallest_size_class_size(self) -> int:
         """
         Get the size of the smallest SizeClass.
@@ -716,9 +716,9 @@ cdef class OperatorBufferPool(IBufferPool):
     # C++ instance of the OperatorBufferPool
     cdef shared_ptr[COperatorBufferPool] c_pool
 
-    def __init__(self, 
+    def __init__(self,
                  int max_pinned_size_bytes,
-                 parent_pool: BufferPool = None, 
+                 parent_pool: BufferPool = None,
                  double error_threshold = 0.5):
         """
         Create a new OperatorBufferPool which can have
@@ -732,9 +732,9 @@ cdef class OperatorBufferPool(IBufferPool):
         """
         if parent_pool is None:
             parent_pool = BufferPool.default()
-        
-        self.c_pool = make_shared[COperatorBufferPool](max_pinned_size_bytes, 
-                                                       parent_pool.c_pool, 
+
+        self.c_pool = make_shared[COperatorBufferPool](max_pinned_size_bytes,
+                                                       parent_pool.c_pool,
                                                        error_threshold)
 
     @property
@@ -743,21 +743,21 @@ cdef class OperatorBufferPool(IBufferPool):
         Getter for the 'max_pinned_size_bytes' attribute.
         """
         return (deref(self.c_pool)).get_max_pinned_size_bytes()
-    
+
     @property
     def memory_error_threshold(self) -> int:
         """
         Getter for the 'memory_error_threshold' attribute.
         """
         return (deref(self.c_pool)).get_memory_error_threshold()
-    
+
     @property
     def threshold_enforcement_enabled(self) -> bool:
         """
         Getter for the 'threshold_enforcement_enabled' attribute.
         """
         return (deref(self.c_pool)).ThresholdEnforcementEnabled()
-    
+
     @property
     def parent_pool(self) -> BufferPool:
         """
@@ -772,10 +772,10 @@ cdef class OperatorBufferPool(IBufferPool):
         # Set the shared_ptr for the instance.
         parent_pool.cinit(parent_pool_shared_ptr)
         return parent_pool
-    
+
     cdef void c_enable_threshold_enforcement(self) except *:
         (deref(self.c_pool)).EnableThresholdEnforcement()
-    
+
     def enable_threshold_enforcement(self):
         """
         Enable threshold enforcement for this OperatorBufferPool.
@@ -796,7 +796,7 @@ cdef class OperatorBufferPool(IBufferPool):
     ## BufferPool and OperatorBufferPool, but Cython's support for inheritance
     ## is not great and there were a lot of conflicts/errors when trying to do
     ## that.
-    
+
     def bytes_pinned(self) -> int:
         """
         Get the number of bytes currently pinned by the
@@ -810,14 +810,14 @@ cdef class OperatorBufferPool(IBufferPool):
         OperatorBufferPool.
         """
         return deref(self.c_pool).get_bytes_allocated()
-    
+
     def max_memory(self) -> int:
         """
         Get the max-memory usage of the OperatorBufferPool
         at any point in its lifetime.
         """
         return deref(self.c_pool).get_max_memory()
-    
+
     @property
     def backend_name(self) -> str:
         """
@@ -841,7 +841,7 @@ cdef class OperatorBufferPool(IBufferPool):
 
     cdef void c_free(self, BufferPoolAllocation allocation) except *:
         deref(self.c_pool).Free(allocation.ptr, allocation.size, allocation.alignment)
-    
+
     cdef void c_reallocate(self, int new_size, BufferPoolAllocation allocation) except *:
         check_status(deref(self.c_pool).Reallocate(allocation.size, new_size, allocation.alignment, &(allocation.ptr)))
         allocation.size = new_size
@@ -855,7 +855,7 @@ cdef class OperatorBufferPool(IBufferPool):
     def allocate(self, size, alignment=64) -> BufferPoolAllocation:
         """
         Wrapper around c_allocate. We encode the information
-        from the allocation in a BufferPoolAllocation object. 
+        from the allocation in a BufferPoolAllocation object.
         """
         return self.c_allocate(size, alignment)
 
@@ -867,7 +867,7 @@ cdef class OperatorBufferPool(IBufferPool):
         and allocated size.
         """
         self.c_free(allocation)
-    
+
     def reallocate(self, new_size: int, allocation: BufferPoolAllocation):
         """
         Resize an allocation to 'new_size' bytes.
