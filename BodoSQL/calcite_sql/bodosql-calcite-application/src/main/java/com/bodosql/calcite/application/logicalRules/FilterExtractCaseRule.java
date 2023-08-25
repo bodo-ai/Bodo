@@ -10,6 +10,7 @@ import org.apache.calcite.rel.core.*;
 import org.apache.calcite.rel.rules.*;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.*;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.fun.*;
 import org.apache.calcite.tools.*;
 import org.immutables.value.*;
@@ -74,39 +75,88 @@ public class FilterExtractCaseRule<C extends BodoSQLReduceExpressionsRule.Config
     return caseStatements;
   }
 
+  /**
+   * Implementation of RexVisitorImpl that uses the case map and builder to remove case statements
+   * from a filter node.
+   */
+  private static class ReplaceCase extends RexShuttle {
+    private final Map<RexNode, Integer> caseMap;
+    private final RelBuilder builder;
+
+    ReplaceCase(Map<RexNode, Integer> caseMap, RelBuilder builder) {
+      super();
+      this.caseMap = caseMap;
+      this.builder = builder;
+    }
+
+    @Override
+    public RexNode visitOver(RexOver over) {
+      RexWindow window = over.getWindow();
+      // Boolean to act as a pointer to indicate if our children have changed.
+      boolean[] update = {false};
+      List<RexNode> newPartitionKeys = visitList(window.partitionKeys, update);
+      // Accumulate the order by Keys to recurse on.
+      int orderKeySize = window.orderKeys.size();
+      List<RexNode> oldKeyRexNodes = new ArrayList(orderKeySize);
+      for (int i = 0; i < orderKeySize; i++) {
+        oldKeyRexNodes.add(i, window.orderKeys.get(i).getKey());
+      }
+      List<RexNode> newKeyRexNodes = visitList(oldKeyRexNodes, update);
+      if (!update[0]) {
+        return over;
+      }
+      // Ensure the final result contains the correct collation information.
+      List<RexNode> newOrderKeys = new ArrayList<>(orderKeySize);
+      for (int i = 0; i < orderKeySize; i++) {
+        RexNode child = newKeyRexNodes.get(i);
+        Set<SqlKind> kinds = window.orderKeys.get(i).getValue();
+        if (kinds.contains(SqlKind.NULLS_FIRST)) {
+          child = builder.nullsFirst(child);
+        }
+        if (kinds.contains(SqlKind.NULLS_LAST)) {
+          child = builder.nullsLast(child);
+        }
+        if (kinds.contains(SqlKind.DESCENDING)) {
+          child = builder.desc(child);
+        }
+        newOrderKeys.add(child);
+      }
+      return builder
+          .aggregateCall(over.getAggOperator(), over.getOperands())
+          .distinct(over.isDistinct())
+          .ignoreNulls(over.ignoreNulls())
+          .over()
+          .partitionBy(newPartitionKeys)
+          .orderBy(newOrderKeys)
+          .rangeBetween(window.getLowerBound(), window.getUpperBound())
+          .toRex();
+    }
+
+    @Override
+    public RexNode visitCall(RexCall call) {
+      if (call.getOperator() instanceof SqlCaseOperator) {
+        return builder.field(caseMap.get(call));
+      }
+      // Boolean to act as a pointer to indicate if our children have changed.
+      boolean[] update = {false};
+      List<RexNode> newOperands = visitList(call.getOperands(), update);
+      if (!update[0]) {
+        return call;
+      }
+      if (call.getOperator() instanceof SqlCastFunction) {
+        // TODO: Replace with a simpler cast API instead in Calcite
+        return builder.getCluster().getRexBuilder().makeCast(call.getType(), newOperands.get(0));
+      } else {
+        return builder.call(call.getOperator(), newOperands);
+      }
+    }
+  }
+
   private static RexNode updateRexNode(
       RexNode node, Map<RexNode, Integer> caseMap, RelBuilder builder) {
     // XXX: In the future we can replace this with RexVisitorImpl
-    if (node instanceof RexCall) {
-      RexCall callNode = ((RexCall) node);
-      // If we find a case statement replace it with its
-      // new RexInputRef.
-      if (callNode.getOperator() instanceof SqlCaseOperator) {
-        return builder.field(caseMap.get(callNode));
-      }
-      // Call expressions need to have their children traversed. No other RexNodes
-      // should have children.
-      List<RexNode> oldOperands = callNode.getOperands();
-      List<RexNode> newOperands = new ArrayList<>();
-      boolean replaceNode = false;
-      for (RexNode oldOperand : oldOperands) {
-        RexNode newOperand = updateRexNode(oldOperand, caseMap, builder);
-        newOperands.add(newOperand);
-        replaceNode = replaceNode || !newOperand.equals(oldOperand);
-      }
-      if (replaceNode) {
-        if (callNode.getOperator() instanceof SqlCastFunction) {
-          // TODO: Replace with a simpler cast API instead in Calcite
-          return builder
-              .getCluster()
-              .getRexBuilder()
-              .makeCast(callNode.getType(), newOperands.get(0));
-        } else {
-          return builder.call(callNode.getOperator(), newOperands);
-        }
-      }
-    }
-    return node;
+    ReplaceCase visitor = new ReplaceCase(caseMap, builder);
+    return node.accept(visitor);
   }
 
   private static RexNode generateFilterCondition(
