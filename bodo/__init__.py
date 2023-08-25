@@ -195,6 +195,7 @@ import bodo.ext
 import bodo.libs
 import bodo.libs.bodosql_crypto_funcs
 import bodo.libs.distributed_api
+import bodo.libs.memory_budget
 import bodo.libs.timsort
 import bodo.libs.stream_join
 import bodo.libs.stream_groupby

@@ -949,6 +949,7 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, arrow_cpp);
     SetAttrStringFromPyInit(m, csv_cpp);
     SetAttrStringFromPyInit(m, json_cpp);
+    SetAttrStringFromPyInit(m, memory_budget_cpp);
     SetAttrStringFromPyInit(m, stream_join_cpp);
     SetAttrStringFromPyInit(m, stream_groupby_cpp);
     SetAttrStringFromPyInit(m, stream_dict_encoding_cpp);
