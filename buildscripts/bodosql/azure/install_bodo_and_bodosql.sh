@@ -20,8 +20,7 @@ BODO_BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version
 
 # Install Bodo first, followed by the iceberg connector, and then install BodoSQL so we don't install Bodo from the wrong
 # channel if they differ
-# TODO(Keaton): Remove scipy import here after we fix the scipy import issue in Bodo (https://bodo.atlassian.net/browse/BSE-1037)
-$CONDA_INSTALL -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$bodo_artifactory_channel -c conda-forge scipy bodo=${BODO_BODOSQL_VERSION}
+$CONDA_INSTALL -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$bodo_artifactory_channel -c conda-forge bodo=${BODO_BODOSQL_VERSION}
 # TODO: figure out how to version lock the iceberg connector in the same way that we do the bodo version
 # Iceberg and BodoSQL upload to the same channel whether it's a release or not.
 $CONDA_INSTALL -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$bodosql_artifactory_channel -c conda-forge bodo-iceberg-connector
