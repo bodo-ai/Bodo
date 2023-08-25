@@ -5,7 +5,6 @@ import com.bodosql.calcite.adapter.pandas.PandasJoinRule
 import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.application.logicalRules.AliasPreservingAggregateProjectMergeRule
 import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule
-import com.bodosql.calcite.application.logicalRules.DependencyCheckingProjectMergeRule
 import com.bodosql.calcite.application.logicalRules.FilterAggregateTransposeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterExtractCaseRule
 import com.bodosql.calcite.application.logicalRules.FilterJoinRuleNoWindow
@@ -32,17 +31,7 @@ import com.bodosql.calcite.rel.logical.BodoLogicalSort
 import com.google.common.collect.Iterables
 import org.apache.calcite.plan.RelOptRule
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
-import org.apache.calcite.rel.rules.AggregateJoinRemoveRule
-import org.apache.calcite.rel.rules.AggregateJoinTransposeRule
-import org.apache.calcite.rel.rules.FilterJoinRule
-import org.apache.calcite.rel.rules.JoinCommuteRule
-import org.apache.calcite.rel.rules.JoinPushTransitivePredicatesRule
-import org.apache.calcite.rel.rules.JoinToMultiJoinRule
-import org.apache.calcite.rel.rules.LoptOptimizeJoinRule
-import org.apache.calcite.rel.rules.ProjectAggregateMergeRule
-import org.apache.calcite.rel.rules.ProjectFilterTransposeRule
-import org.apache.calcite.rel.rules.ProjectRemoveRule
+import org.apache.calcite.rel.rules.*
 
 object BodoRules {
     /**
@@ -66,12 +55,11 @@ object BodoRules {
 
     /**
      * Planner rule that merges a Project into another Project,
-     * provided the projects aren't projecting identical sets of input references
-     * and don't have any dependencies.
+     * provided the projects aren't projecting identical sets of input references.
      */
     @JvmField
-    val DEPENDENCY_CHECKING_PROJECT_MERGE_RULE: RelOptRule =
-        DependencyCheckingProjectMergeRule.Config.DEFAULT
+    val PROJECT_MERGE_RULE: RelOptRule =
+        ProjectMergeRule.Config.DEFAULT
             .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
             .toRule()
 
@@ -435,7 +423,7 @@ object BodoRules {
      * Pull up Constants used in Aggregates.
      */
     @JvmField
-    val AGGREGATE_CONSTANT_PULL_UP_RULE = VolcanoAcceptingAggregateProjectPullUpConstantsRule.Config.DEFAULT
+    val AGGREGATE_CONSTANT_PULL_UP_RULE: RelOptRule = VolcanoAcceptingAggregateProjectPullUpConstantsRule.Config.DEFAULT
         .withOperandFor(BodoLogicalAggregate::class.java, RelNode::class.java)
         .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
         .toRule()
@@ -444,7 +432,7 @@ object BodoRules {
     val HEURISTIC_RULE_SET: List<RelOptRule> = listOf(
         PROJECT_REMOVE_RULE,
         FILTER_MERGE_RULE,
-        DEPENDENCY_CHECKING_PROJECT_MERGE_RULE,
+        PROJECT_MERGE_RULE,
         FILTER_AGGREGATE_TRANSPOSE_RULE,
         AGGREGATE_JOIN_REMOVE_RULE,
         AGGREGATE_JOIN_TRANSPOSE_RULE,
@@ -486,7 +474,7 @@ object BodoRules {
     val VOLCANO_OPTIMIZE_RULE_SET: List<RelOptRule> = listOf(
         PROJECT_REMOVE_RULE,
         FILTER_MERGE_RULE,
-        DEPENDENCY_CHECKING_PROJECT_MERGE_RULE,
+        PROJECT_MERGE_RULE,
         FILTER_AGGREGATE_TRANSPOSE_RULE,
         AGGREGATE_JOIN_REMOVE_RULE,
         AGGREGATE_JOIN_TRANSPOSE_RULE,
