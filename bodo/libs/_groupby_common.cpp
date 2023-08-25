@@ -467,7 +467,9 @@ void aggfunc_output_initialize_kernel(
             } else {
                 memset(out_col->data1() +
                            numpy_item_size[out_col->dtype] * start_row,
-                       0, numpy_item_size[out_col->dtype] * out_col->length);
+                       0,
+                       numpy_item_size[out_col->dtype] *
+                           (out_col->length - start_row));
             }
     }
 }
