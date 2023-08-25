@@ -268,7 +268,6 @@ from bodo.libs.matrix_ext import MatrixType
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType, pd_datetime_tz_naive_type
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
-import bodo.libs.fft_kernels
 import bodo.libs.bodosql_array_kernel_utils
 import bodo.libs.bodosql_datetime_array_kernels
 import bodo.libs.bodosql_string_array_kernels
