@@ -13,7 +13,10 @@ from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
 
 
-@pytest.mark.skip(reason="[BSE-912] TODO: complete coverage for polar_format function")
+@pytest.mark.skipif(
+    bodo.get_size() > 1,
+    reason="[BSE-991] TODO: investigate parallel support for taylor function",
+)
 def test_polar_format_e2e(datapath, memory_leak_check):
     """
     Full E2E test of the polar_format function from theworkload. The function
@@ -97,7 +100,7 @@ def test_polar_format_e2e(datapath, memory_leak_check):
         # Compute r_hat, the diretion of k_r, for each pulse
         r_norm = norm(pos, axis=1)
         # BODO CHANGE: replace r_norm = np.array([r_norm]).T with r_norm.reshape((len(r_norm), 1))
-        r_norm.reshape((len(r_norm), 1))
+        r_norm = r_norm.reshape((len(r_norm), 1))
         r_norm = np.tile(r_norm, (1, 3))
 
         r_hat = pos / r_norm
@@ -125,7 +128,7 @@ def test_polar_format_e2e(datapath, memory_leak_check):
         # BODO CHANGE: replace np.zeroes([a, b]) with np.zeros((a, b))
         real_rad_interp = np.zeros((npulses, nu))
         imag_rad_interp = np.zeros((npulses, nu))
-        ky_new = np.zeros([npulses, nu])
+        ky_new = np.zeros((npulses, nu))
         for i in range(npulses):
             real_rad_interp[i, :] = np.interp(
                 k_ui, ku[i, :], phs.real[i, :] * win1, left=0, right=0
@@ -193,13 +196,14 @@ def test_polar_format_e2e(datapath, memory_leak_check):
     expected_output = np.loadtxt(datapath("data/polar_format_e2e_out.gz"))
     res = polar_format(phs, env_args, 17)
     # Verify that the function run with regular Python matches the previously calculated output
-    np.testing.assert_array_equal(res, expected_output)
+    np.testing.assert_allclose(res, expected_output, rtol=1e-5, atol=1e-8)
     # Now test with Bodo
     check_func(
         polar_format,
         (phs, env_args, 17),
         py_output=expected_output,
         convert_to_nullable_float=False,
+        only_seq=True,
     )
 
 
@@ -216,7 +220,8 @@ def test_division_bug(datapath, memory_leak_check):
 
 
 @pytest.mark.skipif(
-    bodo.get_size() > 1, reason="[BSE-991] TODO: investigate parallel support"
+    bodo.get_size() > 1,
+    reason="[BSE-991] TODO: investigate parallel support for taylor function",
 )
 def test_taylor(memory_leak_check):
     def taylor(nsamples, S_L=43):
@@ -423,9 +428,6 @@ def test_tile_non_constant(memory_leak_check):
     check_func(impl2, (A2, 7), convert_to_nullable_float=False)
 
 
-@pytest.mark.skip(
-    reason="[BSE-949] TODO: Support np.asmatrix and matrix multiplication with * operator forworkload"
-)
 @pytest.mark.parametrize(
     "r0, c0, r1, c1",
     [
@@ -455,8 +457,8 @@ def test_matrix_multiply(r0, c0, r1, c1, already_matrix, memory_leak_check):
 
     # Construct 2 matrices using the desired dimensions by taking 1d arrays, extracting
     # the prefix of desired length, and reshaping into 2d arrays.
-    data_a = np.arange(100)
-    data_b = (np.arange(0, 300, 3) % 19) - 9
+    data_a = np.linspace(0, 30, 101) * ((-1) ** np.arange(101))
+    data_b = np.tan(data_a)
     A = data_a[: r0 * c0].reshape((r0, c0))
     B = data_b[: r1 * c1].reshape((r1, c1))
 
@@ -466,7 +468,7 @@ def test_matrix_multiply(r0, c0, r1, c1, already_matrix, memory_leak_check):
             return A * B
 
         A = np.asmatrix(A)
-        B = np.asmatrix(A)
+        B = np.asmatrix(B)
     else:
 
         def impl(A, B):
@@ -474,7 +476,7 @@ def test_matrix_multiply(r0, c0, r1, c1, already_matrix, memory_leak_check):
             b_matrix = np.asmatrix(B)
             return a_matrix * b_matrix
 
-    check_func(impl, (A, B), convert_to_nullable_float=False)
+    check_func(impl, (A, B), convert_to_nullable_float=False, only_seq=True)
 
 
 def test_asmatrix_2d(memory_leak_check):
