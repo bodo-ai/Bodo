@@ -116,8 +116,12 @@ std::shared_ptr<table_info> get_update_table(
         in_table, groupby_state->n_keys, SEED_HASH_GROUPBY_SHUFFLE, false);
 
     std::vector<std::shared_ptr<table_info>> tables = {in_table};
-    size_t nunique_hashes = get_nunique_hashes(
-        batch_hashes_groupby, in_table->nrows(), groupby_state->parallel);
+    // In the case of streaming groupby, we don't need to estimate the number of
+    // unique hashes. We can just use the number of rows in the input table
+    // since the batches are so small. This has been tested to be faster than
+    // estimating the number of unique hashes based on previous batches as well
+    // as using HLL.
+    size_t nunique_hashes = in_table->nrows();
     std::vector<grouping_info> grp_infos;
 
     if (groupby_state->req_extended_group_info) {
