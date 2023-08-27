@@ -20,20 +20,10 @@ public class SnowflakeFilterRule extends AbstractSnowflakeFilterRule {
                 b0 ->
                     b0.operand(Filter.class)
                         .predicate(AbstractSnowflakeFilterRule::isPushableFilter)
-                        .oneInput(b1 -> b1.operand(SnowflakeRel.class).anyInputs()))
-            .as(Config.class);
-
-    Config NESTED_CONFIG =
-        ImmutableSnowflakeFilterRule.Config.of()
-            .withOperandSupplier(
-                b0 ->
-                    b0.operand(Filter.class)
-                        .predicate(AbstractSnowflakeFilterRule::isPushableFilter)
                         .oneInput(
                             b1 ->
                                 b1.operand(SnowflakeToPandasConverter.class)
                                     .oneInput(b2 -> b2.operand(SnowflakeRel.class).anyInputs())))
-            .withDescription("SnowflakeFilterRule::WithSnowflakeToPandasConverter")
             .as(Config.class);
 
     @Override

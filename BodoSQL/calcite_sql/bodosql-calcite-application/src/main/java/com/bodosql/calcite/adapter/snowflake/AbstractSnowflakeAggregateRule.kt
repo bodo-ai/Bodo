@@ -42,11 +42,7 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
             // Aggregate ->
             //   SnowflakeToPandasConverter ->
             //      SnowflakeRel
-            3 -> Pair(call.rel(0), call.rel(2))
-            // Inputs are:
-            // Aggregate ->
-            //    SnowflakeRel
-            else -> Pair(call.rel(0), call.rel(1))
+            else -> Pair(call.rel(0), call.rel(2))
         }
     }
 
