@@ -21,15 +21,6 @@ public class SnowflakeLimitRule extends AbstractSnowflakeLimitRule {
                 b0 ->
                     b0.operand(Sort.class)
                         .predicate(SnowflakeLimitRule::isOnlyLimit)
-                        .oneInput(b1 -> b1.operand(SnowflakeRel.class).anyInputs()))
-            .as(Config.class);
-
-    Config NESTED_CONFIG =
-        ImmutableSnowflakeLimitRule.Config.of()
-            .withOperandSupplier(
-                b0 ->
-                    b0.operand(Sort.class)
-                        .predicate(SnowflakeLimitRule::isOnlyLimit)
                         .oneInput(
                             b1 ->
                                 b1.operand(SnowflakeToPandasConverter.class)

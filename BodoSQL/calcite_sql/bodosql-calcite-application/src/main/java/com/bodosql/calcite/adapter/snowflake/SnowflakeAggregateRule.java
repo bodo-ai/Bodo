@@ -21,20 +21,10 @@ public class SnowflakeAggregateRule extends AbstractSnowflakeAggregateRule {
                 b0 ->
                     b0.operand(Aggregate.class)
                         .predicate(SnowflakeAggregateRule::isPushableAggregate)
-                        .oneInput(b1 -> b1.operand(SnowflakeRel.class).anyInputs()))
-            .as(Config.class);
-
-    Config NESTED_CONFIG =
-        ImmutableSnowflakeAggregateRule.Config.of()
-            .withOperandSupplier(
-                b0 ->
-                    b0.operand(Aggregate.class)
-                        .predicate(SnowflakeAggregateRule::isPushableAggregate)
                         .oneInput(
                             b1 ->
                                 b1.operand(SnowflakeToPandasConverter.class)
                                     .oneInput(b2 -> b2.operand(SnowflakeRel.class).anyInputs())))
-            .withDescription("SnowflakeAggregateRule::WithSnowflakeToPandasConverter")
             .as(Config.class);
 
     Config STREAMING_CONFIG =
