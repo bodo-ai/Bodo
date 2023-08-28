@@ -885,9 +885,12 @@ std::unique_ptr<array_info> alloc_numpy(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
-std::unique_ptr<array_info> alloc_array_item(int64_t n_arrays,
-                                             int64_t n_total_items,
-                                             Bodo_CTypes::CTypeEnum dtype);
+std::unique_ptr<array_info> alloc_array_item(
+    int64_t n_arrays, std::shared_ptr<array_info> inner_arr,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
 std::unique_ptr<array_info> alloc_categorical(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t num_categories,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
