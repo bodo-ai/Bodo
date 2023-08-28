@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.adapter.pandas.PandasCostEstimator.Companion.averageTypeValueSize
 import com.bodosql.calcite.plan.Cost
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexCorrelVariable
@@ -16,7 +17,7 @@ import org.apache.calcite.rex.RexTableInputRef
 import org.apache.calcite.rex.RexVisitor
 import org.apache.calcite.sql.SqlOperator
 
-object RexCostEstimator : RexVisitor<Cost>, PandasCostEstimator {
+object RexCostEstimator : RexVisitor<Cost> {
     // Input refs have no cost to either use or materialize.
     override fun visitInputRef(inputRef: RexInputRef): Cost = Cost()
 
@@ -40,7 +41,7 @@ object RexCostEstimator : RexVisitor<Cost>, PandasCostEstimator {
         // Base cost for this operation.
         var cost = Cost(
             cpu = if (call is RexOver) overFuncMultiplier(call.op) else 1.0,
-            mem = averageTypeValueSize(call.type) ?: 8.0,
+            mem = averageTypeValueSize(call.type),
         )
         // If there are operands, include them in the cost.
         if (call.operands.isNotEmpty()) {
@@ -97,7 +98,7 @@ object RexCostEstimator : RexVisitor<Cost>, PandasCostEstimator {
         throw UnsupportedOperationException()
 
     override fun visitDynamicParam(param: RexDynamicParam): Cost =
-        Cost(mem = averageTypeValueSize(param.type) ?: 0.0)
+        Cost(mem = averageTypeValueSize(param.type))
 
     override fun visitRangeRef(rangeRef: RexRangeRef): Cost =
         throw UnsupportedOperationException()
