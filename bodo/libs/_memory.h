@@ -420,8 +420,14 @@ class SizeClass final {
      * markFrameAsUnpinned.
      *
      * @param idx Frame index to unpin.
+     * @return bool Was the frame spilled to disk. This is only applicable in
+     * the SPILL_ON_UNPIN or MOVE_ON_UNPIN cases. In the regular case, this will
+     * always be false. In the SPILL_ON_UNPIN case, this will always be true.
+     * In the MOVE_ON_UNPIN case, this will be true only if we weren't able to
+     * find an alternative frame to move the data to and had to spill the block
+     * instead.
      */
-    void UnpinFrame(uint64_t idx);
+    bool UnpinFrame(uint64_t idx);
 
     /**
      * @brief Evict the frame at index idx from
@@ -476,7 +482,7 @@ class SizeClass final {
      * @return int64_t Index of the first unmapped frame. -1 if no unmapped
      * frame was found.
      */
-    int64_t findUnmappedFrame() noexcept;
+    int64_t findUnmappedFrame() const noexcept;
 
    private:
     /// @brief Size Class Index
@@ -544,6 +550,42 @@ class SizeClass final {
      * on the frame with the MADV_DONTNEED flag.
      */
     void adviseAwayFrame(uint64_t idx);
+
+    /**
+     * @brief Find the index of the first mapped unpinned
+     * frame in this SizeClass. Note that this only finds
+     * the frame but doesn't mark it as pinned.
+     * This is only used in the MOVE_ON_UNPIN case at this point.
+     *
+     * @return int64_t Index of the first mapped unpinned frame. -1 if no such
+     * frame was found.
+     */
+    int64_t findMappedUnpinnedFrame() const noexcept;
+
+    /**
+     * @brief Move data from the idx1'th frame to the idx2'th frame and update
+     * the swips, including the swip owners pointing to these frames. Currently
+     * this is only used in the MOVE_ON_UNPIN case and is only practical for
+     * swapping two unpinned frames (swapping pinned frames is not unsafe).
+     *
+     * @param idx1
+     * @param idx2
+     */
+    void swapFrames(uint64_t idx1, uint64_t idx2);
+
+    /**
+     * @brief Move data and swip (including swip owner pointing to the frame)
+     * from the source_idx'th frame to the target_idx'th frame.
+     * Currently this is only used in the MOVE_ON_UNPIN case. Note that
+     * this is only really practical when the source_idx'th frame is
+     * unpinned since moving pinned frames is not safe.
+     * Also note that this function just moves the data and swip and doesn't
+     * actually update the pinned/mapped bitmasks or advise away the frame.
+     *
+     * @param source_idx Mapped frame to move the data from.
+     * @param target_idx The unmapped frame to move the data to.
+     */
+    void moveFrame(uint64_t source_idx, uint64_t target_idx);
 };
 
 class BufferPool final : public IBufferPool {
