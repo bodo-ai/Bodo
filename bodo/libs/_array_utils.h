@@ -816,6 +816,10 @@ void DEBUG_PrintUnorderedMap(std::ostream& os,
 void DEBUG_PrintRefct(std::ostream& os,
                       std::vector<std::shared_ptr<array_info>> const& ListArr);
 
+void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
+                               int64_t start_offset, int64_t end_offset,
+                               std::string& string_builder);
+
 inline bool does_keys_have_nulls(
     std::vector<std::shared_ptr<array_info>> const& key_cols) {
     for (auto key_col : key_cols) {

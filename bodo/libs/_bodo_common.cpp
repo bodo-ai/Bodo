@@ -238,6 +238,24 @@ std::unique_ptr<array_info> alloc_interval_array(
             {std::move(left_buffer), std::move(right_buffer)}));
 }
 
+std::unique_ptr<array_info> alloc_array_item(
+    int64_t n_arrays, std::shared_ptr<array_info> inner_arr,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::unique_ptr<BodoBuffer> offsets_buffer =
+        AllocateBodoBuffer(n_arrays + 1, Bodo_CType_offset, pool, mm);
+    int64_t n_bytes = (int64_t)((n_arrays + 7) >> 3);
+    std::unique_ptr<BodoBuffer> null_bitmap_buffer =
+        AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8, pool, std::move(mm));
+    // setting all to non-null to avoid unexpected issues
+    memset(null_bitmap_buffer->mutable_data(), 0xff, n_bytes);
+    return std::make_unique<array_info>(
+        bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST, n_arrays,
+        std::vector<std::shared_ptr<BodoBuffer>>(
+            {std::move(offsets_buffer), std::move(null_bitmap_buffer)}),
+        std::vector<std::shared_ptr<array_info>>({inner_arr}));
+}
+
 std::unique_ptr<array_info> alloc_categorical(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t num_categories,
     bodo::IBufferPool* const pool,
