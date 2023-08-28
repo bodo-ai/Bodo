@@ -281,7 +281,7 @@ void SizeClass::adviseAwayFrame(uint64_t idx) {
     }
 }
 
-int64_t SizeClass::findUnmappedFrame() noexcept {
+int64_t SizeClass::findUnmappedFrame() const noexcept {
     for (size_t i = 0; i < this->bitmask_nbytes_; i++) {
         if (this->mapped_bitmask_[i] != static_cast<uint8_t>(0xff)) {
             // There's a free bit in this byte.
@@ -290,7 +290,7 @@ int64_t SizeClass::findUnmappedFrame() noexcept {
             uint64_t frame_idx = (8 * i);
             for (size_t j = 0; j < 8; j++) {
                 if (!::arrow::bit_util::GetBit(&this->mapped_bitmask_[i], j) &&
-                    frame_idx < this->capacity_) {
+                    (frame_idx < this->capacity_)) {
                     return frame_idx;
                 }
                 frame_idx++;
@@ -298,6 +298,29 @@ int64_t SizeClass::findUnmappedFrame() noexcept {
         }
     }
     // Return -1 if not found.
+    return -1;
+}
+
+int64_t SizeClass::findMappedUnpinnedFrame() const noexcept {
+    for (size_t i = 0; i < this->bitmask_nbytes_; i++) {
+        if (this->pinned_bitmask_[i] != static_cast<uint8_t>(0xff)) {
+            // There's a free bit in this byte.
+            // If this is the last byte, this may be a false
+            // positive.
+            uint64_t frame_idx = (8 * i);
+            for (size_t j = 0; j < 8; j++) {
+                // Check if the frame is mapped but unpinned
+                if (::arrow::bit_util::GetBit(&this->mapped_bitmask_[i], j) &&
+                    !::arrow::bit_util::GetBit(&this->pinned_bitmask_[i], j) &&
+                    (frame_idx < this->capacity_)) {
+                    return frame_idx;
+                }
+                frame_idx++;
+            }
+        }
+    }
+
+    // Return -1 if not found
     return -1;
 }
 
@@ -344,20 +367,127 @@ void SizeClass::PinFrame(uint64_t idx) {
     this->markFrameAsPinned(idx);
 }
 
-void SizeClass::UnpinFrame(uint64_t idx) {
+void SizeClass::swapFrames(uint64_t idx1, uint64_t idx2) {
+    if (idx1 >= this->capacity_) {
+        throw std::runtime_error("SizeClass::swap_frames: idx1 (" +
+                                 std::to_string(idx1) + ") is out of bounds!");
+    }
+    if (idx2 >= this->capacity_) {
+        throw std::runtime_error("SizeClass::swap_frames: idx2 (" +
+                                 std::to_string(idx2) + ") is out of bounds!");
+    }
+
+    uint8_t* addr1 = this->getFrameAddress(idx1);
+    uint8_t* addr2 = this->getFrameAddress(idx2);
+    OwningSwip swip1 = this->swips_[idx1];
+    OwningSwip swip2 = this->swips_[idx2];
+
+    // Swap data
+    std::swap_ranges(addr1, addr1 + this->block_size_, addr2);
+
+    // Update swips
+    this->swips_[idx1] = swip2;
+    this->swips_[idx2] = swip1;
+
+    // Update the swip owners to point to the correct frames
+    *swip1 = addr2;
+    *swip2 = addr1;
+}
+
+void SizeClass::moveFrame(uint64_t source_idx, uint64_t target_idx) {
+    if (source_idx >= this->capacity_) {
+        throw std::runtime_error("SizeClass::moveFrame: source_idx (" +
+                                 std::to_string(source_idx) +
+                                 ") is out of bounds!");
+    }
+    if (target_idx >= this->capacity_) {
+        throw std::runtime_error("SizeClass::moveFrame: target_idx (" +
+                                 std::to_string(target_idx) +
+                                 ") is out of bounds!");
+    }
+
+    uint8_t* old_addr = this->getFrameAddress(source_idx);
+    uint8_t* new_addr = this->getFrameAddress(target_idx);
+    OwningSwip swip = this->swips_[source_idx];
+
+    // Copy data to the new frame
+    std::copy(old_addr, old_addr + this->block_size_, new_addr);
+
+    // Update swips
+    this->swips_[source_idx] = nullptr;
+    this->swips_[target_idx] = swip;
+
+    // Update the swip owner of to point to the new frame
+    *swip = new_addr;
+}
+
+bool SizeClass::UnpinFrame(uint64_t idx) {
     if (idx >= this->capacity_) {
         throw std::runtime_error("SizeClass::UnpinFrame: Frame Index (" +
                                  std::to_string(idx) + ") is out of bounds!");
     }
 
-    this->markFrameAsUnpinned(idx);
+#if defined(MOVE_ON_UNPIN)
+    // Move the data to another frame in the same SizeClass.
 
-#ifdef SPILL_ON_UNPIN
+    // 1. Check if an unmapped frame is available.
+    int64_t new_frame_idx = this->findUnmappedFrame();
+    if (new_frame_idx != -1) {
+        // Mark old frame as unpinned
+        this->markFrameAsUnpinned(idx);
+
+        // Move the data and swip to the new frame.
+        this->moveFrame(idx, new_frame_idx);
+
+        // Advise away the old frame
+        this->adviseAwayFrame(idx);
+
+        // Mark the old frame as unmapped and the new one
+        // as mapped.
+        this->markFrameAsUnmapped(idx);
+        this->markFrameAsMapped(new_frame_idx);
+
+        // Mark new frame as unpinned.
+        this->markFrameAsUnpinned(new_frame_idx);
+    }
+    // 2. If no unmapped frame is available, look for another unpinned frame.
+    else {
+        // NOTE: This will find an unpinned other than 'idx' since idx
+        // hasn't been marked as unpinned yet.
+        new_frame_idx = this->findMappedUnpinnedFrame();
+        // Mark the frame as unpinned:
+        this->markFrameAsUnpinned(idx);
+        if (new_frame_idx != -1) {
+            // Swap the data between the two frames
+            // and update the swips. No other metadata needs
+            // to be updated since both frames are already
+            // mapped and unpinned and should remain so.
+            this->swapFrames(idx, new_frame_idx);
+        }
+        // 3. If no unpinned frame is available either, just spill this frame.
+        else {
+            CHECK_ARROW_MEM(
+                this->EvictFrame(idx),
+                "SizeClass::UnpinFrame: Error during EvictFrame which was "
+                "used because MOVE_ON_UNPIN is set and no other frame to move "
+                "the data to could be found: ");
+            return true;
+        }
+    }
+
+#elif defined(SPILL_ON_UNPIN)
+    // Mark the frame as unpinned:
+    this->markFrameAsUnpinned(idx);
     // Force spill the frame to disk:
     CHECK_ARROW_MEM(this->EvictFrame(idx),
                     "SizeClass::UnpinFrame: Error during EvictFrame which was "
                     "used because SPILL_ON_UNPIN is set: ");
-#endif  // SPILL_ON_UNPIN
+    return true;
+#else
+    // In the regular case, simply mark the frame as unpinned.
+    this->markFrameAsUnpinned(idx);
+#endif
+    return false;
 }
 
 arrow::Status SizeClass::EvictFrame(uint64_t idx) {
@@ -569,6 +699,10 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
             }
         }
     }
+
+#if defined(SPILL_ON_UNPIN) && defined(MOVE_ON_UNPIN)
+    static_assert(false, "Cannot set both SPILL_ON_UNPIN and MOVE_ON_UNPIN!");
+#endif  // defined(SPILL_ON_UNPIN) && defined(MOVE_ON_UNPIN)
 
 #ifdef SPILL_ON_UNPIN
     // Since we will spill every unpinned allocation, the user
@@ -1382,14 +1516,23 @@ void BufferPool::Unpin(uint8_t* ptr, int64_t size, int64_t alignment) {
 
     // If pinned, unpin and update stats, else we don't need to do anything
     if (this->size_classes_[size_class_idx]->isFramePinned(frame_idx)) {
-        this->size_classes_[size_class_idx]->UnpinFrame(frame_idx);
+        bool was_spilled =
+            this->size_classes_[size_class_idx]->UnpinFrame(frame_idx);
         this->update_pinned_bytes(-this->size_class_bytes_[size_class_idx]);
-#ifdef SPILL_ON_UNPIN
-        // When SPILL_ON_UNPIN is set, we will spill any unpinned frames.
+
+#if defined(SPILL_ON_UNPIN) || defined(MOVE_ON_UNPIN)
+        // In the SPILL_ON_UNPIN case, we will spill any unpinned frames.
+        // In the MOVE_ON_UNPIN case, we might've spilled the frame if
+        // we weren't able to find another frame to move the data to.
         // We must update the statistics to match this action.
-        this->stats_.UpdateAllocatedBytes(
-            -this->size_class_bytes_[size_class_idx]);
-#endif  // SPILL_ON_UNPIN
+        // 'was_spilled' is guaranteed to be false in the case that neither
+        // of these macros are defined, so we can skip this check entirely
+        // in the regular case.
+        if (was_spilled) {
+            this->stats_.UpdateAllocatedBytes(
+                -this->size_class_bytes_[size_class_idx]);
+        }
+#endif
     }
 }
 
