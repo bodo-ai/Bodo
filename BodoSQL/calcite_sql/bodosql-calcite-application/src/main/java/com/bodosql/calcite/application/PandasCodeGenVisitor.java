@@ -1449,8 +1449,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node aggregate node being visited
    */
   private void visitStreamingPandasAggregate(PandasAggregate node) {
+    StreamingRelNodeTimer timerInfo =
+        StreamingRelNodeTimer.createStreamingTimer(
+            this.generatedCode,
+            this.verboseLevel,
+            node.operationDescriptor(),
+            node.loggingTitle(),
+            node.nodeDetails(),
+            node.getTimerType());
+
     // Visit the input node
     this.visit(node.getInput(), 0, node);
+    timerInfo.initializeTimer();
     Variable buildTable = tableGenStack.pop();
     // Create the state var.
     // TODO: Add streaming timer support
@@ -1470,7 +1480,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Op.Assign groupbyInit = new Op.Assign(groupbyStateVar, stateCall);
     // Fetch the streaming pipeline
     StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
+    timerInfo.insertStateStartTimer();
     inputPipeline.addInitialization(groupbyInit);
+    timerInfo.insertStateEndTimer();
     Variable batchExitCond = inputPipeline.getExitCond();
     Variable newExitCond = genGenericTempVar();
     inputPipeline.endSection(newExitCond);
@@ -1478,7 +1490,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
         new Expr.Call(
             "bodo.libs.stream_groupby.groupby_build_consume_batch",
             List.of(groupbyStateVar, buildTable, batchExitCond));
+    timerInfo.insertLoopOperationStartTimer();
     generatedCode.add(new Op.Assign(newExitCond, batchCall));
+    timerInfo.insertLoopOperationEndTimer();
     // Finalize and add the batch pipeline.
     generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));
 
@@ -1495,7 +1509,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
         new Expr.Call(
             "bodo.libs.stream_groupby.groupby_produce_output_batch",
             List.of(groupbyStateVar, outputControl));
+    timerInfo.insertLoopOperationStartTimer();
     generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), outputCall));
+    timerInfo.insertLoopOperationEndTimer();
 
     // Append the code to delete the state
     Op.Stmt deleteState =
@@ -1505,6 +1521,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     outputPipeline.addTermination(deleteState);
     // Add the DF to the stack
     tableGenStack.push(new BodoEngineTable(outTable.emit(), node));
+    timerInfo.terminateTimer();
   }
 
   /**
