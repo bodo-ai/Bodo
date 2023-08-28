@@ -1,5 +1,6 @@
 import math
 import mmap
+import re
 from pathlib import Path
 
 import numpy as np
@@ -620,17 +621,23 @@ def test_larger_than_pool_allocation():
     options = BufferPoolOptions(memory_size=4, min_size_class=4)
     pool: BufferPool = BufferPool.from_options(options)
 
+    alloc_size = (4 * 1024 * 1024) + 1
     with pytest.raises(
         ValueError,
-        match="Request allocation size is larger than the largest block-size available!",
+        match=re.escape(
+            f"Request allocation size ({alloc_size}) is larger than the largest block-size available!"
+        ),
     ):
-        _: BufferPoolAllocation = pool.allocate((4 * 1024 * 1024) + 1)
+        _: BufferPoolAllocation = pool.allocate(alloc_size)
 
+    alloc_size = 5 * 1024 * 1024
     with pytest.raises(
         ValueError,
-        match="Request allocation size is larger than the largest block-size available!",
+        match=re.escape(
+            f"Request allocation size ({alloc_size}) is larger than the largest block-size available!"
+        ),
     ):
-        _: BufferPoolAllocation = pool.allocate(5 * 1024 * 1024)
+        _: BufferPoolAllocation = pool.allocate(alloc_size)
 
     # Verify stats after allocation
     assert pool.bytes_allocated() == 0
@@ -709,21 +716,25 @@ def test_alignment():
         pool.free(allocation)
 
     # Trying to allocate with alignment larger than page-size should error
+    page_size = mmap.PAGESIZE
+    req_alignment = page_size * 2
     with pytest.raises(
-        ValueError, match="Requested alignment higher than max supported alignment."
+        ValueError,
+        match=r"Requested alignment \(.*\) higher than max supported alignment \(.*\).",
     ):
-        page_size = mmap.PAGESIZE
-        _: BufferPoolAllocation = pool.allocate(20 * 1024, page_size * 2)
+        _: BufferPoolAllocation = pool.allocate(20 * 1024, req_alignment)
 
     # Trying to allocate with non power of 2 alignment should error out
     with pytest.raises(
-        ValueError, match="Alignment must be a positive number and a power of 2."
+        ValueError,
+        match=r"Alignment \(.*\) must be a positive number and a power of 2.",
     ):
         # Malloc
         _: BufferPoolAllocation = pool.allocate(10, 48)
 
     with pytest.raises(
-        ValueError, match="Alignment must be a positive number and a power of 2."
+        ValueError,
+        match=r"Alignment \(.*\) must be a positive number and a power of 2.",
     ):
         # Mmap
         _: BufferPoolAllocation = pool.allocate(20 * 1024, 48)

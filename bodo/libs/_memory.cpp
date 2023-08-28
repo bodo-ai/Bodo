@@ -95,7 +95,9 @@ arrow::Status LocalStorageManager::ReadBlock(uint64_t block_id, int64_t n_bytes,
 
     if (n_bytes_read != n_bytes) {
         return arrow::Status::Invalid(
-            "LocalStorageManager::ReadBlock: Read Fewer Bytes than Expected");
+            "LocalStorageManager::ReadBlock: Read Fewer Bytes (" +
+            std::to_string(n_bytes_read) + ") than expected (" +
+            std::to_string(n_bytes) + ")");
     }
 
     return this->DeleteBlock(block_id, n_bytes);
@@ -191,10 +193,11 @@ SizeClass::SizeClass(
                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, /*fd*/ -1,
                      /*offset*/ 0);
     if (ptr == MAP_FAILED || ptr == nullptr) {
-        throw std::runtime_error(
-            std::string("Could not allocate memory for SizeClass ") +
-            std::to_string(block_size) + std::string(". Failed with errno: ") +
-            std::strerror(errno) + std::string("."));
+        throw std::runtime_error(std::string("SizeClass::SizeClass: Could not "
+                                             "allocate memory for SizeClass ") +
+                                 std::to_string(block_size) +
+                                 std::string(". Failed with errno: ") +
+                                 std::strerror(errno) + std::string("."));
     }
     this->address_ = static_cast<uint8_t*>(ptr);
 }
@@ -208,7 +211,8 @@ bool SizeClass::isInRange(uint8_t* ptr) const {
     if ((ptr >= this->address_) && (ptr < (this->address_ + this->byteSize_))) {
         if ((ptr - this->address_) % this->block_size_ != 0) {
             throw std::runtime_error(
-                "Pointer is in SizeClass but not at a frame boundary.");
+                "SizeClass::isInRange: Pointer is in SizeClass but not at a "
+                "frame boundary.");
         }
         return true;
     }
@@ -217,21 +221,24 @@ bool SizeClass::isInRange(uint8_t* ptr) const {
 
 uint8_t* SizeClass::getFrameAddress(uint64_t idx) const {
     if (idx >= this->capacity_) {
-        throw std::runtime_error("Frame index is out of bounds.");
+        throw std::runtime_error("SizeClass::getFrameAddress: Frame index " +
+                                 std::to_string(idx) + " is out of bounds.");
     }
     return this->address_ + (idx * this->block_size_);
 }
 
 inline void SizeClass::markFrameAsPinned(uint64_t idx) {
     if (!::arrow::bit_util::GetBit(this->mapped_bitmask_.data(), idx)) {
-        throw std::runtime_error("Cannot pin an unmapped frame.");
+        throw std::runtime_error(
+            "SizeClass::markFrameAsPinned: Cannot pin an unmapped frame.");
     }
     ::arrow::bit_util::SetBitTo(this->pinned_bitmask_.data(), idx, true);
 }
 
 inline void SizeClass::markFrameAsUnpinned(uint64_t idx) {
     if (!::arrow::bit_util::GetBit(this->mapped_bitmask_.data(), idx)) {
-        throw std::runtime_error("Cannot unpin an unmapped frame.");
+        throw std::runtime_error(
+            "SizeClass::markFrameAsUnpinned: Cannot unpin an unmapped frame.");
     }
     ::arrow::bit_util::SetBitTo(this->pinned_bitmask_.data(), idx, false);
 }
@@ -256,7 +263,8 @@ uint8_t** SizeClass::getSwip(uint64_t idx) const { return this->swips_[idx]; }
 
 uint64_t SizeClass::getFrameIndex(uint8_t* ptr) const {
     if (!this->isInRange(ptr)) {
-        throw std::runtime_error("Pointer is not in size-class");
+        throw std::runtime_error(
+            "SizeClass::getFrameIndex: Pointer is not in size-class");
     }
     return (uint64_t)((ptr - this->address_) / this->block_size_);
 }
@@ -266,8 +274,10 @@ void SizeClass::adviseAwayFrame(uint64_t idx) {
     int madvise_out =
         ::madvise(this->getFrameAddress(idx), this->block_size_, MADV_DONTNEED);
     if (madvise_out < 0) {
-        throw std::runtime_error(std::string("madvise returned errno: ") +
-                                 std::strerror(errno));
+        throw std::runtime_error(
+            std::string(
+                "SizeClass::adviseAwayFrame: madvise returned errno: ") +
+            std::strerror(errno));
     }
 }
 
@@ -307,7 +317,8 @@ int64_t SizeClass::AllocateFrame(OwningSwip swip) {
 
 void SizeClass::FreeFrame(uint64_t idx) {
     if (idx >= this->capacity_) {
-        throw std::runtime_error("FreeFrame: Frame Index is out of bounds!");
+        throw std::runtime_error("SizeClass::FreeFrame: Frame Index (" +
+                                 std::to_string(idx) + ") is out of bounds!");
     }
     // Advise away the frame
     this->adviseAwayFrame(idx);
@@ -326,7 +337,8 @@ void SizeClass::FreeFrame(uint8_t* ptr) {
 
 void SizeClass::PinFrame(uint64_t idx) {
     if (idx >= this->capacity_) {
-        throw std::runtime_error("PinFrame: Frame Index is out of bounds!");
+        throw std::runtime_error("SizeClass::PinFrame: Frame Index (" +
+                                 std::to_string(idx) + ") is out of bounds!");
     }
 
     this->markFrameAsPinned(idx);
@@ -334,7 +346,8 @@ void SizeClass::PinFrame(uint64_t idx) {
 
 void SizeClass::UnpinFrame(uint64_t idx) {
     if (idx >= this->capacity_) {
-        throw std::runtime_error("UnpinFrame: Frame Index is out of bounds!");
+        throw std::runtime_error("SizeClass::UnpinFrame: Frame Index (" +
+                                 std::to_string(idx) + ") is out of bounds!");
     }
 
     this->markFrameAsUnpinned(idx);
@@ -349,10 +362,12 @@ void SizeClass::UnpinFrame(uint64_t idx) {
 
 arrow::Status SizeClass::EvictFrame(uint64_t idx) {
     if (idx >= this->capacity_) {
-        throw std::runtime_error("EvictFrame: Frame Index is out of bounds!");
+        throw std::runtime_error("SizeClass::EvictFrame: Frame Index " +
+                                 std::to_string(idx) + " is out of bounds!");
     }
     if (this->isFramePinned(idx)) {
-        throw std::runtime_error("EvictFrame: Frame is not unpinned!");
+        throw std::runtime_error(
+            "SizeClass::EvictFrame: Frame is not unpinned!");
     }
 
     auto ptr = this->getFrameAddress(idx);
@@ -666,7 +681,8 @@ BufferPool::BufferPool() : BufferPool(BufferPoolOptions::Defaults()) {}
  */
 static inline int64_t highest_power_of_2(int64_t N) {
     if (N <= 0) {
-        throw std::runtime_error("highest_power_of_2: N must be >0");
+        throw std::runtime_error("highest_power_of_2: N ( " +
+                                 std::to_string(N) + ") must be >0");
     }
     // if N is a power of two simply return it
     if (!(N & (N - 1)))
@@ -681,7 +697,9 @@ void BufferPool::Initialize() {
     if (((this->options_.min_size_class &
           (this->options_.min_size_class - 1)) != 0) ||
         (this->options_.min_size_class == 0)) {
-        throw std::runtime_error("min_size_class must be a power of 2");
+        throw std::runtime_error("BufferPool::Initialize: min_size_class (" +
+                                 std::to_string(this->options_.min_size_class) +
+                                 ") must be a power of 2");
     }
 
     // Convert from KiB to bytes
@@ -693,8 +711,10 @@ void BufferPool::Initialize() {
         static_cast<uint64_t>(highest_power_of_2(this->memory_size_bytes_));
 
     if (min_size_class_bytes > max_size_class_possible_bytes) {
-        throw std::runtime_error(
-            "min_size_class is larger than available memory!");
+        throw std::runtime_error("BufferPool::Initialize: min_size_class " +
+                                 std::to_string(min_size_class_bytes) +
+                                 " is larger than available "
+                                 "memory!");
     }
 
     // Based on this, the max size classes possible is:
@@ -834,24 +854,28 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
     // We couldn't find enough smaller frames
     // or 1 larger frame to evict
     return arrow::Status::OutOfMemory(
-        "Unable to evict enough frames to free up the required space");
+        "Unable to evict enough frames to free up the required space (" +
+        std::to_string(bytes_rem) + ")");
 }
 
 ::arrow::Status BufferPool::Allocate(int64_t size, int64_t alignment,
                                      uint8_t** out) {
     if (size < 0) {
-        return ::arrow::Status::Invalid("Negative allocation size requested.");
+        return ::arrow::Status::Invalid("Negative allocation size (" +
+                                        std::to_string(size) + ") requested.");
     }
 
     if ((alignment <= 0) || ((alignment & (alignment - 1)) != 0)) {
         return ::arrow::Status::Invalid(
-            "Alignment must be a positive number and a power of 2.");
+            "Alignment (" + std::to_string(alignment) +
+            ") must be a positive number and a power of 2.");
     }
 
     // Copied from Arrow (they are probably just being conservative for
     // compatibility with 32-bit architectures).
     if (static_cast<uint64_t>(size) >= std::numeric_limits<size_t>::max()) {
-        return ::arrow::Status::OutOfMemory("malloc size overflows size_t");
+        return ::arrow::Status::OutOfMemory(
+            "malloc size (" + std::to_string(size) + ") overflows size_t");
     }
 
     // If size 0 allocation, point to a pre-defined area (same as Arrow)
@@ -876,7 +900,9 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
             aligned_size > static_cast<int64_t>(this->memory_size_bytes_ -
                                                 this->bytes_pinned())) {
             return ::arrow::Status::OutOfMemory(
-                "Allocation failed. Not enough space in the buffer pool.");
+                "Allocation failed. Not enough space in the buffer pool to "
+                "allocate (" +
+                std::to_string(size) + ").");
         }
 
         // If available memory is less than needed, start spilling
@@ -915,7 +941,8 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
             // be good to indicate that to the compiler
             // similar to how Velox does it using "folly".
             return ::arrow::Status::UnknownError(
-                "Failed to allocate required bytes.");
+                "Failed to allocate required bytes (" +
+                std::to_string(aligned_size) + ").");
         }
         *out = static_cast<uint8_t*>(result);
 
@@ -934,15 +961,17 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
         const static long page_size = sysconf(_SC_PAGE_SIZE);
         if (alignment > page_size) {
             return ::arrow::Status::Invalid(
-                "Requested alignment higher than max supported alignment.");
+                "Requested alignment (" + std::to_string(alignment) +
+                ") higher than max supported alignment (" +
+                std::to_string(page_size) + ").");
         }
         // Use one of the mmap-ed buffer frames.
         int64_t size_class_idx = this->find_size_class_idx(aligned_size);
 
         if (size_class_idx == -1) {
             return ::arrow::Status::Invalid(
-                "Request allocation size is larger than the largest block-size "
-                "available!");
+                "Request allocation size (" + std::to_string(size) +
+                ") is larger than the largest block-size available!");
             // XXX If number of size classes was artificially set to too low
             // (through BufferPoolOptions), we also need to have ability to
             // allocate contiguous and non-contiguous blocks for cases where the
@@ -957,7 +986,9 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
             size_class_bytes >
                 (this->memory_size_bytes_ - this->bytes_pinned())) {
             return ::arrow::Status::OutOfMemory(
-                "Allocation failed. Not enough space in the buffer pool.");
+                "Allocation failed. Not enough space in the buffer pool to "
+                "allocate (" +
+                std::to_string(size) + ").");
         }
 
         // If available memory is less than needed, start spilling
@@ -1047,8 +1078,9 @@ std::tuple<bool, int64_t, int64_t, int64_t> BufferPool::get_alloc_details(
                 // TODO Add compiler hint that this branch
                 // is unlikely.
                 throw std::runtime_error(
-                    "Provided size doesn't match any of the "
-                    "size-classes!");
+                    "BufferPool::get_alloc_details: Provided size (" +
+                    std::to_string(size) +
+                    ") doesn't match any of the size-classes!");
             }
             return std::make_tuple(
                 true, size_class_idx,
@@ -1152,11 +1184,13 @@ uint64_t BufferPool::get_memory_size_bytes() const {
 ::arrow::Status BufferPool::Reallocate(int64_t old_size, int64_t new_size,
                                        int64_t alignment, uint8_t** ptr) {
     if (new_size < 0) {
-        return ::arrow::Status::Invalid(
-            "Negative reallocation size requested.");
+        return ::arrow::Status::Invalid("Negative reallocation size (" +
+                                        std::to_string(new_size) +
+                                        ") requested.");
     }
     if (static_cast<uint64_t>(new_size) >= std::numeric_limits<size_t>::max()) {
-        return ::arrow::Status::OutOfMemory("realloc overflows size_t");
+        return ::arrow::Status::OutOfMemory(
+            "realloc (" + std::to_string(new_size) + ") overflows size_t");
     }
 
     uint8_t* old_memory_ptr = *ptr;
@@ -1181,7 +1215,8 @@ uint64_t BufferPool::get_memory_size_bytes() const {
         auto status = this->Pin(ptr);
         if (!status.IsOutOfMemory()) {
             return arrow::Status::OutOfMemory(
-                "Reallocate failed. Not enough space to pin old allocation.");
+                "Reallocate failed. Not enough space to pin old allocation (" +
+                std::to_string(old_size) + ").");
         } else if (!status.ok()) {
             return status;
         }
@@ -1268,7 +1303,8 @@ uint64_t BufferPool::get_memory_size_bytes() const {
         // If non-pinned memory is less than needed, immediately fail
         if (block_bytes > (this->memory_size_bytes_ - this->bytes_pinned())) {
             return ::arrow::Status::OutOfMemory(
-                "Pin failed. Not enough space in the buffer pool.");
+                "Pin failed. Not enough space in the buffer pool to pin " +
+                std::to_string(size) + " bytes.");
         }
 
         if (block_bytes >
@@ -1359,7 +1395,9 @@ void BufferPool::Unpin(uint8_t* ptr, int64_t size, int64_t alignment) {
 
 SizeClass* BufferPool::GetSizeClass_Unsafe(uint64_t idx) const {
     if (idx > this->size_classes_.size()) {
-        throw std::runtime_error("Requested SizeClass doesn't exist.");
+        throw std::runtime_error(
+            "BufferPool::GetSizeClass_Unsafe: Requested SizeClass (" +
+            std::to_string(idx) + ") doesn't exist.");
     }
     return this->size_classes_[idx].get();
 }
