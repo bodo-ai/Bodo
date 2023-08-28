@@ -9,7 +9,7 @@ import org.apache.calcite.rel.core.AggregateCall
  * This currently outputs all aggregates as having the same cost except
  * for if a filter is present.
  */
-class AggCostEstimator : PandasCostEstimator {
+class AggCostEstimator {
 
     companion object {
         fun estimateInputCost(input: RelNode): Cost {
@@ -18,13 +18,13 @@ class AggCostEstimator : PandasCostEstimator {
             // All the input has to be consumed by the Aggregate State
             // Note: We must call getRowType
             val rowType = input.getRowType()
-            val mem = RexCostEstimator.averageTypeValueSize(rowType) ?: 8.0
+            val mem = PandasCostEstimator.averageTypeValueSize(rowType)
             return Cost(cpu = cpu, mem = mem)
         }
 
         fun estimateFunctionCost(aggCall: AggregateCall): Cost {
             val cpu = if (aggCall.hasFilter()) 2.0 else 1.0
-            val mem = RexCostEstimator.averageTypeValueSize(aggCall.type) ?: 8.0
+            val mem = PandasCostEstimator.averageTypeValueSize(aggCall.type)
             return Cost(cpu = cpu, mem = mem)
         }
     }
