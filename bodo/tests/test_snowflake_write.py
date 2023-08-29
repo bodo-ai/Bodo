@@ -32,6 +32,7 @@ from bodo.tests.utils import (
     get_start_end,
     pytest_snowflake,
     reduce_sum,
+    run_rank0,
     snowflake_cred_env_vars_present,
 )
 from bodo.utils.testing import ensure_clean_snowflake_table
@@ -1583,7 +1584,14 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
     "is_distributed",
     [
         pytest.param(True, id="distributed"),
-        pytest.param(False, id="replicated"),
+        pytest.param(
+            False,
+            id="replicated",
+            marks=pytest.mark.skipif(
+                bodo.get_size() != 1,
+                reason="Replicated write is not supported yet, so running it on multiple ranks is unsafe!",
+            ),
+        ),
     ],
 )
 @pytest.mark.parametrize(
@@ -1605,6 +1613,7 @@ def test_batched_write_agg(
     Test a simple use of batched Snowflake writes by reading a table, writing
     the results, then reading again
     """
+    comm = MPI.COMM_WORLD
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
             "l_orderkey",
@@ -1632,14 +1641,16 @@ def test_batched_write_agg(
     conn_w = bodo.tests.utils.get_snowflake_connection_string(
         "TEST_DB", "PUBLIC", user=snowflake_user
     )
-    if bodo.get_rank() == 0:
-        cursor_w = bodo.io.snowflake.snowflake_connect(conn_w).cursor()
+
+    cursor_w = run_rank0(
+        lambda: bodo.io.snowflake.snowflake_connect(conn_w).cursor(), bcast_result=False
+    )()
 
     table_r = "LINEITEM"
     table_w = None  # Forward declaration
     if bodo.get_rank() == 0:
         table_w = f'"LINEITEM_TEST_{uuid.uuid4()}"'
-    table_w = MPI.COMM_WORLD.bcast(table_w)
+    table_w = comm.bcast(table_w)
 
     # To test multiple COPY INTO, temporarily reduce Parquet write chunk size
     # and the number of files included in each streaming COPY INTO
@@ -1671,7 +1682,6 @@ def test_batched_write_agg(
             # so we need to manually synchronize `is_last`. We assume that
             # arrow_reader handles repeated empty calls.
             all_is_last = False
-            and_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value)
             iter_val = 0
             while not all_is_last:
                 table, is_last = read_arrow_next(reader0, True)
@@ -1683,6 +1693,7 @@ def test_batched_write_agg(
 
             return total0
 
+        @bodo.jit(cache=False)
         def impl_check(conn_w):
             reader1 = pd.read_sql(
                 f"SELECT * FROM {table_w}", conn_w, _bodo_chunksize=1000
@@ -1701,19 +1712,29 @@ def test_batched_write_agg(
             return total1
 
         if is_distributed:
-            impl_write_dist = bodo.jit(cache=False, distributed=["df"])(impl_write)
-            impl_check_dist = bodo.jit(cache=False, distributed=["df"])(impl_check)
+            # Not specifying anything will run it in a distributed fashion
+            # by default.
+            impl_write_dist = bodo.jit(cache=False)(impl_write)
             total0 = impl_write_dist(conn_r, conn_w)
-            total1 = impl_check_dist(conn_w)
+            total1 = impl_check(conn_w)
             assert total0 == total1, (
                 f"Distributed streaming write failed: "
                 f"wrote {total0} but read back {total1}"
             )
         else:
-            impl_write_repl = bodo.jit(cache=False, replicated=["df"])(impl_write)
-            impl_check_repl = bodo.jit(cache=False, replicated=["df"])(impl_check)
-            total0 = impl_write_repl(conn_r, conn_w)
-            total1 = impl_check_repl(conn_w)
+            impl_write_repl = bodo.jit(cache=False, distributed=False)(impl_write)
+            err = None
+            total0 = 0
+            if bodo.get_rank() == 0:
+                try:
+                    total0 = impl_write_repl(conn_r, conn_w)
+                except Exception as e:
+                    err = e
+            err = comm.bcast(err)
+            if isinstance(err, Exception):
+                raise err
+            total0 = comm.bcast(total0)
+            total1 = impl_check(conn_w)
             assert total0 == total1, (
                 f"Replicated streaming write failed: "
                 f"wrote {total0} but read back {total1}"
