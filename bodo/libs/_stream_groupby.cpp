@@ -1,6 +1,7 @@
 
 #include "_stream_groupby.h"
 #include "_array_hash.h"
+#include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
@@ -37,7 +38,6 @@ bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t iRowA,
         is_build_A ? build_table : in_table;
     const std::shared_ptr<table_info>& table_B =
         is_build_B ? build_table : in_table;
-
     bool test = TestEqualJoin(table_A, table_B, jRowA, jRowB, this->n_keys,
                               /*is_na_equal=*/true);
     return test;
@@ -60,13 +60,10 @@ inline void update_groups(
     GroupbyState* groupby_state,
     bodo::unord_map_container<int64_t, int64_t, HashGroupbyTable<is_local>,
                               KeyEqualGroupbyTable<is_local>>& build_table,
-    grouping_info& grp_info, const std::shared_ptr<table_info>& in_table,
-    std::shared_ptr<uint32_t[]>& batch_hashes_groupby, size_t i_row) {
+    grouping_info& grp_info, std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
+    size_t i_row, std::vector<bool>& append_row_to_build_table) {
     // get local or shuffle build state to update
 
-    TableBuildBuffer& build_table_buffer =
-        is_local ? groupby_state->local_table_buffer
-                 : groupby_state->shuffle_table_buffer;
     bodo::vector<uint32_t>& build_hashes =
         is_local ? groupby_state->local_table_groupby_hashes
                  : groupby_state->shuffle_table_groupby_hashes;
@@ -76,17 +73,15 @@ inline void update_groups(
     bodo::vector<int64_t>& row_to_group = grp_info.row_to_group;
     // TODO[BSE-578]: update group_to_first_row, group_to_first_row etc. if
     // necessary
-
-    uint64_t n_keys = groupby_state->n_keys;
     int64_t group;
 
-    if (build_table.contains(-i_row - 1)) {
+    if (auto group_iter = build_table.find(-i_row - 1);
+        group_iter != build_table.end()) {
         // update existing group
-        group = build_table[-i_row - 1];
+        group = group_iter->second;
     } else {
         // add new group
-        build_table_buffer.AppendRowKeys(in_table, i_row, n_keys);
-        build_table_buffer.IncrementSizeDataColumns(n_keys);
+        append_row_to_build_table[i_row] = true;
         build_hashes.emplace_back(batch_hashes_groupby[i_row]);
         group = next_group++;
         build_table[group] = group;
@@ -107,7 +102,13 @@ std::shared_ptr<table_info> get_update_table(
     // empty function set means drop_duplicates operation, which doesn't require
     // update
     if (groupby_state->col_sets.size() == 0) {
-        return in_table;
+        // TODO: Move this before UnifiedBuildTableDictionaryArrays
+        // This is necessary because keys are appended in batches which prevents
+        // update_groups from dropping duplicates in the same batch.
+        return drop_duplicates_keys(in_table, groupby_state->n_keys,
+                                    /*is_parallel, setting to false because we
+                                       only care about local duplicates*/
+                                    false);
     }
 
     // similar to update() function of GroupbyPipeline:
@@ -167,7 +168,6 @@ std::shared_ptr<table_info> get_update_table(
         }
         col_set->update(grp_infos);
     }
-
     return update_table;
 }
 
@@ -313,6 +313,8 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
     shuffle_grp_info.row_to_group.resize(in_table->nrows(), -1);
     // Get current size of the buffers to know starting offset of new
     // keys which need output data column initialization.
+    std::vector<bool> append_row_to_local_table(in_table->nrows(), false);
+    std::vector<bool> append_row_to_shuffle_table(in_table->nrows(), false);
     int64_t local_init_start_row = groupby_state->local_next_group;
     int64_t shuffle_init_start_row = groupby_state->shuffle_next_group;
 
@@ -322,14 +324,21 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
             hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank;
         if (process_on_rank) {
             update_groups<true>(groupby_state, groupby_state->local_build_table,
-                                local_grp_info, in_table, batch_hashes_groupby,
-                                i_row);
+                                local_grp_info, batch_hashes_groupby, i_row,
+                                append_row_to_local_table);
         } else {
-            update_groups<false>(
-                groupby_state, groupby_state->shuffle_build_table,
-                shuffle_grp_info, in_table, batch_hashes_groupby, i_row);
+            update_groups<false>(groupby_state,
+                                 groupby_state->shuffle_build_table,
+                                 shuffle_grp_info, batch_hashes_groupby, i_row,
+                                 append_row_to_shuffle_table);
         }
     }
+
+    groupby_state->local_table_buffer.UnsafeAppendKeysIncreaseDataSize(
+        in_table, append_row_to_local_table, groupby_state->n_keys);
+    groupby_state->shuffle_table_buffer.UnsafeAppendKeysIncreaseDataSize(
+        in_table, append_row_to_shuffle_table, groupby_state->n_keys);
+    append_row_to_shuffle_table.resize(0);
 
     // combine update data with local/shuffle running values
     combine_input_table(groupby_state,
@@ -366,6 +375,18 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
         shuffle_hashes.reset();
         groupby_state->shuffle_table_buffer.Reset();
 
+        if (groupby_state->col_sets.size() == 0) {
+            // drop_duplicates operation
+            // Calling drop_duplicates_keys is necessary because keys are
+            // appended in batches which prevents update_groups from dropping
+            // duplicates in the same batch.
+            new_data =
+                drop_duplicates_keys(new_data, groupby_state->n_keys,
+                                     /*is_parallel, setting to false because we
+                                        only care about local duplicates*/
+                                     false);
+        }
+
         // unify dictionaries to allow consistent hashing and fast key
         // comparison using indices
         new_data = groupby_state->UnifyBuildTableDictionaryArrays(new_data);
@@ -382,12 +403,17 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
         grouping_info local_grp_info;
         local_grp_info.row_to_group.resize(new_data->nrows());
         int64_t local_init_start_row = groupby_state->local_next_group;
-
+        append_row_to_local_table.resize(new_data->nrows());
+        std::fill(append_row_to_local_table.begin(),
+                  append_row_to_local_table.end(), false);
         for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
             update_groups<true>(groupby_state, groupby_state->local_build_table,
-                                local_grp_info, new_data, batch_hashes_groupby,
-                                i_row);
+                                local_grp_info, batch_hashes_groupby, i_row,
+                                append_row_to_local_table);
         }
+        groupby_state->local_table_buffer.UnsafeAppendKeysIncreaseDataSize(
+            new_data, append_row_to_local_table, groupby_state->n_keys);
+        append_row_to_local_table.resize(0);
 
         combine_input_table(groupby_state,
                             groupby_state->local_table_buffer.data_table,

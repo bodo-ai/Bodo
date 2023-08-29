@@ -1,6 +1,8 @@
-#include "_table_builder.h"
+#include <ranges>
+
 #include "_array_hash.h"
 #include "_stream_join.h"
+#include "_table_builder.h"
 
 /* -------------------------- ArrayBuildBuffer ---------------------------- */
 
@@ -45,63 +47,6 @@ size_t ArrayBuildBuffer::EstimatedSize() const {
         return size;
     };
     return getSizeOfArrayInfo(*data_array);
-}
-
-void ArrayBuildBuffer::IncrementSize() {
-    switch (this->data_array->arr_type) {
-        case bodo_array_type::NULLABLE_INT_BOOL: {
-            if (this->data_array->dtype == Bodo_CTypes::_BOOL) {
-                size++;
-                data_array->length = size;
-                CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
-                                    arrow::bit_util::BytesForBits(size), false),
-                                "Resize Failed!");
-                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
-                                    arrow::bit_util::BytesForBits(size), false),
-                                "Resize Failed!");
-            } else {
-                uint64_t size_type = numpy_item_size[this->data_array->dtype];
-                size++;
-                data_array->length = size;
-                CHECK_ARROW_MEM(
-                    data_array->buffers[0]->Resize(size * size_type, false),
-                    "Resize Failed!");
-                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
-                                    arrow::bit_util::BytesForBits(size), false),
-                                "Resize Failed!");
-            }
-        } break;
-        case bodo_array_type::STRING: {
-            // NOTE: only increments offset and null bitmap sizes but not data
-            // buffer.
-            size++;
-            data_array->length = size;
-
-            CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
-                                (size + 1) * sizeof(offset_t), false),
-                            "Resize Failed!");
-            CHECK_ARROW_MEM(data_array->buffers[2]->Resize(
-                                arrow::bit_util::BytesForBits(size), false),
-                            "Resize Failed!");
-        } break;
-        case bodo_array_type::DICT: {
-            this->dict_indices->IncrementSize();
-            size++;
-            data_array->length = size;
-        } break;
-        case bodo_array_type::NUMPY: {
-            uint64_t size_type = numpy_item_size[this->data_array->dtype];
-            size++;
-            data_array->length = size;
-            CHECK_ARROW_MEM(
-                data_array->buffers[0]->Resize(size * size_type, false),
-                "Resize Failed!");
-        } break;
-        default:
-            throw std::runtime_error(
-                "invalid array type in IncrementSize " +
-                GetArrType_as_string(this->data_array->arr_type));
-    }
 }
 
 void ArrayBuildBuffer::ReserveArrayTypeCheck(
@@ -317,6 +262,54 @@ void ArrayBuildBuffer::Reset() {
     }
 }
 
+void ArrayBuildBuffer::UnsafeIncreaseSize(int64_t size_inc) {
+    size += size_inc;
+    data_array->length += size_inc;
+
+    switch (this->data_array->arr_type) {
+        case bodo_array_type::NULLABLE_INT_BOOL: {
+            if (this->data_array->dtype == Bodo_CTypes::_BOOL) {
+                CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(
+                                    arrow::bit_util::BytesForBits(size)),
+                                "Resize Failed!");
+                CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(
+                                    arrow::bit_util::BytesForBits(size)),
+                                "Resize Failed!");
+            } else {
+                uint64_t size_type = numpy_item_size[this->data_array->dtype];
+                CHECK_ARROW_MEM(
+                    data_array->buffers[0]->SetSize(size * size_type),
+                    "Resize Failed!");
+                CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(
+                                    arrow::bit_util::BytesForBits(size)),
+                                "Resize Failed!");
+            }
+        } break;
+        case bodo_array_type::STRING: {
+            // NOTE: only increments offset and null bitmap sizes but not data
+            // buffer.
+            CHECK_ARROW_MEM(
+                data_array->buffers[1]->SetSize((size + 1) * sizeof(offset_t)),
+                "Resize Failed!");
+            CHECK_ARROW_MEM(data_array->buffers[2]->SetSize(
+                                arrow::bit_util::BytesForBits(size)),
+                            "Resize Failed!");
+        } break;
+        case bodo_array_type::DICT: {
+            this->dict_indices->UnsafeIncreaseSize(size_inc);
+        } break;
+        case bodo_array_type::NUMPY: {
+            uint64_t size_type = numpy_item_size[this->data_array->dtype];
+            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(size * size_type),
+                            "Resize Failed!");
+        } break;
+        default:
+            throw std::runtime_error(
+                "invalid array type in UnsafeIncreaseSize" +
+                GetArrType_as_string(this->data_array->arr_type));
+    }
+}
+
 /* ------------------------------------------------------------------------ */
 
 /* -------------------------- TableBuildBuffer ---------------------------- */
@@ -361,14 +354,32 @@ void TableBuildBuffer::UnifyTablesAndAppend(
 
 void TableBuildBuffer::UnsafeAppendBatch(
     const std::shared_ptr<table_info>& in_table,
+    const std::vector<bool>& append_rows) {
+    auto columns = std::views::iota((size_t)0, in_table->ncols());
+    uint64_t append_rows_sum =
+        std::accumulate(append_rows.begin(), append_rows.end(), (uint64_t)0);
+    UnsafeAppendBatchColumns(in_table, append_rows, append_rows_sum, columns);
+}
+
+void TableBuildBuffer::UnsafeAppendBatch(
+    const std::shared_ptr<table_info>& in_table,
     const std::vector<bool>& append_rows, uint64_t append_rows_sum) {
+    auto columns = std::views::iota((size_t)0, in_table->ncols());
+    UnsafeAppendBatchColumns(in_table, append_rows, append_rows_sum, columns);
+}
+
+template <std::ranges::range range_t>
+void TableBuildBuffer::UnsafeAppendBatchColumns(
+    const std::shared_ptr<table_info>& in_table,
+    const std::vector<bool>& append_rows, uint64_t append_rows_sum,
+    range_t& columns) {
 #ifndef APPEND_BATCH
 #define APPEND_BATCH(arr_type_exp, dtype_exp)                    \
     array_buffers[i].UnsafeAppendBatch<arr_type_exp, dtype_exp>( \
         in_arr, append_rows, append_rows_sum)
 #endif
 
-    for (size_t i = 0; i < in_table->ncols(); i++) {
+    for (const size_t i : columns) {
         std::shared_ptr<array_info>& in_arr = in_table->columns[i];
         if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             switch (in_arr->dtype) {
@@ -513,14 +524,6 @@ void TableBuildBuffer::UnsafeAppendBatch(
         }
     }
 #undef APPEND_BATCH
-}
-
-void TableBuildBuffer::UnsafeAppendBatch(
-    const std::shared_ptr<table_info>& in_table,
-    const std::vector<bool>& append_rows) {
-    uint64_t append_rows_sum =
-        std::accumulate(append_rows.begin(), append_rows.end(), (uint64_t)0);
-    this->UnsafeAppendBatch(in_table, append_rows, append_rows_sum);
 }
 
 void TableBuildBuffer::UnsafeAppendBatch(
@@ -677,19 +680,14 @@ void TableBuildBuffer::UnsafeAppendBatch(
 #undef APPEND_BATCH
 }
 
-void TableBuildBuffer::AppendRowKeys(
-    const std::shared_ptr<table_info>& in_table, int64_t row_ind,
-    uint64_t n_keys) {
-    for (size_t i = 0; i < (size_t)n_keys; i++) {
-        const std::shared_ptr<array_info>& in_arr = in_table->columns[i];
-        array_buffers[i].AppendRow(in_arr, row_ind);
-    }
-}
-
-void TableBuildBuffer::IncrementSizeDataColumns(uint64_t n_keys) {
-    for (size_t i = n_keys; i < this->data_table->ncols(); i++) {
-        array_buffers[i].IncrementSize();
-    }
+void TableBuildBuffer::UnsafeAppendKeysIncreaseDataSize(
+    const std::shared_ptr<table_info>& in_table,
+    const std::vector<bool>& append_rows, const uint64_t n_keys) {
+    auto columns = std::views::iota((size_t)0, n_keys);
+    uint64_t num_rows =
+        std::accumulate(append_rows.begin(), append_rows.end(), (uint64_t)0);
+    this->UnsafeAppendBatchColumns(in_table, append_rows, num_rows, columns);
+    this->UnsafeIncreaseSizeDataColumns(num_rows, n_keys);
 }
 
 void TableBuildBuffer::ReserveTable(const std::shared_ptr<table_info>& in_table,
@@ -738,12 +736,24 @@ void TableBuildBuffer::ReserveSizeDataColumns(uint64_t new_data_len,
     }
 }
 
+void TableBuildBuffer::UnsafeIncreaseSizeDataColumns(uint64_t size_inc,
+                                                     uint64_t n_keys) {
+    for (size_t i = n_keys; i < this->data_table->ncols(); i++) {
+        array_buffers[i].UnsafeIncreaseSize(size_inc);
+    }
+}
+
 void TableBuildBuffer::Reset() {
     for (size_t i = 0; i < array_buffers.size(); i++) {
         array_buffers[i].Reset();
     }
 }
 
+void TableBuildBuffer::UnsafeIncreaseSize(uint64_t size_inc) {
+    for (size_t i = 0; i < this->data_table->ncols(); i++) {
+        array_buffers[i].UnsafeIncreaseSize(size_inc);
+    }
+}
 void TableBuildBuffer::pin() {
     if (!this->pinned_) {
         // This will automatically pin the underlying arrays.
