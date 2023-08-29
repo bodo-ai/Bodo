@@ -61,4 +61,11 @@ public class BodoReturnTypes {
               opBinding.getTypeFactory(), BodoTZInfo.UTC);
         }
       };
+
+  public static final SqlReturnTypeInference VARIANT =
+          new SqlReturnTypeInference() {
+              @Override public @Nullable RelDataType inferReturnType(final SqlOperatorBinding opBinding) {
+                  return BodoRelDataTypeFactory.createVariantSqlType(opBinding.getTypeFactory());
+              }
+          };
 }

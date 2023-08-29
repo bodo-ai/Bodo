@@ -47,6 +47,10 @@ interface PandasCostEstimator {
                         }
                         ).coerceAtMost(100.0)
 
+                // Note: this is the Variant type.
+                // TODO: Refactor this to look at actual types instead of type names.
+                SqlTypeName.OTHER -> VARIANT_SIZE_BYTES
+
                 SqlTypeName.ROW -> {
                     var average = 0.0
                     for (field in type.fieldList) {
@@ -77,5 +81,8 @@ interface PandasCostEstimator {
          * significant for memory use.
          */
         private const val DEFAULT_VARBINARY_PRECISION: Double = 16.0
+
+        // TODO: Tune this number based on actual data.
+        private val VARIANT_SIZE_BYTES: Double = 64.0
     }
 }
