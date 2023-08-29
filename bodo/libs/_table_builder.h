@@ -653,6 +653,14 @@ struct ArrayBuildBuffer {
      * dictionary related flags are reset.
      */
     void Reset();
+
+    /**
+     * @brief Increase the size of the buffer by size_inc without
+     * checking if there is enough space.
+     *
+     * @param size_inc Number of rows to increase the size by.
+     */
+    void UnsafeIncreaseSize(int64_t size_inc);
 };
 
 /**
@@ -728,26 +736,42 @@ struct TableBuildBuffer {
     void UnsafeAppendBatch(const std::shared_ptr<table_info>& in_table,
                            const std::vector<bool>& append_rows);
 
+    /**
+     * @brief Append a batch of data to the buffer, assuming
+     * there is already enough space reserved (with ReserveTable).
+     *
+     * @param in_table input table with the new rows
+     */
     void UnsafeAppendBatch(const std::shared_ptr<table_info>& in_table);
+
+    /**
+     * @brief Append a batch of data to the buffer, assuming
+     * there is already enough space reserved (with ReserveTable).
+     *
+     * @param in_table input table with the new rows
+     * @param append_rows bit vector indicating which rows to append
+     * @param append_rows_sum Total number of rows to append. This is just the
+     * number of 'true' values in append_rows.
+     * @param columns columns to append to
+     */
+    template <std::ranges::range range_t>
+    void UnsafeAppendBatchColumns(const std::shared_ptr<table_info>& in_table,
+                                  const std::vector<bool>& append_rows,
+                                  uint64_t append_rows_sum, range_t& columns);
 
     /**
      * @brief Append key columns of a row of input table, assuming there is
      * already enough space reserved (with ReserveTable).
+     * Inceases the size of data columns to compensate for the new rows in the
+     * key columns.
      *
      * @param in_table input table with the new row
-     * @param row_ind index of new row in input table
+     * @param append_rows bit vector indicating whether to append the row
      * @param n_keys number of key columns
      */
-    void AppendRowKeys(const std::shared_ptr<table_info>& in_table,
-                       int64_t row_ind, uint64_t n_keys);
-
-    /**
-     * @brief increment size of data columns by one to allow appending a new
-     * data row
-     *
-     * @param n_keys number of key columns
-     */
-    void IncrementSizeDataColumns(uint64_t n_keys);
+    void UnsafeAppendKeysIncreaseDataSize(
+        const std::shared_ptr<table_info>& in_table,
+        const std::vector<bool>& append_rows, const uint64_t n_keys);
 
     /**
      * @brief Reserve enough space to potentially append rows from
@@ -820,6 +844,22 @@ struct TableBuildBuffer {
      * creation.
      */
     void Reset();
+
+    /**
+     * @brief Increase the size of the table without checking
+     * whether there is enough space.
+     *
+     * @param size_inc number of rows to increase
+     */
+    void UnsafeIncreaseSize(uint64_t size_inc);
+
+    /**
+     * @brief Increase the size of the data columns without checking
+     * whether there is enough space.
+     *
+     * @param size_inc number of rows to increase
+     */
+    void UnsafeIncreaseSizeDataColumns(uint64_t size_inc, uint64_t n_keys);
 
     /**
      * @brief Pin this table buffer. This is idempotent.
