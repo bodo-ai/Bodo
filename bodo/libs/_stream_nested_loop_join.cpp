@@ -14,14 +14,12 @@ void NestedLoopJoinState::FinalizeBuild() {
     // replicated.
     if (this->build_parallel && this->probe_parallel) {
         int64_t table_size = 0;
-        for (auto& table : this->build_table_buffer->chunks) {
+        for (const auto& table : *this->build_table_buffer) {
             // For certain data types like string, we need to load the buffers
             // (e.g. the offset buffers for strings) in memory to be able to
             // calculate the memory size.
             // https://bodo.atlassian.net/browse/BSE-874 will resolve this.
-            table->pin();
             table_size += table_local_memory_size(table);
-            table->unpin();
         }
         MPI_Allreduce(MPI_IN_PLACE, &table_size, 1, MPI_INT64_T, MPI_SUM,
                       MPI_COMM_WORLD);
@@ -241,14 +239,12 @@ bool nested_loop_join_probe_consume_batch(
                 join_state->UnifyProbeTableDictionaryArrays(bcast_probe_chunk);
             // define the number of rows already processed as 0
             int64_t build_table_offset = 0;
-            for (auto& build_table : join_state->build_table_buffer->chunks) {
-                build_table->pin();
+            for (const auto& build_table : *join_state->build_table_buffer) {
                 nested_loop_join_local_chunk(
                     join_state, build_table, bcast_probe_chunk, build_kept_cols,
                     probe_kept_cols, build_table_matched_guard,
                     build_table_offset);
                 build_table_offset += build_table->nrows();
-                build_table->unpin();
             }
         }
     } else {
@@ -265,13 +261,11 @@ bool nested_loop_join_probe_consume_batch(
             bodo::pin(join_state->build_table_matched));
         // define the number of rows already processed as 0
         int64_t build_table_offset = 0;
-        for (auto& build_table : join_state->build_table_buffer->chunks) {
-            build_table->pin();
+        for (const auto& build_table : *join_state->build_table_buffer) {
             nested_loop_join_local_chunk(
                 join_state, build_table, in_table, build_kept_cols,
                 probe_kept_cols, build_table_matched_guard, build_table_offset);
             build_table_offset += build_table->nrows();
-            build_table->unpin();
         }
     }
     if (join_state->build_table_outer && is_last) {
@@ -285,8 +279,7 @@ bool nested_loop_join_probe_consume_batch(
         auto build_table_matched_pin(
             bodo::pin(join_state->build_table_matched));
 
-        for (auto& build_table : join_state->build_table_buffer->chunks) {
-            build_table->pin();
+        for (const auto& build_table : *join_state->build_table_buffer) {
             add_unmatched_rows(
                 *build_table_matched_pin, build_table->nrows(), build_idxs,
                 probe_idxs,
@@ -296,7 +289,6 @@ bool nested_loop_join_probe_consume_batch(
                 build_table, join_state->dummy_probe_table, build_idxs,
                 probe_idxs, build_kept_cols, probe_kept_cols);
             build_table_offset += build_table->nrows();
-            build_table->unpin();
             build_idxs.clear();
             probe_idxs.clear();
         }
