@@ -55,9 +55,9 @@ public class SqlTzAwareTypeNameSpec extends SqlTypeNameSpec {
   }
 
   @Override public boolean equalsDeep(final SqlTypeNameSpec spec, final Litmus litmus) {
-    if (!(spec instanceof SqlTzAwareTypeNameSpec)) {
-      return false;
+    if (!(spec instanceof SqlTzAwareTypeNameSpec) || this.origTz != ((SqlTzAwareTypeNameSpec) spec).origTz) {
+      return litmus.fail("{} != {}", this, spec);
     }
-    return this.origTz == ((SqlTzAwareTypeNameSpec) spec).origTz;
+    return litmus.succeed();
   }
 }

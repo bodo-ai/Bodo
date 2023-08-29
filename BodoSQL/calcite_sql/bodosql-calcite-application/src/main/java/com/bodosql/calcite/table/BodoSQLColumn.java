@@ -2,7 +2,6 @@ package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
-
 import java.sql.JDBCType;
 import java.util.Locale;
 import kotlin.Pair;
@@ -366,11 +365,13 @@ public interface BodoSQLColumn {
               typeFactory.createSqlIntervalType(
                   new SqlIntervalQualifier(TimeUnit.YEAR, TimeUnit.MONTH, SqlParserPos.ZERO));
           break;
-        case STRING:
         case VARIANT:
+          temp = BodoRelDataTypeFactory.createVariantSqlType(typeFactory);
+          break;
+        case STRING:
         case JSON_OBJECT:
         case ARRAY:
-          // Currently VARIANT, ARRAY, and JSON_OBJECT aren't yet supported
+          // Currently ARRAY and JSON_OBJECT aren't yet supported
           // inside BodoSQL, so we treat them as strings
           // (which is how the snowflake connector will load them)
           temp = typeFactory.createSqlType(SqlTypeName.VARCHAR);
@@ -425,6 +426,8 @@ public interface BodoSQLColumn {
           return "datetime64[ns]";
         case TIMEDELTA:
           return "timedelta64[ns]";
+        case VARIANT:
+          return "VARIANT";
         default:
           throw new RuntimeException(
               String.format("Cast to type %s not supported.", this.getTypeIdName()));

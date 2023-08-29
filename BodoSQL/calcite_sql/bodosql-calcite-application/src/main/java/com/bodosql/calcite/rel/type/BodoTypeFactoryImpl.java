@@ -1,17 +1,16 @@
 package com.bodosql.calcite.rel.type;
 
+import static java.util.Objects.requireNonNull;
+
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.TZAwareSqlType;
-
-import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
-
+import org.apache.calcite.sql.type.VariantSqlType;
 import org.checkerframework.checker.nullness.qual.Nullable;
-
-import static java.util.Objects.requireNonNull;
 
 public class BodoTypeFactoryImpl extends JavaTypeFactoryImpl implements BodoRelDataTypeFactory {
   public BodoTypeFactoryImpl(RelDataTypeSystem typeSystem) {
@@ -22,6 +21,8 @@ public class BodoTypeFactoryImpl extends JavaTypeFactoryImpl implements BodoRelD
   public RelDataType createSqlType(SqlTypeName typeName) {
     if (typeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
       return createTZAwareSqlType(null);
+    } else if (typeName == SqlTypeName.OTHER) {
+      return createVariantSqlType();
     }
     return super.createSqlType(typeName);
   }
@@ -30,6 +31,8 @@ public class BodoTypeFactoryImpl extends JavaTypeFactoryImpl implements BodoRelD
   public RelDataType createSqlType(SqlTypeName typeName, int precision) {
     if (typeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
       return createTZAwareSqlType(null);
+    } else if (typeName == SqlTypeName.OTHER) {
+      return createVariantSqlType();
     }
     return super.createSqlType(typeName, precision);
   }
@@ -38,19 +41,24 @@ public class BodoTypeFactoryImpl extends JavaTypeFactoryImpl implements BodoRelD
   public RelDataType createSqlType(SqlTypeName typeName, int precision, int scale) {
     if (typeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
       return createTZAwareSqlType(null);
+    } else if (typeName == SqlTypeName.OTHER) {
+      return createVariantSqlType();
     }
     return super.createSqlType(typeName, precision, scale);
   }
 
   @Override
-  public RelDataType createTypeWithNullability(
-      final RelDataType type,
-      final boolean nullable) {
+  public RelDataType createTypeWithNullability(final RelDataType type, final boolean nullable) {
     if (type instanceof TZAwareSqlType) {
       if (type.isNullable() == nullable) {
         return type;
       }
       return copyTZAwareSqlType((TZAwareSqlType) type, nullable);
+    } else if (type instanceof VariantSqlType) {
+      if (type.isNullable() == nullable) {
+        return type;
+      }
+      return copyVariantSqlType((VariantSqlType) type, nullable);
     }
     return super.createTypeWithNullability(type, nullable);
   }
@@ -70,5 +78,18 @@ public class BodoTypeFactoryImpl extends JavaTypeFactoryImpl implements BodoRelD
   private RelDataType copyTZAwareSqlType(TZAwareSqlType type, boolean nullable) {
     BodoTZInfo tzInfo = requireNonNull(type.getTZInfo());
     return canonize(new TZAwareSqlType(tzInfo, nullable));
+  }
+
+  @Override
+  public RelDataType createVariantSqlType() {
+    return canonize(new VariantSqlType(false));
+  }
+
+  public RelDataType createVariantSqlType(boolean nullable) {
+    return canonize(new VariantSqlType(nullable));
+  }
+
+  private RelDataType copyVariantSqlType(VariantSqlType type, boolean nullable) {
+    return canonize(new VariantSqlType(nullable));
   }
 }
