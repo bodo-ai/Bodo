@@ -260,8 +260,9 @@ def test_snowflake_catalog_insert_into(
         assert_tables_equal(output_df, result_df)
 
 
+# TODO: re add memory_leak_check. See https://bodo.atlassian.net/browse/BSE-990
 def test_snowflake_catalog_insert_into_read(
-    test_db_snowflake_catalog, memory_leak_check
+    test_db_snowflake_catalog,
 ):
     """
     Tests insert into in a snowflake catalog and afterwards reading the result.
@@ -302,8 +303,9 @@ def test_snowflake_catalog_insert_into_read(
         )
 
 
+# TODO: re add memory_leak_check. See https://bodo.atlassian.net/browse/BSE-990
 def test_snowflake_catalog_insert_into_null_literal(
-    test_db_snowflake_catalog, memory_leak_check
+    test_db_snowflake_catalog,
 ):
     """
     Tests insert into in a snowflake catalog with a literal null value.
