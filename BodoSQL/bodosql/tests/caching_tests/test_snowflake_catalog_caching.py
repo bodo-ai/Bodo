@@ -6,10 +6,12 @@ sequential and parallel code.
 
 import os
 import traceback
+from uuid import getnode
 
 import bodosql
 import numpy as np
 import pandas as pd
+from mpi4py import MPI
 
 import bodo
 from bodo.tests.caching_tests.caching_tests_common import (  # noqa
@@ -98,9 +100,26 @@ def test_snowflake_catalog_write_caching(fn_distribution, is_cached):
         }
     )
 
-    # We must generate consistent names for caching.
-    read_table = "EXAMPLE_CACHE_READ_TABLE"
-    write_table = "EXAMPLE_CACHE_WRITE_TABLE"
+    # We must generate consistent names that are consistent between runs for caching,
+    # However the names must also be different on different machines so we don't
+    # run into issues if
+    # we're running this test in two places at the same time.
+    # Therefore we use the MAC address of the current machine, since this
+    # shouldn't change between runs, but should be different if this test is being run
+    # on two different machines.
+
+    read_table = None
+    write_table = None
+    if bodo.get_rank() == 0:
+        # I don't think the mac address should change between mpi nodes in a cluster
+        # (at least, not for CI, since it's all on one worker machine)
+        # but just in case, we'll bcast it.
+        hardware_address = str(getnode())
+        read_table = "EXAMPLE_CACHE_READ_TABLE_" + hardware_address
+        write_table = "EXAMPLE_CACHE_WRITE_TABLE_" + hardware_address
+
+    read_table = MPI.COMM_WORLD.bcast(read_table)
+    write_table = MPI.COMM_WORLD.bcast(write_table)
 
     passed = 1
     try:
@@ -135,5 +154,15 @@ def test_snowflake_catalog_write_caching(fn_distribution, is_cached):
             reset_index=True,
         )
     finally:
-        drop_snowflake_table(read_table, db, schema)
-        drop_snowflake_table(write_table, db, schema)
+        # Try to drop the tables.
+        # If the error ocurred before their creation, they may not exist,
+        # hence the try/finally blocks
+        try:
+            drop_snowflake_table(write_table, db, schema)
+        finally:
+            pass
+
+        try:
+            drop_snowflake_table(write_table, db, schema)
+        finally:
+            pass
