@@ -713,6 +713,59 @@ struct ChunkedTableArrayBuilder {
 };
 
 /**
+ * @brief Iterator of inactive chunks for ChunkedTableBuilder. It supports
+ * iterations over deque of inactive chunks and uses bodo::pin_guard to
+ * automatically pin and unpin the chunks.
+ * @param Iterator the iterator type. It must be a deque iterator and is either
+ * std::deque<std::shared_ptr<table_info>>::iterator or
+ * std::deque<std::shared_ptr<table_info>>::const_iterator
+ */
+template <typename Iterator>
+class ChunkedTableBuilderIterator {
+   public:
+    using value_type = Iterator::value_type;
+    using reference = Iterator::reference;
+
+    static_assert(
+        std::is_same_v<value_type, std::shared_ptr<table_info>>,
+        "Iterator must be a iterator of deque<std::shared_ptr<table_info>>");
+
+    ChunkedTableBuilderIterator(Iterator&& iter, std::deque<value_type>& chunks)
+        : iter(iter), chunks(chunks) {
+        if (this->iter != chunks.end()) {
+            chunk_guard.emplace(**this->iter);
+        }
+    }
+
+    ChunkedTableBuilderIterator& operator++() {
+        // Just like any STL container, attempting to increment or access the
+        // value of the end() iterator of a ChunkedTableBuilder is undefined
+        // behavior
+        if (++iter == chunks.end()) {
+            chunk_guard.reset();
+        } else {
+            chunk_guard.emplace(**iter);
+        }
+        return *this;
+    }
+
+    bool operator==(const ChunkedTableBuilderIterator& other) const {
+        return iter == other.iter;
+    }
+
+    bool operator!=(const ChunkedTableBuilderIterator& other) const {
+        return iter != other.iter;
+    }
+
+    reference operator*() const { return *iter; }
+
+   private:
+    Iterator iter;
+    std::deque<value_type>& chunks;
+    std::optional<bodo::pin_guard<table_info>> chunk_guard;
+};
+
+/**
  * @brief Chunked Table Builder for use cases like outputs
  * of streaming operators, etc.
  * Columnar table chunks (essentially PAX) are maintained such that
@@ -731,6 +784,11 @@ struct ChunkedTableBuilder {
     // If we want to access finalized chunks, we need to pin and unpin them
     // manually.
     std::deque<std::shared_ptr<table_info>> chunks;
+
+    using iterator = ChunkedTableBuilderIterator<
+        std::deque<std::shared_ptr<table_info>>::iterator>;
+    using const_iterator = ChunkedTableBuilderIterator<
+        std::deque<std::shared_ptr<table_info>>::const_iterator>;
 
     /* Active chunk state */
 
@@ -874,4 +932,12 @@ struct ChunkedTableBuilder {
      * dictionary related flags are reset.
      */
     void Reset();
+
+    iterator begin() { return iterator(chunks.begin(), chunks); }
+
+    iterator end() { return iterator(chunks.end(), chunks); }
+
+    const_iterator cbegin() { return const_iterator(chunks.cbegin(), chunks); }
+
+    const_iterator cend() { return const_iterator(chunks.cend(), chunks); }
 };
