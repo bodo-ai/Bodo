@@ -31,6 +31,16 @@ public final class JsonOperatorTable implements SqlOperatorTable {
     return instance;
   }
 
+  // TODO: add proper typing information
+  public static final SqlFunction GET_PATH =
+      new SqlFunction(
+          "GET_PATH",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0,
+          null,
+          OperandTypes.ANY_ANY,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction JSON_EXTRACT_PATH_TEXT =
       new SqlFunction(
           "JSON_EXTRACT_PATH_TEXT",
@@ -40,7 +50,7 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           OperandTypes.STRING_STRING,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  private List<SqlOperator> functionList = Arrays.asList(JSON_EXTRACT_PATH_TEXT);
+  private List<SqlOperator> functionList = Arrays.asList(GET_PATH, JSON_EXTRACT_PATH_TEXT);
 
   @Override
   public void lookupOperatorOverloads(
