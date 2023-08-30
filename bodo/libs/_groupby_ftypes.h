@@ -60,44 +60,45 @@ struct Bodo_FTypes {
         bitxor_agg = 33,
         count_if = 34,
         listagg = 35,
-        mode = 36,
-        percentile_cont = 37,
-        percentile_disc = 38,
-        udf = 39,
-        gen_udf = 40,
-        window = 41,
-        row_number = 42,
-        min_row_number_filter = 43,
-        rank = 44,
-        dense_rank = 45,
-        percent_rank = 46,
-        cume_dist = 47,
-        ntile = 48,
-        ratio_to_report = 49,
-        conditional_true_event = 50,
-        conditional_change_event = 51,
-        any_value = 52,
-        num_funcs = 53,  // num_funcs is used to know how many functions up to
+        array_agg = 36,
+        mode = 37,
+        percentile_cont = 38,
+        percentile_disc = 39,
+        udf = 40,
+        gen_udf = 41,
+        window = 42,
+        row_number = 43,
+        min_row_number_filter = 44,
+        rank = 45,
+        dense_rank = 46,
+        percent_rank = 47,
+        cume_dist = 48,
+        ntile = 49,
+        ratio_to_report = 50,
+        conditional_true_event = 51,
+        conditional_change_event = 52,
+        any_value = 53,
+        num_funcs = 54,  // num_funcs is used to know how many functions up to
                          // this point. Below this point are functions that are
                          // defined in the C++ code but not the Python enum.
-        mean_eval = 54,
-        var_pop_eval = 55,
-        std_pop_eval = 56,
-        var_eval = 57,
-        std_eval = 58,
-        kurt_eval = 59,
-        skew_eval = 60,
-        boolxor_eval = 61,
+        mean_eval = 55,
+        var_pop_eval = 56,
+        std_pop_eval = 57,
+        var_eval = 58,
+        std_eval = 59,
+        kurt_eval = 60,
+        skew_eval = 61,
+        boolxor_eval = 62,
         // These are internal operators used by groupby.window
         // when the orderby clause has na values first.
-        idxmin_na_first = 62,
-        idxmax_na_first = 63,
+        idxmin_na_first = 63,
+        idxmax_na_first = 64,
         // This is the operator for when we are generating one
         // of the 4 idx functions to operate over N columns. Each
         // column may have a different function so we cannot defineF
         // more explicit ftypes. This is used only in the min_row_number_filter
         // window function path.
-        idx_n_columns = 64,
+        idx_n_columns = 65,
     };
 };
 

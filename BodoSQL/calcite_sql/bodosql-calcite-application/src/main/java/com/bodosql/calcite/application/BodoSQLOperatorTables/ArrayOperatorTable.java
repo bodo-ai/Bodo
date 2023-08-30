@@ -1,8 +1,11 @@
 package com.bodosql.calcite.application.BodoSQLOperatorTables;
 
-import org.apache.calcite.avatica.SqlType;
+import java.util.Arrays;
+import java.util.List;
+import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -11,16 +14,13 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
+import org.apache.calcite.sql.fun.SqlBasicAggFunction;
 import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
-
-import javax.annotation.Nullable;
-
-import java.util.Arrays;
-import java.util.List;
+import org.apache.calcite.util.Optionality;
 
 public class ArrayOperatorTable implements SqlOperatorTable {
   private static @Nullable ArrayOperatorTable instance;
@@ -67,9 +67,7 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           null,
           // The input can be any data type.
           OperandTypes.sequence(
-              "ARRAY_TO_STRING(ARRAY, STRING)",
-              OperandTypes.ARRAY,
-              OperandTypes.STRING),
+              "ARRAY_TO_STRING(ARRAY, STRING)", OperandTypes.ARRAY, OperandTypes.STRING),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
@@ -91,10 +89,13 @@ public class ArrayOperatorTable implements SqlOperatorTable {
     return typeFactory.createArrayType(inputType, -1);
   }
 
-  private List<SqlOperator> functionList =
-      Arrays.asList(
-          TO_ARRAY,
-          ARRAY_TO_STRING);
+  public static final SqlAggFunction ARRAY_AGG =
+      SqlBasicAggFunction.create(
+              "ARRAY_AGG", SqlKind.ARRAY_AGG, ReturnTypes.TO_ARRAY, OperandTypes.ANY)
+          .withGroupOrder(Optionality.OPTIONAL)
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
+
+  private List<SqlOperator> functionList = Arrays.asList(TO_ARRAY, ARRAY_TO_STRING, ARRAY_AGG);
 
   @Override
   public void lookupOperatorOverloads(

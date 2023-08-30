@@ -281,6 +281,7 @@ supported_agg_funcs = [
     "bitxor_agg",
     "count_if",
     "listagg",
+    "array_agg",
     "mode",
     "percentile_cont",
     "percentile_disc",
@@ -304,6 +305,7 @@ supported_agg_funcs = [
 # bodo.utils.utils.ExtendedNamedAgg. Any function in this list
 # should also be included in supported_agg_funcs
 supported_extended_agg_funcs = [
+    "array_agg",
     "listagg",
     "percentile_cont",
     "percentile_disc",
@@ -412,6 +414,18 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
             func.ascending,
             func.na_position_b,
         ) = handle_listagg_additional_args(func_ir, rhs)
+        return func
+    elif func_name == "array_agg":
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.fname = func_name
+        func.ncols_pre_shuffle = 1
+        func.ncols_post_shuffle = 1
+        (
+            func.orderby,
+            func.ascending,
+            func.na_position_b,
+        ) = handle_array_agg_additional_args(func_ir, rhs)
         return func
     elif func_name in {"percentile_cont", "percentile_disc"}:
         func = pytypes.SimpleNamespace()
@@ -811,6 +825,28 @@ def handle_listagg_additional_args(func_ir, outcol_and_namedagg):  # pragma: no 
         for na_pos in get_const_or_build_tuple_of_consts(additional_args_values[3])
     ]
     return listagg_sep, orderby, ascending, na_position_b
+
+
+def handle_array_agg_additional_args(func_ir, outcol_and_namedagg):  # pragma: no cover
+    """
+    Extract additional arguments for the array_agg function.
+
+    In this case, outcol_and_namedagg is a tuple containing the assigned column name,
+    and the pd.NamedAgg/ExtendedAgg value. For example,
+    in df.groupby("A").agg(New_B=pd.NamedAgg("B", "sum")), outcol_and_namedagg is
+    ("new_b", pd.NamedAgg("B", "sum")) (as the relevant numba types).
+    """
+    additional_args_values = extract_extendedagg_additional_args_tuple(
+        func_ir, outcol_and_namedagg
+    )
+
+    orderby = get_const_or_build_tuple_of_consts(additional_args_values[0])
+    ascending = list(get_const_or_build_tuple_of_consts(additional_args_values[1]))
+    na_position_b = [
+        na_pos == "last"
+        for na_pos in get_const_or_build_tuple_of_consts(additional_args_values[2])
+    ]
+    return orderby, ascending, na_position_b
 
 
 def handle_percentile_additional_args(func_ir, outcol_and_namedagg):  # pragma: no cover
@@ -2082,6 +2118,7 @@ def gen_top_level_agg_func(
             "nunique",
             "ngroup",
             "listagg",
+            "array_agg",
             "mode",
             "percentile_cont",
             "percentile_disc",
@@ -2115,6 +2152,12 @@ def gen_top_level_agg_func(
             # Therefore, we add two extra columns to account for the listagg_sep column, and the data argument
             ascending = [False, False] + func.ascending
             na_position = [False, False] + func.na_position_b
+        if func.ftype == "array_agg":
+            do_combine = False  # See median/nunique note ^
+            # length of ascending/na_position should be the same as the number of input columns passed to groupby_and_aggregate
+            # Therefore, we add an extra columns to account for the the data argument
+            ascending = [False] + func.ascending
+            na_position = [False] + func.na_position_b
 
         # Update the various window arguments
         n_window_calls_per_func.append(w_calls)

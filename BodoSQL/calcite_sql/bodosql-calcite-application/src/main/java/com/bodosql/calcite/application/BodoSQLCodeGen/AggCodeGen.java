@@ -109,6 +109,7 @@ public class AggCodeGen {
     equivalentHelperFnMap.put("APPROX_PERCENTILE", "approx_percentile");
 
     equivalentExtendedNamedAggAggregates.put("LISTAGG", "listagg");
+    equivalentExtendedNamedAggAggregates.put("ARRAY_AGG", "array_agg");
     equivalentExtendedNamedAggAggregates.put("PERCENTILE_CONT", "percentile_cont");
     equivalentExtendedNamedAggAggregates.put("PERCENTILE_DISC", "percentile_disc");
   }
@@ -250,6 +251,8 @@ public class AggCodeGen {
           || aggFunc.equals("bitand_agg")
           || aggFunc.equals("bitxor_agg")) {
         aggExpr = new Expr.Call("bodo.libs.array_kernels." + aggFunc, aggExpr);
+      } else if (aggFunc.equals("array_agg")) {
+        throw new BodoSQLCodegenException("array_agg not supported without a GROUP BY clause");
       } else if (aggFunc.equals("percentile_cont") || aggFunc.equals("percentile_disc")) {
         if (a.collation == null) {
           throw new BodoSQLCodegenException(a.getName() + " requires a WITHIN GROUP term");
@@ -530,6 +533,34 @@ public class AggCodeGen {
         additionalArgsList.add(
             new Expr.StringLiteral(inputColumnNames.get(curCollation.getFieldIndex())));
         return new Expr.Tuple(additionalArgsList);
+        // TODO: try to fuse logic with LISTAGG
+      case ARRAY_AGG:
+        assert argsList.size() == 1;
+        if (agg.collation != null) {
+          // If the collation exists, populate the relevant fields
+
+          List<Expr.StringLiteral> orderbyList = new ArrayList<>();
+          List<Expr.BooleanLiteral> ascendingList = new ArrayList<>();
+          List<Expr.StringLiteral> nullDirList = new ArrayList<>();
+
+          for (int i = 0; i < agg.collation.getFieldCollations().size(); i++) {
+            curCollation = agg.collation.getFieldCollations().get(i);
+            orderbyList.add(
+                new Expr.StringLiteral(inputColumnNames.get(curCollation.getFieldIndex())));
+            ascendingList.add(getAscendingExpr(curCollation.direction));
+            nullDirList.add(getNAPositionStringLiteral(curCollation.nullDirection));
+          }
+          additionalArgsList.add(new Expr.Tuple(orderbyList));
+          additionalArgsList.add(new Expr.Tuple(ascendingList));
+          additionalArgsList.add(new Expr.Tuple(nullDirList));
+        } else {
+          // Otherwise, just add empty tuples
+          for (int i = 0; i < 3; i++) {
+            additionalArgsList.add(new Expr.Tuple());
+          }
+        }
+
+        return new Expr.Tuple(additionalArgsList);
       case LISTAGG:
         if (argsList.size() == 1) {
           throw new BodoSQLCodegenException(
@@ -569,7 +600,7 @@ public class AggCodeGen {
         return new Expr.Tuple(additionalArgsList);
       default:
         throw new BodoSQLCodegenException(
-            "Internal error in getAdditionalArgs: " + kind.toString() + "not handled");
+            "Internal error in getAdditionalArgs: " + (kind.name()) + "not handled");
     }
   }
 
@@ -678,8 +709,10 @@ public class AggCodeGen {
       } else if (aggFunc.equals("listagg")) {
         Variable dfVar = new Variable("df");
         fnString.append(genNonGroupedListaggCall(dfVar, inputColumnNames, a).emit());
-      } else if (aggFunc.equals("percentile_cont") || aggFunc.equals("percentile_disc")) {
-        throw new BodoSQLCodegenException("PERCENTILE_DISC not supported with a filter clause");
+      } else if (aggFunc.equals("percentile_cont")
+          || aggFunc.equals("percentile_disc")
+          || aggFunc.equals("array_agg")) {
+        throw new BodoSQLCodegenException(aggFunc + " not supported with a filter clause");
       } else {
         if (!isMethod) {
           // If we have a function surround the column
