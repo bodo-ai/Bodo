@@ -8,7 +8,6 @@ from utils.utils import run_cmd
 @pytest.mark.parametrize("sf_username", [1, 2])
 @pytest.mark.parametrize("use_put_method", [False, True])
 def test_snowflake_write(sf_username, use_put_method):
-
     pytest_working_dir = os.getcwd()
     try:
         # change to directory of this file

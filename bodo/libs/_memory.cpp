@@ -159,7 +159,7 @@ arrow::Status LocalStorageManager::DeleteBlock(uint64_t block_id,
 SizeClass::SizeClass(
     uint8_t idx,
     const std::span<std::unique_ptr<StorageManager>> storage_managers,
-    size_t capacity, size_t block_size)
+    size_t capacity, size_t block_size, bool spill_on_unpin, bool move_on_unpin)
     : idx_(idx),
       capacity_(capacity),
       block_size_(block_size),
@@ -173,7 +173,9 @@ SizeClass::SizeClass(
       // Start off priority hints as 1s
       priority_hint_(bitmask_nbytes_, 0xff),
       // Initialize vector of swips
-      swips_(capacity, nullptr) {
+      swips_(capacity, nullptr),
+      spill_on_unpin_(spill_on_unpin),
+      move_on_unpin_(move_on_unpin) {
     // Allocate the address range using mmap.
     // Create a private (i.e. only visible to this process) anonymous (i.e. not
     // backed by a physical file) mapping.
@@ -427,67 +429,70 @@ bool SizeClass::UnpinFrame(uint64_t idx) {
                                  std::to_string(idx) + ") is out of bounds!");
     }
 
-#if defined(MOVE_ON_UNPIN)
-    // Move the data to another frame in the same SizeClass.
+    bool spilled = false;
 
-    // 1. Check if an unmapped frame is available.
-    int64_t new_frame_idx = this->findUnmappedFrame();
-    if (new_frame_idx != -1) {
-        // Mark old frame as unpinned
-        this->markFrameAsUnpinned(idx);
+    if (this->move_on_unpin_) {
+        // Move the data to another frame in the same SizeClass.
+        // 1. Check if an unmapped frame is available.
+        int64_t new_frame_idx = this->findUnmappedFrame();
+        if (new_frame_idx != -1) {
+            // Mark old frame as unpinned
+            this->markFrameAsUnpinned(idx);
 
-        // Move the data and swip to the new frame.
-        this->moveFrame(idx, new_frame_idx);
+            // Move the data and swip to the new frame.
+            this->moveFrame(idx, new_frame_idx);
 
-        // Advise away the old frame
-        this->adviseAwayFrame(idx);
+            // Advise away the old frame
+            this->adviseAwayFrame(idx);
 
-        // Mark the old frame as unmapped and the new one
-        // as mapped.
-        this->markFrameAsUnmapped(idx);
-        this->markFrameAsMapped(new_frame_idx);
+            // Mark the old frame as unmapped and the new one
+            // as mapped.
+            this->markFrameAsUnmapped(idx);
+            this->markFrameAsMapped(new_frame_idx);
 
-        // Mark new frame as unpinned.
-        this->markFrameAsUnpinned(new_frame_idx);
-    }
-    // 2. If no unmapped frame is available, look for another unpinned frame.
-    else {
-        // NOTE: This will find an unpinned other than 'idx' since idx
-        // hasn't been marked as unpinned yet.
-        new_frame_idx = this->findMappedUnpinnedFrame();
+            // Mark new frame as unpinned.
+            this->markFrameAsUnpinned(new_frame_idx);
+        }
+        // 2. If no unmapped frame is available, look for another unpinned
+        // frame.
+        else {
+            // NOTE: This will find an unpinned frame other than 'idx' since idx
+            // hasn't been marked as unpinned yet.
+            new_frame_idx = this->findMappedUnpinnedFrame();
+            // Mark the frame as unpinned:
+            this->markFrameAsUnpinned(idx);
+            if (new_frame_idx != -1) {
+                // Swap the data between the two frames
+                // and update the swips. No other metadata needs
+                // to be updated since both frames are already
+                // mapped and unpinned and should remain so.
+                this->swapFrames(idx, new_frame_idx);
+            }
+            // 3. If no unpinned frame is available either, just spill this
+            // frame.
+            else {
+                CHECK_ARROW_MEM(
+                    this->EvictFrame(idx),
+                    "SizeClass::UnpinFrame: Error during EvictFrame which was "
+                    "used because move_on_unpin is set and no other frame to "
+                    "move the data to could be found: ");
+                spilled = true;
+            }
+        }
+    } else if (this->spill_on_unpin_) {
         // Mark the frame as unpinned:
         this->markFrameAsUnpinned(idx);
-        if (new_frame_idx != -1) {
-            // Swap the data between the two frames
-            // and update the swips. No other metadata needs
-            // to be updated since both frames are already
-            // mapped and unpinned and should remain so.
-            this->swapFrames(idx, new_frame_idx);
-        }
-        // 3. If no unpinned frame is available either, just spill this frame.
-        else {
-            CHECK_ARROW_MEM(
-                this->EvictFrame(idx),
-                "SizeClass::UnpinFrame: Error during EvictFrame which was "
-                "used because MOVE_ON_UNPIN is set and no other frame to move "
-                "the data to could be found: ");
-            return true;
-        }
+        // Force spill the frame to disk:
+        CHECK_ARROW_MEM(
+            this->EvictFrame(idx),
+            "SizeClass::UnpinFrame: Error during EvictFrame which was "
+            "used because spill_on_unpin is set: ");
+        spilled = true;
+    } else {
+        // In the regular case, simply mark the frame as unpinned.
+        this->markFrameAsUnpinned(idx);
     }
-
-#elif defined(SPILL_ON_UNPIN)
-    // Mark the frame as unpinned:
-    this->markFrameAsUnpinned(idx);
-    // Force spill the frame to disk:
-    CHECK_ARROW_MEM(this->EvictFrame(idx),
-                    "SizeClass::UnpinFrame: Error during EvictFrame which was "
-                    "used because SPILL_ON_UNPIN is set: ");
-    return true;
-#else
-    // In the regular case, simply mark the frame as unpinned.
-    this->markFrameAsUnpinned(idx);
-#endif
-    return false;
+    return spilled;
 }
 
 arrow::Status SizeClass::EvictFrame(uint64_t idx) {
@@ -700,19 +705,35 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         }
     }
 
-#if defined(SPILL_ON_UNPIN) && defined(MOVE_ON_UNPIN)
-    static_assert(false, "Cannot set both SPILL_ON_UNPIN and MOVE_ON_UNPIN!");
-#endif  // defined(SPILL_ON_UNPIN) && defined(MOVE_ON_UNPIN)
+    if (char* spill_on_unpin_env_ =
+            std::getenv("BODO_BUFFER_POOL_SPILL_ON_UNPIN")) {
+        options.spill_on_unpin = !std::strcmp(spill_on_unpin_env_, "1");
+    }
+    if (char* move_on_unpin_env_ =
+            std::getenv("BODO_BUFFER_POOL_MOVE_ON_UNPIN")) {
+        options.move_on_unpin = !std::strcmp(move_on_unpin_env_, "1");
+    }
 
-#ifdef SPILL_ON_UNPIN
+    if (options.spill_on_unpin && options.move_on_unpin) {
+        std::cerr << "WARNING: BODO_BUFFER_POOL_SPILL_ON_UNPIN will override "
+                     "BODO_BUFFER_POOL_MOVE_ON_UNPIN"
+                  << std::endl;
+        options.move_on_unpin = false;
+    }
+
     // Since we will spill every unpinned allocation, the user
     // must provide at least one valid storage location to spill to.
-    if (options.storage_options.size() == 0) {
+    if (options.spill_on_unpin && (options.storage_options.size() == 0)) {
         throw std::runtime_error(
             "BufferPoolOptions::Defaults: Must specify at least one storage "
-            "location when building with SPILL_ON_UNPIN");
+            "location when setting spill_on_unpin");
     }
-#endif  // SPILL_ON_UNPIN
+
+    if (options.spill_on_unpin) {
+        std::cerr << "Warning: Using SPILL ON UNPIN." << std::endl;
+    } else if (options.move_on_unpin) {
+        std::cerr << "Warning: Using MOVE ON UNPIN." << std::endl;
+    }
 
     // Read memory_size from env_var if provided.
     // If env var is not set, we will get the memory
@@ -870,9 +891,10 @@ void BufferPool::Initialize() {
     for (uint8_t i = 0; i < num_size_classes; i++) {
         uint64_t num_blocks = static_cast<uint64_t>(this->memory_size_bytes_ /
                                                     size_class_bytes_i);
-        this->size_classes_.emplace_back(
-            std::make_unique<SizeClass>(i, std::span(this->storage_managers_),
-                                        num_blocks, size_class_bytes_i));
+        this->size_classes_.emplace_back(std::make_unique<SizeClass>(
+            i, std::span(this->storage_managers_), num_blocks,
+            size_class_bytes_i, this->options_.spill_on_unpin,
+            this->options_.move_on_unpin));
         this->size_class_bytes_.emplace_back(size_class_bytes_i);
         size_class_bytes_i *= 2;
     }
@@ -1520,9 +1542,8 @@ void BufferPool::Unpin(uint8_t* ptr, int64_t size, int64_t alignment) {
             this->size_classes_[size_class_idx]->UnpinFrame(frame_idx);
         this->update_pinned_bytes(-this->size_class_bytes_[size_class_idx]);
 
-#if defined(SPILL_ON_UNPIN) || defined(MOVE_ON_UNPIN)
-        // In the SPILL_ON_UNPIN case, we will spill any unpinned frames.
-        // In the MOVE_ON_UNPIN case, we might've spilled the frame if
+        // In the spill_on_unpin case, we will spill any unpinned frames.
+        // In the move_on_unpin case, we might've spilled the frame if
         // we weren't able to find another frame to move the data to.
         // We must update the statistics to match this action.
         // 'was_spilled' is guaranteed to be false in the case that neither
@@ -1532,7 +1553,6 @@ void BufferPool::Unpin(uint8_t* ptr, int64_t size, int64_t alignment) {
             this->stats_.UpdateAllocatedBytes(
                 -this->size_class_bytes_[size_class_idx]);
         }
-#endif
     }
 }
 

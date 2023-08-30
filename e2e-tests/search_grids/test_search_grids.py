@@ -10,6 +10,19 @@ BUCKET_NAME = "s3://bodotest-customer-data/search_grid"
 
 
 def test_search(tmp_path):
+    # Get latest AWS creds for any pandas S3 operation.
+    # The env vars should be populated by the assume_iam_role
+    # fixture which is used on all tests by default.
+    # This is required since Pandas/Botocore may keep using
+    # an old "session" whose token has expired. There's no
+    # good way to ask it to reset its credentials, so it's
+    # safer to set the credentials explicitly using
+    # storage_options.
+    s3_storage_options = {
+        "key": os.environ["AWS_ACCESS_KEY_ID"],
+        "secret": os.environ["AWS_SECRET_ACCESS_KEY"],
+        "token": os.environ["AWS_SESSION_TOKEN"],
+    }
     s3_oracle = BUCKET_NAME + "/oracle_df_rec3.csv"
     pytest_working_dir = os.getcwd()
     try:
@@ -19,7 +32,7 @@ def test_search(tmp_path):
         shutil.rmtree("__pycache__", ignore_errors=True)
 
         # get the oracle
-        oracle_df = pd.read_csv(s3_oracle)
+        oracle_df = pd.read_csv(s3_oracle, storage_options=s3_storage_options)
         oracle_sorted = oracle_df.sort_values(list(oracle_df.columns)).reset_index(
             drop=True
         )
@@ -46,7 +59,6 @@ def test_search(tmp_path):
 
 
 def validate_results(bodo_result, oracle):
-
     df2 = bodo.jit(lambda: pd.read_csv(bodo_result))()
     # convert pyarrow string data to regular object arrays to avoid dtype errors
     for i in range(len(df2.columns)):

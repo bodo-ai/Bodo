@@ -1,5 +1,6 @@
 import os
 import subprocess
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -126,17 +127,24 @@ def get_sf_read_conn():
     return f"snowflake://{username}:{password}@{account}/{database}/{schema}?warehouse={warehouse}"
 
 
-def run_cmd(cmd, print_output=True, timeout=3600):
+def run_cmd(
+    cmd,
+    print_output=True,
+    timeout=3600,
+    additional_envs: Optional[Dict[str, str]] = None,
+):
     # TODO: specify a timeout to check_output or will the CI handle this? (e.g.
     # situations where Bodo hangs for some reason)
     # stderr=subprocess.STDOUT to also capture stderr in the result
     try:
+        additional_envs = {} if additional_envs is None else additional_envs
         output = subprocess.check_output(
             cmd,
             stderr=subprocess.STDOUT,
             text=True,
             errors="replace",
             timeout=timeout,
+            env=dict(os.environ, **additional_envs),
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         print(e.output)
