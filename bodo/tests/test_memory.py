@@ -169,6 +169,8 @@ def test_default_memory_options(tmp_path: Path):
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": None,
         }
     ):
         options = BufferPoolOptions.defaults()
@@ -211,6 +213,48 @@ def test_default_memory_options(tmp_path: Path):
         assert options.memory_size == int(0.95 * total_mem)
         assert len(options.storage_options) == 1
         assert BufferPool.from_options(options).is_spilling_enabled()
+
+    # Verify that it raises an error when spill-on-unpin is set but
+    # no spilling locations are provided.
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_SPILL_ON_UNPIN": "1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": None,
+        }
+    ):
+        with pytest.raises(
+            RuntimeError,
+            match="Must specify at least one storage location when setting spill_on_unpin",
+        ):
+            options = BufferPoolOptions.defaults()
+
+    # Verify that setting spill-on-unpin works as expected.
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_SPILL_ON_UNPIN": "1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
+        }
+    ):
+        options = BufferPoolOptions.defaults()
+        assert options.spill_on_unpin
+        assert not options.move_on_unpin
+
+    # Verify that setting move-on-unpin works as expected.
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_MOVE_ON_UNPIN": "1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
+        }
+    ):
+        options = BufferPoolOptions.defaults()
+        assert not options.spill_on_unpin
+        assert options.move_on_unpin
 
 
 def test_default_storage_options(tmp_path: Path):
@@ -2137,6 +2181,225 @@ def test_buffer_pool_eq():
     del pool1
     del pool2
     del pool3
+
+
+def test_spill_on_unpin(tmp_path: Path):
+    """
+    Test that spill on unpin functionality
+    works as expected.
+    """
+
+    # Create a pool with spill_on_unpin=True
+    local_opt = StorageOptions(usable_size=100 * 1024 * 1024, location=bytes(tmp_path))
+    options: BufferPoolOptions = BufferPoolOptions(
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        spill_on_unpin=True,
+        storage_options=[local_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Make an allocation that goes through a SizeClass
+    write_bytes = b"Hello BufferPool from Bodo!"
+    allocation_1: BufferPoolAllocation = pool.allocate(3.5 * 1024 * 1024)
+    allocation_1.write_bytes(write_bytes)
+
+    # Unpin it
+    pool.unpin(allocation_1)
+
+    # Verify that it's been spilled to disk and contents are correct
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
+
+    # Look for spilled file in expected location
+    # First Folder Expected to Have Prepended Rank
+    paths = list(tmp_path.glob(f"{bodo.get_rank()}-*"))
+    assert len(paths) == 1
+    inner_path = paths[0]
+    # Block File should be in {size_class}/{block_id}
+    block_file = inner_path / str(4 * 1024 * 1024) / "0"
+    assert block_file.is_file()
+
+    # Check file contents
+    expected_contents = (
+        write_bytes
+        + b"\x00"
+        + (255 - len(write_bytes)) * b"\xcb"
+        + (4 * 1024 * 1024 - 256) * b"\x00"
+    )
+    assert block_file.read_bytes() == expected_contents
+
+    # Pin it back and verify contents
+    pool.pin(allocation_1)
+    contents_after_pin_back = allocation_1.read_bytes(3.5 * 1024 * 1024)
+    assert contents_after_pin_back == write_bytes
+
+    pool.free(allocation_1)
+    pool.cleanup()
+    del pool
+
+
+def test_move_on_unpin_move_frame_case(tmp_path: Path):
+    """
+    Test that the "moveFrame" case of move on
+    unpin works as expected.
+    """
+    # Create a pool with move_on_unpin=True
+    local_opt = StorageOptions(usable_size=100 * 1024 * 1024, location=bytes(tmp_path))
+    options: BufferPoolOptions = BufferPoolOptions(
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=15,
+        move_on_unpin=True,
+        storage_options=[local_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Allocate from SizeClass other largest one (i.e. at least 2 frames).
+    write_bytes = b"Hello BufferPool from Bodo!"
+    allocation: BufferPoolAllocation = pool.allocate(1.5 * 1024 * 1024)
+    allocation.write_bytes(write_bytes)
+    orig_ptr_alloc = allocation.get_ptr_as_int()
+
+    # Unpin allocation so that it moves it. Verify that
+    # it's been moved.
+    pool.unpin(allocation)
+    assert orig_ptr_alloc != allocation.get_ptr_as_int()
+    # Verify that it's at the next frame
+    assert allocation.get_ptr_as_int() == (orig_ptr_alloc + 2 * 1024 * 1024)
+    # Verify contents -- this is technically unsafe to do when a frame is
+    # unpinned, but in this case we're sure it's still in memory.
+    assert write_bytes == allocation.read_bytes(1.5 * 1024 * 1024)
+
+    # Pin back and verify that it's still at another frame
+    pool.pin(allocation)
+    assert orig_ptr_alloc != allocation.get_ptr_as_int()
+    assert allocation.get_ptr_as_int() == (orig_ptr_alloc + 2 * 1024 * 1024)
+    assert write_bytes == allocation.read_bytes(1.5 * 1024 * 1024)
+
+    pool.free(allocation)
+    pool.cleanup()
+    del pool
+
+
+def test_move_on_unpin_swap_frames_case(tmp_path: Path):
+    """
+    Test that the "swapFrames" case of move on
+    unpin works as expected.
+    """
+
+    # Create a pool with move_on_unpin=True
+    local_opt = StorageOptions(usable_size=100 * 1024 * 1024, location=bytes(tmp_path))
+    options: BufferPoolOptions = BufferPoolOptions(
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=15,
+        move_on_unpin=True,
+        storage_options=[local_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Allocate from SizeClass with two frames (4MiB) and unpin it
+    write_bytes_1 = b"[1] Hello BufferPool from Bodo!"
+    allocation_1: BufferPoolAllocation = pool.allocate(3.5 * 1024 * 1024)
+    allocation_1.write_bytes(write_bytes_1)
+    orig_ptr_alloc_1 = allocation_1.get_ptr_as_int()
+    pool.unpin(allocation_1)
+    ptr_after_unpin_alloc_1 = allocation_1.get_ptr_as_int()
+    assert write_bytes_1 == allocation_1.read_bytes(3.5 * 1024 * 1024)
+    assert ptr_after_unpin_alloc_1 != orig_ptr_alloc_1
+    assert ptr_after_unpin_alloc_1 == (orig_ptr_alloc_1 + 4 * 1024 * 1024)
+
+    # Allocate again from the same SizeClass and unpin it. This will swap it.
+    write_bytes_2 = b"[2] Hello BufferPool from Bodo!"
+    allocation_2: BufferPoolAllocation = pool.allocate(3.5 * 1024 * 1024)
+    allocation_2.write_bytes(write_bytes_2)
+    orig_ptr_alloc_2 = allocation_2.get_ptr_as_int()
+    pool.unpin(allocation_2)
+    ptr_after_unpin_alloc_2 = allocation_2.get_ptr_as_int()
+    # Update alloc_1 pointer
+    ptr_after_unpin_alloc_1 = allocation_1.get_ptr_as_int()
+    assert write_bytes_2 == allocation_2.read_bytes(3.5 * 1024 * 1024)
+    assert ptr_after_unpin_alloc_2 != orig_ptr_alloc_2
+    # Confirm the swap
+    assert ptr_after_unpin_alloc_1 == orig_ptr_alloc_1 == orig_ptr_alloc_2
+    assert ptr_after_unpin_alloc_2 != orig_ptr_alloc_1
+
+    # Pin back both and verify addresses and contents
+    pool.pin(allocation_1)
+    ptr_after_pin_alloc_1 = allocation_1.get_ptr_as_int()
+    assert write_bytes_1 == allocation_1.read_bytes(3.5 * 1024 * 1024)
+    assert ptr_after_pin_alloc_1 == ptr_after_unpin_alloc_1
+    pool.pin(allocation_2)
+    ptr_after_pin_alloc_2 = allocation_2.get_ptr_as_int()
+    assert write_bytes_2 == allocation_2.read_bytes(3.5 * 1024 * 1024)
+    assert ptr_after_pin_alloc_2 == ptr_after_unpin_alloc_2
+
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+
+    pool.cleanup()
+    del pool
+
+
+def test_move_on_unpin_spill_case(tmp_path: Path):
+    """
+    Test that the "spillFrame" case of move on
+    unpin works as expected.
+    """
+
+    # Create a pool with move_on_unpin=True
+    local_opt = StorageOptions(usable_size=100 * 1024 * 1024, location=bytes(tmp_path))
+    options: BufferPoolOptions = BufferPoolOptions(
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=15,
+        move_on_unpin=True,
+        storage_options=[local_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Allocate from largest size class with a single frame
+    write_bytes = b"[4] Hello BufferPool from Bodo!"
+    allocation: BufferPoolAllocation = pool.allocate(6 * 1024 * 1024)
+    allocation.write_bytes(write_bytes)
+
+    # Unpin it
+    pool.unpin(allocation)
+
+    # Verify that it's been spilled to disk and contents are correct
+    assert not allocation.is_nullptr() and not allocation.is_in_memory()
+
+    # Look for spilled file in expected location
+    # First Folder Expected to Have Prepended Rank
+    paths = list(tmp_path.glob(f"{bodo.get_rank()}-*"))
+    assert len(paths) == 1
+    inner_path = paths[0]
+    # Block File should be in {size_class}/{block_id}
+    block_file = inner_path / str(8 * 1024 * 1024) / "0"
+    assert block_file.is_file()
+
+    # Check file contents
+    expected_contents = (
+        write_bytes
+        + b"\x00"
+        + (255 - len(write_bytes)) * b"\xcb"
+        + (8 * 1024 * 1024 - 256) * b"\x00"
+    )
+    assert block_file.read_bytes() == expected_contents
+
+    # Pin back
+    pool.pin(allocation)
+    contents_after_pin_back = allocation.read_bytes(6 * 1024 * 1024)
+    assert contents_after_pin_back == write_bytes
+
+    pool.free(allocation)
+
+    pool.cleanup()
+    del pool
 
 
 ## OperatorBufferPool tests

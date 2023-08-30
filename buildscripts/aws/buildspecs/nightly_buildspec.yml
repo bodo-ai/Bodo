@@ -1,7 +1,8 @@
 version: 0.2
 
 # Link to reference documentation: https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html
-# Running on an instance of specs: 145 GB memory, 72 vCPUs
+# https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html
+# Running on an instance of specs: 145 GB memory, 72 vCPUs, 824 GB (SSD)
 
 env:
   shell: /bin/bash

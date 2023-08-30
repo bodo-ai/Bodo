@@ -5,7 +5,6 @@ from utils.utils import run_cmd
 
 
 def test_sequences():
-
     pytest_working_dir = os.getcwd()
     try:
         # change to directory of this file
