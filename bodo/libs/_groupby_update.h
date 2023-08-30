@@ -237,6 +237,31 @@ void boolxor_combine(const std::shared_ptr<array_info>& one_col_in,
                      const std::shared_ptr<array_info>& two_col_out,
                      grouping_info const& grp_info);
 
+// ARRAY_AGG
+
+/**
+ * @brief The array_agg function. It uses the symbolic information to compute
+ * the nunique results.
+ *
+ * @param[in] in_arr The column on which we do the computation.
+ * @param[in,out] out_arr The column which contains array_agg results.
+ * @param[in] orderby_cols The columns to sort each group internally by.
+ * @param[in] ascending Which of the orderby_cols to sort in increasing order.
+ * @param[in] na_position Which of the orderby_cols to place nulls first/last
+ * during sorting.
+ * @param[in] grp_info The array containing information on how the rows are
+ * organized.
+ * @param[in] is_parallel Is the computation happening in parallel (used for
+ * tracing).
+ */
+void array_agg_computation(
+    const std::shared_ptr<array_info>& in_arr,
+    std::shared_ptr<array_info> out_arr,
+
+    const std::vector<std::shared_ptr<array_info>>& orderby_cols,
+    const std::vector<bool>& ascending, const std::vector<bool>& na_position,
+    const grouping_info& grp_info, bool is_parallel);
+
 // NUNIQUE
 
 /**

@@ -1449,7 +1449,19 @@ numeric types
 
     !!! note
         This aggregation function is currently only supported with a `GROUP BY` clause.
-        In case of a tie, BodoSQL will choose a value arbitrarily based on performance considerations.
+
+#### ARRAY_AGG
+-   `#!sql ARRAY_AGG(A) [WITHIN GROUP(ORDER BY orderby_terms)]`
+
+    Combines all the values in column `A` within each group into a single array.
+
+    Optionally allows using a `WITHIN GROUP` clause to specify how the values should
+    be ordered before being combined into an array. If no clause is specified, then the ordering
+    is unpredictable.
+
+    !!! note
+        This aggregation function is currently only supported with a `GROUP BY` clause,
+        without a `DISTINCT` CLAUSE, and on numerical data (integers, floats, etc.).
 
 #### APPROX_PERCENTILE
 -   `#!sql APPROX_PERCENTILE(A, q)`

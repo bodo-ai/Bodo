@@ -1002,6 +1002,62 @@ std::shared_ptr<array_info> ListAggColSet::getOutputColumn() {
     return out_col;
 }
 
+// ############################## ArrayAgg ##############################
+
+ArrayAggColSet::ArrayAggColSet(
+    std::shared_ptr<array_info> in_col,
+    std::vector<std::shared_ptr<array_info>> _orderby_cols,
+    std::vector<bool> _ascending, std::vector<bool> _na_position,
+    bool _is_parallel)
+    : BasicColSet(in_col, Bodo_FTypes::array_agg, false, true),
+      orderby_cols(_orderby_cols),
+      ascending(_ascending),
+      na_position(_na_position),
+      is_parallel(_is_parallel) {}
+
+ArrayAggColSet::~ArrayAggColSet() {}
+
+void ArrayAggColSet::alloc_running_value_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    Bodo_CTypes::CTypeEnum dtype = in_col->dtype;
+    // Need to allocate a dummy inner column for now since we cannot allocate
+    // the real array until we know the sizes; the real inner array will be
+    // handled later.
+    std::shared_ptr inner_arr = alloc_array(0, 1, 1, in_col->arr_type, dtype);
+    out_cols.push_back(alloc_array_item(num_groups, inner_arr));
+}
+
+void ArrayAggColSet::update(const std::vector<grouping_info>& grp_infos) {
+    if (this->combine_step) {
+        throw std::runtime_error(
+            "Internal error in ArrayAggColSet::update: array_agg must always "
+            "shuffle before update");
+    } else {
+        if (grp_infos.size() != 1) {
+            throw new std::runtime_error(
+                "Internal error in ArrayAggColSet::update: grp_infos length "
+                "does not equal 1. Each ArrayAggColSet should handle only one "
+                "group");
+        }
+        if (in_col->arr_type != bodo_array_type::arr_type_enum::NUMPY &&
+            in_col->arr_type !=
+                bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL) {
+            throw new std::runtime_error(
+                "Internal error in ArrayAggColSet::update: unsupported array "
+                "type " +
+                (GetArrType_as_string(in_col->arr_type)));
+        }
+        array_agg_computation(in_col, update_cols[0], orderby_cols, ascending,
+                              na_position, grp_infos[0], is_parallel);
+    }
+}
+
+// Since we don't do combine, output column is always at update_cols[0]
+const std::vector<std::shared_ptr<array_info>>
+ArrayAggColSet::getOutputColumns() {
+    return {update_cols[0]};
+}
+
 // ############################## Kurtosis ##############################
 
 KurtColSet::KurtColSet(std::shared_ptr<array_info> in_col, int ftype,
@@ -1635,11 +1691,13 @@ std::unique_ptr<BasicColSet> makeColSet(
     BasicColSet* colset;
 
     if ((ftype != Bodo_FTypes::window && ftype != Bodo_FTypes::listagg &&
+         ftype != Bodo_FTypes::array_agg &&
          ftype != Bodo_FTypes::percentile_cont &&
          ftype != Bodo_FTypes::percentile_disc) &&
         in_cols.size() != 1) {
         throw std::runtime_error(
-            "Only window functions and listagg can have multiple input "
+            "Only listagg, array_agg, percentile_cont, percentile_disc and "
+            "window functions can have multiple input "
             "columns");
     }
     switch (ftype) {
@@ -1733,6 +1791,16 @@ std::unique_ptr<BasicColSet> makeColSet(
                 std::vector<std::shared_ptr<array_info>>(in_cols.begin() + 2,
                                                          in_cols.end()),
                 window_ascending, window_na_position);
+            break;
+        case Bodo_FTypes::array_agg:
+
+            colset = new ArrayAggColSet(
+                // data column
+                in_cols[0],
+                // Remaining columns are the columns to order by
+                std::vector<std::shared_ptr<array_info>>(in_cols.begin() + 1,
+                                                         in_cols.end()),
+                window_ascending, window_na_position, is_parallel);
             break;
         default:
             colset =
