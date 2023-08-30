@@ -159,6 +159,7 @@ class GroupbyPipeline {
                        ftype == Bodo_FTypes::ngroup ||
                        ftype == Bodo_FTypes::window ||
                        ftype == Bodo_FTypes::listagg ||
+                       ftype == Bodo_FTypes::array_agg ||
                        ftype == Bodo_FTypes::percentile_cont ||
                        ftype == Bodo_FTypes::percentile_disc) {
                 // these operations first require shuffling the data to
@@ -621,7 +622,6 @@ class GroupbyPipeline {
             alloc_init_keys(tables, update_table, grp_infos, num_keys,
                             num_groups);
         }
-
         for (auto col_set : col_sets) {
             std::vector<std::shared_ptr<array_info>> list_arr;
             col_set->alloc_update_columns(update_col_len, list_arr);

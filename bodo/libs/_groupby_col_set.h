@@ -664,6 +664,34 @@ class ModeColSet : public BasicColSet {
 };
 
 /**
+ * @brief ColSet for ARRAY_AGG.
+ *
+ */
+class ArrayAggColSet : public BasicColSet {
+   public:
+    ArrayAggColSet(std::shared_ptr<array_info> in_col,
+                   std::vector<std::shared_ptr<array_info>> orderby_cols,
+                   std::vector<bool> ascending, std::vector<bool> na_position,
+                   bool _is_parallel);
+
+    ~ArrayAggColSet() override;
+
+    void alloc_running_value_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+
+    void update(const std::vector<grouping_info>& grp_infos) override;
+
+    const std::vector<std::shared_ptr<array_info>> getOutputColumns() override;
+
+   private:
+    std::vector<std::shared_ptr<array_info>> orderby_cols;
+    std::vector<bool> ascending;
+    std::vector<bool> na_position;
+    bool is_parallel;
+};
+
+/**
  * @brief ColSet for Nunique operations.
  *
  */

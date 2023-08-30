@@ -1378,3 +1378,56 @@ def test_mode(values, dtype, memory_leak_check):
         check_names=False,
         check_dtype=False,
     )
+
+
+@pytest.mark.parametrize(
+    "call, answer",
+    [
+        pytest.param(
+            "ARRAY_AGG(D) WITHIN GROUP (ORDER BY O)",
+            [[20, 15, 12, 7, 2, 0], [21, 18, 13, 8, 6, 3, 1], [24, 19, 14, 9]],
+            id="with_order",
+        ),
+        pytest.param(
+            "ARRAY_AGG(D)",
+            [[0, 2, 7, 12, 15, 20], [1, 3, 6, 8, 13, 18, 21], [9, 14, 19, 24]],
+            id="no_order",
+        ),
+    ],
+)
+def test_array_agg(call, answer, memory_leak_check):
+    """Tests ARRAY_AGG on integer data with and without a WITHIN GROUP clause containing
+    a single ordering term, no DISTINCT, and accompanied by a GROUP BY.
+
+    An ORDER BY clause at the end of the query must be provided since
+    sort_output=True is not supported on nested array data.
+    """
+    query = f"SELECT K, {call} FROM table1 GROUP BY K ORDER BY K"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "K": pd.Series(list("EIEIO") * 5),
+                "O": list(range(25, 0, -1)),
+                "D": pd.Series(
+                    [None if i % 6 > 3 else i for i in range(25)], dtype=pd.Int32Dtype()
+                ),
+            }
+        )
+    }
+
+    answer = pd.DataFrame(
+        {
+            0: list("EIO"),
+            1: answer,
+        }
+    )
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,  # Unsupported on nested array data
+    )

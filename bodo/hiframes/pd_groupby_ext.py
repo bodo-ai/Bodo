@@ -417,6 +417,19 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             None,
             f"For listagg, only string columns are allowed",
         )
+    elif func_name == "array_agg":
+        # For array_agg, output is a nested array where the internal arrays' dtypes
+        # are the same as the original input. Only numerical data currently supported.
+        if not isinstance(
+            in_dtype, (types.Integer, types.Float, types.Boolean)
+        ) and not isinstance(
+            arr_type, bodo.DecimalArrayType
+        ):  # pragma: no cover
+            return (
+                None,
+                f"Unsupported dtype for array_agg: {in_dtype}",
+            )
+        return ArrayItemArrayType(arr_type), "ok"
 
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         if is_list_string or in_dtype == types.unicode_type:
@@ -964,6 +977,13 @@ def handle_extended_named_agg_input_cols(
             get_literal_value(args[1]) == "listagg"
         ), "Internal error in resolve_listagg_func_inputs: Called on not listagg function."
         return resolve_listagg_func_inputs(data_col_name, additional_args_made_literal)
+    if f_name == "array_agg":
+        assert (
+            get_literal_value(args[1]) == "array_agg"
+        ), "Internal error in resolve_array_agg_func_inputs: Called on not array_agg function."
+        return resolve_array_agg_func_inputs(
+            data_col_name, additional_args_made_literal
+        )
     if f_name in {"percentile_cont", "percentile_disc"}:
         assert (
             get_literal_value(args[1]) == f_name
@@ -1019,6 +1039,46 @@ def resolve_listagg_func_inputs(data_col_name, additional_args) -> Tuple:
 
     # orderby is the only columnar input that should be included in the input columns
     input_cols = (data_col_name,) + (sep,) + order_by
+    additional_args = (ascending, na_position)
+    return input_cols, additional_args
+
+
+def resolve_array_agg_func_inputs(data_col_name, additional_args) -> Tuple:
+    order_by = additional_args[0]
+    ascending = additional_args[1]
+    na_position = additional_args[2]
+
+    if not (
+        isinstance(order_by, tuple)
+        and all(isinstance(col_name, str) for col_name in order_by)
+    ):  # pragma: no cover
+        raise_bodo_error(
+            "Groupby.array_agg: 'order_by' argument must be a tuple of column names if provided."
+        )
+    if not (
+        isinstance(ascending, tuple) and all(isinstance(val, bool) for val in ascending)
+    ):  # pragma: no cover
+        raise_bodo_error(
+            "Groupby.array_agg: 'ascending' argument must be a tuple of booleans if provided."
+        )
+
+    if not (
+        isinstance(na_position, tuple)
+        and all(isinstance(val, str) for val in na_position)
+    ):  # pragma: no cover
+        raise_bodo_error(
+            "Groupby.array_agg: 'na_position' argument must be a tuple of 'first' or 'last' if provided."
+        )
+
+    if len(order_by) != len(ascending) or len(ascending) != len(
+        na_position
+    ):  # pragma: no cover
+        raise_bodo_error(
+            "Groupby.array_agg: 'order_by', 'ascending', and 'na_position' arguments must have the same length."
+        )
+
+    # orderby is the only columnar input that should be included in the input columns
+    input_cols = (data_col_name,) + order_by
     additional_args = (ascending, na_position)
     return input_cols, additional_args
 
