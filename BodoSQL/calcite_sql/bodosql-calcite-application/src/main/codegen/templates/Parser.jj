@@ -4266,7 +4266,7 @@ SqlCall StringAggFunctionCall() :
  */
 SqlNode AtomicRowExpression() :
 {
-    final SqlNode e;
+    SqlNode e;
 }
 {
     (
@@ -4319,7 +4319,61 @@ SqlNode AtomicRowExpression() :
     |
         e = SequenceExpression()
     )
+
+    // An expression in the form A:B is a field access on a JSON object
+    [ <COLON> e = NestedAccess(e) ]
+
     { return e; }
+}
+
+/* Parses accesses to a JSON object, e.g. obj:field1.field2, where lhs
+ * is the already-parsed expresiont that evaluates to the JSON object. This
+ * production is responsible for picking up the accesses after the colon
+ * and combining them all into a GET_PATH call. */
+SqlNode NestedAccess(SqlNode lhs) :
+{
+    StringBuilder accessNames = new StringBuilder();
+    List<SqlNode> operands = new ArrayList<SqlNode>();
+    operands.add(lhs);
+}
+{
+    FieldAccess(accessNames)
+    (
+        ( <DOT> | <COLON> )
+        { accessNames.append("."); }
+        FieldAccess(accessNames)
+    )*
+    {
+        operands.add(SqlLiteral.createCharString(accessNames.toString(), getPos()));
+        return JsonOperatorTable.GET_PATH.createCall(getPos(), operands);
+    }
+}
+
+/* Variant of IdentifierSegment designed for JSON field accesses. Picks up
+ * the identifier and addes it to a string builder input without adjusting
+ * the input's casing, since JSON keys are case-sensitive. */
+void FieldAccess(StringBuilder accessNames) :
+{
+    final String fieldName;
+}
+{
+    (
+        (   <IDENTIFIER>
+        |   NonReservedKeyWord0of3()
+        |   NonReservedKeyWord1of3()
+        |   NonReservedKeyWord2of3()
+        )   {
+            fieldName = SqlParserUtil.toCase(getToken(0).image, Casing.UNCHANGED);
+        }
+    |
+        <QUOTED_IDENTIFIER> {
+            fieldName = SqlParserUtil.stripQuotes(getToken(0).image, DQ, DQ, DQDQ,
+                Casing.UNCHANGED);
+        }
+    )
+    {
+        accessNames.append(fieldName);
+    }
 }
 
 SqlNode CaseExpression() :
@@ -8549,10 +8603,6 @@ String NonReservedKeyWord() :
         NonReservedKeyWord0of3()
     |   NonReservedKeyWord1of3()
     |   NonReservedKeyWord2of3()
-    |   <WIDTH_BUCKET>
-    |   <CONTAINS>
-    |   <INSERT>
-    |   <DAY>
     )
     {
         return unquotedIdentifier();
