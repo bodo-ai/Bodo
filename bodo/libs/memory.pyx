@@ -355,7 +355,9 @@ cdef class BufferPoolOptions(_Weakrefable):
                  min_size_class=None,
                  max_num_size_classes=None,
                  ignore_max_limit_during_allocation=None,
-                 storage_options=None):
+                 storage_options=None,
+                 spill_on_unpin=None,
+                 move_on_unpin=None):
         """
         Constructor for BufferPoolOptions.
         If the attributes are not provided, they default
@@ -373,6 +375,10 @@ cdef class BufferPoolOptions(_Weakrefable):
         if storage_options is not None:
             for option in storage_options:
                 self.c_add_storage(option)
+        if spill_on_unpin is not None:
+            self.options.spill_on_unpin = spill_on_unpin
+        if move_on_unpin is not None:
+            self.options.move_on_unpin = move_on_unpin
 
     cdef void c_add_storage(self, StorageOptions option):
         self.options.storage_options.push_back(option.options)
@@ -412,6 +418,14 @@ cdef class BufferPoolOptions(_Weakrefable):
         for i in range(self.c_storage_options_len()):
             res.append(self.c_storage_option(i))
         return res
+    
+    @property
+    def spill_on_unpin(self):
+        return self.options.spill_on_unpin
+    
+    @property
+    def move_on_unpin(self):
+        return self.options.move_on_unpin
 
     @staticmethod
     def defaults():

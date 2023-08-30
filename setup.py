@@ -112,37 +112,6 @@ if "--debug" in sys.argv:
 else:
     debug_flag = "-g0"
 
-# When spill-on-unpin is set, all unpinned allocations
-# (assuming they are from a SizeClass and not allocated
-# through malloc) are forcefully spilled to disk. This
-# is useful for testing correctness and is not intended
-# for production use cases.
-spill_on_unpin = False
-if "--spill-on-unpin" in sys.argv:
-    spill_on_unpin = True
-    sys.argv.remove("--spill-on-unpin")
-
-# When move-on-unpin is set, all unpinned allocations
-# (assuming they are from a SizeClass and not allocated
-# through malloc) are forcefully moved to a different
-# frame in the same SizeClass. We first try to move it to
-# an unused frame. If one cannot be found, we swap it with
-# another unpinned frame. If we cannot find another unpinned
-# frame either, we just spill the block.
-# This is useful for testing correctness and is not
-# intended for production use cases.
-move_on_unpin = False
-if "--move-on-unpin" in sys.argv:
-    move_on_unpin = True
-    sys.argv.remove("--move-on-unpin")
-
-# If both spill-on-unpin and move-on-unpin are set, the
-# latter will be effectively ignored.
-if spill_on_unpin and move_on_unpin:
-    # Set move_on_unpin to False. From here on out,
-    # at most one of these two will be set to True.
-    move_on_unpin = False
-    print("WARNING: --spill-on-unpin will override --move-on-unpin")
 
 is_testing = os.environ.get("NUMBA_DEVELOPER_MODE") == "1"
 if "--no-test" in sys.argv:
@@ -404,11 +373,6 @@ if is_testing:
     )
     ext_metadata["define_macros"].append(("IS_TESTING", "1"))
 
-if spill_on_unpin:
-    ext_metadata["define_macros"].append(("SPILL_ON_UNPIN", "1"))
-elif move_on_unpin:
-    ext_metadata["define_macros"].append(("MOVE_ON_UNPIN", "1"))
-
 
 # We cannot compile with -Werror yet because _fsspec_reader.cpp
 # depends on pyfs.cpp which generates a warning.
@@ -510,12 +474,6 @@ ext_tracing = Extension(
 builtin_exts.append(ext_tracing)
 pyx_builtins.append(os.path.join("bodo", "utils", "tracing.pyx"))
 
-ext_memory_macros = []
-if spill_on_unpin:
-    ext_memory_macros.append(("SPILL_ON_UNPIN", "1"))
-elif move_on_unpin:
-    ext_memory_macros.append(("MOVE_ON_UNPIN", "1"))
-
 ext_memory = Extension(
     name="bodo.libs.memory",
     sources=[
@@ -526,7 +484,7 @@ ext_memory = Extension(
     include_dirs=np_compile_args["include_dirs"]
     + ind
     + pa_compile_args["include_dirs"],
-    define_macros=ext_memory_macros,
+    define_macros=[],
     library_dirs=lid + pa_compile_args["library_dirs"],
     libraries=["arrow", "arrow_python"] + mpi_libs,
     # Cannot compile with -Werror yet because memory.cpp

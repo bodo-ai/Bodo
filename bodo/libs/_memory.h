@@ -144,6 +144,24 @@ struct BufferPoolOptions {
     /// @brief Config for Storage Managers
     std::vector<std::shared_ptr<StorageOptions>> storage_options;
 
+    /// @brief When spill-on-unpin is set, all unpinned allocations
+    /// (assuming they are from a SizeClass and not allocated
+    /// through malloc) are forcefully spilled to disk. This
+    /// is useful for testing correctness and is not intended
+    /// for production use cases.
+    bool spill_on_unpin = false;
+
+    /// @brief When move-on-unpin is set, all unpinned allocations
+    /// (assuming they are from a SizeClass and not allocated
+    /// through malloc) are forcefully moved to a different
+    /// frame in the same SizeClass. We first try to move it to
+    /// an unused frame. If one cannot be found, we swap it with
+    /// another unpinned frame. If we cannot find another unpinned
+    /// frame either, we just spill the block.
+    /// This is useful for testing correctness and is not
+    /// intended for production use cases.
+    bool move_on_unpin = false;
+
     static BufferPoolOptions Defaults();
 };
 
@@ -313,10 +331,16 @@ class SizeClass final {
      *  to spill frames to. Owned by the Buffer Pool
      * @param capacity Number of frames to allocate
      * @param block_size Size of each frame (in bytes).
+     * @param spill_on_unpin Whether the unpin behavior should be to spill the
+     * frame. See BufferPoolOptions::spill_on_unpin for the full description.
+     * @param move_on_unpin Whether the unpin behavior should be to move the
+     * frame (or spill if no other frame could be found). See
+     * BufferPoolOptions::move_on_unpin for the full description.
      */
     SizeClass(uint8_t idx,
               const std::span<std::unique_ptr<StorageManager>> storage_managers,
-              size_t capacity, size_t block_size);
+              size_t capacity, size_t block_size, bool spill_on_unpin,
+              bool move_on_unpin);
 
     /**
      * @brief Delete the SizeClass and unmap the allocated
@@ -421,9 +445,9 @@ class SizeClass final {
      *
      * @param idx Frame index to unpin.
      * @return bool Was the frame spilled to disk. This is only applicable in
-     * the SPILL_ON_UNPIN or MOVE_ON_UNPIN cases. In the regular case, this will
-     * always be false. In the SPILL_ON_UNPIN case, this will always be true.
-     * In the MOVE_ON_UNPIN case, this will be true only if we weren't able to
+     * the spill_on_unpin or move_on_unpin cases. In the regular case, this will
+     * always be false. In the spill_on_unpin case, this will always be true.
+     * In the move_on_unpin case, this will be true only if we weren't able to
      * find an alternative frame to move the data to and had to spill the block
      * instead.
      */
@@ -528,6 +552,12 @@ class SizeClass final {
     /// done by STL containers).
     std::vector<OwningSwip> swips_;
 
+    /// @brief See full description in BufferPoolOptions::spill_on_unpin.
+    const bool spill_on_unpin_;
+
+    /// @brief See full description in BufferPoolOptions::move_on_unpin.
+    const bool move_on_unpin_;
+
     /// @brief Helper function to mark the frame at
     /// index idx as "mapped", i.e. taken.
     inline void markFrameAsMapped(uint64_t idx);
@@ -555,7 +585,7 @@ class SizeClass final {
      * @brief Find the index of the first mapped unpinned
      * frame in this SizeClass. Note that this only finds
      * the frame but doesn't mark it as pinned.
-     * This is only used in the MOVE_ON_UNPIN case at this point.
+     * This is only used in the move_on_unpin_ case at this point.
      *
      * @return int64_t Index of the first mapped unpinned frame. -1 if no such
      * frame was found.
@@ -565,7 +595,7 @@ class SizeClass final {
     /**
      * @brief Move data from the idx1'th frame to the idx2'th frame and update
      * the swips, including the swip owners pointing to these frames. Currently
-     * this is only used in the MOVE_ON_UNPIN case and is only practical for
+     * this is only used in the move_on_unpin_ case and is only practical for
      * swapping two unpinned frames (swapping pinned frames is not unsafe).
      *
      * @param idx1
@@ -576,7 +606,7 @@ class SizeClass final {
     /**
      * @brief Move data and swip (including swip owner pointing to the frame)
      * from the source_idx'th frame to the target_idx'th frame.
-     * Currently this is only used in the MOVE_ON_UNPIN case. Note that
+     * Currently this is only used in the move_on_unpin_ case. Note that
      * this is only really practical when the source_idx'th frame is
      * unpinned since moving pinned frames is not safe.
      * Also note that this function just moves the data and swip and doesn't
