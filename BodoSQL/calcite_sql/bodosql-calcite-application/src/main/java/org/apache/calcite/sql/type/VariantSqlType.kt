@@ -1,5 +1,8 @@
 package org.apache.calcite.sql.type
 
+import org.apache.calcite.rel.type.RelDataTypeComparability
+import org.apache.calcite.rel.type.RelDataTypeFamily
+
 /**
  * Implementation of the Snowflake Variant type.
  * This type can be converted to by any type but
@@ -20,6 +23,34 @@ class VariantSqlType(nullable: Boolean) : AbstractSqlType(SqlTypeName.OTHER, nul
      * be included;
      */
     override fun generateTypeString(sb: StringBuilder, withDetail: Boolean) {
-        sb.append("VARIANT()")
+        // Note: We don't use withDetail because there are no details to add
+        // yet. If we represent this with a "real runtime type" then we will
+        // likely use this then.
+        sb.append("VARIANT")
+    }
+
+    /**
+     * Indicate that the variant type can be used in all comparison
+     * operations.
+     */
+    override fun getComparability(): RelDataTypeComparability {
+        return RelDataTypeComparability.ALL
+    }
+
+    override fun getFamily(): RelDataTypeFamily {
+        return typeFamily
+    }
+
+    /** Define a variant family so all Variant types even if
+     * they differ in nullability are considered comparable. */
+    private class VariantDataTypeFamily: RelDataTypeFamily {
+
+        override fun equals(other: Any?): Boolean {
+            return other != null && other is VariantDataTypeFamily
+        }
+    }
+    companion object {
+        @JvmStatic
+        private val typeFamily: VariantDataTypeFamily = VariantDataTypeFamily()
     }
 }
