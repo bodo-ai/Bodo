@@ -8,10 +8,7 @@ import bodosql
 import pandas as pd
 
 import bodo
-
-from bodo.tests.utils import (
-    pytest_perf_regression
-)
+from bodo.tests.utils import pytest_perf_regression
 
 pytestmark = pytest_perf_regression
 
