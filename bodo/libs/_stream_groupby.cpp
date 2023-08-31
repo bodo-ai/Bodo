@@ -438,6 +438,7 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
         // TODO(njriasan): Move eval computation directly into the output
         // buffer.
         groupby_state->InitOutputBuffer(out_table);
+        out_table = groupby_state->UnifyOutputDictionaryArrays(out_table);
         groupby_state->output_buffer->AppendBatch(out_table);
         groupby_state->output_buffer->Finalize();
     }
@@ -464,12 +465,12 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     auto iterationEvent(groupby_state->groupby_event.iteration());
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
     is_last = stream_sync_is_last(is_last, groupby_state->build_iter,
                                   groupby_state->sync_iter);
 
-    // Unify dictionaries to allow consistent hashing and fast key comparison
-    // using indices
-    in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table);
+    // We require that all dictionary keys/values are unified before update
+    in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table, false);
     // Dictionary hashes for the key columns which will be used for
     // the partitioning hashes:
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
@@ -537,6 +538,7 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
         std::shared_ptr<table_info> output_table = get_update_table(
             groupby_state, groupby_state->local_table_buffer.data_table);
         groupby_state->InitOutputBuffer(output_table);
+        output_table = groupby_state->UnifyOutputDictionaryArrays(output_table);
         groupby_state->output_buffer->AppendBatch(output_table);
         groupby_state->output_buffer->Finalize();
     }
@@ -687,6 +689,26 @@ std::shared_ptr<table_info> GroupbyState::UnifyBuildTableDictionaryArrays(
         } else {
             out_arr = this->build_table_dict_builders[i]->UnifyDictionaryArray(
                 in_arr);
+        }
+        out_arrs.emplace_back(out_arr);
+    }
+
+    return std::make_shared<table_info>(out_arrs);
+}
+
+std::shared_ptr<table_info> GroupbyState::UnifyOutputDictionaryArrays(
+    const std::shared_ptr<table_info>& out_table) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    out_arrs.reserve(out_table->ncols());
+    for (size_t i = 0; i < out_table->ncols(); i++) {
+        std::shared_ptr<array_info>& in_arr = out_table->columns[i];
+        std::shared_ptr<array_info> out_arr;
+        // Output key columns have the same dictionary as inputs and don't need
+        // unification
+        if (in_arr->arr_type != bodo_array_type::DICT || (i < this->n_keys)) {
+            out_arr = in_arr;
+        } else {
+            out_arr = this->out_dict_builders[i]->UnifyDictionaryArray(in_arr);
         }
         out_arrs.emplace_back(out_arr);
     }

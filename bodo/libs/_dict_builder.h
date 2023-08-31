@@ -90,7 +90,6 @@ struct DictionaryBuilder {
      * Is is guaranteed that the output array will be locally unique.
      *
      * @param in_arr input array
-     * @param is_key input is a key column of its table
      * @return std::shared_ptr<array_info> input array with its dictionary
      * replaced and indices transposed
      */
