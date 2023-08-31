@@ -43,7 +43,7 @@ class VariantSqlType(nullable: Boolean) : AbstractSqlType(SqlTypeName.OTHER, nul
 
     /** Define a variant family so all Variant types even if
      * they differ in nullability are considered comparable. */
-    private class VariantDataTypeFamily: RelDataTypeFamily {
+    private class VariantDataTypeFamily : RelDataTypeFamily {
 
         override fun equals(other: Any?): Boolean {
             return other != null && other is VariantDataTypeFamily
