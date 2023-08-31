@@ -217,7 +217,7 @@ def test_groupby_key_reorder(memory_leak_check):
     )
 
 
-@pytest.mark.parametrize("func_name", ["nunique"])
+@pytest.mark.parametrize("func_name", ["nunique", "min"])
 def test_groupby_dict_str(func_name, memory_leak_check):
     """
     Test groupby with dictionary-encoded strings
