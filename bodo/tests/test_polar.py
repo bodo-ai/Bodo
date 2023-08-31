@@ -17,6 +17,9 @@ from bodo.utils.typing import BodoError
     bodo.get_size() > 1,
     reason="[BSE-991] TODO: investigate parallel support for taylor function",
 )
+@pytest.mark.skip(
+    reason="TODO: Retrieve data from https://s3.console.aws.amazon.com/s3/buckets/data"
+)
 def test_polar_format_e2e(datapath, memory_leak_check):
     """
     Full E2E test of the polar_format function from the workload. The function
@@ -176,24 +179,22 @@ def test_polar_format_e2e(datapath, memory_leak_check):
 
         return img
 
-    # Load the simulated phase history from the compressed file
-    phs = np.loadtxt(
-        datapath("data/polar_format_e2e_in.gz"), dtype=np.dtype("complex128")
-    )
+    # Load the data from S3 (TODO)
+    phs = np.load("data/polar_format_e2e_in.npy")
+    pos = np.load("data/polar_format_e2e_pos.npy")
+    k_r, k_u, k_v = np.load("data/polar_format_e2e_k.npy")
+    expected_output = np.load("data/polar_format_e2e_out.npy")
     # Hardcode the inputs that would normally be placed in the dictionaries
     c = 299792458.0
     npulses = 1950
     f_0 = 10000000000.0
-    pos = np.loadtxt(datapath("data/polar_format_e2e_pos.txt"))
     R_c = np.array(
         [8.660254037844386403e03, 5.682954107300020041e-15, 5.000000000000000000e03],
         dtype=np.float64,
     )
     n_hat = np.array([0, 0, 1], dtype=np.int64)
-    k_r, k_u, k_v = np.loadtxt(datapath("data/polar_format_e2e_k.txt"))
     env_args = (c, npulses, f_0, pos, R_c, n_hat, k_r, k_u, k_v)
     # Load the expected output from the compressed file
-    expected_output = np.loadtxt(datapath("data/polar_format_e2e_out.gz"))
     res = polar_format(phs, env_args, 17)
     # Verify that the function run with regular Python matches the previously calculated output
     np.testing.assert_allclose(res, expected_output, rtol=1e-5, atol=1e-8)
