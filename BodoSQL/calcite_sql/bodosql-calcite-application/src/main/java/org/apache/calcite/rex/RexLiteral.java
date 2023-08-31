@@ -391,6 +391,11 @@ public class RexLiteral extends RexNode {
       // Literal of type ANY is not legal. "CAST(2 AS ANY)" remains
       // an integer literal surrounded by a cast function.
       return false;
+    case OTHER:
+      // Literal of type OTHER (VARIANT) is not legal.
+      // Cast "(True as VARIANT)" remains a boolean literal
+      // surrounded by a cast function
+      return false;
     default:
       throw Util.unexpected(typeName);
     }
