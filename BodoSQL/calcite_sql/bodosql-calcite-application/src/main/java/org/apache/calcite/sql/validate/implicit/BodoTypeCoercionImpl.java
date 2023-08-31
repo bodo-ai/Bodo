@@ -1,5 +1,6 @@
 package org.apache.calcite.sql.validate.implicit;
 
+import com.google.errorprone.annotations.Var;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -13,6 +14,7 @@ import org.apache.calcite.sql.type.BodoSqlTypeUtil;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
+import org.apache.calcite.sql.type.VariantSqlType;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
 
@@ -62,6 +64,13 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     SqlTypeName typeName2 = type2.getSqlTypeName();
     if (typeName1 == null || typeName2 == null) {
       return null;
+    }
+    // Any variant type should be the common type.
+    if (type1 instanceof VariantSqlType) {
+      return type1;
+    }
+    if (type2 instanceof VariantSqlType) {
+      return type2;
     }
 
     // BOOLEAN + NUMERIC -> BOOLEAN

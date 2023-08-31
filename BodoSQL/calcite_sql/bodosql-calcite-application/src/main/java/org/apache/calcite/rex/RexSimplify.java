@@ -31,6 +31,7 @@ import org.apache.calcite.sql.type.SqlTypeCoercionRule;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
+import org.apache.calcite.sql.type.VariantSqlType;
 import org.apache.calcite.util.Bug;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.RangeSets;
@@ -2192,6 +2193,12 @@ public class RexSimplify {
         }
         switch (operand.getKind()) {
             case LITERAL:
+                // Bodo Change: Disallow simplifying cast to Variant.
+                // This must be in calcite because Bodo's simplifier
+                // calls Calcite's
+                if (e.getType() instanceof VariantSqlType) {
+                    return e;
+                }
                 final RexLiteral literal = (RexLiteral) operand;
                 final Comparable value = literal.getValueAs(Comparable.class);
                 final SqlTypeName typeName = literal.getTypeName();

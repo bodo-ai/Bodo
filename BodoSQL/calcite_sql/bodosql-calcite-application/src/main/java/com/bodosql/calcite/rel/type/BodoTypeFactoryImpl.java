@@ -3,6 +3,7 @@ package com.bodosql.calcite.rel.type;
 import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
+import java.util.List;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -91,5 +92,42 @@ public class BodoTypeFactoryImpl extends JavaTypeFactoryImpl implements BodoRelD
 
   private RelDataType copyVariantSqlType(VariantSqlType type, boolean nullable) {
     return canonize(new VariantSqlType(nullable));
+  }
+
+  /**
+   * Implementation of leastRestrictive that handles Variant Types. Any other types are handled by
+   * the parent class. Since ANY has priority over VARIANT this also needs to support variant.
+   *
+   * @param types The types to coerce to the least restrictive type.
+   * @return The least restrictive type according to our rules.
+   */
+  @Override
+  public @Nullable RelDataType leastRestrictive(List<RelDataType> types) {
+    // Implementation of leastRestrictive that handles Variant Types.
+    // Any other types are handled by the parent class.
+    assert types != null;
+    assert types.size() >= 1;
+    int anyCount = 0;
+    int nullCount = 0;
+    boolean seenVariant = false;
+
+    for (RelDataType type : types) {
+      if (type.getSqlTypeName() == SqlTypeName.ANY) {
+        anyCount++;
+      }
+      if (type.isNullable() || type.getSqlTypeName() == SqlTypeName.NULL) {
+        nullCount++;
+      }
+      if (type instanceof VariantSqlType) {
+        seenVariant = true;
+      }
+    }
+    if (anyCount > 0) {
+      return createTypeWithNullability(createSqlType(SqlTypeName.ANY), nullCount > 0);
+    }
+    if (seenVariant) {
+      return createTypeWithNullability(createVariantSqlType(), nullCount > 0);
+    }
+    return super.leastRestrictive(types);
   }
 }

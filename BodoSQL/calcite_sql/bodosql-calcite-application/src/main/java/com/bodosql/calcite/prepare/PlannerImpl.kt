@@ -32,6 +32,7 @@ import org.apache.calcite.prepare.CalciteCatalogReader
 import org.apache.calcite.rel.type.RelDataTypeSystem
 import org.apache.calcite.schema.SchemaPlus
 import org.apache.calcite.sql.parser.SqlParser
+import org.apache.calcite.sql.type.BodoSqlTypeCoercionRule
 import org.apache.calcite.sql.validate.SqlConformanceEnum
 import org.apache.calcite.sql.validate.SqlValidator
 import org.apache.calcite.sql.validate.implicit.BodoTypeCoercionImpl
@@ -71,7 +72,8 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                         .withNamedParamTableName(config.namedParamTableName)
                         .withDefaultNullCollation(NullCollation.LOW)
                         .withCallRewrite(false)
-                        .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY),
+                        .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
+                        .withTypeCoercionRules(BodoSqlTypeCoercionRule.instance()),
                 )
                 .costFactory(CostFactory())
                 .traitDefs(config.plannerType.traitDefs())
