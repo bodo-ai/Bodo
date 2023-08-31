@@ -117,6 +117,7 @@ void MeanColSet::combine(const grouping_info& grp_info,
     aggfunc_output_initialize(this->combine_cols[0], this->ftype, use_sql_rules,
                               init_start_row);
     // Initialize the output as mean to match the nullable behavior.
+
     aggfunc_output_initialize(this->combine_cols[1], this->ftype, use_sql_rules,
                               init_start_row);
     do_apply_to_column(this->update_cols[0], this->combine_cols[0], aux_cols,
