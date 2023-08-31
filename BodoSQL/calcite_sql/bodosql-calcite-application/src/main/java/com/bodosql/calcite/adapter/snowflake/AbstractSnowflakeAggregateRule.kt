@@ -55,20 +55,19 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
             SqlKind.SUM0,
             SqlKind.MIN,
             SqlKind.MAX,
-            SqlKind.MEDIAN,
             SqlKind.AVG,
         )
 
         @JvmStatic
         fun isPushableAggregate(aggregate: Aggregate): Boolean {
             // We only allow aggregates to be pushed if there's no grouping
-            // and they are considered simple. I'm honestly not sure what the
-            // other types of aggregates are. It's likely fine to allow more
-            // than just group count 0, but I am just leaving it at no grouping
-            // for now.
-            return Aggregate.isSimple(aggregate) &&
+            // and they are one of our supported functions.
+            return aggregate.groupSet.isEmpty &&
+                aggregate.aggCallList.isNotEmpty() &&
                 aggregate.aggCallList.all { agg ->
-                    SUPPORTED_AGGREGATES.contains(agg.aggregation.kind)
+                    SUPPORTED_AGGREGATES.contains(agg.aggregation.kind) &&
+                        !agg.hasFilter() &&
+                        !agg.isDistinct
                 }
         }
     }
