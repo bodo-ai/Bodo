@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 from llvmlite import ir as lir
+from numba import generated_jit
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_new_ref, lower_builtin, lower_constant
 from numba.core.typing import signature
@@ -39,6 +40,7 @@ from numba.extending import (
 
 import bodo
 from bodo.ext import stream_join_cpp
+from bodo.hiframes.pd_series_ext import if_series_to_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     StringArrayType,
@@ -1569,3 +1571,24 @@ def _register_extractall_methods():
 
 
 _register_extractall_methods()
+
+
+@generated_jit(nopython=True)
+def is_dict_encoded(t):
+    """This is a testing utility, that can be used to check if a given array/series
+    is dict encoded. This should never be called internally in the engine,
+    you should just check the type at compile time."""
+    t = if_series_to_array_type(t)
+
+    if t == bodo.dict_str_arr_type:
+
+        def impl(t):
+            return True
+
+    else:
+        assert t == bodo.string_array_type
+
+        def impl(t):
+            return False
+
+    return impl

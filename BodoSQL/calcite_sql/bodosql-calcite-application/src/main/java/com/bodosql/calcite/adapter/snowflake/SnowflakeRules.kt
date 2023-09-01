@@ -25,6 +25,9 @@ class SnowflakeRules private constructor() {
             SnowflakeFilterRule.Config.DEFAULT_CONFIG.toRule()
 
         @JvmField
+        val SNOWFLAKE_PROJECT_RULE: RelOptRule = SnowflakeProjectRule.Config.DEFAULT_CONFIG.toRule()
+
+        @JvmField
         val TO_PANDAS: RelOptRule =
             SnowflakeToPandasConverterRule.DEFAULT_CONFIG.toRule()
 
@@ -35,6 +38,7 @@ class SnowflakeRules private constructor() {
             SNOWFLAKE_LIMIT_RULE,
             SNOWFLAKE_STREAMING_LIMIT_RULE,
             SNOWFLAKE_FILTER_RULE,
+            SNOWFLAKE_PROJECT_RULE,
         )
 
         fun rules(): List<RelOptRule> = SNOWFLAKE_RULES

@@ -1,40 +1,45 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.plan.makeCost
+import com.bodosql.calcite.rel.core.ProjectBase
 import com.bodosql.calcite.table.CatalogTableImpl
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
+import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelTraitSet
-import org.apache.calcite.rel.RelCollation
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.core.Sort
+import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.metadata.RelMetadataQuery
+import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexNode
 
-class SnowflakeSort private constructor(
+/**
+ * RelNode that represents a projection that occurs within Snowflake. See SnowflakeRel for more information.
+ */
+class SnowflakeProject(
     cluster: RelOptCluster,
     traitSet: RelTraitSet,
     input: RelNode,
-    collation: RelCollation,
-    offset: RexNode?,
-    fetch: RexNode?,
+    projects: List<RexNode>,
+    rowType: RelDataType,
     private val catalogTable: CatalogTableImpl,
-) :
-    Sort(cluster, traitSet, input, collation, offset, fetch), SnowflakeRel {
+) : ProjectBase(cluster, traitSet, ImmutableList.of(), input, projects, rowType), SnowflakeRel {
+
+    init {
+        // SnowflakeProject should always have the Snowflake convention.
+        assert(convention == SnowflakeRel.CONVENTION)
+    }
 
     override fun copy(
         traitSet: RelTraitSet,
-        newInput: RelNode,
-        newCollation: RelCollation,
-        offset: RexNode?,
-        fetch: RexNode?,
-    ): Sort {
-        return SnowflakeSort(cluster, traitSet, newInput, newCollation, offset, fetch, catalogTable)
+        input: RelNode,
+        projects: List<RexNode>,
+        rowType: RelDataType,
+    ): Project {
+        return SnowflakeProject(cluster, traitSet, input, projects, rowType, catalogTable)
     }
-
-    override fun getCatalogTable(): CatalogTableImpl = catalogTable
 
     override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
         val rows = mq.getRowCount(this)
@@ -47,15 +52,16 @@ class SnowflakeSort private constructor(
             cluster: RelOptCluster,
             traitSet: RelTraitSet,
             input: RelNode,
-            collation: RelCollation,
-            offset: RexNode?,
-            fetch: RexNode?,
+            projects: List<RexNode>,
+            rowType: RelDataType,
             catalogTable: CatalogTableImpl,
-        ): SnowflakeSort {
+        ): SnowflakeProject {
             // Note: Types may be lazily computed so use getRowType() instead of rowType
             val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(input.getRowType())
             val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION).replace(batchingProperty)
-            return SnowflakeSort(cluster, newTraitSet, input, collation, offset, fetch, catalogTable)
+            return SnowflakeProject(cluster, newTraitSet, input, projects, rowType, catalogTable)
         }
     }
+
+    override fun getCatalogTable(): CatalogTableImpl = catalogTable
 }
