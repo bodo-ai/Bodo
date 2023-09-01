@@ -2483,7 +2483,6 @@ def test_projection_pushdown_rename(test_db_snowflake_catalog, memory_leak_check
         is_dict2_encoded = is_dict_encoded(df2["FILTER_COL"])
         return is_dict2_encoded
 
-    # With the filter, the table should be dict encoded
-    check_func(impl1, (bc,), py_output=True, check_dtype=False, reset_index=True)
-    # With the oposite filter, the table shouldnt be dict encoded
+    # In both cases the column isn't dict encoded because we don't depend on the filter.
+    check_func(impl1, (bc,), py_output=False, check_dtype=False, reset_index=True)
     check_func(impl2, (bc,), py_output=False, check_dtype=False, reset_index=True)
