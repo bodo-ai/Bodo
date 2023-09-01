@@ -1,5 +1,6 @@
 package com.bodosql.calcite.traits
 
+import com.bodosql.calcite.application.BodoSQLOperatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.utils.AggHelpers
 import com.bodosql.calcite.schema.CatalogSchemaImpl
@@ -10,6 +11,8 @@ import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.schema.Schema
+import org.apache.calcite.sql.SqlAggFunction
+import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.ArraySqlType
 import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.ImmutableBitSet
@@ -38,6 +41,7 @@ class ExpectedBatchingProperty {
          * @param rowType The input row type
          * @return A list of the fields as a list of types.
          */
+        @JvmStatic
         fun rowTypeToTypes(rowType: RelDataType): List<RelDataType> {
             // Note: Types may be lazily computed so use getType() instead of type
             return rowType.fieldList.map { f -> f.getType() }
@@ -48,6 +52,7 @@ class ExpectedBatchingProperty {
          *
          * @param type Column type in question.
          */
+        @JvmStatic
         private fun isUnsupportedStreamingType(type: RelDataType): Boolean {
             // Note we don't support arrays in streaming, but Snowflake tables may contain arrays,
             // so we must ignore them. We don't support reading arrays yet anyways.
@@ -104,6 +109,20 @@ class ExpectedBatchingProperty {
             return getBatchingProperty(canStream, nodeTypes)
         }
 
+        @JvmStatic
+        val unsupportedAggregates = setOf(
+            SqlStdOperatorTable.PERCENTILE_CONT.name,
+            SqlStdOperatorTable.PERCENTILE_DISC.name,
+            SqlStdOperatorTable.MODE.name,
+            SqlStdOperatorTable.LISTAGG.name,
+            ArrayOperatorTable.ARRAY_AGG.name,
+        )
+
+        @JvmStatic
+        private fun streamingSupportedAggFunction(a: SqlAggFunction): Boolean {
+            return !unsupportedAggregates.contains(a.name)
+        }
+
         /**
          * Determine the streaming trait that can be used for an aggregation.
          *
@@ -122,7 +141,12 @@ class ExpectedBatchingProperty {
         fun aggregateProperty(groupSets: List<ImmutableBitSet>, aggCallList: List<AggregateCall>, rowType: RelDataType): BatchingProperty {
             var canStream = RelationalAlgebraGenerator.enableGroupbyStreaming &&
                 groupSets.size == 1 && groupSets[0].cardinality() != 0 &&
-                !AggHelpers.aggContainsFilter(aggCallList)
+                !AggHelpers.aggContainsFilter(aggCallList) &&
+                aggCallList.all {
+                        a ->
+                    streamingSupportedAggFunction(a.aggregation)
+                }
+
             val nodeTypes = rowTypeToTypes(rowType)
             return getBatchingProperty(canStream, nodeTypes)
         }

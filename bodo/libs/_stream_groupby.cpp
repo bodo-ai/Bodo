@@ -108,7 +108,7 @@ std::shared_ptr<table_info> get_update_table(
         return drop_duplicates_keys(in_table, groupby_state->n_keys,
                                     /*is_parallel, setting to false because we
                                        only care about local duplicates*/
-                                    false);
+                                    false, false);
     }
 
     // similar to update() function of GroupbyPipeline:
@@ -384,7 +384,7 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
                 drop_duplicates_keys(new_data, groupby_state->n_keys,
                                      /*is_parallel, setting to false because we
                                         only care about local duplicates*/
-                                     false);
+                                     false, false);
         }
 
         // unify dictionaries to allow consistent hashing and fast key
