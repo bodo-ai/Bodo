@@ -1,11 +1,15 @@
 package com.bodosql.calcite.adapter.snowflake
 
+import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.table.CatalogTableImpl
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
+import org.apache.calcite.plan.RelOptCost
+import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Filter
+import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexNode
 
 class SnowflakeFilter private constructor(
@@ -18,6 +22,11 @@ class SnowflakeFilter private constructor(
 
     override fun copy(traitSet: RelTraitSet, input: RelNode, condition: RexNode): Filter {
         return SnowflakeFilter(cluster, traitSet, input, condition, catalogTable)
+    }
+
+    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
+        val rows = mq.getRowCount(this)
+        return planner.makeCost(cpu = 0.0, mem = 0.0, rows = rows)
     }
 
     companion object {

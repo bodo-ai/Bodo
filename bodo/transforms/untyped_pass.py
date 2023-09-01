@@ -10,7 +10,7 @@ import itertools
 import datetime
 import pandas as pd
 import numpy as np
-from typing import Optional, Any
+from typing import Optional, Any, Tuple
 
 import numba
 from numba.core import ir, ir_utils, types
@@ -959,6 +959,29 @@ class UntypedPass:
             rhs.loc,
             default=False,
         )
+
+        _bodo_orig_table_name_const: Optional[str] = self._get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            10e5,
+            "_bodo_orig_table_name",
+            rhs.loc,
+            default=None,
+            use_default=True,
+        )
+
+        _bodo_orig_table_indices_const: Optional[Tuple[int]] = self._get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            10e5,
+            "_bodo_orig_table_indices",
+            rhs.loc,
+            default=None,
+            use_default=True,
+        )
+
         # coerce_float = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 3, "coerce_float", default=True
         # )
@@ -991,6 +1014,8 @@ class UntypedPass:
             "_bodo_is_table_input",
             "_bodo_downcast_decimal_to_double",
             "_bodo_read_as_table",
+            "_bodo_orig_table_name",
+            "_bodo_orig_table_indices",
         )
 
         unsupported_args = set(kws.keys()) - set(supported_args)
@@ -1020,6 +1045,8 @@ class UntypedPass:
             _bodo_is_table_input,
             self._is_independent,
             _bodo_downcast_decimal_to_double,
+            _bodo_orig_table_name_const,
+            _bodo_orig_table_indices_const,
         )
 
         if chunksize is not None and db_type != "snowflake":  # pragma: no cover
@@ -3255,6 +3282,8 @@ def _get_sql_types_arr_colnames(
     is_table_input: bool,
     is_independent: bool,
     downcast_decimal_to_double: bool = False,
+    orig_table_const: Optional[str] = None,
+    orig_table_indices_const: Optional[Tuple[int]] = None,
 ):
     """
     Wrapper function to determine the db_type, column names,
@@ -3265,6 +3294,27 @@ def _get_sql_types_arr_colnames(
     This is written as a standalone
     function because other packages (i.e. BodoSQL) may need
     to type a SQL query.
+
+    Args:
+        sql_const: The sql query to determine the array types for. May be a full query, or a table name.
+        con_const (str): The connection string being used to connect to the database.
+        _bodo_read_as_dict (bool): Read all string columns as dict encoded strings.
+        lhs: The variable being assigned to by the read_sql call. If not converting a read_sql call,
+                this is a dummy variable.
+        loc: The location of the original read_sql call, if calling this function
+                is called while converting a read_sql. Otherwise, it's a dummy location.
+        is_table_input (bool): Is sql_const just the string name of the table to read from?
+        is_independent (bool): (TODO: add docs)
+        downcast_decimal_to_double (bool, default false): (TODO: add docs)
+        orig_table_const (Optional str): The string of the table at the outermost
+                leaf of this query. Should never be passed for queries that read from multiple tables.
+                If provided, this will be used for certain metadata queries.
+        orig_table_indices_const (Optional[Tuple[Int]]): The indices for each column
+            in the original table. This is to handle renaming and replace name based reads with
+            index based reads.
+
+    Returns:
+        A very large tuple (TODO: add docs)
     """
     # find db type
     db_type, _ = sql_ext.parse_dbtype(con_const)
@@ -3321,6 +3371,8 @@ def _get_sql_types_arr_colnames(
         is_table_input,
         is_independent,
         downcast_decimal_to_double,
+        orig_table_const,
+        orig_table_indices_const,
     )
     dtypes = df_type.data
     dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
@@ -3361,9 +3413,36 @@ def _get_sql_df_type_from_db(
     is_table_input: bool,
     is_independent: bool,
     downcast_decimal_to_double: bool,
+    orig_table_const: Optional[str] = None,
+    orig_table_indices_const: Optional[Tuple[int]] = None,
 ):
     """access the database to find df type for read_sql() output.
     Only rank zero accesses the database, then broadcasts.
+
+    Args:
+        sql_query (str): read query or Snowflake table name
+        con_const (str): The connection string being used to connect to the database.
+        db_type (str): The string name of the type of database being read from.
+        is_select_query (bool): TODO: document this
+        sql_word: TODO: document this
+        _bodo_read_as_dict (bool): Read all string columns as dict encoded strings.
+        loc: The location of the original read_sql call, can be a dummy,
+            if the original call does not exist
+        is_table_input (bool): read query is a just a table name
+        is_independent (bool): TODO: document this
+        downcast_decimal_to_double (bool): downcast decimal types to double
+        orig_table_const (str, optional): Original table name, to be used if sql_query is not
+            a table name. If provided, must guarantee that the sql_query only performs
+            a selection of a subset of the table's columns, and does not rename
+            any of the columns from the input table. Defaults to None.
+        orig_table_indices_const (Optional[Tuple[Int]]): The indices for each column
+            in the original table. This is to handle renaming and replace name based reads with
+            index based reads.
+
+
+    Returns:
+        A large tuple containing: (#TODO: document this)
+
     """
     from mpi4py import MPI
 
@@ -3425,6 +3504,8 @@ def _get_sql_df_type_from_db(
                     is_table_input,
                     _bodo_read_as_dict,
                     downcast_decimal_to_double,
+                    orig_table_const,
+                    orig_table_indices_const,
                 )
 
                 # Log the chosen dict-encoding timeout behavior

@@ -504,7 +504,7 @@ def test_read_timing_debug_message(
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
         impl(bc)
-        check_logger_msg(stream, "Execution time for reading table REGION")
+        check_logger_msg(stream, "Execution time for reading table ")
 
 
 def test_insert_into_timing_debug_message(test_db_snowflake_catalog, memory_leak_check):

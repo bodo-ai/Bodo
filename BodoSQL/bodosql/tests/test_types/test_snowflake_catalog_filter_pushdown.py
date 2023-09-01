@@ -16,6 +16,7 @@ from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
 from bodosql.utils import levenshteinDistance
 
 import bodo
+from bodo.libs.dict_arr_ext import is_dict_encoded
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,
@@ -585,7 +586,7 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
             # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" IS NOT NULL',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" IS NOT NULL',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1020,7 +1021,7 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B"',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where b or c"
@@ -1038,7 +1039,7 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" OR "C"',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" OR "C"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query3 = f"Select a from {table_name} where b and c"
@@ -1056,7 +1057,7 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" AND "C"',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" AND "C"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1105,7 +1106,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B"',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where not(b or c)"
@@ -1123,7 +1124,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B" AND NOT "C"',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B" AND NOT "C"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query3 = f"Select a from {table_name} where not(b and c)"
@@ -1141,7 +1142,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B" OR NOT "C"',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B" OR NOT "C"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query4 = f"Select a from {table_name} where (not b) or c"
@@ -1159,7 +1160,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "C" OR NOT "B"',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "C" OR NOT "B"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query5 = f"Select a from {table_name} where (not b) and c"
@@ -1177,7 +1178,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "C" AND NOT "B"',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "C" AND NOT "B"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1228,7 +1229,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" = 3',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" = 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where not (b <= 3)"
@@ -1246,7 +1247,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" > 3',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" > 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query3 = f"Select a from {table_name} where not (b < 3)"
@@ -1264,7 +1265,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" >= 3',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" >= 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query4 = f"Select a from {table_name} where not (b >= 3)"
@@ -1282,7 +1283,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" < 3',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" < 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query5 = f"Select a from {table_name} where not (b > 3)"
@@ -1300,7 +1301,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" <= 3',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" <= 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query6 = f"Select a from {table_name} where NOT((b > 3 OR b < 2) AND C)"
@@ -1320,7 +1321,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "C" OR "B" >= 2 AND "B" <= 3',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "C" OR "B" >= 2 AND "B" <= 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1368,7 +1369,7 @@ def test_snowflake_not_is_null_pushdown(test_db_snowflake_catalog, memory_leak_c
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" IS NOT NULL',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" IS NOT NULL',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where not (b is not NULL)"
@@ -1385,7 +1386,7 @@ def test_snowflake_not_is_null_pushdown(test_db_snowflake_catalog, memory_leak_c
             )
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" IS NULL',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" IS NULL',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1432,7 +1433,7 @@ def test_snowflake_not_in_pushdown(test_db_snowflake_catalog, memory_leak_check)
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'reading table SELECT * FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" NOT IN (1, 3)',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" NOT IN (1, 3)',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -2425,3 +2426,64 @@ def test_least_greatest(
         check_logger_msg(stream, f"Columns loaded ['float_col']")
         check_logger_msg(stream, "Filter pushdown successfully performed")
         check_logger_msg(stream, sql_func)
+
+
+def test_column_pruning_pushdown_dict_encoding(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests for that column pruning does not interfere with out ability to do dictionairy encoding.
+    """
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    # KEATON_TESTING_TABLE_STRING_DUPLICATE_WHERE_FILTER_COL_EQUAL_2, as it's name suggests,
+    # is completly duplicate for the column my_col where filter_col = 2, and completely unique
+    # for all other groups.
+    def impl1(bc):
+        df1 = bc.sql(
+            "SELECT MY_COL FROM KEATON_TESTING_TABLE_STRING_DUPLICATE_WHERE_FILTER_COL_EQUAL_2 WHERE FILTER_COL = 2"
+        )
+        # Check that the string columns are NOT dict encoded
+        is_dict1_encoded = is_dict_encoded(df1["MY_COL"])
+        return is_dict1_encoded
+
+    def impl2(bc):
+        df2 = bc.sql(
+            "SELECT MY_COL FROM KEATON_TESTING_TABLE_STRING_DUPLICATE_WHERE_FILTER_COL_EQUAL_2 WHERE FILTER_COL <> 2"
+        )
+        is_dict2_encoded = is_dict_encoded(df2["MY_COL"])
+        return is_dict2_encoded
+
+    # In both cases the column isn't dict encoded because we don't depend on the filter.
+    check_func(impl1, (bc,), py_output=False, check_dtype=False, reset_index=True)
+    check_func(impl2, (bc,), py_output=False, check_dtype=False, reset_index=True)
+
+
+def test_projection_pushdown_rename(test_db_snowflake_catalog, memory_leak_check):
+    """Makes sure that renaming columns in a projection pushdown works as expected"""
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    # KEATON_TESTING_TABLE_STRING_DUPLICATE_WHERE_FILTER_COL_EQUAL_2, as it's name suggests,
+    # is completly duplicate for the column my_col where filter_col = 2, and completely unique
+    # for all other groups.
+    def impl1(bc):
+        df1 = bc.sql(
+            "SELECT MY_COL AS I_AM_NOT_A_REAL_COLUMN FROM KEATON_TESTING_TABLE_STRING_DUPLICATE_WHERE_FILTER_COL_EQUAL_2 WHERE FILTER_COL = 2"
+        )
+        # Check that the string columns are NOT dict encoded
+        is_dict1_encoded = is_dict_encoded(df1["I_AM_NOT_A_REAL_COLUMN"])
+        return is_dict1_encoded
+
+    def impl2(bc):
+        df2 = bc.sql(
+            "SELECT MY_COL AS FILTER_COL FROM KEATON_TESTING_TABLE_STRING_DUPLICATE_WHERE_FILTER_COL_EQUAL_2 WHERE FILTER_COL <> 2"
+        )
+        is_dict2_encoded = is_dict_encoded(df2["FILTER_COL"])
+        return is_dict2_encoded
+
+    # With the filter, the table should be dict encoded
+    check_func(impl1, (bc,), py_output=True, check_dtype=False, reset_index=True)
+    # With the oposite filter, the table shouldnt be dict encoded
+    check_func(impl2, (bc,), py_output=False, check_dtype=False, reset_index=True)
