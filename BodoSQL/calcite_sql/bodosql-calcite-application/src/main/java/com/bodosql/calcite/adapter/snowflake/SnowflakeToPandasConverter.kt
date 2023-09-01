@@ -4,6 +4,7 @@ import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Expr.StringLiteral
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
@@ -13,12 +14,18 @@ import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.RelVisitor
 import org.apache.calcite.rel.convert.ConverterImpl
+import org.apache.calcite.rel.core.Project
+import org.apache.calcite.rel.core.TableScan
+import org.apache.calcite.rel.core.Values
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.rel2sql.BodoRelToSqlConverter
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl
 import org.apache.calcite.rel.type.RelRecordType
+import org.apache.calcite.rex.RexInputRef
+import java.lang.RuntimeException
 
 class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
     ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits, input), PandasRel {
@@ -134,10 +141,10 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         val schemaName = getSchemaName(tableScan)
         val relInput = input as SnowflakeRel
         val args = listOf(
-            Expr.StringLiteral(tableName),
-            Expr.StringLiteral(relInput.generatePythonConnStr(schemaName)),
+            StringLiteral(tableName),
+            StringLiteral(relInput.generatePythonConnStr(schemaName)),
         )
-        return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, true))
+        return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, true, Expr.None, Expr.None))
     }
 
     private fun getSnowflakeSQL(): String {
@@ -159,19 +166,121 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     private fun readSql(ctx: PandasRel.BuildContext): Expr.Call {
         val sql = getSnowflakeSQL()
         val relInput = input as SnowflakeRel
+
+        val passTableInfo = canUseOptimizedReadSqlPath(relInput)
+
+        val bodoTableNameExpr = if (passTableInfo) {
+            // Store the original indices to allow handling renaming.
+            val catalogTable = relInput.getCatalogTable()
+            // Give the full name as schema.table. In the future when we
+            // support multiple databases it will need to be
+            // database.schema.table
+            StringLiteral("\"${catalogTable.schema.name}\".\"${catalogTable.name}\"")
+        } else {
+            Expr.None
+        }
+
+        val originalIndices = if (passTableInfo) {
+            // TODO: Replace with a global variable?
+            Expr.Tuple(getOriginalColumnIndices(relInput).map { i -> Expr.IntegerLiteral(i) })
+        } else {
+            Expr.None
+        }
+
         val args = listOf(
-            Expr.StringLiteral(sql),
+            StringLiteral(sql),
             // We don't use a schema name because we've already fully qualified
             // all table references and it's better if this doesn't have any
             // potentially unexpected behavior.
-            Expr.StringLiteral(relInput.generatePythonConnStr("")),
+            StringLiteral(relInput.generatePythonConnStr("")),
         )
-        return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, false))
+        return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, false, bodoTableNameExpr, originalIndices))
     }
 
-    private fun getNamedArgs(ctx: PandasRel.BuildContext, isTable: Boolean): List<Pair<String, Expr>> {
+    /**
+     * Helper function to remap each column to its original index.
+     * This function assumes that canUseOptimizedReadSqlPath has already
+     * been called and evaluates to True.
+     */
+    private fun getOriginalColumnIndices(node: SnowflakeRel): List<Int> {
+        val onlyColumnSubsetVisitor = object : RelVisitor() {
+            // Initialize all columns to be in the original location.
+            var originalColumns: MutableList<Int> = (0..<node.getRowType().fieldCount).toMutableList()
+
+            override fun visit(node: RelNode, ordinal: Int, parent: RelNode?) {
+                if (node is Project) {
+                    for (i in 0..<node.projects.size) {
+                        val project = node.projects[i]
+                        if (project !is RexInputRef) {
+                            throw RuntimeException("getOriginalColumnIndices() requires only InputRefs")
+                        }
+                        // Remap to the original location.
+                        originalColumns[i] = project.index
+                    }
+                    node.childrenAccept(this)
+                } else if (node is SnowflakeFilter || node is SnowflakeSort) {
+                    // Enable moving past filters to get the original table
+                    // for filter and limit.
+                    node.childrenAccept(this)
+                } else {
+                    return
+                }
+            }
+        }
+
+        onlyColumnSubsetVisitor.go(node)
+        return onlyColumnSubsetVisitor.originalColumns.toList()
+    }
+
+    /**
+     * Helper function to determine if we can use an optimized read_sql path.
+     * currently, this is true if:
+     *  1. The query has only 1 root table.
+     *  2. The input query only selects a subset of the columns from that root table,
+     *      and possibly a filter or limit.
+     */
+    private fun canUseOptimizedReadSqlPath(node: SnowflakeRel): Boolean {
+        val onlyColumnSubsetVisitor = object : RelVisitor() {
+            var seenInvalidNode: Boolean = false
+
+            override fun visit(node: RelNode, ordinal: Int, parent: RelNode?) {
+                if (seenInvalidNode) {
+                    return
+                }
+
+                if (node is Project) {
+                    for (proj in node.projects) {
+                        if (proj !is RexInputRef) {
+                            // This is already enforced in the SnowflakeProject, but this will
+                            // help protect against unexpected changes.
+                            seenInvalidNode = true
+                            break
+                        }
+                    }
+                    node.childrenAccept(this)
+                } else if (node is SnowflakeFilter || node is SnowflakeSort) {
+                    // Enable moving past filters to get the original table
+                    // for filter and limit.
+                    node.childrenAccept(this)
+                } else if (node is TableScan || node is Values) {
+                    // Found the root table.
+                    return
+                } else {
+                    seenInvalidNode = true
+                    return
+                }
+            }
+        }
+
+        onlyColumnSubsetVisitor.go(node)
+        return !onlyColumnSubsetVisitor.seenInvalidNode
+    }
+
+    private fun getNamedArgs(ctx: PandasRel.BuildContext, isTable: Boolean, origTableExpr: Expr, origTableIndices: Expr): List<Pair<String, Expr>> {
         return listOf(
             "_bodo_is_table_input" to Expr.BooleanLiteral(isTable),
+            "_bodo_orig_table_name" to origTableExpr,
+            "_bodo_orig_table_indices" to origTableIndices,
             "_bodo_chunksize" to getStreamingBatchArg(ctx),
             "_bodo_read_as_table" to Expr.BooleanLiteral(true),
         )

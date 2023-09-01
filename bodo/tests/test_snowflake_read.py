@@ -20,17 +20,18 @@ from numba.core import types
 import bodo
 import bodo.io.snowflake
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+from bodo.libs.dict_arr_ext import is_dict_encoded
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,
     create_string_io_logger,
     set_logging_stream,
 )
+from bodo.tests.utils import pytest_snowflake  # pragma: no cover
 from bodo.tests.utils import (
     check_func,
     create_snowflake_table,
     get_snowflake_connection_string,
-    pytest_snowflake,
 )
 from bodo.utils.typing import BodoWarning
 
@@ -166,6 +167,8 @@ def test_decimal_metadata_handling():
     pa_fields, _, _, _, _, _ = bodo.io.snowflake.get_schema_from_metadata(
         cursor,
         "SELECT 10, 10.11, 1.1010101::decimal(30, 8), 12345678901234567890.0987654321",
+        None,
+        None,
         True,
         False,
         False,
@@ -244,6 +247,7 @@ def test_snowflake_runtime_upcasting_ints(
             [],
             [],
             schema[1],
+            None,
             None,
             None,
         ),
@@ -326,6 +330,7 @@ def test_snowflake_runtime_downcasting_int_fail(mocker: "MockerFixture"):
             ),
             None,
             None,
+            None,
         ),
     )
 
@@ -372,6 +377,7 @@ def test_snowflake_runtime_downcasting_timestamp_fail(mocker: "MockerFixture"):
             ),
             None,
             None,
+            None,
         ),
     )
 
@@ -415,6 +421,7 @@ def test_snowflake_runtime_downcasting_decimal(mocker: "MockerFixture"):
                     pa.field("I", pa.float64(), nullable=True),
                 ]
             ),
+            None,
             None,
             None,
         ),
@@ -2232,3 +2239,41 @@ def test_batched_read_produce_output(memory_leak_check):
     conn = get_snowflake_connection_string(db, schema)
     # Ensure that the output is empty if produce_output is False
     assert not impl(conn)
+
+
+def test_bodo_read_sql_bodo_orig_table_name_arg(memory_leak_check):
+    """
+    Test that bodo.read_sql works with the _bodo_orig_table_name argument.
+    """
+
+    # Two tables KEATON_TESTING_TABLE_STRING_ALL_UNIQUE, which contains one string
+    # column with entirely unique values, and KEATON_TESTING_TABLE_STRING_ALL_DUPLICATE,
+    # which contains one string column which is just the same value repeated.
+    def impl1(conn):
+        df1 = pd.read_sql(
+            "SELECT * FROM KEATON_TESTING_TABLE_STRING_ALL_UNIQUE",
+            conn,
+        )
+        # Check that the string columns are NOT dict encoded
+        is_dict1_encoded = is_dict_encoded(df1["my_col"])
+        return is_dict1_encoded
+
+    def impl2(conn):
+        df2 = pd.read_sql(
+            "SELECT * FROM KEATON_TESTING_TABLE_STRING_ALL_UNIQUE",
+            conn,
+            _bodo_orig_table_name="KEATON_TESTING_TABLE_STRING_ALL_DUPLICATE",
+        )
+        # Check that the string columns are dict encoded
+        is_dict2_encoded = is_dict_encoded(df2["my_col"])
+
+        return is_dict2_encoded
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+
+    # Expect the read of the entirely unique table to NOT be dict encoded
+    check_func(impl1, (conn,), py_output=False, check_dtype=False, reset_index=True)
+    # Expect the read of the entirely duplicate table to be dict encoded
+    check_func(impl2, (conn,), py_output=True, check_dtype=False, reset_index=True)
