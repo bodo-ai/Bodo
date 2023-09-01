@@ -3,21 +3,19 @@ Test using BodoSQL inside Bodo JIT functions
 """
 import bodosql
 import pandas as pd
-import pytest
 
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import bodo
 
 
-@pytest.mark.skip(
-    reason="[BSE-1018] Need to fix the segmentation fault on PR CI first."
-)
 def test_demo1(datapath, memory_leak_check):
     """test for demo1.py"""
 
     @bodo.jit
     def f(ss_file, i_file):
-        df1 = pd.read_parquet(ss_file)
+        # NOTE: in the actual demo, we don't have the limits on the number of rows
+        # However, we run out of memory on the CI machine, so we limit the number of rows
+        df1 = pd.read_parquet(ss_file).head(100000)
         df2 = pd.read_parquet(i_file)
         bc = bodosql.BodoSQLContext({"store_sales": df1, "item": df2})
         sale_items = bc.sql(
