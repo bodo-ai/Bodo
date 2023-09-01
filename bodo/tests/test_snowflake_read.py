@@ -249,7 +249,6 @@ def test_snowflake_runtime_upcasting_ints(
             schema[1],
             None,
             None,
-            None,
         ),
     )
 
@@ -330,7 +329,6 @@ def test_snowflake_runtime_downcasting_int_fail(mocker: "MockerFixture"):
             ),
             None,
             None,
-            None,
         ),
     )
 
@@ -377,7 +375,6 @@ def test_snowflake_runtime_downcasting_timestamp_fail(mocker: "MockerFixture"):
             ),
             None,
             None,
-            None,
         ),
     )
 
@@ -421,7 +418,6 @@ def test_snowflake_runtime_downcasting_decimal(mocker: "MockerFixture"):
                     pa.field("I", pa.float64(), nullable=True),
                 ]
             ),
-            None,
             None,
             None,
         ),
