@@ -2258,7 +2258,11 @@ def test_bodo_read_sql_bodo_orig_table_name_arg(memory_leak_check):
         df2 = pd.read_sql(
             "SELECT * FROM KEATON_TESTING_TABLE_STRING_ALL_UNIQUE",
             conn,
-            _bodo_orig_table_name="KEATON_TESTING_TABLE_STRING_ALL_DUPLICATE",
+            # Note: BodoSQL always provides SCHEMA.TABLENAME as the _bodo_orig_table_name.
+            _bodo_orig_table_name='"PUBLIC"."KEATON_TESTING_TABLE_STRING_ALL_DUPLICATE"',
+            # Note: BodoSQL always provides _bodo_orig_table_indices if it provides
+            # _bodo_orig_table_name.
+            _bodo_orig_table_indices=(0,),
         )
         # Check that the string columns are dict encoded
         is_dict2_encoded = is_dict_encoded(df2["my_col"])
