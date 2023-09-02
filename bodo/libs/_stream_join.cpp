@@ -842,8 +842,6 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
       probe_parallel(probe_parallel_),
       output_batch_size(output_batch_size_),
       sync_iter(sync_iter),
-      build_iter(0),
-      probe_iter(0),
       dummy_probe_table(alloc_table(probe_arr_c_types, probe_arr_array_types)) {
     this->key_dict_builders.resize(this->n_keys);
 
