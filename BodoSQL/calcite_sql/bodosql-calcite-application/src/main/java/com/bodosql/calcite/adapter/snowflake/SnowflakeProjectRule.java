@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake;
 
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.traits.CombineStreamsExchange;
 import org.apache.calcite.rel.core.Project;
 import org.immutables.value.Value;
 import org.jetbrains.annotations.NotNull;
@@ -33,7 +34,27 @@ public class SnowflakeProjectRule extends AbstractSnowflakeProjectRule {
                             b1 ->
                                 b1.operand(SnowflakeToPandasConverter.class)
                                     .oneInput(b2 -> b2.operand(SnowflakeRel.class).anyInputs())))
-            .withDescription("SnowflakeProjectRule::WithSnowflakeToPandasConverter")
+            .as(Config.class);
+
+    // This configuration is done to handle projections with window functions
+    // that can look past CombineStreamsExchange.
+    Config STREAMING_CONFIG =
+        ImmutableSnowflakeProjectRule.Config.of()
+            .withOperandSupplier(
+                b0 ->
+                    b0.operand(Project.class)
+                        .predicate(AbstractSnowflakeProjectRule::isPushableProject)
+                        .oneInput(
+                            b1 ->
+                                b1.operand(CombineStreamsExchange.class)
+                                    .oneInput(
+                                        b2 ->
+                                            b2.operand(SnowflakeToPandasConverter.class)
+                                                .oneInput(
+                                                    b3 ->
+                                                        b3.operand(SnowflakeRel.class)
+                                                            .anyInputs()))))
+            .withDescription("SnowflakeProjectRule::WithCombineStreamsExchange")
             .as(Config.class);
 
     @Override

@@ -121,15 +121,19 @@ public class FilterExtractCaseRule<C extends BodoSQLReduceExpressionsRule.Config
         }
         newOrderKeys.add(child);
       }
-      return builder
-          .aggregateCall(over.getAggOperator(), over.getOperands())
-          .distinct(over.isDistinct())
-          .ignoreNulls(over.ignoreNulls())
-          .over()
-          .partitionBy(newPartitionKeys)
-          .orderBy(newOrderKeys)
-          .rangeBetween(window.getLowerBound(), window.getUpperBound())
-          .toRex();
+      RelBuilder.OverCall baseNode =
+          builder
+              .aggregateCall(over.getAggOperator(), over.getOperands())
+              .distinct(over.isDistinct())
+              .ignoreNulls(over.ignoreNulls())
+              .over()
+              .partitionBy(newPartitionKeys)
+              .orderBy(newOrderKeys);
+      if (window.isRows()) {
+        return baseNode.rowsBetween(window.getLowerBound(), window.getUpperBound()).toRex();
+      } else {
+        return baseNode.rangeBetween(window.getLowerBound(), window.getUpperBound()).toRex();
+      }
     }
 
     @Override
