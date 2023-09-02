@@ -1289,10 +1289,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node BatchingProperty node to be visited
    */
   public void visitPandasAggregate(PandasAggregate node) {
-    if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
-      visitStreamingPandasAggregate(node);
+    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+    if (operatorCache.isNodeCached(node)) {
+      tableGenStack.push(operatorCache.getCachedTable(node));
     } else {
-      visitSingleBatchedPandasAggregate(node);
+      if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+        visitStreamingPandasAggregate(node);
+      } else {
+        visitSingleBatchedPandasAggregate(node);
+      }
     }
   }
 
@@ -1312,135 +1317,129 @@ public class PandasCodeGenVisitor extends RelVisitor {
     assert groups.size() > 0;
 
     List<String> expectedOutputCols = node.getRowType().getFieldNames();
+    Variable outVar = this.genDfVar();
+    final List<AggregateCall> aggCallList = node.getAggCallList();
 
-    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
-    if (operatorCache.isNodeCached(node)) {
-      tableGenStack.push(operatorCache.getCachedTable(node));
-    } else {
-      Variable outVar = this.genDfVar();
-      final List<AggregateCall> aggCallList = node.getAggCallList();
+    // Expected output column names according to the calcite plan, contains any/all of the
+    // expected aliases
 
-      // Expected output column names according to the calcite plan, contains any/all of the
-      // expected aliases
+    List<String> aggCallNames = new ArrayList<>();
+    for (int i = 0; i < aggCallList.size(); i++) {
+      AggregateCall aggregateCall = aggCallList.get(i);
 
-      List<String> aggCallNames = new ArrayList<>();
-      for (int i = 0; i < aggCallList.size(); i++) {
-        AggregateCall aggregateCall = aggCallList.get(i);
-
-        if (aggregateCall.getName() == null) {
-          aggCallNames.add(expectedOutputCols.get(groupingVariables.size() + i));
-        } else {
-          aggCallNames.add(aggregateCall.getName());
-        }
+      if (aggregateCall.getName() == null) {
+        aggCallNames.add(expectedOutputCols.get(groupingVariables.size() + i));
+      } else {
+        aggCallNames.add(aggregateCall.getName());
       }
-
-      RelNode inputNode = node.getInput();
-      this.visit(inputNode, 0, node);
-
-      singleBatchTimer(
-          node,
-          () -> {
-            Variable finalOutVar = outVar;
-            List<String> inputColumnNames = inputNode.getRowType().getFieldNames();
-            BodoEngineTable inTable = tableGenStack.pop();
-            Variable inVar = ctx.convertTableToDf(inTable);
-            List<String> outputDfNames = new ArrayList<>();
-
-            // If any group is missing a column we may need to do a concat.
-            boolean hasMissingColsGroup = false;
-
-            boolean distIfNoGroup = groups.size() > 1;
-
-            // Naive implementation for handling multiple aggregation groups, where we repeatedly
-            // call group by, and append the dataframes together
-            for (int i = 0; i < groups.size(); i++) {
-              List<Integer> curGroup = groups.get(i).toList();
-
-              hasMissingColsGroup =
-                  hasMissingColsGroup || curGroup.size() < groupingVariables.size();
-              Expr curGroupAggExpr;
-              /* First rename any input keys to the output. */
-
-              /* group without aggregation : e.g. select B from table1 groupby A */
-              if (aggCallList.isEmpty()) {
-                curGroupAggExpr = generateAggCodeNoAgg(inVar, inputColumnNames, curGroup);
-              }
-              /* aggregate without group : e.g. select sum(A) from table1 */
-              else if (curGroup.isEmpty()) {
-                curGroupAggExpr =
-                    generateAggCodeNoGroupBy(
-                        inVar, inputColumnNames, aggCallList, aggCallNames, distIfNoGroup, this);
-              }
-              /* group with aggregation : e.g. select sum(B) from table1 groupby A */
-              else {
-                Pair<Expr, @Nullable Op> curGroupAggExprAndAdditionalGeneratedCode =
-                    handleLogicalAggregateWithGroups(
-                        inVar, inputColumnNames, aggCallList, aggCallNames, curGroup);
-
-                curGroupAggExpr = curGroupAggExprAndAdditionalGeneratedCode.getKey();
-                @Nullable Op prependOp = curGroupAggExprAndAdditionalGeneratedCode.getValue();
-                if (prependOp != null) {
-                  this.generatedCode.add(prependOp);
-                }
-              }
-              // assign each of the generated dataframes their own variable, for greater clarity in
-              // the
-              // generated code
-              Variable outDf = this.genDfVar();
-              outputDfNames.add(outDf.getName());
-              this.generatedCode.add(new Op.Assign(outDf, curGroupAggExpr));
-            }
-            // If we have multiple groups, append the dataframes together
-            if (groups.size() > 1 || hasMissingColsGroup) {
-              // It is not guaranteed that a particular input column exists in any of the output
-              // dataframes,
-              // but Calcite expects
-              // All input dataframes to be carried into the output. It is also not
-              // guaranteed that the output dataframes contain the columns in the order expected by
-              // calcite.
-              // In order to ensure that we have all the input columns in the output,
-              // we create a dummy dataframe that has all the columns with
-              // a length of 0. The ordering is handled by a loc after the concat
-
-              // We initialize the dummy column like this, as Bodo will default these columns to
-              // string type if we initialize empty columns.
-              List<String> concatDfs = new ArrayList<>();
-              if (hasMissingColsGroup) {
-                Variable dummyDfVar = genDfVar();
-                // TODO: Switch to proper IR
-                Expr dummyDfExpr = new Expr.Raw(inVar.getName() + ".iloc[:0, :]");
-                // Assign the dummy df to a variable name,
-                this.generatedCode.add(new Op.Assign(dummyDfVar, dummyDfExpr));
-                concatDfs.add(dummyDfVar.emit());
-              }
-              concatDfs.addAll(outputDfNames);
-
-              // Generate the concatenation expression
-              StringBuilder concatExprRaw = new StringBuilder(concatDataFrames(concatDfs).emit());
-
-              // Sort the output dataframe, so that they are in the ordering expected by Calcite
-              // Needed in the case that the topmost dataframe in the concat does not contain all
-              // the
-              // columns in the correct ordering
-              concatExprRaw.append(".loc[:, [");
-
-              for (int i = 0; i < expectedOutputCols.size(); i++) {
-                concatExprRaw.append(makeQuoted(expectedOutputCols.get(i))).append(", ");
-              }
-              concatExprRaw.append("]]");
-
-              // Generate the concatenation
-              this.generatedCode.add(
-                  new Op.Assign(finalOutVar, new Expr.Raw(concatExprRaw.toString())));
-
-            } else {
-              finalOutVar = new Variable(outputDfNames.get(0));
-            }
-            BodoEngineTable outTable = ctx.convertDfToTable(finalOutVar, node);
-            operatorCache.tryCacheNode(node, outTable);
-            tableGenStack.push(outTable);
-          });
     }
+
+    RelNode inputNode = node.getInput();
+    this.visit(inputNode, 0, node);
+
+    singleBatchTimer(
+        node,
+        () -> {
+          Variable finalOutVar = outVar;
+          List<String> inputColumnNames = inputNode.getRowType().getFieldNames();
+          BodoEngineTable inTable = tableGenStack.pop();
+          Variable inVar = ctx.convertTableToDf(inTable);
+          List<String> outputDfNames = new ArrayList<>();
+
+          // If any group is missing a column we may need to do a concat.
+          boolean hasMissingColsGroup = false;
+
+          boolean distIfNoGroup = groups.size() > 1;
+
+          // Naive implementation for handling multiple aggregation groups, where we repeatedly
+          // call group by, and append the dataframes together
+          for (int i = 0; i < groups.size(); i++) {
+            List<Integer> curGroup = groups.get(i).toList();
+
+            hasMissingColsGroup = hasMissingColsGroup || curGroup.size() < groupingVariables.size();
+            Expr curGroupAggExpr;
+            /* First rename any input keys to the output. */
+
+            /* group without aggregation : e.g. select B from table1 groupby A */
+            if (aggCallList.isEmpty()) {
+              curGroupAggExpr = generateAggCodeNoAgg(inVar, inputColumnNames, curGroup);
+            }
+            /* aggregate without group : e.g. select sum(A) from table1 */
+            else if (curGroup.isEmpty()) {
+              curGroupAggExpr =
+                  generateAggCodeNoGroupBy(
+                      inVar, inputColumnNames, aggCallList, aggCallNames, distIfNoGroup, this);
+            }
+            /* group with aggregation : e.g. select sum(B) from table1 groupby A */
+            else {
+              Pair<Expr, @Nullable Op> curGroupAggExprAndAdditionalGeneratedCode =
+                  handleLogicalAggregateWithGroups(
+                      inVar, inputColumnNames, aggCallList, aggCallNames, curGroup);
+
+              curGroupAggExpr = curGroupAggExprAndAdditionalGeneratedCode.getKey();
+              @Nullable Op prependOp = curGroupAggExprAndAdditionalGeneratedCode.getValue();
+              if (prependOp != null) {
+                this.generatedCode.add(prependOp);
+              }
+            }
+            // assign each of the generated dataframes their own variable, for greater clarity in
+            // the
+            // generated code
+            Variable outDf = this.genDfVar();
+            outputDfNames.add(outDf.getName());
+            this.generatedCode.add(new Op.Assign(outDf, curGroupAggExpr));
+          }
+          // If we have multiple groups, append the dataframes together
+          if (groups.size() > 1 || hasMissingColsGroup) {
+            // It is not guaranteed that a particular input column exists in any of the output
+            // dataframes,
+            // but Calcite expects
+            // All input dataframes to be carried into the output. It is also not
+            // guaranteed that the output dataframes contain the columns in the order expected by
+            // calcite.
+            // In order to ensure that we have all the input columns in the output,
+            // we create a dummy dataframe that has all the columns with
+            // a length of 0. The ordering is handled by a loc after the concat
+
+            // We initialize the dummy column like this, as Bodo will default these columns to
+            // string type if we initialize empty columns.
+            List<String> concatDfs = new ArrayList<>();
+            if (hasMissingColsGroup) {
+              Variable dummyDfVar = genDfVar();
+              // TODO: Switch to proper IR
+              Expr dummyDfExpr = new Expr.Raw(inVar.getName() + ".iloc[:0, :]");
+              // Assign the dummy df to a variable name,
+              this.generatedCode.add(new Op.Assign(dummyDfVar, dummyDfExpr));
+              concatDfs.add(dummyDfVar.emit());
+            }
+            concatDfs.addAll(outputDfNames);
+
+            // Generate the concatenation expression
+            StringBuilder concatExprRaw = new StringBuilder(concatDataFrames(concatDfs).emit());
+
+            // Sort the output dataframe, so that they are in the ordering expected by Calcite
+            // Needed in the case that the topmost dataframe in the concat does not contain all
+            // the
+            // columns in the correct ordering
+            concatExprRaw.append(".loc[:, [");
+
+            for (int i = 0; i < expectedOutputCols.size(); i++) {
+              concatExprRaw.append(makeQuoted(expectedOutputCols.get(i))).append(", ");
+            }
+            concatExprRaw.append("]]");
+
+            // Generate the concatenation
+            this.generatedCode.add(
+                new Op.Assign(finalOutVar, new Expr.Raw(concatExprRaw.toString())));
+
+          } else {
+            finalOutVar = new Variable(outputDfNames.get(0));
+          }
+          BodoEngineTable outTable = ctx.convertDfToTable(finalOutVar, node);
+          RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+          operatorCache.tryCacheNode(node, outTable);
+          tableGenStack.push(outTable);
+        });
   }
 
   /**
@@ -1519,8 +1518,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
             new Expr.Call(
                 "bodo.libs.stream_groupby.delete_groupby_state", List.of(groupbyStateVar)));
     outputPipeline.addTermination(deleteState);
-    // Add the DF to the stack
-    tableGenStack.push(new BodoEngineTable(outTable.emit(), node));
+    // Add the table to the stack
+    BodoEngineTable table = new BodoEngineTable(outTable.emit(), node);
+    tableGenStack.push(table);
+    // Update the cache.
+    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+    operatorCache.tryCacheNode(node, table);
     timerInfo.terminateTimer();
   }
 
