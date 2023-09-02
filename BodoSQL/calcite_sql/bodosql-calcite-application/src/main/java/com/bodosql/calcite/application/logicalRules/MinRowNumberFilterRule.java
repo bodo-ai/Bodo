@@ -202,16 +202,20 @@ public class MinRowNumberFilterRule extends RelRule<MinRowNumberFilterRule.Confi
     }
     // Create the new window function. Here we replace the function call
     // with the min_row_number_filter internal function.
-    RexNode newNode =
+    RelBuilder.OverCall baseCall =
         builder
             .aggregateCall(CondOperatorTable.MIN_ROW_NUMBER_FILTER, overNode.getOperands())
             .distinct(overNode.isDistinct())
             .ignoreNulls(overNode.ignoreNulls())
             .over()
             .partitionBy(window.partitionKeys)
-            .orderBy(newOrderKeys)
-            .rangeBetween(window.getLowerBound(), window.getUpperBound())
-            .toRex();
+            .orderBy(newOrderKeys);
+    RexNode newNode;
+    if (window.isRows()) {
+      newNode = baseCall.rowsBetween(window.getLowerBound(), window.getUpperBound()).toRex();
+    } else {
+      newNode = baseCall.rangeBetween(window.getLowerBound(), window.getUpperBound()).toRex();
+    }
     builder.filter(newNode);
   }
 

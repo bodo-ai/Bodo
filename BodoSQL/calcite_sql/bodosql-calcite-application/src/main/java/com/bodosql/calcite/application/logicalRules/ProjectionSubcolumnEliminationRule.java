@@ -361,15 +361,19 @@ public class ProjectionSubcolumnEliminationRule
         replaceNode = replaceNode || !newOperand.equals(oldOperand);
       }
       if (replaceNode) {
-        return builder
-            .aggregateCall(overNode.getAggOperator(), newOperands)
-            .distinct(overNode.isDistinct())
-            .ignoreNulls(overNode.ignoreNulls())
-            .over()
-            .partitionBy(newPartitionKeys)
-            .orderBy(newOrderKeys)
-            .rangeBetween(window.getLowerBound(), window.getUpperBound())
-            .toRex();
+        RelBuilder.OverCall baseCall =
+            builder
+                .aggregateCall(overNode.getAggOperator(), newOperands)
+                .distinct(overNode.isDistinct())
+                .ignoreNulls(overNode.ignoreNulls())
+                .over()
+                .partitionBy(newPartitionKeys)
+                .orderBy(newOrderKeys);
+        if (window.isRows()) {
+          return baseCall.rowsBetween(window.getLowerBound(), window.getUpperBound()).toRex();
+        } else {
+          return baseCall.rangeBetween(window.getLowerBound(), window.getUpperBound()).toRex();
+        }
       }
     } else if (node instanceof RexCall) {
       // Call expressions need to have their children traversed. No other RexNodes
@@ -447,15 +451,19 @@ public class ProjectionSubcolumnEliminationRule
         replaceNode = replaceNode || !newOperand.equals(oldOperand);
       }
       if (replaceNode) {
-        return builder
-            .aggregateCall(overNode.getAggOperator(), newOperands)
-            .distinct(overNode.isDistinct())
-            .ignoreNulls(overNode.ignoreNulls())
-            .over()
-            .partitionBy(newPartitionKeys)
-            .orderBy(newOrderKeys)
-            .rangeBetween(window.getLowerBound(), window.getUpperBound())
-            .toRex();
+        RelBuilder.OverCall baseCall =
+            builder
+                .aggregateCall(overNode.getAggOperator(), newOperands)
+                .distinct(overNode.isDistinct())
+                .ignoreNulls(overNode.ignoreNulls())
+                .over()
+                .partitionBy(newPartitionKeys)
+                .orderBy(newOrderKeys);
+        if (window.isRows()) {
+          return baseCall.rowsBetween(window.getLowerBound(), window.getUpperBound()).toRex();
+        } else {
+          return baseCall.rangeBetween(window.getLowerBound(), window.getUpperBound()).toRex();
+        }
       }
     } else if (node instanceof RexCall) {
       // Call expressions need to have their children traversed. No other RexNodes

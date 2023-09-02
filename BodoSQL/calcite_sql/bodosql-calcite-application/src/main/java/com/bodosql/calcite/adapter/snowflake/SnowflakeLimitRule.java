@@ -25,7 +25,6 @@ public class SnowflakeLimitRule extends AbstractSnowflakeLimitRule {
                             b1 ->
                                 b1.operand(SnowflakeToPandasConverter.class)
                                     .oneInput(b2 -> b2.operand(SnowflakeRel.class).anyInputs())))
-            .withDescription("SnowflakeLimitRule::WithSnowflakeToPandasConverter")
             .as(Config.class);
 
     Config STREAMING_CONFIG =

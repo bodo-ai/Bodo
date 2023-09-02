@@ -14,6 +14,8 @@ import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexUtil
+import org.apache.calcite.sql.validate.SqlValidatorUtil
 
 /**
  * RelNode that represents a projection that occurs within Snowflake. See SnowflakeRel for more information.
@@ -60,6 +62,24 @@ class SnowflakeProject(
             val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(input.getRowType())
             val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION).replace(batchingProperty)
             return SnowflakeProject(cluster, newTraitSet, input, projects, rowType, catalogTable)
+        }
+
+        @JvmStatic
+        fun create(
+            cluster: RelOptCluster,
+            traitSet: RelTraitSet,
+            input: RelNode,
+            projects: List<RexNode>,
+            fieldNames: List<String?>?,
+            catalogTable: CatalogTableImpl,
+        ): SnowflakeProject {
+            val rowType = RexUtil.createStructType(
+                cluster.typeFactory,
+                projects,
+                fieldNames,
+                SqlValidatorUtil.F_SUGGESTER,
+            )
+            return create(cluster, traitSet, input, projects, rowType, catalogTable)
         }
     }
 
