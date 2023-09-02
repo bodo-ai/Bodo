@@ -475,8 +475,8 @@ class JoinState {
     // The number of iterations between syncs
     uint64_t sync_iter;
     // Current iteration of the build and probe steps
-    uint64_t build_iter;
-    uint64_t probe_iter;
+    uint64_t build_iter = 0;
+    uint64_t probe_iter = 0;
 
     // Dictionary builders for the key columns. This is
     // always of length n_keys and is nullptr for non DICT keys.

@@ -100,7 +100,7 @@ class GroupbyState {
     std::vector<int32_t> f_running_value_offsets;
 
     // Current iteration of build steps
-    uint64_t build_iter;
+    uint64_t build_iter = 0;
     // The number of iterations between syncs
     uint64_t sync_iter;
 
