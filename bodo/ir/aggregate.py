@@ -2066,10 +2066,11 @@ def gen_top_level_agg_func(
             # Index is always last input
             all_in_arrs.append(f"arg{len(agg_node.in_vars)-1}")
 
-        func_text += "    info_list = [{}]\n".format(
-            ", ".join(f"array_to_info({a})" for a in all_in_arrs),
-        )
-        func_text += "    table = arr_info_list_to_table(info_list)\n"
+        # NOTE: Avoiding direct array_to_info calls to workaround possible Numba
+        # refcount pruning bug. See https://bodo.atlassian.net/browse/BSE-1135
+        in_cpp_col_inds = list(range(len(all_in_arrs)))
+        comma = "," if len(all_in_arrs) == 1 else ""
+        func_text += f"    table = py_data_to_cpp_table(None, ({', '.join(all_in_arrs)}{comma}), in_col_inds, 0)\n"
 
     # do_combine indicates whether GroupbyPipeline in C++ will need to do
     # `void combine()` operation or not
