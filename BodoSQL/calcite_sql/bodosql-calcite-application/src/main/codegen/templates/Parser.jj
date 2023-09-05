@@ -33,6 +33,7 @@ package ${parser.package};
 import ${importStr};
 </#list>
 
+import org.apache.calcite.sql.VariantTypeNameSpec;
 import com.bodosql.calcite.sql.BodoSqlUtil;
 import com.bodosql.calcite.sql.func.SqlNamedParameterOperator;
 import org.apache.calcite.avatica.util.Casing;
@@ -5803,6 +5804,8 @@ SqlTypeNameSpec TypeName() :
     |
         typeNameSpec = RowTypeName()
     |
+        typeNameSpec = VariantTypeName()
+    |
         typeName = CompoundIdentifier() {
             typeNameSpec = new SqlUserDefinedTypeNameSpec(typeName, s.end(this));
         }
@@ -5866,6 +5869,11 @@ SqlTypeNameSpec SqlTypeName1(Span s) :
         [ <PRECISION> ] { sqlTypeName = SqlTypeName.DOUBLE; }
     |
         ( <FLOAT> | <FLOAT4> | <FLOAT8> ) { s.add(this); sqlTypeName = SqlTypeName.FLOAT; }
+    |
+        <VARIANT> {
+            s.add(this);
+            sqlTypeName = SqlTypeName.OTHER;
+        }
     )
     {
         return new SqlBasicTypeNameSpec(sqlTypeName, s.end(this));
@@ -6047,6 +6055,22 @@ void FieldNameTypeCommaList(
             fieldTypes.add(fType.withNullable(nullable, getPos()));
         }
     )*
+}
+
+/** 
+ * Parse VARIANT as type keyword. 
+ */
+SqlTypeNameSpec VariantTypeName() :
+{
+
+    SqlTypeName typeName;
+}
+{
+    <VARIANT>
+    {
+    typeName = SqlTypeName.OTHER; 
+    return new VariantTypeNameSpec(new SqlIdentifier(typeName.name(), getPos()));
+    }
 }
 
 /**
@@ -8554,6 +8578,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < VAR_SAMP: "VAR_SAMP" >
 |   < VARBINARY: "VARBINARY" >
 |   < VARCHAR: "VARCHAR" >
+|   < VARIANT: "VARIANT" >
 |   < VARYING: "VARYING" >
 |   < VERSION: "VERSION" >
 |   < VERSIONING: "VERSIONING" >

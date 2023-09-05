@@ -8,8 +8,8 @@ import org.apache.calcite.sql.validate.SqlValidator
 import org.apache.calcite.util.Litmus
 import java.util.*
 
-class VariantTypeNameSpec(type: VariantSqlType) : SqlTypeNameSpec(
-    Objects.requireNonNull<SqlIdentifier>(type.sqlIdentifier),
+class VariantTypeNameSpec(identifier: SqlIdentifier) : SqlTypeNameSpec(
+    identifier,
     SqlParserPos.ZERO,
 ) {
 
