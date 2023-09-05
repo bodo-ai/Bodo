@@ -1,5 +1,6 @@
 import os
 import subprocess
+from contextlib import contextmanager
 from typing import Dict, Optional
 
 import numpy as np
@@ -152,3 +153,49 @@ def run_cmd(
     if print_output:
         print(output)
     return output
+
+
+def update_env_vars(env_vars):
+    """Update the current environment variables with key-value pairs provided
+    in a dictionary.
+
+    Args
+        env_vars (Dict(str, str or None)): A dictionary of environment variables to set.
+            A value of None indicates a variable should be removed.
+
+    Returns
+        old_env_vars (Dict(str, str or None)): Previous value of any overwritten
+            environment variables. A value of None indicates an environment
+            variable was previously unset.
+    """
+    old_env_vars = {}
+    for k, v in env_vars.items():
+        if k in os.environ:
+            old_env_vars[k] = os.environ[k]
+        else:
+            old_env_vars[k] = None
+
+        if v is None:
+            if k in os.environ:
+                del os.environ[k]
+        else:
+            os.environ[k] = v
+    return old_env_vars
+
+
+@contextmanager
+def temp_env_override(env_vars):
+    """Update the current environment variables with key-value pairs provided
+    in a dictionary and then restore it after.
+
+    Args
+        env_vars (Dict(str, str or None)): A dictionary of environment variables to set.
+            A value of None indicates a variable should be removed.
+    """
+
+    old_env = {}
+    try:
+        old_env = update_env_vars(env_vars)
+        yield
+    finally:
+        update_env_vars(old_env)

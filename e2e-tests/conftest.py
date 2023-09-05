@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 
 import boto3
 import pytest
+from utils.utils import update_env_vars
 
 e2e_tests_base_dir = os.path.dirname(__file__)
 if e2e_tests_base_dir not in sys.path:
@@ -13,34 +14,6 @@ if "PYTHONPATH" in os.environ:
     os.environ["PYTHONPATH"] += os.pathsep + e2e_tests_base_dir
 else:
     os.environ["PYTHONPATH"] = e2e_tests_base_dir
-
-
-def update_env_vars(env_vars):
-    """Update the current environment variables with key-value pairs provided
-    in a dictionary.
-
-    Args
-        env_vars (Dict(str, str or None)): A dictionary of environment variables to set.
-            A value of None indicates a variable should be removed.
-
-    Returns
-        old_env_vars (Dict(str, str or None)): Previous value of any overwritten
-            environment variables. A value of None indicates an environment
-            variable was previously unset.
-    """
-    old_env_vars = {}
-    for k, v in env_vars.items():
-        if k in os.environ:
-            old_env_vars[k] = os.environ[k]
-        else:
-            old_env_vars[k] = None
-
-        if v is None:
-            del os.environ[k]
-        else:
-            os.environ[k] = v
-
-    return old_env_vars
 
 
 # Our Codebuild project does have a service role that has access
