@@ -906,6 +906,18 @@ void clear_all_cols_if_last_table_ref(
     }
 }
 
+std::tuple<std::vector<int8_t>, std::vector<int8_t>>
+get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table) {
+    size_t n_cols = table->columns.size();
+    std::vector<int8_t> arr_c_types(n_cols);
+    std::vector<int8_t> arr_array_types(n_cols);
+    for (size_t i = 0; i < n_cols; i++) {
+        arr_c_types[i] = table->columns[i]->dtype;
+        arr_array_types[i] = table->columns[i]->arr_type;
+    }
+    return std::make_tuple(arr_c_types, arr_array_types);
+}
+
 // get memory alloc/free info from _meminfo.h
 size_t get_stats_alloc() { return NRT_MemSys_get_stats_alloc(); }
 size_t get_stats_free() { return NRT_MemSys_get_stats_free(); }

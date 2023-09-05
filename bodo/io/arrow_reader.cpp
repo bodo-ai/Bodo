@@ -1179,7 +1179,8 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
     }
 
     // Initialize the number of rows left to read
-    rows_left = count;
+    rows_left_to_emit = count;
+    rows_left_to_read = count;
 
     initialized = true;
 }

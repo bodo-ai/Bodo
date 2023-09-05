@@ -304,7 +304,7 @@ ChunkedTableBuilder::ChunkedTableBuilder(
           max_resize_count_for_variable_size_dtypes_) {
     this->active_chunk_array_builders.reserve(arr_c_types.size());
     for (size_t i = 0; i < arr_c_types.size(); i++) {
-        if (arr_array_types[i] == bodo_array_type::DICT) {
+        if (active_chunk->columns[i]->arr_type == bodo_array_type::DICT) {
             // Set the dictionary to the one from the dict builder:
             this->active_chunk->columns[i]->child_arrays[0] =
                 dict_builders[i]->dict_buff->data_array;
@@ -1051,6 +1051,25 @@ void ChunkedTableBuilder::Reset() {
     this->total_size = 0;
     this->total_remaining = 0;
     this->max_reached_size = 0;
+}
+
+bool ChunkedTableBuilder::empty() const { return this->total_remaining == 0; }
+
+void ChunkedTableBuilder::UnifyDictionariesAndAppend(
+    const std::shared_ptr<table_info>& in_table,
+    const std::span<std::shared_ptr<DictionaryBuilder>> dict_builders) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    out_arrs.reserve(in_table->ncols());
+    for (int i = 0; i < in_table->ncols(); i++) {
+        std::shared_ptr<array_info> col = this->dummy_output_chunk->columns[i];
+        if (col->arr_type == bodo_array_type::DICT) {
+            out_arrs.emplace_back(
+                dict_builders[i]->UnifyDictionaryArray(in_table->columns[i]));
+        } else {
+            out_arrs.emplace_back(in_table->columns[i]);
+        }
+    }
+    this->AppendBatch(std::make_shared<table_info>(out_arrs));
 }
 
 /* ------------------------------------------------------------------------

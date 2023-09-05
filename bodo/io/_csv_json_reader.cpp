@@ -26,7 +26,6 @@
 #include <string>
 #include <vector>
 
-#include "../libs/_bodo_common.h"
 #include "../libs/_distributed.h"
 #include "_bodo_file_reader.h"
 #include "_fs_io.h"

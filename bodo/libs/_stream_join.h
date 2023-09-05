@@ -878,16 +878,6 @@ bool nested_loop_join_probe_consume_batch(
 /* ----------------------------- Helper Functions --------------------------- */
 
 /**
- * @brief Get the dtypes and arr types from an existing table
- *
- * @param table Reference table
- * @return std::tuple<std::vector<int8_t>, std::vector<int8_t>> Vector of
- * C types and vector of array types
- */
-std::tuple<std::vector<int8_t>, std::vector<int8_t>>
-get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table);
-
-/**
  * @brief Wrapper around stream_sync_is_last to avoid synchronization
  * if we have a broadcast join or a replicated input.
  *

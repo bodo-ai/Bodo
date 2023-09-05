@@ -7,86 +7,9 @@
 #include <queue>
 #include "arrow_reader.h"
 
+#include "../libs/_chunked_table_builder.h"
+#include "../libs/_dict_builder.h"
 #include "../libs/_distributed.h"
-#include "../libs/_table_builder.h"
-
-/**
- * @brief Get the max table size threshold (in bytes) to determine when to stop
- * reading from snowflake
- *
- * @return size_t limit value
- */
-size_t get_max_table_size() {
-    // We default to 64MB (arbitrarily chosen), unless to user specifies a
-    // threshold manually.
-    size_t table_size = 64 * 2 << 20;
-    char* table_size_str = std::getenv("BODO_READ_MAX_TABLE_SIZE");
-    if (table_size_str) {
-        std::stringstream stream(table_size_str);
-        stream >> table_size;
-    }
-    return table_size;
-}
-
-/**
- * @brief Class that contains the information to convert
- * Arrow string columns loaded from Snowflake into
- * Arrow Dictionary columns. This shouldn't incur additional
- * overhead because we have a zero-copy approach to convert
- * to Bodo arrays.
- *
- */
-class SnowflakeDictionaryBuilder {
-   public:
-    SnowflakeDictionaryBuilder(std::shared_ptr<arrow::Schema> _schema,
-                               const std::set<int>& _selected_fields,
-                               const std::set<std::string>& _str_as_dict_cols)
-        : schema(_schema),
-          selected_fields(_selected_fields),
-          str_as_dict_cols(_str_as_dict_cols) {}
-
-    std::tuple<std::shared_ptr<arrow::Table>, std::vector<int64_t>> convert(
-        std::shared_ptr<arrow::Table> in_table) {
-        arrow::ChunkedArrayVector new_cols(in_table->num_columns());
-        std::vector<int64_t> dict_ids(in_table->num_columns());
-        for (int i = 0; i < in_table->num_columns(); i++) {
-            auto col = in_table->column(i);
-            if (selected_fields.contains(i) &&
-                str_as_dict_cols.contains(schema->field(i)->name())) {
-                // We have a dictionary column to convert.
-                auto new_col = arrow::compute::DictionaryEncode(col);
-                std::shared_ptr<arrow::ChunkedArray> chunked_arr =
-                    new_col->chunked_array();
-                new_cols[i] = chunked_arr;
-                // Fetch the dictionary from the first chunk to get the length.
-                // DictionaryEncode outputs the same dictionary in every batch.
-                // https://github.com/apache/arrow/blob/ea5ce0305d0792517183408e2eed25bdac267e54/cpp/src/arrow/compute/kernels/vector_hash.cc#L644
-                // This code is not documented because the publicly visible API
-                // is just the Python API.
-                // https://arrow.apache.org/docs/python/generated/pyarrow.compute.dictionary_encode.html
-                std::shared_ptr<arrow::Array> first_chunk =
-                    (chunked_arr->chunk(0));
-                std::shared_ptr<arrow::Array> dictionary =
-                    reinterpret_cast<arrow::DictionaryArray*>(first_chunk.get())
-                        ->dictionary();
-                dict_ids[i] = generate_array_id(dictionary->length());
-            } else {
-                // For all other columns just copy the column to the table.
-                new_cols[i] = col;
-                dict_ids[i] = -1;
-            }
-        }
-
-        return std::tuple(
-            arrow::Table::Make(this->schema, new_cols, in_table->num_rows()),
-            dict_ids);
-    }
-
-   private:
-    std::shared_ptr<arrow::Schema> schema;
-    const std::set<int>& selected_fields;
-    const std::set<std::string>& str_as_dict_cols;
-};
 
 // -------- SnowflakeReader --------
 
@@ -113,14 +36,24 @@ class SnowflakeReader : public ArrowReader {
           downcast_decimal_to_double(_downcast_decimal_to_double) {
         // Initialize reader
         init_arrow_reader(str_as_dict_cols, true);
+
+        // Construct ChunkedTableBuilder for output
+        this->dict_builders = std::vector<std::shared_ptr<DictionaryBuilder>>(
+            schema->num_fields());
+        for (int str_as_dict_col : str_as_dict_cols) {
+            std::shared_ptr<array_info> dict = alloc_array(
+                0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
+            this->dict_builders[str_as_dict_col] =
+                std::make_shared<DictionaryBuilder>(dict, false);
+        }
+
+        auto [arr_c_types, arr_array_types] =
+            get_dtypes_arr_types_from_table(get_empty_out_table());
+        this->out_batches = std::make_shared<ChunkedTableBuilder>(
+            arr_c_types, arr_array_types, dict_builders, (size_t)batch_size);
     }
 
-    virtual ~SnowflakeReader() override {
-        Py_XDECREF(sf_conn);
-        if (this->empty_out_table != nullptr) {
-            delete empty_out_table;
-        }
-    }
+    virtual ~SnowflakeReader() { Py_XDECREF(sf_conn); }
 
     /// A piece is a snowflake.connector.result_batch.ArrowResultBatch
     virtual size_t get_num_pieces() const override {
@@ -137,8 +70,8 @@ class SnowflakeReader : public ArrowReader {
     int64_t get_total_source_rows() const { return this->total_nrows; }
 
    protected:
-    void add_piece(PyObject* piece, int64_t num_rows,
-                   int64_t total_rows) override {
+    virtual void add_piece(PyObject* piece, int64_t num_rows,
+                           int64_t total_rows) override {
         Py_INCREF(piece);  // keeping a reference to this piece
         result_batches.push(piece);
     }
@@ -188,16 +121,15 @@ class SnowflakeReader : public ArrowReader {
         return ds;
     }
 
-    virtual table_info* get_empty_out_table() override {
+    virtual std::shared_ptr<table_info> get_empty_out_table() override {
         if (this->empty_out_table == nullptr) {
             TableBuilder builder(schema, selected_fields, 0, is_nullable,
                                  str_as_dict_colnames, false);
-            this->empty_out_table = builder.get_table();
+            this->empty_out_table =
+                std::shared_ptr<table_info>(builder.get_table());
         }
         return this->empty_out_table;
     }
-
-    table_info* empty_out_table = nullptr;
 
     /**
      * @brief Convert a ResultBatch piece object the current rank should read
@@ -229,7 +161,8 @@ class SnowflakeReader : public ArrowReader {
         to_arrow_time = duration_cast<microseconds>((end - start)).count();
 
         start = steady_clock::now();
-        int64_t length = std::min(rows_left, table->num_rows() - offset);
+        int64_t length =
+            std::min(rows_left_to_read, table->num_rows() - offset);
         // TODO: Add check if length < 0, never possible
         table = table->Slice(offset, length);
 
@@ -248,6 +181,8 @@ class SnowflakeReader : public ArrowReader {
 
     // Design for Batched Snowflake Reads:
     // https://bodo.atlassian.net/l/cp/4JwaiChQ
+    // Non-Streaming Uses TableBuilder to Construct Output
+    // Streaming Uses ChunkedTableBuilder to Construct Batches
     virtual std::tuple<table_info*, bool, uint64_t> read_inner() override {
         using namespace std::chrono;
         // Note: These can be called in a loop by streaming.
@@ -256,8 +191,6 @@ class SnowflakeReader : public ArrowReader {
         int64_t to_arrow_time = 0;
         int64_t cast_arrow_table_time = 0;
         int64_t append_time = 0;
-        // Total number of rows to output from func call
-        uint64_t total_read_rows = 0;
 
         // In the case when we only need to perform a count(*)
         // We need to still return a table with 0 columns but
@@ -266,13 +199,20 @@ class SnowflakeReader : public ArrowReader {
         // length on each rank. In the batching case, this only occurs on the
         // first iteration
         if (this->only_length_query) {
-            if (!result_batches.empty() || !out_batches.empty()) {
+            // Runtime Assertions
+            // No performance penalty since ArrowReader sets up
+            // call stack anyways
+            if (!result_batches.empty() || !out_batches->empty()) {
                 throw std::runtime_error(
                     "SnowflakeReader: Read a batch in the "
                     "only_length_query case!");
             }
 
-            assert(this->rows_left == 0);
+            if (this->rows_left_to_read != 0) {
+                throw std::runtime_error(
+                    "SnowflakeReader: Expecting to read a row in the "
+                    "only_length_query case!");
+            }
 
             size_t rank = dist_get_rank();
             size_t nranks = dist_get_size();
@@ -281,6 +221,7 @@ class SnowflakeReader : public ArrowReader {
                     ? 0
                     : dist_get_node_portion(this->total_nrows, nranks, rank);
             returned_once_empty_case = true;
+            // TODO(srilman): Why does nullptr work here?
             return std::make_tuple(nullptr, true, out_rows);
         }
 
@@ -311,7 +252,7 @@ class SnowflakeReader : public ArrowReader {
                 cast_arrow_table_time += cast_arrow_table_time_;
 
                 auto start = steady_clock::now();
-                this->rows_left -= table->num_rows();
+                this->rows_left_to_read -= table->num_rows();
                 builder.append(table);
                 auto end = steady_clock::now();
                 append_time +=
@@ -324,129 +265,73 @@ class SnowflakeReader : public ArrowReader {
                              cast_arrow_table_time);
 
             auto out_table = builder.get_table();
+            // TODO: This is a hack to get the correct number of rows
+            // when reading 0 columns
+            // Should be true in the non-streaming case anyways
+            rows_left_to_emit = rows_left_to_read;
             ev.add_attribute("out_batch_size", out_table->nrows());
             ev.finalize();
             return std::make_tuple(out_table, true, out_table->nrows());
         }
 
-        auto GetNextBatch = [&]() {
-            table_info* next_batch = nullptr;
+        if (out_batches->chunks.empty() && !result_batches.empty()) {
+            auto next_piece = result_batches.front();
+            result_batches.pop();
 
-            // If next batch not available, prepare next batches
-            if (out_batches.empty() && !result_batches.empty()) {
-                auto next_piece = result_batches.front();
-                result_batches.pop();
-
-                int64_t offset = 0;
-                if (is_first_piece) {
-                    offset = start_row_first_piece;
-                    is_first_piece = false;
-                }
-
-                auto [table, to_arrow_time, cast_arrow_table_time] =
-                    process_result_batch(next_piece, offset);
-
-                auto start = steady_clock::now();
-
-                // TODO(aneesh) this isn't great for performance since we're
-                // creating a new dictionary for every batch and then unifying
-                // with what we've read so far. Instead, the lifetime of this
-                // builder should be the lifetime of this whole set of reads.
-
-                // Build the dictionary
-                SnowflakeDictionaryBuilder dict_builder(schema, selected_fields,
-                                                        str_as_dict_colnames);
-                // Generate the dict_ids
-                auto [batch_table, dict_ids] = dict_builder.convert(table);
-                // Arrow utility to iterate over row-chunks of an input
-                // table Useful for us to construct batches of Bodo tables
-                // from the piece
-                auto reader = arrow::TableBatchReader(batch_table);
-                reader.set_chunksize(batch_size);
-
-                std::shared_ptr<arrow::RecordBatch> next_recordbatch;
-                for (auto status = reader.ReadNext(&next_recordbatch);
-                     status.ok() && next_recordbatch;
-                     status = reader.ReadNext(&next_recordbatch)) {
-                    // Construct Builder Object for Next Batch
-                    TableBuilder builder(
-                        schema, selected_fields, next_recordbatch->num_rows(),
-                        is_nullable, str_as_dict_colnames, false, dict_ids);
-                    // TODO: Have TableBuilder support RecordBatches
-                    auto res =
-                        arrow::Table::FromRecordBatches({next_recordbatch})
-                            .ValueOrDie();
-                    builder.append(res);
-                    out_batches.push(builder.get_table());
-                }
-
-                auto end = steady_clock::now();
-                append_time =
-                    duration_cast<microseconds>((end - start)).count();
+            int64_t offset = 0;
+            if (is_first_piece) {
+                offset = start_row_first_piece;
+                is_first_piece = false;
             }
 
-            ev.add_attribute("total_to_arrow_time_micro", to_arrow_time);
-            ev.add_attribute("total_append_time_micro", append_time);
-            ev.add_attribute("total_cast_arrow_table_time_micro",
-                             cast_arrow_table_time);
+            auto [table, to_arrow_time, cast_arrow_table_time] =
+                process_result_batch(next_piece, offset);
 
-            if (out_batches.size() > 0) {
-                next_batch = out_batches.front();
-                out_batches.pop();
-                this->rows_left -= next_batch->nrows();
-                total_read_rows += next_batch->nrows();
+            auto start = steady_clock::now();
+            this->rows_left_to_read -= table->num_rows();
+
+            // Arrow utility to zero-copy construct RecordBatches tables.
+            // Tables consist of chunked arrays with inconsistent boundaries
+            // Difficult to directly zero-copy
+            // See https://arrow.apache.org/docs/cpp/tables.html#record-batches
+            // for details and rationale
+            auto reader = arrow::TableBatchReader(table);
+            // Want the largest contiguous chunks possible
+            reader.set_chunksize(table->num_rows());
+
+            std::shared_ptr<arrow::RecordBatch> next_recordbatch;
+            for (auto status = reader.ReadNext(&next_recordbatch);
+                 status.ok() && next_recordbatch;
+                 status = reader.ReadNext(&next_recordbatch)) {
+                auto bodo_table = arrow_recordbatch_to_bodo(next_recordbatch);
+                out_batches->UnifyDictionariesAndAppend(bodo_table,
+                                                        this->dict_builders);
             }
 
-            ev.add_attribute("out_batch_size",
-                             next_batch == nullptr ? 0 : next_batch->nrows());
-            ev.finalize();
+            auto end = steady_clock::now();
+            append_time = duration_cast<microseconds>((end - start)).count();
 
-            bool is_last = result_batches.empty() && out_batches.empty();
-            return std::make_pair(next_batch, is_last);
-        };
-        auto [next_batch, is_last] = GetNextBatch();
-
-        // We might want to read multiple batches until our dictionaries reach
-        // the limit instead of just reading a single batch.
-        size_t max_table_size = get_max_table_size();
-
-        // Using the table we just got, create a TableBuildBuffer to handle
-        // combining tables. We use TableBuildBuffer instead of TableBuilder
-        // because we want to unify the dictionaries as early as possible to
-        // reduce memory usage.
-        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-        std::vector<int8_t> types;
-        std::vector<int8_t> arr_types;
-        for (size_t i = 0; i < next_batch->ncols(); i++) {
-            types.push_back(next_batch->columns[i]->dtype);
-            auto arr_type = next_batch->columns[i]->arr_type;
-            arr_types.push_back(arr_type);
-            if (arr_type == bodo_array_type::arr_type_enum::DICT) {
-                std::shared_ptr<array_info> dict = alloc_array(
-                    0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-                dict_builders.emplace_back(
-                    std::make_shared<DictionaryBuilder>(dict, false));
-            } else {
-                dict_builders.emplace_back(nullptr);
+            // Explicitly Finalize ChunkedTableBuilder once all data
+            // has been consumed
+            if (result_batches.empty()) {
+                out_batches->Finalize();
             }
         }
 
-        TableBuildBuffer table_builder =
-            TableBuildBuffer(types, arr_types, dict_builders);
+        ev.add_attribute("total_to_arrow_time_micro", to_arrow_time);
+        ev.add_attribute("total_append_time_micro", append_time);
+        ev.add_attribute("total_cast_arrow_table_time_micro",
+                         cast_arrow_table_time);
 
-        // Get batches and append them to the TableBuildBuffer until either
-        // max_table_size is exceeded or there's no more batches to read.
-        std::shared_ptr<table_info> tmp_table(next_batch);
-        table_builder.UnifyTablesAndAppend(tmp_table, dict_builders);
-        while (!is_last && table_builder.EstimatedSize() < max_table_size) {
-            std::tie(next_batch, is_last) = GetNextBatch();
+        auto [next_batch, out_batch_size] = out_batches->PopChunk();
 
-            std::shared_ptr<table_info> tmp_table(next_batch);
-            table_builder.UnifyTablesAndAppend(tmp_table, dict_builders);
-        }
+        ev.add_attribute("out_batch_size", out_batch_size);
+        ev.finalize();
+        rows_left_to_emit -= out_batch_size;
 
-        auto* rettable = new table_info(*table_builder.data_table);
-        return std::make_tuple(rettable, is_last, total_read_rows);
+        bool is_last = result_batches.empty() && out_batches->empty();
+        return std::make_tuple(new table_info(*next_batch), is_last,
+                               out_batch_size);
     }
 
    private:
@@ -478,8 +363,14 @@ class SnowflakeReader : public ArrowReader {
     std::queue<PyObject*> result_batches;
 
     // Prepared output batches (Bodo tables) ready to emit
-    std::queue<table_info*> out_batches;
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    std::shared_ptr<ChunkedTableBuilder> out_batches;
+
+    // If we still need to return the first batch for streaming
     bool is_first_piece = true;
+
+    // Empty Table for Mapping Datatypes
+    std::shared_ptr<table_info> empty_out_table = nullptr;
 };
 
 /**

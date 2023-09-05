@@ -6,18 +6,6 @@
 #include "_array_utils.h"
 #include "_bodo_to_arrow.h"
 
-// if status of arrow::Result is not ok, form an err msg and raise a
-// runtime_error with it. If it is ok, get value using ValueOrDie
-// and assign it to lhs using std::move
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs)                  \
-    if (!(res.status().ok())) {                                \
-        std::string err_msg = std::string("Error in arrow ") + \
-                              " write: " + msg + " " +         \
-                              res.status().ToString();         \
-        throw std::runtime_error(err_msg);                     \
-    }                                                          \
-    lhs = std::move(res).ValueOrDie();
-
 /**
  * @brief Create Arrow Chunked Array from Bodo's array_info
  *
@@ -1051,4 +1039,16 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                                      arrow_arr->type()->ToString() +
                                      " not supported");
     }
+}
+
+std::shared_ptr<table_info> arrow_recordbatch_to_bodo(
+    std::shared_ptr<arrow::RecordBatch> arrow_rb) {
+    std::vector<std::shared_ptr<array_info>> cols;
+    cols.reserve(arrow_rb->num_columns());
+
+    for (auto col : arrow_rb->columns()) {
+        cols.push_back(arrow_array_to_bodo(col));
+    }
+
+    return std::make_shared<table_info>(cols);
 }

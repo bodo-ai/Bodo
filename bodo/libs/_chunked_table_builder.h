@@ -845,7 +845,9 @@ struct ChunkedTableBuilder {
         const std::vector<int8_t>& arr_c_types,
         const std::vector<int8_t>& arr_array_types,
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-        size_t chunk_size, size_t max_resize_count_for_variable_size_dtypes);
+        size_t chunk_size,
+        size_t max_resize_count_for_variable_size_dtypes =
+            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
 
     /**
      * @brief Finalize the active chunk and create a new active chunk.
@@ -932,6 +934,20 @@ struct ChunkedTableBuilder {
      * dictionary related flags are reset.
      */
     void Reset();
+
+    /// @brief True if there are 0 rows in the table, prepared or active
+    bool empty() const;
+
+    /**
+     * @brief Wrapper method over AppendBatch to append an input table
+     * with string columns that should be converted to dictionary-encoded
+     * string columns. Currently only used for SnowflakeReader
+     *
+     * @param in_table Input with string columns to convert
+     */
+    void UnifyDictionariesAndAppend(
+        const std::shared_ptr<table_info>& in_table,
+        const std::span<std::shared_ptr<DictionaryBuilder>> dict_builders);
 
     iterator begin() { return iterator(chunks.begin(), chunks); }
 
