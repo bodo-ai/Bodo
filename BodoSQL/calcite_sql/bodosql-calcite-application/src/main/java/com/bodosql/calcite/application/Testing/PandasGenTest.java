@@ -107,7 +107,9 @@ public class PandasGenTest {
             plannerChoice,
             0,
             BatchingProperty.defaultBatchSize,
-            enableStreamingGroupBy);
+            enableStreamingGroupBy,
+            true // Always hide credentials
+            );
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String unOptimizedPlanStr = getRelationalAlgebraString(generator, sql, false);

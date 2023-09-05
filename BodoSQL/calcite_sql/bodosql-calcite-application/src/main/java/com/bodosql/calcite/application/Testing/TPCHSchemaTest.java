@@ -167,7 +167,15 @@ public class TPCHSchemaTest {
     schema.addTable(table);
 
     RelationalAlgebraGenerator generator =
-        new RelationalAlgebraGenerator(schema, "", 0, 0, BatchingProperty.defaultBatchSize, false);
+        new RelationalAlgebraGenerator(
+            schema,
+            "",
+            0,
+            0,
+            BatchingProperty.defaultBatchSize,
+            false,
+            true // Always hide credentials
+            );
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String planStr = getRelationalAlgebraString(generator, sql, true);

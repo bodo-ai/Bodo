@@ -5,6 +5,7 @@ import static java.lang.Math.min;
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.snowflake.BodoSnowflakeSqlDialect;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
@@ -578,13 +579,28 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     StringBuilder connString = new StringBuilder();
     // Append the base url
 
+    // Hide the username, password, and accountName for
+    // sharing code without leaking credentials.
+    String username;
+    String password;
+    String accountName;
+    if (RelationalAlgebraGenerator.hideCredentials) {
+      username = "USERNAME***";
+      password = "PASSWORD***";
+      accountName = "ACCOUNT***";
+    } else {
+      username = this.username;
+      password = this.password;
+      accountName = this.accountName;
+    }
+
     try {
       connString.append(
           String.format(
               "snowflake://%s:%s@%s/%s",
-              URLEncoder.encode(this.username, "UTF-8"),
-              URLEncoder.encode(this.password, "UTF-8"),
-              URLEncoder.encode(this.accountName, "UTF-8"),
+              URLEncoder.encode(username, "UTF-8"),
+              URLEncoder.encode(password, "UTF-8"),
+              URLEncoder.encode(accountName, "UTF-8"),
               URLEncoder.encode(this.catalogName, "UTF-8")));
       if (!schemaName.isEmpty()) {
         // Append a schema if it exists

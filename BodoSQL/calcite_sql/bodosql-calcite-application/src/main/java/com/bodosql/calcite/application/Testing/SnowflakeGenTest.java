@@ -82,7 +82,9 @@ public class SnowflakeGenTest {
             RelationalAlgebraGenerator.STREAMING_PLANNER,
             0,
             BatchingProperty.defaultBatchSize,
-            false);
+            false,
+            true // Always hide credentials
+            );
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String optimizedPlanStr = getRelationalAlgebraString(generator, sql, true);
