@@ -1,4 +1,4 @@
-package com.bodosql.calcite.application.BodoSQLOperatorTables;
+package com.bodosql.calcite.application.operatorTables;
 
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlCallBinding;

@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.logicalRules;
 
-import com.bodosql.calcite.application.BodoSQLOperatorTables.*;
+import com.bodosql.calcite.application.operatorTables.CondOperatorTable;
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter;
 import com.bodosql.calcite.rel.logical.BodoLogicalProject;

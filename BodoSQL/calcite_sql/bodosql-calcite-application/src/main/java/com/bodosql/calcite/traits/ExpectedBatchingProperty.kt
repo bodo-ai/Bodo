@@ -1,7 +1,7 @@
 package com.bodosql.calcite.traits
 
-import com.bodosql.calcite.application.BodoSQLOperatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
+import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.utils.AggHelpers
 import com.bodosql.calcite.schema.CatalogSchemaImpl
 import com.bodosql.calcite.table.BodoSqlTable

@@ -1,4 +1,4 @@
-package com.bodosql.calcite.application.BodoSQLOperatorTables;
+package com.bodosql.calcite.application.operatorTables;
 
 import java.util.Arrays;
 import java.util.List;

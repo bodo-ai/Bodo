@@ -1,6 +1,6 @@
-package com.bodosql.calcite.application.BodoSQLOperatorTables;
+package com.bodosql.calcite.application.operatorTables;
 
-import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.argumentRange;
+import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.argumentRange;
 
 import java.util.Arrays;
 import java.util.List;
@@ -672,7 +672,6 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SUBSTRING_INDEX,
           SqlLibraryOperators.TRANSLATE3,
           INITCAP,
-          // TRIM,
           LTRIM,
           RTRIM,
           LEN,

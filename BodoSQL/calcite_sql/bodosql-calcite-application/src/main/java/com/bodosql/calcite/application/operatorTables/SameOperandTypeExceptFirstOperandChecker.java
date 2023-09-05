@@ -1,33 +1,40 @@
-package com.bodosql.calcite.application.BodoSQLOperatorTables;
+package com.bodosql.calcite.application.operatorTables;
 
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.util.Static.RESOURCE;
 
+import com.google.common.collect.ImmutableList;
+import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlCallBinding;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorBinding;
+import org.apache.calcite.sql.SqlUtil;
 import org.apache.calcite.sql.type.SameOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 
-public class DecodeOperandChecker extends SameOperandTypeChecker {
+public class SameOperandTypeExceptFirstOperandChecker extends SameOperandTypeChecker {
+  // ~ Instance fields --------------------------------------------------------
+
+  protected final String firstOperandTypeName;
+
+  // ~ Constructors -----------------------------------------------------------
+
   /**
-   * Parameter type-checking strategy for the DECODE function, which has the following rules:
-   *
-   * <p>There must be 3+ arguments - Argument 0 must have the same type as arguments 1, 3, 5, etc.
-   * (if there are an even number of arguments, then the final argument is exempt) - Argument 2 must
-   * have the same type as arguments 4, 6, 8, etc. (if there are an even number of arguments, then
-   * the final argument must also match). If there is no default argument, then it acts as if the
-   * default fallback value is NULL.
+   * Parameter type-checking strategy where all operand types except the first one must be the same.
    *
    * <p>Influenced by SameOperandTypeExceptLastOperandChecker
    * https://github.com/apache/calcite/blob/4bc916619fd286b2c0cc4d5c653c96a68801d74e/core/src/main/java/org/apache/calcite/sql/type/SameOperandTypeExceptLastOperandChecker.java#L39
    */
-  public DecodeOperandChecker() {
-    super(-1);
+  public SameOperandTypeExceptFirstOperandChecker(int nOperands, String firstOperandTypeName) {
+    super(nOperands);
+    this.firstOperandTypeName = firstOperandTypeName;
   }
+
+  // ~ Methods ----------------------------------------------------------------
 
   @Override
   protected boolean checkOperandTypesImpl(
@@ -38,12 +45,10 @@ public class DecodeOperandChecker extends SameOperandTypeChecker {
       throw new IllegalArgumentException(
           "callBinding must be non-null in case throwOnFailure=true");
     }
-    // Extract and verify the number of operands
-    int nOperandsActual = operatorBinding.getOperandCount();
-    if (nOperandsActual < 3) {
-      throw new IllegalArgumentException("DECODE must be called on at least 3 arguments");
+    int nOperandsActual = nOperands;
+    if (nOperandsActual == -1) {
+      nOperandsActual = operatorBinding.getOperandCount();
     }
-    // Extract each operand type and verify that it is valid
     RelDataType[] types = new RelDataType[nOperandsActual];
     final List<Integer> operandList = getOperandList(operatorBinding.getOperandCount());
     for (int i : operandList) {
@@ -61,31 +66,38 @@ public class DecodeOperandChecker extends SameOperandTypeChecker {
         types[i] = operatorBinding.getOperandType(i);
       }
     }
+    int prev = -1;
+    for (int i : operandList) {
+      if (prev > 0 && i < operandList.get(operandList.size())) {
+        if (!SqlTypeUtil.isComparable(types[i], types[prev])) {
+          if (!throwOnFailure) {
+            return false;
+          }
 
-    // Loop over each argument and verify that it either matches the type of
-    // argument 0 or 2, depending on whether it corresponds to an input or
-    // an output (this is the part that is different from SameOperandTypeExceptLastOperandChecker)
-    RelDataType inputType = types[0];
-    RelDataType outputType = types[2];
-    Boolean faliure;
-    for (int i = 1; i < nOperandsActual; i += 1) {
-      if (i == 2) {
-        continue;
-      }
-      if ((i % 2 == 1) && (i != (nOperandsActual - 1))) {
-        faliure = !SqlTypeUtil.isComparable(types[i], inputType);
-      } else {
-        faliure = !SqlTypeUtil.isComparable(types[i], outputType);
-      }
-      if (faliure) {
-        if (throwOnFailure) {
+          // REVIEW jvs 5-June-2005: Why don't we use
+          // newValidationSignatureError() here?  It gives more
+          // specific diagnostics.
           throw requireNonNull(callBinding, "callBinding")
               .newValidationError(RESOURCE.needSameTypeParameter());
-        } else {
-          return false;
         }
       }
+      prev = i;
     }
     return true;
+  }
+
+  @Override
+  public String getAllowedSignatures(SqlOperator op, String opName) {
+    final String typeName = getTypeName();
+    if (nOperands == -1) {
+      return SqlUtil.getAliasedSignature(op, opName, ImmutableList.of(typeName, typeName, "..."));
+    } else {
+      List<String> types = new ArrayList<>();
+      types.add(firstOperandTypeName);
+      for (int i = 0; i < nOperands - 1; i++) {
+        types.add(typeName);
+      }
+      return SqlUtil.getAliasedSignature(op, opName, types);
+    }
   }
 }
