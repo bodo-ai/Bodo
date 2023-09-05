@@ -1,6 +1,6 @@
-package com.bodosql.calcite.application.BodoSQLOperatorTables;
+package com.bodosql.calcite.application.operatorTables;
 
-import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.argumentRange;
+import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.argumentRange;
 
 import com.bodosql.calcite.sql.func.SqlRandomOperator;
 import java.util.ArrayList;

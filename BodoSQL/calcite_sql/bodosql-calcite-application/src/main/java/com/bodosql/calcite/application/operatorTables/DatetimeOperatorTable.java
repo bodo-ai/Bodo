@@ -1,8 +1,8 @@
-package com.bodosql.calcite.application.BodoSQLOperatorTables;
+package com.bodosql.calcite.application.operatorTables;
 
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
-import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.argumentRange;
-import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.isOutputNullableCompile;
+import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.argumentRange;
+import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.isOutputNullableCompile;
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.DateTimeType;
 import com.bodosql.calcite.application.BodoSQLCodegenException;

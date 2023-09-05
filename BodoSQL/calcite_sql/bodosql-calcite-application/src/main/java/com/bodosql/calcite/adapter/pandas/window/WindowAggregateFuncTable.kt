@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.pandas.window
 
-import com.bodosql.calcite.application.BodoSQLOperatorTables.CondOperatorTable
-import com.bodosql.calcite.application.BodoSQLOperatorTables.NumericOperatorTable
+import com.bodosql.calcite.application.operatorTables.CondOperatorTable
+import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
 import com.bodosql.calcite.ir.Expr
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.SqlKind

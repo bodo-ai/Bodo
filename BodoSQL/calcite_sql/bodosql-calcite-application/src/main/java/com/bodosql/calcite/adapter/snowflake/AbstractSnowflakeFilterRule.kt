@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable
-import com.bodosql.calcite.application.BodoSQLOperatorTables.JsonOperatorTable
+import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
+import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
 import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelRule
