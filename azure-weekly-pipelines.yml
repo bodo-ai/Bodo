@@ -40,31 +40,26 @@ stages:
   # Bodo build:
   # Note: for all the bodo build steps,
   # the name string is used later in the buildscripts to determine which version of conda to install
-  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
+  - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: Linux
       vmImage: ubuntu-latest
-      useNumbaDev: false
       platformBuild: false
       weeklyTest: true
-  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
+  - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: macOS
       vmImage: macOS-latest
-      useNumbaDev: false
       platformBuild: false
       weeklyTest: true
-#  - template: buildscripts/azure/azure-build-binary-windows.yml
+#  - template: buildscripts/bodo/azure/azure-build-conda-windows.yml
 #    parameters:
 #      name: Windows
 #      vmImage: windows-2019
-#      useNumbaDev: false
-#  - template: buildscripts/azure/azure-build-binary-windows-pip.yml
+#  - template: buildscripts/bodo/azure/azure-build-pip-windows.yml
 #    parameters:
 #      name: Windows_pip
 #      vmImage: windows-2019
-#      useNumbaDev: false
-#      platformBuild: false
 
 # Note: It is difficult to enforce the exact version of bodo to use for the build, outside of
 # modifying the build recipe. Therefore, if we update BodoSQL's build process to require a specific version
@@ -76,21 +71,16 @@ stages:
   dependsOn: Build_Bodo_Binary
   jobs:
   # BodoSQL build:
-  - template: buildscripts/bodosql/azure/azure-build-binary.yml
+  - template: buildscripts/bodosql/azure/azure-build-conda.yml
     parameters:
       name: BodoSQL_Conda_Build
-      vmImage: ubuntu-latest
       CONDA_ENV: build_bodo_sql
       PYTHON_VERSION: 3.10
-      weeklyTest: true
   # Uncomment when pip is enabled again.
   # # BodoSQL build:
-  # - template: buildscripts/bodosql/azure/azure-build-binary-pip.yml
+  # - template: buildscripts/bodosql/azure/azure-build-pip.yml
   #   parameters:
   #     name: BodoSQL_Pip_Build
-  #     vmImage: ubuntu-latest
-  #     CONDA_ENV: build_bodo_sql
-  #     PYTHON_VERSION: 3.10
 
 # NOTE: we don't do any builds here, as we assume the previous nightly run has built the needed
 # packages and put them on conda
@@ -102,9 +92,10 @@ stages:
 
   # Bodo tests:
 
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       name: macOS_38py
+      ### NOTE: The template doesn't actually support this parameter!
       vmImage: macOS-latest
       useNumbaDev: false
       caching_test: false
@@ -152,9 +143,10 @@ stages:
           CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_10of10
 
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       name: macOS_39py
+      ### NOTE: The template doesn't actually support this parameter!
       vmImage: macOS-latest
       useNumbaDev: false
       caching_test: false
@@ -202,10 +194,11 @@ stages:
           CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_10of10
 
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
       name: macOS
+      ### NOTE: The template doesn't actually support this parameter!
       vmImage: macOS-latest
       useNumbaDev: false
       caching_test: false
@@ -252,10 +245,9 @@ stages:
           CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_10of10
 
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       name: Linux_38py
-      vmImage: ubuntu-latest
       useNumbaDev: false
       caching_test: false
       CONDA_ENV: 'bodo'
@@ -302,10 +294,9 @@ stages:
           CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_10of10
 
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       name: Linux_39py
-      vmImage: ubuntu-latest
       useNumbaDev: false
       caching_test: false
       CONDA_ENV: 'bodo'
@@ -351,11 +342,10 @@ stages:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_10of10
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
       name: Linux
-      vmImage: ubuntu-latest
       useNumbaDev: false
       caching_test: false
       PYTHON_VERSION: 3.10
@@ -401,11 +391,10 @@ stages:
           CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_10of10
 
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
       name: Linux_cache
-      vmImage: ubuntu-latest
       useNumbaDev: false
       caching_test: true
       PYTHON_VERSION: 3.10
@@ -415,10 +404,11 @@ stages:
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: ""
 
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
       name: macOS_cache
+      ### NOTE: The template doesn't actually support this parameter!
       vmImage: macOS-latest
       useNumbaDev: false
       caching_test: true
@@ -435,12 +425,12 @@ stages:
   dependsOn: Build_BodoSQL_Binary
   jobs:
 
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
       name: BODOSQL_Linux_38py
-      vmImage: ubuntu-latest
+      ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.8
@@ -466,12 +456,12 @@ stages:
         BODOSQL_3P_7_OF_7:
           NP: 3
           PYTEST_MARKER:  bodosql_7of7
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
       name: BODOSQL_Linux_39py
-      vmImage: ubuntu-latest
+      ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.9
@@ -497,12 +487,12 @@ stages:
         BODOSQL_3P_7_OF_7:
           NP: 3
           PYTEST_MARKER:  bodosql_7of7
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
       name: BODOSQL_Linux_310py
-      vmImage: ubuntu-latest
+      ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
@@ -528,12 +518,14 @@ stages:
         BODOSQL_3P_7_OF_7:
           NP: 3
           PYTEST_MARKER:  bodosql_7of7
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
       name: BODOSQL_macOS_38py
+      ## NOTE: The template doesn't support this!!
       vmImage: macOS-latest
+      ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.8
@@ -559,12 +551,14 @@ stages:
         BODOSQL_3P_7_OF_7:
           NP: 3
           PYTEST_MARKER:  bodosql_7of7
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
       name: BODOSQL_macOS_39py
+      ## NOTE: The template doesn't support this!!
       vmImage: macOS-latest
+      ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.9
@@ -590,12 +584,14 @@ stages:
         BODOSQL_3P_7_OF_7:
           NP: 3
           PYTEST_MARKER:  bodosql_7of7
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
       name: BODOSQL_macOS_310py
+      ## NOTE: The template doesn't support this!!
       vmImage: macOS-latest
+      ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
@@ -622,12 +618,12 @@ stages:
           NP: 3
           PYTEST_MARKER:  bodosql_7of7
 
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly pass CACHE_TEST and
       # check uname to determine the os for the bodoSQL tests
       name: BODOSQL_Linux_cache
-      vmImage: ubuntu-latest
+      ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: build_bodo_sql
       PYTHON_VERSION: 3.10
@@ -637,12 +633,14 @@ stages:
         TEST_3P:
           NP: 3
 
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly pass CACHE_TEST and
       # check uname to determine the os for the bodoSQL tests
       name: BODOSQL_macOS_cache
+      ## NOTE: The template doesn't support this!!
       vmImage: macOS-latest
+      ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: build_bodo_sql
       PYTHON_VERSION: 3.10

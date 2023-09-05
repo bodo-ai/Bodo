@@ -23,7 +23,7 @@ requirements:
     # TODO[BE-3467]: remove distutils
     - setuptools <63
     - numba =0.56.4
-    # Compatable with Numba requirements.
+    # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.18,<1.24
     - cython <3.0
@@ -31,7 +31,7 @@ requirements:
     - fsspec >=2021.09
     - pyarrow =11.0.0
     - boost-cpp =1.82
-    # We suport both 1.10 and 1.12. Since
+    # We support both 1.10 and 1.12. Since
     # M1 only support 1.12 with Python 3.10.
     - hdf5 >=1.10.*,<1.13.0a0=*mpi_mpich_* # [not win]
     - h5py
