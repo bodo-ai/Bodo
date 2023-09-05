@@ -1,4 +1,4 @@
-package com.bodosql.calcite.application.BodoSQLOperatorTables;
+package com.bodosql.calcite.application.operatorTables;
 
 import java.util.Arrays;
 import java.util.List;
@@ -78,30 +78,7 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction REPLACE =
-      new SqlFunction(
-          "REPLACE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.or(
-              OperandTypes.sequence(
-                  "REPLACE(STRING, FIND_STRING, REPLACE_STRING)",
-                  OperandTypes.STRING,
-                  OperandTypes.STRING,
-                  OperandTypes.STRING),
-              OperandTypes.sequence(
-                  "REPLACE(STRING, FIND_STRING)", OperandTypes.STRING, OperandTypes.STRING)),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.STRING);
-
-  private List<SqlOperator> functionList = Arrays.asList(LPAD, RPAD, REPLACE);
+  private List<SqlOperator> functionList = Arrays.asList(LPAD, RPAD);
 
   @Override
   public void lookupOperatorOverloads(

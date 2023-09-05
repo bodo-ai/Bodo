@@ -1,7 +1,7 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
-import com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable
+import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.rex.RexNamedParam
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.bodosql.calcite.sql.func.SqlLikeQuantifyOperator

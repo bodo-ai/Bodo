@@ -1,6 +1,5 @@
 package org.apache.calcite.sql.validate.implicit;
 
-import com.google.errorprone.annotations.Var;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -43,6 +42,14 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
 
   @Override
   public @Nullable RelDataType implicitCast(RelDataType in, SqlTypeFamily expected) {
+    // Allow casting from Variant to any string.
+    // TODO: Add the other type families.
+    if (in instanceof VariantSqlType && expected != SqlTypeFamily.ANY && expected.getTypeNames().contains(SqlTypeName.VARCHAR)) {
+      return factory.createTypeWithNullability(
+              factory.createSqlType(SqlTypeName.VARCHAR),
+              in.isNullable()
+      );
+    }
     if ((SqlTypeUtil.isNumeric(in) || SqlTypeUtil.isCharacter(in))
         && expected == SqlTypeFamily.BOOLEAN) {
       return factory.createSqlType(SqlTypeName.BOOLEAN);

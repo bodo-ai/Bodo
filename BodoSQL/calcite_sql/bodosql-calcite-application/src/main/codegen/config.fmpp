@@ -28,9 +28,9 @@ data: {
     # Example: "org.apache.calcite.sql.*", "java.util.List".
     imports: [
       "java.util.HashMap"
-      "com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable",
-      "com.bodosql.calcite.application.BodoSQLOperatorTables.NumericOperatorTable",
-      "com.bodosql.calcite.application.BodoSQLOperatorTables.JsonOperatorTable",
+      "com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable",
+      "com.bodosql.calcite.application.operatorTables.NumericOperatorTable",
+      "com.bodosql.calcite.application.operatorTables.JsonOperatorTable",
       "com.bodosql.calcite.sql.ddl.SqlCopyIntoTable",
       "com.bodosql.calcite.sql.ddl.SqlCopyIntoLocation",
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeFileFormat",
