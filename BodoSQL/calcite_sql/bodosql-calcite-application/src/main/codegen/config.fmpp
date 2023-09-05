@@ -223,11 +223,11 @@ data: {
         "DATE",
         "TIME",
         "TIMESTAMP",
-        # TIMESTAMP_LTZ, TIMESTAMP_TZ and VARIANT are not registered in parser.jj yet
+        # TIMESTAMP_LTZ and  TIMESTAMP_TZ are not registered in parser.jj yet
         # "TIMESTAMP_LTZ",
         "TIMESTAMP_NTZ",
         # "TIMESTAMP_TZ",
-        # "VARIANT",
+        "VARIANT",
         "ARRAY",
         "OBJECT",
     ]
