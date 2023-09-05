@@ -156,13 +156,17 @@ def test_snowflake_catalog_write_caching(fn_distribution, is_cached):
     finally:
         # Try to drop the tables.
         # If the error ocurred before their creation, they may not exist,
-        # hence the try/finally blocks
+        # hence the try/except blocks
+        error = None
         try:
-            drop_snowflake_table(write_table, db, schema)
-        finally:
-            pass
+            drop_snowflake_table(read_table, db, schema)
+        except Exception as e:
+            error = e
 
         try:
             drop_snowflake_table(write_table, db, schema)
-        finally:
-            pass
+        except Exception as e:
+            error = e
+
+        if error is not None:
+            raise error
