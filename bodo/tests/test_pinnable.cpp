@@ -116,22 +116,16 @@ void simple_pin(const std::string &nm, Args &&...args) {
         srand(seed);  // Need to keeep the random seed the same for all three
                       // tests
 
-        auto normal_start(std::chrono::system_clock::now());
         normal(ref);
-        auto normal_end(std::chrono::system_clock::now());
         {
             auto pinned(bodo::pin(pinnable));
 
             typename bodo::pinnable<T>::element_type nonspilling;
             srand(seed);
-            auto spilling_start1(std::chrono::system_clock::now());
             spilling(nonspilling);
-            auto spilling_end1(std::chrono::system_clock::now());
 
             srand(seed);
-            auto spilling_start2(std::chrono::system_clock::now());
             spilling(*pinned);
-            auto spilling_end2(std::chrono::system_clock::now());
 
             equality_check(std::begin(nonspilling), std::end(nonspilling),
                            std::begin(*pinned),
@@ -140,24 +134,7 @@ void simple_pin(const std::string &nm, Args &&...args) {
                            "Arrays differ before spill");
 
             T ref2;
-            auto normal_start2(std::chrono::system_clock::now());
             normal(ref2);
-            auto normal_end2(std::chrono::system_clock::now());
-
-            auto normalTime(
-                std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    normal_end - normal_start));
-            auto normalTime2(
-                std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    normal_end2 - normal_start2));
-            auto pinTime1(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                spilling_end1 - spilling_start1));
-            auto pinTime2(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                spilling_end2 - spilling_start2));
-            auto pinTimeAvg((pinTime1 + pinTime2) / 2);
-
-            std::cerr << normalTime2.count() << "," << pinTimeAvg.count()
-                      << std::endl;
         }
 
         // Emulate a spill
@@ -285,8 +262,9 @@ static bodo::tests::suite tests([] {
             initial.push_back(i);
         };
 
-        bodo::tests::check(pool->bytes_allocated() ==
-                           pool->bytes_pinned());  // Everything is pinned
+        bodo::tests::check(
+            pool->bytes_allocated() ==
+            (int64_t)(pool->bytes_pinned()));  // Everything is pinned
 
         bodo::pinnable<bodo::vector<std::uint32_t>>::element_type expected(
             initial);
@@ -294,7 +272,8 @@ static bodo::tests::suite tests([] {
         bodo::pinnable<bodo::vector<std::uint32_t>> pinnable_ints(
             std::move(initial));
 
-        bodo::tests::check(pool->bytes_allocated() > pool->bytes_pinned());
+        bodo::tests::check(pool->bytes_allocated() >
+                           (int64_t)(pool->bytes_pinned()));
         bodo::tests::check(*bodo::pin(pinnable_ints) == expected);
     });
 

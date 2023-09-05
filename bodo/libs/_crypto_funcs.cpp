@@ -6,21 +6,34 @@
  * @copyright Copyright (C) 2023 Bodo Inc. All rights reserved.
  *
  */
-#include "_bodo_common.h"
 #include "_crypto_funcs.h"
-#include <openssl/md5.h>
-#include <openssl/sha.h>
 #include <Python.h>
+#include <openssl/evp.h>
+#include <openssl/sha.h>
 #include <stdexcept>
+#include "_bodo_common.h"
 
-void run_crypto_function(char *in_str, int64_t in_len, crypto_function func, char *output) {
+// Invocation of the OpenSSL MD5 implementation as described in the following
+// links: https://github.com/yhirose/cpp-httplib/issues/1030
+// https://github.com/yhirose/cpp-httplib/pull/1241/files
+void run_md5(char *in_str, int64_t in_len, char *output) {
+    auto context = std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)>(
+        EVP_MD_CTX_new(), EVP_MD_CTX_free);
+    uint32_t md5_length = 0;
+    uint8_t md5_str[EVP_MAX_MD_SIZE];
+    EVP_DigestInit_ex(context.get(), EVP_md5(), nullptr);
+    EVP_DigestUpdate(context.get(), in_str, in_len);
+    EVP_DigestFinal_ex(context.get(), md5_str, &md5_length);
+    for (uint32_t i = 0; i < md5_length; i++) {
+        std::snprintf(output + (i * 2), 4, "%02x", md5_str[i]);
+    }
+}
+
+void run_crypto_function(char *in_str, int64_t in_len, crypto_function func,
+                         char *output) {
     switch (func) {
         case crypto_function::md5:
-            unsigned char md5_str[MD5_DIGEST_LENGTH];
-            MD5((const unsigned char *)in_str, in_len, md5_str);
-            for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
-                std::snprintf(output + (i * 2), 4, "%02x", md5_str[i]);
-            }
+            run_md5(in_str, in_len, output);
             break;
         case crypto_function::sha1:
             // TODO: Support SHA1

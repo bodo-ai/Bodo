@@ -6,6 +6,7 @@
  * @copyright Copyright (C) 2023 Bodo Inc. All rights reserved.
  *
  */
+#include "_bodo_common.h"
 #ifndef _CRYPTO_FUNCS_H_INCLUDED
 #define _CRYPTO_FUNCS_H_INCLUDED
 #endif
@@ -27,6 +28,7 @@ enum crypto_function {
  * @param[in] crypto_function func which encryption function to be used
  * @param[out] char *output output string pointer
  */
-void run_crypto_function(char *in_str, int64_t in_len, crypto_function func, char *output);
+void run_crypto_function(char *in_str, int64_t in_len, crypto_function func,
+                         char *output);
 
 #undef _CRYPTO_FUNCS_H_INCLUDED
