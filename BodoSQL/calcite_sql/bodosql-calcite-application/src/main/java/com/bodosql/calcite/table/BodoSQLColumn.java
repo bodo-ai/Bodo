@@ -368,12 +368,18 @@ public interface BodoSQLColumn {
         case VARIANT:
           temp = BodoRelDataTypeFactory.createVariantSqlType(typeFactory);
           break;
-        case STRING:
         case JSON_OBJECT:
+          temp =
+              typeFactory.createMapType(
+                  typeFactory.createSqlType(SqlTypeName.VARCHAR),
+                  BodoRelDataTypeFactory.createVariantSqlType(typeFactory));
+          break;
         case ARRAY:
-          // Currently ARRAY and JSON_OBJECT aren't yet supported
-          // inside BodoSQL, so we treat them as strings
-          // (which is how the snowflake connector will load them)
+          temp =
+              typeFactory.createArrayType(
+                  BodoRelDataTypeFactory.createVariantSqlType(typeFactory), -1);
+          break;
+        case STRING:
           temp = typeFactory.createSqlType(SqlTypeName.VARCHAR);
           break;
         case BINARY:

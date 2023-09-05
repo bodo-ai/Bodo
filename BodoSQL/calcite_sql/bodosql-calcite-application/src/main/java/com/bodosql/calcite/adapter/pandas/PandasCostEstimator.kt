@@ -51,6 +51,18 @@ interface PandasCostEstimator {
                 // TODO: Refactor this to look at actual types instead of type names.
                 SqlTypeName.OTHER -> VARIANT_SIZE_BYTES
 
+                // The average row size for an ARRAY is the average row size of the inner elements
+                // times the average number of array entries per row.
+                SqlTypeName.ARRAY -> {
+                    AVG_ARRAY_ENTRIES_PER_ROW * averageTypeValueSize(type.componentType!!)
+                }
+
+                // The average row size for a MAP is the average row size its key type
+                // plus its value type, all times the average number of array entries per row.
+                SqlTypeName.MAP -> {
+                    AVG_JSON_ENTRIES_PER_ROW * (averageTypeValueSize(type.keyType!!) + averageTypeValueSize(type.valueType!!))
+                }
+
                 SqlTypeName.ROW -> {
                     var average = 0.0
                     for (field in type.fieldList) {
@@ -84,5 +96,17 @@ interface PandasCostEstimator {
 
         // TODO: Tune this number based on actual data.
         private val VARIANT_SIZE_BYTES: Double = 64.0
+
+        /**
+         * Magic number used to guess how many inner elements
+         * each row in a column with ARRAY type contains on average.
+         */
+        private val AVG_ARRAY_ENTRIES_PER_ROW: Double = 16.0
+
+        /**
+         * Magic number used to guess how many key-value pairs
+         * each row in a column with JSON type contains on average.
+         */
+        private val AVG_JSON_ENTRIES_PER_ROW: Double = 16.0
     }
 }
