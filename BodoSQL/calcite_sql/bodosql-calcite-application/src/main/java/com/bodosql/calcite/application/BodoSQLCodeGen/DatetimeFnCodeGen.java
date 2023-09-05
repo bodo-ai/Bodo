@@ -279,10 +279,6 @@ public class DatetimeFnCodeGen {
     return new Expr.Raw(outputExpr);
   }
 
-  public static String intExprToIntervalDays(String expr) {
-    return "bodo.libs.bodosql_array_kernels.int_to_days(" + expr + ")";
-  }
-
   /**
    * Helper function that handles the codegen for snowflake SQL's TIME, TO_TIME, and TRY_TO_TIME
    *

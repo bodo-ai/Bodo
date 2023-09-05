@@ -3,9 +3,6 @@ package com.bodosql.calcite.application.utils;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexLiteral;
-import org.apache.calcite.rex.RexNode;
 
 /** Class of helper functions used to process a Join RelNode. */
 public class JoinHelpers {
@@ -31,30 +28,5 @@ public class JoinHelpers {
         }
       }
     }
-  }
-
-  /**
-   * Function that determines if we need to perform a filter on the results of the code produced by
-   * generateJoinCode in BodoSQLCodeGen/JoinCodeGen
-   *
-   * @param equalityMergeExprs A Hashset of rexNodes where each rexNode is an equality condition
-   * @param cond The original condition of the join in the Calcite Plan
-   */
-  public static boolean needsPostJoinFilter(HashSet<RexNode> equalityMergeExprs, RexNode cond) {
-
-    boolean filterOutput = true;
-    if (equalityMergeExprs.size() == 1) {
-      // Note: If there is more than 1 key for merging, it may be possible to avoid
-      // filtering, but this requires a more detailed update.
-      RexNode firstEntry = equalityMergeExprs.iterator().next();
-      RexCall condition = (RexCall) firstEntry;
-      filterOutput = (RexCall) cond != condition;
-    } else {
-      /* We skip filtering if the cond is a boolean literal (false should be optimized out). */
-      if (cond instanceof RexLiteral && ((RexLiteral) cond).getValue() instanceof Boolean) {
-        filterOutput = false;
-      }
-    }
-    return filterOutput;
   }
 }
