@@ -103,6 +103,12 @@ public class RelationalAlgebraGenerator {
   public static boolean enableGroupbyStreaming = false;
 
   /**
+   * Hide credential information in any generated code. This is used for code generated in Python by
+   * convert_to_pandas() or Java tests so the generated code can be shared.
+   */
+  public static boolean hideCredentials = false;
+
+  /**
    * Helper method for RelationalAlgebraGenerator constructor to create a Connection object so that
    * SQL queries can be executed within its context.
    */
@@ -170,7 +176,8 @@ public class RelationalAlgebraGenerator {
       int plannerType,
       int verboseLevel,
       int streamingBatchSize,
-      boolean enableGroupbyStreaming) {
+      boolean enableGroupbyStreaming,
+      boolean hideCredentials) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -189,6 +196,7 @@ public class RelationalAlgebraGenerator {
     this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
     this.enableGroupbyStreaming = enableGroupbyStreaming;
+    this.hideCredentials = hideCredentials;
   }
 
   public static final int HEURISTIC_PLANNER = 1;
@@ -211,11 +219,14 @@ public class RelationalAlgebraGenerator {
       int plannerType,
       int verboseLevel,
       int streamingBatchSize,
-      boolean enableGroupbyStreaming) {
+      boolean enableGroupbyStreaming,
+      boolean hideCredentials) {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
     this.streamingBatchSize = streamingBatchSize;
+    this.enableGroupbyStreaming = enableGroupbyStreaming;
+    this.hideCredentials = hideCredentials;
     // Enable/Disable join streaming.
     // TODO: Remove when join code generation is stable.
     System.setProperty("calcite.default.charset", "UTF-8");
@@ -268,7 +279,6 @@ public class RelationalAlgebraGenerator {
         new BodoSQLRelDataTypeSystem(tzInfo, weekStart, weekOfYearPolicy);
     this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
-    this.enableGroupbyStreaming = enableGroupbyStreaming;
   }
 
   /**

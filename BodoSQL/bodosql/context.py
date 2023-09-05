@@ -5,7 +5,7 @@ import time
 import traceback
 import warnings
 from enum import Enum, IntEnum
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numba
 import numpy as np
@@ -725,7 +725,10 @@ class BodoSQLContext:
             params_dict = dict()
 
         func_text, lowered_globals = self._convert_to_pandas(
-            sql, optimizePlan, params_dict
+            sql,
+            optimizePlan,
+            params_dict,
+            False,  # We need to execute the code so don't hide credentials.
         )
 
         glbls = {
@@ -789,9 +792,14 @@ class BodoSQLContext:
 
         return executable_flag
 
-    def convert_to_pandas(self, sql, params_dict=None):
+    def convert_to_pandas(self, sql, params_dict=None, hide_credentials=True):
         """converts SQL code to Pandas"""
-        pd_code, lowered_globals = self._convert_to_pandas(sql, True, params_dict)
+        pd_code, lowered_globals = self._convert_to_pandas(
+            sql,
+            True,
+            params_dict,
+            hide_credentials,
+        )
         # add the imports so someone can directly run the code.
         imports = [
             "import numpy as np",
@@ -831,6 +839,7 @@ class BodoSQLContext:
             sql,
             False,
             params_dict,
+            False,  # We need to execute the code so don't hide credentials.
         )
         # Add the global variable definitions at the begining of the fn,
         # for better readability
@@ -855,9 +864,30 @@ class BodoSQLContext:
     def _remove_named_params(self):
         self.schema.removeTable(NAMED_PARAM_TABLE_NAME)
 
-    def _convert_to_pandas(self, sql, optimizePlan, params_dict):
-        """convert SQL code to Pandas functext. Generates the func_text on rank 0, the
-        errors/results are broadcast to all ranks."""
+    def _convert_to_pandas(
+        self,
+        sql: str,
+        optimize_plan: bool,
+        params_dict: Dict[str, Any],
+        hide_credentials: bool,
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Generate the func_text for the Python code generated for the given SQL query.
+        This is always computed entirely on rank 0 to avoid parallelism errors.
+
+        Args:
+            sql (str): The SQL query to process.
+            optimize_plan (bool): Should the generated plan be optimized?
+            params_dict (Dict[str, Any]): A python dictionary mapping Python variables
+                to usable SQL names that can be referenced in the query.
+            hide_credentials (bool): Should credentials be hidden in the generated code. This
+                is set to true when we want to inspect the code but not run the code.
+
+        Raises:
+            BodoError: If the SQL query cannot be processed.
+
+        Returns:
+            Tuple[str, Dict[str, Any]]: The generated code and the lowered global variables.
+        """
         from mpi4py import MPI
 
         comm = MPI.COMM_WORLD
@@ -876,7 +906,9 @@ class BodoSQLContext:
                 self._setup_named_params(params_dict)
 
                 # Generate the code
-                pd_code, globalsToLower = self._get_pandas_code(sql, optimizePlan)
+                pd_code, globalsToLower = self._get_pandas_code(
+                    sql, optimize_plan, hide_credentials
+                )
                 # Convert to tuple of string tuples, to allow bcast to work
                 globalsToLower = tuple(
                     [(str(k), str(v)) for k, v in globalsToLower.items()]
@@ -931,7 +963,10 @@ class BodoSQLContext:
             params_dict = dict()
 
         func_text, lowered_globals = self._convert_to_pandas(
-            sql, optimizePlan, params_dict
+            sql,
+            optimizePlan,
+            params_dict,
+            False,  # We need to execute the code so don't hide credentials.
         )
 
         glbls = {
@@ -971,7 +1006,7 @@ class BodoSQLContext:
         if bodo.get_rank() == 0:
             try:
                 self._setup_named_params(params_dict)
-                generator = self._create_generator()
+                generator = self._create_generator(False)
                 # Handle the parsing step.
                 generator.parseQuery(sql)
                 # Determine the write type
@@ -1009,7 +1044,7 @@ class BodoSQLContext:
         if bodo.get_rank() == 0:
             try:
                 self._setup_named_params(params_dict)
-                generator = self._create_generator()
+                generator = self._create_generator(False)
                 # Handle the parsing step.
                 generator.parseQuery(sql)
                 # Determine the write type
@@ -1036,7 +1071,24 @@ class BodoSQLContext:
             raise BodoError(plan_or_err_msg)
         return plan_or_err_msg
 
-    def _get_pandas_code(self, sql, optimized):
+    def _get_pandas_code(
+        self, sql: str, optimized: bool, hide_credentials: bool
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Generate the Pandas code for the given SQL string.
+
+        Args:
+            sql (str): The SQL query text.
+            optimized (bool): Should the plan be optimized for the generated code.
+            hide_credentials (bool): Should credentials be hidden in the
+                generated code. This is true when we want to just inspect code,
+                not run it.
+
+        Raises:
+            bodo.utils.typing.BodoError: The SQL text is not supported.
+
+        Returns:
+            Tuple[str, Dict[str, Any]]: The generated code and the lowered global variables.
+        """
         # Construct the relational algebra generator
 
         debugDeltaTable = bool(
@@ -1047,7 +1099,7 @@ class BodoSQLContext:
                 "BodoSQLContext passed empty query string"
             )
 
-        generator = self._create_generator()
+        generator = self._create_generator(hide_credentials)
         # Handle the parsing step.
         generator.parseQuery(sql)
         # Determine the write type
@@ -1096,9 +1148,16 @@ class BodoSQLContext:
             )
         return pd_code, generator.getLoweredGlobalVariables()
 
-    def _create_generator(self):
-        """
-        Creates a generator from the given schema
+    def _create_generator(self, hide_credentials: bool):
+        """Creates a RelationalAlgebraGenerator from the schema.
+
+        Args:
+            hide_credentials (bool): Should credentials be hidden for
+                any generated code.
+
+        Returns:
+            RelationalAlgebraGeneratorClass: The java object holding
+                the relational algebra generator.
         """
         verbose_level = bodo.user_logging.get_verbose_level()
         planner_type = _PlannerType.Default.value
@@ -1115,6 +1174,7 @@ class BodoSQLContext:
                 verbose_level,
                 bodo.bodosql_streaming_batch_size,
                 bodo.enable_groupby_streaming,
+                hide_credentials,
             )
         generator = RelationalAlgebraGeneratorClass(
             self.schema,
@@ -1123,6 +1183,7 @@ class BodoSQLContext:
             verbose_level,
             bodo.bodosql_streaming_batch_size,
             bodo.enable_groupby_streaming,
+            hide_credentials,
         )
         return generator
 
