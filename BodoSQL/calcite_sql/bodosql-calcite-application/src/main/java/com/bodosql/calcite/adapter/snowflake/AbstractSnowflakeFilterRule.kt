@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable
+import com.bodosql.calcite.application.BodoSQLOperatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
 import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelRule
@@ -76,6 +77,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             SqlStdOperatorTable.CURRENT_DATE.name,
             DatetimeOperatorTable.CURDATE.name,
             DatetimeOperatorTable.GETDATE.name,
+            JsonOperatorTable.GET_PATH.name,
         )
 
         @JvmStatic

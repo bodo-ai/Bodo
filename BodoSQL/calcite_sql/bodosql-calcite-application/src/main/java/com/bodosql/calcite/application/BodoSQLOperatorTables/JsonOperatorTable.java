@@ -10,8 +10,10 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
+import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
 public final class JsonOperatorTable implements SqlOperatorTable {
@@ -31,14 +33,17 @@ public final class JsonOperatorTable implements SqlOperatorTable {
     return instance;
   }
 
-  // TODO: add proper typing information
+  public static final SqlSingleOperandTypeChecker SEMI_STRUCTURED =
+      SemiStructuredOperandChecker.INSTANCE;
+
   public static final SqlFunction GET_PATH =
       new SqlFunction(
           "GET_PATH",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.ARG0,
+          BodoReturnTypes.VARIANT_NULLABLE,
           null,
-          OperandTypes.ANY_ANY,
+          OperandTypes.sequence(
+              "GET_PATH(SEMI_STRUCTURED, STRING_LITERAL)", SEMI_STRUCTURED, OperandTypes.CHARACTER),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction JSON_EXTRACT_PATH_TEXT =
