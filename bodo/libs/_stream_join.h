@@ -595,6 +595,10 @@ class HashJoinState : public JoinState {
     // the final output is replicated.
     size_t build_na_counter = 0;
 
+    /// @brief Whether we should print debug information
+    /// about partitioning such as when a partition is split.
+    bool debug_partitioning = false;
+
     HashJoinState(const std::vector<int8_t>& build_arr_c_types,
                   const std::vector<int8_t>& build_arr_array_types,
                   const std::vector<int8_t>& probe_arr_c_types,

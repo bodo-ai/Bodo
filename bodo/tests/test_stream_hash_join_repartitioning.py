@@ -15,7 +15,7 @@ from bodo.libs.stream_join import (
     join_build_consume_batch,
     join_probe_consume_batch,
 )
-from bodo.tests.utils import set_broadcast_join
+from bodo.tests.utils import set_broadcast_join, temp_env_override
 
 
 @pytest.fixture(params=[True, False])
@@ -173,7 +173,9 @@ def test_split_during_append_table(build_probe_outer, broadcast, memory_leak_che
     # This will cause partition split during the "AppendBuildBatch"
     # In the broadcast case, we don't want it to re-partition.
     op_pool_size_bytes = 768 * 1024 if not broadcast else 2 * 1024 * 1024
-    with set_broadcast_join(broadcast):
+    with set_broadcast_join(broadcast), temp_env_override(
+        {"BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1"}
+    ):
         (
             output,
             final_partition_state,
@@ -238,7 +240,9 @@ def test_split_during_finalize_build(build_probe_outer, memory_leak_check):
 
     # This will cause partition split during the "FinalizeBuild"
     op_pool_size_bytes = 896 * 1024
-    with set_broadcast_join(False):
+    with set_broadcast_join(False), temp_env_override(
+        {"BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1"}
+    ):
         (
             output,
             final_partition_state,
@@ -318,7 +322,9 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
     # This will cause partition split during the "AppendBuildBatch"
     # after the shuffle on rank 1.
     op_pool_size_bytes = 1024 * 1024
-    with set_broadcast_join(False):
+    with set_broadcast_join(False), temp_env_override(
+        {"BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1"}
+    ):
         (
             output,
             final_partition_state,
