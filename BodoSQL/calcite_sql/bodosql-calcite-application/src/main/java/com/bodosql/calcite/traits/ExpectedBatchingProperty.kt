@@ -14,7 +14,8 @@ import org.apache.calcite.schema.Schema
 import org.apache.calcite.sql.SqlAggFunction
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.ArraySqlType
-import org.apache.calcite.sql.type.SqlTypeName
+import org.apache.calcite.sql.type.MapSqlType
+import org.apache.calcite.sql.type.VariantSqlType
 import org.apache.calcite.util.ImmutableBitSet
 
 /**
@@ -54,9 +55,18 @@ class ExpectedBatchingProperty {
          */
         @JvmStatic
         private fun isUnsupportedStreamingType(type: RelDataType): Boolean {
-            // Note we don't support arrays in streaming, but Snowflake tables may contain arrays,
-            // so we must ignore them. We don't support reading arrays yet anyways.
-            return (type is ArraySqlType) && (type.componentType!!.sqlTypeName != SqlTypeName.UNKNOWN)
+            // We don't support arrays or objects in streaming yet, but we also
+            // do not allow them to be read directly from Snowflake. Since
+            // computations involving columns from the input table with these types
+            // are pushed down to Snowflake, we can still do streaming since they
+            // will not be present after reading from Snowflake.
+            if (type is ArraySqlType) {
+                return !(type.getComponentType() is VariantSqlType)
+            }
+            if (type is MapSqlType) {
+                return !(type.getValueType() is VariantSqlType)
+            }
+            return false
         }
 
         /**

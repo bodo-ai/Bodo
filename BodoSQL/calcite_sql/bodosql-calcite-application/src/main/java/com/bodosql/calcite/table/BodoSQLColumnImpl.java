@@ -1,5 +1,6 @@
 package com.bodosql.calcite.table;
 
+import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Variable;
 import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
@@ -292,7 +293,11 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
       // Categorical code should be treated as its underlying elemType
       dtype = this.elemType;
     }
-    if (this.dataType == BodoSQLColumnDataType.ARRAY) {
+    if (this.dataType == BodoSQLColumnDataType.ARRAY
+        && !(this.elemType == BodoSQLColumnDataType.VARIANT)) {
+      if (this.elemType == BodoSQLColumnDataType.EMPTY) {
+        throw new BodoSQLCodegenException("Cannot have ARRAY type with dtype EMPTY");
+      }
       RelDataType elemRelType =
           this.elemType.convertToSqlType(typeFactory, nullable, tzInfo, precision);
       return typeFactory.createArrayType(elemRelType, -1);

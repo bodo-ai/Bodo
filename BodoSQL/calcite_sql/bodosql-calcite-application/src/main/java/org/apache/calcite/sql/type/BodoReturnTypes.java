@@ -68,4 +68,7 @@ public class BodoReturnTypes {
                   return BodoRelDataTypeFactory.createVariantSqlType(opBinding.getTypeFactory());
               }
           };
+
+    public static final SqlReturnTypeInference VARIANT_NULLABLE =
+            VARIANT.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 }
