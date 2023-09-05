@@ -26,8 +26,8 @@ class ParquetReader : public ArrowReader {
           path(_path),
           storage_options(_storage_options),
           input_file_name_col(_input_file_name_col),
-          use_hive(_use_hive),
-          empty_out_table(nullptr) {
+          empty_out_table(nullptr),
+          use_hive(_use_hive) {
         if (storage_options == Py_None)
             throw std::runtime_error("ParquetReader: storage_options is None");
     }

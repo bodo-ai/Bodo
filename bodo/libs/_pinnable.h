@@ -324,7 +324,6 @@ class PinnableAllocator {
     }
 
     pinnable_ptr<T> allocate(size_t n) {
-        std::uint8_t *data;
         std::size_t sz = n * sizeof(T);
 
         auto base(new pinnable_ptr_base(this->state_->pool_, sz));

@@ -115,7 +115,7 @@ class SnowflakeReader : public ArrowReader {
         init_arrow_reader(str_as_dict_cols, true);
     }
 
-    virtual ~SnowflakeReader() {
+    virtual ~SnowflakeReader() override {
         Py_XDECREF(sf_conn);
         if (this->empty_out_table != nullptr) {
             delete empty_out_table;
@@ -123,7 +123,7 @@ class SnowflakeReader : public ArrowReader {
     }
 
     /// A piece is a snowflake.connector.result_batch.ArrowResultBatch
-    virtual size_t get_num_pieces() const {
+    virtual size_t get_num_pieces() const override {
         if (!this->initialized) {
             return this->result_batches.size();
         } else {
@@ -137,13 +137,13 @@ class SnowflakeReader : public ArrowReader {
     int64_t get_total_source_rows() const { return this->total_nrows; }
 
    protected:
-    virtual void add_piece(PyObject* piece, int64_t num_rows,
-                           int64_t total_rows) {
+    void add_piece(PyObject* piece, int64_t num_rows,
+                   int64_t total_rows) override {
         Py_INCREF(piece);  // keeping a reference to this piece
         result_batches.push(piece);
     }
 
-    virtual PyObject* get_dataset() {
+    virtual PyObject* get_dataset() override {
         // import bodo.io.snowflake
         PyObject* sf_mod = PyImport_ImportModule("bodo.io.snowflake");
         if (PyErr_Occurred())
@@ -248,7 +248,7 @@ class SnowflakeReader : public ArrowReader {
 
     // Design for Batched Snowflake Reads:
     // https://bodo.atlassian.net/l/cp/4JwaiChQ
-    virtual std::tuple<table_info*, bool, uint64_t> read_inner() {
+    virtual std::tuple<table_info*, bool, uint64_t> read_inner() override {
         using namespace std::chrono;
         // Note: These can be called in a loop by streaming.
         // Set the parallel flag to False.

@@ -630,7 +630,6 @@ class PercentileColSet : public BasicColSet {
    private:
     double percentile;
     bool interpolate;
-    bool skipna;
 };
 
 /**
