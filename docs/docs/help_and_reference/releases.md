@@ -1,5 +1,8 @@
 # Release Notes {#releases}
 
+-   [Bodo.ai 2023.9 Release][September_2023]
+-   [Bodo.ai 2023.7 Release][July_2023]
+-   [Bodo.ai 2023.6 Release][June_2023]
 -   [Bodo.ai 2023.1 Release][January_2023]
 -   [Bodo.ai 2022.9 Release][September_2022]
 -   [Bodo.ai 2022.8 Release][August_2022]
