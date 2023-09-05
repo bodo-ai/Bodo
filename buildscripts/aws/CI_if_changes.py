@@ -38,7 +38,8 @@ def run_ci():
             or filename.startswith("bodo/")
             or (
                 filename.startswith("buildscripts/")
-                and not filename.startswith("buildscripts/azure/")
+                and not filename.startswith("buildscripts/bodo/azure/")
+                and not filename.startswith("buildscripts/bodosql/azure/")
             )
             or filename.startswith("iceberg/")
         ):

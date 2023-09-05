@@ -127,10 +127,10 @@ jobs:
       export OBFUSCATE=$(OBFUSCATE)
       export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
       export PLATFORM_DEV_RELEASE="false"
-      artifactory_channel=`./buildscripts/azure/get_channel.sh $PLATFORM_DEV_RELEASE`
+      artifactory_channel=`./buildscripts/get_channel.sh $PLATFORM_DEV_RELEASE`
       echo "artifactory_channel: $artifactory_channel"
       artifactory_os_dir="win-64"
       echo "artifactory_os_dir: $artifactory_os_dir"
-      ./buildscripts/azure/publish_binary.sh $artifactory_channel $artifactory_os_dir $BODO_VERSION
+      ./buildscripts/bodo/azure/publish_binary.sh $artifactory_channel $artifactory_os_dir $BODO_VERSION
 
     displayName: 'publish bodo binary to Artifactory'

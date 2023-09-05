@@ -1,7 +1,21 @@
 parameters:
-  name: ''
-  vmImage: ''
-  buildARM: false
+- name: name
+  type: string
+  default: ''
+- name: vmImage
+  displayName: VM Image
+  values:
+  - ubuntu-latest
+  - macOS-latest
+- name: buildARM
+  type: boolean
+  default: false
+- name: platformBuild
+  type: boolean
+  default: false
+- name: weeklyTest
+  type: boolean
+  default: false
 
 jobs:
 - job: ${{ parameters.name }}
@@ -13,7 +27,7 @@ jobs:
   - task: UsePythonVersion@0
     inputs:
       versionSpec: '3.8'
-      #Github Token used to download python from the GitHub registry if it doesn't already exist locally
+      # Github Token used to download python from the GitHub registry if it doesn't already exist locally
       githubToken: $(GITHUB_REGISTRY_DL_TOKEN)
     displayName: 'Use Python 3.8'
 
@@ -210,7 +224,7 @@ jobs:
         export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
         export PLATFORM_DEV_RELEASE="false"
       fi
-      artifactory_channel=`./buildscripts/azure/get_channel.sh $PLATFORM_DEV_RELEASE`
+      artifactory_channel=`./buildscripts/get_channel.sh $PLATFORM_DEV_RELEASE`
       echo "artifactory_channel: $artifactory_channel"
 
       unamestr=`uname`
@@ -226,9 +240,5 @@ jobs:
       echo "artifactory_os_dir: $artifactory_os_dir"
 
       # We build non-Linux packages only for releases and weekly runs, see conda-build command
-      ./buildscripts/azure/publish_binary.sh $artifactory_channel $artifactory_os_dir $BODO_VERSION
-
-      if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
-        ./buildscripts/azure/trigger_ami_build.sh $artifactory_channel $artifactory_os_dir $PLATFORM_DEV_RELEASE $BODO_VERSION
-      fi
+      ./buildscripts/bodo/azure/publish_binary.sh $artifactory_channel $artifactory_os_dir $BODO_VERSION
     displayName: 'Publish Bodo Binary'

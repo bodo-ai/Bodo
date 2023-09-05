@@ -6,16 +6,16 @@ USERNAME=`cat $HOME/secret_file | grep artifactory.ci.username | cut -f 2 -d' '`
 TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
 
 
-bodo_artifactory_channel=`./buildscripts/azure/get_channel.sh $PLATFORM_DEV_RELEASE`
+bodo_artifactory_channel=`./buildscripts/get_channel.sh $PLATFORM_DEV_RELEASE`
 echo "bodo_artifactory_channel: $bodo_artifactory_channel"
 bodosql_artifactory_channel=`./buildscripts/bodosql/azure/get_channel.sh`
 echo "bodosql_artifactory_channel: $bodosql_artifactory_channel"
 
 
-export PATH=$HOME/miniconda3/bin:${PATH}
+export PATH=$HOME/mambaforge/bin:${PATH}
 source activate $CONDA_ENV
 
-CONDA_INSTALL="conda install -y"
+CONDA_INSTALL="mamba install -y"
 BODO_BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
 
 # Install Bodo first, followed by the iceberg connector, and then install BodoSQL so we don't install Bodo from the wrong
