@@ -5,10 +5,51 @@
 
 /* -------------------------- DictionaryBuilder --------------------------- */
 
+DictionaryBuilder::DictionaryBuilder(std::shared_ptr<array_info> dict,
+                                     bool is_key_, size_t transpose_cache_size)
+    : is_key(is_key_),
+      // Note: We cannot guarantee all DictionaryBuilders are created
+      // the same number of times on each rank. Right now we do, but
+      // in the future this could change.
+      dict_builder_event("DictionaryBuilder::UnifyDictionaryArray", false),
+      cached_array_transposes(
+          transpose_cache_size,
+          std::pair(DictionaryID{-1, 0}, std::vector<dict_indices_t>())) {
+    // Dictionary build dictionaries are always unique.
+    dict->is_locally_unique = true;
+    this->dict_buff = std::make_shared<ArrayBuildBuffer>(dict);
+    this->dict_hashes = std::make_shared<bodo::vector<uint32_t>>();
+    this->dict_str_to_ind = std::make_shared<bodo::unord_map_container<
+        std::string, dict_indices_t, string_hash, std::equal_to<>>>();
+}
+
+// TODO: Template this based on the type of the array
 std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
     const std::shared_ptr<array_info>& in_arr) {
-    if (in_arr->arr_type != bodo_array_type::DICT) {
-        throw std::runtime_error("UnifyDictionaryArray: DICT array expected");
+    if (in_arr->arr_type != bodo_array_type::DICT &&
+        in_arr->arr_type != bodo_array_type::STRING) {
+        throw std::runtime_error(
+            "UnifyDictionaryArray: DICT or STRING array expected");
+    }
+
+    if (in_arr->arr_type == bodo_array_type::STRING) {
+        // If the input is a string array, we need to convert it to a dictionary
+        // array before we can unify it.
+        // arrow::Datum is a wrapper type for Arrow compute functions
+        // Allows for conversion from and to scalars, arrays, and tables
+        // Most compute functions take a Datum and return one
+        arrow::Datum dict_encoded_result;
+        CHECK_ARROW_AND_ASSIGN(
+            arrow::compute::DictionaryEncode(
+                to_arrow(in_arr),
+                arrow::compute::DictionaryEncodeOptions::Defaults(),
+                bodo::default_buffer_exec_context()),
+            "DictionaryEncode", dict_encoded_result);
+
+        // Convert Datum -> arrow::Array -> array_info
+        auto dict_encoded_arr =
+            arrow_array_to_bodo(dict_encoded_result.make_array());
+        return this->UnifyDictionaryArray(dict_encoded_arr);
     }
 
     auto iterationEvent(this->dict_builder_event.iteration());

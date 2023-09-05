@@ -438,14 +438,6 @@ array_info* info_from_table(table_info* table, int64_t col_ind) {
     return new array_info(*table->columns[col_ind]);
 }
 
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs)                              \
-    if (!(res.status().ok())) {                                            \
-        std::string err_msg = std::string("Error in arrow ") + msg + " " + \
-                              res.status().ToString();                     \
-        std::cerr << msg << std::endl;                                     \
-    }                                                                      \
-    lhs = std::move(res).ValueOrDie();
-
 /**
  * @brief create a Bodo string array from a PyArrow string array
  *

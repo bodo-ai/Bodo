@@ -197,7 +197,7 @@ class ArrowReader {
         // (when selected_fields.empty() == true)
         // Right now, this occurs when reading a Snowflake DELETE
         // What would be the equivalent for Parquet?
-        if (rows_left == 0 && !selected_fields.empty()) {
+        if (rows_left_to_emit == 0 && !selected_fields.empty()) {
             is_last = true;
             total_rows_out = 0;
             ev.finalize();
@@ -206,7 +206,7 @@ class ArrowReader {
         }
 
         if (!produce_output) {
-            is_last = rows_left == 0;
+            is_last = rows_left_to_emit == 0;
             total_rows_out = 0;
             ev.finalize();
 
@@ -214,7 +214,7 @@ class ArrowReader {
         }
 
         auto [out_table, is_last_, total_rows_out_] = read_inner();
-        if (is_last_ && rows_left != 0) {
+        if (is_last_ && rows_left_to_emit != 0) {
             throw std::runtime_error(
                 "ArrowReader::read_batch(): did not read all rows");
         }
@@ -247,9 +247,10 @@ class ArrowReader {
         auto [out_table, is_last_, total_rows_out_] = read_inner();
         assert(is_last_ == true);
         assert(total_rows_out_ == this->total_rows);
-        if (rows_left != 0) {
+        if (rows_left_to_emit != 0) {
             throw std::runtime_error(
-                "ArrowReader::read_all(): did not read all rows");
+                "ArrowReader::read_all(): did not read all rows. " +
+                std::to_string(rows_left_to_emit) + " rows left!");
         }
 
         return out_table;
@@ -279,7 +280,16 @@ class ArrowReader {
 
     /// Total number of rows this process has to read (across pieces)
     int64_t count = 0;
-    int64_t rows_left;  // only used during ArrowReader::read_inner()
+
+    /// Number of rows left to emit out of ArrowReader
+    /// Needed for streaming reads in ArrowReader::read_inner()
+    int64_t rows_left_to_emit;
+
+    /// Rows left to read from input pieces
+    /// Should be equivalent to rows_left_to_emit in non-streaming
+    int64_t rows_left_to_read;
+
+    /// Output batch size of streaming tables
     int64_t batch_size;
 
     /// initialize reader
@@ -322,7 +332,7 @@ class ArrowReader {
      *
      * @return table_info* Output table with correct format
      */
-    virtual table_info* get_empty_out_table() = 0;
+    virtual std::shared_ptr<table_info> get_empty_out_table() = 0;
 
    private:
     // XXX needed to call into Python?

@@ -69,11 +69,7 @@ class ParquetReader : public ArrowReader {
         this->init_pq_scanner();
     }
 
-    virtual ~ParquetReader() {
-        if (this->empty_out_table != nullptr) {
-            delete empty_out_table;
-        };
-    }
+    virtual ~ParquetReader() {}
 
     /// a piece is a single parquet file in the context of parquet
     virtual size_t get_num_pieces() const override { return file_paths.size(); }
@@ -95,8 +91,9 @@ class ParquetReader : public ArrowReader {
 
     virtual std::tuple<table_info*, bool, uint64_t> read_inner() override;
 
-    virtual table_info* get_empty_out_table() override;
-    table_info* empty_out_table;
+    virtual std::shared_ptr<table_info> get_empty_out_table() override;
+
+    std::shared_ptr<table_info> empty_out_table;
 
     // Prefix to add to each of the file paths (only used for input_file_name)
     std::string prefix;

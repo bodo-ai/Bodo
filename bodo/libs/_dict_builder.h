@@ -22,8 +22,8 @@ struct DictionaryBuilder {
     // NOTE: dictionary state can be shared across buffers that require the same
     // dictionary hash table used for dictionary unification of new batches
     // (only for dictionary-encoded string arrays)
-    std::shared_ptr<std::unordered_map<std::string, dict_indices_t, string_hash,
-                                       std::equal_to<>>>
+    std::shared_ptr<bodo::unord_map_container<std::string, dict_indices_t,
+                                              string_hash, std::equal_to<>>>
         dict_str_to_ind;
     // dictionary buffer to allow appending new dictionary values (only for
     // dictionary-encoded string arrays)
@@ -60,22 +60,7 @@ struct DictionaryBuilder {
      * information for.
      */
     DictionaryBuilder(std::shared_ptr<array_info> dict, bool is_key_,
-                      size_t transpose_cache_size = 2)
-        : is_key(is_key_),
-          // Note: We cannot guarantee all DictionaryBuilders are created
-          // the same number of times on each rank. Right now we do, but
-          // in the future this could change.
-          dict_builder_event("DictionaryBuilder::UnifyDictionaryArray", false),
-          cached_array_transposes(
-              transpose_cache_size,
-              std::pair(DictionaryID{-1, 0}, std::vector<dict_indices_t>())) {
-        // Dictionary build dictionaries are always unique.
-        dict->is_locally_unique = true;
-        this->dict_buff = std::make_shared<ArrayBuildBuffer>(dict);
-        this->dict_hashes = std::make_shared<bodo::vector<uint32_t>>();
-        this->dict_str_to_ind = std::make_shared<std::unordered_map<
-            std::string, dict_indices_t, string_hash, std::equal_to<>>>();
-    }
+                      size_t transpose_cache_size = 2);
 
     ~DictionaryBuilder() {
         dict_builder_event.add_attribute("Unify_Cache_ID_Misses",
