@@ -1060,6 +1060,11 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
         this->DisablePartitioning();
     }
 
+    if (char* debug_partitioning_env_ =
+            std::getenv("BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING")) {
+        this->debug_partitioning = !std::strcmp(debug_partitioning_env_, "1");
+    }
+
     // Create the initial partition
     this->partitions.emplace_back(std::make_shared<JoinPartition>(
         0, 0, build_arr_c_types, build_arr_array_types, probe_arr_c_types,
@@ -1088,8 +1093,11 @@ void HashJoinState::SplitPartition(size_t idx) {
     if (!this->build_parallel) {
         throw std::runtime_error(
             "HashJoinState::SplitPartition: We cannot split a partition "
-            "when "
-            "the build table is replicated!");
+            "when the build table is replicated!");
+    }
+
+    if (this->debug_partitioning) {
+        std::cerr << "[DEBUG] Splitting partition " << idx << "." << std::endl;
     }
 
     // Temporarily disable threshold enforcement during partition
@@ -1187,6 +1195,11 @@ void HashJoinState::AppendBuildBatch(
             // The new active partition can only be as large as the original
             // partition, and since threshold enforcement is disabled, it
             // should fit in memory.
+            if (this->debug_partitioning) {
+                std::cerr << "[DEBUG] HashJoinState::AppendBuildBatch[2]: "
+                             "Encountered OperatorPoolThresholdExceededError."
+                          << std::endl;
+            }
             this->SplitPartition(0);
         }
     }
@@ -1256,6 +1269,11 @@ void HashJoinState::AppendBuildBatch(
             // The new active partition can only be as large as the original
             // partition, and since threshold enforcement is disabled, it
             // should fit in memory.
+            if (this->debug_partitioning) {
+                std::cerr << "[DEBUG] HashJoinState::AppendBuildBatch[3]: "
+                             "Encountered OperatorPoolThresholdExceededError."
+                          << std::endl;
+            }
             this->SplitPartition(0);
         }
     }
@@ -1344,9 +1362,22 @@ void HashJoinState::FinalizeBuild() {
                 // new active partition can only be as large as the original
                 // partition, and since threshold enforcement is disabled,
                 // it should fit in memory just fine.
+                if (this->debug_partitioning) {
+                    std::cerr
+                        << "[DEBUG] HashJoinState::FinalizeBuild: "
+                           "Encountered OperatorPoolThresholdExceededError "
+                           "while finalizing partition "
+                        << i_part << "." << std::endl;
+                }
                 this->SplitPartition(i_part);
             }
         }
+    }
+
+    if (this->debug_partitioning) {
+        std::cerr << "[DEBUG] HashJoinState::FinalizeBuild: Total number of "
+                     "partitions: "
+                  << this->partitions.size() << "." << std::endl;
     }
 
     // Add the tracing information.
