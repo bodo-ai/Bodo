@@ -1,25 +1,6 @@
 #include "_stream_join.h"
-#include "_array_hash.h"
-#include "_array_utils.h"
-#include "_bodo_common.h"
 #include "_distributed.h"
 #include "_shuffle.h"
-
-/* --------------------------- Helper Functions --------------------------- */
-
-std::tuple<std::vector<int8_t>, std::vector<int8_t>>
-get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table) {
-    size_t n_cols = table->columns.size();
-    std::vector<int8_t> arr_c_types(n_cols);
-    std::vector<int8_t> arr_array_types(n_cols);
-    for (size_t i = 0; i < n_cols; i++) {
-        arr_c_types[i] = table->columns[i]->dtype;
-        arr_array_types[i] = table->columns[i]->arr_type;
-    }
-    return std::make_tuple(arr_c_types, arr_array_types);
-}
-
-/* ------------------------------------------------------------------------ */
 
 /* --------------------------- HashHashJoinTable -------------------------- */
 

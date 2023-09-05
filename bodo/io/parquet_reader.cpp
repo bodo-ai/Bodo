@@ -219,7 +219,7 @@ void ParquetReader::init_pq_scanner() {
     Py_DECREF(scanner_batches_tup);
 }
 
-table_info* ParquetReader::get_empty_out_table() {
+std::shared_ptr<table_info> ParquetReader::get_empty_out_table() {
     if (this->empty_out_table != nullptr) {
         return this->empty_out_table;
     }
@@ -227,7 +227,7 @@ table_info* ParquetReader::get_empty_out_table() {
     TableBuilder builder(schema, selected_fields, 0, is_nullable,
                          str_as_dict_colnames,
                          create_dict_encoding_from_strings);
-    table_info* out_table = builder.get_table();
+    auto out_table = std::shared_ptr<table_info>(builder.get_table());
 
     if (part_cols.size() > 0) {
         std::vector<std::shared_ptr<array_info>> batch_part_cols;
@@ -252,7 +252,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
     if (batch_size != -1) {
         // TODO: Consolidate behavior with SnowflakeReader
         // Specifically, what does SnowflakeReader do in zero-col case?
-        if (rows_left == 0) {
+        if (rows_left_to_emit == 0) {
             return std::make_tuple(new table_info(*get_empty_out_table()), true,
                                    0);
         }
@@ -270,10 +270,11 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
         }
 
         int64_t batch_offset = std::min(rows_to_skip, batch->num_rows());
-        int64_t length = std::min(rows_left, batch->num_rows() - batch_offset);
+        int64_t length =
+            std::min(rows_left_to_read, batch->num_rows() - batch_offset);
         auto table = arrow::Table::Make(
             schema, batch->Slice(batch_offset, length)->columns());
-        rows_left -= length;
+        rows_left_to_read -= length;
         rows_to_skip -= batch_offset;
 
         // TODO: Replace with arrow_table_to_bodo once available
@@ -323,8 +324,8 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
                                       batch_part_cols.begin(),
                                       batch_part_cols.end());
         }
-
-        bool is_last = rows_left <= 0;
+        rows_left_to_emit -= length;
+        bool is_last = rows_left_to_emit <= 0;
         return std::make_tuple(out_table, is_last, length);
     }
 
@@ -347,13 +348,14 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
          batch_iter != this->reader->end(); ++batch_iter) {
         auto batch = (*batch_iter).ValueOrDie();
         int64_t batch_offset = std::min(rows_to_skip, batch->num_rows());
-        int64_t length = std::min(rows_left, batch->num_rows() - batch_offset);
+        int64_t length =
+            std::min(rows_left_to_read, batch->num_rows() - batch_offset);
         if (length > 0) {
             // this is zero-copy slice
             auto table = arrow::Table::Make(
                 schema, batch->Slice(batch_offset, length)->columns());
             builder.append(table);
-            rows_left -= length;
+            rows_left_to_read -= length;
 
             // handle partition columns and input_file_name column
             if (part_cols.size() > 0) {
@@ -419,6 +421,9 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
         table->columns.push_back(input_file_name_col_arr);
     }
 
+    // rows_left_to_emit is unnecessary for non-streaming
+    // so just set equal to rows_left_to_read
+    rows_left_to_emit = rows_left_to_read;
     return std::make_tuple(table, true, table->nrows());
 }
 

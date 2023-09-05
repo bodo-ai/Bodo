@@ -4,11 +4,12 @@
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 #include "_chunked_table_builder.h"
+#include "_table_builder.h"
+
 #include "_groupby.h"
 #include "_groupby_col_set.h"
 #include "_groupby_ftypes.h"
 #include "_groupby_groups.h"
-#include "_stream_join.h"
 
 class GroupbyState;
 
