@@ -3,16 +3,9 @@ package com.bodosql.calcite.application.utils;
 import static com.bodosql.calcite.application.utils.IsScalar.isScalar;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
-import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.IntegerLiteral;
-import com.bodosql.calcite.ir.Expr.None;
 import com.bodosql.calcite.ir.Expr.StringLiteral;
-import com.bodosql.calcite.ir.Expr.Tuple;
-import com.bodosql.calcite.ir.Module;
-import com.bodosql.calcite.ir.Op;
-import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
@@ -43,13 +36,6 @@ public class Utils {
   /** Function used to return the standard indent used within BodoSql */
   public static String getBodoIndent() {
     return bodoIndent;
-  }
-
-  /** Function used to add multiple indents to a string buffer all at once */
-  public static void addIndent(StringBuilder funcText, int numIndents) {
-    for (int i = 0; i < numIndents; i++) {
-      funcText = funcText.append(bodoIndent);
-    }
   }
 
   /**
@@ -309,79 +295,6 @@ public class Utils {
   }
 
   /**
-   * Helper function, takes the existing column names and a hashset of columns to add, and returns a
-   * new DataFrame, consisting of both the new and old columns. Generally used immediately before
-   * generating code for CASE statements.
-   *
-   * @param inputVar The input DataFrame, to which we add the new columns.
-   * @param colNames The Name of the columns already present in the inputVar in order of the column
-   *     indices
-   * @param colsToAddList The List of array variables that must be added to new DataFrame.
-   * @param visitor The visitor for generating intermediate variables, especially globals.
-   * @param builder The builder for appending generated code.
-   * @return The variable with the output DataFrame.
-   */
-  public static Variable generateCombinedDf(
-      Variable inputVar,
-      List<String> colNames,
-      List<String> colsToAddList,
-      PandasCodeGenVisitor visitor,
-      Module.Builder builder) {
-    // TODO: Unify visitor and builder
-    List<Expr.StringLiteral> names = new ArrayList<>();
-    List<Expr.IntegerLiteral> keptIndices = new ArrayList<>();
-    for (int i = 0; i < colNames.size(); i++) {
-      Expr.StringLiteral colNameLiteral = new StringLiteral(colNames.get(i));
-      names.add(colNameLiteral);
-      keptIndices.add(new IntegerLiteral(i));
-    }
-    List<Expr> newColValues = new ArrayList<>();
-    for (int j = 0; j < colsToAddList.size(); j++) {
-      String newCol = colsToAddList.get(j);
-      Expr.StringLiteral colNameLiteral = new StringLiteral(newCol);
-      names.add(colNameLiteral);
-      keptIndices.add(new IntegerLiteral(j + colNames.size()));
-      newColValues.add(new Variable(newCol));
-    }
-    // Generate the data call
-    Variable columnsVar = visitor.genGenericTempVar();
-    Expr.Call getData =
-        new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(inputVar));
-    builder.add(new Op.Assign(columnsVar, getData));
-    // Generate the table
-    Variable tableVar = visitor.genTableVar();
-    Expr.Tuple extraData = new Tuple(newColValues);
-    Variable keptColsGlobal = visitor.lowerAsMetaType(new Expr.Tuple(keptIndices));
-    Expr.IntegerLiteral originalNumCols = new Expr.IntegerLiteral(colNames.size());
-    Expr.Call tableCall =
-        new Expr.Call(
-            "bodo.hiframes.table.logical_table_to_table",
-            List.of(columnsVar, extraData, keptColsGlobal, originalNumCols));
-    builder.add(new Op.Assign(tableVar, tableCall));
-    // Generate the index
-    Variable indexVar = visitor.genIndexVar();
-    Expr.Len lenExpr = new Expr.Len(inputVar);
-    Expr.Call indexCall =
-        new Expr.Call(
-            "bodo.hiframes.pd_index_ext.init_range_index",
-            List.of(Expr.Companion.getZero(), lenExpr, Expr.Companion.getOne(), None.INSTANCE));
-    builder.add(new Op.Assign(indexVar, indexCall));
-    // Generate the DataFrame
-    Variable dfVar = visitor.genDfVar();
-    Expr.Tuple colNameTuple = new Expr.Tuple(names);
-    Variable globalNamesVar = visitor.lowerAsColNamesMetaType(colNameTuple);
-
-    // output dataframe is always in table format
-    Expr tableTuple = new Expr.Tuple(List.of(tableVar));
-    Expr.Call initDf =
-        new Expr.Call(
-            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
-            List.of(tableTuple, indexVar, globalNamesVar));
-    builder.add(new Op.Assign(dfVar, initDf));
-    return dfVar;
-  }
-
-  /**
    * Checks if a string is a legal name for a Python identifier
    *
    * @param name the string name that needs to be checked
@@ -411,21 +324,6 @@ public class Utils {
     } else {
       return inputColumnNames.get(a.getArgList().get(0));
     }
-  }
-
-  /***
-   * Searches the input expression for table references to oldTableName, and replaces them to reference the new Table.
-   * Only used inside CASE when there are window functions (so a new dataframe has to be created).
-   * For example, table1_1[i] -> tmp_case_df2_1[i]
-   *
-   * @param expr The expression to replace table references
-   * @param oldVar The old variable, whose name the input expr uses for table references
-   * @param newVar The new variable, whose name the output expr will use for table references
-   * @return
-   */
-  public static String renameTableRef(String expr, Variable oldVar, Variable newVar) {
-    // check word boundary with \b to reduce chance of name conflicts with oldTableName
-    return expr.replaceAll("\\b" + Pattern.quote(oldVar.getName() + "_"), newVar.getName() + "_");
   }
 
   public static void assertWithErrMsg(boolean test, String msg) {

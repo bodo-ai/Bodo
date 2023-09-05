@@ -9,8 +9,6 @@ public class DateTimeHelpers {
   static HashMap<Character, String> dtFormatMap;
   // hashset of valid mysql formatters, that are currently unsupported
   static HashSet<Character> unsupportedFormatters;
-  // hashset of valid mysql formatters, that are currently unsupported
-  static HashSet<Character> pythonFormatters;
 
   static {
     dtFormatMap = new HashMap<>();
@@ -76,11 +74,6 @@ public class DateTimeHelpers {
     unsupportedFormatters.add('D');
     // day of month as numeric value (0 to 31)
     unsupportedFormatters.add('e');
-
-    // Set of all valid python formatters
-    // found here: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior
-    // pythonFormatters.addAll(Arrays.asList('a', 'A', 'w', 'd', 'b', 'B', 'm', 'y', 'Y', 'H', 'I',
-    // 'p', 'M', 'S', 'f', 'z', 'j', 'U', 'W', 'c', 'x', 'X', 'G', 'u', 'V'));
   }
 
   public static String convertMySQLFormatStringToPython(String mySQLFormatStr) {
@@ -117,15 +110,5 @@ public class DateTimeHelpers {
    */
   public static boolean isStringLiteral(String s) {
     return s.charAt(0) == '"' && s.charAt(s.length() - 1) == '"';
-  }
-
-  /**
-   * Helper function to extract the underlying value for a String Literal.
-   *
-   * @param s the string expression
-   * @return Does the expression represent a string literal
-   */
-  public static String getStringLiteralValue(String s) {
-    return s.substring(1, s.length() - 1);
   }
 }
