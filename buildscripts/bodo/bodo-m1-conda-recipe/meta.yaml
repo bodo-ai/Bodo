@@ -48,7 +48,7 @@ requirements:
     - pyarrow =11.0.0
     - boost-cpp =1.82
     - libcurl
-    # We suport both 1.10 and 1.12. Since
+    # We support both 1.10 and 1.12. Since
     # M1 only support 1.12 with Python 3.10.
     - hdf5 >=1.10.*,<1.13.0a0=*mpi_mpich_* # [not win]
     - h5py

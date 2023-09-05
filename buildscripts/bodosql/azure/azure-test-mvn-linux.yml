@@ -1,9 +1,7 @@
 parameters:
-  name: ''
-  vmImage: ''
-  CONDA_ENV: ''
-  BODO_CHANNEL_NAME: ''
-  PYTHON_VERSION: ''
+- name: name
+  type: string
+  default: ''
 
 jobs:
 - job: ${{ parameters.name }}
@@ -26,5 +24,4 @@ jobs:
       set -eo pipefail
       cd $(System.DefaultWorkingDirectory)/BodoSQL/calcite_sql/
       sudo mvn -B -U test
-    displayName: 'Run maven tests for BodoSQL'
-
+    displayName: 'Run Maven Tests for BodoSQL'

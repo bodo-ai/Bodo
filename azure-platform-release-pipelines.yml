@@ -11,14 +11,13 @@ schedules:
 pr: none
 
 stages:
-- stage: Build_Bodo_Binary
-  displayName: 'Build Bodo Binary'
+- stage: Build_Bodo_Conda
+  displayName: 'Build Bodo for Conda'
   jobs:
 
-  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
+  - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
       name: LinuxForPlatform
       vmImage: ubuntu-latest
-      useNumbaDev: false
       platformBuild: true
       weeklyTest: false

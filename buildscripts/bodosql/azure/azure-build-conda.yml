@@ -1,8 +1,13 @@
 parameters:
-    name: ''
-    vmImage: ''
-    CONDA_ENV: ''
-    PYTHON_VERSION: ''
+- name: name
+  type: string
+  default: ''
+- name: PYTHON_VERSION
+  type: string
+  default: ''
+- name: CONDA_ENV
+  type: string
+  default: ''
 
 jobs:
 - job: ${{ parameters.name }}

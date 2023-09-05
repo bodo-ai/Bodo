@@ -1,16 +1,36 @@
 parameters:
-  name: ''
-  vmImage: ''
-  caching_test: false
-  PYTHON_VERSION: ''
-  BODO_TESTING_HAS_MULTI_RANK_TEST: false
-  matrix: []
+- name: name
+  type: string
+  default: ''
+- name: PYTHON_VERSION
+  type: string
+  default: ''
+- name: matrix
+  type: object
+  default: []
+- name: CONDA_ENV
+  type: string
+  default: ''
+- name: useNumbaDev
+  type: boolean
+  default: false
+- name: platformBuild
+  type: boolean
+  default: false
+- name: caching_test
+  type: boolean
+  default: false
+- name: BODO_TESTING_HAS_MULTI_RANK_TEST
+  type: boolean
+  default: false
 
 jobs:
 - job: ${{ parameters.name }}
   timeoutInMinutes: 360
   variables:
     - group: SnowflakeCredentials
+    - name: CONDA_ENV
+      value: 'bodo'
   pool: ScalingVMSet
   strategy:
     matrix:
@@ -73,7 +93,7 @@ jobs:
       fi
       export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
       cd $(System.DefaultWorkingDirectory)
-      ./buildscripts/azure/install_bodo.sh $BODO_VERSION $PLATFORM_DEV_RELEASE
+      ./buildscripts/bodo/azure/install_bodo.sh $BODO_VERSION $PLATFORM_DEV_RELEASE
     displayName: 'Install Bodo from Mamba'
 
   - script: |
