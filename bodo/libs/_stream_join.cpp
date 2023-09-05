@@ -228,8 +228,6 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         // Calculate number of rows going to 1st new partition
         uint64_t append_partition1_sum = std::accumulate(
             append_partition1.begin(), append_partition1.end(), (uint64_t)0);
-        uint64_t append_partition2_sum =
-            this->build_safely_appended_nrows - append_partition1_sum;
 
         // Reserve space in hashes vector. This doesn't inhibit
         // exponential growth since we're only doing it at the start.
@@ -353,7 +351,7 @@ inline void JoinPartition::BuildHashTable() {
     // Add all the rows in the build_table_buffer that haven't
     // already been added to the hash table.
     while (this->curr_build_size <
-           this->build_table_buffer.data_table->nrows()) {
+           static_cast<int64_t>(this->build_table_buffer.data_table->nrows())) {
         size_t& group_id = (*build_hash_table_)[this->curr_build_size];
         // group_id==0 means key doesn't exist in map
         if (group_id == 0) {
@@ -2445,7 +2443,7 @@ uint32_t get_partition_num_top_bits_by_idx(JoinState* join_state, int64_t idx) {
     try {
         std::vector<std::shared_ptr<JoinPartition>>& partitions =
             ((HashJoinState*)join_state)->partitions;
-        if (idx >= partitions.size()) {
+        if (idx >= static_cast<int64_t>(partitions.size())) {
             throw std::runtime_error(
                 "get_partition_num_top_bits_by_idx: partition index " +
                 std::to_string(idx) + " out of bound: " + std::to_string(idx) +

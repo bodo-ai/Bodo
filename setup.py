@@ -161,7 +161,6 @@ if develop_mode:
         eca.append("-Wno-alloc-size-larger-than")
 eca.append("-Wno-c99-designator")
 
-
 # Use a single C-extension for all of Bodo
 # Copying ind, lid, eca, and ela to avoid aliasing, as we continue to append
 ext_metadata: Dict[str, Any] = dict(
