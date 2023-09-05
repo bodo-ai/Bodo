@@ -2134,7 +2134,7 @@ def test_filter_pushdown_row_count_caching(
     ), "We should have one query for the C_COMMENT row estimate"
 
 
-def test_snowflake_catalog_string_format(test_db_snowflake_catalog):
+def test_snowflake_catalog_string_format(test_db_snowflake_catalog, memory_leak_check):
     """Tests a specific issue with the unparsing of strings for snowflake query submission."""
     bodo.bodosql_use_streaming_plan = True
 
@@ -2155,3 +2155,16 @@ def test_snowflake_catalog_string_format(test_db_snowflake_catalog):
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     out = bc.sql(query)
     assert out.iloc[0, 0] == 1, f"Expected one row in output, found {out.iloc[0,0]}"
+
+
+def test_hidden_credentials(snowflake_sample_data_snowflake_catalog, memory_leak_check):
+    """
+    Test that the given username and password are not embedded into the generate code
+    when calling convert_to_pandas.
+    """
+    query = "Select * from CUSTOMER"
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
+    code = bc.convert_to_pandas(query)
+    assert snowflake_sample_data_snowflake_catalog.username not in code
+    assert snowflake_sample_data_snowflake_catalog.password not in code
+    assert snowflake_sample_data_snowflake_catalog.account not in code

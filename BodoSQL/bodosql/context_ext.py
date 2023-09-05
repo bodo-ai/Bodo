@@ -5,6 +5,7 @@ which allows typing and optimization.
 import datetime
 import re
 import time
+from typing import Any, Dict, Tuple
 
 import numba
 import numpy as np
@@ -344,14 +345,36 @@ def overload_remove_catalog(bc):
 
 
 def _gen_pd_func_text_and_lowered_globals(
-    bodo_sql_context_type, sql_str, param_keys, param_values, is_optimized=True
-):
+    bodo_sql_context_type: BodoSQLContextType,
+    sql_str: str,
+    param_keys: Tuple[str],
+    param_values: Tuple[Any],
+    hide_credentials: bool,
+    is_optimized: bool = True,
+) -> Tuple[str, Dict[str, Any]]:
     """
-    Helper function called by _gen_pd_func_for_query and _gen_pd_func_str_for_query.
+    Helper function called by _gen_pd_func_for_query and _gen_pd_func_str_for_query
+    that generates the func_text by calling our calcite application on rank 0.
 
-    Generates the func_text by calling our calcite application on rank 0. Throws a BodoError if
-    it encounters an error.
+    Args:
+        bodo_sql_context_type (BodoSQLContextType): The BodoSQL context type used to derive
+            the necessary configuration for generating the query.
+        sql_str (str): The SQL text to parse and execute.
+        param_keys (Tuple[str]): An N-Tuple of keys used to access Python variables in SQL.
+        param_values (Tuple[Any]): An N-Tuple of values containing the data for Python variables
+            used in SQL.
+        hide_credentials (bool): Should credentials be hidden in the generated
+            code. This is used when we generate code/plans we want to inspect but
+            not run to avoid exposing credentials.
+        is_optimized (bool, optional): Should the generated func_text derive
+            from an optimized plan. This is set to False for a handful of tests.
 
+    Raises:
+        BodoError: If the given SQL cannot be properly processed it raises an error.
+
+    Returns:
+        Tuple[str, Dict[str, Any]]: Returns the generated func_text as well as a dictionary
+            containing the lowered global variables.
     """
     from mpi4py import MPI
 
@@ -396,6 +419,7 @@ def _gen_pd_func_text_and_lowered_globals(
                     verbose_level,
                     bodo.bodosql_streaming_batch_size,
                     bodo.enable_groupby_streaming,
+                    hide_credentials,
                 )
             else:
                 generator = RelationalAlgebraGeneratorClass(
@@ -405,6 +429,7 @@ def _gen_pd_func_text_and_lowered_globals(
                     verbose_level,
                     bodo.bodosql_streaming_batch_size,
                     bodo.enable_groupby_streaming,
+                    hide_credentials,
                 )
         except Exception as e:
             # Raise BodoError outside except to avoid stack trace
@@ -489,7 +514,11 @@ def _gen_pd_func_and_glbls_for_query(
     import bodosql
 
     func_text, glblsToLower = _gen_pd_func_text_and_lowered_globals(
-        bodo_sql_context_type, sql_str, param_keys, param_values
+        bodo_sql_context_type,
+        sql_str,
+        param_keys,
+        param_values,
+        False,  # Don't hide credentials because we need to execute this code.
     )
 
     glbls = {
@@ -533,7 +562,11 @@ def _gen_pd_func_str_for_query(
 
     # Don't need globals here, just need the func_text
     returned_func_text, globalsToLower = _gen_pd_func_text_and_lowered_globals(
-        bodo_sql_context_type, sql_str, param_keys, param_values
+        bodo_sql_context_type,
+        sql_str,
+        param_keys,
+        param_values,
+        True,  # Hide credentials because we want to inspect the code, not run it.
     )
 
     # In this case, since the func_text is not going to be executed, we just
@@ -580,7 +613,12 @@ def _gen_pd_func_and_globals_for_unoptimized_query(
     import bodosql
 
     func_text, globalsToLower = _gen_pd_func_text_and_lowered_globals(
-        bodo_sql_context_type, sql_str, param_keys, param_values, is_optimized=False
+        bodo_sql_context_type,
+        sql_str,
+        param_keys,
+        param_values,
+        False,  # Don't hide credentials because we need to execute this code.
+        is_optimized=False,
     )
 
     loc_vars = {}
