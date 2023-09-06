@@ -79,8 +79,9 @@ class SnowflakeReader : public ArrowReader {
     virtual PyObject* get_dataset() override {
         // import bodo.io.snowflake
         PyObject* sf_mod = PyImport_ImportModule("bodo.io.snowflake");
-        if (PyErr_Occurred())
+        if (PyErr_Occurred()) {
             throw std::runtime_error("python");
+        }
 
         // ds = bodo.io.snowflake.get_dataset(query, conn, pyarrow_schema,
         //   only_length, is_select_query, is_parallel, is_independent)

@@ -1677,10 +1677,6 @@ def test_batched_write_agg(
             )
             total0 = 0
 
-            # Streaming read might output a different number of chunks on each
-            # rank, but streaming write assumes the number of chunks is equal,
-            # so we need to manually synchronize `is_last`. We assume that
-            # arrow_reader handles repeated empty calls.
             all_is_last = False
             iter_val = 0
             while not all_is_last:
@@ -1691,6 +1687,7 @@ def test_batched_write_agg(
                 )
                 iter_val += 1
 
+            arrow_reader_del(reader0)
             return total0
 
         @bodo.jit(cache=False)
