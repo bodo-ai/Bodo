@@ -18,6 +18,7 @@ from numba.core import types
 
 import bodo
 import bodo.io.snowflake
+from bodo.libs.dict_arr_ext import is_dict_encoded
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,
