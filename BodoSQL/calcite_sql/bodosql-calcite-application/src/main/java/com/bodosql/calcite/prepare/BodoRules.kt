@@ -3,7 +3,6 @@ package com.bodosql.calcite.prepare
 import com.bodosql.calcite.adapter.pandas.PandasJoin
 import com.bodosql.calcite.adapter.pandas.PandasJoinRule
 import com.bodosql.calcite.adapter.pandas.PandasRules
-import com.bodosql.calcite.application.logicalRules.AliasPreservingAggregateProjectMergeRule
 import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule
 import com.bodosql.calcite.application.logicalRules.FilterAggregateTransposeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterExtractCaseRule
@@ -31,7 +30,19 @@ import com.bodosql.calcite.rel.logical.BodoLogicalSort
 import com.google.common.collect.Iterables
 import org.apache.calcite.plan.RelOptRule
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.rules.*
+import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
+import org.apache.calcite.rel.rules.AggregateJoinRemoveRule
+import org.apache.calcite.rel.rules.AggregateJoinTransposeRule
+import org.apache.calcite.rel.rules.AggregateProjectMergeRule
+import org.apache.calcite.rel.rules.FilterJoinRule
+import org.apache.calcite.rel.rules.JoinCommuteRule
+import org.apache.calcite.rel.rules.JoinPushTransitivePredicatesRule
+import org.apache.calcite.rel.rules.JoinToMultiJoinRule
+import org.apache.calcite.rel.rules.LoptOptimizeJoinRule
+import org.apache.calcite.rel.rules.ProjectAggregateMergeRule
+import org.apache.calcite.rel.rules.ProjectFilterTransposeRule
+import org.apache.calcite.rel.rules.ProjectMergeRule
+import org.apache.calcite.rel.rules.ProjectRemoveRule
 
 object BodoRules {
     /**
@@ -251,7 +262,7 @@ object BodoRules {
      */
     @JvmField
     val AGGREGATE_PROJECT_MERGE_RULE: RelOptRule =
-        AliasPreservingAggregateProjectMergeRule.Config.DEFAULT
+        AggregateProjectMergeRule.Config.DEFAULT
             .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
             .toRule()
 
