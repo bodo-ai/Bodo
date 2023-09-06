@@ -9,6 +9,7 @@
 #include "_nested_loop_join.h"
 #include "_operator_pool.h"
 #include "_pinnable.h"
+#include "_shuffle.h"
 #include "_table_builder.h"
 #include "simd-block-fixed-fpp.h"
 
@@ -473,7 +474,7 @@ class JoinState {
     bool probe_input_finalized = false;
     const int64_t output_batch_size;
     // The number of iterations between syncs
-    uint64_t sync_iter;
+    int64_t sync_iter;
     // Current iteration of the build and probe steps
     uint64_t build_iter = 0;
     uint64_t probe_iter = 0;
@@ -509,7 +510,7 @@ class JoinState {
               uint64_t n_keys_, bool build_table_outer_,
               bool probe_table_outer_, cond_expr_fn_t cond_func_,
               bool build_parallel_, bool probe_parallel_,
-              int64_t output_batch_size_, uint64_t sync_iter_);
+              int64_t output_batch_size_, int64_t sync_iter_);
 
     virtual ~JoinState() {}
 
@@ -595,6 +596,12 @@ class HashJoinState : public JoinState {
     // the final output is replicated.
     size_t build_na_counter = 0;
 
+    // Counter of number of syncs since previous sync freq update.
+    // Set to -1 if not updating adaptively (user has specified sync freq).
+    int64_t adaptive_sync_counter = -1;
+    // The iteration number of last shuffle (used for adaptive sync estimation
+    // in both build and probe)
+    uint64_t prev_shuffle_iter = 0;
     /// @brief Whether we should print debug information
     /// about partitioning such as when a partition is split.
     bool debug_partitioning = false;
@@ -606,7 +613,7 @@ class HashJoinState : public JoinState {
                   uint64_t n_keys_, bool build_table_outer_,
                   bool probe_table_outer_, cond_expr_fn_t cond_func_,
                   bool build_parallel_, bool probe_parallel_,
-                  int64_t output_batch_size_, uint64_t sync_iter,
+                  int64_t output_batch_size_, int64_t sync_iter,
                   // If -1, we'll use 100% of the total buffer
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,
@@ -817,7 +824,7 @@ class NestedLoopJoinState : public JoinState {
                         bool build_table_outer_, bool probe_table_outer_,
                         cond_expr_fn_t cond_func_, bool build_parallel_,
                         bool probe_parallel_, int64_t output_batch_size_,
-                        uint64_t sync_iter_)
+                        int64_t sync_iter_)
         : JoinState(build_arr_c_types, build_arr_array_types, probe_arr_c_types,
                     probe_arr_array_types, 0, build_table_outer_,
                     probe_table_outer_, cond_func_, build_parallel_,
@@ -834,6 +841,8 @@ class NestedLoopJoinState : public JoinState {
               DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES)),
           join_event("NestedLoopJoin") {
         // TODO: Integrate dict_builders for nested loop join.
+        this->sync_iter =
+            this->sync_iter == -1 ? DEFAULT_SYNC_ITERS : this->sync_iter;
     }
 
     tracing::ResumableEvent join_event;

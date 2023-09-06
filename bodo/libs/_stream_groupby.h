@@ -100,10 +100,16 @@ class GroupbyState {
     // indices of update and combine columns for each function
     std::vector<int32_t> f_running_value_offsets;
 
+    // The number of iterations between syncs
+    int64_t sync_iter;
+    // Counter of number of syncs since previous sync freq update.
+    // Set to -1 if not updating adaptively (user has specified sync freq).
+    int64_t adaptive_sync_counter = -1;
+    // The iteration number of last shuffle (used for adaptive sync estimation)
+    uint64_t prev_shuffle_iter = 0;
+
     // Current iteration of build steps
     uint64_t build_iter = 0;
-    // The number of iterations between syncs
-    uint64_t sync_iter;
 
     // Accumulating all values before update is needed
     // when one of the groupby functions is
@@ -146,8 +152,7 @@ class GroupbyState {
                  std::vector<int32_t> ftypes,
                  std::vector<int32_t> f_in_offsets_,
                  std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
-                 int64_t output_batch_size_, bool parallel_,
-                 uint64_t sync_iter_)
+                 int64_t output_batch_size_, bool parallel_, int64_t sync_iter_)
         : n_keys(n_keys_),
           parallel(parallel_),
           output_batch_size(output_batch_size_),
@@ -158,6 +163,9 @@ class GroupbyState {
           f_in_offsets(std::move(f_in_offsets_)),
           f_in_cols(std::move(f_in_cols_)),
           sync_iter(sync_iter_),
+          // Update number of sync iterations adaptively based on batch byte
+          // size if sync_iter == -1 (user hasn't specified number of syncs)
+          adaptive_sync_counter(sync_iter == -1 ? 0 : -1),
           groupby_event("Groupby") {
         // Add key column types to running value buffer types (same type as
         // input)
