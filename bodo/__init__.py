@@ -100,7 +100,11 @@ bodosql_streaming_batch_size = int(os.environ.get("BODO_STREAMING_BATCH_SIZE", 4
 # Flag to track if we should enable groupby streaming in BodoSQL when the streaming plan is enabled
 enable_groupby_streaming = os.environ.get("BODO_ENABLE_GROUPBY_STREAMING", "1") == "1"
 # How many iterations to run a streaming loop for before synchronizing
-stream_loop_sync_iters = int(os.environ.get("BODO_STREAM_LOOP_SYNC_ITERS", 100))
+# -1 means it's adaptive and is updated based on shuffle buffer sizes
+stream_loop_sync_iters = int(os.environ.get("BODO_STREAM_LOOP_SYNC_ITERS", -1))
+# Default value for above to use if not specified by user
+# NOTE: should be the same as DEFAULT_SYNC_ITERS in _shuffle.h
+default_stream_loop_sync_iters = 100
 
 #### END STREAMING CONFIGURATION ####
 

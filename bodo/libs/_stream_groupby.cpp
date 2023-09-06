@@ -267,6 +267,12 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
+    if (groupby_state->build_iter == 0) {
+        groupby_state->sync_iter = init_sync_iters(
+            in_table, groupby_state->adaptive_sync_counter,
+            groupby_state->parallel, groupby_state->sync_iter, n_pes);
+    }
+
     // Make is_last global
     is_last = stream_sync_is_last(is_last, groupby_state->build_iter,
                                   groupby_state->sync_iter);
@@ -341,10 +347,17 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
                         groupby_state->shuffle_table_buffer.data_table,
                         shuffle_init_start_row, in_table, shuffle_grp_info);
 
-    if (shuffle_this_iter(groupby_state->parallel, is_last,
+    auto [shuffle_now, new_sync_iter, new_adaptive_sync_counter] =
+        shuffle_this_iter(groupby_state->parallel, is_last,
                           groupby_state->shuffle_table_buffer.data_table,
-                          groupby_state->build_iter,
-                          groupby_state->sync_iter)) {
+                          groupby_state->build_iter, groupby_state->sync_iter,
+                          groupby_state->prev_shuffle_iter,
+                          groupby_state->adaptive_sync_counter);
+    groupby_state->sync_iter = new_sync_iter;
+    groupby_state->adaptive_sync_counter = new_adaptive_sync_counter;
+
+    if (shuffle_now) {
+        groupby_state->prev_shuffle_iter = groupby_state->build_iter;
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             groupby_state->shuffle_table_buffer.data_table;
@@ -441,6 +454,12 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
+    if (groupby_state->build_iter == 0) {
+        groupby_state->sync_iter = init_sync_iters(
+            in_table, groupby_state->adaptive_sync_counter,
+            groupby_state->parallel, groupby_state->sync_iter, n_pes);
+    }
+
     is_last = stream_sync_is_last(is_last, groupby_state->build_iter,
                                   groupby_state->sync_iter);
 
@@ -474,11 +493,18 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
 
     batch_hashes_partition.reset();
 
-    // shuffle data of other ranks and append received data to local buffer
-    if (shuffle_this_iter(groupby_state->parallel, is_last,
+    auto [shuffle_now, new_sync_iter, new_adaptive_sync_counter] =
+        shuffle_this_iter(groupby_state->parallel, is_last,
                           groupby_state->shuffle_table_buffer.data_table,
-                          groupby_state->build_iter,
-                          groupby_state->sync_iter)) {
+                          groupby_state->build_iter, groupby_state->sync_iter,
+                          groupby_state->prev_shuffle_iter,
+                          groupby_state->adaptive_sync_counter);
+    groupby_state->sync_iter = new_sync_iter;
+    groupby_state->adaptive_sync_counter = new_adaptive_sync_counter;
+
+    // shuffle data of other ranks and append received data to local buffer
+    if (shuffle_now) {
+        groupby_state->prev_shuffle_iter = groupby_state->build_iter;
         std::shared_ptr<table_info> shuffle_table =
             groupby_state->shuffle_table_buffer.data_table;
 
@@ -614,7 +640,7 @@ GroupbyState* groupby_state_init_py_entry(
     int8_t* build_arr_c_types, int8_t* build_arr_array_types, int n_build_arrs,
     int32_t* ftypes, int32_t* f_in_offsets, int32_t* f_in_cols, int n_funcs,
     uint64_t n_keys, int64_t output_batch_size, bool parallel,
-    uint64_t sync_iters) {
+    int64_t sync_iter) {
     return new GroupbyState(
         std::vector<int8_t>(build_arr_c_types,
                             build_arr_c_types + n_build_arrs),
@@ -625,7 +651,7 @@ GroupbyState* groupby_state_init_py_entry(
         std::vector<int32_t>(f_in_offsets, f_in_offsets + n_funcs + 1),
         std::vector<int32_t>(f_in_cols, f_in_cols + f_in_offsets[n_funcs]),
 
-        n_keys, output_batch_size, parallel, sync_iters);
+        n_keys, output_batch_size, parallel, sync_iter);
 }
 
 /**
