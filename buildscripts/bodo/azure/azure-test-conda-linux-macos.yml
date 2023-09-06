@@ -20,7 +20,7 @@ parameters:
 - name: caching_test
   type: boolean
   default: false
-- name: BODO_TESTING_HAS_MULTI_RANK_TEST
+- name: BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST
   type: boolean
   default: false
 
@@ -86,7 +86,7 @@ jobs:
       export CHECK_LICENSE_PLATFORM=$(CHECK_LICENSE_PLATFORM)
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
       export OBFUSCATE=$(OBFUSCATE)
-      if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
+      if [[ "${{ parameters.platformBuild }}" == "True" ]]; then
         export PLATFORM_DEV_RELEASE=$(PLATFORM_DEV_RELEASE)
       else
         export PLATFORM_DEV_RELEASE="false"
@@ -310,7 +310,7 @@ jobs:
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/obfuscation/decompress_traces.py"`
-      if [[ "${{ parameters.caching_test }}" == "true" ]]; then
+      if [[ "${{ parameters.caching_test }}" == "True" ]]; then
         python -m bodo.runtests_caching "${{ parameters.name }}" "$NP" bodo/tests/caching_tests
       else
         python -m bodo.runtests "${{ parameters.name }}" "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
@@ -322,7 +322,7 @@ jobs:
       SF_PASSWORD2: $(SNOWFLAKE_PASSWORD2)
       SF_AZURE_USER: $(SF_AZURE_USER)
       SF_AZURE_PASSWORD: $(SF_AZURE_PASSWORD)
-      BODO_TESTING_HAS_MULTI_RANK_TEST: ${{ parameters.BODO_TESTING_HAS_MULTI_RANK_TEST }}
+      BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: ${{ parameters.BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST }}
     displayName: 'Test Bodo'
 
   - script: |

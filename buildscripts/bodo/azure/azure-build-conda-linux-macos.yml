@@ -97,7 +97,7 @@ jobs:
   - script: |
       set -exo pipefail
       # Check if running x86 Build
-      if [[ "${{ parameters.buildARM }}" == "true" ]]; then
+      if [[ "${{ parameters.buildARM }}" == "True" ]]; then
         export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
       fi
       buildscripts/setup_osx_sdk.sh
@@ -158,7 +158,7 @@ jobs:
       unamestr=`uname`
 
       # macOS_ARM
-      if [[ "$unamestr" == 'Darwin' ]] && [[ "${{ parameters.buildARM }}" == "true" ]]; then
+      if [[ "$unamestr" == 'Darwin' ]] && [[ "${{ parameters.buildARM }}" == "True" ]]; then
         export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
         export VERIFY_ARG="--no-verify"
       else
@@ -172,13 +172,13 @@ jobs:
       set -x
 
       # macOS_ARM
-      if [[ "$unamestr" == 'Darwin' ]] && [[ "${{ parameters.buildARM }}" == "true" ]]; then
+      if [[ "$unamestr" == 'Darwin' ]] && [[ "${{ parameters.buildARM }}" == "True" ]]; then
         cd buildscripts/bodo/bodo-m1-conda-recipe/
       else
         cd buildscripts/bodo/bodo-conda-recipe/
       fi
 
-      if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
+      if [[ "${{ parameters.platformBuild }}" == "True" ]]; then
         export CHECK_LICENSE_EXPIRED="0"
         export CHECK_LICENSE_CORE_COUNT="0"
         export CHECK_LICENSE_PLATFORM="1"
@@ -189,7 +189,7 @@ jobs:
 
       # release and weekly conda variant file builds Python 3.8/3.9/3.10,
       # but the nightly one builds only Python 3.10 (nightly tests use 3.10)
-      if [[ ! -z $IS_RELEASE ]] || [[ "${{ parameters.weeklyTest }}" == "true" ]]; then
+      if [[ ! -z $IS_RELEASE ]] || [[ "${{ parameters.weeklyTest }}" == "True" ]]; then
         export CONDA_VARIANT_ARG="-e release_conda_build_config.yaml"
       else
         export CONDA_VARIANT_ARG="-e nightly_conda_build_config.yaml"
@@ -214,7 +214,7 @@ jobs:
       echo "IS_RELEASE: $IS_RELEASE"
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
       export OBFUSCATE=$(OBFUSCATE)
-      if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
+      if [[ "${{ parameters.platformBuild }}" == "True" ]]; then
         export CHECK_LICENSE_EXPIRED="0"
         export CHECK_LICENSE_CORE_COUNT="0"
         export CHECK_LICENSE_PLATFORM="1"
@@ -231,7 +231,7 @@ jobs:
       if [[ "$unamestr" == 'Linux' ]]; then
         artifactory_os_dir="linux-64"
       else
-        if [[ "${{ parameters.buildARM }}" == "true" ]]; then
+        if [[ "${{ parameters.buildARM }}" == "True" ]]; then
           artifactory_os_dir="osx-arm64"
         else
           artifactory_os_dir="osx-64"
