@@ -17,11 +17,17 @@ schedules:
 
 parameters:
   - name: BUILD_MAC_CONDA
+    displayName: Build Conda Package for Mac x86 and ARM
     type: boolean
     default: false
   - name: BUILD_PIP
+    displayName: Build Pip Package
     type: boolean
     default: false
+  - name: PYTEST_MARKER
+    displayName: PyTest Marker
+    type: string
+    default: 'not weekly'
 
 # NOTE: these variables determine artifactory channel to publish Bodo/BodoSQL/Iceberg packages.
 # See get_channel.sh
@@ -150,13 +156,13 @@ stages:
         ${{ each slice in split(variables.bodo_1p_each, ',') }}:
           ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_1p_total) }}:
             NP: 1
-            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and not weekly', slice, variables.bodo_1p_total) }}
+            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_1p_total, parameters.PYTEST_MARKER) }}
             BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
         
         ${{ each slice in split(variables.bodo_2p_each, ',') }}:
           ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_2p_total) }}:
             NP: 2
-            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and not weekly', slice, variables.bodo_2p_total) }}
+            PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_2p_total, parameters.PYTEST_MARKER) }}
             BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
@@ -188,12 +194,12 @@ stages:
         ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
           ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
             NP: 1
-            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and not weekly', slice, variables.bodosql_1p_total) }}
+            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_1p_total, parameters.PYTEST_MARKER) }}
             BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
         ${{ each slice in split(variables.bodosql_2p_each, ',') }}:
           ${{ format('BODOSQL_2P_{0}_OF_{1}', slice, variables.bodosql_2p_total) }}:
             NP: 2
-            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and not weekly', slice, variables.bodosql_2p_total) }}
+            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_2p_total, parameters.PYTEST_MARKER) }}
             BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
 
   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
@@ -229,12 +235,12 @@ stages:
         ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
           ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
             NP: 1
-            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and not weekly', slice, variables.bodosql_1p_total) }}
+            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_1p_total, parameters.PYTEST_MARKER) }}
             BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
         ${{ each slice in split(variables.bodosql_2p_each, ',') }}:
           ${{ format('BODOSQL_2P_{0}_OF_{1}', slice, variables.bodosql_2p_total) }}:
             NP: 2
-            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and not weekly', slice, variables.bodosql_2p_total) }}
+            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_2p_total, parameters.PYTEST_MARKER) }}
             BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
 
   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
@@ -254,7 +260,7 @@ stages:
 
 # Maven unit tests
 - stage: Test_BodoSQL_Maven
-  displayName: 'Test BodoSQL Maven unit tests'
+  displayName: 'Test BodoSQL Maven Unit Tests'
   dependsOn: []
   jobs:
 
