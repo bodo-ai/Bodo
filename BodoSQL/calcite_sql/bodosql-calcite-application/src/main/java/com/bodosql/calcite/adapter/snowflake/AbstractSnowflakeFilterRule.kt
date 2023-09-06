@@ -12,6 +12,7 @@ import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
+import org.apache.calcite.sql.type.VariantSqlType
 import org.immutables.value.Value
 
 @BodoSQLStyleImmutable
@@ -85,6 +86,13 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             return call.kind == SqlKind.OTHER_FUNCTION && SUPPORTED_GENERIC_CALL_NAMES.contains(call.operator.name)
         }
 
+        /**
+         * Casts that we want to push into Snowflake.
+         */
+        private fun isSupportedCast(call: RexCall): Boolean {
+            return call.kind == SqlKind.CAST && call.getType() is VariantSqlType
+        }
+
         @JvmStatic
         fun isPushableFilter(filter: Filter): Boolean {
             // Not sure what things are ok to push, but we're going to be fairly conservative
@@ -98,7 +106,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                     // Allow select operators to be pushed down.
                     // This list is non-exhaustive, but are generally the functions we've seen
                     // and verified to work. Add more as appropriate.
-                    return if (call != null && (SUPPORTED_CALLS.contains(call.kind) || isSupportedOtherFunction(call))) {
+                    return if (call != null && (SUPPORTED_CALLS.contains(call.kind) || isSupportedOtherFunction(call) || isSupportedCast(call))) {
                         // Arguments also need to be pushable.
                         call.operands.all { op -> op.accept(this) ?: false }
                     } else {
