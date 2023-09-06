@@ -76,7 +76,7 @@ jobs:
       export CHECK_LICENSE_PLATFORM=$(CHECK_LICENSE_PLATFORM)
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
       export OBFUSCATE=$(OBFUSCATE)
-      if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
+      if [[ "${{ parameters.platformBuild }}" == "True" ]]; then
         export PLATFORM_DEV_RELEASE=$(PLATFORM_DEV_RELEASE)
       else
         export PLATFORM_DEV_RELEASE="false"
@@ -118,7 +118,7 @@ jobs:
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/obfuscation/decompress_traces.py"`
-      if [[ "${{ parameters.CACHE_TEST }}" == "true" ]]; then
+      if [[ "${{ parameters.CACHE_TEST }}" == "True" ]]; then
         python -u -m bodosql.runtests_caching "${{ parameters.name }}" "$(NP)" bodosql/tests/caching_tests/
       else
         python -u -m bodosql.runtests "${{ parameters.name }}" "$(NP)" -s -v -p no:faulthandler -m "$(PYTEST_MARKER)" bodosql/tests/
