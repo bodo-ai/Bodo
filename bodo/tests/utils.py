@@ -2509,6 +2509,7 @@ def _pytest_snowflake_rerun_filter(err, *args):
 # (@pytest_mark_snowflake)
 pytest_mark_snowflake = compose_decos(
     (
+        pytest.mark.snowflake,
         pytest.mark.skipif(
             "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
         ),
@@ -2519,6 +2520,7 @@ pytest_mark_snowflake = compose_decos(
 # This is for marking an entire test file
 # (pytestmark = pytest_snowflake)
 pytest_snowflake = [
+    pytest.mark.snowflake,
     pytest.mark.skipif(
         "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
     ),
