@@ -659,23 +659,56 @@ std::shared_ptr<BodoBuffer> arrow_buffer_to_bodo(
  * @brief Helper function to pass an Arrow null bitmap to Bodo with zero-copy
  * @param buf Shared pointer to the Arrow null bitmap buffer
  * @param data Pointer to the raw null bitmap data
- * @param n_bits Number of bits
+ *  Using the buffer's data() method causes a segfault
+ * @param offset Number of elements in the buffers to start from
+ * @param null_count Number of null elements in the array
+ *  Arrow doesn't allocate null bitmap if there are no nulls or all nulls
+ * @param n_bits Number of bits / Number of elements in Array
  * @return null_bitmap_buffer Output Bodo meminfo
  */
 std::shared_ptr<BodoBuffer> arrow_null_bitmap_to_bodo(
-    std::shared_ptr<arrow::Buffer> buf, const uint8_t *data, int64_t n_bits) {
+    std::shared_ptr<arrow::Buffer> buf, const uint8_t *data,
+    const int64_t offset, int64_t null_count, int64_t n_bits) {
     int64_t n_bytes = arrow::bit_util::BytesForBits(n_bits);
+    int64_t offset_bytes = offset / 8;
 
     // Arrow doesn't allocate null bitmap if there are no nulls in the array
     if (data != nullptr) {
-        // Pass null bitmap buffer to Bodo with zero-copy
-        return arrow_buffer_to_bodo(buf, (void *)data, n_bytes,
-                                    Bodo_CTypes::UINT8);
+        if (offset == 0) {
+            // Pass null bitmap buffer to Bodo with zero-copy
+            return arrow_buffer_to_bodo(buf, (void *)data, n_bytes,
+                                        Bodo_CTypes::UINT8);
+        } else if (offset % 8 == 0) {
+            // Allocate null bitmap and efficiently copy
+            // n_bits when aligned on bytes
+            std::shared_ptr<BodoBuffer> null_bitmap_buffer =
+                AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8);
+            memcpy(null_bitmap_buffer->mutable_data(), data + offset_bytes,
+                   n_bytes);
+            return null_bitmap_buffer;
+        } else {
+            // Allocate null bitmap and copy n_bits elements from offset
+            std::shared_ptr<BodoBuffer> null_bitmap_buffer =
+                AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8);
+            // Initialize to all nulls:
+            memset(null_bitmap_buffer->mutable_data(), 0x00, n_bytes);
+            // Set the non-null bits:
+            for (int64_t i = 0; i < n_bits; i++) {
+                if (arrow::bit_util::GetBit(data, offset + i)) {
+                    arrow::bit_util::SetBit(null_bitmap_buffer->mutable_data(),
+                                            i);
+                }
+            }
+            return null_bitmap_buffer;
+        }
     } else {
-        // Allocate null bitmap and set all elements to non-null
+        // Allocate null bitmap and set all elements to non-null or all null
+        // based on the null_count (see
+        // https://github.com/apache/arrow/blob/apache-arrow-11.0.0/cpp/src/arrow/array/array_base.h#L58)
         std::shared_ptr<BodoBuffer> null_bitmap_buffer =
             AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8);
-        memset(null_bitmap_buffer->mutable_data(), 0xff, n_bytes);
+        memset(null_bitmap_buffer->mutable_data(),
+               null_count == 0 ? 0xff : 0x00, n_bytes);
         return null_bitmap_buffer;
     }
 }
@@ -692,9 +725,9 @@ std::shared_ptr<array_info> arrow_struct_array_to_bodo(
     std::shared_ptr<arrow::StructArray> arrow_struct_arr) {
     int64_t n = arrow_struct_arr->length();
 
-    std::shared_ptr<BodoBuffer> null_bitmap_buffer =
-        arrow_null_bitmap_to_bodo(arrow_struct_arr->null_bitmap(),
-                                  arrow_struct_arr->null_bitmap_data(), n);
+    std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
+        arrow_struct_arr->null_bitmap(), arrow_struct_arr->null_bitmap_data(),
+        arrow_struct_arr->offset(), arrow_struct_arr->null_count(), n);
 
     size_t n_fields = arrow_struct_arr->fields().size();
     std::vector<std::shared_ptr<array_info>> inner_arrs_vec;
@@ -734,7 +767,8 @@ std::shared_ptr<array_info> arrow_list_array_to_bodo(
                              (void *)arrow_list_arr->raw_value_offsets(),
                              (n + 1) * sizeof(offset_t), Bodo_CType_offset);
     std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
-        arrow_list_arr->null_bitmap(), arrow_list_arr->null_bitmap_data(), n);
+        arrow_list_arr->null_bitmap(), arrow_list_arr->null_bitmap_data(),
+        arrow_list_arr->offset(), arrow_list_arr->null_count(), n);
 
     std::shared_ptr<array_info> inner_arr =
         arrow_array_to_bodo(arrow_list_arr->values());
@@ -768,9 +802,9 @@ std::shared_ptr<array_info> arrow_decimal_array_to_bodo(
     int64_t n = arrow_decimal_arr->length();
 
     // Pass Arrow null bitmap and data buffer to Bodo
-    std::shared_ptr<BodoBuffer> null_bitmap_buffer =
-        arrow_null_bitmap_to_bodo(arrow_decimal_arr->null_bitmap(),
-                                  arrow_decimal_arr->null_bitmap_data(), n);
+    std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
+        arrow_decimal_arr->null_bitmap(), arrow_decimal_arr->null_bitmap_data(),
+        arrow_decimal_arr->offset(), arrow_decimal_arr->null_count(), n);
     std::shared_ptr<BodoBuffer> data_buf_buffer = arrow_buffer_to_bodo(
         arrow_decimal_arr->values(), (void *)arrow_decimal_arr->raw_values(),
         n * numpy_item_size[Bodo_CTypes::DECIMAL], Bodo_CTypes::DECIMAL);
@@ -806,7 +840,8 @@ std::shared_ptr<array_info> arrow_numeric_array_to_bodo(
 
     // Pass Arrow null bitmap and data buffer to Bodo
     std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
-        arrow_num_arr->null_bitmap(), arrow_num_arr->null_bitmap_data(), n);
+        arrow_num_arr->null_bitmap(), arrow_num_arr->null_bitmap_data(),
+        arrow_num_arr->offset(), arrow_num_arr->null_count(), n);
     std::shared_ptr<BodoBuffer> data_buf_buffer = arrow_buffer_to_bodo(
         arrow_num_arr->values(), (void *)arrow_num_arr->raw_values(),
         n * numpy_item_size[typ_enum], typ_enum);
@@ -830,9 +865,9 @@ std::shared_ptr<array_info> arrow_boolean_array_to_bodo(
     int64_t n_bits = arrow_bool_arr->length();
     int64_t n_bytes = arrow::bit_util::BytesForBits(n_bits);
 
-    std::shared_ptr<BodoBuffer> null_bitmap_buffer =
-        arrow_null_bitmap_to_bodo(arrow_bool_arr->null_bitmap(),
-                                  arrow_bool_arr->null_bitmap_data(), n_bits);
+    std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
+        arrow_bool_arr->null_bitmap(), arrow_bool_arr->null_bitmap_data(),
+        arrow_bool_arr->offset(), arrow_bool_arr->null_count(), n_bits);
 
     // As BooleanArray does not expose the raw_values ptr, we cannot easily
     // copy the underlying boolean array starting from the offset. If offset
@@ -884,7 +919,8 @@ std::shared_ptr<array_info> arrow_string_binary_array_to_bodo(
                              (void *)arrow_bin_arr->raw_value_offsets(),
                              (n + 1) * sizeof(offset_t), Bodo_CType_offset);
     std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
-        arrow_bin_arr->null_bitmap(), arrow_bin_arr->null_bitmap_data(), n);
+        arrow_bin_arr->null_bitmap(), arrow_bin_arr->null_bitmap_data(),
+        arrow_bin_arr->offset(), arrow_bin_arr->null_count(), n);
 
     if (array_id < 0) {
         array_id = generate_array_id(n);
