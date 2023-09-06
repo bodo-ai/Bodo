@@ -1,7 +1,6 @@
 package org.apache.calcite.rel.rel2sql;
 
 import org.apache.calcite.plan.volcano.RelSubset;
-import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.sql.SqlDialect;
 
 /**

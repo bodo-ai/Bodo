@@ -3,7 +3,6 @@ package org.apache.calcite.sql
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.parser.SqlParserPos
-import org.apache.calcite.sql.type.VariantSqlType
 import org.apache.calcite.sql.validate.SqlValidator
 import org.apache.calcite.util.Litmus
 import java.util.*

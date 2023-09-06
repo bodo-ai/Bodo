@@ -1,10 +1,15 @@
 package com.bodosql.calcite.adapter.snowflake
 
+import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeSystem
 import org.apache.calcite.sql.SqlIntervalLiteral
 import org.apache.calcite.sql.SqlIntervalLiteral.IntervalValue
+import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.dialect.SnowflakeSqlDialect
+import org.apache.calcite.sql.type.AbstractSqlType
+import org.apache.calcite.sql.type.BodoSqlTypeUtil
+import org.apache.calcite.sql.type.SqlTypeName
 
 class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
     override fun unparseSqlIntervalLiteral(
@@ -61,6 +66,45 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
             }
         }
         buf.append("'")
+    }
+
+    /** Returns SqlNode for type in "cast(column as type)", which might be
+     * different between databases by type name, precision etc.
+     *
+     *
+     * If this method returns null, the cast will be omitted. In the default
+     * implementation, this is the case for the NULL type, and therefore
+     * `CAST(NULL AS <nulltype>)` is rendered as `NULL`.
+     *
+     * We implement this to ensure all casting goes through our own
+     * BodoSqlTypeUtil.convertTypeToSpec casting rules. All other details
+     * are copied from Calcite.
+     * */
+    override fun getCastSpec(type: RelDataType): SqlNode? {
+        // Note: This implementation is borrowed from Calcite just
+        // replacing SqlTypeUtil.convertTypeToSpec with
+        // BodoSqlTypeUtil.convertTypeToSpec.
+        var maxPrecision = -1
+        var maxScale = -1
+        if (type is AbstractSqlType) {
+            when (type.getSqlTypeName()) {
+                SqlTypeName.NULL -> return null
+                SqlTypeName.DECIMAL -> {
+                    maxScale = typeSystem.getMaxScale(type.getSqlTypeName())
+                    // if needed, adjust varchar length to max length supported by the system
+                    maxPrecision = typeSystem.getMaxPrecision(type.getSqlTypeName())
+                }
+
+                SqlTypeName.CHAR, SqlTypeName.VARCHAR ->
+                    maxPrecision =
+                        typeSystem.getMaxPrecision(type.getSqlTypeName())
+
+                else -> {}
+            }
+            val charSet = if (supportsCharSet()) type.getCharset()?.name() else null
+            return BodoSqlTypeUtil.convertTypeToSpec(type, charSet, maxPrecision, maxScale)
+        }
+        return BodoSqlTypeUtil.convertTypeToSpec(type)
     }
 
     companion object {
