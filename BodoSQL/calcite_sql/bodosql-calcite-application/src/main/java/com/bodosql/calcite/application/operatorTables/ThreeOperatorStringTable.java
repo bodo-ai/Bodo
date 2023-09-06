@@ -78,7 +78,26 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  private List<SqlOperator> functionList = Arrays.asList(LPAD, RPAD);
+  public static final SqlFunction REPLACE =
+      new SqlFunction(
+          "REPLACE",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.ARG0_NULLABLE_VARYING,
+          // What should be used to infer operand types. We don't use
+          // this, so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          // Note: Calcite already defines REPLACE with 3 arguments
+          // in the SqlStdOperatorTable, so we just define when
+          // the third argument is missing.
+          OperandTypes.STRING_STRING,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.STRING);
+
+  private List<SqlOperator> functionList = Arrays.asList(LPAD, RPAD, REPLACE);
 
   @Override
   public void lookupOperatorOverloads(
