@@ -4066,10 +4066,18 @@ def get_num_nodes():  # pragma: no cover
     return len(get_host_ranks())
 
 
+# Use default number of iterations for sync if not specified by user
+sync_iters = (
+    bodo.default_stream_loop_sync_iters
+    if bodo.stream_loop_sync_iters == -1
+    else bodo.stream_loop_sync_iters
+)
+
+
 @numba.njit
 def sync_is_last(condition, iter):  # pragma: no cover
     """Check if condition is true for all ranks if iter % bodo.stream_loop_sync_iters == 0, return false otherwise"""
-    if iter % bodo.stream_loop_sync_iters == 0:
+    if iter % sync_iters == 0:
         return dist_reduce(
             condition, np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value)
         )

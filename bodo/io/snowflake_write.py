@@ -500,6 +500,13 @@ def snowflake_writer_append_table(
     n_cols = len(col_names_meta)
     py_table_typ = table
 
+    # Use default number of iterations for sync if not specified by user
+    sync_iters = (
+        bodo.default_stream_loop_sync_iters
+        if bodo.stream_loop_sync_iters == -1
+        else bodo.stream_loop_sync_iters
+    )
+
     # This function must be called the same number of times on all ranks.
     # This is because we only execute COPY INTO commands from rank 0, so
     # all ranks must finish writing their respective files to Snowflake
@@ -613,7 +620,7 @@ def snowflake_writer_append_table(
         # To reduce synchronization, we do this infrequently
         # Note: This requires append() to be called the same number of times on all ranks
         if writer["parallel"]:
-            if is_last or (iter % bodo.stream_loop_sync_iters == 0):
+            if is_last or (iter % sync_iters == 0):
                 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
                 writer["file_count_global"] = bodo.libs.distributed_api.dist_reduce(
                     writer["file_count_local"], sum_op

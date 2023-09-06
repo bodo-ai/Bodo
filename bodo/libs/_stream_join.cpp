@@ -808,7 +808,7 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
                      uint64_t n_keys_, bool build_table_outer_,
                      bool probe_table_outer_, cond_expr_fn_t cond_func_,
                      bool build_parallel_, bool probe_parallel_,
-                     int64_t output_batch_size_, uint64_t sync_iter)
+                     int64_t output_batch_size_, int64_t sync_iter)
     : build_arr_c_types(build_arr_c_types_),
       build_arr_array_types(build_arr_array_types_),
       probe_arr_c_types(probe_arr_c_types_),
@@ -990,7 +990,7 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
                              uint64_t n_keys_, bool build_table_outer_,
                              bool probe_table_outer_, cond_expr_fn_t cond_func_,
                              bool build_parallel_, bool probe_parallel_,
-                             int64_t output_batch_size_, uint64_t sync_iter,
+                             int64_t output_batch_size_, int64_t sync_iter,
                              int64_t op_pool_size_bytes,
                              size_t max_partition_depth_)
     : JoinState(build_arr_c_types, build_arr_array_types, probe_arr_c_types,
@@ -1020,6 +1020,10 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
                           DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
       build_event("HashJoinBuild"),
       probe_event("HashJoinProbe") {
+    // Update number of sync iterations adaptively based on batch byte size
+    // if sync_iter == -1 (user hasn't specified number of syncs)
+    this->adaptive_sync_counter = sync_iter == -1 ? 0 : -1;
+
     // For now, we will allow re-partitioning only in the case where the
     // build side is distributed. If we allow re-partitioning in the
     // replicated build side case, we must assume that the partitioning
@@ -1308,6 +1312,9 @@ void HashJoinState::FinalizeBuild() {
     // Finalize the NA buffer now that we've seen all the input.
     this->build_na_key_buffer.Finalize();
 
+    // Reset shuffle iteration number for probe phase
+    this->prev_shuffle_iter = 0;
+
     // Finalize all the partitions and split them as needed:
     size_t total_rows = 0;
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
@@ -1566,6 +1573,12 @@ bool join_build_consume_batch(HashJoinState* join_state,
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
+    if (join_state->build_iter == 0) {
+        join_state->sync_iter = init_sync_iters(
+            in_table, join_state->adaptive_sync_counter,
+            join_state->build_parallel, join_state->sync_iter, n_pes);
+    }
+
     // Make is_last global
     is_last =
         join_stream_sync_is_last(is_last, join_state->build_iter, join_state);
@@ -1745,9 +1758,18 @@ bool join_build_consume_batch(HashJoinState* join_state,
         }
     }
 
-    if (shuffle_this_iter(join_state->build_parallel, is_last,
+    auto [shuffle_now, new_sync_iter, new_adaptive_sync_counter] =
+        shuffle_this_iter(join_state->build_parallel, is_last,
                           join_state->build_shuffle_buffer->data_table,
-                          join_state->build_iter, join_state->sync_iter)) {
+                          join_state->build_iter, join_state->sync_iter,
+                          join_state->prev_shuffle_iter,
+                          join_state->adaptive_sync_counter);
+
+    join_state->sync_iter = new_sync_iter;
+    join_state->adaptive_sync_counter = new_adaptive_sync_counter;
+
+    if (shuffle_now) {
+        join_state->prev_shuffle_iter = join_state->build_iter;
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             join_state->build_shuffle_buffer->data_table;
@@ -1847,6 +1869,12 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    if (join_state->probe_iter == 0) {
+        join_state->sync_iter = init_sync_iters(
+            in_table, join_state->adaptive_sync_counter,
+            join_state->probe_parallel, join_state->sync_iter, n_pes);
+    }
 
     // Make is_last global
     is_last =
@@ -1988,9 +2016,18 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     build_idxs.clear();
     probe_idxs.clear();
 
-    if (shuffle_this_iter(shuffle_possible, is_last,
+    auto [shuffle_now, new_sync_iter, new_adaptive_sync_counter] =
+        shuffle_this_iter(shuffle_possible, is_last,
                           join_state->probe_shuffle_buffer->data_table,
-                          join_state->probe_iter, join_state->sync_iter)) {
+                          join_state->probe_iter, join_state->sync_iter,
+                          join_state->prev_shuffle_iter,
+                          join_state->adaptive_sync_counter);
+
+    join_state->sync_iter = new_sync_iter;
+    join_state->adaptive_sync_counter = new_adaptive_sync_counter;
+
+    if (shuffle_now) {
+        join_state->prev_shuffle_iter = join_state->probe_iter;
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             join_state->probe_shuffle_buffer->data_table;
@@ -2167,7 +2204,7 @@ JoinState* join_state_init_py_entry(
     int8_t* probe_arr_c_types, int8_t* probe_arr_array_types, int n_probe_arrs,
     uint64_t n_keys, bool build_table_outer, bool probe_table_outer,
     cond_expr_fn_t cond_func, bool build_parallel, bool probe_parallel,
-    int64_t output_batch_size, uint64_t sync_iter, int64_t op_pool_size_bytes) {
+    int64_t output_batch_size, int64_t sync_iter, int64_t op_pool_size_bytes) {
     // nested loop join is required if there are no equality keys
     if (n_keys == 0) {
         return new NestedLoopJoinState(

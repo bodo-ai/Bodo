@@ -350,7 +350,7 @@ def _init_groupby_state(
         output_batch_size = context.get_constant(
             types.int64, bodo.bodosql_streaming_batch_size
         )
-        sync_iter = context.get_constant(types.uint64, bodo.stream_loop_sync_iters)
+        sync_iter = context.get_constant(types.int64, bodo.stream_loop_sync_iters)
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [

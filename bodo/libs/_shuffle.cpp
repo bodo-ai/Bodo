@@ -9,10 +9,6 @@
 #include "_bodo_to_arrow.h"
 #include "_distributed.h"
 
-#ifndef SHUFFLE_THRESHOLD
-#define SHUFFLE_THRESHOLD 16000
-#endif
-
 mpi_comm_info::mpi_comm_info(std::vector<std::shared_ptr<array_info>>& _arrays)
     : arrays(_arrays) {
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -3463,26 +3459,77 @@ table_info* shuffle_renormalization_py_entrypt(table_info* in_table, int random,
     }
 }
 
-bool shuffle_this_iter(const bool parallel, const bool is_last,
-                       const std::shared_ptr<table_info>& shuffle_table,
-                       const uint64_t iter, const uint64_t sync_iter) {
+int64_t init_sync_iters(const std::shared_ptr<table_info>& in_table,
+                        int64_t adaptive_sync_counter, bool is_parallel,
+                        int64_t sync_iter, int n_pes) {
+    if (adaptive_sync_counter != -1 && is_parallel && n_pes > 1) {
+        // Get max batch size of ranks
+        int64_t in_data_size = table_local_memory_size(in_table);
+        int64_t max_in_data_size;
+        MPI_Allreduce(&in_data_size, &max_in_data_size, 1, MPI_INT64_T, MPI_MAX,
+                      MPI_COMM_WORLD);
+
+        // Estimate shuffle buffer size assuming (p-1)/p portion of batch is
+        // shuffled each iteration
+        int64_t shuffle_size_iter = std::ceil(
+            ((n_pes - 1) / static_cast<double>(n_pes)) * max_in_data_size);
+        shuffle_size_iter = std::max<int64_t>(shuffle_size_iter, 1);
+        int64_t shuffle_iters =
+            std::max<int64_t>(SHUFFLE_THRESHOLD / shuffle_size_iter, 1);
+
+        return std::min<int64_t>(DEFAULT_SYNC_ITERS, shuffle_iters);
+    }
+
+    // make sure sync_iter isn't -1 just in case
+    return sync_iter == -1 ? DEFAULT_SYNC_ITERS : sync_iter;
+}
+
+std::tuple<bool, uint64_t, int64_t> shuffle_this_iter(
+    const bool parallel, const bool is_last,
+    const std::shared_ptr<table_info>& shuffle_table, const uint64_t iter,
+    const uint64_t sync_iter, const uint64_t prev_shuffle_iter,
+    const int64_t adaptive_sync_counter) {
     if (!parallel) {
-        return false;
+        return std::make_tuple(false, sync_iter, adaptive_sync_counter);
     }
     if (is_last) {
-        return true;
+        return std::make_tuple(true, sync_iter, adaptive_sync_counter);
     }
 
     // Use iter + 1 to avoid a sync on the first iteration
     if ((iter + 1) % sync_iter == 0) {
-        uint64_t local_shuffle_buffer_nrows = shuffle_table->nrows();
-        uint64_t reduced_shuffle_buffer_nrows;
-        MPI_Allreduce(&local_shuffle_buffer_nrows,
-                      &reduced_shuffle_buffer_nrows, 1, MPI_UINT64_T, MPI_MAX,
-                      MPI_COMM_WORLD);
-        return reduced_shuffle_buffer_nrows >= SHUFFLE_THRESHOLD;
-    }
-    return false;
-}
+        // shuffle now if shuffle buffer size of any rank is larger than
+        // SHUFFLE_THRESHOLD
+        int64_t local_shuffle_buffer_size =
+            table_local_memory_size(shuffle_table);
+        int64_t reduced_shuffle_buffer_size;
+        MPI_Allreduce(&local_shuffle_buffer_size, &reduced_shuffle_buffer_size,
+                      1, MPI_INT64_T, MPI_MAX, MPI_COMM_WORLD);
+        bool shuffle_now = reduced_shuffle_buffer_size >= SHUFFLE_THRESHOLD;
 
-#undef SHUFFLE_THRESHOLD
+        uint64_t new_sync_iter = sync_iter;
+        int64_t new_adaptive_sync_counter = adaptive_sync_counter != -1
+                                                ? adaptive_sync_counter + 1
+                                                : adaptive_sync_counter;
+
+        // Estimate how many iterations it will take until we need to shuffle
+        // again and update sync frequency (every SYNC_UPDATE_FREQ
+        // syncs and only if adaptive).
+        if (reduced_shuffle_buffer_size > 0 && iter > prev_shuffle_iter &&
+            adaptive_sync_counter != -1 &&
+            ((adaptive_sync_counter + 1) % SYNC_UPDATE_FREQ == 0)) {
+            // It took (iter - prev_shuffle_iter) iterations to accumulate a buffer of size reduced_shuffle_buffer_size.
+            // Based on this, the new shuffle frequency should be:
+            new_sync_iter = (SHUFFLE_THRESHOLD * (iter - prev_shuffle_iter)) /
+                            reduced_shuffle_buffer_size;
+
+            new_sync_iter = std::max<uint64_t>(new_sync_iter, 1);
+            new_sync_iter =
+                std::min<uint64_t>(new_sync_iter, DEFAULT_SYNC_ITERS);
+        }
+
+        return std::make_tuple(shuffle_now, new_sync_iter,
+                               new_adaptive_sync_counter);
+    }
+    return std::make_tuple(false, sync_iter, adaptive_sync_counter);
+}

@@ -1983,11 +1983,17 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             assert len(out_dfs[i]) == 0
 
     # Run all tests:
-    test1()
-    test2()
-    test3()
-    test4()
-    test5()
+    # Set sync iterations explicitly since used in tests
+    saved_sync_iters = bodo.stream_loop_sync_iters
+    try:
+        bodo.stream_loop_sync_iters = bodo.default_stream_loop_sync_iters
+        test1()
+        test2()
+        test3()
+        test4()
+        test5()
+    finally:
+        bodo.stream_loop_sync_iters = saved_sync_iters
 
 
 @pytest.mark.slow
