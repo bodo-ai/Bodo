@@ -270,6 +270,34 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.precision = -1;
   }
 
+  /**
+   * Create a new column from a readName, writeName type, elemType, nullability, tzInfo and
+   * precision.
+   *
+   * @param readName the name that we will give the column when reading
+   * @param writeName the name that we will give the column when writing
+   * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
+   * @param elemType the {@link BodoSQLColumnDataType} for the element in categorical types
+   * @param nullable Is the column type nullable?
+   * @param tzInfo The timezone to use for this column if its timezone aware. This may be null.
+   */
+  public BodoSQLColumnImpl(
+      String readName,
+      String writeName,
+      BodoSQLColumnDataType type,
+      BodoSQLColumnDataType elemType,
+      boolean nullable,
+      BodoTZInfo tzInfo,
+      int precision) {
+    this.dataType = type;
+    this.readName = readName;
+    this.writeName = writeName;
+    this.elemType = elemType;
+    this.nullable = nullable;
+    this.tzInfo = tzInfo;
+    this.precision = precision;
+  }
+
   @Override
   public String getColumnName() {
     return this.readName;

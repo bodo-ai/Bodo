@@ -3,8 +3,6 @@ package com.bodosql.calcite.table;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 import java.sql.JDBCType;
-import java.util.Locale;
-import kotlin.Pair;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -152,6 +150,7 @@ public interface BodoSQLColumn {
       }
     }
 
+    // TODO: support ARRAY, JSON and VARIANT so that CatalogTableImpl and LocalTableImpl will work
     public static BodoSQLColumnDataType fromSqlType(RelDataType relDataType) {
       SqlTypeName typeName = relDataType.getSqlTypeName();
       BodoSQLColumnDataType outType;
@@ -210,101 +209,6 @@ public interface BodoSQLColumn {
                   + "for table extension Type");
       }
       return outType;
-    }
-
-    /**
-     * Parse the BodoSQL column data type obtained from a type returned by a "DESCRIBE TABLE" call.
-     * This is done to obtain information about types that cannot be communicated via JDBC APIs.
-     *
-     * @param typeName The type name string returned for a column by Snowflake's describe table
-     *     query.
-     * @return A pair of the BodoSQLColumnDataType and precision for the type in question. If the
-     *     type is not Time then the precision value is garbage and its value is ignored.
-     */
-    public static Pair<BodoSQLColumnDataType, Integer> fromSnowflakeTypeName(String typeName) {
-      // Convert the type to all caps to simplify checking.
-      typeName = typeName.toUpperCase(Locale.ROOT);
-      final BodoSQLColumnDataType columnDataType;
-      int precision = 0;
-      if (typeName.startsWith("NUMBER")) {
-        // If we encounter a number type we need to parse it to determine the actual type.
-        // The type information is of the form NUMBER(PRECISION, SCALE)
-        String internalFields = typeName.split("\\(|\\)")[1];
-        String[] numericParts = internalFields.split(",");
-        precision = Integer.valueOf(numericParts[0].trim());
-        int scale = Integer.valueOf(numericParts[1].trim());
-        if (scale > 0) {
-          // If scale > 0 then we have a Float, Double, or Decimal Type
-          // Currently we only support having DOUBLE inside SQL
-          columnDataType = FLOAT64;
-        } else {
-          // We have an integer type.
-          if (precision < 3) {
-            // If we use only 2 digits we know that this value fits in an int8
-            columnDataType = INT8;
-          } else if (precision < 5) {
-            // Using 4 digits always fits in an int16
-            columnDataType = INT16;
-          } else if (precision < 10) {
-            // Using 10 digits fits in an int32
-            columnDataType = INT32;
-          } else {
-            // Our max type is int64
-            columnDataType = INT64;
-          }
-        }
-      } else if (typeName.equals("BOOLEAN")) {
-        columnDataType = BOOL8;
-      } else if (typeName.startsWith("VARCHAR")
-          || typeName.startsWith("CHAR")
-          || typeName.equals("TEXT")
-          || typeName.equals("STRING")) {
-        // TODO: Load max string information
-        columnDataType = STRING;
-      } else if (typeName.equals("DATE")) {
-        columnDataType = DATE;
-      } else if (typeName.startsWith("DATETIME") || typeName.startsWith("TIMESTAMP_NTZ")) {
-        columnDataType = DATETIME;
-      } else if (typeName.startsWith("TIMESTAMP_TZ") || typeName.startsWith("TIMESTAMP_LTZ")) {
-        columnDataType = TZ_AWARE_TIMESTAMP;
-      } else if (typeName.startsWith("TIME(")) {
-        columnDataType = TIME;
-        // Determine the precision by parsing the type.
-        String precisionString = typeName.split("\\(|\\)")[1];
-        precision = Integer.valueOf(precisionString.trim());
-      } else if (typeName.startsWith("BINARY") || typeName.startsWith("VARBINARY")) {
-        columnDataType = BINARY;
-      } else if (typeName.equals("VARIANT")) {
-        columnDataType = VARIANT;
-      } else if (typeName.equals("OBJECT")) {
-        // TODO: Replace with a map type if possible.
-        columnDataType = JSON_OBJECT;
-      } else if (typeName.startsWith("ARRAY")) {
-        // TODO: Replace with array containing dtype info.
-        columnDataType = ARRAY;
-      } else if (typeName.startsWith("TIMESTAMP")) {
-        // TODO: Leverage the snowflake session parameter.
-        columnDataType = DATETIME;
-      } else if (typeName.startsWith("FLOAT")
-          || typeName.startsWith("DOUBLE")
-          || typeName.equals("REAL")
-          || typeName.equals("DECIMAL")
-          || typeName.equals("NUMERIC")) {
-        // A snowflake bug outputs float for double and float, so we match double
-        columnDataType = FLOAT64;
-      } else if (typeName.startsWith("INT")
-          || typeName.equals("BIGINT")
-          || typeName.equals("SMALLINT")
-          || typeName.equals("TINYINT")
-          || typeName.equals("BYTEINT")) {
-        // Snowflake treats these all internally as suggestions so we must use INT64
-        columnDataType = INT64;
-      } else {
-        // Unsupported types (e.g. GEOGRAPHY and GEOMETRY) may be in the table but unused,
-        // so we don't fail here.
-        columnDataType = UNSUPPORTED;
-      }
-      return new Pair<>(columnDataType, precision);
     }
 
     public RelDataType convertToSqlType(

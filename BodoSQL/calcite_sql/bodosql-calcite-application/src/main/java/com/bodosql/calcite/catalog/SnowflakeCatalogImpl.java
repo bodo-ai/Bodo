@@ -32,7 +32,6 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
-import kotlin.Pair;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -381,6 +380,116 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     return getTableImpl(schema, tableName, isConnectionCached());
   }
 
+  private class SnowflakeTypeInfo {
+    BodoSQLColumnDataType columnDataType;
+    BodoSQLColumnDataType elemType;
+    int precision;
+
+    SnowflakeTypeInfo(BodoSQLColumnDataType dtype, BodoSQLColumnDataType etype, int prec) {
+      columnDataType = dtype;
+      elemType = etype;
+      precision = prec;
+    }
+  }
+
+  /**
+   * Parse the BodoSQL column data type obtained from a type returned by a "DESCRIBE TABLE" call.
+   * This is done to obtain information about types that cannot be communicated via JDBC APIs.
+   *
+   * @param typeName The type name string returned for a column by Snowflake's describe table query.
+   * @return A dataclass of the BodoSQLColumnDataType of the column itself, the elem type if it is
+   *     an ARRAY containing nested data and precision for the type in question. If the type is not
+   *     Time then the precision value is garbage and its value is ignored.
+   */
+  SnowflakeTypeInfo snowflakeTypeNameToTypeInfo(String typeName) {
+    // Convert the type to all caps to simplify checking.
+    typeName = typeName.toUpperCase(Locale.ROOT);
+    final BodoSQLColumnDataType columnDataType;
+    BodoSQLColumnDataType elemType = BodoSQLColumnDataType.EMPTY;
+    int precision = 0;
+    if (typeName.startsWith("NUMBER")) {
+      // If we encounter a number type we need to parse it to determine the actual type.
+      // The type information is of the form NUMBER(PRECISION, SCALE)
+      String internalFields = typeName.split("\\(|\\)")[1];
+      String[] numericParts = internalFields.split(",");
+      precision = Integer.valueOf(numericParts[0].trim());
+      int scale = Integer.valueOf(numericParts[1].trim());
+      if (scale > 0) {
+        // If scale > 0 then we have a Float, Double, or Decimal Type
+        // Currently we only support having DOUBLE inside SQL
+        columnDataType = BodoSQLColumnDataType.FLOAT64;
+      } else {
+        // We have an integer type.
+        if (precision < 3) {
+          // If we use only 2 digits we know that this value fits in an int8
+          columnDataType = BodoSQLColumnDataType.INT8;
+        } else if (precision < 5) {
+          // Using 4 digits always fits in an int16
+          columnDataType = BodoSQLColumnDataType.INT16;
+        } else if (precision < 10) {
+          // Using 10 digits fits in an int32
+          columnDataType = BodoSQLColumnDataType.INT32;
+        } else {
+          // Our max type is int64
+          columnDataType = BodoSQLColumnDataType.INT64;
+        }
+      }
+    } else if (typeName.equals("BOOLEAN")) {
+      columnDataType = BodoSQLColumnDataType.BOOL8;
+    } else if (typeName.startsWith("VARCHAR")
+        || typeName.startsWith("CHAR")
+        || typeName.equals("TEXT")
+        || typeName.equals("STRING")) {
+      // TODO: Load max string information
+      columnDataType = BodoSQLColumnDataType.STRING;
+    } else if (typeName.equals("DATE")) {
+      columnDataType = BodoSQLColumnDataType.DATE;
+    } else if (typeName.startsWith("DATETIME") || typeName.startsWith("TIMESTAMP_NTZ")) {
+      columnDataType = BodoSQLColumnDataType.DATETIME;
+    } else if (typeName.startsWith("TIMESTAMP_TZ") || typeName.startsWith("TIMESTAMP_LTZ")) {
+      columnDataType = BodoSQLColumnDataType.TZ_AWARE_TIMESTAMP;
+    } else if (typeName.startsWith("TIME(")) {
+      columnDataType = BodoSQLColumnDataType.TIME;
+      // Determine the precision by parsing the type.
+      String precisionString = typeName.split("\\(|\\)")[1];
+      precision = Integer.valueOf(precisionString.trim());
+    } else if (typeName.startsWith("BINARY") || typeName.startsWith("VARBINARY")) {
+      columnDataType = BodoSQLColumnDataType.BINARY;
+    } else if (typeName.equals("VARIANT")) {
+      columnDataType = BodoSQLColumnDataType.VARIANT;
+    } else if (typeName.equals("OBJECT")) {
+      // TODO: Replace with a map type if possible.
+      columnDataType = BodoSQLColumnDataType.JSON_OBJECT;
+    } else if (typeName.startsWith("ARRAY")) {
+      // TODO: Replace with the true inner dtype rather than defaulting to variant
+      columnDataType = BodoSQLColumnDataType.ARRAY;
+      elemType = BodoSQLColumnDataType.VARIANT;
+    } else if (typeName.startsWith("TIMESTAMP")) {
+      // TODO: Leverage the snowflake session parameter.
+      columnDataType = BodoSQLColumnDataType.DATETIME;
+    } else if (typeName.startsWith("FLOAT")
+        || typeName.startsWith("DOUBLE")
+        || typeName.equals("REAL")
+        || typeName.equals("DECIMAL")
+        || typeName.equals("NUMERIC")) {
+      // A snowflake bug outputs float for double and float, so we match double
+      columnDataType = BodoSQLColumnDataType.FLOAT64;
+    } else if (typeName.startsWith("INT")
+        || typeName.equals("BIGINT")
+        || typeName.equals("SMALLINT")
+        || typeName.equals("TINYINT")
+        || typeName.equals("BYTEINT")) {
+      // Snowflake treats these all internally as suggestions so we must use INT64
+      columnDataType = BodoSQLColumnDataType.INT64;
+    } else {
+      // Unsupported types (e.g. GEOGRAPHY and GEOMETRY) may be in the table but unused,
+      // so we don't fail here.
+      columnDataType = BodoSQLColumnDataType.UNSUPPORTED;
+    }
+    SnowflakeTypeInfo typeInfo = new SnowflakeTypeInfo(columnDataType, elemType, precision);
+    return typeInfo;
+  }
+
   /**
    * Implementation of getTable that enables retrying if a cached connection fails
    *
@@ -415,13 +524,15 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         }
         String dataType = tableInfo.getString(2);
         // Parse the given type for the column type and precision information.
-        Pair<BodoSQLColumnDataType, Integer> snowflakeTypeInfo =
-            BodoSQLColumnDataType.fromSnowflakeTypeName(dataType);
-        BodoSQLColumnDataType type = snowflakeTypeInfo.getFirst();
-        int precision = snowflakeTypeInfo.getSecond();
+        SnowflakeTypeInfo typeInfo = snowflakeTypeNameToTypeInfo(dataType);
+        BodoSQLColumnDataType type = typeInfo.columnDataType;
+        BodoSQLColumnDataType elemType = typeInfo.elemType;
+        int precision = typeInfo.precision;
         // The column is nullable unless we are certain it has no nulls.
         boolean nullable = tableInfo.getString(4).toUpperCase(Locale.ROOT).equals("Y");
-        columns.add(new BodoSQLColumnImpl(readName, writeName, type, nullable, tzInfo, precision));
+        columns.add(
+            new BodoSQLColumnImpl(
+                readName, writeName, type, elemType, nullable, tzInfo, precision));
       }
       return new CatalogTableImpl(tableName, schema, columns);
     } catch (SQLException e) {
