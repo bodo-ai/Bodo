@@ -413,10 +413,11 @@ void ChunkedTableBuilder::AppendBatch(
 #endif
 
 #ifndef APPEND_ROWS_COL
-#define APPEND_ROWS_COL(ARR_TYPE, DTYPE)                               \
-    this->active_chunk_array_builders[i_col]                           \
-        .AppendRows<ARR_TYPE, ARR_TYPE, DTYPE>(in_arr, idxs, curr_row, \
-                                               batch_length)
+#define APPEND_ROWS_COL(OUT_ARR_TYPE, IN_ARR_TYPE, DTYPE)                     \
+    found_match = true;                                                       \
+    this->active_chunk_array_builders[i_col]                                  \
+        .AppendRows<OUT_ARR_TYPE, IN_ARR_TYPE, DTYPE>(in_arr, idxs, curr_row, \
+                                                      batch_length)
 #endif
 
     // See comment in AppendJoinOutput for a description of the procedure.
@@ -441,149 +442,367 @@ void ChunkedTableBuilder::AppendBatch(
         }
         // Append the actual rows.
         for (size_t i_col = 0; i_col < in_table->ncols(); i_col++) {
+            bool found_match = false;
             std::shared_ptr<array_info>& in_arr = in_table->columns[i_col];
-            if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                this->dummy_output_chunk->columns[i_col]->arr_type ==
+                    bodo_array_type::NULLABLE_INT_BOOL) {
                 switch (in_arr->dtype) {
                     case Bodo_CTypes::INT8:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::INT8);
                         break;
                     case Bodo_CTypes::INT16:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::INT16);
                         break;
                     case Bodo_CTypes::INT32:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::INT32);
                         break;
                     case Bodo_CTypes::INT64:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::INT64);
                         break;
                     case Bodo_CTypes::UINT8:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::UINT8);
                         break;
                     case Bodo_CTypes::UINT16:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::UINT16);
                         break;
                     case Bodo_CTypes::UINT32:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::UINT32);
                         break;
                     case Bodo_CTypes::UINT64:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::UINT64);
                         break;
                     case Bodo_CTypes::FLOAT32:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::FLOAT32);
                         break;
                     case Bodo_CTypes::FLOAT64:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::FLOAT64);
                         break;
                     case Bodo_CTypes::_BOOL:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::_BOOL);
                         break;
                     case Bodo_CTypes::DATETIME:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::DATETIME);
                         break;
                     case Bodo_CTypes::TIMEDELTA:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::TIMEDELTA);
                         break;
                     case Bodo_CTypes::TIME:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::TIME);
                         break;
                     case Bodo_CTypes::DATE:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::DATE);
                         break;
                     case Bodo_CTypes::DECIMAL:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::DECIMAL);
                         break;
                     case Bodo_CTypes::INT128:
                         APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::INT128);
                         break;
                     default:
                         break;
                 }
-            } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
+            } else if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                       this->dummy_output_chunk->columns[i_col]->arr_type ==
+                           bodo_array_type::NUMPY) {
                 switch (in_arr->dtype) {
                     case Bodo_CTypes::INT8:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::INT8);
                         break;
                     case Bodo_CTypes::INT16:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::INT16);
                         break;
                     case Bodo_CTypes::INT32:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::INT32);
                         break;
                     case Bodo_CTypes::INT64:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::INT64);
                         break;
                     case Bodo_CTypes::UINT8:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::UINT8);
                         break;
                     case Bodo_CTypes::UINT16:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::UINT16);
                         break;
                     case Bodo_CTypes::UINT32:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::UINT32);
                         break;
                     case Bodo_CTypes::UINT64:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::UINT64);
                         break;
                     case Bodo_CTypes::FLOAT32:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::FLOAT32);
                         break;
                     case Bodo_CTypes::FLOAT64:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
                                         Bodo_CTypes::FLOAT64);
                         break;
                     case Bodo_CTypes::_BOOL:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
+                                        Bodo_CTypes::_BOOL);
+                        break;
+                    case Bodo_CTypes::DATETIME:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
+                                        Bodo_CTypes::DATETIME);
+                        break;
+                    case Bodo_CTypes::TIMEDELTA:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
+                                        Bodo_CTypes::TIMEDELTA);
+                        break;
+                    case Bodo_CTypes::TIME:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
+                                        Bodo_CTypes::TIME);
+                        break;
+                    case Bodo_CTypes::DECIMAL:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
+                                        Bodo_CTypes::DECIMAL);
+                        break;
+                    case Bodo_CTypes::INT128:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NULLABLE_INT_BOOL,
+                                        Bodo_CTypes::INT128);
+                        break;
+                    default:
+                        break;
+                }
+            } else if (in_arr->arr_type == bodo_array_type::NUMPY &&
+                       this->dummy_output_chunk->columns[i_col]->arr_type ==
+                           bodo_array_type::NUMPY) {
+                switch (in_arr->dtype) {
+                    case Bodo_CTypes::INT8:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::INT8);
+                        break;
+                    case Bodo_CTypes::INT16:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::INT16);
+                        break;
+                    case Bodo_CTypes::INT32:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::INT32);
+                        break;
+                    case Bodo_CTypes::INT64:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::INT64);
+                        break;
+                    case Bodo_CTypes::UINT8:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::UINT8);
+                        break;
+                    case Bodo_CTypes::UINT16:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::UINT16);
+                        break;
+                    case Bodo_CTypes::UINT32:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::UINT32);
+                        break;
+                    case Bodo_CTypes::UINT64:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::UINT64);
+                        break;
+                    case Bodo_CTypes::FLOAT32:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::FLOAT32);
+                        break;
+                    case Bodo_CTypes::FLOAT64:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::FLOAT64);
+                        break;
+                    case Bodo_CTypes::_BOOL:
+                        APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
                                         Bodo_CTypes::_BOOL);
                         break;
                     // TODO: Remove when nullable timestamp is supported
                     case Bodo_CTypes::DATETIME:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
                                         Bodo_CTypes::DATETIME);
                         break;
                     case Bodo_CTypes::TIMEDELTA:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
                                         Bodo_CTypes::TIMEDELTA);
                         break;
                     case Bodo_CTypes::TIME:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
                                         Bodo_CTypes::TIME);
                         break;
                     case Bodo_CTypes::DATE:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
                                         Bodo_CTypes::DATE);
                         break;
                     case Bodo_CTypes::DECIMAL:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
                                         Bodo_CTypes::DECIMAL);
                         break;
                     case Bodo_CTypes::INT128:
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::INT128);
+                        break;
+                    default:
+                        break;
+                }
+            } else if (in_arr->arr_type == bodo_array_type::NUMPY &&
+                       this->dummy_output_chunk->columns[i_col]->arr_type ==
+                           bodo_array_type::NULLABLE_INT_BOOL) {
+                switch (in_arr->dtype) {
+                    case Bodo_CTypes::INT8:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::INT8);
+                        break;
+                    case Bodo_CTypes::INT16:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::INT16);
+                        break;
+                    case Bodo_CTypes::INT32:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::INT32);
+                        break;
+                    case Bodo_CTypes::INT64:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::INT64);
+                        break;
+                    case Bodo_CTypes::UINT8:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::UINT8);
+                        break;
+                    case Bodo_CTypes::UINT16:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::UINT16);
+                        break;
+                    case Bodo_CTypes::UINT32:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::UINT32);
+                        break;
+                    case Bodo_CTypes::UINT64:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::UINT64);
+                        break;
+                    case Bodo_CTypes::FLOAT32:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::FLOAT32);
+                        break;
+                    case Bodo_CTypes::FLOAT64:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::FLOAT64);
+                        break;
+                    case Bodo_CTypes::_BOOL:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::_BOOL);
+                        break;
+                    case Bodo_CTypes::DATETIME:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::DATETIME);
+                        break;
+                    case Bodo_CTypes::TIMEDELTA:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::TIMEDELTA);
+                        break;
+                    case Bodo_CTypes::TIME:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::TIME);
+                        break;
+                    case Bodo_CTypes::DATE:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::DATE);
+                        break;
+                    case Bodo_CTypes::DECIMAL:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
+                                        Bodo_CTypes::DECIMAL);
+                        break;
+                    case Bodo_CTypes::INT128:
+                        APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                        bodo_array_type::NUMPY,
                                         Bodo_CTypes::INT128);
                         break;
                     default:
@@ -592,17 +811,27 @@ void ChunkedTableBuilder::AppendBatch(
             } else if (in_arr->arr_type == bodo_array_type::STRING) {
                 if (in_arr->dtype == Bodo_CTypes::STRING) {
                     APPEND_ROWS_COL(bodo_array_type::STRING,
+                                    bodo_array_type::STRING,
                                     Bodo_CTypes::STRING);
                 } else if (in_arr->dtype == Bodo_CTypes::BINARY) {
                     APPEND_ROWS_COL(bodo_array_type::STRING,
+                                    bodo_array_type::STRING,
                                     Bodo_CTypes::BINARY);
                 }
             } else if (in_arr->arr_type == bodo_array_type::DICT) {
                 if (in_arr->dtype == Bodo_CTypes::STRING) {
-                    APPEND_ROWS_COL(bodo_array_type::DICT, Bodo_CTypes::STRING);
+                    APPEND_ROWS_COL(bodo_array_type::DICT,
+                                    bodo_array_type::DICT, Bodo_CTypes::STRING);
                 }
             }
+            if (!found_match) {
+                throw std::runtime_error(
+                    "ChunkedTableBuilder::AppendBatch: Could not append "
+                    "column " +
+                    std::to_string(i_col));
+            }
         }
+
         // Update the metadata.
         this->active_chunk_size += batch_length;
         this->total_size += batch_length;
