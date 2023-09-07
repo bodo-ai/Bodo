@@ -47,4 +47,28 @@ void alloc_init_keys(
     const std::vector<grouping_info>& grp_infos, int64_t num_keys,
     size_t num_groups);
 
+/**
+ * @brief Sorts the local data for an aggregation that has shuffled
+ * before aggregation first by the group and then by any orderby
+ * columns.
+ *
+ * @param[in] group_info: The struct associating each row to its group.
+ * @param[in] orderby_cols: The columns to sort by.
+ * @param[in] extra_cols: Any additional columns to sort along with the ordering
+ * columns.
+ * @param[in] asc_vect: Which columns in orderby_cols should be ascending?
+ * @param[in] na_pos_vect: Which columns in orderby_cols should be nulls
+ * first/last?
+ * @param[in] order_offset: What index in asc_vect/na_pos_vect corresponds to
+ * the first entry in orderby_cols, in case there is an offset.
+ * @param[in] is_parallel: is the operation happening in parallel
+ * @return the sorted table
+ */
+std::shared_ptr<table_info> grouped_sort(
+    const grouping_info& grp_info,
+    const std::vector<std::shared_ptr<array_info>>& orderby_cols,
+    const std::vector<std::shared_ptr<array_info>>& extra_cols,
+    const std::vector<bool>& asc_vect, const std::vector<bool>& na_pos_vect,
+    int64_t order_offset, bool is_parallel);
+
 #endif  // _GROUPBY_COMMON_H_INCLUDED

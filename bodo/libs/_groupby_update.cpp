@@ -1012,36 +1012,13 @@ void array_agg_operation(
     size_t num_group = grp_info.group_to_first_row.size();
     size_t n_total = in_arr->length;
 
-    // Step 1: Convert the row_to_group vector into an array_info
-    std::shared_ptr<array_info> group_arr =
-        alloc_numpy(n_total, Bodo_CTypes::INT64);
-    memcpy(group_arr->data1(), grp_info.row_to_group.data(), n_total << 3);
-
-    // Step 2: Place the group array, orderby columns, and data column in a
-    // single table so they can be sorted together.
-    std::shared_ptr<table_info> sort_table = std::make_shared<table_info>();
-    sort_table->columns.push_back(group_arr);
-    for (std::shared_ptr<array_info> orderby_arr : orderby_cols) {
-        sort_table->columns.push_back(orderby_arr);
-    }
-    sort_table->columns.push_back(in_arr);
-
-    // Step 3: Sort the table first by group (so each group has its elements
+    // Step 1: Sort the table first by group (so each group has its elements
     // contiguous) and then by the orderby columns (so each group's elements
     // are internally sorted in the desired manner)
-    int64_t n_sort_cols = ascending.size();
-    int64_t ascending_arr[n_sort_cols];
-    int64_t na_position_arr[n_sort_cols];
-    ascending_arr[0] = 1;
-    na_position_arr[0] = 1;
-    for (int64_t i = 1; i < ascending.size(); i++) {
-        ascending_arr[i] = ascending[i];
-        na_position_arr[i] = na_position[i];
-    }
-    std::shared_ptr<table_info> sorted_table = sort_values_table_local(
-        std::move(sort_table), n_sort_cols, ascending_arr, na_position_arr,
-        nullptr, is_parallel /* This is just used for tracing */);
-    sort_table.reset();
+    std::shared_ptr<table_info> sorted_table =
+        grouped_sort(grp_info, orderby_cols, {in_arr}, ascending, na_position,
+                     1, is_parallel);
+    int64_t n_sort_cols = orderby_cols.size() + 1;
 
     // At this stage, the implementations diverge depending on the input
     // data's array type
@@ -1049,13 +1026,13 @@ void array_agg_operation(
         // Numpy arrays do not have any nulls to remove, so the last column
         // of the sorted table can be used directly as the inner data.
 
-        // Step 4: Make the last column from the sorted table the new inner
+        // Step 2: Make the last column from the sorted table the new inner
         // array, since it has all of the data from each group stored
         // contiguously and in the correct order.
         std::shared_ptr<array_info> inner_arr = out_arr->child_arrays[0];
         *inner_arr = *(sorted_table->columns[n_sort_cols]);
 
-        // Step 5: Update the offsets to match the cutoffs where each contiguous
+        // Step 3: Update the offsets to match the cutoffs where each contiguous
         // group in the sorted table begins/ends
         offset_t* offset_buffer =
             (offset_t*)(out_arr->buffers[0]->mutable_data() + out_arr->offset);
@@ -1063,7 +1040,7 @@ void array_agg_operation(
         offset_buffer[num_group] = n_total;
         std::shared_ptr<array_info> sorted_groups = sorted_table->columns[0];
         int64_t cur_idx = 1;
-        for (int64_t i = 1; i < n_total; i++) {
+        for (size_t i = 1; i < n_total; i++) {
             if (getv<int64_t>(sorted_groups, i) !=
                 getv<int64_t>(sorted_groups, i - 1)) {
                 offset_buffer[cur_idx] = (offset_t)i;
@@ -1075,12 +1052,12 @@ void array_agg_operation(
         // data column must first be removed, but groups that have all of their
         // rows removed must not have the group itself removed.
 
-        // Step 4: Calculate the number of non-null rows and create a new
+        // Step 2: Calculate the number of non-null rows and create a new
         // arrays for the data excluding nulls.
         int64_t non_null_count = 0;
         std::shared_ptr<array_info> sorted_data =
             sorted_table->columns[n_sort_cols];
-        for (int64_t i = 0; i < n_total; i++) {
+        for (size_t i = 0; i < n_total; i++) {
             if (non_null_at<ArrType, T, DType>(*sorted_data, i)) {
                 non_null_count++;
             }
@@ -1095,7 +1072,7 @@ void array_agg_operation(
             data_without_nulls->scale = in_arr->scale;
         }
 
-        // Step 5: Move the non null elements from the data column to the new
+        // Step 3: Move the non null elements from the data column to the new
         // array, and copy over the offsets each time we enter a new group.
         offset_t* offset_buffer =
             (offset_t*)(out_arr->buffers[0]->mutable_data() + out_arr->offset);
@@ -1104,7 +1081,7 @@ void array_agg_operation(
         std::shared_ptr<array_info> sorted_groups = sorted_table->columns[0];
         int64_t group_idx = 1;
         offset_t curr_offset = 0;
-        for (int64_t i = 0; i < n_total; i++) {
+        for (size_t i = 0; i < n_total; i++) {
             // If the current group has just ended, the next offset will be the
             // previous offset plus the number of non null elements since the
             // current group started.

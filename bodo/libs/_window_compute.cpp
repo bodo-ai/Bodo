@@ -685,89 +685,37 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
     int64_t window_col_offset = input_arrs.size() - n_input_cols;
     std::vector<std::shared_ptr<array_info>> orderby_arrs(
         input_arrs.begin(), input_arrs.begin() + window_col_offset);
-    // Create a new table. We want to sort the table first by
-    // the groups and second by the orderby_arr.
-    std::shared_ptr<table_info> sort_table = std::make_shared<table_info>();
     std::shared_ptr<table_info> iter_table = nullptr;
-    const bodo::vector<int64_t>& row_to_group = grp_info.row_to_group;
-    int64_t num_rows = row_to_group.size();
-    int64_t n_keys = orderby_arrs.size() + 1;
-    int64_t vect_ascending[n_keys];
-    int64_t na_position[n_keys];
     // The sort table will be the same for every window function call that uses
     // it, so the table will be uninitialized until one of the calls specifies
     // that we do need to sort
     bool needs_sort = false;
-    bool sort_has_required_cols = false;
     int64_t idx_col = 0;
     for (size_t i = 0; i < window_funcs.size(); i++) {
-        switch (window_funcs[i]) {
-            case Bodo_FTypes::min_row_number_filter: {
-                // Window functions that do not require the sorted table
-                break;
+        if (window_funcs[i] != Bodo_FTypes::min_row_number_filter) {
+            needs_sort = true;
+            /* If this is the first function encountered that requires,
+             * a sort, create a sorted table with the following columns:
+             * - 1 column containing the group numbers so that when the
+             *   table is sorted, each partition has its rows clustered
+             * together
+             * - 1 column for each of the orderby cols so that within each
+             *   partition, the values are sorted as desired
+             * - 1 extra column that is set to 0...n-1 so that when it is
+             *   sorted, we have a way of converting rows in the sorted
+             *   table back to rows in the original table.
+             */
+            size_t num_rows = grp_info.row_to_group.size();
+            idx_col = orderby_arrs.size() + 1;
+            std::shared_ptr<array_info> idx_arr =
+                alloc_numpy(num_rows, Bodo_CTypes::INT64);
+            for (size_t i = 0; i < num_rows; i++) {
+                getv<int64_t>(idx_arr, i) = i;
             }
-            default: {
-                needs_sort = true;
-                /* If this is the first function encountered that requires,
-                 * a sort, populate sort_table with the following columns:
-                 * - 1 column containing the group numbers so that when the
-                 *   table is sorted, each partition has its rows clustered
-                 * together
-                 * - 1 column for each of the orderby cols so that within each
-                 *   partition, the values are sorted as desired
-                 * - 1 extra column that is set to 0...n-1 so that when it is
-                 *   sorted, we have a way of converting rows in the sorted
-                 *   table back to rows in the original table.
-                 */
-                if (!sort_has_required_cols) {
-                    // Wrap the row_to_group in an array info so we can use it
-                    // to sort.
-                    std::shared_ptr<array_info> group_arr =
-                        alloc_numpy(num_rows, Bodo_CTypes::INT64);
-                    // TODO: Reuse the row_to_group buffer
-                    for (int64_t i = 0; i < num_rows; i++) {
-                        getv<int64_t>(group_arr, i) = row_to_group[i];
-                    }
-                    sort_table->columns.push_back(group_arr);
-                    // Push each orderby column into the sort table
-                    for (std::shared_ptr<array_info> orderby_arr :
-                         orderby_arrs) {
-                        sort_table->columns.push_back(orderby_arr);
-                    }
-                    // Append an index column so we can find the original
-                    // index in the out array, and mark which column
-                    // is the index column
-                    idx_col = sort_table->columns.size();
-                    std::shared_ptr<array_info> idx_arr =
-                        alloc_numpy(num_rows, Bodo_CTypes::INT64);
-                    for (int64_t i = 0; i < num_rows; i++) {
-                        getv<int64_t>(idx_arr, i) = i;
-                    }
-                    sort_table->columns.push_back(idx_arr);
-                    /* Populate the buffers to indicate which columns are
-                     * ascending/descending and which have nulls first/last
-                     * according to the input specifications, plus the
-                     * group key column in front which is hardcoded.
-                     */
-                    vect_ascending[0] = 0;
-                    na_position[0] = 0;
-                    for (int64_t i = 1; i < n_keys; i++) {
-                        vect_ascending[i] = asc_vect[i - 1];
-                        na_position[i] = na_pos_vect[i - 1];
-                    }
-                    sort_has_required_cols = true;
-                }
-                break;
-            }
+            iter_table = grouped_sort(grp_info, orderby_arrs, {idx_arr},
+                                      asc_vect, na_pos_vect, 0, is_parallel);
+            break;
         }
-    }
-    if (needs_sort) {
-        // Sort the table so that all window functions that use the
-        // sorted table can access it
-        iter_table = sort_values_table_local(
-            sort_table, n_keys, vect_ascending, na_position, nullptr,
-            is_parallel /* This is just used for tracing */);
-        sort_table.reset();
     }
     int64_t* frame_lo;
     int64_t* frame_hi;

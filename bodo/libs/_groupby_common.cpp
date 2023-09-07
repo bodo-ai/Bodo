@@ -1,5 +1,6 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_common.h"
+#include "_array_operations.h"
 #include "_array_utils.h"
 #include "_groupby_ftypes.h"
 #include "_groupby_update.h"
@@ -762,4 +763,58 @@ void alloc_init_keys(
         }
         out_table->columns.push_back(std::move(new_key_col));
     }
+}
+
+std::shared_ptr<table_info> grouped_sort(
+    const grouping_info& grp_info,
+    const std::vector<std::shared_ptr<array_info>>& orderby_cols,
+    const std::vector<std::shared_ptr<array_info>>& extra_cols,
+    const std::vector<bool>& asc_vect, const std::vector<bool>& na_pos_vect,
+    int64_t order_offset, bool is_parallel) {
+    // Create a new table. We want to sort the table first by
+    // the groups and second by the orderby_arr.
+    std::shared_ptr<table_info> sort_table = std::make_shared<table_info>();
+    const bodo::vector<int64_t>& row_to_group = grp_info.row_to_group;
+    int64_t num_rows = row_to_group.size();
+    int64_t n_keys = orderby_cols.size() + 1;
+    int64_t vect_ascending[n_keys];
+    int64_t na_position[n_keys];
+
+    // Wrap the row_to_group in an array info so we can use it
+    // to sort.
+    std::shared_ptr<array_info> group_arr =
+        alloc_numpy(num_rows, Bodo_CTypes::INT64);
+    memcpy(group_arr->data1(), row_to_group.data(),
+           sizeof(int64_t) * group_arr->length);
+
+    sort_table->columns.push_back(group_arr);
+
+    // Push each orderby column into the sort table
+    for (std::shared_ptr<array_info> orderby_arr : orderby_cols) {
+        sort_table->columns.push_back(orderby_arr);
+    }
+
+    // Push each extra column into the sort table
+    for (std::shared_ptr<array_info> extra_arr : extra_cols) {
+        sort_table->columns.push_back(extra_arr);
+    }
+
+    /* Populate the buffers to indicate which columns are
+     * ascending/descending and which have nulls first/last
+     * according to the input specifications, plus the
+     * group key column in front which is hardcoded.
+     */
+    vect_ascending[0] = 1;
+    na_position[0] = 1;
+    for (int64_t i = 1; i < n_keys; i++) {
+        vect_ascending[i] = asc_vect[i + order_offset - 1];
+        na_position[i] = na_pos_vect[i + order_offset - 1];
+    }
+    // Sort the table so that all window functions that use the
+    // sorted table can access it
+    std::shared_ptr<table_info> iter_table = sort_values_table_local(
+        sort_table, n_keys, vect_ascending, na_position, nullptr,
+        is_parallel /* This is just used for tracing */);
+    sort_table.reset();
+    return iter_table;
 }
