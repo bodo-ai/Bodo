@@ -118,11 +118,11 @@ class Cost private constructor(
     override fun minus(other: RelOptCost): RelOptCost {
         return convert(other).let { c ->
             Cost(
-                rows = rows + c.rows,
-                cpu = cpu + c.cpu,
-                io = io + c.io,
-                mem = mem + c.mem,
-                cost = value + c.value,
+                rows = rows - c.rows,
+                cpu = cpu - c.cpu,
+                io = io - c.io,
+                mem = mem - c.mem,
+                cost = value - c.value,
             )
         }
     }
