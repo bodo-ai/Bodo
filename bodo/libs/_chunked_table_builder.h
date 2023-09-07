@@ -307,6 +307,98 @@ struct ChunkedTableArrayBuilder {
      * as externally when the caller is tracking available space
      * themselves.
      *
+     * This is the implementation where input is a nullable array, output is
+     * numpy, dtype isn't bool and without SQL NULL sentinels.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::NUMPY &&
+                 in_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 !SQLNASentinelDtype<dtype> && dtype != Bodo_CTypes::_BOOL)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        using T = typename dtype_to_type<dtype>::type;
+        T* out_data = (T*)this->data_array->data1();
+        T* in_data = (T*)in_arr->data1();
+        uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+        for (size_t i = 0; i < idx_length; i++) {
+            if (!arrow::bit_util::GetBit(in_bitmask, idxs[i + idx_start])) {
+                throw std::runtime_error(
+                    "ChunkedTableArrayBuilder::UnsafeAppendRows: Cannot append "
+                    "NULL value to non-nullable array");
+            }
+        }
+
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            T new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            out_data[this->size + i] = new_data;
+        }
+        this->size += idx_length;
+        data_array->length = this->size;
+    }
+
+    /**
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
+     * This assumes that enough space is available in the buffers
+     * without need to resize. This is useful internally as well
+     * as externally when the caller is tracking available space
+     * themselves.
+     *
+     * This is the implementation where input is a nullable array, output is
+     * numpy, dtype is bool and without SQL NULL sentinels.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::NUMPY &&
+                 in_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 !SQLNASentinelDtype<dtype> && dtype == Bodo_CTypes::_BOOL)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        uint8_t* out_data = (uint8_t*)this->data_array->data1();
+        uint8_t* in_data = (uint8_t*)in_arr->data1();
+        uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+        for (size_t i = 0; i < idx_length; i++) {
+            if (!arrow::bit_util::GetBit(in_bitmask, idxs[i + idx_start])) {
+                throw std::runtime_error(
+                    "ChunkedTableArrayBuilder::UnsafeAppendRows: Cannot append "
+                    "NULL value to non-nullable array");
+            }
+        }
+
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            bool new_data =
+                row_idx < 0 ? 0 : arrow::bit_util::GetBit(in_data, row_idx);
+            out_data[this->size + i] = new_data;
+        }
+        this->size += idx_length;
+        data_array->length = this->size;
+    }
+
+    /**
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
+     * This assumes that enough space is available in the buffers
+     * without need to resize. This is useful internally as well
+     * as externally when the caller is tracking available space
+     * themselves.
+     *
      * This is the implementation where both arrays are numpy arrays
      * with SQL NULL sentinels.
      *
@@ -335,6 +427,50 @@ struct ChunkedTableArrayBuilder {
             T new_data = row_idx < 0 ? std::numeric_limits<int64_t>::min()
                                      : in_data[row_idx];
             out_data[this->size + i] = new_data;
+        }
+        this->size += idx_length;
+        data_array->length = this->size;
+    }
+
+    /**
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
+     * This assumes that enough space is available in the buffers
+     * without need to resize. This is useful internally as well
+     * as externally when the caller is tracking available space
+     * themselves.
+     *
+     * This is the implementation where input is a nullable array and output is
+     * numpy with SQL NULL sentinels.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::NUMPY &&
+                 in_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 SQLNASentinelDtype<dtype>)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        // TODO: Remove when Timedelta can be nullable.
+        using T = typename dtype_to_type<dtype>::type;
+        T* out_data = (T*)this->data_array->data1();
+        T* in_data = (T*)in_arr->data1();
+        uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            // Timedelta Sentinel is std::numeric_limits<int64_t>::min()
+            out_data[this->size + i] =
+                ((row_idx < 0) ||
+                 (!arrow::bit_util::GetBit(in_bitmask, row_idx)))
+                    ? std::numeric_limits<int64_t>::min()
+                    : in_data[row_idx];
         }
         this->size += idx_length;
         data_array->length = this->size;
