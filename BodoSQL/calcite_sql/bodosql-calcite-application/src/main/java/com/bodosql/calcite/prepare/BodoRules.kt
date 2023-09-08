@@ -13,7 +13,6 @@ import com.bodosql.calcite.application.logicalRules.InnerJoinRemoveRule
 import com.bodosql.calcite.application.logicalRules.JoinConditionToFilterRule
 import com.bodosql.calcite.application.logicalRules.JoinReorderConditionRule
 import com.bodosql.calcite.application.logicalRules.LimitProjectTransposeRule
-import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
 import com.bodosql.calcite.application.logicalRules.LogicalFilterReorderConditionRule
 import com.bodosql.calcite.application.logicalRules.MinRowNumberFilterRule
 import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEliminationRule
@@ -366,12 +365,6 @@ object BodoRules {
             .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
             .toRule()
 
-    @JvmField
-    val LIST_AGG_OPTIONAL_REPLACE_RULE: RelOptRule =
-        ListAggOptionalReplaceRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
-            .toRule()
-
     /**
      * Extract the join condition to the filter rule to allow invalid join
      * conditions to be utilized.
@@ -467,7 +460,6 @@ object BodoRules {
         PROJECT_FILTER_PROJECT_COLUMN_ELIMINATION_RULE,
         MIN_ROW_NUMBER_FILTER_RULE,
         REX_SIMPLIFICATION_RULE,
-        LIST_AGG_OPTIONAL_REPLACE_RULE,
         AGGREGATE_CONSTANT_PULL_UP_RULE,
     )
 
@@ -507,7 +499,6 @@ object BodoRules {
         PROJECT_FILTER_PROJECT_COLUMN_ELIMINATION_RULE,
         MIN_ROW_NUMBER_FILTER_RULE,
         REX_SIMPLIFICATION_RULE,
-        LIST_AGG_OPTIONAL_REPLACE_RULE,
         JOIN_COMMUTE_RULE,
         LOPT_OPTIMIZE_JOIN_RULE,
         AGGREGATE_CONSTANT_PULL_UP_RULE,
