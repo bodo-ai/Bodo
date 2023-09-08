@@ -2157,6 +2157,27 @@ def test_snowflake_catalog_string_format(test_db_snowflake_catalog, memory_leak_
     assert out.iloc[0, 0] == 1, f"Expected one row in output, found {out.iloc[0,0]}"
 
 
+def test_snowflake_catalog_array_read(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests reading an array column from Snowflake.
+    The table BODOSQL_ARRAY_READ_TEST has 3 columns:
+    - I: integers
+    - V: strings
+    - A: arrays of integers
+    """
+    query = """
+        SELECT *
+        FROM BODOSQL_ARRAY_READ_TEST
+    """
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    out = bc.sql(query)
+    assert len(out) == 100
+    assert len(out.columns) == 3
+    # [BSE-1152] TODO: properly test that out[out.columns[2]] is a correct array type once we support
+    # proper array reads.
+
+
 def test_hidden_credentials(snowflake_sample_data_snowflake_catalog, memory_leak_check):
     """
     Test that the given username and password are not embedded into the generate code
