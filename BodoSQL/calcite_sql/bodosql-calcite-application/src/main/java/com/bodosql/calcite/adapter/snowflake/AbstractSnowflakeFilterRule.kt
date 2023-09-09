@@ -72,6 +72,8 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             SqlKind.DIVIDE,
             SqlKind.MINUS_PREFIX,
             SqlKind.SEARCH,
+            // String Logical operators
+            SqlKind.LIKE,
         )
 
         private val SUPPORTED_GENERIC_CALL_NAMES = setOf(
