@@ -65,6 +65,8 @@ requirements:
     - matplotlib <= 3.5.1
   run_constrained:
     - numpy >=1.18,<1.24
+  run_constrained:
+    - scikit-learn =1.1.*
 
 test:
   imports:
