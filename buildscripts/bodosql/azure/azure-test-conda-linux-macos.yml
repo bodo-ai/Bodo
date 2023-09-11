@@ -2,21 +2,12 @@ parameters:
 - name: name
   type: string
   default: ''
-- name: PYTHON_VERSION
-  type: string
-  default: ''
 - name: CONDA_ENV
   type: string
   default: ''
 - name: matrix
   type: object
   default: []
-- name: useNumbaDev
-  type: boolean
-  default: false
-- name: platformBuild
-  type: boolean
-  default: false
 - name: CACHE_TEST
   type: boolean
   default: false
@@ -38,61 +29,57 @@ jobs:
       ${{ insert }}: ${{ parameters.matrix }}
 
   steps:
+  # TODO: Use Micromamba when it supports remote_max_retries
+  - script: |
+      set -exo pipefail
+      curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"
+      bash Mambaforge-$(uname)-$(uname -m).sh -b
+    displayName: 'Install Mambaforge'
 
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: '3.8'
-      # Github Token used to download python from the GitHub registry if it doesn't already exist locally
-      githubToken: $(GITHUB_REGISTRY_DL_TOKEN)
-    displayName: 'Use Python 3.8'
+  - bash: echo "##vso[task.prependpath]$HOME/mambaforge/bin"
+    displayName: Add Mamba to PATH
+  
+  - script: |
+      conda config --set remote_max_retries 5
+      conda config --set remote_backoff_factor 60
+      # Ensure that conda/mamba install/update/remove commands
+      # do not try to mutate the environment beyond what's required.
+      conda config --add aggressive_update_packages nodefaults
+    displayName: 'Set conda config'
 
   - script: |
-      set -eo pipefail
-      unamestr=`uname`
-      # This template only works for Linux.
-      wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh
-      chmod +x mambaforge.sh
-      ./mambaforge.sh -b
-      export PATH=$HOME/mambaforge/bin:${PATH}
-      mamba create -y -n $CONDA_ENV python=$PYTHON_VERSION pytest pytest-cov pytest-timeout pytest-azurepipelines flaky maven py4j=0.10.9.5 openjdk=11 credstash pyspark=3.2 -c conda-forge
-      source activate $CONDA_ENV
-    env:
-      CONDA_ENV:  ${{ parameters.CONDA_ENV }}
-      PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
+      source activate base
+      mamba install -y pip
+      pip install pipx
+      pipx run conda-lock install -n ${{ parameters.CONDA_ENV }} $(System.DefaultWorkingDirectory)/buildscripts/envs/conda-lock.yml
     displayName: 'Create Mamba Env'
 
   - task: DownloadSecureFile@1
     name: secret_file
-    displayName: 'Download secrets file'
     inputs:
       secureFile: 'publish_binary_secrets'
+    displayName: 'Download Secrets File'
 
   - script: |
       set -eo pipefail
+      source activate ${{ parameters.CONDA_ENV }}
+      set -x
+
       sudo chmod a+r $(secret_file.secureFilePath)
       sudo cp $(secret_file.secureFilePath) $HOME/secret_file
-      export PATH=$HOME/mambaforge/bin:${PATH}
-      source activate $CONDA_ENV
-      export CHECK_LICENSE_PLATFORM=$(CHECK_LICENSE_PLATFORM)
-      export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
-      export OBFUSCATE=$(OBFUSCATE)
-      if [[ "${{ parameters.platformBuild }}" == "True" ]]; then
-        export PLATFORM_DEV_RELEASE=$(PLATFORM_DEV_RELEASE)
-      else
-        export PLATFORM_DEV_RELEASE="false"
-      fi
-      ./buildscripts/bodosql/azure/install_bodo_and_bodosql.sh $PLATFORM_DEV_RELEASE
+
+      cd $(System.DefaultWorkingDirectory)
+      ./buildscripts/bodosql/azure/artifactory_install.sh "false"
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
-    displayName: 'Install Bodo and BodoSQL from Conda'
+    displayName: 'Install Bodo, BodoSQL, and Iceberg from Artifactory'
 
   - script: |
-      set -eo pipefail
+      set -exo pipefail
       mkdir -p $HOME/bodo-inc
       cd $HOME/bodo-inc
       mkdir bodosql
-      # Note, I don't think this ever runs? we don't have any tests with the name parameter
-      # Equal to Linux for bodosql
+
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
         cp -avr $(System.DefaultWorkingDirectory)/BodoSQL/bodosql/tests bodosql/
@@ -103,16 +90,18 @@ jobs:
 
   - task: DownloadSecureFile@1
     name: testLicense
-    displayName: 'Download Test License'
     inputs:
       secureFile: 'bodo.lic'
+    displayName: 'Download Test License'
 
   - script: |
-      set -exo pipefail
+      set -eo pipefail
+      source activate ${{ parameters.CONDA_ENV }}
+      set -x
+
       sudo chmod a+r $(testLicense.secureFilePath)
       sudo cp $(testLicense.secureFilePath) $HOME/bodo-inc
-      export PATH=$HOME/mambaforge/bin:${PATH}
-      source activate ${{ parameters.CONDA_ENV }}
+
       cd $HOME/bodo-inc
       cp `python -c "import bodosql; print(bodosql.__file__[:-11])"`pytest.ini .
       # For caching tests we need to update the location of the decryption file.
@@ -123,7 +112,6 @@ jobs:
       else
         python -u -m bodosql.runtests "${{ parameters.name }}" "$(NP)" -s -v -p no:faulthandler -m "$(PYTEST_MARKER)" bodosql/tests/
       fi
-
     env:
       SF_USERNAME: $(SNOWFLAKE_USER)
       SF_PASSWORD: $(SNOWFLAKE_PASSWORD)

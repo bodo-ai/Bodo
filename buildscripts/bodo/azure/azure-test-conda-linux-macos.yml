@@ -2,9 +2,6 @@ parameters:
 - name: name
   type: string
   default: ''
-- name: PYTHON_VERSION
-  type: string
-  default: ''
 - name: matrix
   type: object
   default: []
@@ -12,9 +9,6 @@ parameters:
   type: string
   default: ''
 - name: useNumbaDev
-  type: boolean
-  default: false
-- name: platformBuild
   type: boolean
   default: false
 - name: caching_test
@@ -37,38 +31,37 @@ jobs:
       ${{ insert }}: ${{ parameters.matrix }}
 
   steps:
+  # TODO: Use Micromamba when it supports remote_max_retries
+  - script: |
+      set -exo pipefail
+      curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"
+      bash Mambaforge-$(uname)-$(uname -m).sh -b
+    displayName: 'Install Mambaforge'
 
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: '3.8'
-      #Github Token used to download python from the GitHub registry if it doesn't already exist locally
-      githubToken: $(GITHUB_REGISTRY_DL_TOKEN)
-    displayName: 'Use Python 3.8'
+  - bash: echo "##vso[task.prependpath]$HOME/mambaforge/bin"
+    displayName: Add Mamba to PATH
+
+  - script: |
+      conda config --set remote_max_retries 5
+      conda config --set remote_backoff_factor 60
+      # Ensure that conda/mamba install/update/remove commands
+      # do not try to mutate the environment beyond what's required.
+      conda config --add aggressive_update_packages nodefaults
+    displayName: 'Set conda config'
+
+  - script: |
+      source activate base
+      mamba install -y pip
+      pip install pipx
+      pipx run conda-lock install -n ${{ parameters.CONDA_ENV }} $(System.DefaultWorkingDirectory)/buildscripts/envs/conda-lock.yml
+    displayName: 'Create Mamba Env'
 
   - script: |
       set -eo pipefail
-      unamestr=`uname`
-      if [[ "$unamestr" == 'Linux' ]]; then
-        wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh
-      else
-        wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-MacOSX-x86_64.sh -O mambaforge.sh
-      fi
-      chmod +x mambaforge.sh
-      ./mambaforge.sh -b
-      export PATH=$HOME/mambaforge/bin:${PATH}
-      mamba create -y -n $CONDA_ENV python=$PYTHON_VERSION -c conda-forge
-      source activate $CONDA_ENV
-    env:
-      CONDA_ENV:  ${{ parameters.CONDA_ENV }}
-      PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
-    displayName: 'Download Mambaforge and Create Mamba Env'
-
-  - script: |
-      set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:${PATH}
-      source activate $CONDA_ENV
+      source activate ${{ parameters.CONDA_ENV }}
+      set -x
       mamba install -y numba -c numba/label/dev -c conda-forge
-    displayName: 'Install Numba-Dev'
+    displayName: 'Install Numba Dev'
     condition: and(succeeded(), eq('${{ parameters.useNumbaDev }}', 'true'))
 
   - task: DownloadSecureFile@1
@@ -79,32 +72,29 @@ jobs:
 
   - script: |
       set -eo pipefail
+      source activate ${{ parameters.CONDA_ENV }}
+      set -x
+
       sudo chmod a+r $(secret_file.secureFilePath)
       sudo cp $(secret_file.secureFilePath) $HOME/secret_file
-      export PATH=$HOME/mambaforge/bin:${PATH}
-      source activate $CONDA_ENV
-      export CHECK_LICENSE_PLATFORM=$(CHECK_LICENSE_PLATFORM)
-      export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
-      export OBFUSCATE=$(OBFUSCATE)
-      if [[ "${{ parameters.platformBuild }}" == "True" ]]; then
-        export PLATFORM_DEV_RELEASE=$(PLATFORM_DEV_RELEASE)
-      else
-        export PLATFORM_DEV_RELEASE="false"
-      fi
+
       export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+      USERNAME=`cat $HOME/secret_file | grep artifactory.ci.username | cut -f 2 -d' '`
+      TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
+
       cd $(System.DefaultWorkingDirectory)
-      ./buildscripts/bodo/azure/install_bodo.sh $BODO_VERSION $PLATFORM_DEV_RELEASE
-    displayName: 'Install Bodo from Mamba'
+      artifactory_channel=`./buildscripts/get_channel.sh`
+      # --no-update-deps ensures that no dependencies are upgraded.
+      # If the conda-lock file is out of date, this would cause this installation
+      # to fail. To fix, we usually need to update the lock-file.
+      mamba install -y bodo=$BODO_VERSION -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$artifactory_channel -c conda-forge --no-update-deps
+    displayName: 'Install Bodo from Artifactory'
 
   - script: |
       set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:${PATH}
-      source activate $CONDA_ENV
-      conda list -f numba
-    displayName: 'Check Numba Version'
+      source activate ${{ parameters.CONDA_ENV }}
+      set -x
 
-  - script: |
-      set -eo pipefail
       mkdir -p $HOME/bodo-inc
       cd $HOME/bodo-inc
       mkdir bodo
@@ -122,116 +112,30 @@ jobs:
 
   - script: |
       set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      # s3fs is required by pandas for S3 IO
-      # Cap the botocore version at 1.20.105 because 1.20.106 is incompatable
-      # with fsspec.
-      mamba install -y -c conda-forge fsspec>=2021.09 boto3 botocore=1.20.105 s3fs
-    displayName: 'Setup S3 Testing'
+      source activate ${{ parameters.CONDA_ENV }}
+      set -x
 
-  - script: |
-      set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      mamba install -y -c conda-forge 'gcsfs>=2022.1'
-    displayName: 'Setup GCS Testing'
-
-  - script: |
-      set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      pip install deltalake
-    displayName: 'Setup Deltalake Testing'
-
-  - script: |
-      set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      mamba install -y -c conda-forge pymysql sqlalchemy snowflake-sqlalchemy
-      mamba install -y -c conda-forge snowflake-connector-python --force --no-deps
-    displayName: 'Setup MySQL + Snowflake Testing'
-
-  - script: |
-      set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      mamba install -y -c conda-forge scikit-learn='1.1.*'
-    displayName: 'Setup Scikit-Learn Testing'
-
-  - script: |
-      set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      mamba install -y -c conda-forge openjdk=11
-      unamestr=`uname`
-      if [[ "$unamestr" == 'Linux' ]]; then
-        wget -q -O - "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
-      else
-        echo "Skipping..."
-      fi
-    displayName: 'Download Hadoop for ADLS Testing (only Linux)'
-
-  - script: |
-      set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      unamestr=`uname`
-      if [[ "$unamestr" == 'Linux' ]]; then
-        mamba install -y -c conda-forge 'openjdk=11' maven
-        cd azurefs-sas-token-provider
-        python setup.py develop
-      else
-        echo "Skipping..."
-      fi
+      wget -q -O - "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
+      cd azurefs-sas-token-provider
+      python setup.py develop
     displayName: "Setup Snowflake ADLS Testing (only Linux)"
 
   - script: |
       set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      mamba install -y -c conda-forge xlrd xlsxwriter openpyxl
-    displayName: 'Setup Excel Testing'
+      source activate ${{ parameters.CONDA_ENV }}
+      set -x
 
-  - task: DownloadSecureFile@1
-    name: testLicense
-    inputs:
-      secureFile: 'bodo.lic'
-    displayName: 'Download Test License'
-
-  # - script: |
-  #     set -eo pipefail
-  #     export PATH=$HOME/mambaforge/bin:$PATH
-  #     source activate $CONDA_ENV
-  #     mamba install -y 'matplotlib<=3.5.1' -c conda-forge
-  #   displayName: 'Matplotlib installation'
-
-  - script: |
-      set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      mamba install -y 'openjdk=11' -c conda-forge
-    displayName: 'Openjdk installation'
-
-  - script: |
-      set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      mamba install -y -c conda-forge 'openjdk=11' py4j=0.10.9.5 maven pyspark=3.2 mmh3=3.0
       cd iceberg
-      python setup.py develop
+      pip install -v .
     displayName: "Setup Iceberg Testing"
 
-  # Note that we use $(which unzip), because the
-  # mambaforge's unzip is not on SUDO's path, because SUDO uses a different PATH
   - script: |
-      set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      mamba install -y -c conda-forge sqlalchemy cx_oracle unzip
-      unamestr=`uname`
-      if [[ "$unamestr" == 'Linux' ]]; then
-        mamba install -y -c conda-forge  libaio
+      set -exo pipefail
+
+      source activate base
+      mamba install -y -c conda-forge unzip
+
+      if [[ "$(uname)" == 'Linux' ]]; then
         wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
         sudo $(which unzip) instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
       else
@@ -240,25 +144,16 @@ jobs:
       fi
     displayName: 'Setup Oracle Database Testing'
 
-  # TODO: Re-enable (https://bodo.atlassian.net/browse/BE-4122)
-  # - script: |
-  #     set -eo pipefail
-  #     export PATH=$HOME/mambaforge/bin:$PATH
-  #     source activate $CONDA_ENV
-  #     mamba install -y -c conda-forge psycopg2
-  #   displayName: 'Setup PostgreSQL Testing'
+  - task: DownloadSecureFile@1
+    name: testLicense
+    inputs:
+      secureFile: 'bodo.lic'
+    displayName: 'Download Test License'
 
   - script: |
       set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      mamba install -y pyspark=3.2 'openjdk=11' -c conda-forge
-    displayName: 'PySpark'
-
-  - script: |
-      set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
+      source activate ${{ parameters.CONDA_ENV }}
+      set -x
 
       mkdir env
       mamba env export | tee env/environment.yml
@@ -273,11 +168,12 @@ jobs:
 
   - script: |
       set -eo pipefail
+      source activate ${{ parameters.CONDA_ENV }}
+      set -x
+
       sudo chmod a+r $(testLicense.secureFilePath)
       sudo cp $(testLicense.secureFilePath) $HOME/bodo-inc
-      export PATH=$HOME/mambaforge/bin:${PATH}
-      source activate $CONDA_ENV
-      pip install pytest pytest-azurepipelines pytest-mock
+
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
         export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH
@@ -331,9 +227,9 @@ jobs:
       if [[ -n "$IS_RELEASE" ]]; then
         export IS_MAJOR_RELEASE=`python -c "import os; print(int(len(os.environ[\"IS_RELEASE\"].split(\".\")) < 3))"`
       fi
+      
       if [[ "$IS_MAJOR_RELEASE" == 1 ]]; then
-        export PATH=$HOME/mambaforge/bin:${PATH}
-        source activate $CONDA_ENV
+        source activate ${{ parameters.CONDA_ENV }}
         git clone https://github.com/Bodo-inc/Bodo-examples.git
         cd Bodo-examples/examples/tpch/
         # Invalid env variables for AWS credentials in the pipeline, s3 access is denied unless we run it by resetting them
