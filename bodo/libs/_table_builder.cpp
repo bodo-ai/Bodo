@@ -776,11 +776,18 @@ struct TableBuilderState {
     std::vector<int8_t> arr_array_types;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
     TableBuildBuffer builder;
+    // true if dictionaries of input batches are already unified and no
+    // unification is necessary during append. Only the dictionary array needs
+    // to be set from the latest batch since the upstream operator may have
+    // appended elements to it (which changes data pointers).
+    bool input_dics_unified;
 
     TableBuilderState(std::vector<int8_t> _arr_c_types,
-                      std::vector<int8_t> _arr_array_types)
+                      std::vector<int8_t> _arr_array_types,
+                      bool _input_dicts_unified)
         : arr_c_types(std::move(_arr_c_types)),
-          arr_array_types(std::move(_arr_array_types)) {
+          arr_array_types(std::move(_arr_array_types)),
+          input_dics_unified(_input_dicts_unified) {
         // Create dictionary builders for all columns
         for (size_t i = 0; i < arr_array_types.size(); i++) {
             if (arr_array_types[i] == bodo_array_type::DICT) {
@@ -798,21 +805,41 @@ struct TableBuilderState {
 
 TableBuilderState* table_builder_state_init_py_entry(int8_t* arr_c_types,
                                                      int8_t* arr_array_types,
-                                                     int n_arrs) {
+                                                     int n_arrs,
+                                                     bool input_dics_unified) {
     std::vector<int8_t> ctype_vec(n_arrs);
     std::vector<int8_t> ctype_arr_vec(n_arrs);
     for (int i = 0; i < n_arrs; i++) {
         ctype_vec[i] = arr_c_types[i];
         ctype_arr_vec[i] = arr_array_types[i];
     }
-    auto* state = new TableBuilderState(ctype_vec, ctype_arr_vec);
+    auto* state =
+        new TableBuilderState(ctype_vec, ctype_arr_vec, input_dics_unified);
     return state;
 }
 
 void table_builder_append_py_entry(TableBuilderState* state,
                                    table_info* in_table) {
     std::shared_ptr<table_info> tmp_table(in_table);
-    state->builder.UnifyTablesAndAppend(tmp_table, state->dict_builders);
+
+    if (state->input_dics_unified) {
+        // No need for unification if input is already unified by an upstream
+        // operator. The dictionary arrays need to be set from the latest batch
+        // since the upstream operator may have appended elements to them (which
+        // changes data pointers).
+        for (size_t i = 0; i < tmp_table->ncols(); i++) {
+            const std::shared_ptr<array_info>& arr = tmp_table->columns[i];
+            if (arr->arr_type == bodo_array_type::DICT) {
+                state->builder.data_table->columns[i]->child_arrays[0] =
+                    arr->child_arrays[0];
+            }
+        }
+
+        state->builder.ReserveTable(tmp_table);
+        state->builder.UnsafeAppendBatch(tmp_table);
+    } else {
+        state->builder.UnifyTablesAndAppend(tmp_table, state->dict_builders);
+    }
 }
 
 table_info* table_builder_finalize(TableBuilderState* state) {

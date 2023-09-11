@@ -24,6 +24,7 @@ from numba.core.ir_utils import (
     guard,
     mk_unique_var,
     replace_arg_nodes,
+    require,
 )
 from numba.core.typing.templates import Signature
 
@@ -90,6 +91,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.transforms.dataframe_pass import DataFramePass
+from bodo.transforms.typing_pass import _get_state_defining_call
 from bodo.utils.transform import (
     ReplaceFunc,
     avoid_udf_inline,
@@ -97,6 +99,8 @@ from bodo.utils.transform import (
     extract_keyvals_from_struct_map,
     get_call_expr_arg,
     replace_func,
+    set_2nd_to_last_arg_to_true,
+    set_last_arg_to_true,
     update_locs,
 )
 from bodo.utils.typing import (
@@ -1573,6 +1577,41 @@ class SeriesPass:
             and any(self.typemap[a.name] == boolean_array_type for a in rhs.args)
         ):
             return self._handle_ufuncs_bool_arr(func_name, rhs.args)
+
+        # Set input_dicts_unified flag if input is already unified in previous streaming
+        # operator
+        if fdef == ("table_builder_append", "bodo.libs.table_builder"):
+            state_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                rhs.args[0],
+                ("init_table_builder_state", "bodo.libs.table_builder"),
+            )
+            if (
+                state_def is not None
+                and self.calltypes[state_def].args[-1] == types.Omitted(False)
+                and guard(self._is_unified_streaming_output, rhs.args[1])
+            ):
+                set_last_arg_to_true(self, state_def)
+
+        # Set input_dicts_unified flag if input is already unified in previous streaming
+        # operator
+        if fdef == (
+            "snowflake_writer_append_table",
+            "bodo.io.snowflake_write",
+        ):
+            state_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                rhs.args[0],
+                ("snowflake_writer_init", "bodo.io.snowflake_write"),
+            )
+            if (
+                state_def is not None
+                and self.calltypes[state_def].args[-2] == types.Omitted(False)
+                and guard(self._is_unified_streaming_output, rhs.args[1])
+            ):
+                set_2nd_to_last_arg_to_true(self, state_def)
 
         # support matplot lib calls
         if "bodo.libs.matplotlib_ext" in sys.modules:
@@ -3883,6 +3922,29 @@ class SeriesPass:
         exec(func_text, {}, loc_vars)
         _h5_write_impl = loc_vars["_h5_write_impl"]
         return compile_func_single_block(_h5_write_impl, (dset, arr), None, self)
+
+    def _is_unified_streaming_output(self, table_var):
+        """Return True if table_var is output a streaming operator that unifies
+        dictionaries. Currently only supports join.
+        TODO[BSE-1197]: support other operators
+        """
+        table_def = get_definition(self.func_ir, table_var)
+
+        # handle projection
+        if is_call(table_def) and find_callname(
+            self.func_ir, table_def, self.typemap
+        ) == ("table_subset", "bodo.hiframes.table"):
+            return self._is_unified_streaming_output(table_def.args[0])
+
+        # join_probe_consume_batch's output is a tuple that is unpacked
+        require(is_expr(table_def, "static_getitem"))
+        table_def = get_definition(self.func_ir, table_def.value)
+        require(is_expr(table_def, "exhaust_iter"))
+        table_def = get_definition(self.func_ir, table_def.value)
+
+        require(is_call(table_def))
+        source_fname = find_callname(self.func_ir, table_def, self.typemap)
+        return source_fname == ("join_probe_consume_batch", "bodo.libs.stream_join")
 
     def _simplify_IR(self):
         """Simplify IR after Series pass transforms."""

@@ -1611,6 +1611,34 @@ def set_call_expr_arg(var, args, kws, arg_no, arg_name, add_if_missing=False):
         )  # pragma: no cover
 
 
+def set_last_arg_to_true(pass_info, rhs):
+    """set last argument of call expr 'rhs' to True, assuming that it is an Omitted
+    arg with value of False.
+    This is usually used for Bodo overloads that have an extra flag as last argument
+    to enable parallelism.
+    """
+    call_type = pass_info.calltypes.pop(rhs)
+    assert call_type.args[-1] == types.Omitted(
+        False
+    ), "Omitted(False) last argument expected"
+    pass_info.calltypes[rhs] = pass_info.typemap[rhs.func.name].get_call_type(
+        pass_info.typingctx, call_type.args[:-1] + (types.Omitted(True),), {}
+    )
+
+
+def set_2nd_to_last_arg_to_true(pass_info, rhs):
+    """Same as above but sets second to last argument to True"""
+    call_type = pass_info.calltypes.pop(rhs)
+    assert call_type.args[-2] == types.Omitted(
+        False
+    ), "Omitted(False) second to last argument expected"
+    pass_info.calltypes[rhs] = pass_info.typemap[rhs.func.name].get_call_type(
+        pass_info.typingctx,
+        call_type.args[:-2] + (types.Omitted(True),) + (call_type.args[-1],),
+        {},
+    )
+
+
 def avoid_udf_inline(py_func, arg_types, kw_types):
     """return True if UDF function should not be inlined because:
     1) it has assertions (which breaks prange)

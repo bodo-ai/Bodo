@@ -1362,6 +1362,7 @@ class PreserveIRTypeMap(PreserveIR):
     def run_pass(self, state):
         PreserveIR.run_pass(self, state)
         state.metadata["preserved_typemap"] = state.typemap.copy()
+        state.metadata["preserved_calltypes"] = state.calltypes.copy()
         return False
 
 

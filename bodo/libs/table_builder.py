@@ -162,7 +162,12 @@ register_model(TableBuilderStateType)(models.OpaqueModel)
 
 @intrinsic
 def _init_table_builder_state(
-    typingctx, arr_ctypes, arr_array_ctypes, n_arrs, output_state_type
+    typingctx,
+    arr_ctypes,
+    arr_array_ctypes,
+    n_arrs,
+    output_state_type,
+    input_dicts_unified,
 ):
     output_type = unwrap_typeref(output_state_type)
 
@@ -172,6 +177,7 @@ def _init_table_builder_state(
             arr_array_ctypes,
             n_arrs,
             _,
+            in_dicts_unified,
         ) = args
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
@@ -179,12 +185,15 @@ def _init_table_builder_state(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(32),
+                lir.IntType(1),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="table_builder_state_init_py_entry"
         )
-        ret = builder.call(fn_tp, (arr_ctypes, arr_array_ctypes, n_arrs))
+        ret = builder.call(
+            fn_tp, (arr_ctypes, arr_array_ctypes, n_arrs, in_dicts_unified)
+        )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
@@ -193,6 +202,7 @@ def _init_table_builder_state(
         types.voidptr,
         types.int32,
         output_state_type,
+        types.bool_,
     )
     return sig, codegen
 
@@ -238,7 +248,9 @@ def _init_chunked_table_builder_state(
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def init_table_builder_state(expected_state_type=None, use_chunked_builder=False):
+def init_table_builder_state(
+    expected_state_type=None, use_chunked_builder=False, input_dicts_unified=False
+):
     """Initialize the C++ TableBuilderState pointer"""
     expected_state_type = unwrap_typeref(expected_state_type)
     if is_overload_none(expected_state_type):
@@ -260,6 +272,7 @@ def init_table_builder_state(expected_state_type=None, use_chunked_builder=False
         def impl(
             expected_state_type=None,
             use_chunked_builder=False,
+            input_dicts_unified=False,
         ):  # pragma: no cover
             return _init_chunked_table_builder_state(
                 arr_dtypes.ctypes,
@@ -274,12 +287,14 @@ def init_table_builder_state(expected_state_type=None, use_chunked_builder=False
         def impl(
             expected_state_type=None,
             use_chunked_builder=False,
+            input_dicts_unified=False,
         ):  # pragma: no cover
             return _init_table_builder_state(
                 arr_dtypes.ctypes,
                 arr_array_types.ctypes,
                 n_arrs,
                 output_type,
+                input_dicts_unified,
             )
 
     return impl
