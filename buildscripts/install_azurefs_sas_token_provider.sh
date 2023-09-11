@@ -5,7 +5,6 @@ export PATH=$HOME/mambaforge/bin:$PATH
 
 
 # ---- Create Conda Env ----
-MAMBA_INSTALL="mamba install -y"
 # Deactivate if another script has already activated the env
 set +x
 source deactivate || true
