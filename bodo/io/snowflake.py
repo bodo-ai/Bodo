@@ -48,6 +48,15 @@ SF_READ_AUTO_DICT_ENCODE_ENABLED = True
 # Encode if num of unique elem / num of total rows <= SF_READ_DICT_ENCODE_CRITERION
 SF_READ_DICT_ENCODE_CRITERION = 0.5
 
+
+# Limits the dictionary size when deciding dictionary-encoded columns for the streaming
+# case since large dictionaries make streaming write extremely slow (also join slow).
+# Currently set to batch size to avoid dictionaries being larger than a batch to limit
+# overheads as a heuristic.
+# More details here: https://bodo.atlassian.net/browse/BSE-1200
+# TODO[BSE-1200] revisit the limit when join issues are resolved.
+SF_STREAM_READ_DICT_ENCODE_LIMIT = bodo.bodosql_streaming_batch_size
+
 # How long the dictionary encoding probe query should run for in the worst case.
 # This is to guard against increasing compilation time prohibitively in case there are
 # issues with Snowflake, the data, etc.
@@ -803,14 +812,18 @@ def _detect_column_dict_encoding(
         cardinality_data: pa.Table = prediction_query.fetch_arrow_all()  # type: ignore
         # calculate the level of uniqueness for each string column
         total_rows = cardinality_data[0][0].as_py()
-        uniqueness = [
-            cardinality_data[i][0].as_py() / max(total_rows, 1)
-            for i in range(1, len(query_args) + 1)
+        n_uniques = [
+            cardinality_data[i][0].as_py() for i in range(1, len(query_args) + 1)
         ]
         # filter the string col indices based on the criterion
+        n_rows = max(total_rows, 1)
         col_inds_to_convert = filter(
-            lambda x: x[0] <= SF_READ_DICT_ENCODE_CRITERION,
-            zip(uniqueness, string_col_ind),
+            lambda x: (x[0] / n_rows) <= SF_READ_DICT_ENCODE_CRITERION
+            and (
+                (not bodo.bodosql_use_streaming_plan)
+                or x[0] < SF_STREAM_READ_DICT_ENCODE_LIMIT
+            ),
+            zip(n_uniques, string_col_ind),
         )
         for _, ind in col_inds_to_convert:
             col_types[ind] = dict_str_arr_type
