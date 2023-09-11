@@ -125,6 +125,17 @@ void ArrayBuildBuffer::ReserveArrayTypeCheck(
     }
 }
 
+void ArrayBuildBuffer::ReserveSpaceForStringAppend(size_t new_char_count) {
+    int64_t capacity_chars = data_array->buffers[0]->capacity();
+    int64_t min_capacity_chars = data_array->n_sub_elems() + new_char_count;
+    if (min_capacity_chars > capacity_chars) {
+        int64_t new_capacity_chars =
+            std::max(min_capacity_chars, capacity_chars * 2);
+        CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(new_capacity_chars),
+                        "Reserve failed!");
+    }
+}
+
 void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr,
                                     const std::vector<bool>& reserve_rows,
                                     uint64_t reserve_rows_sum) {
@@ -136,21 +147,16 @@ void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr,
             throw std::runtime_error(
                 "Array length doesn't match bitmap size in ReserveArray");
         }
-        // update data buffer
-        int64_t capacity_chars = this->data_array->buffers[0]->capacity();
-        int64_t min_capacity_chars = this->data_array->n_sub_elems();
+        // update data buffer to be able to store all strings that have their
+        // corresponding entry in reserve_rows set to true
+        size_t new_capacity_chars = 0;
         offset_t* offsets = (offset_t*)in_arr->data2();
         for (uint64_t i = 0; i < in_arr->length; i++) {
             if (reserve_rows[i]) {
-                min_capacity_chars += offsets[i + 1] - offsets[i];
+                new_capacity_chars += offsets[i + 1] - offsets[i];
             }
         }
-        if (min_capacity_chars > capacity_chars) {
-            int64_t new_capacity_chars =
-                std::max(min_capacity_chars, capacity_chars * 2);
-            CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(new_capacity_chars),
-                            "Reserve failed!");
-        }
+        this->ReserveSpaceForStringAppend(new_capacity_chars);
     }
 }
 
@@ -159,16 +165,9 @@ void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr) {
     this->ReserveSize(in_arr->length);
 
     if (in_arr->arr_type == bodo_array_type::STRING) {
-        // update data buffer
-        int64_t capacity_chars = this->data_array->buffers[0]->capacity();
-        int64_t min_capacity_chars =
-            this->data_array->n_sub_elems() + in_arr->n_sub_elems();
-        if (min_capacity_chars > capacity_chars) {
-            int64_t new_capacity_chars =
-                std::max(min_capacity_chars, capacity_chars * 2);
-            CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(new_capacity_chars),
-                            "Reserve failed!");
-        }
+        // update data buffer to be able to store all strings from in_arr
+        this->ReserveSpaceForStringAppend(
+            static_cast<size_t>(in_arr->n_sub_elems()));
     }
 }
 
@@ -192,27 +191,33 @@ void ArrayBuildBuffer::ReserveArray(const ChunkedTableBuilder& chunked_tb,
 
     // In case of strings, calculate required size of characters buffer:
     if (in_arr_first_chunk->arr_type == bodo_array_type::STRING) {
-        // update data buffer
-        int64_t capacity_chars = this->data_array->buffers[0]->capacity();
-
-        int64_t min_capacity_chars = this->data_array->n_sub_elems();
+        // update data buffer to be able to store all strings from the chunked
+        // table
+        size_t new_capacity_chars = 0;
         for (auto& table : chunked_tb.chunks) {
             const std::shared_ptr<array_info>& arr = table->columns[array_idx];
             // TODO Remove pin/unpin requirement to get this information.
             // Looking at size_ of the buffers[0] might be sufficient
             // since we maintain that information correctly.
             arr->pin();
-            min_capacity_chars += arr->n_sub_elems();
+            new_capacity_chars += arr->n_sub_elems();
             arr->unpin();
         }
 
-        if (min_capacity_chars > capacity_chars) {
-            int64_t new_capacity_chars =
-                std::max(min_capacity_chars, capacity_chars * 2);
-            CHECK_ARROW_MEM(this->data_array->buffers[0]->Reserve(
-                                new_capacity_chars * sizeof(int8_t)),
-                            "ArrayBuilder::ReserveArray: Reserve failed!");
-        }
+        this->ReserveSpaceForStringAppend(new_capacity_chars);
+    }
+}
+
+void ArrayBuildBuffer::ReserveArrayRow(
+    const std::shared_ptr<array_info>& in_arr, size_t row_idx) {
+    this->ReserveArrayTypeCheck(in_arr);
+    this->ReserveSize(1);
+
+    if (in_arr->arr_type == bodo_array_type::STRING) {
+        // update data buffer to be able to store the string at in_arr[row_idx]
+        offset_t* offsets = (offset_t*)in_arr->data2();
+        size_t len = offsets[row_idx + 1] - offsets[row_idx];
+        this->ReserveSpaceForStringAppend(len);
     }
 }
 
@@ -367,7 +372,6 @@ void TableBuildBuffer::UnsafeAppendBatch(
     array_buffers[i].UnsafeAppendBatch<arr_type_exp, dtype_exp>( \
         in_arr, append_rows, append_rows_sum)
 #endif
-
     for (size_t i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info>& in_arr = in_table->columns[i];
         if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -529,7 +533,6 @@ void TableBuildBuffer::UnsafeAppendBatch(
 #define APPEND_BATCH(arr_type_exp, dtype_exp) \
     array_buffers[i].UnsafeAppendBatch<arr_type_exp, dtype_exp>(in_arr)
 #endif
-
     for (size_t i = 0; i < in_table->ncols(); i++) {
         const std::shared_ptr<array_info>& in_arr = in_table->columns[i];
         if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {

@@ -627,6 +627,15 @@ struct ArrayBuildBuffer {
                       const size_t array_idx);
 
     /**
+     * @brief Reserved enouch space to append in_arr[row_idx] as a row.
+     * @param in_arr input array used for finding new buffer sizes to reserve
+     * @param row_idx index of input array used for finding new buffer sizes to
+     * reserve
+     */
+    void ReserveArrayRow(const std::shared_ptr<array_info>& in_arr,
+                         size_t row_idx);
+
+    /**
      * @brief Reserve enough space to potentially append new_data_len new rows
      * to buffer.
      * NOTE: This does not reserve space for variable-sized
@@ -635,6 +644,16 @@ struct ArrayBuildBuffer {
      * @param new_data_len number of new rows that need reserved
      */
     void ReserveSize(uint64_t new_data_len);
+
+    /**
+     * @brief Reserve enough space to append additional characters
+     * NOTE: This function assumes that this ArrayBuildBuffer is building a
+     * string array.
+     *
+     * @param new_char_count the minimum number of characters that we should
+     * reserve space for.
+     */
+    void ReserveSpaceForStringAppend(size_t new_char_count);
 
     /**
      * @brief increment the size of the buffer by one to allow a new row to be

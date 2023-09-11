@@ -91,6 +91,17 @@ struct DictionaryBuilder {
 
    private:
     /**
+     * @brief Ensure in_arr[idx] is in the dictionary and return the index for
+     * it
+     * @param in_arr array of strings
+     * @param idx index into in_arr for the value we want in the dictionary
+     * @return index of the existing entry for in_arr[idx] or the index of the
+     * newly created entry for it.
+     */
+    dict_indices_t InsertIfNotExists(const std::shared_ptr<array_info>& in_arr,
+                                     size_t idx);
+
+    /**
      * @brief a unique identifier for a dictionary at a point in time
      */
     struct DictionaryID {
