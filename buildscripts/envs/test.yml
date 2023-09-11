@@ -46,17 +46,17 @@ dependencies:
 
   # Testing and CI
   - pytest
-  - pip:
-    - pytest-cov
-    - pytest-mock
-    - pytest-timeout
-    - pytest-xdist
-    - flaky
+  - pytest-cov
+  - pytest-mock
+  - pytest-timeout
+  - pytest-xdist
+  - flaky
+  - flake8
+  - credstash
 
-  # CI
+  # For deltalake testing
   - pip:
-    - credstash
-    - flake8
+    - deltalake
 
   # Future ML Libraries
   # Used to be installed on AWS CIs
