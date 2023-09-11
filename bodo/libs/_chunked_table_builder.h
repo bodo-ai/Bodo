@@ -111,10 +111,12 @@ struct ChunkedTableArrayBuilder {
                           const std::span<const int64_t> idxs, size_t idx_start,
                           size_t idx_length) {
         using T = typename dtype_to_type<dtype>::type;
-        T* out_data = (T*)this->data_array->data1();
-        T* in_data = (T*)in_arr->data1();
-        uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
-        const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+        T* out_data = (T*)this->data_array->data1<out_arr_type>();
+        T* in_data = (T*)in_arr->data1<in_arr_type>();
+        uint8_t* out_bitmask =
+            (uint8_t*)this->data_array->null_bitmask<out_arr_type>();
+        const uint8_t* in_bitmask =
+            (uint8_t*)in_arr->null_bitmask<in_arr_type>();
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
@@ -155,10 +157,12 @@ struct ChunkedTableArrayBuilder {
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
                           const std::span<const int64_t> idxs, size_t idx_start,
                           size_t idx_length) {
-        uint8_t* out_data = (uint8_t*)this->data_array->data1();
-        uint8_t* in_data = (uint8_t*)in_arr->data1();
-        uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
-        const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+        uint8_t* out_data = (uint8_t*)this->data_array->data1<out_arr_type>();
+        uint8_t* in_data = (uint8_t*)in_arr->data1<in_arr_type>();
+        uint8_t* out_bitmask =
+            (uint8_t*)this->data_array->null_bitmask<out_arr_type>();
+        const uint8_t* in_bitmask =
+            (uint8_t*)in_arr->null_bitmask<in_arr_type>();
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
@@ -200,9 +204,10 @@ struct ChunkedTableArrayBuilder {
                           const std::span<const int64_t> idxs, size_t idx_start,
                           size_t idx_length) {
         using T = typename dtype_to_type<dtype>::type;
-        T* out_data = (T*)this->data_array->data1();
-        T* in_data = (T*)in_arr->data1();
-        uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
+        T* out_data = (T*)this->data_array->data1<out_arr_type>();
+        T* in_data = (T*)in_arr->data1<in_arr_type>();
+        uint8_t* out_bitmask =
+            (uint8_t*)this->data_array->null_bitmask<out_arr_type>();
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
@@ -243,9 +248,10 @@ struct ChunkedTableArrayBuilder {
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
                           const std::span<const int64_t> idxs, size_t idx_start,
                           size_t idx_length) {
-        uint8_t* out_data = (uint8_t*)this->data_array->data1();
-        uint8_t* in_data = (uint8_t*)in_arr->data1();
-        uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
+        uint8_t* out_data = (uint8_t*)this->data_array->data1<out_arr_type>();
+        uint8_t* in_data = (uint8_t*)in_arr->data1<in_arr_type>();
+        uint8_t* out_bitmask =
+            (uint8_t*)this->data_array->null_bitmask<out_arr_type>();
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
@@ -287,8 +293,8 @@ struct ChunkedTableArrayBuilder {
                           const std::span<const int64_t> idxs, size_t idx_start,
                           size_t idx_length) {
         using T = typename dtype_to_type<dtype>::type;
-        T* out_data = (T*)this->data_array->data1();
-        T* in_data = (T*)in_arr->data1();
+        T* out_data = (T*)this->data_array->data1<out_arr_type>();
+        T* in_data = (T*)in_arr->data1<in_arr_type>();
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
@@ -325,9 +331,9 @@ struct ChunkedTableArrayBuilder {
                           const std::span<const int64_t> idxs, size_t idx_start,
                           size_t idx_length) {
         using T = typename dtype_to_type<dtype>::type;
-        T* out_data = (T*)this->data_array->data1();
-        T* in_data = (T*)in_arr->data1();
-        uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+        T* out_data = (T*)this->data_array->data1<out_arr_type>();
+        T* in_data = (T*)in_arr->data1<in_arr_type>();
+        uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask<in_arr_type>();
         for (size_t i = 0; i < idx_length; i++) {
             if (!arrow::bit_util::GetBit(in_bitmask, idxs[i + idx_start])) {
                 throw std::runtime_error(
@@ -370,9 +376,9 @@ struct ChunkedTableArrayBuilder {
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
                           const std::span<const int64_t> idxs, size_t idx_start,
                           size_t idx_length) {
-        uint8_t* out_data = (uint8_t*)this->data_array->data1();
-        uint8_t* in_data = (uint8_t*)in_arr->data1();
-        uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+        uint8_t* out_data = (uint8_t*)this->data_array->data1<out_arr_type>();
+        uint8_t* in_data = (uint8_t*)in_arr->data1<in_arr_type>();
+        uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask<in_arr_type>();
         for (size_t i = 0; i < idx_length; i++) {
             if (!arrow::bit_util::GetBit(in_bitmask, idxs[i + idx_start])) {
                 throw std::runtime_error(
@@ -418,8 +424,8 @@ struct ChunkedTableArrayBuilder {
                           size_t idx_length) {
         // TODO: Remove when Timedelta can be nullable.
         using T = typename dtype_to_type<dtype>::type;
-        T* out_data = (T*)this->data_array->data1();
-        T* in_data = (T*)in_arr->data1();
+        T* out_data = (T*)this->data_array->data1<out_arr_type>();
+        T* in_data = (T*)in_arr->data1<in_arr_type>();
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
@@ -459,9 +465,9 @@ struct ChunkedTableArrayBuilder {
                           size_t idx_length) {
         // TODO: Remove when Timedelta can be nullable.
         using T = typename dtype_to_type<dtype>::type;
-        T* out_data = (T*)this->data_array->data1();
-        T* in_data = (T*)in_arr->data1();
-        uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+        T* out_data = (T*)this->data_array->data1<out_arr_type>();
+        T* in_data = (T*)in_arr->data1<in_arr_type>();
+        uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask<in_arr_type>();
 
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
@@ -501,8 +507,8 @@ struct ChunkedTableArrayBuilder {
                           size_t idx_length) {
         // Copy the offsets
         offset_t* curr_offsets =
-            (offset_t*)this->data_array->data2() + this->size;
-        offset_t* in_offsets = (offset_t*)in_arr->data2();
+            (offset_t*)this->data_array->data2<out_arr_type>() + this->size;
+        offset_t* in_offsets = (offset_t*)in_arr->data2<in_arr_type>();
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
             offset_t new_length =
@@ -510,8 +516,8 @@ struct ChunkedTableArrayBuilder {
             curr_offsets[i + 1] = curr_offsets[i] + new_length;
         }
         // Copy the data
-        char* out_data = this->data_array->data1();
-        char* in_data = in_arr->data1();
+        char* out_data = this->data_array->data1<out_arr_type>();
+        char* in_data = in_arr->data1<in_arr_type>();
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
             offset_t out_offset = curr_offsets[i];
@@ -521,8 +527,10 @@ struct ChunkedTableArrayBuilder {
             memcpy(out_data + out_offset, in_data + in_offset, copy_len);
         }
         // Copy the null bitmap
-        uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
-        const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+        uint8_t* out_bitmask =
+            (uint8_t*)this->data_array->null_bitmask<out_arr_type>();
+        const uint8_t* in_bitmask =
+            (uint8_t*)in_arr->null_bitmask<in_arr_type>();
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
             bool null_bit = (row_idx >= 0) && GetBit(in_bitmask, row_idx);
@@ -622,7 +630,7 @@ struct ChunkedTableArrayBuilder {
         int64_t buffer_size = this->data_array->buffers[0]->size();
         // Compute the total amount of memory needed.
         int64_t total_memory = this->data_array->n_sub_elems();
-        const offset_t* offsets = (offset_t*)in_arr->data2();
+        const offset_t* offsets = (offset_t*)in_arr->data2<arr_type>();
         // Iterate over the max_rows we might keep and check the memory.
         size_t idx_end = idx_start + max_rows;
         for (size_t i = idx_start; i < idx_end; i++) {
@@ -696,7 +704,7 @@ struct ChunkedTableArrayBuilder {
             std::pow(2, (this->max_resize_count - 1) - (this->resize_count));
         // Compute the total amount of memory needed.
         int64_t total_memory = this->data_array->n_sub_elems();
-        const offset_t* offsets = (offset_t*)in_arr->data2();
+        const offset_t* offsets = (offset_t*)in_arr->data2<arr_type>();
         // Iterate over the max_rows we might keep and check the memory.
         size_t idx_end = idx_start + max_rows;
         for (size_t i = idx_start; i < idx_end; i++) {
@@ -796,7 +804,7 @@ struct ChunkedTableArrayBuilder {
 
         // Compute the total amount of memory needed.
         int64_t total_memory = this->data_array->n_sub_elems();
-        const offset_t* offsets = (offset_t*)in_arr->data2();
+        const offset_t* offsets = (offset_t*)in_arr->data2<in_arr_type>();
         // Iterate over the max_rows we might keep and check the memory.
         size_t idx_end = idx_start + idx_length;
         for (size_t i = idx_start; i < idx_end; i++) {

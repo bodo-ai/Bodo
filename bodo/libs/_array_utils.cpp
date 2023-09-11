@@ -717,8 +717,12 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             offset_t size_index = 0;
             offset_t size_data = 0;
             if (ArrRow.second >= 0) {
-                offset_t* index_offsets = (offset_t*)ArrRow.first->data3();
-                offset_t* data_offsets = (offset_t*)ArrRow.first->data2();
+                offset_t* index_offsets =
+                    (offset_t*)
+                        ArrRow.first->data3<bodo_array_type::LIST_STRING>();
+                offset_t* data_offsets =
+                    (offset_t*)
+                        ArrRow.first->data2<bodo_array_type::LIST_STRING>();
                 offset_t start_offset_index = index_offsets[ArrRow.second];
                 offset_t end_offset_index = index_offsets[ArrRow.second + 1];
                 size_index = end_offset_index - start_offset_index;
@@ -736,8 +740,10 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         uint8_t* out_sub_null_bitmask = (uint8_t*)out_arr->sub_null_bitmask();
         offset_t pos_index = 0;
         offset_t pos_data = 0;
-        offset_t* out_index_offsets = (offset_t*)out_arr->data3();
-        offset_t* out_data_offsets = (offset_t*)out_arr->data2();
+        offset_t* out_index_offsets =
+            (offset_t*)out_arr->data3<bodo_array_type::LIST_STRING>();
+        offset_t* out_data_offsets =
+            (offset_t*)out_arr->data2<bodo_array_type::LIST_STRING>();
         out_data_offsets[0] = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
@@ -749,9 +755,11 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             if (ArrRow.second >= 0) {
                 std::shared_ptr<array_info> e_col = ArrRow.first;
                 size_t i_row = ArrRow.second;
-                offset_t* in_index_offsets = (offset_t*)e_col->data3();
-                offset_t* in_data_offsets = (offset_t*)e_col->data2();
-                char* data1 = e_col->data1();
+                offset_t* in_index_offsets =
+                    (offset_t*)e_col->data3<bodo_array_type::LIST_STRING>();
+                offset_t* in_data_offsets =
+                    (offset_t*)e_col->data2<bodo_array_type::LIST_STRING>();
+                char* data1 = e_col->data1<bodo_array_type::LIST_STRING>();
                 uint8_t* in_sub_null_bitmask =
                     (uint8_t*)e_col->sub_null_bitmask();
                 offset_t start_index_offset = in_index_offsets[i_row];
@@ -769,11 +777,12 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
                 }
                 memcpy(&out_arr->data1()[pos_data], &data1[start_data_offset],
                        size_data);
-                bit = e_col->get_null_bit(ArrRow.second);
+                bit = e_col->get_null_bit<bodo_array_type::LIST_STRING>(
+                    ArrRow.second);
             }
             pos_index += size_index;
             pos_data += size_data;
-            out_arr->set_null_bit(iRow, bit);
+            out_arr->set_null_bit<bodo_array_type::LIST_STRING>(iRow, bit);
         }
         out_index_offsets[nRowOut] = pos_index;
     }
@@ -789,7 +798,8 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
                 get_iRow(iRow);
             offset_t size = 0;
             if (ArrRow.second >= 0) {
-                offset_t* in_offsets = (offset_t*)ArrRow.first->data2();
+                offset_t* in_offsets =
+                    (offset_t*)ArrRow.first->data2<bodo_array_type::STRING>();
                 offset_t end_offset = in_offsets[ArrRow.second + 1];
                 offset_t start_offset = in_offsets[ArrRow.second];
                 size = end_offset - start_offset;
@@ -799,7 +809,8 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         }
         out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype);
         offset_t pos = 0;
-        offset_t* out_offsets = (offset_t*)out_arr->data2();
+        offset_t* out_offsets =
+            (offset_t*)out_arr->data2<bodo_array_type::STRING>();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
                 get_iRow(iRow);
@@ -808,15 +819,18 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             bool bit = false;
             if (ArrRow.second >= 0) {
                 std::shared_ptr<array_info> e_col = ArrRow.first;
-                offset_t* in_offsets = (offset_t*)e_col->data2();
+                offset_t* in_offsets =
+                    (offset_t*)e_col->data2<bodo_array_type::STRING>();
                 offset_t start_offset = in_offsets[ArrRow.second];
-                char* out_ptr = out_arr->data1() + pos;
-                char* in_ptr = e_col->data1() + start_offset;
+                char* out_ptr = out_arr->data1<bodo_array_type::STRING>() + pos;
+                char* in_ptr =
+                    e_col->data1<bodo_array_type::STRING>() + start_offset;
                 memcpy(out_ptr, in_ptr, size);
                 pos += size;
-                bit = e_col->get_null_bit(ArrRow.second);
+                bit =
+                    e_col->get_null_bit<bodo_array_type::STRING>(ArrRow.second);
             }
-            out_arr->set_null_bit(iRow, bit);
+            out_arr->set_null_bit<bodo_array_type::STRING>(iRow, bit);
         }
         out_offsets[nRowOut] = pos;
     }
@@ -866,12 +880,19 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
                 bool null_bit = false;
                 if (ArrRow.second >= 0) {
                     std::shared_ptr<array_info> e_col = ArrRow.first;
-                    bool data_bit =
-                        GetBit((uint8_t*)e_col->data1(), ArrRow.second);
-                    SetBitTo((uint8_t*)out_arr->data1(), iRow, data_bit);
-                    null_bit = e_col->get_null_bit(ArrRow.second);
+                    bool data_bit = GetBit(
+                        (uint8_t*)
+                            e_col->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                        ArrRow.second);
+                    SetBitTo((uint8_t*)out_arr
+                                 ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                             iRow, data_bit);
+                    null_bit =
+                        e_col->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                            ArrRow.second);
                 }
-                out_arr->set_null_bit(iRow, null_bit);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    iRow, null_bit);
             }
         } else {
             uint64_t siztype = numpy_item_size[dtype];
@@ -881,12 +902,19 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
                 bool bit = false;
                 if (ArrRow.second >= 0) {
                     std::shared_ptr<array_info> e_col = ArrRow.first;
-                    char* out_ptr = out_arr->data1() + siztype * iRow;
-                    char* in_ptr = e_col->data1() + siztype * ArrRow.second;
+                    char* out_ptr =
+                        out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>() +
+                        siztype * iRow;
+                    char* in_ptr =
+                        e_col->data1<bodo_array_type::NULLABLE_INT_BOOL>() +
+                        siztype * ArrRow.second;
                     memcpy(out_ptr, in_ptr, siztype);
-                    bit = e_col->get_null_bit(ArrRow.second);
+                    bit =
+                        e_col->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                            ArrRow.second);
                 }
-                out_arr->set_null_bit(iRow, bit);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow,
+                                                                          bit);
             }
         }
     }
@@ -902,10 +930,12 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
                 get_iRow(iRow);
             //
-            char* out_ptr = out_arr->data1() + siztype * iRow;
+            char* out_ptr =
+                out_arr->data1<bodo_array_type::CATEGORICAL>() + siztype * iRow;
             char* in_ptr;
             if (ArrRow.second >= 0)
-                in_ptr = ArrRow.first->data1() + siztype * ArrRow.second;
+                in_ptr = ArrRow.first->data1<bodo_array_type::CATEGORICAL>() +
+                         siztype * ArrRow.second;
             else
                 in_ptr = vectNaN.data();
             memcpy(out_ptr, in_ptr, siztype);
@@ -927,10 +957,12 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
                 get_iRow(iRow);
             //
-            char* out_ptr = out_arr->data1() + siztype * iRow;
+            char* out_ptr =
+                out_arr->data1<bodo_array_type::NUMPY>() + siztype * iRow;
             char* in_ptr;
             if (ArrRow.second >= 0)
-                in_ptr = ArrRow.first->data1() + siztype * ArrRow.second;
+                in_ptr = ArrRow.first->data1<bodo_array_type::NUMPY>() +
+                         siztype * ArrRow.second;
             else
                 in_ptr = vectNaN.data();
             memcpy(out_ptr, in_ptr, siztype);
@@ -1307,8 +1339,8 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
     }
     if (arr1->arr_type == bodo_array_type::LIST_STRING) {
         // For STRING case we need to deal bitmask and the values.
-        bool bit1 = arr1->get_null_bit(pos1);
-        bool bit2 = arr2->get_null_bit(pos2);
+        bool bit1 = arr1->get_null_bit<bodo_array_type::LIST_STRING>(pos1);
+        bool bit2 = arr2->get_null_bit<bodo_array_type::LIST_STRING>(pos2);
         uint8_t* sub_null_bitmask1 = (uint8_t*)arr1->sub_null_bitmask();
         uint8_t* sub_null_bitmask2 = (uint8_t*)arr2->sub_null_bitmask();
         // (1): If bitmasks are different then we conclude they are not
@@ -1320,8 +1352,10 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
         // values.
         if (bit1) {
             // Here we consider the shifts in data2 for the comparison.
-            offset_t* data3_1 = (offset_t*)arr1->data3();
-            offset_t* data3_2 = (offset_t*)arr2->data3();
+            offset_t* data3_1 =
+                (offset_t*)arr1->data3<bodo_array_type::LIST_STRING>();
+            offset_t* data3_2 =
+                (offset_t*)arr2->data3<bodo_array_type::LIST_STRING>();
             offset_t len1 = data3_1[pos1 + 1] - data3_1[pos1];
             offset_t len2 = data3_2[pos2 + 1] - data3_2[pos2];
             // (2): If number of strings are different the they are
@@ -1329,8 +1363,10 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
             if (len1 != len2)
                 return false;
             // (3): Checking that the string lengths are the same
-            offset_t* data2_1 = (offset_t*)arr1->data2();
-            offset_t* data2_2 = (offset_t*)arr2->data2();
+            offset_t* data2_1 =
+                (offset_t*)arr1->data2<bodo_array_type::LIST_STRING>();
+            offset_t* data2_2 =
+                (offset_t*)arr2->data2<bodo_array_type::LIST_STRING>();
             offset_t pos1_prev = data3_1[pos1];
             offset_t pos2_prev = data3_2[pos2];
             for (offset_t u = 0; u < len1; u++) {
@@ -1350,8 +1386,10 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
             // (4): Checking the data1 array
             offset_t pos1_B = data2_1[data3_1[pos1]];
             offset_t pos2_B = data2_2[data3_2[pos2]];
-            char* data1_1_comp = arr1->data1() + pos1_B;
-            char* data1_2_comp = arr2->data1() + pos2_B;
+            char* data1_1_comp =
+                arr1->data1<bodo_array_type::LIST_STRING>() + pos1_B;
+            char* data1_2_comp =
+                arr2->data1<bodo_array_type::LIST_STRING>() + pos2_B;
             if (memcmp(data1_1_comp, data1_2_comp, tot_nb_char) != 0)
                 return false;
         } else {
@@ -1360,8 +1398,8 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
     }
     if (arr1->arr_type == bodo_array_type::STRING) {
         // For STRING case we need to deal bitmask and the values.
-        bool bit1 = arr1->get_null_bit(pos1);
-        bool bit2 = arr2->get_null_bit(pos2);
+        bool bit1 = arr1->get_null_bit<bodo_array_type::STRING>(pos1);
+        bool bit2 = arr2->get_null_bit<bodo_array_type::STRING>(pos2);
         // If bitmasks are different then we conclude they are not equal.
         if (bit1 != bit2)
             return false;
@@ -1369,8 +1407,10 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
         // values.
         if (bit1) {
             // Here we consider the shifts in data2 for the comparison.
-            offset_t* data2_1 = (offset_t*)arr1->data2();
-            offset_t* data2_2 = (offset_t*)arr2->data2();
+            offset_t* data2_1 =
+                (offset_t*)arr1->data2<bodo_array_type::STRING>();
+            offset_t* data2_2 =
+                (offset_t*)arr2->data2<bodo_array_type::STRING>();
             offset_t len1 = data2_1[pos1 + 1] - data2_1[pos1];
             offset_t len2 = data2_2[pos2 + 1] - data2_2[pos2];
             // If string lengths are different then they are different.
@@ -1379,8 +1419,8 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
             // Now we iterate over the characters for the comparison.
             offset_t pos1_prev = data2_1[pos1];
             offset_t pos2_prev = data2_2[pos2];
-            char* data1_1 = arr1->data1() + pos1_prev;
-            char* data1_2 = arr2->data1() + pos2_prev;
+            char* data1_1 = arr1->data1<bodo_array_type::STRING>() + pos1_prev;
+            char* data1_2 = arr2->data1<bodo_array_type::STRING>() + pos2_prev;
             if (memcmp(data1_1, data1_2, len1) != 0) {
                 return false;
             }
@@ -1409,8 +1449,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
     if (arr1->arr_type == bodo_array_type::NUMPY) {
         // In the case of NUMPY, we compare the values for concluding.
         uint64_t siztype = numpy_item_size[arr1->dtype];
-        char* ptr1 = arr1->data1() + (siztype * iRow1);
-        char* ptr2 = arr2->data1() + (siztype * iRow2);
+        char* ptr1 = arr1->data1<bodo_array_type::NUMPY>() + (siztype * iRow1);
+        char* ptr2 = arr2->data1<bodo_array_type::NUMPY>() + (siztype * iRow2);
         return NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
     }
     auto process_bits = [&](bool bit1, bool bit2) -> int {
@@ -1433,8 +1473,10 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
     if (arr1->arr_type == bodo_array_type::CATEGORICAL) {
         // In the case of CATEGORICAL, we need to check for null
         uint64_t siztype = numpy_item_size[arr1->dtype];
-        char* ptr1 = arr1->data1() + (siztype * iRow1);
-        char* ptr2 = arr2->data1() + (siztype * iRow2);
+        char* ptr1 =
+            arr1->data1<bodo_array_type::CATEGORICAL>() + (siztype * iRow1);
+        char* ptr2 =
+            arr2->data1<bodo_array_type::CATEGORICAL>() + (siztype * iRow2);
         bool is_not_na1 = !isnan_categorical_ptr(arr1->dtype, ptr1);
         bool is_not_na2 = !isnan_categorical_ptr(arr2->dtype, ptr2);
         int reply = process_bits(is_not_na1, is_not_na2);
@@ -1446,8 +1488,10 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
     }
     if (arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // NULLABLE case. We need to consider the bitmask and the values.
-        uint8_t* null_bitmask1 = (uint8_t*)arr1->null_bitmask();
-        uint8_t* null_bitmask2 = (uint8_t*)arr2->null_bitmask();
+        uint8_t* null_bitmask1 =
+            (uint8_t*)arr1->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
+        uint8_t* null_bitmask2 =
+            (uint8_t*)arr2->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
         bool bit1 = GetBit(null_bitmask1, iRow1);
         bool bit2 = GetBit(null_bitmask2, iRow2);
         // If one bitmask is T and the other the reverse then they are
@@ -1460,8 +1504,10 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
         // they are storing. Comparison is the same as for NUMPY.
         if (bit1) {
             if (arr1->dtype == Bodo_CTypes::_BOOL) {
-                uint8_t* data1 = (uint8_t*)arr1->data1();
-                uint8_t* data2 = (uint8_t*)arr2->data1();
+                uint8_t* data1 =
+                    (uint8_t*)arr1->data1<bodo_array_type::NULLABLE_INT_BOOL>();
+                uint8_t* data2 =
+                    (uint8_t*)arr2->data1<bodo_array_type::NULLABLE_INT_BOOL>();
                 bool bit1 = arrow::bit_util::GetBit(data1, iRow1);
                 bool bit2 = arrow::bit_util::GetBit(data2, iRow2);
                 if (bit1 == bit2) {
@@ -1477,8 +1523,10 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
                 }
             } else {
                 uint64_t siztype = numpy_item_size[arr1->dtype];
-                char* ptr1 = arr1->data1() + (siztype * iRow1);
-                char* ptr2 = arr2->data1() + (siztype * iRow2);
+                char* ptr1 = arr1->data1<bodo_array_type::NULLABLE_INT_BOOL>() +
+                             (siztype * iRow1);
+                char* ptr2 = arr2->data1<bodo_array_type::NULLABLE_INT_BOOL>() +
+                             (siztype * iRow2);
                 int test =
                     NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
                 return test;
@@ -1487,8 +1535,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
     }
     if (arr1->arr_type == bodo_array_type::LIST_STRING) {
         // For LIST_STRING case we need to deal bitmask and the values.
-        bool bit1 = arr1->get_null_bit(iRow1);
-        bool bit2 = arr2->get_null_bit(iRow2);
+        bool bit1 = arr1->get_null_bit<bodo_array_type::LIST_STRING>(iRow1);
+        bool bit2 = arr2->get_null_bit<bodo_array_type::LIST_STRING>(iRow2);
         uint8_t* sub_null_bitmask1 = (uint8_t*)arr1->sub_null_bitmask();
         uint8_t* sub_null_bitmask2 = (uint8_t*)arr2->sub_null_bitmask();
         // If bitmasks are different then we can conclude the comparison
@@ -1496,10 +1544,14 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
         if (reply != 0)
             return reply;
         if (bit1) {  // here bit1 = bit2
-            offset_t* data3_1 = (offset_t*)arr1->data3();
-            offset_t* data3_2 = (offset_t*)arr2->data3();
-            offset_t* data2_1 = (offset_t*)arr1->data2();
-            offset_t* data2_2 = (offset_t*)arr2->data2();
+            offset_t* data3_1 =
+                (offset_t*)arr1->data3<bodo_array_type::LIST_STRING>();
+            offset_t* data3_2 =
+                (offset_t*)arr2->data3<bodo_array_type::LIST_STRING>();
+            offset_t* data2_1 =
+                (offset_t*)arr1->data2<bodo_array_type::LIST_STRING>();
+            offset_t* data2_2 =
+                (offset_t*)arr2->data2<bodo_array_type::LIST_STRING>();
             // Computing the number of strings and their minimum
             offset_t nb_string1 = data3_1[iRow1 + 1] - data3_1[iRow1];
             offset_t nb_string2 = data3_2[iRow2 + 1] - data3_2[iRow2];
@@ -1526,8 +1578,10 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
                     if (len2 < len1) {
                         minlen = len2;
                     }
-                    char* data1_1 = arr1->data1() + pos1_prev;
-                    char* data1_2 = arr2->data1() + pos2_prev;
+                    char* data1_1 =
+                        arr1->data1<bodo_array_type::LIST_STRING>() + pos1_prev;
+                    char* data1_2 =
+                        arr2->data1<bodo_array_type::LIST_STRING>() + pos2_prev;
                     // We check the strings for comparison and check if we
                     // can conclude.
                     int test = std::memcmp(data1_2, data1_1, minlen);
@@ -1549,8 +1603,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
     }
     if (arr1->arr_type == bodo_array_type::STRING) {
         // For STRING case we need to deal bitmask and the values.
-        bool bit1 = arr1->get_null_bit(iRow1);
-        bool bit2 = arr2->get_null_bit(iRow2);
+        bool bit1 = arr1->get_null_bit<bodo_array_type::STRING>(iRow1);
+        bool bit2 = arr2->get_null_bit<bodo_array_type::STRING>(iRow2);
         // If bitmasks are different then we can conclude the comparison
         int reply = process_bits(bit1, bit2);
         if (reply != 0)
@@ -1559,8 +1613,10 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
         // values.
         if (bit1) {
             // Here we consider the shifts in data2 for the comparison.
-            offset_t* data2_1 = (offset_t*)arr1->data2();
-            offset_t* data2_2 = (offset_t*)arr2->data2();
+            offset_t* data2_1 =
+                (offset_t*)arr1->data2<bodo_array_type::STRING>();
+            offset_t* data2_2 =
+                (offset_t*)arr2->data2<bodo_array_type::STRING>();
             offset_t len1 = data2_1[iRow1 + 1] - data2_1[iRow1];
             offset_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
             // Compute minimal length
@@ -1570,8 +1626,10 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
             // From the common characters, we may be able to conclude.
             offset_t pos1_prev = data2_1[iRow1];
             offset_t pos2_prev = data2_2[iRow2];
-            char* data1_1 = (char*)arr1->data1() + pos1_prev;
-            char* data1_2 = (char*)arr2->data1() + pos2_prev;
+            char* data1_1 =
+                (char*)arr1->data1<bodo_array_type::STRING>() + pos1_prev;
+            char* data1_2 =
+                (char*)arr2->data1<bodo_array_type::STRING>() + pos2_prev;
             int test = std::memcmp(data1_2, data1_1, minlen);
             if (test)
                 return test;
@@ -2070,7 +2128,8 @@ bodo::vector<std::string> GetColumn_as_ListString(
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         if (arr->dtype == Bodo_CTypes::_BOOL) {
             for (size_t iRow = 0; iRow < nRow; iRow++) {
-                bool bit = arr->get_null_bit(iRow);
+                bool bit =
+                    arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow);
                 if (bit) {
                     bool data_bit = GetBit((uint8_t*)arr->data1(), iRow);
                     strOut = std::to_string(data_bit);
@@ -2082,9 +2141,12 @@ bodo::vector<std::string> GetColumn_as_ListString(
         } else {
             uint64_t siztype = numpy_item_size[arr->dtype];
             for (size_t iRow = 0; iRow < nRow; iRow++) {
-                bool bit = arr->get_null_bit(iRow);
+                bool bit =
+                    arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow);
                 if (bit) {
-                    char* ptrdata1 = &(arr->data1()[siztype * iRow]);
+                    char* ptrdata1 =
+                        &(arr->data1<bodo_array_type::NULLABLE_INT_BOOL>()
+                              [siztype * iRow]);
                     strOut =
                         GetStringExpression(arr->dtype, ptrdata1, arr->scale);
                 } else {
@@ -2097,7 +2159,8 @@ bodo::vector<std::string> GetColumn_as_ListString(
     if (arr->arr_type == bodo_array_type::NUMPY) {
         uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
-            char* ptrdata1 = &(arr->data1()[siztype * iRow]);
+            char* ptrdata1 =
+                &(arr->data1<bodo_array_type::NUMPY>()[siztype * iRow]);
             strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale);
             ListStr[iRow] = strOut;
         }
@@ -2119,10 +2182,10 @@ bodo::vector<std::string> GetColumn_as_ListString(
         }
     }
     if (arr->arr_type == bodo_array_type::STRING) {
-        offset_t* data2 = (offset_t*)arr->data2();
-        char* data1 = arr->data1();
+        offset_t* data2 = (offset_t*)arr->data2<bodo_array_type::STRING>();
+        char* data1 = arr->data1<bodo_array_type::STRING>();
         for (size_t iRow = 0; iRow < nRow; iRow++) {
-            bool bit = arr->get_null_bit(iRow);
+            bool bit = arr->get_null_bit<bodo_array_type::STRING>(iRow);
             if (bit) {
                 offset_t start_pos = data2[iRow];
                 offset_t end_pos = data2[iRow + 1];
@@ -2142,12 +2205,14 @@ bodo::vector<std::string> GetColumn_as_ListString(
         }
     }
     if (arr->arr_type == bodo_array_type::LIST_STRING) {
-        offset_t* index_offset = (offset_t*)arr->data3();
-        offset_t* data_offset = (offset_t*)arr->data2();
+        offset_t* index_offset =
+            (offset_t*)arr->data3<bodo_array_type::LIST_STRING>();
+        offset_t* data_offset =
+            (offset_t*)arr->data2<bodo_array_type::LIST_STRING>();
         uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask();
-        char* data1 = arr->data1();
+        char* data1 = arr->data1<bodo_array_type::LIST_STRING>();
         for (size_t iRow = 0; iRow < nRow; iRow++) {
-            bool bit = arr->get_null_bit(iRow);
+            bool bit = arr->get_null_bit<bodo_array_type::LIST_STRING>(iRow);
             if (bit) {
                 strOut = "[";
                 offset_t len = index_offset[iRow + 1] - index_offset[iRow];
@@ -2192,7 +2257,8 @@ bodo::vector<std::string> GetColumn_as_ListString(
     if (arr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
-            char* ptrdata1 = &(arr->data1()[siztype * iRow]);
+            char* ptrdata1 =
+                &(arr->data1<bodo_array_type::CATEGORICAL>()[siztype * iRow]);
             strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale);
             ListStr[iRow] = strOut;
         }

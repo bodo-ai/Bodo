@@ -414,6 +414,10 @@ struct bodo_array_type {
         INTERVAL = 7,
         DICT = 8,  // dictionary-encoded string array
         // string_array_split_view_type, etc.
+
+        // Used to fallback to runtime type checks
+        // for templated functions
+        UNKNOWN = 15,
     };
 };
 
@@ -553,28 +557,204 @@ struct array_info {
      *
      * @return char* data pointer
      */
-    char* data1() const;
-
+    template <
+        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+        requires(arr_type == bodo_array_type::UNKNOWN)
+    inline char* data1() const {
+        switch (this->arr_type) {
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::STRING:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            case bodo_array_type::INTERVAL:
+                return (char*)this->buffers[0]->mutable_data() + this->offset;
+            case bodo_array_type::LIST_STRING:
+                return this->child_arrays[0]->data1();
+            case bodo_array_type::DICT:
+            case bodo_array_type::ARRAY_ITEM:
+            case bodo_array_type::STRUCT:
+            default:
+                return nullptr;
+        }
+    }
+    /**
+     * @brief returns the first data pointer for the array if any.
+     *
+     * @return char* data pointer
+     */
+    template <bodo_array_type::arr_type_enum arr_type>
+        requires(arr_type != bodo_array_type::UNKNOWN)
+    inline char* data1() const {
+        switch (arr_type) {
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::STRING:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            case bodo_array_type::INTERVAL:
+                return (char*)this->buffers[0]->mutable_data() + this->offset;
+            case bodo_array_type::LIST_STRING:
+                return this->child_arrays[0]->data1();
+            case bodo_array_type::DICT:
+            case bodo_array_type::ARRAY_ITEM:
+            case bodo_array_type::STRUCT:
+            default:
+                return nullptr;
+        }
+    }
     /**
      * @brief returns the second data pointer for the array if any.
      *
      * @return char* data pointer
      */
-    char* data2() const;
-
+    template <
+        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+        requires(arr_type == bodo_array_type::UNKNOWN)
+    inline char* data2() const {
+        switch (this->arr_type) {
+            case bodo_array_type::STRING:
+            case bodo_array_type::INTERVAL:
+                return (char*)this->buffers[1]->mutable_data();
+            case bodo_array_type::LIST_STRING:
+                return this->child_arrays[0]->data2();
+            case bodo_array_type::DICT:
+            case bodo_array_type::ARRAY_ITEM:
+            case bodo_array_type::STRUCT:
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            default:
+                return nullptr;
+        }
+    }
+    /**
+     * @brief returns the second data pointer for the array if any.
+     *
+     * @return char* data pointer
+     */
+    template <
+        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+        requires(arr_type != bodo_array_type::UNKNOWN)
+    inline char* data2() const {
+        switch (arr_type) {
+            case bodo_array_type::STRING:
+            case bodo_array_type::INTERVAL:
+                return (char*)this->buffers[1]->mutable_data();
+            case bodo_array_type::LIST_STRING:
+                return this->child_arrays[0]->data2();
+            case bodo_array_type::DICT:
+            case bodo_array_type::ARRAY_ITEM:
+            case bodo_array_type::STRUCT:
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            default:
+                return nullptr;
+        }
+    }
     /**
      * @brief returns the third data pointer for the array if any.
      *
      * @return char* data pointer
      */
-    char* data3() const;
-
+    template <
+        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+        requires(arr_type == bodo_array_type::UNKNOWN)
+    inline char* data3() const {
+        switch (this->arr_type) {
+            case bodo_array_type::LIST_STRING:
+                return (char*)this->buffers[0]->mutable_data();
+            case bodo_array_type::STRING:
+            case bodo_array_type::INTERVAL:
+            case bodo_array_type::DICT:
+            case bodo_array_type::ARRAY_ITEM:
+            case bodo_array_type::STRUCT:
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            default:
+                return nullptr;
+        }
+    }
+    /**
+     * @brief returns the third data pointer for the array if any.
+     *
+     * @return char* data pointer
+     */
+    template <
+        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+        requires(arr_type != bodo_array_type::UNKNOWN)
+    inline char* data3() const {
+        switch (arr_type) {
+            case bodo_array_type::LIST_STRING:
+                return (char*)this->buffers[0]->mutable_data();
+            case bodo_array_type::STRING:
+            case bodo_array_type::INTERVAL:
+            case bodo_array_type::DICT:
+            case bodo_array_type::ARRAY_ITEM:
+            case bodo_array_type::STRUCT:
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            default:
+                return nullptr;
+        }
+    }
     /**
      * @brief returns the pointer to null bitmask buffer for the array if any.
      *
      * @return char* null bitmask pointer
      */
-    char* null_bitmask() const;
+    template <
+        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+        requires(arr_type == bodo_array_type::UNKNOWN)
+    inline char* null_bitmask() const {
+        switch (this->arr_type) {
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::LIST_STRING:
+            case bodo_array_type::ARRAY_ITEM:
+                return (char*)this->buffers[1]->mutable_data();
+            case bodo_array_type::STRING:
+                return (char*)this->buffers[2]->mutable_data();
+            case bodo_array_type::DICT:
+                return (char*)this->child_arrays[1]
+                    ->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
+            case bodo_array_type::STRUCT:
+                return (char*)this->buffers[0]->mutable_data();
+            case bodo_array_type::INTERVAL:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            default:
+                return nullptr;
+        }
+    }
+    /**
+     * @brief returns the pointer to null bitmask buffer for the array if any.
+     *
+     * @return char* null bitmask pointer
+     */
+    template <
+        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+        requires(arr_type != bodo_array_type::UNKNOWN)
+    inline char* null_bitmask() const {
+        switch (arr_type) {
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::LIST_STRING:
+            case bodo_array_type::ARRAY_ITEM:
+                return (char*)this->buffers[1]->mutable_data();
+            case bodo_array_type::STRING:
+                return (char*)this->buffers[2]->mutable_data();
+            case bodo_array_type::DICT:
+                return (char*)this->child_arrays[1]
+                    ->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
+            case bodo_array_type::STRUCT:
+                return (char*)this->buffers[0]->mutable_data();
+            case bodo_array_type::INTERVAL:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            default:
+                return nullptr;
+        }
+    }
 
     /**
      * @brief returns the pointer to null bitmask buffer for the nested array if
@@ -646,8 +826,10 @@ struct array_info {
         return ((T*)data1())[idx];
     }
 
-    bool get_null_bit(size_t idx) const {
-        return GetBit((uint8_t*)null_bitmask(), idx);
+    template <
+        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+    inline bool get_null_bit(size_t idx) const {
+        return GetBit((uint8_t*)null_bitmask<arr_type>(), idx);
     }
 
     /**
@@ -743,9 +925,10 @@ struct array_info {
             }
         }
     }
-
-    void set_null_bit(size_t idx, bool bit) {
-        SetBitTo((uint8_t*)null_bitmask(), idx, bit);
+    template <
+        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+    inline void set_null_bit(size_t idx, bool bit) {
+        SetBitTo((uint8_t*)null_bitmask<arr_type>(), idx, bit);
     }
 
     void pin() {
