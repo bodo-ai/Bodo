@@ -143,7 +143,9 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         cum_computation(
             [=](int64_t pos) -> std::pair<bool, T> {
-                return {!arr->get_null_bit(pos), arr->at<T>(pos)};
+                return {
+                    !arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(pos),
+                    arr->at<T>(pos)};
             },
             [=](int64_t pos, std::pair<bool, T> const& ePair) -> void {
                 out_arr->set_null_bit(pos, !ePair.first);
@@ -759,8 +761,9 @@ void median_computation(std::shared_ptr<array_info> arr,
         });
     }
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        median_operation(
-            [=](size_t pos) -> bool { return !arr->get_null_bit(pos); });
+        median_operation([=](size_t pos) -> bool {
+            return !arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(pos);
+        });
     }
 }
 
@@ -1273,7 +1276,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
             eset.clear();
             bool HasNullRow = false;
             while (true) {
-                if (arr->get_null_bit(i)) {
+                if (arr->get_null_bit<bodo_array_type::LIST_STRING>(i)) {
                     eset.insert(i);
                 } else {
                     HasNullRow = true;
@@ -1309,7 +1312,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
             eset.clear();
             bool HasNullRow = false;
             while (true) {
-                if (arr->get_null_bit(i)) {
+                if (arr->get_null_bit<bodo_array_type::STRING>(i)) {
                     eset.insert(i);
                 } else {
                     HasNullRow = true;
@@ -1345,7 +1348,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
             eset.clear();
             bool HasNullRow = false;
             while (true) {
-                if (arr->get_null_bit(i)) {
+                if (arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
                     eset.insert(i);
                 } else {
                     HasNullRow = true;
