@@ -1300,6 +1300,5 @@ void ChunkedTableBuilder::UnifyDictionariesAndAppend(
     }
     this->AppendBatch(std::make_shared<table_info>(out_arrs));
 }
-
 /* ------------------------------------------------------------------------
  */

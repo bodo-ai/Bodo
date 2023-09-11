@@ -5,6 +5,38 @@
 
 /* -------------------------- DictionaryBuilder --------------------------- */
 
+inline dict_indices_t DictionaryBuilder::InsertIfNotExists(
+    const std::shared_ptr<array_info>& in_arr, size_t idx) {
+    char* in_data = in_arr->data1();
+    offset_t* in_offsets = (offset_t*)in_arr->data2();
+
+    offset_t start_offset = in_offsets[idx];
+    offset_t end_offset = in_offsets[idx + 1];
+    int64_t len = end_offset - start_offset;
+    std::string_view val(&in_data[start_offset], len);
+
+    dict_indices_t ind;
+
+    // get existing index if already in hash table
+    if (auto it = this->dict_str_to_ind->find(val);
+        it != this->dict_str_to_ind->end()) {
+        ind = it->second;
+    } else {
+        // insert into hash table if not exists
+        ind = this->dict_str_to_ind->size();
+        // TODO: remove std::string() after upgrade to C++23
+        (*this->dict_str_to_ind)[std::string(val)] = ind;
+        this->dict_buff->AppendRow(in_arr, idx);
+        if (this->is_key) {
+            uint32_t hash;
+            hash_string_32(&in_data[start_offset], (const int)len,
+                           SEED_HASH_PARTITION, &hash);
+            this->dict_hashes->emplace_back(hash);
+        }
+    }
+    return ind;
+}
+
 DictionaryBuilder::DictionaryBuilder(std::shared_ptr<array_info> dict,
                                      bool is_key_, size_t transpose_cache_size)
     : is_key(is_key_),
@@ -32,24 +64,40 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
             "UnifyDictionaryArray: DICT or STRING array expected");
     }
 
+    bool not_empty_builder = this->dict_buff->data_array->array_id != 0;
     if (in_arr->arr_type == bodo_array_type::STRING) {
-        // If the input is a string array, we need to convert it to a dictionary
-        // array before we can unify it.
-        // arrow::Datum is a wrapper type for Arrow compute functions
-        // Allows for conversion from and to scalars, arrays, and tables
-        // Most compute functions take a Datum and return one
-        arrow::Datum dict_encoded_result;
-        CHECK_ARROW_AND_ASSIGN(
-            arrow::compute::DictionaryEncode(
-                to_arrow(in_arr),
-                arrow::compute::DictionaryEncodeOptions::Defaults(),
-                bodo::default_buffer_exec_context()),
-            "DictionaryEncode", dict_encoded_result);
+        // TODO(aneesh) move this out into it's own function
+        if (!not_empty_builder) {
+            this->dict_buff->data_array->array_id =
+                generate_array_id(this->dict_buff->data_array->length);
+        }
 
-        // Convert Datum -> arrow::Array -> array_info
-        auto dict_encoded_arr =
-            arrow_array_to_bodo(dict_encoded_result.make_array());
-        return this->UnifyDictionaryArray(dict_encoded_arr);
+        std::shared_ptr<array_info> out_indices_arr =
+            alloc_nullable_array(in_arr->length, Bodo_CTypes::INT32, 0);
+        dict_indices_t* out_inds = (dict_indices_t*)out_indices_arr->data1();
+
+        // copy null bitmask from input to output
+        char* src_null_bitmask = in_arr->null_bitmask();
+        char* dst_null_bitmask = out_indices_arr->null_bitmask();
+        size_t bytes_in_bitmask = arrow::bit_util::BytesForBits(in_arr->length);
+        memcpy(dst_null_bitmask, src_null_bitmask, bytes_in_bitmask);
+
+        for (size_t i = 0; i < in_arr->length; i++) {
+            // handle nulls in the dictionary
+            if (!in_arr->get_null_bit(i)) {
+                out_inds[i] = -1;
+            } else {
+                // We reserve space here instead of in InsertIfNotExists because
+                // it shouldn't really make a big difference. The downside is
+                // that we're checking the capacity and computing the length for
+                // each element.
+                this->dict_buff->ReserveArrayRow(in_arr, i);
+                out_inds[i] = this->InsertIfNotExists(in_arr, i);
+            }
+        }
+
+        return create_dict_string_array(this->dict_buff->data_array,
+                                        out_indices_arr);
     }
 
     auto iterationEvent(this->dict_builder_event.iteration());
@@ -85,8 +133,6 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         this->dict_buff->ReserveArray(batch_dict);
 
         // Check/update dictionary hash table and create transpose map
-        char* data = batch_dict->data1();
-        offset_t* offsets = (offset_t*)batch_dict->data2();
         // if new_transpose_map is already populated, only consider elements
         // that come after it ends
         for (size_t i = new_transpose_map.size(); i < batch_dict->length; i++) {
@@ -95,28 +141,8 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
                 new_transpose_map.emplace_back(-1);
                 continue;
             }
-            offset_t start_offset = offsets[i];
-            offset_t end_offset = offsets[i + 1];
-            int64_t len = end_offset - start_offset;
-            std::string_view val(&data[start_offset], len);
-            // get existing index if already in hash table
-            if (this->dict_str_to_ind->contains(val)) {
-                dict_indices_t ind = this->dict_str_to_ind->find(val)->second;
-                new_transpose_map.emplace_back(ind);
-            } else {
-                // insert into hash table if not exists
-                dict_indices_t ind = this->dict_str_to_ind->size();
-                // TODO: remove std::string() after upgrade to C++23
-                (*(this->dict_str_to_ind))[std::string(val)] = ind;
-                new_transpose_map.emplace_back(ind);
-                this->dict_buff->AppendRow(batch_dict, i);
-                if (this->is_key) {
-                    uint32_t hash;
-                    hash_string_32(&data[start_offset], (const int)len,
-                                   SEED_HASH_PARTITION, &hash);
-                    this->dict_hashes->emplace_back(hash);
-                }
-            }
+            new_transpose_map.emplace_back(
+                this->InsertIfNotExists(batch_dict, i));
         }
     };
     std::vector<int> new_transpose_map;
