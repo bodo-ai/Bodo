@@ -8,6 +8,7 @@ import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.RelWriter
 import org.apache.calcite.rel.core.TableScan
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl
@@ -27,6 +28,13 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
                 RelDataTypeFieldImpl(name, field.index, field.type)
             },
         )
+    }
+
+    // Update the digest to include listed columns
+    override fun explainTerms(pw: RelWriter): RelWriter {
+        val columnNames = deriveRowType().fieldNames
+        return super.explainTerms(pw)
+            .item("Columns", columnNames)
     }
 
     override fun getCatalogTable(): CatalogTableImpl = catalogTable
