@@ -724,7 +724,10 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
                                     in_offsets[str_start_offset + i];
             std::string_view val =
                 ArrowStrArrGetView<ARROW_ARRAY_TYPE>(str_arr, i);
-            if (!str_to_ind.contains(val)) {
+            if (auto it = str_to_ind.find(val); it != str_to_ind.end()) {
+                indices_arr->at<int32_t>(n_strings_copied + i) =
+                    it->second.first;
+            } else {
                 indices_arr->at<int32_t>(n_strings_copied + i) = count;
                 std::pair<int32_t, uint64_t> ind_offset_len =
                     std::make_pair(count++, total_distinct_chars);
@@ -732,9 +735,6 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
                 str_to_ind[std::string(val)] = ind_offset_len;
                 total_distinct_chars += length;
                 total_distinct_strings += 1;
-            } else {
-                indices_arr->at<int32_t>(n_strings_copied + i) =
-                    str_to_ind.find(val)->second.first;
             }
         }
         n_strings_copied += n_strings;
