@@ -20,6 +20,8 @@ from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
     test_db_snowflake_catalog,
 )
 from mpi4py import MPI
+from numba.core import types
+from numba.core.ir_utils import find_callname, guard
 
 import bodo
 from bodo.tests.user_logging_utils import (
@@ -28,6 +30,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
+    SeriesOptTestPipeline,
     check_func,
     create_snowflake_table,
     drop_snowflake_table,
@@ -36,6 +39,7 @@ from bodo.tests.utils import (
     pytest_snowflake,
 )
 from bodo.utils.typing import BodoError
+from bodo.utils.utils import is_call_assign
 
 pytestmark = pytest_snowflake
 
@@ -2176,6 +2180,84 @@ def test_snowflake_catalog_array_read(test_db_snowflake_catalog, memory_leak_che
     assert len(out.columns) == 3
     # [BSE-1152] TODO: properly test that out[out.columns[2]] is a correct array type once we support
     # proper array reads.
+
+
+def _check_stream_unify_opt(impl, bc, query, fdef, arg_no):
+    """Check the IR to make sure unification optimization worked ('fdef' call arg
+    'arg_no' is set to types.Omitted(True))
+    """
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+    bodo_func(bc, query)
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    calltypes = bodo_func.overloads[bodo_func.signatures[0]].metadata[
+        "preserved_calltypes"
+    ]
+    init_found = False
+    for block in fir.blocks.values():
+        for stmt in block.body:
+            if is_call_assign(stmt) and guard(find_callname, fir, stmt.value) == fdef:
+                assert calltypes[stmt.value].args[arg_no] == types.Omitted(
+                    True
+                ), "input_dicts_unified is not set to true in init"
+                init_found = True
+
+    assert init_found
+
+
+@pytest.mark.skipif(
+    not bodo.bodosql_use_streaming_plan, reason="Only relevant for streaming"
+)
+def test_stream_unification_opt(test_db_snowflake_catalog, memory_leak_check):
+    """Make sure compiler optimization sets input_dicts_unified flag of
+    snowflake_writer_init() and init_table_builder_state() to true after a join
+    """
+    catalog = test_db_snowflake_catalog
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    df1 = pd.DataFrame(
+        {
+            "A": pd.Series([5, None, 1, 0, None, 7] * 2, dtype="Int64"),
+            "C": ["T1_1", "T1_2", "T1_3", "T1_4", "T1_5", "T1_6"] * 2,
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": pd.Series([2, 5, 6, 6, None, 1] * 2, dtype="Int64"),
+            "D": ["T2_1", "T2_2", "T2_3", "T2_4", "T2_5", "T2_6"] * 2,
+        }
+    )
+    bc = bc.add_or_replace_view("table1", df1)
+    bc = bc.add_or_replace_view("table2", df2)
+
+    def impl(bc, query):
+        bc.sql(query)
+
+    comm = MPI.COMM_WORLD
+    table_name = None
+    if bodo.get_rank() == 0:
+        table_name = gen_unique_table_id("bodosql_catalog_write_unification_opt")
+    table_name = comm.bcast(table_name)
+
+    # test streaming write
+    query = f"CREATE OR REPLACE TEMPORARY TABLE {schema}.{table_name} as select C, D from __bodolocal__.table1 inner join __bodolocal__.table2 on __bodolocal__.table1.A = __bodolocal__.table2.A"
+    _check_stream_unify_opt(
+        impl,
+        bc,
+        query,
+        (
+            "snowflake_writer_init",
+            "bodo.io.snowflake_write",
+        ),
+        -2,
+    )
+
+    # test combine exchange
+    query = "select C, D from __bodolocal__.table1 inner join __bodolocal__.table2 on __bodolocal__.table1.A = __bodolocal__.table2.A"
+    _check_stream_unify_opt(
+        impl, bc, query, ("init_table_builder_state", "bodo.libs.table_builder"), -1
+    )
 
 
 def test_hidden_credentials(snowflake_sample_data_snowflake_catalog, memory_leak_check):

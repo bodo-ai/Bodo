@@ -4458,15 +4458,6 @@ class TypingTransforms:
             find_build_tuple(self.func_ir, args_var)
         return apply_assign, args_var
 
-    def _get_state_defining_call(self, state, fn):
-        """Find the expression defining `state` (e.g. join/table builder state)
-        and return it only if it is a call to `fn`."""
-        defn = get_definition(self.func_ir, state)
-        init = find_callname(self.func_ir, defn)
-        if init != fn:
-            raise GuardException("initialization is not the expected call")
-        return defn
-
     def _replace_state_definition(
         self,
         func_text: str,
@@ -4602,7 +4593,8 @@ class TypingTransforms:
                 return [assign]
 
             builder_def = guard(
-                self._get_state_defining_call,
+                _get_state_defining_call,
+                self.func_ir,
                 builder_state,
                 ("init_table_builder_state", "bodo.libs.table_builder"),
             )
@@ -4639,7 +4631,7 @@ class TypingTransforms:
                     default=None,
                     use_default=True,
                 )
-                if should_use_chunked_builder_arg == None:
+                if should_use_chunked_builder_arg is None:
                     should_use_chunked_builder_arg = False
                 else:
                     should_use_chunked_builder_type = self.typemap.get(
@@ -4653,6 +4645,27 @@ class TypingTransforms:
                         should_use_chunked_builder_type
                     )
 
+                inputs_unified_arg = get_call_expr_arg(
+                    "init_table_builder_state",
+                    builder_def.args,
+                    dict(builder_def.kws),
+                    2,
+                    "input_dicts_unified",
+                    default=None,
+                    use_default=True,
+                )
+                inputs_unified_txt = ""
+                if inputs_unified_arg is not None:
+                    inputs_unified_type = self.typemap.get(
+                        inputs_unified_arg.name, None
+                    )
+                    if not is_overload_constant_bool(inputs_unified_type):
+                        raise BodoError(
+                            "init_table_builder_state(): inputs_unified must be a constant boolean value"
+                        )
+                    inputs_unified_arg = get_overload_const_bool(inputs_unified_type)
+                    inputs_unified_txt = f"input_dicts_unified={inputs_unified_arg}"
+
                 args = []
                 new_type = bodo.libs.table_builder.TableBuilderStateType(
                     input_table_type, should_use_chunked_builder_arg
@@ -4661,7 +4674,8 @@ class TypingTransforms:
                     "def impl():\n"
                     "  return bodo.libs.table_builder.init_table_builder_state(\n"
                     "    expected_state_type=_expected_state_type,\n"
-                    "    use_chunked_builder=_should_use_chunked_builder_arg\n"
+                    "    use_chunked_builder=_should_use_chunked_builder_arg,\n"
+                    f"    {inputs_unified_txt}\n"
                     "  )\n"
                 )
 
@@ -4671,12 +4685,14 @@ class TypingTransforms:
                     {
                         "_expected_state_type": new_type,
                         "_should_use_chunked_builder_arg": should_use_chunked_builder_arg,
+                        "_inputs_unified_arg": inputs_unified_arg,
                     },
                     args,
                     builder_state,
                     builder_def,
                     label,
                 )
+
         return [assign]
 
     def _run_call_stream_write(self, assign, rhs, func_name, label):  # pragma: no cover
@@ -4716,7 +4732,8 @@ class TypingTransforms:
                 return [assign]
 
             writer_init_def = guard(
-                self._get_state_defining_call,
+                _get_state_defining_call,
+                self.func_ir,
                 write_state,
                 ("snowflake_writer_init", "bodo.io.snowflake_write"),
             )
@@ -4807,8 +4824,8 @@ class TypingTransforms:
 
             # Fetch the join information from the definition
             join_state = rhs.args[0]
-            join_def = self._get_state_defining_call(
-                join_state, ("init_join_state", "bodo.libs.stream_join")
+            join_def = _get_state_defining_call(
+                self.func_ir, join_state, ("init_join_state", "bodo.libs.stream_join")
             )
             if join_def is None:
                 self.needs_transform = True
@@ -6927,3 +6944,13 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount):
         i += 2
 
     return bytes(new_code)
+
+
+def _get_state_defining_call(func_ir, state, fn):
+    """Find the expression defining `state` (e.g. join/table builder state)
+    and return it only if it is a call to `fn`."""
+    defn = get_definition(func_ir, state)
+    init = find_callname(func_ir, defn)
+    if init != fn:
+        raise GuardException("initialization is not the expected call")
+    return defn

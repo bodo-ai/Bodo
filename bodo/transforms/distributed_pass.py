@@ -66,6 +66,7 @@ from bodo.utils.transform import (
     get_call_expr_arg,
     get_const_value_inner,
     set_call_expr_arg,
+    set_last_arg_to_true,
 )
 from bodo.utils.typing import (
     BodoError,
@@ -510,17 +511,17 @@ class DistributedPass:
 
         if fdef == ("interp_bin_search", "bodo.libs.array_kernels"):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
 
         if fdef == ("bodosql_listagg", "bodo.libs.bodosql_listagg"):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
 
         if fdef == (
             "generate_table_nbytes",
             "bodo.utils.table_utils",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
@@ -550,14 +551,14 @@ class DistributedPass:
             "snowflake_writer_init",
             "bodo.io.snowflake_write",
         ) and self._is_1D_or_1D_Var_arr(lhs):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "init_groupby_state",
             "bodo.libs.stream_groupby",
         ) and self._is_1D_or_1D_Var_arr(lhs):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
@@ -573,7 +574,7 @@ class DistributedPass:
             )
         ):  # pragma: no cover
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
                 return [assign]
 
         if (
@@ -604,7 +605,7 @@ class DistributedPass:
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
@@ -617,7 +618,7 @@ class DistributedPass:
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
@@ -642,7 +643,7 @@ class DistributedPass:
             )
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
                 return [assign]
         if (
             func_name == "fit_transform"
@@ -658,7 +659,7 @@ class DistributedPass:
             )
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
                 return [assign]
 
         if (
@@ -1259,7 +1260,7 @@ class DistributedPass:
         if func_mod == "sklearn.metrics.pairwise" and func_name == "cosine_similarity":
             # Set last argument to True if X is distributed
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
 
             # Set second-to-last argument to True if Y exists and is distributed
             # Y could be passed in as the second positional arg, or a kwarg if not None.
@@ -1285,7 +1286,7 @@ class DistributedPass:
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
             # Not checking get_n_splits for KFold since it might not have a first arg
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
@@ -1298,7 +1299,7 @@ class DistributedPass:
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
@@ -1823,7 +1824,7 @@ class DistributedPass:
                 "bodo.hiframes.rolling",
             ),
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if (
@@ -1857,7 +1858,7 @@ class DistributedPass:
             "is_in",
             "bodo.libs.bodosql_array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[1].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return
 
         if (
@@ -1898,7 +1899,7 @@ class DistributedPass:
             ("percentile_cont", "bodo.libs.array_kernels"),
             ("percentile_disc", "bodo.libs.array_kernels"),
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("nunique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
@@ -1912,59 +1913,59 @@ class DistributedPass:
         if fdef == ("unique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "accum_func",
             "bodo.libs.array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "intersection_mask",
             "bodo.libs.array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "first_last_valid_index",
             "bodo.libs.array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("tile_transpose_upcast_helper", "bodo.libs.array_kernels"):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):  # pragma: no cover
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "get_valid_entries_from_date_offset",
             "bodo.libs.array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("pivot_impl", "bodo.hiframes.pd_dataframe_ext") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "ffill_bfill_arr",
             "bodo.libs.array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("nonzero", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
@@ -1981,25 +1982,25 @@ class DistributedPass:
         if fdef == ("nancorr", "bodo.libs.array_kernels") and (
             self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("series_monotonicity", "bodo.libs.array_kernels") and (
             self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("autocorr", "bodo.libs.array_kernels") and (
             self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("array_op_median", "bodo.libs.array_ops") and (
             self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("array_op_describe", "bodo.libs.array_ops") and (
@@ -2039,33 +2040,33 @@ class DistributedPass:
         if fdef == ("duplicated", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "drop_duplicates_table",
             "bodo.utils.table_utils",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == ("union_tables", "bodo.libs.array") and self._is_1D_or_1D_Var_arr(
             lhs
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
             "drop_duplicates_array",
             "bodo.libs.array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if func_name == "rebalance" and func_mod in {
@@ -2073,7 +2074,7 @@ class DistributedPass:
             "bodo",
         }:
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
                 return [assign]
             else:
                 warnings.warn("Invoking rebalance on a replicated array has no effect")
@@ -2082,7 +2083,7 @@ class DistributedPass:
             "get_chunk_bounds",
             "bodo.libs.distributed_api",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if func_name == "random_shuffle" and func_mod in {
@@ -2090,13 +2091,13 @@ class DistributedPass:
             "bodo",
         }:
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
                 return [assign]
 
         if fdef == ("sample_table_operation", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
 
         if fdef == (
@@ -2261,10 +2262,10 @@ class DistributedPass:
         if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg"):
             # Dataframe is the 3rd argument (counting from 0)
             df_arg = rhs.args[3].name
-            if self._is_1D_or_1D_Var_arr(df_arg) and self._set_last_arg_to_true(
-                assign.value
+            if self._is_1D_or_1D_Var_arr(df_arg) and set_last_arg_to_true(
+                self, assign.value
             ):
-                self._set_last_arg_to_true(assign.value)
+                set_last_arg_to_true(self, assign.value)
                 return [assign]
 
         # replace get_type_max_value(arr.dtype) since parfors
@@ -2548,7 +2549,7 @@ class DistributedPass:
     def _run_call_df(self, lhs, df, func_name, assign, args):
         """transform DataFrame calls to be distributed"""
         if func_name in ("to_parquet", "to_sql") and self._is_1D_or_1D_Var_arr(df.name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
             return [assign]
         elif func_name == "to_csv" and self._is_1D_or_1D_Var_arr(df.name):
             # avoid header for non-zero ranks
@@ -2816,7 +2817,7 @@ class DistributedPass:
 
     def _run_call_series(self, lhs, series, func_name, assign, args):
         if func_name == "to_csv" and self._is_1D_or_1D_Var_arr(series.name):
-            self._set_last_arg_to_true(assign.value)
+            set_last_arg_to_true(self, assign.value)
         return [assign]
 
     def _gen_csv_header_node(self, cond_var, fname_var):
@@ -4580,18 +4581,6 @@ class DistributedPass:
         first_block = blocks[topo_order[0]]
         first_block.body = nodes + first_block.body
         return
-
-    def _set_last_arg_to_true(self, rhs):
-        """set last argument of call expr 'rhs' to True, assuming that it is an Omitted
-        arg with value of False.
-        This is usually used for Bodo overloads that have an extra flag as last argument
-        to enable parallelism.
-        """
-        call_type = self.calltypes.pop(rhs)
-        assert call_type.args[-1] == types.Omitted(False)
-        self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
-            self.typingctx, call_type.args[:-1] + (types.Omitted(True),), {}
-        )
 
     def _set_ith_arg_to_unliteral(self, rhs: ir.Expr, i: int) -> None:
         """Set the ith argument of call expr 'rhs' to a nonliteral version.
