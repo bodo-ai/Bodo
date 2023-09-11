@@ -372,6 +372,7 @@ def snowflake_writer_init(
     if_exists,
     table_type,
     expected_state_type=None,
+    input_dicts_unified=False,
     _is_parallel=False,
 ):  # pragma: no cover
     expected_state_type = unwrap_typeref(expected_state_type)
@@ -385,7 +386,7 @@ def snowflake_writer_init(
     )
 
     func_text = (
-        "def impl(conn, table_name, schema, if_exists, table_type, expected_state_type=None, _is_parallel=False):\n"
+        "def impl(conn, table_name, schema, if_exists, table_type, expected_state_type=None, input_dicts_unified=False, _is_parallel=False):\n"
         "    ev = tracing.Event('snowflake_writer_init', is_parallel=_is_parallel)\n"
         "    location = ''\n"
     )
@@ -408,7 +409,7 @@ def snowflake_writer_init(
         "    writer['copy_into_prev_sfqid'] = ''\n"
         "    writer['file_count_global_prev'] = 0\n"
         "    writer['upload_threads_exists'] = False\n"
-        "    writer['batches'] = bodo.libs.table_builder.init_table_builder_state(table_builder_state_type)\n"
+        "    writer['batches'] = bodo.libs.table_builder.init_table_builder_state(table_builder_state_type, input_dicts_unified=input_dicts_unified)\n"
         "    writer['curr_mem_size'] = 0\n"
         # Connect to Snowflake on rank 0 and get internal stage credentials
         # Note: Identical to the initialization code in df.to_sql()
