@@ -6,10 +6,8 @@
  * @copyright Copyright (C) 2023 Bodo Inc. All rights reserved.
  *
  */
+#pragma once
 #include "_bodo_common.h"
-#ifndef _CRYPTO_FUNCS_H_INCLUDED
-#define _CRYPTO_FUNCS_H_INCLUDED
-#endif
 
 enum crypto_function {
     md5 = 0,
