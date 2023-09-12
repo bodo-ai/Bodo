@@ -39,6 +39,7 @@ constexpr int64_t DEFAULT_ROW_GROUP_SIZE = 1000000;  // in number of rows
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it. If it is ok, get value using ValueOrDie
 // and assign it to lhs using std::move
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK_ARROW(res.status(), msg)            \
     lhs = std::move(res).ValueOrDie();

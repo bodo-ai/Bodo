@@ -230,6 +230,7 @@ npy_datetime npy_datetimestruct_to_datetime(int64_t year, int month, int day,
  */
 void* box_datetime_date_array(int64_t n, const int32_t* data,
                               const uint8_t* null_bitmap) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -290,12 +291,14 @@ void* box_datetime_date_array(int64_t n, const int32_t* data,
  */
 void unbox_datetime_date_array(PyObject* obj, int64_t n, int32_t* data,
                                uint8_t* null_bitmap) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return;                        \
     }
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -384,6 +387,7 @@ const static int64_t _NANOS_PER_HOUR = 60 * _NANOS_PER_MINUTE;
  */
 void* box_time_array(int64_t n, const int64_t* data, const uint8_t* null_bitmap,
                      uint8_t precision) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -446,12 +450,14 @@ void* box_time_array(int64_t n, const int64_t* data, const uint8_t* null_bitmap,
  */
 void unbox_time_array(PyObject* obj, int64_t n, int64_t* data,
                       uint8_t* null_bitmap) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return;                        \
     }
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -526,6 +532,7 @@ void* box_datetime_timedelta_array(int64_t n, const int64_t* days_data,
                                    const int64_t* seconds_data,
                                    const int64_t* microseconds_data,
                                    const uint8_t* null_bitmap) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -592,12 +599,14 @@ void unbox_datetime_timedelta_array(PyObject* obj, int64_t n,
                                     int64_t* days_data, int64_t* seconds_data,
                                     int64_t* microseconds_data,
                                     uint8_t* null_bitmap) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return;                        \
     }
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -688,6 +697,7 @@ void unbox_datetime_timedelta_array(PyObject* obj, int64_t n,
  */
 PyObject* box_date_offset(int64_t n, bool normalize, int64_t fields_arr[18],
                           bool has_kws) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -770,6 +780,7 @@ PyObject* box_date_offset(int64_t n, bool normalize, int64_t fields_arr[18],
  * @param fields_arr Array of fields that must be initialized
  */
 bool unbox_date_offset(PyObject* obj, int64_t fields_arr[18]) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \

@@ -637,7 +637,8 @@ void generate_build_table_outer_rows_for_partition(
     // Add unmatched rows from build table to output table
     for (size_t i_row = 0;
          i_row < partition->build_table_buffer.data_table->nrows(); i_row++) {
-        if ((!requires_reduction || ((i_row % n_pes) == my_rank))) {
+        if ((!requires_reduction ||
+             ((i_row % n_pes) == static_cast<size_t>(my_rank)))) {
             bool has_match = GetBit(build_table_matched_->data(), i_row);
             if (!has_match) {
                 build_idxs.push_back(i_row);
@@ -1520,8 +1521,8 @@ std::shared_ptr<table_info> filter_na_values(
         } else if (build_table_outer) {
             // If build table is replicated but output is not
             // replicated evenly divide NA values across all ranks.
-            append_nas[i] =
-                add_all || ((join_state->build_na_counter % n_pes) == myrank);
+            append_nas[i] = add_all || ((join_state->build_na_counter %
+                                         n_pes) == static_cast<size_t>(myrank));
             join_state->build_na_counter++;
         }
     }
@@ -2478,7 +2479,7 @@ uint32_t get_partition_top_bitmask_by_idx(JoinState* join_state, int64_t idx) {
     try {
         std::vector<std::shared_ptr<JoinPartition>>& partitions =
             ((HashJoinState*)join_state)->partitions;
-        if (idx >= partitions.size()) {
+        if (static_cast<size_t>(idx) >= partitions.size()) {
             throw std::runtime_error(
                 "get_partition_top_bitmask_by_idx: partition index " +
                 std::to_string(idx) + " out of bound: " + std::to_string(idx) +

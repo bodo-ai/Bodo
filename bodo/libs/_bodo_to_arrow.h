@@ -15,6 +15,7 @@
 // runtime_error with it. If it is ok, get value using ValueOrDie
 // and assign it to lhs using std::move
 #ifndef CHECK_ARROW_AND_ASSIGN
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs)                  \
     if (!(res.status().ok())) {                                \
         std::string err_msg = std::string("Error in arrow ") + \

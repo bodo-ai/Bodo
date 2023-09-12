@@ -6,7 +6,12 @@
 #include "parquet_reader.h"
 #include <span>
 #include "../libs/_array_utils.h"
+
+// Silence warnings from including generated code
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
 #include "arrow_ext.cpp"
+#pragma GCC diagnostic pop
 
 using arrow::Type;
 using parquet::ParquetFileReader;
