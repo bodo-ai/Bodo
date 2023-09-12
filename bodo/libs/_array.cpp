@@ -445,7 +445,6 @@ array_info* info_from_table(table_info* table, int64_t col_ind) {
  * @return std::shared_ptr<array_info> Bodo string array
  */
 std::shared_ptr<array_info> string_array_from_pyarrow(PyObject* pyarrow_arr) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -487,7 +486,6 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
                                 int64_t* out_n_chars, NRT_MemInfo** data_arr,
                                 NRT_MemInfo** offsets_arr,
                                 NRT_MemInfo** null_bitmap_arr, int is_bytes) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -630,7 +628,6 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
  * @return int64_t total number of data elements
  */
 int64_t count_total_elems_list_array(PyObject* list_arr_obj) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -699,7 +696,6 @@ inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
 void array_item_array_from_sequence(PyObject* list_arr_obj, char* data,
                                     offset_t* offsets, uint8_t* null_bitmap,
                                     Bodo_CTypes::CTypeEnum dtype) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -791,7 +787,6 @@ void* np_array_from_array_item_array(int64_t num_lists, const char* buffer,
                                      const offset_t* offsets,
                                      const uint8_t* null_bitmap,
                                      Bodo_CTypes::CTypeEnum dtype) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -859,7 +854,6 @@ void* np_array_from_map_array(int64_t num_maps, const char* key_data,
                               const uint8_t* null_bitmap,
                               Bodo_CTypes::CTypeEnum key_dtype,
                               Bodo_CTypes::CTypeEnum value_dtype) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -933,7 +927,6 @@ void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
                                 char** data, uint8_t* null_bitmap,
                                 int32_t* dtypes, char** field_names,
                                 bool is_tuple_array) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -1009,7 +1002,6 @@ void map_array_from_sequence(PyObject* map_arr_obj, char* key_data,
                              uint8_t* null_bitmap,
                              Bodo_CTypes::CTypeEnum key_dtype,
                              Bodo_CTypes::CTypeEnum value_dtype) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -1077,7 +1069,6 @@ void map_array_from_sequence(PyObject* map_arr_obj, char* key_data,
  * @return PyObject* value returned by getitem
  */
 PyObject* array_getitem(PyArrayObject* arr, const char* p) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -1097,7 +1088,6 @@ PyObject* array_getitem(PyArrayObject* arr, const char* p) {
  * @return PyObject* value returned by getitem
  */
 PyObject* seq_getitem(PyObject* obj, Py_ssize_t i) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -1123,7 +1113,6 @@ PyObject* seq_getitem(PyObject* obj, Py_ssize_t i) {
 void* np_array_from_struct_array(int64_t num_structs, int n_fields, char** data,
                                  uint8_t* null_bitmap, int32_t* dtypes,
                                  char** field_names, bool is_tuple_array) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -1231,7 +1220,6 @@ int is_na_value(PyObject* s, PyObject* C_NA) {
 }
 
 int is_pd_int_array(PyObject* arr) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -1269,7 +1257,6 @@ int is_pd_int_array(PyObject* arr) {
  * @return int 1 if object is a pd.FloatArray, 0 otherwise
  */
 int is_pd_float_array(PyObject* arr) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -1310,7 +1297,6 @@ int is_pd_float_array(PyObject* arr) {
  */
 void int_array_from_sequence(PyObject* arr_obj, int64_t* data,
                              uint8_t* null_bitmap) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -1362,7 +1348,6 @@ void int_array_from_sequence(PyObject* arr_obj, int64_t* data,
  */
 void float_array_from_sequence(PyObject* arr_obj, double* data,
                                uint8_t* null_bitmap) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \

@@ -1046,7 +1046,7 @@ void array_agg_operation(
         for (size_t i = 1; i < n_total; i++) {
             if (getv<int64_t>(sorted_groups, i) !=
                 getv<int64_t>(sorted_groups, i - 1)) {
-                offset_buffer[cur_idx] = i;
+                offset_buffer[cur_idx] = (offset_t)i;
                 cur_idx++;
             }
         }

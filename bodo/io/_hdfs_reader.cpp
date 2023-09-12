@@ -12,7 +12,6 @@
 #include "../libs/_bodo_common.h"
 #include "_bodo_file_reader.h"
 
-#undef CHECK
 #define CHECK(expr, msg)                                          \
     if (!(expr)) {                                                \
         std::cerr << "Error in arrow hdfs: " << msg << std::endl; \
@@ -24,7 +23,6 @@
                   << std::endl;                                    \
     }
 
-#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK_ARROW(res.status(), msg);           \
     lhs = std::move(res).ValueOrDie();
