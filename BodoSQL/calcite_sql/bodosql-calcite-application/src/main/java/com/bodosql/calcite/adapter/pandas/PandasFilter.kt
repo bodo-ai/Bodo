@@ -85,7 +85,7 @@ class PandasFilter(
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
         val readerVar = builder.symbolTable.genStateVar()
-        currentPipeline.addInitialization(Op.Assign(readerVar, Expr.Call("bodo.libs.stream_dict_encoding.init_dict_encoding_state")))
+        currentPipeline.initializeStreamingState(ctx.operatorID(), Op.Assign(readerVar, Expr.Call("bodo.libs.stream_dict_encoding.init_dict_encoding_state")))
         return readerVar
     }
 
@@ -96,7 +96,7 @@ class PandasFilter(
     override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
         val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
         val deleteState = Op.Stmt(Expr.Call("bodo.libs.stream_dict_encoding.delete_dict_encoding_state", listOf(stateVar)))
-        currentPipeline.addTermination(deleteState)
+        currentPipeline.deleteStreamingState(ctx.operatorID(), deleteState)
     }
 
     private fun emit(ctx: PandasRel.BuildContext, translator: RexToPandasTranslator, input: BodoEngineTable, condition: RexNode): BodoEngineTable {

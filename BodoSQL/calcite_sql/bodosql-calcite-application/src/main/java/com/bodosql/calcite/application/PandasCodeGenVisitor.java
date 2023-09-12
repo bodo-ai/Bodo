@@ -99,7 +99,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   /** Stack of generated tables T1, T2, etc. */
   private final Stack<BodoEngineTable> tableGenStack = new Stack<>();
 
-  /* The builder responsible for code emission */
+  // TODO: Add this to the docs as banned
   private final Module.Builder generatedCode;
 
   // Note that a given query can only have one MERGE INTO statement. Therefore,
@@ -269,33 +269,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   public Variable genWriterVar() {
     return generatedCode.getSymbolTable().genWriterVar();
-  }
-
-  /**
-   * Generate the new variable for a precomputed windowed aggregation column.
-   *
-   * @return variable
-   */
-  private Variable genTempColumnVar() {
-    return generatedCode.getSymbolTable().genTempColumnVar();
-  }
-
-  /**
-   * Generate the new variable for a precomputed windowed aggregation dataframe.
-   *
-   * @return variable
-   */
-  private Variable genWindowedAggDf() {
-    return generatedCode.getSymbolTable().genWindowedAggDf();
-  }
-
-  /**
-   * generate a new variable used for nested aggregation functions.
-   *
-   * @return variable
-   */
-  private Variable genWindowedAggFnVar() {
-    return generatedCode.getSymbolTable().genWindowedAggFnName();
   }
 
   /**
@@ -479,10 +452,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.visit(node.getInput(0), 0, node);
 
     Variable inputTableVar = tableGenStack.pop();
+    int operatorID = this.generatedCode.newOperatorID();
     // Generate the list we are accumulating into.
     Variable batchAccumulatorVariable = this.genBatchAccumulatorVar();
     StreamingPipelineFrame activePipeline = this.generatedCode.getCurrentStreamingPipeline();
-    activePipeline.addInitialization(
+    activePipeline.initializeStreamingState(
+        operatorID,
         new Op.Assign(
             batchAccumulatorVariable,
             new Expr.Call("bodo.libs.table_builder.init_table_builder_state", List.of())));
@@ -494,19 +469,17 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Op appendStatement =
         new Op.Stmt(new Expr.Call("bodo.libs.table_builder.table_builder_append", args));
     generatedCode.add(appendStatement);
-
-    // Pop the pipeline
-    StreamingPipelineFrame finishedPipeline = generatedCode.endCurrentStreamingPipeline();
-    // Append the pipeline
-    generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
-    // Finally, concatenate the batches in the accumulator into one dataframe, so that the following
-    // operations that
-    // expect a single-batch dataframe can operate as needed.
+    // Finally, concatenate the batches in the accumulator into a table to use in regular code.
     Variable accumulatedTable = genTableVar();
     Expr concatenatedTable =
         new Expr.Call(
             "bodo.libs.table_builder.table_builder_finalize", List.of(batchAccumulatorVariable));
-    generatedCode.add(new Op.Assign(accumulatedTable, concatenatedTable));
+    Op.Assign assign = new Op.Assign(accumulatedTable, concatenatedTable);
+    activePipeline.deleteStreamingState(operatorID, assign);
+    // Pop the pipeline
+    StreamingPipelineFrame finishedPipeline = generatedCode.endCurrentStreamingPipeline();
+    // Append the pipeline
+    generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
     tableGenStack.push(new BodoEngineTable(accumulatedTable.emit(), node));
   }
 
@@ -824,10 +797,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
       CatalogSchemaImpl outputSchemaAsCatalog,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
-    BuildContext ctx = new BuildContext(node);
     // Generate Streaming Code in this case
     // Get or create current streaming pipeline
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
+    int operatorID = this.generatedCode.newOperatorID();
     // TODO: Move to a wrapper function to avoid the timerInfo calls.
     // This requires more information about the high level design of the streaming
     // operators since there are several parts (e.g. state, multiple loop sections, etc.)
@@ -850,7 +823,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         outputSchemaAsCatalog.generateStreamingWriteInitCode(
             node.getTableName(), ifExists, createTableType);
     Variable writerVar = this.genWriterVar();
-    currentPipeline.addInitialization((new Op.Assign(writerVar, writeInitCode)));
+    currentPipeline.initializeStreamingState(operatorID, new Op.Assign(writerVar, writeInitCode));
     timerInfo.insertStateEndTimer();
 
     // Second, append the Table to the writer
@@ -879,6 +852,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.terminateTimer();
     StreamingPipelineFrame finishedPipeline = this.generatedCode.endCurrentStreamingPipeline();
     this.generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
+    this.generatedCode.forceEndOperatorAtCurPipeline(operatorID);
   }
 
   public void visitLogicalTableCreate(PandasTableCreate node) {
@@ -1097,6 +1071,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Generate Streaming Code in this case
     // Get or create current streaming pipeline
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
+    int operatorID = this.generatedCode.newOperatorID();
 
     // TODO: Move to a wrapper function to avoid the timerInfo calls.
     // This requires more information about the high level design of the streaming
@@ -1118,7 +1093,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.insertStateStartTimer();
     Expr writeInitCode = bodoSqlTable.generateStreamingWriteInitCode();
     Variable writerVar = this.genWriterVar();
-    currentPipeline.addInitialization((new Op.Assign(writerVar, writeInitCode)));
+    currentPipeline.initializeStreamingState(operatorID, new Op.Assign(writerVar, writeInitCode));
     timerInfo.insertStateEndTimer();
 
     // Second, append the Table to the writer
@@ -1143,6 +1118,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.terminateTimer();
     StreamingPipelineFrame finishedPipeline = this.generatedCode.endCurrentStreamingPipeline();
     this.generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
+    this.generatedCode.forceEndOperatorAtCurPipeline(operatorID);
   }
 
   /**
@@ -1461,8 +1437,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.visit(node.getInput(), 0, node);
     timerInfo.initializeTimer();
     Variable buildTable = tableGenStack.pop();
+
     // Create the state var.
     // TODO: Add streaming timer support
+    int operatorID = generatedCode.newOperatorID();
     StateVariable groupbyStateVar = genStateVar();
     List<Expr.IntegerLiteral> keyIndiciesList = getStreamingGroupByKeyIndices(node.getGroupSet());
     Variable keyIndices = this.lowerAsMetaType(new Expr.Tuple(keyIndiciesList));
@@ -1480,7 +1458,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Fetch the streaming pipeline
     StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
     timerInfo.insertStateStartTimer();
-    inputPipeline.addInitialization(groupbyInit);
+    inputPipeline.initializeStreamingState(operatorID, groupbyInit);
     timerInfo.insertStateEndTimer();
     Variable batchExitCond = inputPipeline.getExitCond();
     Variable newExitCond = genGenericTempVar();
@@ -1517,7 +1495,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         new Op.Stmt(
             new Expr.Call(
                 "bodo.libs.stream_groupby.delete_groupby_state", List.of(groupbyStateVar)));
-    outputPipeline.addTermination(deleteState);
+    outputPipeline.deleteStreamingState(operatorID, deleteState);
     // Add the table to the stack
     BodoEngineTable table = new BodoEngineTable(outTable.emit(), node);
     tableGenStack.push(table);
@@ -1797,6 +1775,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // At this time it seems like it would be too much work to have a clean interface.
     // There may be a need to pass in several lambdas, so other changes may be needed to avoid
     // constant rewriting.
+    int operatorID = this.generatedCode.newOperatorID();
     StreamingRelNodeTimer timerInfo =
         StreamingRelNodeTimer.createStreamingTimer(
             this.generatedCode,
@@ -1805,13 +1784,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
             node.loggingTitle(),
             node.nodeDetails(),
             node.getTimerType());
-    StateVariable joinStateVar = visitStreamingPandasJoinBatch(node, timerInfo);
-    visitStreamingPandasJoinProbe(node, joinStateVar, timerInfo);
+    StateVariable joinStateVar = visitStreamingPandasJoinBatch(node, timerInfo, operatorID);
+    visitStreamingPandasJoinProbe(node, joinStateVar, timerInfo, operatorID);
     timerInfo.terminateTimer();
   }
 
   private StateVariable visitStreamingPandasJoinState(
-      PandasJoin node, StreamingRelNodeTimer timerInfo) {
+      PandasJoin node, StreamingRelNodeTimer timerInfo, int operatorID) {
     // Extract the Hash Join information
     timerInfo.initializeTimer();
     timerInfo.insertStateStartTimer();
@@ -1857,17 +1836,17 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 isRightOuter),
             namedArgs);
     Op.Assign joinInit = new Op.Assign(joinStateVar, stateCall);
-    batchPipeline.addInitialization(joinInit);
+    batchPipeline.initializeStreamingState(operatorID, joinInit);
     timerInfo.insertStateEndTimer();
     return joinStateVar;
   }
 
   private StateVariable visitStreamingPandasJoinBatch(
-      PandasJoin node, StreamingRelNodeTimer timerInfo) {
+      PandasJoin node, StreamingRelNodeTimer timerInfo, int operatorID) {
     // Visit the batch side
     this.visit(node.getLeft(), 0, node);
     BodoEngineTable buildTable = tableGenStack.pop();
-    StateVariable joinStateVar = visitStreamingPandasJoinState(node, timerInfo);
+    StateVariable joinStateVar = visitStreamingPandasJoinState(node, timerInfo, operatorID);
     timerInfo.insertLoopOperationStartTimer();
     // Fetch the batch state
     StreamingPipelineFrame batchPipeline = generatedCode.getCurrentStreamingPipeline();
@@ -1886,7 +1865,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   private void visitStreamingPandasJoinProbe(
-      PandasJoin node, StateVariable joinStateVar, StreamingRelNodeTimer timerInfo) {
+      PandasJoin node,
+      StateVariable joinStateVar,
+      StreamingRelNodeTimer timerInfo,
+      int operatorID) {
     // Visit the probe side
     this.visit(node.getRight(), 1, node);
     timerInfo.insertLoopOperationStartTimer();
@@ -1914,19 +1896,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Op.Stmt deleteState =
         new Op.Stmt(
             new Expr.Call("bodo.libs.stream_join.delete_join_state", List.of(joinStateVar)));
-    probePipeline.addTermination(deleteState);
+    probePipeline.deleteStreamingState(operatorID, deleteState);
     // Add the table to the stack
     tableGenStack.push(new BodoEngineTable(outTable.emit(), node));
-  }
-
-  /**
-   * Helper function for getting data from a dataframe
-   *
-   * @param dataframe the dataframe to retrieve data
-   */
-  private Expr.Call getDfData(Variable dataframe) {
-    return new Expr.Call(
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(dataframe));
   }
 
   /**
@@ -2062,6 +2034,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     @Override
     public BodoEngineTable build(
         @NotNull final Function1<? super PandasRel.BuildContext, BodoEngineTable> fn) {
+      int operatorID = generatedCode.newOperatorID();
+      generatedCode.registerSingleBatchOperatorScope(operatorID);
       return singleBatchTimer(node, () -> fn.invoke(new PandasCodeGenVisitor.BuildContext(node)));
     }
 
@@ -2087,7 +2061,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
               node.loggingTitle(),
               node.nodeDetails(),
               node.getTimerType());
-      PandasCodeGenVisitor.BuildContext buildContext = new PandasCodeGenVisitor.BuildContext(node);
+      int operatorID = generatedCode.newOperatorID();
+      PandasCodeGenVisitor.BuildContext buildContext =
+          new PandasCodeGenVisitor.BuildContext(node, operatorID);
       timerInfo.initializeTimer();
       // Init the state and time it.
       timerInfo.insertStateStartTimer();
@@ -2113,9 +2089,21 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
   private class BuildContext implements PandasRel.BuildContext {
     private final @NotNull PandasRel node;
+    private final int operatorID;
 
     public BuildContext(@NotNull PandasRel node) {
       this.node = node;
+      this.operatorID = -1;
+    }
+
+    public BuildContext(@NotNull PandasRel node, int operatorID) {
+      this.node = node;
+      this.operatorID = operatorID;
+    }
+
+    @Override
+    public int operatorID() {
+      return operatorID;
     }
 
     @NotNull

@@ -58,14 +58,14 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
         val readerVar = builder.symbolTable.genStateVar()
-        currentPipeline.addInitialization(Op.Assign(readerVar, generateReadExpr(ctx)))
+        currentPipeline.initializeStreamingState(ctx.operatorID(), Op.Assign(readerVar, generateReadExpr(ctx)))
         return readerVar
     }
 
     override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
         val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
         val deleteState = Op.Stmt(Expr.Call("bodo.io.arrow_reader.arrow_reader_del", listOf(stateVar)))
-        currentPipeline.addTermination(deleteState)
+        currentPipeline.deleteStreamingState(ctx.operatorID(), deleteState)
     }
 
     override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost? {
