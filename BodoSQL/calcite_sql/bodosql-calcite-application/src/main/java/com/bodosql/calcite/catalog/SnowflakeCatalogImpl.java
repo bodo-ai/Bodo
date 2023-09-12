@@ -977,7 +977,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         select.toSqlString(
             (c) -> c.withClauseStartsLine(false).withDialect(BodoSnowflakeSqlDialect.DEFAULT));
 
-    @Nullable Integer snowflakeResult = trySubmitIntegerMetadataQuery(sql);
+    @Nullable Long snowflakeResult = trySubmitLongMetadataQuery(sql);
     @Nullable Double output = snowflakeResult == null ? null : (double) snowflakeResult;
     return output;
   }
@@ -995,7 +995,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         select.toSqlString(
             (c) -> c.withClauseStartsLine(false).withDialect(BodoSnowflakeSqlDialect.DEFAULT));
 
-    @Nullable Integer snowflakeResult = trySubmitIntegerMetadataQuery(sql);
+    @Nullable Long snowflakeResult = trySubmitLongMetadataQuery(sql);
     @Nullable Double output = snowflakeResult == null ? null : (double) snowflakeResult;
     return output;
   }
@@ -1009,7 +1009,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @param sql The SQL query to submit to snowflake
    * @return The integer value returned by the sql query
    */
-  public @Nullable Integer trySubmitIntegerMetadataQuery(SqlString sql) {
+  public @Nullable Long trySubmitLongMetadataQuery(SqlString sql) {
     String sqlString = sql.getSql();
 
     // TODO(jsternberg): This class mostly doesn't handle connections correctly.
@@ -1029,7 +1029,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         try (ResultSet rs = stmt.executeQuery()) {
           // Only one row matters.
           if (rs.next()) {
-            return rs.getInt(1);
+            return rs.getLong(1);
           }
         }
       }
