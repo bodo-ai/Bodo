@@ -28,7 +28,7 @@ from bodo.utils.typing import (
     is_overload_none,
     unwrap_typeref,
 )
-from bodo.utils.utils import numba_to_c_array_type, numba_to_c_type
+from bodo.utils.utils import numba_to_c_array_types, numba_to_c_types
 
 ll.add_symbol(
     "groupby_state_init_py_entry", stream_groupby_cpp.groupby_state_init_py_entry
@@ -187,10 +187,7 @@ class GroupbyStateType(types.Type):
         Returns:
             List(int): List with the integer values of each CTypeEnum value.
         """
-        return np.array(
-            [numba_to_c_type(arr_type.dtype) for arr_type in arr_types],
-            dtype=np.int8,
-        )
+        return numba_to_c_types(arr_types)
 
     @property
     def build_arr_ctypes(self) -> np.ndarray:
@@ -217,10 +214,7 @@ class GroupbyStateType(types.Type):
         Returns:
             List(int): List with the integer values of each CTypeEnum value.
         """
-        return np.array(
-            [numba_to_c_array_type(arr_type) for arr_type in arr_types],
-            dtype=np.int8,
-        )
+        return numba_to_c_array_types(arr_types)
 
     @property
     def build_arr_array_types(self) -> np.ndarray:

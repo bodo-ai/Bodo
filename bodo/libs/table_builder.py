@@ -25,7 +25,7 @@ from bodo.utils.typing import (
     is_overload_none,
     unwrap_typeref,
 )
-from bodo.utils.utils import numba_to_c_array_type, numba_to_c_type
+from bodo.utils.utils import numba_to_c_array_types, numba_to_c_types
 
 ll.add_symbol(
     "table_builder_state_init_py_entry",
@@ -51,8 +51,6 @@ ll.add_symbol(
     "delete_table_builder_state",
     table_builder_cpp.delete_table_builder_state,
 )
-
-
 ll.add_symbol(
     "chunked_table_builder_state_init_py_entry",
     table_builder_cpp.chunked_table_builder_state_init_py_entry,
@@ -98,10 +96,7 @@ class TableBuilderStateType(types.Type):
         Returns:
             List(int): List with the integer values of each CTypeEnum value.
         """
-        return np.array(
-            [numba_to_c_type(arr_type.dtype) for arr_type in arr_types],
-            dtype=np.int8,
-        )
+        return numba_to_c_types(arr_types)
 
     @cached_property
     def arr_dtypes(self) -> List[types.ArrayCompatible]:
@@ -123,10 +118,7 @@ class TableBuilderStateType(types.Type):
         Returns:
             List(int): List with the integer values of each CTypeEnum value.
         """
-        return np.array(
-            [numba_to_c_array_type(arr_type) for arr_type in arr_types],
-            dtype=np.int8,
-        )
+        return numba_to_c_array_types(arr_types)
 
     @property
     def arr_array_types(self) -> np.ndarray:
@@ -147,7 +139,7 @@ class TableBuilderStateType(types.Type):
 
         Return (int): The number of build arrays
         """
-        return len(self.arr_ctypes)
+        return len(self.arr_dtypes)
 
     @property
     def build_table_type(self):
