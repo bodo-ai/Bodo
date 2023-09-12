@@ -39,6 +39,7 @@
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it. If it is ok, get value using ValueOrDie
 // and assign it to lhs using std::move
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs, s3_fs_region) \
     CHECK_ARROW(res.status(), msg, s3_fs_region)            \
     lhs = std::move(res).ValueOrDie();

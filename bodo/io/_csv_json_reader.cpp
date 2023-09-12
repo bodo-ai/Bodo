@@ -40,6 +40,7 @@
 // when json_lines=false. we are reading a multi line json format where each
 // dataframe row/json record takes up more than one lines, separated by '},'
 
+#undef CHECK
 #define CHECK(expr, msg)                                    \
     if (!(expr)) {                                          \
         std::cerr << "Error in read: " << msg << std::endl; \

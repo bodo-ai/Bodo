@@ -53,6 +53,7 @@ PyMODINIT_FUNC PyInit__hdf5(void) {
 }
 
 // TODO: raise Python error
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
