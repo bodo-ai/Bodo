@@ -51,7 +51,8 @@ class PandasTableScan(
         val readerVar = builder.symbolTable.genStateVar()
 
         val bodoSQLTable = (table as RelOptTableImpl).table() as BodoSqlTable
-        currentPipeline.addInitialization(
+        currentPipeline.initializeStreamingState(
+            ctx.operatorID(),
             Op.Assign(
                 readerVar,
                 bodoSQLTable.generateReadCode(true, ctx.streamingOptions()),
@@ -64,7 +65,7 @@ class PandasTableScan(
     override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
         val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
         val deleteState = Op.Stmt(Expr.Call("bodo.io.arrow_reader.arrow_reader_del", listOf(stateVar)))
-        currentPipeline.addTermination(deleteState)
+        currentPipeline.deleteStreamingState(ctx.operatorID(), deleteState)
     }
 
     /**

@@ -26,9 +26,15 @@ class Module(private val frame: Frame) {
     class Builder(val symbolTable: SymbolTable, private val functionFrame: Frame) {
         constructor() : this(symbolTable = SymbolTable(), functionFrame = CodegenFrame())
 
+        private val scope: StreamingStateScope = StreamingStateScope()
+
         private var activeFrame: Frame = functionFrame
         private var parentFrames: Stack<Frame> = Stack()
         private var assignedVariables: Set<Variable> = emptySet()
+
+        private var operatorCounter: Int = 0
+
+        fun newOperatorID() = operatorCounter++
 
         // relationalOperatorCache handles caching intermediate outputs of Relation Operators (RelNodes)
         // When possible
@@ -42,7 +48,7 @@ class Module(private val frame: Frame) {
          */
         private fun checkNoVariableShadowing(op: Op) {
             if (op is Op.Assign) {
-                var targetVar: Variable = op.target
+                val targetVar: Variable = op.target
                 if (assignedVariables.contains(targetVar)) {
                     throw Exception("Internal error in Assign.emit(): Attempted to perform an invalid variable shadow.")
                 }
@@ -150,7 +156,7 @@ class Module(private val frame: Frame) {
          */
         fun startStreamingPipelineFrame(exitCond: Variable, iterVar: Variable) {
             parentFrames.add(activeFrame)
-            activeFrame = StreamingPipelineFrame(exitCond, iterVar)
+            activeFrame = StreamingPipelineFrame(exitCond, iterVar, scope, parentFrames.size)
         }
 
         /**
@@ -186,6 +192,25 @@ class Module(private val frame: Frame) {
                 return activeFrame as StreamingPipelineFrame
             }
             throw BodoSQLCodegenException("Attempting to fetch the current streaming pipeline from outside a streaming context.")
+        }
+
+        /**
+         * Helper function for registering a single batch operator as
+         * only existing for the current pipeline
+         */
+        fun registerSingleBatchOperatorScope(opID: Int) {
+            scope.startOperator(opID, parentFrames.size)
+            scope.endOperator(opID, parentFrames.size)
+        }
+
+        /**
+         * Helper function that force registers the current
+         * pipeline as the end pipeline of an operator.
+         * This is currently only used for CombineStreamExchange
+         * as it doesn't call currentStreamingPipeline.deleteState
+         */
+        fun forceEndOperatorAtCurPipeline(opID: Int) {
+            scope.endOperator(opID, parentFrames.size)
         }
 
         /**

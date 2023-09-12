@@ -83,6 +83,8 @@ interface PandasRel : RelNode {
     }
 
     interface BuildContext {
+        fun operatorID(): Int
+
         /**
          * Returns the Module.Builder used to construct this operation in this context.
          */
