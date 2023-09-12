@@ -5,8 +5,13 @@
 #include "./test.hpp"
 
 static std::shared_ptr<table_info> strVecToTable(
-    std::string column_name, const std::vector<std::string>& input_column) {
-    return bodo::tests::cppToBodo({column_name}, {false}, {column_name},
+    std::string column_name, const std::vector<std::string>& input_column,
+    bool dict_encoded = true) {
+    std::set<std::string> dict_encoded_cols;
+    if (dict_encoded) {
+        dict_encoded_cols.insert(column_name);
+    }
+    return bodo::tests::cppToBodo({column_name}, {false}, dict_encoded_cols,
                                   input_column);
 };
 
@@ -171,5 +176,43 @@ bodo::tests::suite dict_builder_tests([] {
 
         // Assert that all strings are already in dst
         bodo::tests::check(dict_builder_dst.dict_buff->data_array->length == 4);
+    });
+
+    bodo::tests::test("test_append_string_array_to_builder", [] {
+        /*
+         * This test will create two dictionary builders (src, dst), append data
+         * to one of them (src), and the unify into the second dictionary. Then
+         * the test will append more data to the first dictionary, and redo the
+         * unification. This should cause a cache miss because the length of the
+         * dictionary has changed.
+         */
+
+        DictionaryBuilder dict_builder = DictionaryBuilder(
+            alloc_array(0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING),
+            false);
+        // Assert that the dictionary is empty
+        bodo::tests::check(dict_builder.dict_buff->data_array->array_id <= 0);
+        bodo::tests::check(dict_builder.dict_buff->data_array->length == 0,
+                           "expected length = 0");
+
+        auto table_0 = strVecToTable("A", {}, false);
+        dict_builder.UnifyDictionaryArray(table_0->columns[0]);
+        // Assert that the dictionary is still empty
+        bodo::tests::check(dict_builder.dict_buff->data_array->array_id <= 0);
+        bodo::tests::check(dict_builder.dict_buff->data_array->length == 0);
+
+        auto table_1 = strVecToTable("A",
+                                     std::vector<std::string>{
+                                         "Str1",
+                                         "Str2",
+                                         "Str3",
+                                         "Str3",
+                                         "Str3",
+                                     },
+                                     false);
+        dict_builder.UnifyDictionaryArray(table_1->columns[0]);
+        // Assert that the dictionary is non-empty and has a valid id
+        bodo::tests::check(dict_builder.dict_buff->data_array->array_id > 0);
+        bodo::tests::check(dict_builder.dict_buff->data_array->length == 3);
     });
 });
