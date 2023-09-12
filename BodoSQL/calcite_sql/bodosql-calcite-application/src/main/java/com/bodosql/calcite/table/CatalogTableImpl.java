@@ -303,12 +303,12 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * Wrappers around submitRowCountQueryEstimateInternal that handles memoization. See
    * submitRowCountQueryEstimateInternal for documentation.
    */
-  public @Nullable Integer trySubmitIntegerMetadataQuerySnowflake(SqlString sql) {
-    return trySubmitIntegerMetadataQuerySnowflakeMemoizedFn.apply(sql);
+  public @Nullable Long trySubmitIntegerMetadataQuerySnowflake(SqlString sql) {
+    return trySubmitLongMetadataQuerySnowflakeMemoizedFn.apply(sql);
   }
 
-  private final Function<SqlString, Integer> trySubmitIntegerMetadataQuerySnowflakeMemoizedFn =
-      Memoizer.memoize(this::trySubmitIntegerMetadataQuerySnowflakeInternal);
+  private final Function<SqlString, Long> trySubmitLongMetadataQuerySnowflakeMemoizedFn =
+      Memoizer.memoize(this::trySubmitLongMetadataQuerySnowflakeInternal);
 
   /**
    * Submits a Submits the specified query to Snowflake for evaluation, with a timeout. See
@@ -321,10 +321,10 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    *
    * @return
    */
-  public @Nullable Integer trySubmitIntegerMetadataQuerySnowflakeInternal(
+  public @Nullable Long trySubmitLongMetadataQuerySnowflakeInternal(
       SqlString metadataSelectQueryString) {
     SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
-    return catalog.trySubmitIntegerMetadataQuery(metadataSelectQueryString);
+    return catalog.trySubmitLongMetadataQuery(metadataSelectQueryString);
   }
 
   private class StatisticImpl implements Statistic {
