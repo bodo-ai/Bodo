@@ -35,7 +35,7 @@ from bodo.utils.typing import (
     to_nullable_type,
     unwrap_typeref,
 )
-from bodo.utils.utils import numba_to_c_array_type, numba_to_c_type
+from bodo.utils.utils import numba_to_c_array_types, numba_to_c_types
 
 if TYPE_CHECKING:  # pragma: no cover
     pass
@@ -472,10 +472,7 @@ class JoinStateType(types.Type):
         Returns:
             List(int): List with the integer values of each CTypeEnum value.
         """
-        return np.array(
-            [numba_to_c_type(arr_type.dtype) for arr_type in arr_types],
-            dtype=np.int8,
-        )
+        return numba_to_c_types(arr_types)
 
     @property
     def build_arr_ctypes(self) -> np.ndarray:
@@ -518,10 +515,7 @@ class JoinStateType(types.Type):
         Returns:
             List(int): List with the integer values of each CTypeEnum value.
         """
-        return np.array(
-            [numba_to_c_array_type(arr_type) for arr_type in arr_types],
-            dtype=np.int8,
-        )
+        return numba_to_c_array_types(arr_types)
 
     @property
     def build_arr_array_types(self) -> np.ndarray:
@@ -948,10 +942,10 @@ def init_join_state(
 
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
-    n_build_arrs = output_type.num_build_input_arrs
+    n_build_arrs = len(build_arr_array_types)
     probe_arr_dtypes = output_type.probe_arr_ctypes
     probe_arr_array_types = output_type.probe_arr_array_types
-    n_probe_arrs = output_type.num_probe_input_arrs
+    n_probe_arrs = len(probe_arr_array_types)
 
     # handle non-equi conditions (reuse existing join code as much as possible)
     # Note we must account for how keys will be cast here.

@@ -2590,7 +2590,6 @@ def error_on_nested_arrays(table_type):
         if isinstance(
             arr_type,
             (
-                bodo.ArrayItemArrayType,
                 bodo.MapArrayType,
                 bodo.StructArrayType,
                 bodo.TupleArrayType,
