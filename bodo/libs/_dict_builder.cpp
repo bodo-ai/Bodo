@@ -64,14 +64,9 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
             "UnifyDictionaryArray: DICT or STRING array expected");
     }
 
-    bool not_empty_builder = this->dict_buff->data_array->array_id != 0;
+    bool empty_builder = this->dict_buff->data_array->array_id <= 0;
     if (in_arr->arr_type == bodo_array_type::STRING) {
         // TODO(aneesh) move this out into it's own function
-        if (!not_empty_builder) {
-            this->dict_buff->data_array->array_id =
-                generate_array_id(this->dict_buff->data_array->length);
-        }
-
         std::shared_ptr<array_info> out_indices_arr =
             alloc_nullable_array(in_arr->length, Bodo_CTypes::INT32, 0);
         dict_indices_t* out_inds = (dict_indices_t*)out_indices_arr->data1();
@@ -94,6 +89,13 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
                 this->dict_buff->ReserveArrayRow(in_arr, i);
                 out_inds[i] = this->InsertIfNotExists(in_arr, i);
             }
+        }
+
+        // We only update the ID if this dictionary went from being empty to
+        // non-empty.
+        if (empty_builder && this->dict_buff->size > 0) {
+            this->dict_buff->data_array->array_id =
+                generate_array_id(this->dict_buff->data_array->length);
         }
 
         return create_dict_string_array(this->dict_buff->data_array,
@@ -166,8 +168,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
 
         // We only update the ID if this dictionary went from being empty to
         // non-empty.
-        if (this->dict_buff->data_array->array_id <= 0 &&
-            this->dict_buff->size > 0) {
+        if (empty_builder && this->dict_buff->size > 0) {
             // Update the dict id if there was any change to the dictionary.
             this->dict_buff->data_array->array_id =
                 generate_array_id(this->dict_buff->data_array->length);
