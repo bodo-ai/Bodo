@@ -72,7 +72,10 @@ def test_snowflake_catalog_simple_filter_pushdown(memory_leak_check):
             # Check for pruned columns
             check_logger_msg(stream, f"Columns loaded ['{col_name}']")
             # Check for filter pushdown
-            check_logger_msg(stream, "Filter pushdown successfully performed")
+            check_logger_msg(
+                stream,
+                f'FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."LINEITEM" WHERE "L_ORDERKEY" > 10 AND "L_SHIPMODE" LIKE $$AIR%%',
+            )
 
     bc = bodosql.BodoSQLContext(
         catalog=bodosql.SnowflakeCatalog(
@@ -447,8 +450,10 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$hello$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # startswith test
@@ -464,8 +469,10 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$he%$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # endswith test
@@ -481,8 +488,10 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$%lo$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # contains test
@@ -498,8 +507,10 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$%e%$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # Equality with escape test
@@ -515,8 +526,10 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$b^%bf$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # startswith with escape test
@@ -532,8 +545,10 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$b^%%$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # endswith with escape test
@@ -549,8 +564,10 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$%^%bf$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # contains with escape test
@@ -566,8 +583,10 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$%^%%$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # Always true test
@@ -626,8 +645,10 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$hello$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # startswith test
@@ -643,8 +664,10 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$He%$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # endswith test
@@ -660,8 +683,10 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$%lo$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # contains test
@@ -677,8 +702,10 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$%e%$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # Equality with escape test
@@ -694,8 +721,10 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$b^%bf$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # startswith with escape test
@@ -711,8 +740,10 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$B^%%$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # endswith with escape test
@@ -728,8 +759,10 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$%^%bf$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # contains with escape test
@@ -745,8 +778,10 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$%^%b%$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -785,8 +820,10 @@ def test_snowflake_like_regex_pushdown(test_db_snowflake_catalog, memory_leak_ch
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$hE_lO$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where a like 'b^%_f' escape '^'"
@@ -801,8 +838,10 @@ def test_snowflake_like_regex_pushdown(test_db_snowflake_catalog, memory_leak_ch
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$b^%_f$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -841,8 +880,10 @@ def test_snowflake_ilike_regex_pushdown(test_db_snowflake_catalog, memory_leak_c
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$he_lo$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where a ilike 'b^%_F' escape '^'"
@@ -857,8 +898,10 @@ def test_snowflake_ilike_regex_pushdown(test_db_snowflake_catalog, memory_leak_c
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$b^%_F$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1476,8 +1519,10 @@ def test_snowflake_not_like_pushdown(test_db_snowflake_catalog, memory_leak_chec
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" NOT LIKE $$hello$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # startswith test
@@ -1493,8 +1538,10 @@ def test_snowflake_not_like_pushdown(test_db_snowflake_catalog, memory_leak_chec
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" NOT LIKE $$he%$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # endswith test
@@ -1510,8 +1557,10 @@ def test_snowflake_not_like_pushdown(test_db_snowflake_catalog, memory_leak_chec
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" NOT LIKE $$%lo$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # contains test
@@ -1527,8 +1576,10 @@ def test_snowflake_not_like_pushdown(test_db_snowflake_catalog, memory_leak_chec
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" NOT LIKE $$%e%$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1571,8 +1622,10 @@ def test_snowflake_not_ilike_pushdown(test_db_snowflake_catalog, memory_leak_che
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" NOT ILIKE $$hello$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # startswith test
@@ -1588,8 +1641,10 @@ def test_snowflake_not_ilike_pushdown(test_db_snowflake_catalog, memory_leak_che
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" NOT ILIKE $$He%$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # endswith test
@@ -1605,8 +1660,10 @@ def test_snowflake_not_ilike_pushdown(test_db_snowflake_catalog, memory_leak_che
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" NOT ILIKE $$%lo$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         # contains test
@@ -1622,8 +1679,10 @@ def test_snowflake_not_ilike_pushdown(test_db_snowflake_catalog, memory_leak_che
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" NOT ILIKE $$%e%$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
@@ -1666,8 +1725,10 @@ def test_snowflake_not_like_regex_pushdown(
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" NOT LIKE $$hE_lO$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
