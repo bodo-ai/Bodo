@@ -118,7 +118,6 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
 /// @param[in] null_bitmap bitvector representing nulls (Arrow format)
 void* box_decimal_array(int64_t n, const uint8_t* data,
                         const uint8_t* null_bitmap, int scale) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -176,14 +175,12 @@ void* box_decimal_array(int64_t n, const uint8_t* data,
  * @param data pointer to 128-bit data
  */
 void unbox_decimal(PyObject* obj, uint8_t* data_ptr) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return;                        \
     }
-#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -221,14 +218,12 @@ void unbox_decimal(PyObject* obj, uint8_t* data_ptr) {
  */
 void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
                          uint8_t* null_bitmap) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return;                        \
     }
-#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -324,14 +319,12 @@ arrow::Decimal128 str_to_decimal(const std::string& str_val) {
         the global variable. If this should ever change this function will need
         to be adjusted.
     */
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return -1;                     \
     }
-#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -355,14 +348,12 @@ arrow::Decimal128 str_to_decimal(const std::string& str_val) {
 // precision values
 bool decimal_cmp_eq(decimal_value val1, int64_t scale1, decimal_value val2,
                     int64_t scale2) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return -1;                     \
     }
-#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -380,14 +371,12 @@ bool decimal_cmp_eq(decimal_value val1, int64_t scale1, decimal_value val2,
 
 bool decimal_cmp_ne(decimal_value val1, int64_t scale1, decimal_value val2,
                     int64_t scale2) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return -1;                     \
     }
-#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -405,14 +394,12 @@ bool decimal_cmp_ne(decimal_value val1, int64_t scale1, decimal_value val2,
 
 bool decimal_cmp_gt(decimal_value val1, int64_t scale1, decimal_value val2,
                     int64_t scale2) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return -1;                     \
     }
-#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -430,14 +417,12 @@ bool decimal_cmp_gt(decimal_value val1, int64_t scale1, decimal_value val2,
 
 bool decimal_cmp_ge(decimal_value val1, int64_t scale1, decimal_value val2,
                     int64_t scale2) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return -1;                     \
     }
-#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -455,14 +440,12 @@ bool decimal_cmp_ge(decimal_value val1, int64_t scale1, decimal_value val2,
 
 bool decimal_cmp_lt(decimal_value val1, int64_t scale1, decimal_value val2,
                     int64_t scale2) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return -1;                     \
     }
-#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
@@ -480,14 +463,12 @@ bool decimal_cmp_lt(decimal_value val1, int64_t scale1, decimal_value val2,
 
 bool decimal_cmp_le(decimal_value val1, int64_t scale1, decimal_value val2,
                     int64_t scale2) {
-#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
         return -1;                     \
     }
-#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();

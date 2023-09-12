@@ -1289,7 +1289,7 @@ void ChunkedTableBuilder::UnifyDictionariesAndAppend(
     const std::span<std::shared_ptr<DictionaryBuilder>> dict_builders) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     out_arrs.reserve(in_table->ncols());
-    for (uint64_t i = 0; i < in_table->ncols(); i++) {
+    for (int i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info> col = this->dummy_output_chunk->columns[i];
         if (col->arr_type == bodo_array_type::DICT) {
             out_arrs.emplace_back(
