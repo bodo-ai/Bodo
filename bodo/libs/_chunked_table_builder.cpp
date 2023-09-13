@@ -885,7 +885,7 @@ void ChunkedTableBuilder::AppendJoinOutput(
                                                       batch_length)
 #endif
 
-    size_t build_ncols = build_kept_cols.size();
+    size_t probe_ncols = probe_kept_cols.size();
 
     // We want to append rows in a columnar process. To do this we split an
     // append into three steps:
@@ -907,17 +907,17 @@ void ChunkedTableBuilder::AppendJoinOutput(
         // be the min of any column.
         for (size_t i_col = 0; i_col < this->active_chunk_array_builders.size();
              i_col++) {
-            bool is_build = i_col < build_ncols;
+            bool is_probe = i_col < probe_ncols;
 
             std::shared_ptr<array_info> col;
             std::span<const int64_t> idxs;
-            if (is_build) {
-                col = build_table->columns[build_kept_cols[i_col]];
-                idxs = build_idxs;
+            if (is_probe) {
+                col = probe_table->columns[probe_kept_cols[i_col]];
+                idxs = probe_idxs;
             } else {
                 col =
-                    probe_table->columns[probe_kept_cols[i_col - build_ncols]];
-                idxs = probe_idxs;
+                    build_table->columns[build_kept_cols[i_col - probe_ncols]];
+                idxs = build_idxs;
             }
 
             if (col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -933,17 +933,17 @@ void ChunkedTableBuilder::AppendJoinOutput(
         // Append the actual rows.
         for (size_t i_col = 0; i_col < this->active_chunk_array_builders.size();
              i_col++) {
-            bool is_build = i_col < build_ncols;
+            bool is_probe = i_col < probe_ncols;
 
             std::shared_ptr<array_info> col;
             std::span<const int64_t> idxs;
-            if (is_build) {
-                col = build_table->columns[build_kept_cols[i_col]];
-                idxs = build_idxs;
+            if (is_probe) {
+                col = probe_table->columns[probe_kept_cols[i_col]];
+                idxs = probe_idxs;
             } else {
                 col =
-                    probe_table->columns[probe_kept_cols[i_col - build_ncols]];
-                idxs = probe_idxs;
+                    build_table->columns[build_kept_cols[i_col - probe_ncols]];
+                idxs = build_idxs;
             }
 
             bodo_array_type::arr_type_enum out_arr_type =

@@ -22,8 +22,8 @@
  * join only)
  * @param right_row_is_matched bitmap of matched right table rows to fill (right
  * join only)
- * @param left_offset the number of bits already used from the start of the
- * left_row_is_matched. Default is 0
+ * @param right_offset the number of bits already used from the start of the
+ * right_row_is_matched. Default is 0
  */
 template <bool is_left_outer, bool is_right_outer, bool non_equi_condition,
           typename Allocator>
@@ -32,8 +32,9 @@ void nested_loop_join_table_local(
     std::shared_ptr<table_info> right_table, cond_expr_fn_batch_t cond_func,
     bool parallel_trace, bodo::vector<int64_t>& left_idxs,
     bodo::vector<int64_t>& right_idxs,
-    bodo::vector<uint8_t, Allocator>& left_row_is_matched,
-    bodo::vector<uint8_t>& right_row_is_matched, int64_t left_offset) {
+    bodo::vector<uint8_t>& left_row_is_matched,
+    bodo::vector<uint8_t, Allocator>& right_row_is_matched,
+    int64_t right_offset) {
     tracing::Event ev("nested_loop_join_table_local", parallel_trace);
     size_t n_rows_left = left_table->nrows();
     size_t n_rows_right = right_table->nrows();
@@ -77,9 +78,8 @@ void nested_loop_join_table_local(
             ((left_block_n_rows * right_block_n_rows) + 7) >> 3;
         match_arr = new uint8_t[n_bytes_match];
     }
-
-    for (int64_t b_left = 0; b_left < n_left_blocks; b_left++) {
-        for (int64_t b_right = 0; b_right < n_right_blocks; b_right++) {
+    for (int64_t b_right = 0; b_right < n_right_blocks; b_right++) {
+        for (int64_t b_left = 0; b_left < n_left_blocks; b_left++) {
             int64_t left_block_start = b_left * left_block_n_rows;
             int64_t right_block_start = b_right * right_block_n_rows;
             int64_t left_block_end = std::min(
@@ -97,19 +97,19 @@ void nested_loop_join_table_local(
             }
 
             int64_t match_ind = 0;
-            for (int64_t i = left_block_start; i < left_block_end; i++) {
-                for (int64_t j = right_block_start; j < right_block_end; j++) {
+            for (int64_t j = right_block_start; j < right_block_end; j++) {
+                for (int64_t i = left_block_start; i < left_block_end; i++) {
                     bool match = (match_arr == nullptr) ||
                                  GetBit(match_arr, match_ind++);
                     if (match) {
                         left_idxs.emplace_back(i);
                         right_idxs.emplace_back(j);
                         if (is_left_outer) {
-                            SetBitTo(left_row_is_matched.data(),
-                                     i + left_offset, true);
+                            SetBitTo(left_row_is_matched.data(), i, true);
                         }
                         if (is_right_outer) {
-                            SetBitTo(right_row_is_matched.data(), j, true);
+                            SetBitTo(right_row_is_matched.data(),
+                                     j + right_offset, true);
                         }
                     }
                 }

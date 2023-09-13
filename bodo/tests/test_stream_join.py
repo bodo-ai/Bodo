@@ -36,7 +36,7 @@ def broadcast(request):
 # Listing them separately since otherwise the traceback during errors is huge.
 hash_join_basic_test_params = [
     # Equivalent query:
-    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+    # select  L_PARTKEY, L_COMMENT, L_ORDERKEY, P_PARTKEY, P_COMMENT, P_NAME, P_SIZE
     # from lineitem inner join part on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
     # where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
     # and p_size > {p_size_limit}
@@ -45,18 +45,18 @@ hash_join_basic_test_params = [
         False,
         pd.DataFrame(
             {
+                "l_partkey": [183728],
+                "l_comment": ["bold deposi"],
+                "l_orderkey": [685476],
                 "p_partkey": [183728],
                 "p_comment": ["bold deposi"],
                 "p_name": ["yellow turquoise cornflower coral saddle"],
                 "p_size": [37],
-                "l_partkey": [183728],
-                "l_comment": ["bold deposi"],
-                "l_orderkey": [685476],
             }
         ),
     ),
     # Equivalent query:
-    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+    # select L_PARTKEY, L_COMMENT, L_ORDERKEY, P_PARTKEY, P_COMMENT, P_NAME, P_SIZE
     # from (
     #     select  L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
     # ) lineitem_filtered
@@ -69,6 +69,13 @@ hash_join_basic_test_params = [
         False,
         pd.DataFrame(
             {
+                "l_partkey": [183728, pd.NA, pd.NA],
+                "l_comment": [
+                    "bold deposi",
+                    pd.NA,
+                    pd.NA,
+                ],
+                "l_orderkey": [685476, pd.NA, pd.NA],
                 "p_partkey": [183728, 183820, 183846],
                 "p_comment": [
                     "bold deposi",
@@ -81,18 +88,11 @@ hash_join_basic_test_params = [
                     "cream dim blush moccasin drab",
                 ],
                 "p_size": [37] * 3,
-                "l_partkey": [183728, pd.NA, pd.NA],
-                "l_comment": [
-                    "bold deposi",
-                    pd.NA,
-                    pd.NA,
-                ],
-                "l_orderkey": [685476, pd.NA, pd.NA],
             }
         ),
     ),
     # Equivalent query:
-    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+    # select L_PARTKEY, L_COMMENT, L_ORDERKEY, P_PARTKEY, P_COMMENT, P_NAME, P_SIZE
     # from lineitem left outer join (
     #     select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > {p_size_limit}
     # ) on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
@@ -102,6 +102,25 @@ hash_join_basic_test_params = [
         True,
         pd.DataFrame(
             {
+                "l_partkey": [45677, 85880, 174117, 183728, 106836, 191705, 171506],
+                "l_comment": [
+                    "requests wake permanently among the e",
+                    "te above the silent platelets. furiously",
+                    "lyly express accounts are blithely f",
+                    "bold deposi",
+                    "t, regular requests cajole ",
+                    "ve the blithely even requests haggle",
+                    "ding packages; ironic accounts ",
+                ],
+                "l_orderkey": [
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                ],
                 "p_partkey": [pd.NA, pd.NA, pd.NA, 183728, pd.NA, pd.NA, pd.NA],
                 "p_comment": [
                     pd.NA,
@@ -122,30 +141,11 @@ hash_join_basic_test_params = [
                     pd.NA,
                 ],
                 "p_size": [pd.NA, pd.NA, pd.NA, 37, pd.NA, pd.NA, pd.NA],
-                "l_partkey": [45677, 85880, 174117, 183728, 106836, 191705, 171506],
-                "l_comment": [
-                    "requests wake permanently among the e",
-                    "te above the silent platelets. furiously",
-                    "lyly express accounts are blithely f",
-                    "bold deposi",
-                    "t, regular requests cajole ",
-                    "ve the blithely even requests haggle",
-                    "ding packages; ironic accounts ",
-                ],
-                "l_orderkey": [
-                    685476,
-                    685476,
-                    685476,
-                    685476,
-                    685476,
-                    685476,
-                    685476,
-                ],
             }
         ),
     ),
     # Equivalent query:
-    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+    # select L_PARTKEY, L_COMMENT, L_ORDERKEY, P_PARTKEY, P_COMMENT, P_NAME, P_SIZE
     # from (
     #     select  L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
     # ) lineitem_filtered
@@ -158,6 +158,39 @@ hash_join_basic_test_params = [
         True,
         pd.DataFrame(
             {
+                "l_partkey": [
+                    45677,
+                    85880,
+                    174117,
+                    183728,
+                    106836,
+                    191705,
+                    171506,
+                    pd.NA,
+                    pd.NA,
+                ],
+                "l_comment": [
+                    "requests wake permanently among the e",
+                    "te above the silent platelets. furiously",
+                    "lyly express accounts are blithely f",
+                    "bold deposi",
+                    "t, regular requests cajole ",
+                    "ve the blithely even requests haggle",
+                    "ding packages; ironic accounts ",
+                    pd.NA,
+                    pd.NA,
+                ],
+                "l_orderkey": [
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    pd.NA,
+                    pd.NA,
+                ],
                 "p_partkey": [
                     pd.NA,
                     pd.NA,
@@ -192,39 +225,6 @@ hash_join_basic_test_params = [
                     "cream dim blush moccasin drab",
                 ],
                 "p_size": [pd.NA, pd.NA, pd.NA, 37, pd.NA, pd.NA, pd.NA, 37, 37],
-                "l_partkey": [
-                    45677,
-                    85880,
-                    174117,
-                    183728,
-                    106836,
-                    191705,
-                    171506,
-                    pd.NA,
-                    pd.NA,
-                ],
-                "l_comment": [
-                    "requests wake permanently among the e",
-                    "te above the silent platelets. furiously",
-                    "lyly express accounts are blithely f",
-                    "bold deposi",
-                    "t, regular requests cajole ",
-                    "ve the blithely even requests haggle",
-                    "ding packages; ironic accounts ",
-                    pd.NA,
-                    pd.NA,
-                ],
-                "l_orderkey": [
-                    685476,
-                    685476,
-                    685476,
-                    685476,
-                    685476,
-                    685476,
-                    685476,
-                    pd.NA,
-                    pd.NA,
-                ],
             }
         ),
     ),
@@ -264,13 +264,13 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
+            "l_partkey",
+            "l_comment",
+            "l_orderkey",
             "p_partkey",
             "p_comment",
             "p_name",
             "p_size",
-            "l_partkey",
-            "l_comment",
-            "l_orderkey",
         )
     )
 
@@ -357,6 +357,9 @@ nested_loop_join_test_params = [
         False,
         pd.DataFrame(
             {
+                "l_partkey": [2132, 2132],
+                "l_comment": ["lites. fluffily even de", "lites. fluffily even de"],
+                "l_orderkey": [1, 1],
                 "p_partkey": [199978, 199995],
                 "p_comment": ["ess, i", "packa"],
                 "p_name": [
@@ -364,9 +367,6 @@ nested_loop_join_test_params = [
                     "blanched floral red maroon papaya",
                 ],
                 "p_size": [50, 50],
-                "l_partkey": [2132, 2132],
-                "l_comment": ["lites. fluffily even de", "lites. fluffily even de"],
-                "l_orderkey": [1, 1],
             }
         ),
     ),
@@ -380,6 +380,15 @@ nested_loop_join_test_params = [
         False,
         pd.DataFrame(
             {
+                "l_partkey": [2132, 2132, pd.NA, pd.NA, pd.NA],
+                "l_comment": [
+                    "lites. fluffily even de",
+                    "lites. fluffily even de",
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                ],
+                "l_orderkey": [1, 1, pd.NA, pd.NA, pd.NA],
                 "p_partkey": [199978, 199995, 199843, 199847, 199898],
                 "p_comment": [
                     "ess, i",
@@ -396,15 +405,6 @@ nested_loop_join_test_params = [
                     "firebrick brown gainsboro orchid medium",
                 ],
                 "p_size": [50, 50, 50, 50, 50],
-                "l_partkey": [2132, 2132, pd.NA, pd.NA, pd.NA],
-                "l_comment": [
-                    "lites. fluffily even de",
-                    "lites. fluffily even de",
-                    pd.NA,
-                    pd.NA,
-                    pd.NA,
-                ],
-                "l_orderkey": [1, 1, pd.NA, pd.NA, pd.NA],
             }
         ),
     ),
@@ -418,6 +418,13 @@ nested_loop_join_test_params = [
         True,
         pd.DataFrame(
             {
+                "l_partkey": [2132, 2132, 15635],
+                "l_comment": [
+                    "lites. fluffily even de",
+                    "lites. fluffily even de",
+                    "arefully slyly ex",
+                ],
+                "l_orderkey": [1, 1, 1],
                 "p_partkey": [199978, 199995, pd.NA],
                 "p_comment": ["ess, i", "packa", pd.NA],
                 "p_name": [
@@ -426,13 +433,6 @@ nested_loop_join_test_params = [
                     pd.NA,
                 ],
                 "p_size": [50, 50, pd.NA],
-                "l_partkey": [2132, 2132, 15635],
-                "l_comment": [
-                    "lites. fluffily even de",
-                    "lites. fluffily even de",
-                    "arefully slyly ex",
-                ],
-                "l_orderkey": [1, 1, 1],
             }
         ),
     ),
@@ -446,6 +446,16 @@ nested_loop_join_test_params = [
         True,
         pd.DataFrame(
             {
+                "l_partkey": [2132, 2132, pd.NA, pd.NA, pd.NA, 15635],
+                "l_comment": [
+                    "lites. fluffily even de",
+                    "lites. fluffily even de",
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                    "arefully slyly ex",
+                ],
+                "l_orderkey": [1, 1, pd.NA, pd.NA, pd.NA, 1],
                 "p_partkey": [199978, 199995, 199843, 199847, 199898, pd.NA],
                 "p_comment": [
                     "ess, i",
@@ -464,16 +474,6 @@ nested_loop_join_test_params = [
                     pd.NA,
                 ],
                 "p_size": [50, 50, 50, 50, 50, pd.NA],
-                "l_partkey": [2132, 2132, pd.NA, pd.NA, pd.NA, 15635],
-                "l_comment": [
-                    "lites. fluffily even de",
-                    "lites. fluffily even de",
-                    pd.NA,
-                    pd.NA,
-                    pd.NA,
-                    "arefully slyly ex",
-                ],
-                "l_orderkey": [1, 1, pd.NA, pd.NA, pd.NA, 1],
             }
         ),
     ),
@@ -515,16 +515,16 @@ def test_nested_loop_join(
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
+            "l_partkey",
+            "l_comment",
+            "l_orderkey",
             "p_partkey",
             "p_comment",
             "p_name",
             "p_size",
-            "l_partkey",
-            "l_comment",
-            "l_orderkey",
         )
     )
-    non_equi_condition = "(left.p_partkey) > ((right.l_partkey) + 197800)"
+    non_equi_condition = "(right.p_partkey) > ((left.l_partkey) + 197800)"
 
     # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
     # from lineitem inner join part on P_PARTKEY > L_PARTKEY + 197800 where l_orderkey < 2 and p_size > 49
@@ -630,22 +630,25 @@ def test_broadcast_nested_loop_join(use_dict_encoding, broadcast, memory_leak_ch
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
+            "l_partkey",
+            "l_comment",
+            "l_orderkey",
             "p_partkey",
             "p_comment",
             "p_name",
             "p_size",
-            "l_partkey",
-            "l_comment",
-            "l_orderkey",
         )
     )
-    non_equi_condition = "(left.p_partkey) > ((right.l_partkey) + 197800)"
+    non_equi_condition = "(right.p_partkey) > ((left.l_partkey) + 197800)"
 
-    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+    # select L_PARTKEY, L_COMMENT, L_ORDERKEY, P_PARTKEY, P_COMMENT, P_NAME, P_SIZE
     # from lineitem inner join part on P_PARTKEY > L_PARTKEY + 197800 where l_orderkey < 2 and p_size > 49
 
     expected_df = pd.DataFrame(
         {
+            "l_partkey": [2132, 2132],
+            "l_comment": ["lites. fluffily even de", "lites. fluffily even de"],
+            "l_orderkey": [1, 1],
             "p_partkey": [199978, 199995],
             "p_comment": ["ess, i", "packa"],
             "p_name": [
@@ -653,9 +656,6 @@ def test_broadcast_nested_loop_join(use_dict_encoding, broadcast, memory_leak_ch
                 "blanched floral red maroon papaya",
             ],
             "p_size": [50, 50],
-            "l_partkey": [2132, 2132],
-            "l_comment": ["lites. fluffily even de", "lites. fluffily even de"],
-            "l_orderkey": [1, 1],
         }
     )
 
@@ -771,13 +771,13 @@ def test_hash_join_reorder(memory_leak_check):
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
+            "l_partkey",
+            "l_orderkey",
+            "l_comment",
             "p_name",
             "p_comment",
             "p_size",
             "p_partkey",
-            "l_partkey",
-            "l_orderkey",
-            "l_comment",
         )
     )
 
@@ -834,13 +834,13 @@ def test_hash_join_reorder(memory_leak_check):
     out_df = test_hash_join(conn_str)
     expected_df = pd.DataFrame(
         {
+            "l_partkey": [183728],
+            "l_orderkey": [685476],
+            "l_comment": ["bold deposi"],
             "p_name": ["yellow turquoise cornflower coral saddle"],
             "p_comment": ["bold deposi"],
             "p_size": [37],
             "p_partkey": [183728],
-            "l_partkey": [183728],
-            "l_orderkey": [685476],
-            "l_comment": ["bold deposi"],
         }
     )
     out_df = bodo.allgatherv(out_df)
@@ -859,8 +859,8 @@ def test_hash_join_reorder(memory_leak_check):
     "build_outer,probe_outer",
     [
         pytest.param(True, True, id="full-outer"),
-        pytest.param(True, False, id="left"),
         pytest.param(True, False, id="right"),
+        pytest.param(True, False, id="left"),
     ],
 )
 def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_check):
@@ -899,10 +899,10 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
 
@@ -956,28 +956,28 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
         return df
 
     # Generate expected output for each type of join
-    left_outer = pd.DataFrame(
-        {
-            "A": [1, 3, 4, 5] * 2500,
-            "B": np.array([1, 3, 4, 5] * 2500, dtype=np.int32),
-            "C": pd.array([None] * 10000, dtype="Int64"),
-            "D": pd.array([None] * 10000, dtype="Int8"),
-        }
-    )
     right_outer = pd.DataFrame(
         {
-            "A": pd.array([None] * 2500, dtype="Int64"),
-            "B": pd.array([None] * 2500, dtype="Int32"),
+            "C": pd.array([None] * 10000, dtype="Int64"),
+            "D": pd.array([None] * 10000, dtype="Int8"),
+            "A": [1, 3, 4, 5] * 2500,
+            "B": np.array([1, 3, 4, 5] * 2500, dtype=np.int32),
+        }
+    )
+    left_outer = pd.DataFrame(
+        {
             "C": [6] * 2500,
             "D": pd.array([6] * 2500, dtype="int8"),
+            "A": pd.array([None] * 2500, dtype="Int64"),
+            "B": pd.array([None] * 2500, dtype="Int32"),
         }
     )
     inner = pd.DataFrame(
         {
-            "A": [2] * 2500 * 2500,
-            "B": np.array([2] * 2500 * 2500, dtype=np.int32),
             "C": [2] * 2500 * 2500,
             "D": np.array([2] * 2500 * 2500, dtype=np.int8),
+            "A": [2] * 2500 * 2500,
+            "B": np.array([2] * 2500 * 2500, dtype=np.int32),
         }
     )
     # Fuse the outputs and cast.
@@ -986,7 +986,7 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
         right_outer = right_outer.astype({"C": "Int64", "D": "Int8"})
         inner = inner.astype({"A": "Int64", "B": "Int32", "C": "Int64", "D": "Int8"})
         expected_df = pd.concat([left_outer, right_outer, inner])
-    elif build_outer:
+    elif probe_outer:
         inner = inner.astype({"C": "Int64", "D": "Int8"})
         expected_df = pd.concat([left_outer, inner])
     else:
@@ -1007,7 +1007,7 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
         # Note for checking types we only need to check 1 side of
         # an outer join.
         pytest.param(False, id="inner"),
-        pytest.param(True, id="right", marks=pytest.mark.slow),
+        pytest.param(True, id="left", marks=pytest.mark.slow),
     ],
 )
 def test_hash_join_key_cast(probe_outer, memory_leak_check):
@@ -1040,10 +1040,10 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
 
@@ -1097,26 +1097,26 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
         return df
 
     # Generate expected output for each type of join
-    right_outer = pd.DataFrame(
+    left_outer = pd.DataFrame(
         {
-            "A": pd.array([None] * 5, dtype="Int16"),
-            "B": pd.array([None] * 5, dtype="Int32"),
             "C": pd.array([-1] * 5, dtype="Int16"),
             "D": pd.array([-1] * 5, dtype="int32"),
+            "A": pd.array([None] * 5, dtype="Int16"),
+            "B": pd.array([None] * 5, dtype="Int32"),
         }
     )
     inner = pd.DataFrame(
         {
-            "A": pd.array([2] * 25, dtype="Int16"),
-            "B": np.array([2] * 25, dtype=np.int32),
             "C": pd.array([2] * 25, dtype="Int16"),
             "D": np.array([2] * 25, dtype=np.int32),
+            "A": pd.array([2] * 25, dtype="Int16"),
+            "B": np.array([2] * 25, dtype=np.int32),
         }
     )
     # Fuse the outputs and cast.
     if probe_outer:
         inner = inner.astype({"B": "Int32"})
-        expected_df = pd.concat([right_outer, inner])
+        expected_df = pd.concat([left_outer, inner])
     else:
         expected_df = inner
 
@@ -1134,8 +1134,8 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
     [
         pytest.param(False, False, id="inner"),
         pytest.param(True, True, id="full-outer"),
-        pytest.param(True, False, id="left", marks=pytest.mark.slow),
-        pytest.param(False, True, id="right", marks=pytest.mark.slow),
+        pytest.param(True, False, id="right", marks=pytest.mark.slow),
+        pytest.param(False, True, id="left", marks=pytest.mark.slow),
     ],
 )
 def test_non_equi_join_cond(build_outer, probe_outer, broadcast, memory_leak_check):
@@ -1169,13 +1169,13 @@ def test_non_equi_join_cond(build_outer, probe_outer, broadcast, memory_leak_che
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
-    non_equi_cond = "(left.`A` < right.`D`)"
+    non_equi_cond = "(right.`A` < left.`D`)"
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -1231,26 +1231,26 @@ def test_non_equi_join_cond(build_outer, probe_outer, broadcast, memory_leak_che
     left_missed_keys = list(set(range(2500)) - {2}) * 5
     build_outer_df = pd.DataFrame(
         {
-            "A": pd.array(left_missed_keys, dtype="Int16"),
-            "B": pd.array(left_missed_keys, dtype="int32"),
             "C": pd.array([None] * len(left_missed_keys), dtype="Int16"),
             "D": pd.array([None] * len(left_missed_keys), dtype="Int8"),
+            "A": pd.array(left_missed_keys, dtype="Int16"),
+            "B": pd.array(left_missed_keys, dtype="int32"),
         }
     )
     probe_outer_df = pd.DataFrame(
         {
-            "A": pd.array([None] * 5, dtype="Int16"),
-            "B": pd.array([None] * 5, dtype="Int32"),
             "C": pd.array([4] * 5, dtype="Int16"),
             "D": pd.array([2] * 5, dtype="int8"),
+            "A": pd.array([None] * 5, dtype="Int16"),
+            "B": pd.array([None] * 5, dtype="Int32"),
         }
     )
     inner = pd.DataFrame(
         {
-            "A": pd.array([2] * 25, dtype="Int16"),
-            "B": np.array([2] * 25, dtype=np.int32),
             "C": pd.array([2] * 25, dtype="Int16"),
             "D": np.array([4] * 25, dtype=np.int8),
+            "A": pd.array([2] * 25, dtype="Int16"),
+            "B": np.array([2] * 25, dtype=np.int32),
         }
     )
     # Fuse the outputs and cast.
@@ -1309,10 +1309,10 @@ def test_join_key_prune(memory_leak_check):
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
 
@@ -1409,9 +1409,9 @@ def test_key_multicast(memory_leak_check):
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
             "C",
             "D",
+            "A",
         )
     )
 
@@ -1473,9 +1473,9 @@ def test_key_multicast(memory_leak_check):
     # Everything should be upcast to int64.
     expected_df = pd.DataFrame(
         {
-            "A": [2] * 2500 * 2500,
             "C": [2] * 2500 * 2500,
             "D": [2] * 2500 * 2500,
+            "A": [2] * 2500 * 2500,
         }
     )
     check_func(
@@ -1496,10 +1496,10 @@ def test_key_multicast(memory_leak_check):
             True, True, False, id="full-outer-probe-dist", marks=pytest.mark.slow
         ),
         pytest.param(True, True, True, id="full-outer-build-dist"),
-        pytest.param(True, False, False, id="left-probe_dist", marks=pytest.mark.slow),
-        pytest.param(True, False, True, id="left-build_dist", marks=pytest.mark.slow),
-        pytest.param(False, True, False, id="right-probe_dist", marks=pytest.mark.slow),
-        pytest.param(False, True, True, id="right-build_dist", marks=pytest.mark.slow),
+        pytest.param(True, False, False, id="right-probe_dist", marks=pytest.mark.slow),
+        pytest.param(True, False, True, id="right-build_dist", marks=pytest.mark.slow),
+        pytest.param(False, True, False, id="left-probe_dist", marks=pytest.mark.slow),
+        pytest.param(False, True, True, id="left-build_dist", marks=pytest.mark.slow),
     ],
 )
 def test_only_one_distributed(
@@ -1542,10 +1542,10 @@ def test_only_one_distributed(
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
 
@@ -1605,26 +1605,26 @@ def test_only_one_distributed(
     left_missed_keys = list(set(range(2500)) - {2}) * 5
     build_outer_df = pd.DataFrame(
         {
-            "A": pd.array(left_missed_keys, dtype="Int64"),
-            "B": pd.array(left_missed_keys, dtype="Int64"),
             "C": pd.array([None] * len(left_missed_keys), dtype="Int64"),
             "D": pd.array([None] * len(left_missed_keys), dtype="Int64"),
+            "A": pd.array(left_missed_keys, dtype="Int64"),
+            "B": pd.array(left_missed_keys, dtype="Int64"),
         }
     )
     probe_outer_df = pd.DataFrame(
         {
-            "A": pd.array([None] * 5, dtype="Int64"),
-            "B": pd.array([None] * 5, dtype="Int32"),
             "C": pd.array([-1] * 5, dtype="Int64"),
             "D": pd.array([-1] * 5, dtype="Int64"),
+            "A": pd.array([None] * 5, dtype="Int64"),
+            "B": pd.array([None] * 5, dtype="Int32"),
         }
     )
     inner = pd.DataFrame(
         {
-            "A": pd.array([2] * 25, dtype="Int64"),
-            "B": pd.array([2] * 25, dtype="Int64"),
             "C": pd.array([2] * 25, dtype="Int64"),
             "D": pd.array([2] * 25, dtype="Int64"),
+            "A": pd.array([2] * 25, dtype="Int64"),
+            "B": pd.array([2] * 25, dtype="Int64"),
         }
     )
     # Fuse the outputs and cast.
@@ -1695,10 +1695,10 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
 
@@ -2038,10 +2038,10 @@ def test_prune_na(build_outer, memory_leak_check):
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
 
@@ -2095,27 +2095,27 @@ def test_prune_na(build_outer, memory_leak_check):
         return df
 
     # Generate expected output for each type of join
-    right_outer = pd.DataFrame(
+    left_outer = pd.DataFrame(
         {
+            "C": pd.array([None] * 10, dtype="Int64"),
+            "D": pd.array([None] * 10, dtype="Int64"),
             "A": pd.array(
                 [2, None, None, 2, None, 2, None, None, 2, None], dtype="Int64"
             ),
             "B": pd.array([1, None, 1, None, 2, 1, None, 1, None, 2], dtype="Int64"),
-            "C": pd.array([None] * 10, dtype="Int64"),
-            "D": pd.array([None] * 10, dtype="Int64"),
         }
     )
     inner = pd.DataFrame(
         {
-            "A": pd.array([2] * 20, dtype="Int64"),
-            "B": pd.array([2] * 20, dtype="Int64"),
             "C": pd.array([2] * 20, dtype="Int64"),
             "D": pd.array([2] * 20, dtype="Int64"),
+            "A": pd.array([2] * 20, dtype="Int64"),
+            "B": pd.array([2] * 20, dtype="Int64"),
         }
     )
     # Fuse the outputs and cast.
     if build_outer:
-        expected_df = pd.concat([right_outer, inner])
+        expected_df = pd.concat([left_outer, inner])
     else:
         expected_df = inner
 
@@ -2175,10 +2175,10 @@ def test_outer_join_na_one_dist(build_dist, broadcast, memory_leak_check):
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
 
@@ -2237,18 +2237,18 @@ def test_outer_join_na_one_dist(build_dist, broadcast, memory_leak_check):
     # Generate expected output
     build_outer_df = pd.DataFrame(
         {
-            "A": pd.array([1, None, None] * 10000, dtype="Int64"),
-            "B": pd.array([-1] * 30000, dtype="Int64"),
             "C": pd.array([None] * 30000, dtype="Int64"),
             "D": pd.array([None] * 30000, dtype="Int64"),
+            "A": pd.array([1, None, None] * 10000, dtype="Int64"),
+            "B": pd.array([-1] * 30000, dtype="Int64"),
         }
     )
     inner = pd.DataFrame(
         {
-            "A": pd.array([2, 3] * 10000, dtype="Int64"),
-            "B": pd.array([-1] * 20000, dtype="Int64"),
             "C": pd.array([2, 3] * 10000, dtype="Int64"),
             "D": pd.array([2, 3] * 10000, dtype="Int64"),
+            "A": pd.array([2, 3] * 10000, dtype="Int64"),
+            "B": pd.array([-1] * 20000, dtype="Int64"),
         }
     )
     # Fuse the outputs and cast.
@@ -2301,10 +2301,10 @@ def test_hash_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
 
@@ -2400,7 +2400,7 @@ def test_hash_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
         return df
 
     expected_df = pd.DataFrame(
-        {"A": [2499] * 25, "B": [2499] * 25, "C": [2499] * 25, "D": [2500] * 25}
+        {"C": [2499] * 25, "D": [2500] * 25, "A": [2499] * 25, "B": [2499] * 25}
     )
 
     with set_broadcast_join(broadcast):
@@ -2449,13 +2449,13 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
-    non_equi_condition = "left.A >= right.C"
+    non_equi_condition = "right.A >= left.C"
 
     def test_nested_loop_join(df1, df2):
         join_state = init_join_state(
@@ -2550,7 +2550,7 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
         return df
 
     expected_df = pd.DataFrame(
-        {"A": [2499] * 25, "B": [2499] * 25, "C": [2499] * 25, "D": [2500] * 25}
+        {"C": [2499] * 25, "D": [2500] * 25, "A": [2499] * 25, "B": [2499] * 25}
     )
 
     with set_broadcast_join(broadcast):
@@ -2569,7 +2569,7 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
 def test_request_input(df_size, memory_leak_check):
     """
     Test that the request_input return value is true
-    if the outputbuffer is smaller than two batches and false otherwise
+    if the output buffer is smaller than two batches and false otherwise
     """
     df1 = pd.DataFrame(
         {
@@ -2600,10 +2600,10 @@ def test_request_input(df_size, memory_leak_check):
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
 
@@ -2702,10 +2702,10 @@ def test_produce_output(memory_leak_check):
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
 

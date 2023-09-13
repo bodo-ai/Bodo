@@ -401,7 +401,9 @@ object BodoRules {
             .toRule()
 
     /**
-     * Allow join inputs to be swapped.
+     * Allow join inputs to be swapped. This is kept to reorder outer joins
+     * until we are certain it will be handled by multi-join, but then it should
+     * be removed.
      */
     @JvmField
     val JOIN_COMMUTE_RULE: RelOptRule =

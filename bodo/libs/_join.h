@@ -237,8 +237,9 @@ void nested_loop_join_table_local(
     std::shared_ptr<table_info> right_table, cond_expr_fn_batch_t cond_func,
     bool parallel_trace, bodo::vector<int64_t>& left_idxs,
     bodo::vector<int64_t>& right_idxs,
-    bodo::vector<uint8_t, Allocator>& left_row_is_matched,
-    bodo::vector<uint8_t>& right_row_is_matched, int64_t left_offset = 0);
+    bodo::vector<uint8_t>& left_row_is_matched,
+    bodo::vector<uint8_t, Allocator>& right_row_is_matched,
+    int64_t right_offset = 0);
 
 template <typename BitMapAllocator>
 void add_unmatched_rows(bodo::vector<uint8_t, BitMapAllocator>& bit_map,
