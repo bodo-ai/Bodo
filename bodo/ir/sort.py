@@ -505,23 +505,7 @@ def sort_distributed_run(
         # variable if it exists.
         sort_node._bodo_chunk_bounds = None
 
-    # copy arrays when not inplace
     nodes = []
-    if not sort_node.inplace:
-        new_in_vars = []
-        for v in in_vars:
-            v_cp = _copy_array_nodes(
-                v,
-                nodes,
-                typingctx,
-                targetctx,
-                typemap,
-                calltypes,
-                sort_node.dead_var_inds,
-            )
-            new_in_vars.append(v_cp)
-        in_vars = new_in_vars
-
     out_types = [
         typemap[v.name] if v is not None else types.none for v in sort_node.out_vars
     ]
@@ -578,44 +562,6 @@ def sort_distributed_run(
 
 
 distributed_pass.distributed_run_extensions[Sort] = sort_distributed_run
-
-
-def _copy_array_nodes(var, nodes, typingctx, targetctx, typemap, calltypes, dead_cols):
-    """generate IR nodes for copying an array
-
-    Args:
-        var (ir.Var): variable of array to copy
-        nodes (list[ir.Stmt]): list of IR nodes to add output to
-        typingctx (typing.Context): typing context for compiler pipeline
-        targetctx (cpu.CPUContext): target context for compiler pipeline
-        typemap (dict(str, ir.Var)): typemap of variables
-        calltypes (dict[ir.Inst, Signature]): signature of callable nodes
-    """
-    from bodo.hiframes.table import TableType
-
-    impl = lambda arr: arr.copy()  # pragma: no cover
-
-    used_columns = None
-    if isinstance(typemap[var.name], TableType):
-        n_table_cols = len(typemap[var.name].arr_types)
-        used_columns = set(range(n_table_cols)) - dead_cols
-        used_columns = MetaType(tuple(sorted(used_columns)))
-        impl = lambda T: bodo.utils.table_utils.generate_mappable_table_func(
-            T, "copy", types.none, True, used_cols=_used_columns
-        )  # pragma: no cover
-
-    f_block = compile_to_numba_ir(
-        impl,
-        {"bodo": bodo, "types": types, "_used_columns": used_columns},
-        typingctx=typingctx,
-        targetctx=targetctx,
-        arg_typs=(typemap[var.name],),
-        typemap=typemap,
-        calltypes=calltypes,
-    ).blocks.popitem()[1]
-    replace_arg_nodes(f_block, [var])
-    nodes += f_block.body[:-2]
-    return nodes[-1].target
 
 
 def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
