@@ -3,7 +3,7 @@ package com.bodosql.calcite.application;
 import com.bodosql.calcite.adapter.pandas.PandasRel;
 import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
-import com.bodosql.calcite.application.utils.RelCostWriter;
+import com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.prepare.PlannerImpl;
 import com.bodosql.calcite.prepare.PlannerType;
@@ -445,8 +445,8 @@ public class RelationalAlgebraGenerator {
     RelNode newRoot = PandasUtilKt.pandasProject(root);
     if (includeCosts) {
       StringWriter sw = new StringWriter();
-      com.bodosql.calcite.application.utils.RelCostWriter costWriter =
-          new RelCostWriter(new PrintWriter(sw), newRoot);
+      com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter costWriter =
+          new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot);
       newRoot.explain(costWriter);
       return sw.toString();
     } else {

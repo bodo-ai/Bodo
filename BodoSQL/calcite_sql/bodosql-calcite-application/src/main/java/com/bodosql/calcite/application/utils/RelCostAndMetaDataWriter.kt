@@ -22,6 +22,7 @@
 package com.bodosql.calcite.application.utils
 
 import com.bodosql.calcite.plan.Cost
+import com.bodosql.calcite.rel.metadata.BodoRelMetadataQuery
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelVisitor
@@ -29,6 +30,7 @@ import org.apache.calcite.rel.externalize.RelWriterImpl
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.util.Pair
 import java.io.PrintWriter
+import java.text.DecimalFormat
 
 /**
  * Writes relational plans in a textual format.
@@ -37,7 +39,7 @@ import java.io.PrintWriter
  * it normalizes the RelNode ids and outputs the cost for
  * each relational operation.
  */
-class RelCostWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw) {
+class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw) {
 
     // Holds a mapping of RelNode ids to their rewritten normalized
     // versions.
@@ -49,7 +51,9 @@ class RelCostWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw) {
 
     override fun explain_(rel: RelNode, values: List<Pair<String, Any?>>) {
         val inputs = rel.inputs
-        val mq = rel.cluster.metadataQuery
+        val uncastedMq = rel.cluster.metadataQuery
+        assert(uncastedMq is BodoRelMetadataQuery) { "Internal error in RelCostAndMetaDataWriter.explain_: metadataQuery should be of type BodoRelMetadataQuery" }
+        val mq = uncastedMq as BodoRelMetadataQuery
 
         val s = StringBuilder()
 
@@ -63,6 +67,20 @@ class RelCostWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw) {
         val batchingProperty = rel.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)
         if (batchingProperty != null) {
             s.append(", batchingProperty=[$batchingProperty]")
+        }
+
+        // Check if we have distinctiveness information for any of the columns
+        val hasDistinctInfo = (0 until rel.rowType.fieldCount).any { i -> mq.getColumnDistinctCount(rel, i) != null }
+        if (hasDistinctInfo) {
+            // If we do,
+            s.append(", Distinct estimates: ")
+            for (columnIdx in 0 until rel.rowType.fieldCount) {
+                val distinctiveness = mq.getColumnDistinctCount(rel, columnIdx)
+                if (distinctiveness != null) {
+                    val formattedDistinctiveness = DecimalFormat("##0.#E0").format(distinctiveness)
+                    s.append("$$columnIdx = $formattedDistinctiveness values, ")
+                }
+            }
         }
 
         // If this relational node appears multiple times in the tree,
