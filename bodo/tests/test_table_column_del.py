@@ -2275,10 +2275,7 @@ def test_sort_table_dels(datapath, memory_leak_check):
         bodo_func()
         columns_list = [f"Column{i}" for i in [1, 3, 6, 8, 9, 11, 13]]
         check_logger_msg(stream, f"Columns loaded {columns_list}")
-        # [3, 6, 8, 9, 11, 13] for input table is repeated since there is a table copy
-        _check_column_dels(
-            bodo_func, [[3, 6, 8, 9, 11, 13], [3, 6, 8, 9, 11, 13], [11], [8], [3], [1]]
-        )
+        _check_column_dels(bodo_func, [[3, 6, 8, 9, 11, 13], [11], [8], [3], [1]])
 
 
 def test_groupby_table_dels(datapath, memory_leak_check):
