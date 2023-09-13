@@ -1450,7 +1450,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
         // In the case of NUMPY, we compare the values for concluding.
         uint64_t siztype = numpy_item_size[arr1->dtype];
         char* ptr1 = arr1->data1<bodo_array_type::NUMPY>() + (siztype * iRow1);
-        char* ptr2 = arr2->data1<bodo_array_type::NUMPY>() + (siztype * iRow2);
+        char* ptr2 = arr2->data1() + (siztype * iRow2);
         return NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
     }
     auto process_bits = [&](bool bit1, bool bit2) -> int {
@@ -1475,8 +1475,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
         uint64_t siztype = numpy_item_size[arr1->dtype];
         char* ptr1 =
             arr1->data1<bodo_array_type::CATEGORICAL>() + (siztype * iRow1);
-        char* ptr2 =
-            arr2->data1<bodo_array_type::CATEGORICAL>() + (siztype * iRow2);
+        char* ptr2 = arr2->data1() + (siztype * iRow2);
         bool is_not_na1 = !isnan_categorical_ptr(arr1->dtype, ptr1);
         bool is_not_na2 = !isnan_categorical_ptr(arr2->dtype, ptr2);
         int reply = process_bits(is_not_na1, is_not_na2);
@@ -1490,8 +1489,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
         // NULLABLE case. We need to consider the bitmask and the values.
         uint8_t* null_bitmask1 =
             (uint8_t*)arr1->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
-        uint8_t* null_bitmask2 =
-            (uint8_t*)arr2->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
+        uint8_t* null_bitmask2 = (uint8_t*)arr2->null_bitmask();
         bool bit1 = GetBit(null_bitmask1, iRow1);
         bool bit2 = GetBit(null_bitmask2, iRow2);
         // If one bitmask is T and the other the reverse then they are
@@ -1506,8 +1504,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
             if (arr1->dtype == Bodo_CTypes::_BOOL) {
                 uint8_t* data1 =
                     (uint8_t*)arr1->data1<bodo_array_type::NULLABLE_INT_BOOL>();
-                uint8_t* data2 =
-                    (uint8_t*)arr2->data1<bodo_array_type::NULLABLE_INT_BOOL>();
+                uint8_t* data2 = (uint8_t*)arr2->data1();
                 bool bit1 = arrow::bit_util::GetBit(data1, iRow1);
                 bool bit2 = arrow::bit_util::GetBit(data2, iRow2);
                 if (bit1 == bit2) {
@@ -1525,8 +1522,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
                 uint64_t siztype = numpy_item_size[arr1->dtype];
                 char* ptr1 = arr1->data1<bodo_array_type::NULLABLE_INT_BOOL>() +
                              (siztype * iRow1);
-                char* ptr2 = arr2->data1<bodo_array_type::NULLABLE_INT_BOOL>() +
-                             (siztype * iRow2);
+                char* ptr2 = arr2->data1() + (siztype * iRow2);
                 int test =
                     NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
                 return test;
@@ -1536,7 +1532,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
     if (arr1->arr_type == bodo_array_type::LIST_STRING) {
         // For LIST_STRING case we need to deal bitmask and the values.
         bool bit1 = arr1->get_null_bit<bodo_array_type::LIST_STRING>(iRow1);
-        bool bit2 = arr2->get_null_bit<bodo_array_type::LIST_STRING>(iRow2);
+        bool bit2 = arr2->get_null_bit(iRow2);
         uint8_t* sub_null_bitmask1 = (uint8_t*)arr1->sub_null_bitmask();
         uint8_t* sub_null_bitmask2 = (uint8_t*)arr2->sub_null_bitmask();
         // If bitmasks are different then we can conclude the comparison
@@ -1546,12 +1542,10 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
         if (bit1) {  // here bit1 = bit2
             offset_t* data3_1 =
                 (offset_t*)arr1->data3<bodo_array_type::LIST_STRING>();
-            offset_t* data3_2 =
-                (offset_t*)arr2->data3<bodo_array_type::LIST_STRING>();
+            offset_t* data3_2 = (offset_t*)arr2->data3();
             offset_t* data2_1 =
                 (offset_t*)arr1->data2<bodo_array_type::LIST_STRING>();
-            offset_t* data2_2 =
-                (offset_t*)arr2->data2<bodo_array_type::LIST_STRING>();
+            offset_t* data2_2 = (offset_t*)arr2->data2();
             // Computing the number of strings and their minimum
             offset_t nb_string1 = data3_1[iRow1 + 1] - data3_1[iRow1];
             offset_t nb_string2 = data3_2[iRow2 + 1] - data3_2[iRow2];
@@ -1580,8 +1574,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
                     }
                     char* data1_1 =
                         arr1->data1<bodo_array_type::LIST_STRING>() + pos1_prev;
-                    char* data1_2 =
-                        arr2->data1<bodo_array_type::LIST_STRING>() + pos2_prev;
+                    char* data1_2 = arr2->data1() + pos2_prev;
                     // We check the strings for comparison and check if we
                     // can conclude.
                     int test = std::memcmp(data1_2, data1_1, minlen);
@@ -1604,7 +1597,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
     if (arr1->arr_type == bodo_array_type::STRING) {
         // For STRING case we need to deal bitmask and the values.
         bool bit1 = arr1->get_null_bit<bodo_array_type::STRING>(iRow1);
-        bool bit2 = arr2->get_null_bit<bodo_array_type::STRING>(iRow2);
+        bool bit2 = arr2->get_null_bit(iRow2);
         // If bitmasks are different then we can conclude the comparison
         int reply = process_bits(bit1, bit2);
         if (reply != 0)
@@ -1615,8 +1608,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
             // Here we consider the shifts in data2 for the comparison.
             offset_t* data2_1 =
                 (offset_t*)arr1->data2<bodo_array_type::STRING>();
-            offset_t* data2_2 =
-                (offset_t*)arr2->data2<bodo_array_type::STRING>();
+            offset_t* data2_2 = (offset_t*)arr2->data2();
             offset_t len1 = data2_1[iRow1 + 1] - data2_1[iRow1];
             offset_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
             // Compute minimal length
@@ -1628,8 +1620,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
             offset_t pos2_prev = data2_2[iRow2];
             char* data1_1 =
                 (char*)arr1->data1<bodo_array_type::STRING>() + pos1_prev;
-            char* data1_2 =
-                (char*)arr2->data1<bodo_array_type::STRING>() + pos2_prev;
+            char* data1_2 = (char*)arr2->data1() + pos2_prev;
             int test = std::memcmp(data1_2, data1_1, minlen);
             if (test)
                 return test;
