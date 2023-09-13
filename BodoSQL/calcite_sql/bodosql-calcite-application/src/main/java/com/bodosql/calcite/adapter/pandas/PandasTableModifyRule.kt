@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.table.BodoSqlTable
-import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.prepare.RelOptTableImpl
@@ -25,7 +24,7 @@ class PandasTableModifyRule private constructor(config: Config) : ConverterRule(
 
     override fun convert(rel: RelNode): RelNode {
         val tableModify = rel as TableModify
-        val traitSet = rel.cluster.traitSetOf(PandasRel.CONVENTION).replace(BatchingProperty.SINGLE_BATCH)
+        val traitSet = rel.cluster.traitSetOf(PandasRel.CONVENTION).replace(ExpectedBatchingProperty.alwaysSingleBatchProperty())
 
         // Case when output is a Snowflake table
         val bodoSqlTable = (tableModify.table as RelOptTableImpl).table() as BodoSqlTable

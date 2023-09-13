@@ -22,7 +22,7 @@ class PandasProjectRule private constructor(config: Config) : ConverterRule(conf
 
     override fun convert(rel: RelNode): RelNode {
         val project = rel as Project
-        val batchProperty = ExpectedBatchingProperty.projectFilterProperty(project.projects)
+        val batchProperty = ExpectedBatchingProperty.projectProperty(project.projects, project.input.traitSet)
         return PandasProject.create(
             convert(
                 project.input,
