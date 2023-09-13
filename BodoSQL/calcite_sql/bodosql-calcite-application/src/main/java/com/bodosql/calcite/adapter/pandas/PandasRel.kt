@@ -7,6 +7,7 @@ import com.bodosql.calcite.ir.Module
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
@@ -55,7 +56,12 @@ interface PandasRel : RelNode {
     /**
      * Determine if an operator is streaming.
      */
-    fun isStreaming() = traitSet.contains(BatchingProperty.STREAMING)
+    fun isStreaming() = batchingProperty() == BatchingProperty.STREAMING
+
+    /**
+     * Get the batching property.
+     */
+    fun batchingProperty(): BatchingProperty = traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) ?: BatchingProperty.NONE
 
     /**
      * Function to create the initial state for a streaming pipeline.

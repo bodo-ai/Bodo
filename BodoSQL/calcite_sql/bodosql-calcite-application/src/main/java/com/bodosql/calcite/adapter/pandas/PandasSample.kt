@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptSamplingParameters
 import org.apache.calcite.plan.RelTraitSet
@@ -50,7 +51,8 @@ class PandasSample(
     companion object {
         fun create(cluster: RelOptCluster, input: RelNode, params: RelOptSamplingParameters): PandasSample {
             val mq = cluster.metadataQuery
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION)
+            val batchingProperty = ExpectedBatchingProperty.alwaysSingleBatchProperty()
+            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION).replace(batchingProperty)
                 .replaceIfs(RelCollationTraitDef.INSTANCE) {
                     mq.collations(input)
                 }

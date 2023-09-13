@@ -8,7 +8,7 @@ import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.core.ProjectBase
-import com.bodosql.calcite.traits.ExpectedBatchingProperty.Companion.projectFilterProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty.Companion.projectProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -299,7 +299,7 @@ class PandasProject(
         fun create(input: RelNode, projects: List<RexNode>, rowType: RelDataType): PandasProject {
             val cluster = input.cluster
             val mq = cluster.metadataQuery
-            val batchProperty = projectFilterProperty(projects)
+            val batchProperty = projectProperty(projects, input.traitSet)
             val traitSet = cluster.traitSet().replace(PandasRel.CONVENTION).replace(batchProperty)
                 .replaceIfs(RelCollationTraitDef.INSTANCE) {
                     RelMdCollation.project(mq, input, projects)

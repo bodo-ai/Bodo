@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -39,7 +40,7 @@ class PandasValues(
 
     companion object {
         fun create(cluster: RelOptCluster, traitSet: RelTraitSet, rowType: RelDataType, tuples: ImmutableList<ImmutableList<RexLiteral>>): PandasValues {
-            val newTraitSet = traitSet.replace(PandasRel.CONVENTION)
+            val newTraitSet = traitSet.replace(PandasRel.CONVENTION).replace(ExpectedBatchingProperty.alwaysSingleBatchProperty())
             return PandasValues(cluster, rowType, tuples, newTraitSet)
         }
     }

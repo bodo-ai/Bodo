@@ -6,8 +6,10 @@ import com.bodosql.calcite.application.utils.AggHelpers
 import com.bodosql.calcite.schema.CatalogSchemaImpl
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.CatalogTableImpl
+import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.rel.type.RelDataType
+import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.schema.Schema
@@ -100,23 +102,60 @@ class ExpectedBatchingProperty {
         }
 
         /**
-         * Determine the streaming trait for either a projection or filter.
-         * Streaming is not supported if any RexNodes contain a RexOver
+         * Determine the streaming trait for a filter.
+         * Streaming is not supported if the RexNode contain a RexOver
          * (e.g. Window Function).
          *
-         * @param nodes This list of nodes to check for streaming.
+         * @param node The node to check for streaming.
          *
          * @return The Batch property.
          */
         @JvmStatic
-        fun projectFilterProperty(nodes: List<RexNode>): BatchingProperty {
-            val canStream = !RexOver.containsOver(nodes, null)
+        fun filterProperty(node: RexNode): BatchingProperty {
+            val canStream = !RexOver.containsOver(node)
+            // Note: Types may be lazily computed so use getType() instead of type
+            // Unsupported types are also only supported for the output of streaming
+            // (e.g. to cross between operators/write to TableBuildBuffers), so we
+            // don't need to check intermediate types.
+            return getBatchingProperty(canStream, listOf(node.getType()))
+        }
+
+        /**
+         * Determine the streaming trait for a project.
+         * Streaming is not supported if the RexNodes contain a RexOver
+         * (e.g. Window Function). If all the nodes are inputRefs then
+         * we match the given property that was determined based on
+         * the input (to avoid jumping to/from streaming just to prune
+         * columns).
+         *
+         * @param nodes The nodes to check for streaming.
+         * @param inputTraitSet The traitset of the input RelNode. This is used to
+         * check for the desired behavior for column pruning/reordering.
+         *
+         * @return The Batch property.
+         */
+        @JvmStatic
+        fun projectProperty(nodes: List<RexNode>, inputTraitSet: RelTraitSet): BatchingProperty {
+            val canStream = if (nodes.all { r -> r is RexInputRef }) {
+                columnPruningIsStreaming(inputTraitSet)
+            } else {
+                !RexOver.containsOver(nodes, null)
+            }
             // Note: Types may be lazily computed so use getType() instead of type
             // Unsupported types are also only supported for the output of streaming
             // (e.g. to cross between operators/write to TableBuildBuffers), so we
             // don't need to check intermediate types.
             val nodeTypes = nodes.map { r -> r.getType() }
             return getBatchingProperty(canStream, nodeTypes)
+        }
+
+        /**
+         * Determine if we are just pruning columns do we want to use
+         * Streaming.
+         */
+        private fun columnPruningIsStreaming(traitSet: RelTraitSet): Boolean {
+            val property = traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) ?: BatchingProperty.NONE
+            return property.satisfies(BatchingProperty.STREAMING)
         }
 
         @JvmStatic

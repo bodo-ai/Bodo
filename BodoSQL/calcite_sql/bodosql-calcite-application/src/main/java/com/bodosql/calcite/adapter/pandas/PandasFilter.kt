@@ -135,7 +135,7 @@ class PandasFilter(
     companion object {
         fun create(cluster: RelOptCluster, input: RelNode, condition: RexNode): PandasFilter {
             val mq = cluster.metadataQuery
-            val batchProperty = ExpectedBatchingProperty.projectFilterProperty(listOf(condition))
+            val batchProperty = ExpectedBatchingProperty.filterProperty(condition)
             val traitSet = cluster.traitSet().replace(PandasRel.CONVENTION).replace(batchProperty)
                 .replaceIfs(RelCollationTraitDef.INSTANCE) {
                     RelMdCollation.filter(mq, input)
