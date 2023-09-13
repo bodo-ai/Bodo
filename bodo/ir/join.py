@@ -2111,8 +2111,8 @@ def gen_general_cond_cfunc(
 
     if compute_in_batch:
         func_text += "  i = 0\n"
-        func_text += "  for left_ind in range(left_block_start, left_block_end):\n"
-        func_text += "    for right_ind in range(right_block_start, right_block_end):\n"
+        func_text += "  for right_ind in range(right_block_start, right_block_end):\n"
+        func_text += "    for left_ind in range(left_block_start, left_block_end):\n"
 
     indent = "      " if compute_in_batch else "  "
     expr, func_text, left_col_nums = _replace_column_accesses(

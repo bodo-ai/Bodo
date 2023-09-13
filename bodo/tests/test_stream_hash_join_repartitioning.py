@@ -54,10 +54,10 @@ def hash_join_common_impl(df1, df2, op_pool_size_bytes, build_outer, probe_outer
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "A",
-            "B",
             "C",
             "D",
+            "A",
+            "B",
         )
     )
 

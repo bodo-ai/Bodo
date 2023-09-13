@@ -635,7 +635,7 @@ class JoinStateType(types.Type):
         Returns:
             bodo.TableType: The type of the output table.
         """
-        arr_types = self.build_output_arrays + self.probe_output_arrays
+        arr_types = self.probe_output_arrays + self.build_output_arrays
         out_table_type = bodo.TableType(tuple(arr_types))
         return out_table_type
 
@@ -722,7 +722,7 @@ class JoinStateType(types.Type):
 
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray]: Returns a tuple of 3 values:
-                - The array of C++ column indices for the build table that should be included
+                - The array of C++ column indices for the probe table that should be included
                   in the output table. This may reorder or drop columns.
                 - The array of C++ column indices for the build table that should be included
                   in the output table. This may reorder or drop columns.
@@ -749,24 +749,24 @@ class JoinStateType(types.Type):
             kept_cols = set(unwrap_typeref(used_cols).meta)
 
         out_cols = []
-        # Compute the build side
-        build_cols, build_output, live_col_counter = self._get_table_live_col_arrs(
-            self.build_key_inds, self.build_table_type, kept_cols, 0, 0
-        )
         # Compute the probe side
-        probe_cols, probe_output, _ = self._get_table_live_col_arrs(
-            self.probe_key_inds,
-            self.probe_table_type,
+        probe_cols, probe_output, live_col_counter = self._get_table_live_col_arrs(
+            self.probe_key_inds, self.probe_table_type, kept_cols, 0, 0
+        )
+        # Compute the build side
+        build_cols, build_output, _ = self._get_table_live_col_arrs(
+            self.build_key_inds,
+            self.build_table_type,
             kept_cols,
             live_col_counter,
-            len(self.build_table_type.arr_types),
+            len(self.probe_table_type.arr_types),
         )
-        out_cols = build_output + probe_output
+        out_cols = probe_output + build_output
 
         # Return the results as arrays
         return (
-            np.array(build_cols, dtype=np.int64),
             np.array(probe_cols, dtype=np.int64),
+            np.array(build_cols, dtype=np.int64),
             np.array(out_cols, dtype=np.int64),
         )
 
@@ -968,15 +968,15 @@ def init_join_state(
         # Parse the query
         _, _, parsed_gen_expr = bodo.hiframes.dataframe_impl._parse_merge_cond(
             gen_expr_const,
-            output_type.build_column_names,
-            build_table_type.arr_types,
             output_type.probe_column_names,
             probe_table_type.arr_types,
+            output_type.build_column_names,
+            build_table_type.arr_types,
         )
-        left_logical_to_physical = output_type.build_logical_to_physical_map()
-        right_logical_to_physical = output_type.probe_logical_to_physical_map()
-        left_var_map = {c: i for i, c in enumerate(output_type.build_column_names)}
-        right_var_map = {c: i for i, c in enumerate(output_type.probe_column_names)}
+        left_logical_to_physical = output_type.probe_logical_to_physical_map()
+        right_logical_to_physical = output_type.build_logical_to_physical_map()
+        left_var_map = {c: i for i, c in enumerate(output_type.probe_column_names)}
+        right_var_map = {c: i for i, c in enumerate(output_type.build_column_names)}
 
         # Generate a general join condition cfunc
         general_cond_cfunc, _, _ = gen_general_cond_cfunc(
@@ -987,11 +987,11 @@ def init_join_state(
             left_var_map,
             None,
             set(),
-            build_table_type,
+            probe_table_type,
             right_var_map,
             None,
             set(),
-            probe_table_type,
+            build_table_type,
             compute_in_batch=not output_type.build_key_inds,
         )
         cfunc_native_name = general_cond_cfunc.native_name
@@ -1220,8 +1220,8 @@ def join_probe_consume_batch(
 
     # Determine the live columns.
     (
-        kept_build_cols,
         kept_probe_cols,
+        kept_build_cols,
         out_cols_arr,
     ) = join_state.get_output_live_col_arrs(used_cols)
 

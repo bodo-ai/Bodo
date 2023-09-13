@@ -584,10 +584,10 @@ inline void handle_probe_input_for_partition(
         if (non_equi_condition) {
             // Check for matches with the non-equality portion.
             bool match =
-                cond_func(build_table_info_ptrs.data(),
-                          probe_table_info_ptrs.data(), build_col_ptrs.data(),
-                          probe_col_ptrs.data(), build_null_bitmaps.data(),
-                          probe_null_bitmaps.data(), j_build, i_row);
+                cond_func(probe_table_info_ptrs.data(),
+                          build_table_info_ptrs.data(), probe_col_ptrs.data(),
+                          build_col_ptrs.data(), probe_null_bitmaps.data(),
+                          build_null_bitmaps.data(), i_row, j_build);
             if (!match) {
                 continue;
             }
@@ -903,9 +903,26 @@ void JoinState::InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
     }
     std::vector<int8_t> arr_c_types, arr_array_types;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-    arr_c_types.reserve(build_kept_cols.size() + probe_kept_cols.size());
-    arr_array_types.reserve(build_kept_cols.size() + probe_kept_cols.size());
-    dict_builders.reserve(build_kept_cols.size() + probe_kept_cols.size());
+    arr_c_types.reserve(probe_kept_cols.size() + build_kept_cols.size());
+    arr_array_types.reserve(probe_kept_cols.size() + build_kept_cols.size());
+    dict_builders.reserve(probe_kept_cols.size() + build_kept_cols.size());
+    for (uint64_t i_col : probe_kept_cols) {
+        bodo_array_type::arr_type_enum arr_type =
+            (bodo_array_type::arr_type_enum)this->probe_arr_array_types[i_col];
+        Bodo_CTypes::CTypeEnum dtype =
+            (Bodo_CTypes::CTypeEnum)this->probe_arr_c_types[i_col];
+        // In the build outer case, we need to make NUMPY arrays
+        // into NULLABLE arrays. Matches the `use_nullable_arrs`
+        // behavior of RetrieveTable.
+        if (this->build_table_outer && ((arr_type == bodo_array_type::NUMPY) &&
+                                        (is_integer(dtype) || is_float(dtype) ||
+                                         dtype == Bodo_CTypes::_BOOL))) {
+            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+        }
+        arr_c_types.push_back(dtype);
+        arr_array_types.push_back(arr_type);
+        dict_builders.push_back(this->probe_table_dict_builders[i_col]);
+    }
     for (uint64_t i_col : build_kept_cols) {
         bodo_array_type::arr_type_enum arr_type =
             (bodo_array_type::arr_type_enum)this->build_arr_array_types[i_col];
@@ -923,23 +940,6 @@ void JoinState::InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
         arr_c_types.push_back(dtype);
         arr_array_types.push_back(arr_type);
         dict_builders.push_back(this->build_table_dict_builders[i_col]);
-    }
-    for (uint64_t i_col : probe_kept_cols) {
-        bodo_array_type::arr_type_enum arr_type =
-            (bodo_array_type::arr_type_enum)this->probe_arr_array_types[i_col];
-        Bodo_CTypes::CTypeEnum dtype =
-            (Bodo_CTypes::CTypeEnum)this->probe_arr_c_types[i_col];
-        // In the build outer case, we need to make NUMPY arrays
-        // into NULLABLE arrays. Matches the `use_nullable_arrs`
-        // behavior of RetrieveTable.
-        if (this->build_table_outer && ((arr_type == bodo_array_type::NUMPY) &&
-                                        (is_integer(dtype) || is_float(dtype) ||
-                                         dtype == Bodo_CTypes::_BOOL))) {
-            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
-        }
-        arr_c_types.push_back(dtype);
-        arr_array_types.push_back(arr_type);
-        dict_builders.push_back(this->probe_table_dict_builders[i_col]);
     }
     this->output_buffer = std::make_shared<ChunkedTableBuilder>(
         arr_c_types, arr_array_types, dict_builders,

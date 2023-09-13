@@ -1796,16 +1796,17 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.insertStateStartTimer();
     JoinInfo joinInfo = node.analyzeCondition();
     Pair<Variable, Variable> keyIndices = getStreamingJoinKeyIndices(joinInfo, this);
-    List<String> buildNodeNames = node.getLeft().getRowType().getFieldNames();
-    List<String> probeNodeNames = node.getRight().getRowType().getFieldNames();
+    // SQL convention is that probe table is on the left and build table is on the right.
+    List<String> probeNodeNames = node.getLeft().getRowType().getFieldNames();
+    List<String> buildNodeNames = node.getRight().getRowType().getFieldNames();
     // Fetch the names for each child.
-    List<Expr.StringLiteral> buildColNames = stringsToStringLiterals(buildNodeNames);
     List<Expr.StringLiteral> probeColNames = stringsToStringLiterals(probeNodeNames);
-    Variable buildNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(buildColNames));
+    List<Expr.StringLiteral> buildColNames = stringsToStringLiterals(buildNodeNames);
     Variable probeNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(probeColNames));
+    Variable buildNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(buildColNames));
     // Get the non equi-join info
     Expr nonEquiCond =
-        visitNonEquiConditions(joinInfo.nonEquiConditions, buildNodeNames, probeNodeNames);
+        visitNonEquiConditions(joinInfo.nonEquiConditions, probeNodeNames, buildNodeNames);
     // Right now we must process nonEquiCond as a string.
     String condString = nonEquiCond.emit();
     final List<kotlin.Pair<String, Expr>> namedArgs;
@@ -1828,12 +1829,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
         new Expr.Call(
             "bodo.libs.stream_join.init_join_state",
             List.of(
-                keyIndices.left,
                 keyIndices.right,
+                keyIndices.left,
                 buildNamesGlobal,
                 probeNamesGlobal,
-                isLeftOuter,
-                isRightOuter),
+                isRightOuter,
+                isLeftOuter),
             namedArgs);
     Op.Assign joinInit = new Op.Assign(joinStateVar, stateCall);
     batchPipeline.initializeStreamingState(operatorID, joinInit);
@@ -1844,7 +1845,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private StateVariable visitStreamingPandasJoinBatch(
       PandasJoin node, StreamingRelNodeTimer timerInfo, int operatorID) {
     // Visit the batch side
-    this.visit(node.getLeft(), 0, node);
+    this.visit(node.getRight(), 0, node);
     BodoEngineTable buildTable = tableGenStack.pop();
     StateVariable joinStateVar = visitStreamingPandasJoinState(node, timerInfo, operatorID);
     timerInfo.insertLoopOperationStartTimer();
@@ -1870,7 +1871,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       StreamingRelNodeTimer timerInfo,
       int operatorID) {
     // Visit the probe side
-    this.visit(node.getRight(), 1, node);
+    this.visit(node.getLeft(), 1, node);
     timerInfo.insertLoopOperationStartTimer();
     BodoEngineTable probeTable = tableGenStack.pop();
     StreamingPipelineFrame probePipeline = generatedCode.getCurrentStreamingPipeline();

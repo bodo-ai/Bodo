@@ -35,16 +35,15 @@ abstract class JoinBase(
             .multiplyBy(conditionRows)
 
         // Compute the memory cost from each of the inputs. Join must use every column
-        val buildRows = mq.getRowCount(this.left)
-        val averageBuildRowSize = mq.getAverageRowSize(this.left) ?: 8.0
-        val probeRows = mq.getRowCount(this.right)
-        val averageProbeRowSize = mq.getAverageRowSize(this.right) ?: 8.0
+        val probeRows = mq.getRowCount(this.left)
+        val averageProbeRowSize = mq.getAverageRowSize(this.left) ?: 8.0
+        val buildRows = mq.getRowCount(this.right)
+        val averageBuildRowSize = mq.getAverageRowSize(this.right) ?: 8.0
         // Build cost should be higher than probe cost because we must make the hash table.
-        // If we have a LEFT JOIN and similar sizes we may want to do a right join because
+        // If we have a RIGHT JOIN and similar sizes we may want to do a LEFT JOIN because
         // there is overhead to tracking the misses.
-        // TODO: Decide on the actual size threshold.
         val baseBuildMultiplier = 1.3
-        val buildMultiplier = if (this.joinType == JoinRelType.LEFT) { baseBuildMultiplier * 1.0 } else { baseBuildMultiplier }
+        val buildMultiplier = if (this.joinType == JoinRelType.RIGHT) { baseBuildMultiplier * 1.0 } else { baseBuildMultiplier }
         val buildCost = Cost(mem = averageBuildRowSize).multiplyBy(buildRows).multiplyBy(buildMultiplier)
         val probeCost = Cost(mem = averageProbeRowSize).multiplyBy(probeRows)
 
