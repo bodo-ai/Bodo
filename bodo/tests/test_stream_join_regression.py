@@ -62,14 +62,14 @@ global_1 = MetaType((0, 1, 5, 8))
 global_6 = MetaType((4, 5, 6, 7, 8, 2, 3, 1))
 global_7 = ColNamesMetaType(
     (
+        "o_orderpriority",
+        "o_comment",
+        "o_custkey",
         "l_orderkey",
         "l_extendedprice",
         "l_shipinstruct",
         "l_shipmode",
         "l_comment",
-        "o_orderpriority",
-        "o_comment",
-        "o_custkey",
     )
 )
 global_4 = ColNamesMetaType(
@@ -87,14 +87,14 @@ def impl(conn_str):  # Codegen change: add conn_str
     Simple read from Snowflake followed by a hash join.
     The equivalent SQL query is:
         select
+            o_orderpriority,
+            o_comment,
+            o_custkey,
             l_orderkey,
             l_extendedprice,
             l_shipinstruct,
             l_shipmode,
-            l_comment,
-            o_orderpriority,
-            o_comment,
-            o_custkey
+            l_comment
         from
             lineitem,
             orders

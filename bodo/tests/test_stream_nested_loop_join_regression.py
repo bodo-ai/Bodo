@@ -177,14 +177,14 @@ def impl(conn_str):  # Codegen change: add conn_str
     Simple read from Snowflake followed by a nested loop join.
     The equivalent SQL query is:
         select
+            o_orderpriority,
+            o_comment,
+            o_custkey,
             l_orderkey,
             l_extendedprice,
             l_shipinstruct,
             l_shipmode,
-            l_comment,
-            o_orderpriority,
-            o_comment,
-            o_custkey
+            l_comment
         from
             (select * from lineitem limit num_rows),
             (select * from orders limit num_rows)
@@ -229,7 +229,7 @@ def impl(conn_str):  # Codegen change: add conn_str
         global_5,
         global_build_outer,
         global_probe_outer,
-        non_equi_condition="(right.`L_SHIPDATE` < left.`O_ORDERDATE`)",
+        non_equi_condition="(left.`L_SHIPDATE` < right.`O_ORDERDATE`)",
     )
     _temp23 = time.time()
     _temp24 = _temp23 - _temp2
@@ -433,14 +433,14 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
     """
     SQL query similar to the above, but without a condition (i.e. pure cross join):
         select
+            o_orderpriority,
+            o_comment,
+            o_custkey,
             l_orderkey,
             l_extendedprice,
             l_shipinstruct,
             l_shipmode,
-            l_comment,
-            o_orderpriority,
-            o_comment,
-            o_custkey
+            l_comment
         from
             (select * from lineitem limit num_rows),
             (select * from orders limit num_rows)
@@ -598,14 +598,14 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
         df56 = df49.loc[
             :,
             [
+                "o_orderpriority",
+                "o_comment",
+                "o_custkey",
                 "l_orderkey",
                 "l_extendedprice",
                 "l_shipinstruct",
                 "l_shipmode",
                 "l_comment",
-                "o_orderpriority",
-                "o_comment",
-                "o_custkey",
             ],
         ]
         _temp57 = time.time()
@@ -651,14 +651,14 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
     """
     SQL query with huge build table:
         select
+            o_orderpriority,
+            o_comment,
+            o_custkey,
             l_orderkey,
             l_extendedprice,
             l_shipinstruct,
             l_shipmode,
-            l_comment,
-            o_orderpriority,
-            o_comment,
-            o_custkey
+            l_comment
         from
             (select * from orders limit 100000000),
             (select * from lineitem limit 5)
@@ -669,14 +669,14 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
     for the build step. What we do is
     1. run codegen for this query:
         select
+            o_orderpriority,
+            o_comment,
+            o_custkey,
             l_orderkey,
             l_extendedprice,
             l_shipinstruct,
             l_shipmode,
-            l_comment,
-            o_orderpriority,
-            o_comment,
-            o_custkey
+            l_comment
         from
             (select * from orders limit 5),
             (select * from lineitem limit 100000000)
@@ -713,7 +713,7 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
         global_5,
         global_build_outer,
         global_probe_outer,
-        non_equi_condition="(right.`L_SHIPDATE` < left.`O_ORDERDATE`)",
+        non_equi_condition="(left.`L_SHIPDATE` < right.`O_ORDERDATE`)",
     )
     _temp23 = time.time()
     _temp24 = _temp23 - _temp2
@@ -858,14 +858,14 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
         df56 = df49.loc[
             :,
             [
+                "O_ORDERPRIORITY",
+                "O_COMMENT",
+                "O_CUSTKEY",
                 "L_ORDERKEY",
                 "L_EXTENDEDPRICE",
                 "L_SHIPINSTRUCT",
                 "L_SHIPMODE",
                 "L_COMMENT",
-                "O_ORDERPRIORITY",
-                "O_COMMENT",
-                "O_CUSTKEY",
             ],
         ].rename(
             columns={

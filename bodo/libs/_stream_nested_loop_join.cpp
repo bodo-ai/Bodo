@@ -139,10 +139,10 @@ void nested_loop_join_local_chunk(
         probe_table_outer == probe_table_outer_exp &&                       \
         non_equi_condition == non_equi_condition_exp) {                     \
         nested_loop_join_table_local<                                       \
-            build_table_outer_exp, probe_table_outer_exp,                   \
+            probe_table_outer_exp, build_table_outer_exp,                   \
             non_equi_condition_exp, bodo::PinnableAllocator<std::uint8_t>>( \
-            build_table, probe_table, cond_func, false, build_idxs,         \
-            probe_idxs, *build_table_matched_guard, probe_table_matched,    \
+            probe_table, build_table, cond_func, false, probe_idxs,         \
+            build_idxs, probe_table_matched, *build_table_matched_guard,    \
             build_table_offset);                                            \
     }
 #endif
