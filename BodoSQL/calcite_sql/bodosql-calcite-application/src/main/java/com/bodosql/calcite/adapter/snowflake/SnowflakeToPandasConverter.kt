@@ -209,8 +209,8 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
 
             override fun visit(node: RelNode, ordinal: Int, parent: RelNode?) {
                 if (node is Project) {
-                    for (i in 0..<node.projects.size) {
-                        val project = node.projects[i]
+                    for (i in 0..<originalColumns.size) {
+                        val project = node.projects[originalColumns[i]]
                         if (project !is RexInputRef) {
                             throw RuntimeException("getOriginalColumnIndices() requires only InputRefs")
                         }
