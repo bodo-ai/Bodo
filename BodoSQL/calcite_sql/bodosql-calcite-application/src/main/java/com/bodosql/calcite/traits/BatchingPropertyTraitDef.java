@@ -49,6 +49,6 @@ public class BatchingPropertyTraitDef extends RelTraitDef<BatchingProperty> {
 
   @Override
   public BatchingProperty getDefault() {
-    return BatchingProperty.SINGLE_BATCH;
+    return BatchingProperty.NONE;
   }
 }

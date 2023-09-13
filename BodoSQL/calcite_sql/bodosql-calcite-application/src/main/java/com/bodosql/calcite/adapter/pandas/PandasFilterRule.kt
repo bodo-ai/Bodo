@@ -22,7 +22,7 @@ class PandasFilterRule private constructor(config: Config) : ConverterRule(confi
 
     override fun convert(rel: RelNode): RelNode {
         val filter = rel as Filter
-        val batchProperty = ExpectedBatchingProperty.projectFilterProperty(listOf(filter.condition))
+        val batchProperty = ExpectedBatchingProperty.filterProperty(filter.condition)
         return PandasFilter.create(
             rel.cluster,
             convert(

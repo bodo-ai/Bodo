@@ -3,6 +3,7 @@ package com.bodosql.calcite.adapter.snowflake
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
 import com.bodosql.calcite.table.CatalogTableImpl
 import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.rel2sql.BodoRelToSqlConverter
@@ -94,4 +95,9 @@ interface SnowflakeRel : RelNode {
     }
 
     fun getCatalogTable(): CatalogTableImpl
+
+    /**
+     * Get the batching property.
+     */
+    fun batchingProperty(): BatchingProperty = traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) ?: BatchingProperty.NONE
 }
