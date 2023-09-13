@@ -38,7 +38,7 @@ const int SHUFFLE_THRESHOLD = __env_threshold_str != nullptr
 #ifndef DEFAULT_SYNC_ITERS
 // Default number of iterations between syncs
 // NOTE: should be the same as default_stream_loop_sync_iters in __init__.py
-#define DEFAULT_SYNC_ITERS 100
+#define DEFAULT_SYNC_ITERS 1000
 #endif
 
 #ifndef SYNC_UPDATE_FREQ

@@ -104,7 +104,7 @@ enable_groupby_streaming = os.environ.get("BODO_ENABLE_GROUPBY_STREAMING", "1") 
 stream_loop_sync_iters = int(os.environ.get("BODO_STREAM_LOOP_SYNC_ITERS", -1))
 # Default value for above to use if not specified by user
 # NOTE: should be the same as DEFAULT_SYNC_ITERS in _shuffle.h
-default_stream_loop_sync_iters = 100
+default_stream_loop_sync_iters = 1000
 
 #### END STREAMING CONFIGURATION ####
 
