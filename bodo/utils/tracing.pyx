@@ -419,7 +419,7 @@ cdef class ResumableEvent(EventBase):
         self.trace["args"]["internal_dur"] = self.resumable_dur
         self.trace["tdur"] = self.resumable_dur
         if autobatched:
-            self.trace["args"]["autobatched"] = True
+            self.trace["args"]["g_autobatched"] = True
         super().finalize(aggregate)
         traceEvents.append(self.trace)
 
@@ -440,6 +440,9 @@ cdef class ResumableEvent(EventBase):
 
     def start_iteration(self):
         """Start a new iteration on the resumable event."""
+        if self.iteration_count == 0:
+            # First iteration, set the start time
+            self.trace["ts"] = get_timestamp()
         if self.current_iter_start < 0:
             self.current_iter_start = get_timestamp()
             self.iteration_count += 1
