@@ -209,42 +209,68 @@ def mk_broadcasted_string_queries():
     """
     queries = [
         (
+            "SELECT LPAD(strings_null_1, mixed_ints_null) from table1",
+            "LPAD-all_vector-2args",
+            True,
+        ),
+        (
+            "SELECT LPAD(strings_null_1, 20) from table1",
+            "LPAD-scalar_int-2args",
+            True,
+        ),
+        ("SELECT LPAD('A', 25) from table1", "LPAD-all_scalar-2args", True),
+        (
+            "SELECT RPAD(strings_null_1, mixed_ints_null) from table1",
+            "RPAD-all_vector-2args",
+            True,
+        ),
+        (
+            "SELECT RPAD(strings_null_1, 25) from table1",
+            "RPAD-scalar_int-2args",
+            True,
+        ),
+        (
+            "SELECT RPAD('words', 25) from table1",
+            "RPAD-two_scalar-2args",
+            True,
+        ),
+        (
             "SELECT LPAD(strings_null_1, mixed_ints_null, strings_null_2) from table1",
-            "LPAD_all_vector",
+            "LPAD-all_vector",
             False,
         ),
         (
             "SELECT LPAD(strings_null_1, mixed_ints_null, ' ') from table1",
-            "LPAD_scalar_str",
+            "LPAD-scalar_str",
             False,
         ),
         (
             "SELECT LPAD(strings_null_1, 20, strings_null_2) from table1",
-            "LPAD_scalar_int",
+            "LPAD-scalar_int",
             True,
         ),
-        ("SELECT LPAD('A', 25, ' ') from table1", "LPAD_all_scalar", False),
+        ("SELECT LPAD('A', 25, ' ') from table1", "LPAD-all_scalar", False),
         (
             "SELECT RPAD(strings_null_1, mixed_ints_null, strings_null_2) from table1",
-            "RPAD_all_vector",
+            "RPAD-all_vector",
             False,
         ),
         (
             "SELECT RPAD(strings_null_1, mixed_ints_null, 'ABC') from table1",
-            "RPAD_scalar_str",
+            "RPAD-scalar_str",
             True,
         ),
         (
             "SELECT RPAD(strings_null_1, 25, strings_null_2) from table1",
-            "RPAD_scalar_int",
+            "RPAD-scalar_int",
             True,
         ),
         (
             "SELECT RPAD('words', 25, strings_null_2) from table1",
-            "RPAD_two_scalar",
+            "RPAD-two_scalar",
             True,
         ),
-        ("SELECT RPAD('B', 20, '_$*') from table1", "RPAD_all_scalar", True),
+        ("SELECT RPAD('B', 20, '_$*') from table1", "RPAD-all_scalar", True),
         (
             "SELECT LEFT(strings_null_1, positive_ints) from table1",
             "LEFT_all_vector",
@@ -384,7 +410,6 @@ def test_string_fns_scalar_vector_case(
     bodosql_string_fn_testing_df,
     memory_leak_check,
 ):
-
     lhs, _ = broadcasted_string_query.split(" from ")
     lhs = lhs[7:]
     broadcasted_string_query = (
@@ -1283,11 +1308,7 @@ def test_replace_two_args_column(memory_leak_check):
             }
         )
     }
-    expected_output = pd.DataFrame(
-        {
-            "A": ["", None, None, "no replace", "zyxxx"] * 4
-        }
-    )
+    expected_output = pd.DataFrame({"A": ["", None, None, "no replace", "zyxxx"] * 4})
     check_query(
         query,
         ctx,
@@ -1299,7 +1320,7 @@ def test_replace_two_args_column(memory_leak_check):
 
 @pytest.mark.parametrize(
     "query, output",
-[
+    [
         pytest.param(
             "SELECT SHA2('Default digest size is 256')",
             "dac91c24b4686ce55713b01c5a21fff1cbce74db3a3e3feee36231471b13f96c",
@@ -1376,7 +1397,8 @@ def test_sha2_columns(query, memory_leak_check):
                     "90babc4e5405e215a4bbdfaf13def1687ef0f00ad152705250890400b7a097a3",
                     "0dc95e29e0583513cb4a75409bcdf9cee72eb647d0ee7f43fa47832b4efd4c23",
                     "b3af10a334d34a4c6dee44530efd39a1b2564b443d5e617d209cb8921c642f7e",
-                ] * 4,
+                ]
+                * 4,
             )
         }
     )
@@ -1391,7 +1413,7 @@ def test_sha2_columns(query, memory_leak_check):
 
 @pytest.mark.parametrize(
     "query, output",
-[
+    [
         pytest.param(
             "SELECT MD5('String to be MD5 encrypted')",
             "6f8c044a4e850a2710dfb65fc77e9665",
@@ -1452,7 +1474,8 @@ def test_md5_columns(query, memory_leak_check):
                     None,
                     "ea168808cd7e976473706fd1ec902b6f",
                     "e68c0610abfc1dd0f5fde151e0c7ee35",
-                ] * 4,
+                ]
+                * 4,
             )
         }
     )
@@ -1463,3 +1486,34 @@ def test_md5_columns(query, memory_leak_check):
         check_names=False,
         expected_output=output,
     )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("func", ["LPAD", "RPAD"])
+def test_binary_pad_2args_errorchecking(func, memory_leak_check):
+    """Test error message is thrown when
+    LPAD/RPAD is used with binary data and 2 arguments.
+    """
+
+    query = f"SELECT {func}(A, len) FROM table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": np.array([b"abc", b"c", None, b"ccdefg"] * 3, object),
+                "len": pd.Series(
+                    [None, -1, 10, 0] * 3,
+                    dtype=pd.Int32Dtype(),
+                ),
+            }
+        )
+    }
+    with pytest.raises(
+        Exception,
+        match="When base is a binary value, the pad argument must be provided explicitly",
+    ):
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output="Error",
+        )
