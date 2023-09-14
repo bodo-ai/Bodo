@@ -160,6 +160,8 @@ if develop_mode:
     if not (is_m1_mac or is_mac):
         eca.append("-Wno-alloc-size-larger-than")
 eca.append("-Wno-c99-designator")
+eca.append("-Wno-return-type-c-linkage")
+eca.append("-Wno-macro-redefined")
 
 # Use a single C-extension for all of Bodo
 # Copying ind, lid, eca, and ela to avoid aliasing, as we continue to append
@@ -375,17 +377,14 @@ if is_testing:
     ext_metadata["define_macros"].append(("IS_TESTING", "1"))
 
 
-# We cannot compile with -Werror yet because _fsspec_reader.cpp
-# depends on pyfs.cpp which generates a warning.
-ext_metadata["extra_compile_args"] = [
-    x for x in ext_metadata["extra_compile_args"] if x != "-Werror"
-]
-
 # Inject required options for extensions compiled against the Numpy
 # C API (include dirs, library dirs etc.)
 np_compile_args = np_misc.get_info("npymath")
 ext_metadata["libraries"] += np_compile_args["libraries"]
-ext_metadata["include_dirs"] += np_compile_args["include_dirs"]
+# Include all Numpy headers as system includes (prevents warnings from being
+# emitted)
+for dir_ in np_compile_args["include_dirs"]:
+    ext_metadata["extra_compile_args"].append(f"-isystem{dir_}")
 ext_metadata["library_dirs"] += np_compile_args["library_dirs"]
 ext_metadata["define_macros"] += np_compile_args["define_macros"]
 
@@ -395,7 +394,11 @@ pa_compile_args = {
     "include_dirs": [pyarrow.get_include()],
     "library_dirs": pyarrow.get_library_dirs(),
 }
-ext_metadata["include_dirs"].extend(pa_compile_args["include_dirs"])
+
+# Include all pyarrow headers as system includes (prevents warnings from
+# being emitted)
+for dir_ in pa_compile_args["include_dirs"]:
+    ext_metadata["extra_compile_args"].append(f"-isystem{dir_}")
 ext_metadata["library_dirs"].extend(pa_compile_args["library_dirs"])
 
 # Compile Bodo extension
@@ -417,9 +420,7 @@ ext_arrow = Extension(
     define_macros=[],
     library_dirs=lid + pa_compile_args["library_dirs"],
     libraries=["arrow", "arrow_python"],
-    # We cannot compile with -Werror yet because pyfs.cpp
-    # generates serveral warnings.
-    extra_compile_args=[x for x in eca if x != "-Werror"],
+    extra_compile_args=eca + ["-Wno-unused-variable"],
     extra_link_args=ela,
     language="c++",
 )
@@ -435,9 +436,7 @@ ext_pyfs = Extension(
     define_macros=[],
     library_dirs=lid + pa_compile_args["library_dirs"],
     libraries=["arrow", "arrow_python"],
-    # We cannot compile with -Werror yet because pyfs.cpp
-    # generates serveral warnings.
-    extra_compile_args=[x for x in eca if x != "-Werror"],
+    extra_compile_args=eca + ["-Wno-unused-variable"],
     extra_link_args=ela,
     language="c++",
 )
@@ -453,9 +452,7 @@ ext_hdfs_pyarrow = Extension(
     define_macros=[],
     library_dirs=lid + pa_compile_args["library_dirs"],
     libraries=["arrow", "arrow_python"],
-    # We cannot compile with -Werror yet because hdfs.cpp
-    # generates serveral warnings.
-    extra_compile_args=[x for x in eca if x != "-Werror"],
+    extra_compile_args=eca + ["-Wno-unused-variable"],
     extra_link_args=ela,
     language="c++",
 )
@@ -490,7 +487,7 @@ ext_memory = Extension(
     libraries=["arrow", "arrow_python"] + mpi_libs,
     # Cannot compile with -Werror yet because memory.cpp
     # generated multiple unused variable warnings
-    extra_compile_args=[x for x in eca if x != "-Werror"],
+    extra_compile_args=eca + ["-Wno-unused-variable"],
     extra_link_args=ela,
     language="c++",
 )

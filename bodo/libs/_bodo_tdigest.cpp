@@ -150,7 +150,9 @@ class TDigest::TDigestImpl {
         // trivial dynamic memory allocated at runtime
         std::vector<CentroidIterPair> queue_buffer;
         queue_buffer.reserve(tdigest_impls.size() + 1);
+        PUSH_IGNORED_COMPILER_ERROR("-Waggressive-loop-optimizations");
         CentroidQueue queue(std::move(centroid_gt), std::move(queue_buffer));
+        POP_IGNORED_COMPILER_ERROR();
 
         const auto& this_tdigest = tdigests_[current_];
         if (this_tdigest.size() > 0) {
@@ -271,7 +273,9 @@ class TDigest::TDigestImpl {
         // trivial dynamic memory allocated at runtime
         std::vector<CentroidIterPair> queue_buffer;
         queue_buffer.reserve(n_pes);
+        PUSH_IGNORED_COMPILER_ERROR("-Waggressive-loop-optimizations");
         CentroidQueue queue(std::move(centroid_gt), std::move(queue_buffer));
+        POP_IGNORED_COMPILER_ERROR();
 
         // Bodo changes
 

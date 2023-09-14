@@ -56,7 +56,7 @@ class SnowflakeReader : public ArrowReader {
     virtual ~SnowflakeReader() { Py_XDECREF(sf_conn); }
 
     /// A piece is a snowflake.connector.result_batch.ArrowResultBatch
-    virtual size_t get_num_pieces() const override {
+    size_t get_num_pieces() const override {
         if (!this->initialized) {
             return this->result_batches.size();
         } else {
@@ -76,7 +76,7 @@ class SnowflakeReader : public ArrowReader {
         result_batches.push(piece);
     }
 
-    virtual PyObject* get_dataset() override {
+    PyObject* get_dataset() override {
         // import bodo.io.snowflake
         PyObject* sf_mod = PyImport_ImportModule("bodo.io.snowflake");
         if (PyErr_Occurred()) {
@@ -122,7 +122,7 @@ class SnowflakeReader : public ArrowReader {
         return ds;
     }
 
-    virtual std::shared_ptr<table_info> get_empty_out_table() override {
+    std::shared_ptr<table_info> get_empty_out_table() override {
         if (this->empty_out_table == nullptr) {
             TableBuilder builder(schema, selected_fields, 0, is_nullable,
                                  str_as_dict_colnames, false);
@@ -184,7 +184,7 @@ class SnowflakeReader : public ArrowReader {
     // https://bodo.atlassian.net/l/cp/4JwaiChQ
     // Non-Streaming Uses TableBuilder to Construct Output
     // Streaming Uses ChunkedTableBuilder to Construct Batches
-    virtual std::tuple<table_info*, bool, uint64_t> read_inner() override {
+    std::tuple<table_info*, bool, uint64_t> read_inner() override {
         using namespace std::chrono;
         // Note: These can be called in a loop by streaming.
         // Set the parallel flag to False.

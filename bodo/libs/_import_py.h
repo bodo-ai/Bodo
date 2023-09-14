@@ -7,6 +7,7 @@
 /* Import 'sym' from module 'module'.
  */
 static PyObject *import_sym(const char *module, const char *sym) __UNUSED__ {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
