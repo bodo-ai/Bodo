@@ -26,6 +26,7 @@
         throw std::runtime_error(err_msg);                                   \
     }
 
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK_ARROW(res.status(), msg)            \
     lhs = std::move(res).ValueOrDie();

@@ -16,6 +16,33 @@
 #include "simd-block-fixed-fpp.h"
 #include "tracing.h"
 
+// Macros for temporarily disabling compiler errors. Example usage:
+//   [[deprecated]] int f() {
+//     return 0;
+//   }
+//
+//   int main() {
+//     PUSH_IGNORED_COMPILER_ERROR("-Wdeprecated-declarations");
+//     return f(); // would normally raise an error
+//     POP_IGNORED_COMPILER_ERROR();
+//   }
+// See https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Pragmas.html
+#define DO_PRAGMA(x) _Pragma(#x)
+#define PUSH_IGNORED_COMPILER_ERROR(err)                                      \
+    DO_PRAGMA(GCC diagnostic push);                                           \
+    /* some compilers don't support -Wunknown-warning-option as used below */ \
+    DO_PRAGMA(GCC diagnostic ignored "-Wpragmas");                            \
+    /* some compilers might not implement the error class specified */        \
+    DO_PRAGMA(GCC diagnostic ignored "-Wunknown-warning-option");             \
+    /* Ignore the requested error class */                                    \
+    DO_PRAGMA(GCC diagnostic ignored err);                                    \
+    /* emit a compiler message so we don't lose track of ignored errors */    \
+    DO_PRAGMA(message "Ignoring error " err " in " __FILE__)
+// Every call to PUSH_IGNORED_COMPILER_ERROR  MUST  have a corresponding call to
+// POP_IGNORED_COMPILER_ERROR. Otherwise the error will be disabled for the rest
+// of compilation
+#define POP_IGNORED_COMPILER_ERROR() DO_PRAGMA(GCC diagnostic pop)
+
 // Convenience macros from
 // https://github.com/numba/numba/blob/main/numba/_pymodule.h
 #define MOD_DEF(ob, name, doc, methods)                                     \

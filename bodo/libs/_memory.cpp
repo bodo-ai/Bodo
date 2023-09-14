@@ -8,6 +8,7 @@
 
 #define MAX_NUM_STORAGE_MANAGERS 4
 
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(expr, msg, lhs)  \
     {                                           \
         auto res = expr;                        \

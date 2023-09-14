@@ -15,6 +15,7 @@
 
 // if expr is not true, form an err msg and raise a
 // runtime_error with it
+#undef CHECK
 #define CHECK(expr, msg, file_type)                                  \
     if (!(expr)) {                                                   \
         std::string err_msg =                                        \
@@ -46,6 +47,7 @@
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it. If it is ok, get value using ValueOrDie
 // and assign it to lhs using std::move
+#undef CHECK_ARROW_AND_ASSIGN
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs, file_type)                   \
     if (!(res.status().ok())) {                                            \
         std::string err_msg = std::string("Error in arrow ") + file_type + \
