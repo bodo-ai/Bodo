@@ -18,7 +18,8 @@ set -x
 # --no-update-deps ensures that no dependencies are upgraded.
 # If the conda-lock file is out of date, this would cause this installation
 # to fail. To fix, we usually need to update the lock-file.
-CONDA_INSTALL="mamba install -y --no-update-deps"
+# NOTE: Temporarily removing --no-update-deps
+CONDA_INSTALL="mamba install -y"
 BODO_BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
 
 # Install Bodo first, followed by the iceberg connector, and then install BodoSQL so we don't install Bodo from the wrong
