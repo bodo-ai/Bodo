@@ -11,6 +11,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import kotlin.Pair;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 public class StringFnCodeGen {
 
@@ -93,6 +95,46 @@ public class StringFnCodeGen {
     } else {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
+  }
+
+  /**
+   * Function that returns the rexInfo for a LPAD/RPAD Function call NOTE: Snowflake allows 3rd
+   * argument to be optional only if base (1st argument) is a string From Snowflake spec: When base
+   * is a string, the default pad string default is ‘ ‘ (a single blank space). When base is a
+   * binary value, the pad argument must be provided explicitly.
+   *
+   * @param fnOperation
+   * @param operands The arguments to LPAD/RPAD function
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The Expr corresponding to the function call
+   */
+  public static Expr generatePadCode(
+      RexCall fnOperation, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    String fnName = fnOperation.getOperator().getName();
+    List<Expr> args = new ArrayList<>(operands);
+    // 2 arguments is only allowed if arg0 is string
+    if (args.size() == 2) {
+      // HA: Let me know if there's a better way to do this check.
+      // Throw an error if 1st argument is binary and no pad is provided.
+      if (SqlTypeName.BINARY_TYPES.contains(
+          fnOperation.getOperands().get(0).getType().getSqlTypeName())) {
+        throw new BodoSQLCodegenException(
+            fnName
+                + ": When base is a binary value, the pad argument must be provided explicitly.");
+      }
+      // the default pad string default is ‘ ‘ (a single blank space)
+      args.add(new Expr.StringLiteral(" "));
+    }
+    if (args.size() != 3) {
+      throw new BodoSQLCodegenException(
+          "Error, invalid number of arguments passed to "
+              + fnName
+              + ". Expected 2 or 3, received "
+              + args.size()
+              + ".\n");
+    }
+    return BodoSQLKernel(fnName.toLowerCase(), args, streamingNamedArgs);
   }
 
   /**
@@ -289,8 +331,7 @@ public class StringFnCodeGen {
       List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
     if (operands.size() == 1) {
       return ExprKt.BodoSQLKernel(
-          "sha2",
-          List.of(operands.get(0), new Expr.IntegerLiteral(256)), streamingNamedArgs);
+          "sha2", List.of(operands.get(0), new Expr.IntegerLiteral(256)), streamingNamedArgs);
     } else if (operands.size() == 2) {
       return ExprKt.BodoSQLKernel("sha2", operands, streamingNamedArgs);
     } else {

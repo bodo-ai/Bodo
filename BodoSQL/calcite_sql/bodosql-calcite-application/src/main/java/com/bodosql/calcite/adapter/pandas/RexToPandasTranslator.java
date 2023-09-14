@@ -65,6 +65,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.gen
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatWSCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateEditdistance;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateInitcapInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generatePadCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generatePosition;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateReplace;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateSHA2;
@@ -790,7 +791,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     //  * start index
     //  * substring length (optional)
     //  All of these values can be both scalars and columns
-    // NOTE: check on number of arguments happen in generateSubstringInfo
+    // NOTE: check on number of arguments happen in generateSubstringCode
     List<Expr> operands = visitList(node.operands);
     return generateSubstringCode(operands, streamingNamedArgs);
   }
@@ -1154,14 +1155,15 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "INSERT":
       case "STARTSWITH":
       case "ENDSWITH":
-      case "RPAD":
-      case "LPAD":
       case "SPLIT_PART":
       case "MID":
       case "SUBSTRING_INDEX":
       case "TRANSLATE3":
       case "SPLIT":
         return getOptimizedStringFnCode(fnName, operands, streamingNamedArgs);
+      case "RPAD":
+      case "LPAD":
+        return generatePadCode(fnOperation, operands, streamingNamedArgs);
       case "SUBSTR":
         return generateSubstringCode(operands, streamingNamedArgs);
       case "POSITION":

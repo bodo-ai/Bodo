@@ -12,6 +12,7 @@ import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
 // Operator table for three operator string functions
@@ -47,13 +48,17 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          // What Input Types does the function accept. This function accepts only
-          // (Datetime, Interval)
-          OperandTypes.sequence(
-              "LPAD(STRING, INTEGER, STRING)",
-              OperandTypes.STRING,
-              OperandTypes.INTEGER,
-              OperandTypes.STRING),
+          // What Input Types does the function accept? This function accepts only
+          // (string, binary)
+          // Takes in 3 arguments.
+          // The 1st is string/binary, the 2nd is an integer, and the 3rd is the same as the 1st.
+          // The 3rd argument can be optionally omitted if the 1st argument is a string.
+          OperandTypes.or(
+              OperandTypes.family(
+                  SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER, SqlTypeFamily.CHARACTER),
+              OperandTypes.family(
+                  SqlTypeFamily.BINARY, SqlTypeFamily.INTEGER, SqlTypeFamily.BINARY),
+              OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
@@ -68,13 +73,18 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          // What Input Types does the function accept. This function accepts only
-          // (Datetime, Interval)
-          OperandTypes.sequence(
-              "RPAD(STRING, INTEGER, STRING)",
-              OperandTypes.STRING,
-              OperandTypes.INTEGER,
-              OperandTypes.STRING),
+          // What Input Types does the function accept? This function accepts only
+          // (string, binary)
+          // Takes in 3 arguments.
+          // The first is string/binary, the second is an integer, and the third is the same as the
+          // first.
+          // The 3rd argument can be optionally omitted if the first argument is a string.
+          OperandTypes.or(
+              OperandTypes.family(
+                  SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER, SqlTypeFamily.CHARACTER),
+              OperandTypes.family(
+                  SqlTypeFamily.BINARY, SqlTypeFamily.INTEGER, SqlTypeFamily.BINARY),
+              OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
