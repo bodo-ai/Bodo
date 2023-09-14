@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
+import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
 import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelRule
@@ -72,8 +73,8 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             SqlKind.DIVIDE,
             SqlKind.MINUS_PREFIX,
             SqlKind.SEARCH,
-            // String Logical operators
-            SqlKind.LIKE,
+            // Common compute steps.
+            SqlKind.COALESCE,
         )
 
         private val SUPPORTED_GENERIC_CALL_NAMES = setOf(
@@ -81,11 +82,18 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             DatetimeOperatorTable.CURDATE.name,
             DatetimeOperatorTable.GETDATE.name,
             JsonOperatorTable.GET_PATH.name,
+            // String manipulation functions.
+            SqlStdOperatorTable.LOWER.name,
+            SqlStdOperatorTable.UPPER.name,
+            StringOperatorTable.CONCAT.name,
+            StringOperatorTable.CONCAT_WS.name,
+            // This handles ||
+            SqlStdOperatorTable.CONCAT.name,
         )
 
         @JvmStatic
         private fun isSupportedOtherFunction(call: RexCall): Boolean {
-            return call.kind == SqlKind.OTHER_FUNCTION && SUPPORTED_GENERIC_CALL_NAMES.contains(call.operator.name)
+            return (call.kind == SqlKind.OTHER_FUNCTION || call.kind == SqlKind.OTHER) && SUPPORTED_GENERIC_CALL_NAMES.contains(call.operator.name)
         }
 
         /**
@@ -95,6 +103,20 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             return call.kind == SqlKind.CAST && call.getType() is VariantSqlType
         }
 
+        /**
+         * Test for like variants we can push to Snowflake. Snowflake requires
+         * escape to be a Stirng literal.
+         */
+        private fun isSupportedLike(call: RexCall): Boolean {
+            return call.kind == SqlKind.LIKE && (call.operands.size < 3 || (call.operands[2] is RexLiteral))
+        }
+
+        /**
+         * Important note. If you update this function or its supported functions you will likely change
+         * 1 or more filters from being pushed to Snowflake by the Python compiler to instead be
+         * pushed by code generation. This means you need to run test_snowflake_catalog_filter_pushdown.py
+         * and check if any of the given tests need to have their expected logging messages updated.
+         */
         @JvmStatic
         fun isPushableFilter(filter: Filter): Boolean {
             // Not sure what things are ok to push, but we're going to be fairly conservative
@@ -108,7 +130,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                     // Allow select operators to be pushed down.
                     // This list is non-exhaustive, but are generally the functions we've seen
                     // and verified to work. Add more as appropriate.
-                    return if (call != null && (SUPPORTED_CALLS.contains(call.kind) || isSupportedOtherFunction(call) || isSupportedCast(call))) {
+                    return if (call != null && (SUPPORTED_CALLS.contains(call.kind) || isSupportedOtherFunction(call) || isSupportedCast(call) || isSupportedLike(call))) {
                         // Arguments also need to be pushable.
                         call.operands.all { op -> op.accept(this) ?: false }
                     } else {
