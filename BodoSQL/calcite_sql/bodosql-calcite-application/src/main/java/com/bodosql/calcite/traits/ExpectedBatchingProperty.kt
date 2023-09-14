@@ -10,6 +10,7 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.schema.Schema
@@ -123,9 +124,9 @@ class ExpectedBatchingProperty {
         /**
          * Determine the streaming trait for a project.
          * Streaming is not supported if the RexNodes contain a RexOver
-         * (e.g. Window Function). If all the nodes are inputRefs then
-         * we match the given property that was determined based on
-         * the input (to avoid jumping to/from streaming just to prune
+         * (e.g. Window Function). If all the nodes are inputRefs or
+         * scalars, then we match the given property that was determined
+         * based on the input (to avoid jumping to/from streaming just to prune
          * columns).
          *
          * @param nodes The nodes to check for streaming.
@@ -136,7 +137,7 @@ class ExpectedBatchingProperty {
          */
         @JvmStatic
         fun projectProperty(nodes: List<RexNode>, inputTraitSet: RelTraitSet): BatchingProperty {
-            val canStream = if (nodes.all { r -> r is RexInputRef }) {
+            val canStream = if (nodes.all { r -> r is RexInputRef || r is RexLiteral }) {
                 columnPruningIsStreaming(inputTraitSet)
             } else {
                 !RexOver.containsOver(nodes, null)
@@ -150,8 +151,8 @@ class ExpectedBatchingProperty {
         }
 
         /**
-         * Determine if we are just pruning columns do we want to use
-         * Streaming.
+         * Determine if we are just pruning columns and or adding
+         * literals, do we want to use Streaming.
          */
         private fun columnPruningIsStreaming(traitSet: RelTraitSet): Boolean {
             val property = traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) ?: BatchingProperty.NONE

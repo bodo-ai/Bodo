@@ -23,37 +23,37 @@ import org.apache.calcite.tools.RelBuilder
 import org.apache.calcite.tools.RelBuilderFactory
 import org.apache.calcite.util.ImmutableBitSet
 
-object RelFactories {
+object BodoLogicalRelFactories {
     @JvmField
-    val PROJECT_FACTORY: RelFactories.ProjectFactory = RelFactories.ProjectFactory(::createProject)
+    val BODO_LOGICAL_PROJECT_FACTORY: RelFactories.ProjectFactory = RelFactories.ProjectFactory(::createProject)
 
     @JvmField
-    val FILTER_FACTORY: RelFactories.FilterFactory = RelFactories.FilterFactory(::createFilter)
+    val BODO_LOGICAL_FILTER_FACTORY: RelFactories.FilterFactory = RelFactories.FilterFactory(::createFilter)
 
     @JvmField
-    val JOIN_FACTORY: RelFactories.JoinFactory = RelFactories.JoinFactory(::createJoin)
+    val BODO_LOGICAL_JOIN_FACTORY: RelFactories.JoinFactory = RelFactories.JoinFactory(::createJoin)
 
     @JvmField
-    val SET_OP_FACTORY: RelFactories.SetOpFactory = RelFactories.SetOpFactory(::createSetOp)
+    val BODO_LOGICAL_SET_OP_FACTORY: RelFactories.SetOpFactory = RelFactories.SetOpFactory(::createSetOp)
 
     @JvmField
-    val AGGREGATE_FACTORY: RelFactories.AggregateFactory = RelFactories.AggregateFactory(::createAggregate)
+    val BODO_LOGICAL_AGGREGATE_FACTORY: RelFactories.AggregateFactory = RelFactories.AggregateFactory(::createAggregate)
 
     @JvmField
-    val SORT_FACTORY: RelFactories.SortFactory = RelFactories.SortFactory(::createSort)
+    val BODO_LOGICAL_SORT_FACTORY: RelFactories.SortFactory = RelFactories.SortFactory(::createSort)
 
     @JvmField
     val DEFAULT_CONTEXT: Context = Contexts.of(
-        PROJECT_FACTORY,
-        FILTER_FACTORY,
-        JOIN_FACTORY,
-        SET_OP_FACTORY,
-        AGGREGATE_FACTORY,
-        SORT_FACTORY,
+        BODO_LOGICAL_PROJECT_FACTORY,
+        BODO_LOGICAL_FILTER_FACTORY,
+        BODO_LOGICAL_JOIN_FACTORY,
+        BODO_LOGICAL_SET_OP_FACTORY,
+        BODO_LOGICAL_AGGREGATE_FACTORY,
+        BODO_LOGICAL_SORT_FACTORY,
     )
 
     @JvmField
-    val LOGICAL_BUILDER: RelBuilderFactory = RelBuilder.proto(DEFAULT_CONTEXT)
+    val BODO_LOGICAL_BUILDER: RelBuilderFactory = RelBuilder.proto(DEFAULT_CONTEXT)
 
     private fun createProject(input: RelNode, hints: List<RelHint>, childExprs: List<RexNode>, fieldNames: List<String?>?): RelNode =
         BodoLogicalProject.create(input, hints, childExprs, fieldNames)
