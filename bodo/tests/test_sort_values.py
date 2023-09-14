@@ -2350,3 +2350,26 @@ def test_sort_values_nested_arrays_random(memory_leak_check):
     check_parallel_coherency(f, (df3,))
     check_parallel_coherency(f, (df4,))
     check_parallel_coherency(f, (df5,))
+
+
+def test_sort_values_nested_arr_dict(memory_leak_check):
+    """Make sure sort works for array(array) input with dictionary data (see [BSE-1155])"""
+
+    def impl(df):
+        return df.sort_values(by="A")
+
+    df1 = pd.DataFrame(
+        {
+            "A": [2, 1, 3] * 4,
+            "B": np.array([["a1", None, "a2"], ["a3"], None] * 4, object),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": [2, 1, 3] * 4,
+            "B": np.array([[["1", "2", "8"], ["3"]], [["2", None]], None] * 4, object),
+        }
+    )
+    # TODO[BSE-1257]: support parallel sort
+    check_func(impl, (df1,), only_seq=True)
+    check_func(impl, (df2,), only_seq=True)

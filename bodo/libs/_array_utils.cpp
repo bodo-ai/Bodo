@@ -186,6 +186,32 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                 (void)str_builder->AppendValues(
                     {str_array->GetString(start_offset + i)});
         }
+    } else if (input_array->type_id() == arrow::Type::DICTIONARY) {
+        auto dict_array =
+            std::dynamic_pointer_cast<arrow::DictionaryArray>(input_array);
+        auto dict_indices =
+            std::dynamic_pointer_cast<arrow::NumericArray<arrow::Int32Type>>(
+                dict_array->indices());
+
+        // NOTE: Arrow as of v11.0 uses DictionaryBuilder instead of
+        // Dictionary32Builder, which requires int64 index inputs instead of
+        // int32 (seems like a bug).
+        auto dict_builder =
+            dynamic_cast<arrow::DictionaryBuilder<arrow::LargeStringType>*>(
+                builder);
+
+        int64_t num_elems = end_offset - start_offset;
+        for (int64_t i = 0; i < num_elems; i++) {
+            if (dict_array->IsNull(start_offset + i)) {
+                (void)dict_builder->AppendNull();
+            } else {
+                // Convert int32 index to int64 as expected by DictionaryBuilder
+                int64_t index = static_cast<int64_t>(
+                    *(dict_indices->raw_values() + (start_offset + i)));
+                (void)dict_builder->AppendIndices(&index, 1);
+            }
+        }
+
     } else {
         int64_t num_elems = end_offset - start_offset;
         int64_t vect_size;
@@ -634,7 +660,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             // TODO: assert builder is not null (at least one row added)
             (void)builder->Finish(&out_arrow_array);
 
-            out_arr = arrow_array_to_bodo(out_arrow_array);
+            // Pass input array to reuse its dictionaries since builder
+            // doesn't set dictionaries.
+            out_arr = arrow_array_to_bodo(out_arrow_array, -1, in_arr);
             break;
         }
         default:

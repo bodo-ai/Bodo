@@ -719,10 +719,13 @@ std::shared_ptr<BodoBuffer> arrow_null_bitmap_to_bodo(
  * array's buffers and releases them when deleted.
  *
  * @param arrow_struct_arr Input Arrow StructArray
+ * @param dicts_ref_arr Array used for setting dictionaries if provided. Should
+ * have the same structure as input (i.e. number and type of fields)
  * @return std::shared_ptr<array_info> Output Bodo array (STRUCT type)
  */
 std::shared_ptr<array_info> arrow_struct_array_to_bodo(
-    std::shared_ptr<arrow::StructArray> arrow_struct_arr) {
+    std::shared_ptr<arrow::StructArray> arrow_struct_arr,
+    std::shared_ptr<array_info> dicts_ref_arr) {
     int64_t n = arrow_struct_arr->length();
 
     std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
@@ -736,8 +739,10 @@ std::shared_ptr<array_info> arrow_struct_array_to_bodo(
     std::shared_ptr<arrow::DataType> struct_type = arrow_struct_arr->type();
 
     for (size_t i = 0; i < n_fields; i++) {
-        std::shared_ptr<array_info> inner_arr =
-            arrow_array_to_bodo(arrow_struct_arr->field(i));
+        std::shared_ptr<array_info> inner_arr = arrow_array_to_bodo(
+            arrow_struct_arr->field(i), -1,
+            dicts_ref_arr == nullptr ? nullptr
+                                     : dicts_ref_arr->child_arrays[i]);
         std::string field_name = struct_type->field(i)->name();
         inner_arrs_vec.push_back(inner_arr);
         field_names_vec.push_back(field_name);
@@ -755,11 +760,14 @@ std::shared_ptr<array_info> arrow_struct_array_to_bodo(
  * array's buffers and releases them when deleted.
  *
  * @param arrow_list_arr Input Arrow LargeListArray
+ * @param dicts_ref_arr Array used for setting dictionaries if provided. Should
+ * have the same structure as input (i.e. child array type)
  * @return std::shared_ptr<array_info> Output Bodo array (ARRAY_ITEM/LIST_STRING
  * type)
  */
 std::shared_ptr<array_info> arrow_list_array_to_bodo(
-    std::shared_ptr<arrow::LargeListArray> arrow_list_arr) {
+    std::shared_ptr<arrow::LargeListArray> arrow_list_arr,
+    std::shared_ptr<array_info> dicts_ref_arr) {
     int64_t n = arrow_list_arr->length();
 
     std::shared_ptr<BodoBuffer> offset_buffer =
@@ -770,8 +778,9 @@ std::shared_ptr<array_info> arrow_list_array_to_bodo(
         arrow_list_arr->null_bitmap(), arrow_list_arr->null_bitmap_data(),
         arrow_list_arr->offset(), arrow_list_arr->null_count(), n);
 
-    std::shared_ptr<array_info> inner_arr =
-        arrow_array_to_bodo(arrow_list_arr->values());
+    std::shared_ptr<array_info> inner_arr = arrow_array_to_bodo(
+        arrow_list_arr->values(), -1,
+        dicts_ref_arr == nullptr ? nullptr : dicts_ref_arr->child_arrays[0]);
 
     bodo_array_type::arr_type_enum array_type = bodo_array_type::ARRAY_ITEM;
     Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::LIST;
@@ -939,13 +948,19 @@ std::shared_ptr<array_info> arrow_string_binary_array_to_bodo(
  * releases thm when deleted.
  *
  * @param arrow_dict_arr Input Arrow DictionaryArray
+ * @param dicts_ref_arr Array used for setting dictionary if provided
  * @return std::shared_ptr<array_info> Output Bodo array
  */
 std::shared_ptr<array_info> arrow_dictionary_array_to_bodo(
-    std::shared_ptr<arrow::DictionaryArray> arrow_dict_arr) {
+    std::shared_ptr<arrow::DictionaryArray> arrow_dict_arr,
+    std::shared_ptr<array_info> dicts_ref_arr) {
     // Recurse on the dictionary and index arrays
-    std::shared_ptr<array_info> dict_array =
-        arrow_array_to_bodo(arrow_dict_arr->dictionary());
+    std::shared_ptr<array_info> dict_array;
+    if (dicts_ref_arr != nullptr) {
+        dict_array = dicts_ref_arr->child_arrays[0];
+    } else {
+        dict_array = arrow_array_to_bodo(arrow_dict_arr->dictionary());
+    }
     std::shared_ptr<array_info> idx_array =
         arrow_array_to_bodo(arrow_dict_arr->indices());
 
@@ -959,7 +974,8 @@ std::shared_ptr<array_info> arrow_dictionary_array_to_bodo(
 }
 
 std::shared_ptr<array_info> arrow_array_to_bodo(
-    std::shared_ptr<arrow::Array> arrow_arr, int64_t array_id) {
+    std::shared_ptr<arrow::Array> arrow_arr, int64_t array_id,
+    std::shared_ptr<array_info> dicts_ref_arr) {
     switch (arrow_arr->type_id()) {
         case arrow::Type::LARGE_STRING:
             return arrow_string_binary_array_to_bodo(
@@ -996,7 +1012,8 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
         }
         case arrow::Type::LARGE_LIST:
             return arrow_list_array_to_bodo(
-                std::static_pointer_cast<arrow::LargeListArray>(arrow_arr));
+                std::static_pointer_cast<arrow::LargeListArray>(arrow_arr),
+                dicts_ref_arr);
         // convert 32-bit offset array to 64-bit offset array to match Bodo data
         // layout
         case arrow::Type::LIST: {
@@ -1008,11 +1025,13 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             std::shared_ptr<arrow::Array> casted_arr;
             CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
             return arrow_list_array_to_bodo(
-                std::static_pointer_cast<arrow::LargeListArray>(casted_arr));
+                std::static_pointer_cast<arrow::LargeListArray>(casted_arr),
+                dicts_ref_arr);
         }
         case arrow::Type::STRUCT:
             return arrow_struct_array_to_bodo(
-                std::static_pointer_cast<arrow::StructArray>(arrow_arr));
+                std::static_pointer_cast<arrow::StructArray>(arrow_arr),
+                dicts_ref_arr);
         case arrow::Type::DECIMAL128:
             return arrow_decimal_array_to_bodo(
                 std::static_pointer_cast<arrow::Decimal128Array>(arrow_arr));
@@ -1069,7 +1088,8 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 Bodo_CTypes::INT8);
         case arrow::Type::DICTIONARY:
             return arrow_dictionary_array_to_bodo(
-                std::static_pointer_cast<arrow::DictionaryArray>(arrow_arr));
+                std::static_pointer_cast<arrow::DictionaryArray>(arrow_arr),
+                dicts_ref_arr);
         default:
             throw std::runtime_error("arrow_array_to_bodo(): Array type " +
                                      arrow_arr->type()->ToString() +
