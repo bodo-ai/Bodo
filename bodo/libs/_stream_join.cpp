@@ -1306,6 +1306,7 @@ void HashJoinState::InitOutputBuffer(
 }
 
 void HashJoinState::FinalizeBuild() {
+    tracing::Event finalizeBuildEvent("FinalizeBuild");
     // Free build shuffle buffer
     this->build_shuffle_buffer.reset();
 
@@ -1375,9 +1376,14 @@ void HashJoinState::FinalizeBuild() {
     this->build_event.add_attribute("g_build_parallel", this->build_parallel);
     this->build_event.add_attribute("g_probe_parallel", this->probe_parallel);
     JoinState::FinalizeBuild();
+    // Finalize event so it ends when no more data is processed
+    // not when the state goes out of scope
+    finalizeBuildEvent.finalize();
+    this->build_event.finalize();
 }
 
 void HashJoinState::FinalizeProbe() {
+    tracing::Event finalizeProbeEvent("FinalizeProbe");
     // Free the probe shuffle buffer's memory:
     this->probe_shuffle_buffer.reset();
 
@@ -1393,6 +1399,10 @@ void HashJoinState::FinalizeProbe() {
     this->probe_event.add_attribute("max_output_buffer_rows",
                                     this->output_buffer->max_reached_size);
     JoinState::FinalizeProbe();
+    // Finalize event so it ends when no more data is processed
+    // not when the state goes out of scope
+    finalizeProbeEvent.finalize();
+    this->probe_event.finalize();
 }
 
 void HashJoinState::AppendProbeBatchToInactivePartition(
@@ -1757,7 +1767,6 @@ bool join_build_consume_batch(HashJoinState* join_state,
             }
         }
     }
-
     auto [shuffle_now, new_sync_iter, new_adaptive_sync_counter] =
         shuffle_this_iter(join_state->build_parallel, is_last,
                           join_state->build_shuffle_buffer->data_table,
@@ -1826,6 +1835,7 @@ bool join_build_consume_batch(HashJoinState* join_state,
             // Make the bloom filter global.
             join_state->global_bloom_filter->union_reduction();
         }
+        buildEvent.finalize();
         join_state->FinalizeBuild();
     }
     join_state->build_iter++;
@@ -2118,7 +2128,6 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                 append_to_probe_inactive_partition[i_row] = true;
             }
         }
-
         join_state->AppendProbeBatchToInactivePartition(
             new_data, batch_hashes_join, batch_hashes_partition,
             append_to_probe_inactive_partition);
@@ -2173,6 +2182,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         join_state->FinalizeProbeForInactivePartitions<
             build_table_outer, probe_table_outer, non_equi_condition>(
             build_kept_cols, probe_kept_cols);
+        probeEvent.finalize();
         // Finalize the probe step:
         join_state->FinalizeProbe();
     }
