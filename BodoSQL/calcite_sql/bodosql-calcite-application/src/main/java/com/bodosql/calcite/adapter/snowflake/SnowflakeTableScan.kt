@@ -11,23 +11,33 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelWriter
 import org.apache.calcite.rel.core.TableScan
 import org.apache.calcite.rel.type.RelDataType
+import org.apache.calcite.rel.type.RelDataTypeField
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl
 import org.apache.calcite.rel.type.RelRecordType
+import org.apache.calcite.util.ImmutableBitSet
 
-class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: RelTraitSet, table: RelOptTable?, private val catalogTable: CatalogTableImpl) :
+class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: RelTraitSet, table: RelOptTable, val keptColumns: ImmutableBitSet, private val catalogTable: CatalogTableImpl) :
     TableScan(cluster, traitSet, ImmutableList.of(), table), SnowflakeRel {
+
+    /**
+     * Comparison for if no columns are pruned.
+     */
+    private val fullBitset = ImmutableBitSet.range(table.getRowType().fieldCount)
 
     /**
      * This exists to set the type to the original names rather than
      * the lowercase normalized names that the table itself exposes.
      */
     override fun deriveRowType(): RelDataType {
-        return RelRecordType(
-            table.rowType.fieldList.map { field ->
-                val name = catalogTable.getPreservedColumnName(field.name)
-                RelDataTypeFieldImpl(name, field.index, field.type)
-            },
-        )
+        val fieldList = table.getRowType().fieldList
+        val fields: MutableList<RelDataTypeField> = ArrayList()
+        keptColumns.iterator().forEach {
+                i ->
+            val field = fieldList[i]
+            val name = catalogTable.getPreservedColumnName(field.name)
+            fields.add(RelDataTypeFieldImpl(name, field.index, field.type))
+        }
+        return RelRecordType(fields)
     }
 
     // Update the digest to include listed columns
@@ -39,8 +49,46 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
 
     override fun getCatalogTable(): CatalogTableImpl = catalogTable
 
-    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode {
-        return SnowflakeTableScan(cluster, traitSet, table, catalogTable)
+    override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): SnowflakeTableScan {
+        return copy(traitSet, keptColumns)
+    }
+
+    private fun copy(traitSet: RelTraitSet, keptColumns: ImmutableBitSet): SnowflakeTableScan {
+        return SnowflakeTableScan(cluster, traitSet, table, keptColumns, catalogTable)
+    }
+
+    /**
+     * Create a new SnowflakeTableScan but pruning the existing columns. KeptColumns
+     * will be given as the ImmutableBitSet of the current type, so we cannot simply
+     * Intersect the two Bitsets.
+     */
+    fun cloneWithProject(newKeptColumns: ImmutableBitSet): SnowflakeTableScan {
+        // Map column numbers to the original column numbers.
+        // Convert to a list for fast lookup.
+        val liveColumns = keptColumns.asList()
+        val colsList: MutableList<Int> = ArrayList()
+        for (colNumber in newKeptColumns.iterator()) {
+            colsList.add(liveColumns[colNumber])
+        }
+        val finalColumns = ImmutableBitSet.of(colsList)
+        return copy(traitSet, finalColumns)
+    }
+
+    /**
+     * Get the original column index in the source table for the index
+     * in the current type.
+     */
+    fun getOriginalColumnIndex(newIndex: Int): Int {
+        // TODO(njriasan): Refactor to be more efficient
+        // and/or cache the list.
+        return keptColumns.asList()[newIndex]
+    }
+
+    /**
+     * Does this table scan include column pruning
+     */
+    fun prunesColumns(): Boolean {
+        return keptColumns != fullBitset
     }
 
     override fun register(planner: RelOptPlanner) {
@@ -54,9 +102,11 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
         @JvmStatic
         fun create(cluster: RelOptCluster, table: RelOptTable, catalogTable: CatalogTableImpl): SnowflakeTableScan {
             // Note: Types may be lazily computed so use getRowType() instead of rowType
-            val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(table.getRowType())
+            val rowType = table.getRowType()
+            val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(rowType)
             val traitSet = cluster.traitSet().replace(batchingProperty)
-            return SnowflakeTableScan(cluster, traitSet, table, catalogTable)
+            val keptColumns = ImmutableBitSet.range(rowType.fieldCount)
+            return SnowflakeTableScan(cluster, traitSet, table, keptColumns, catalogTable)
         }
     }
 }

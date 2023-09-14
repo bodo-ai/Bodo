@@ -14,13 +14,14 @@ import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelCollationTraitDef
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.metadata.RelMdCollation
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLocalRef
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexSlot
+import org.apache.calcite.rex.RexUtil
+import org.apache.calcite.sql.validate.SqlValidatorUtil
 
 class PandasProject(
     cluster: RelOptCluster,
@@ -34,7 +35,7 @@ class PandasProject(
         assert(convention == PandasRel.CONVENTION)
     }
 
-    override fun copy(traitSet: RelTraitSet, input: RelNode, projects: List<RexNode>, rowType: RelDataType): Project {
+    override fun copy(traitSet: RelTraitSet, input: RelNode, projects: List<RexNode>, rowType: RelDataType): PandasProject {
         return PandasProject(cluster, traitSet, input, projects, rowType)
     }
 
@@ -296,6 +297,18 @@ class PandasProject(
     }
 
     companion object {
+
+        fun create(input: RelNode, projects: List<RexNode>, fieldNames: List<String?>?): PandasProject {
+            val cluster = input.cluster
+            val rowType = RexUtil.createStructType(
+                cluster.typeFactory,
+                projects,
+                fieldNames,
+                SqlValidatorUtil.F_SUGGESTER,
+            )
+            return create(input, projects, rowType)
+        }
+
         fun create(input: RelNode, projects: List<RexNode>, rowType: RelDataType): PandasProject {
             val cluster = input.cluster
             val mq = cluster.metadataQuery

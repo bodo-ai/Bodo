@@ -17,7 +17,6 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelVisitor
 import org.apache.calcite.rel.convert.ConverterImpl
 import org.apache.calcite.rel.core.Project
-import org.apache.calcite.rel.core.TableScan
 import org.apache.calcite.rel.core.Values
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.rel2sql.BodoRelToSqlConverter
@@ -47,7 +46,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     override fun loggingTitle() = "IO TIMING"
 
     override fun nodeDetails() = (
-        if (input is SnowflakeTableScan) {
+        if (isWholeTableRead()) {
             getTableName(input as SnowflakeRel)
         } else {
             getSnowflakeSQL()
@@ -123,7 +122,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
      */
     private fun generateReadExpr(ctx: PandasRel.BuildContext): Expr.Call {
         val readExpr = when {
-            (input is SnowflakeTableScan) -> sqlReadTable(input as SnowflakeTableScan, ctx)
+            (isWholeTableRead()) -> sqlReadTable(input as SnowflakeTableScan, ctx)
             else -> readSql(ctx)
         }
         return readExpr
@@ -222,6 +221,10 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
                     // Enable moving past filters to get the original table
                     // for filter and limit.
                     node.childrenAccept(this)
+                } else if (node is SnowflakeTableScan) {
+                    for (i in 0..<originalColumns.size) {
+                        originalColumns[i] = node.getOriginalColumnIndex(originalColumns[i])
+                    }
                 } else {
                     return
                 }
@@ -262,7 +265,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
                     // Enable moving past filters to get the original table
                     // for filter and limit.
                     node.childrenAccept(this)
-                } else if (node is TableScan || node is Values) {
+                } else if (node is SnowflakeTableScan || node is Values) {
                     // Found the root table.
                     return
                 } else {
@@ -318,5 +321,13 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     private fun generateNonStreamingTable(ctx: PandasRel.BuildContext): BodoEngineTable {
         val readExpr = generateReadExpr(ctx)
         return ctx.returns(readExpr)
+    }
+
+    /**
+     * Is the Snowflake read for a whole table without any column pruning,
+     * filtering, or other snowflake nodes.
+     */
+    private fun isWholeTableRead(): Boolean {
+        return input is SnowflakeTableScan && !(input as SnowflakeTableScan).prunesColumns()
     }
 }

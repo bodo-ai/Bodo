@@ -6,6 +6,7 @@ import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.table.BodoSqlTable
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptTable
@@ -108,6 +109,18 @@ class PandasTableScan(
         } else {
             builder.add(Op.Assign(readDFVar, readExpr))
             castExpr
+        }
+    }
+
+    companion object {
+        @JvmStatic
+        fun create(cluster: RelOptCluster, table: RelOptTable): PandasTableScan {
+            // Note: Types may be lazily computed so use getRowType() instead of rowType
+            val rowType = table.getRowType()
+            val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(rowType)
+            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION).replace(batchingProperty)
+
+            return PandasTableScan(cluster, traitSet, table)
         }
     }
 }
