@@ -19,7 +19,6 @@ import bodo
 from bodo.libs.dict_arr_ext import is_dict_encoded
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
-    check_logger_no_msg,
     create_string_io_logger,
     set_logging_stream,
 )
@@ -160,8 +159,11 @@ def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
             impl, (bc, query), py_output=py_output, sort_output=True, reset_index=True
         )
         check_logger_msg(stream, "Columns loaded ['mycol', 'mycol2']")
-        check_logger_msg(stream, "Filter pushdown successfully performed")
-        check_logger_msg(stream, r"WHERE  ( ( COALESCE(\"MYCOL2\", {f0}) > {f1} ) )")
+        # Pushdown happens in the planner. Check the timer message instead.
+        check_logger_msg(
+            stream,
+            f'FROM "TEST_DB"."PUBLIC"."BODOSQL_ALL_SUPPORTED" WHERE COALESCE("MYCOL2", CURRENT_DATE) > DATE \'2022-01-01\'',
+        )
 
 
 @pytest.mark.skipif(
@@ -226,9 +228,10 @@ def test_no_arg_string_transform_functions(
                 check_dtype=False,
             )
             check_logger_msg(stream, "Columns loaded ['a']")
-            check_logger_msg(stream, "Filter pushdown successfully performed")
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, rf"WHERE  ( ( {sql_func.upper()}(\"A\") = {{f1}} ) )"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE {sql_func.upper()}("A") = $${test_str_val}$$',
             )
 
 
@@ -276,9 +279,10 @@ def test_snowflake_coalesce_lower_pushdown(
                 check_dtype=False,
             )
             check_logger_msg(stream, "Columns loaded ['b']")
-            check_logger_msg(stream, "Filter pushdown successfully performed")
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, r"WHERE  ( ( COALESCE(LOWER(\"A\"), {f1}) = {f2} ) )"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE COALESCE(LOWER("A"), $$macedonia$$) = $$macedonia$$',
             )
 
 
@@ -326,9 +330,10 @@ def test_snowflake_upper_coalesce_pushdown(
                 check_dtype=False,
             )
             check_logger_msg(stream, "Columns loaded ['b']")
-            check_logger_msg(stream, "Filter pushdown successfully performed")
+            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
-                stream, r"WHERE  ( ( UPPER(COALESCE(\"A\", {f0})) = {f2} ) )"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE UPPER(COALESCE("A", $$macedonia$$)) = $$MACEDONIA$$',
             )
 
 
@@ -369,7 +374,11 @@ def test_snowflake_catalog_coalesce_not_pushdown(memory_leak_check):
         check_func(
             impl, (bc, query), py_output=py_output, sort_output=True, reset_index=True
         )
-        check_logger_no_msg(stream, "Filter pushdown successfully performed")
+        # Pushdown happens in the planner. Check the timer message instead.
+        check_logger_msg(
+            stream,
+            f'FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."LINEITEM" WHERE COALESCE("L_COMMITDATE", "L_SHIPDATE") > DATE \'1998-10-29\'',
+        )
 
 
 def test_snowflake_catalog_limit_pushdown(memory_leak_check):
@@ -940,8 +949,10 @@ def test_snowflake_like_non_constant_pushdown(
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$hE_l$$ || $$O$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = (
@@ -998,8 +1009,10 @@ def test_snowflake_ilike_non_constant_pushdown(
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$he$$ || $$_lo$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = (
@@ -2442,8 +2455,11 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
                 # Pandas output is non-nullable
                 check_dtype=False,
             )
-            check_logger_msg(stream, "Filter pushdown successfully performed.")
-            check_logger_msg(stream, r"COALESCE(\"L_COMMITDATE\", {f0}) >= {f1} )")
+            # Pushdown happens in the planner. Check the timer message instead.
+            check_logger_msg(
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE COALESCE("L_COMMITDATE", TIMESTAMP \'2023-06-20 00:00:00\') >= TIMESTAMP \'2023-01-20 00:00:00\'',
+            )
 
 
 @pytest.mark.parametrize(
