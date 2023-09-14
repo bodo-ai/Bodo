@@ -1,6 +1,7 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.adapter.pandas.PandasRules
+import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectIntoScanRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.logicalRules.JoinExtractOverRule
@@ -58,9 +59,12 @@ object BodoPrograms {
             NoopProgram
         },
         SnowflakeTraitAdder(),
+        SnowflakeColumnPruning(),
         // Includes minimal set of rules to produce a valid plan.
         // This is a subset of the heuristic rule set.
         RuleSetProgram(BodoRules.VOLCANO_MINIMAL_RULE_SET),
+        // Add a final trim step.
+        TrimFieldsProgram(true),
         DecorateAttributesProgram(),
         MergeRelProgram(),
     )
@@ -72,6 +76,7 @@ object BodoPrograms {
         // When the HepStandardProgram is removed entirely, we would add the
         // convention when the SnowflakeTableScan is created instead of here.
         SnowflakeTraitAdder(),
+        SnowflakeColumnPruning(),
         if (optimize) {
             Programs.of(
                 HepProgramBuilder()
@@ -91,6 +96,8 @@ object BodoPrograms {
                 ifTrue(optimize, BodoRules.VOLCANO_OPTIMIZE_RULE_SET),
             ),
         ),
+        // Add a final trim step.
+        TrimFieldsProgram(true),
         // TODO(jsternberg): This can likely be adapted and integrated directly with
         // the VolcanoPlanner, but that hasn't been done so leave this here.
         DecorateAttributesProgram(),
@@ -179,6 +186,7 @@ object BodoPrograms {
         // Convert calcite logical nodes to bodo logical nodes
         // when necessary.
         LogicalConverterProgram,
+        TrimFieldsProgram(false),
     )
 
     /**
@@ -325,6 +333,31 @@ object BodoPrograms {
                     else -> super.visit(scan)
                 }
             }
+        }
+    }
+
+    private class SnowflakeColumnPruning : Program by Programs.hep(
+        listOf(SnowflakeProjectIntoScanRule.Config.LOGICAL_CONFIG.toRule()),
+        true,
+        DefaultRelMetadataProvider.INSTANCE,
+    )
+
+    private class TrimFieldsProgram(private val isPhysical: Boolean) : Program {
+        override fun run(
+            planner: RelOptPlanner,
+            rel: RelNode,
+            requiredOutputTraits: RelTraitSet,
+            materializations: List<RelOptMaterialization>,
+            lattices: List<RelOptLattice>,
+        ): RelNode {
+            val relBuilder = if (isPhysical) {
+                val physicalBuilder = com.bodosql.calcite.rel.core.BodoPhysicalRelFactories.BODO_PHYSICAL_BUILDER.create(rel.cluster, null)
+                val tmp = physicalBuilder.transform({ t -> t.withBloat(-1) })
+                tmp
+            } else {
+                com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER.create(rel.cluster, null)
+            }
+            return BodoRelFieldTrimmer(null, relBuilder).trim(rel)
         }
     }
 

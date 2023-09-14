@@ -20,7 +20,7 @@ import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminati
 import com.bodosql.calcite.application.logicalRules.RexSimplificationRule
 import com.bodosql.calcite.application.logicalRules.TrivialProjectJoinTransposeRule
 import com.bodosql.calcite.application.logicalRules.VolcanoAcceptingAggregateProjectPullUpConstantsRule
-import com.bodosql.calcite.rel.core.RelFactories
+import com.bodosql.calcite.rel.core.BodoLogicalRelFactories
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin
@@ -51,7 +51,7 @@ object BodoRules {
     @JvmField
     val PROJECT_REMOVE_RULE: RelOptRule =
         ProjectRemoveRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -60,7 +60,7 @@ object BodoRules {
     @JvmField
     val FILTER_MERGE_RULE: RelOptRule =
         FilterMergeRuleNoWindow.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -70,7 +70,7 @@ object BodoRules {
     @JvmField
     val PROJECT_MERGE_RULE: RelOptRule =
         ProjectMergeRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -79,7 +79,7 @@ object BodoRules {
     @JvmField
     val FILTER_AGGREGATE_TRANSPOSE_RULE: RelOptRule =
         FilterAggregateTransposeRuleNoWindow.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -105,7 +105,7 @@ object BodoRules {
     val AGGREGATE_JOIN_REMOVE_RULE: RelOptRule =
         AggregateJoinRemoveRule.Config.DEFAULT
             .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java)
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -115,7 +115,7 @@ object BodoRules {
     val AGGREGATE_JOIN_TRANSPOSE_RULE: RelOptRule =
         AggregateJoinTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java, true)
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -124,7 +124,7 @@ object BodoRules {
     @JvmField
     val FILTER_INTO_JOIN_RULE: RelOptRule =
         FilterJoinRuleNoWindow.FilterIntoJoinRule.FilterIntoJoinRuleConfig.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -134,7 +134,7 @@ object BodoRules {
     @JvmField
     val FILTER_JOIN_RULE: RelOptRule =
         FilterJoinRule.JoinConditionPushRule.JoinConditionPushRuleConfig.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -144,7 +144,7 @@ object BodoRules {
     val PROJECT_JOIN_TRANSPOSE_RULE: RelOptRule =
         TrivialProjectJoinTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalProject::class.java, BodoLogicalJoin::class.java)
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -154,7 +154,7 @@ object BodoRules {
     val TRIVIAL_PROJECT_FILTER_TRANSPOSE: RelOptRule =
         ProjectFilterTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalProject::class.java, BodoLogicalFilter::class.java)
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -166,7 +166,7 @@ object BodoRules {
     val FILTER_REDUCE_EXPRESSIONS_RULE: RelOptRule =
         BodoSQLReduceExpressionsRule.FilterReduceExpressionsRule.FilterReduceExpressionsRuleConfig.DEFAULT
             .withOperandFor(BodoLogicalFilter::class.java)
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -177,7 +177,7 @@ object BodoRules {
     val PROJECT_REDUCE_EXPRESSIONS_RULE: RelOptRule =
         BodoSQLReduceExpressionsRule.ProjectReduceExpressionsRule.ProjectReduceExpressionsRuleConfig.DEFAULT
             .withOperandFor(BodoLogicalProject::class.java)
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -207,7 +207,7 @@ object BodoRules {
     @JvmField
     val JOIN_PUSH_TRANSITIVE_PREDICATES: RelOptRule =
         JoinPushTransitivePredicatesRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -220,7 +220,7 @@ object BodoRules {
     val AGGREGATE_REMOVE_RULE: RelOptRule =
         AggregateJoinRemoveRule.Config.DEFAULT
             .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java)
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -252,7 +252,7 @@ object BodoRules {
     val AGGREGATE_JOIN_JOIN_REMOVE_RULE: RelOptRule =
         AggregateJoinJoinRemoveRule.Config.DEFAULT
             .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java)
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /*
@@ -262,7 +262,7 @@ object BodoRules {
     @JvmField
     val AGGREGATE_PROJECT_MERGE_RULE: RelOptRule =
         AggregateProjectMergeRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /*
@@ -272,7 +272,7 @@ object BodoRules {
     @JvmField
     val PROJECT_AGGREGATE_MERGE_RULE: RelOptRule =
         ProjectAggregateMergeRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /*
@@ -284,14 +284,14 @@ object BodoRules {
     @JvmField
     val FILTER_PROJECT_TRANSPOSE_RULE: RelOptRule =
         FilterProjectTransposeNoCaseRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     // Prune trivial cross-joins
     @JvmField
     val INNER_JOIN_REMOVE_RULE: RelOptRule =
         InnerJoinRemoveRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     // Rewrite filters in either Filter or Join to convert OR with shared subexpression
@@ -304,14 +304,14 @@ object BodoRules {
     @JvmField
     val JOIN_REORDER_CONDITION_RULE: RelOptRule =
         JoinReorderConditionRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     @JvmField
     val FILTER_REORDER_CONDITION_RULE: RelOptRule =
         LogicalFilterReorderConditionRule.Config.DEFAULT
             .withOperandFor(BodoLogicalFilter::class.java)
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     // Push a limit before a project (e.g. select col as alias from table limit 10)
@@ -319,7 +319,7 @@ object BodoRules {
     val LIMIT_PROJECT_TRANSPOSE_RULE: RelOptRule =
         LimitProjectTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalSort::class.java, BodoLogicalProject::class.java)
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     // If a column has been repeated or rewritten as a part of another column, possibly
@@ -333,7 +333,7 @@ object BodoRules {
     @JvmField
     val PROJECTION_SUBCOLUMN_ELIMINATION_RULE: RelOptRule =
         ProjectionSubcolumnEliminationRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     // Remove any case expressions from filters because we cannot use them in filter
@@ -341,7 +341,7 @@ object BodoRules {
     @JvmField
     val FILTER_EXTRACT_CASE_RULE: RelOptRule =
         FilterExtractCaseRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     // For two projections separated by a filter, determine if any computation in
@@ -350,19 +350,19 @@ object BodoRules {
     @JvmField
     val PROJECT_FILTER_PROJECT_COLUMN_ELIMINATION_RULE: RelOptRule =
         ProjectFilterProjectColumnEliminationRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     @JvmField
     val MIN_ROW_NUMBER_FILTER_RULE: RelOptRule =
         MinRowNumberFilterRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     @JvmField
     val REX_SIMPLIFICATION_RULE: RelOptRule =
         RexSimplificationRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -372,7 +372,7 @@ object BodoRules {
     @JvmField
     val JOIN_CONDITION_TO_FILTER_RULE: RelOptRule =
         JoinConditionToFilterRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -387,7 +387,7 @@ object BodoRules {
                     else -> true
                 }
             }
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -397,7 +397,7 @@ object BodoRules {
     val JOIN_TO_MULTI_JOIN: RelOptRule =
         JoinToMultiJoinRule.Config.DEFAULT
             .withOperandFor(BodoLogicalJoin::class.java)
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -410,7 +410,7 @@ object BodoRules {
         JoinCommuteRule.Config.DEFAULT
             .withOperandFor(BodoLogicalJoin::class.java)
             .withSwapOuter(true)
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -422,7 +422,7 @@ object BodoRules {
     @JvmField
     val LOPT_OPTIMIZE_JOIN_RULE: RelOptRule =
         LoptOptimizeJoinRule.Config.DEFAULT
-            .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
     /**
@@ -431,7 +431,7 @@ object BodoRules {
     @JvmField
     val AGGREGATE_CONSTANT_PULL_UP_RULE: RelOptRule = VolcanoAcceptingAggregateProjectPullUpConstantsRule.Config.DEFAULT
         .withOperandFor(BodoLogicalAggregate::class.java, RelNode::class.java)
-        .withRelBuilderFactory(RelFactories.LOGICAL_BUILDER)
+        .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
         .toRule()
 
     @JvmField
