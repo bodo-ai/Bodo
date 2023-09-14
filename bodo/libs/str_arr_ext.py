@@ -2405,7 +2405,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
         return impl_int
 
 
-@numba.jit
+@numba.njit(no_cpython_wrapper=True)
 def str_arr_to_dict_str_arr(A):  # pragma: no cover
     return str_arr_to_dict_str_arr_cpp(A)
 
