@@ -343,11 +343,87 @@ def _unbox_array_item_array_generic(
     c.pyapi.decref(C_NA)
 
 
+def to_str_nested_arr_if_dict_type(arr_type):
+    """Convert ArrayItemArrayType type with dict-encoded data to equivalent type with
+    regular strings.
+    For example, converts ArrayItemArrayType(ArrayItemArrayType(dict_str_arr))
+    to ArrayItemArrayType(ArrayItemArrayType(string_array)).
+    Also returns a flag to indicate if input was converted.
+
+    Args:
+        arr_type (ArrayItemArrayType): input ArrayItemArrayType type
+
+    Returns:
+        Tuple[ArrayItemArrayType, bool]: updated data type and flag to indicate if
+        conversion happened
+    """
+    assert isinstance(
+        arr_type, ArrayItemArrayType
+    ), "to_str_nested_arr_if_dict_type: ArrayItemArrayType expected"
+
+    if arr_type.dtype == bodo.dict_str_arr_type:
+        return ArrayItemArrayType(bodo.string_array_type), True
+
+    if isinstance(arr_type.dtype, ArrayItemArrayType):
+        inner_dtype, inner_flag = to_str_nested_arr_if_dict_type(arr_type.dtype)
+        return ArrayItemArrayType(inner_dtype), inner_flag
+
+    return arr_type, False
+
+
+def str_nested_arr_to_dict(A):
+    pass
+
+
+@overload(str_nested_arr_to_dict)
+def str_nested_arr_to_dict_overload(A):
+    """Convert ArrayItemArrayType input with string array data to equivalent array
+    with dict-encoded array data.
+
+    Args:
+        A (ArrayItemArrayType): input array(array) value
+
+    Returns:
+        ArrayItemArrayType: array(array) value with dict-encoded strings
+    """
+
+    if isinstance(A, ArrayItemArrayType):
+        return lambda A: init_array_item_array(
+            len(A),
+            bodo.libs.array_item_arr_ext.str_nested_arr_to_dict(get_data(A)),
+            get_offsets(A),
+            get_null_bitmap(A),
+        )  # pragma: no cover
+
+    if A == bodo.string_array_type:
+        return lambda A: bodo.libs.str_arr_ext.str_arr_to_dict_str_arr(
+            A
+        )  # pragma: no cover
+
+    return lambda A: A  # pragma: no cover
+
+
 @unbox(ArrayItemArrayType)
 def unbox_array_item_array(typ, val, c):
     """
     Unbox a numpy array with array of data values.
     """
+
+    arr_str_type, is_dict_nested_arr = to_str_nested_arr_if_dict_type(typ)
+
+    # For unboxing dict-encoded str data, use regular strings and then convert to
+    # dict-encoded data since the dictionary isn't available upfront for allocation
+    if is_dict_nested_arr:
+        arr_data_str = c.pyapi.to_native_value(arr_str_type, val).value
+
+        _is_error, arr = c.pyapi.call_jit_code(
+            lambda A: str_nested_arr_to_dict(A),
+            typ(arr_str_type),
+            [arr_data_str],
+        )  # pragma: no cover
+        c.context.nrt.decref(c.builder, arr_str_type, arr_data_str)
+        return NativeValue(arr, is_error=_is_error)
+
     handle_in_c = isinstance(typ.dtype, types.Array) and typ.dtype.dtype in (
         types.int64,
         types.float64,
@@ -435,6 +511,32 @@ def _get_array_item_arr_payload(context, builder, arr_typ, arr):
     return payload
 
 
+def dict_nested_arr_to_str(A):
+    pass
+
+
+@overload(dict_nested_arr_to_str)
+def dict_nested_arr_to_str_overload(A):
+    """Convert ArrayItemArrayType input with dict-encoded data to equivalent array
+    with string array data.
+
+    Args:
+        A (ArrayItemArrayType): input array(array) value
+
+    Returns:
+        ArrayItemArrayType: array(array) value with regular strings
+    """
+    if isinstance(A, ArrayItemArrayType):
+        return lambda A: init_array_item_array(
+            len(A),
+            bodo.libs.array_item_arr_ext.dict_nested_arr_to_str(get_data(A)),
+            get_offsets(A),
+            get_null_bitmap(A),
+        )  # pragma: no cover
+
+    return lambda A: bodo.utils.typing.decode_if_dict_array(A)  # pragma: no cover
+
+
 def _box_array_item_array_generic(
     typ, c, n_arrays, data_arr, offsets_ptr, null_bitmap_ptr
 ):
@@ -444,6 +546,18 @@ def _box_array_item_array_generic(
     context = c.context
     builder = c.builder
     # TODO: error checking for pyapi calls
+
+    # Use regular strings for unboxing dict-encoded nested arrays since some of the
+    # code paths don't support dict-encoded arrays yet
+    str_arr_typ, is_dict_nested_arr = to_str_nested_arr_if_dict_type(typ)
+    if is_dict_nested_arr:
+        _is_error, str_data_arr = c.pyapi.call_jit_code(
+            lambda A: dict_nested_arr_to_str(A),
+            (str_arr_typ.dtype)(typ.dtype),
+            [data_arr],
+        )  # pragma: no cover
+        typ = str_arr_typ
+        data_arr = str_data_arr
 
     # pseudocode for code generation:
     # out_arr = np.ndarray(n, np.object_)
@@ -510,6 +624,10 @@ def _box_array_item_array_generic(
             arr_obj = c.pyapi.from_native_value(typ.dtype, arr_slice, c.env_manager)
             pyarray_setitem(builder, context, out_arr, array_ind, arr_obj)
             c.pyapi.decref(arr_obj)
+
+    # data_arr is a new reference that needs released if created above
+    if is_dict_nested_arr:
+        context.nrt.decref(builder, typ.dtype, data_arr)
 
     c.pyapi.decref(np_class_obj)
     c.pyapi.decref(dtype_obj)

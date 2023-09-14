@@ -1690,6 +1690,8 @@ def _infer_ndarray_obj_dtype(val):
     ):
         dtype, nesting_depth, nullable = _infer_array_item_array_type_and_depth(val, 0)
         arr_type = dtype_to_array_type(dtype, nullable)
+        if _use_dict_str_type and arr_type == string_array_type:
+            arr_type = bodo.dict_str_arr_type
         for i in range(nesting_depth):
             arr_type = ArrayItemArrayType(arr_type)
         return arr_type

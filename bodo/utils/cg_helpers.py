@@ -479,8 +479,9 @@ def gen_allocate_array(context, builder, arr_type, n_elems, c=None):
     When in boxing/unboxing, 'call_jit_code' is used to handle Python error model.
     """
     n_counts = n_elems.type.count
-    assert n_counts >= 1
+    assert n_counts >= 1, "gen_allocate_array(): invalid n_elems count"
     length = builder.extract_value(n_elems, 0)
+
     # if nested counts are provided, pack a new tuple for them
     if n_counts != 1:
         n_nested_elems = cgutils.pack_array(
