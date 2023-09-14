@@ -1041,8 +1041,39 @@ def test_strtok(args, spark_info, memory_leak_check):
                         pd.array(["aaeaaeieaaeioiea"]),
                         pd.array(["A.BCD.E.FGH.I.JKLMN.O.PQRST.U.VWXYZ"]),
                         pd.array(["415-555-1234,", "412-555-2345,", "937-555-3456"]),
-                        pd.array(['a', '', 'b', '', '', '', 'c', '', 'd', 'e', '', '', '', '', 'f',
-                                  'g', '', '', '', '', 'h', '', 'i', '', '', '', '', 'j', '']),
+                        pd.array(
+                            [
+                                "a",
+                                "",
+                                "b",
+                                "",
+                                "",
+                                "",
+                                "c",
+                                "",
+                                "d",
+                                "e",
+                                "",
+                                "",
+                                "",
+                                "",
+                                "f",
+                                "g",
+                                "",
+                                "",
+                                "",
+                                "",
+                                "h",
+                                "",
+                                "i",
+                                "",
+                                "",
+                                "",
+                                "",
+                                "j",
+                                "",
+                            ]
+                        ),
                         None,
                     ]
                 ),
@@ -1055,10 +1086,33 @@ def test_strtok(args, spark_info, memory_leak_check):
                 pd.Series(
                     [
                         pd.array(["alphabet", "soup", "is", "delicious"]),
-                        pd.array(['', '', 'ie', 'ioiea']),
-                        pd.array(["A", "BCD", "E", "FGH", "I", "JKLMN","O", "PQRST", "U", "VWXYZ"]),
-                        pd.array(['415', '555', '1234, 412', '555', '2345, 937', '555', '3456']),
-                        pd.array(['a  b', ' c  d e', '  f g', '  h  i', '  j ']),
+                        pd.array(["", "", "ie", "ioiea"]),
+                        pd.array(
+                            [
+                                "A",
+                                "BCD",
+                                "E",
+                                "FGH",
+                                "I",
+                                "JKLMN",
+                                "O",
+                                "PQRST",
+                                "U",
+                                "VWXYZ",
+                            ]
+                        ),
+                        pd.array(
+                            [
+                                "415",
+                                "555",
+                                "1234, 412",
+                                "555",
+                                "2345, 937",
+                                "555",
+                                "3456",
+                            ]
+                        ),
+                        pd.array(["a  b", " c  d e", "  f g", "  h  i", "  j "]),
                         None,
                     ]
                 ),
@@ -1071,19 +1125,44 @@ def test_strtok(args, spark_info, memory_leak_check):
                 pd.Series(
                     [
                         pd.array(["alphabet", "soup", "is", "delicious"]),
-                        pd.array(['', '', 'ie', 'ioiea']),
-                        pd.array(["A", "BCD", "E", "FGH", "I", "JKLMN","O", "PQRST", "U", "VWXYZ"]),
-                        pd.array(['415', '555', '1234, 412', '555', '2345, 937', '555', '3456']),
-                        pd.array(['a  b', ' c  d e', '  f g', '  h  i', '  j ']),
+                        pd.array(["", "", "ie", "ioiea"]),
+                        pd.array(
+                            [
+                                "A",
+                                "BCD",
+                                "E",
+                                "FGH",
+                                "I",
+                                "JKLMN",
+                                "O",
+                                "PQRST",
+                                "U",
+                                "VWXYZ",
+                            ]
+                        ),
+                        pd.array(
+                            [
+                                "415",
+                                "555",
+                                "1234, 412",
+                                "555",
+                                "2345, 937",
+                                "555",
+                                "3456",
+                            ]
+                        ),
+                        pd.array(["a  b", " c  d e", "  f g", "  h  i", "  j "]),
                         None,
                     ]
                 ),
             ),
             id="all_vector_with_case",
-            marks=pytest.mark.skip(reason="TODO: [BSE-511] Support ARRAY with CASE statement."),
+            marks=pytest.mark.skip(
+                reason="TODO: [BSE-511] Support ARRAY with CASE statement."
+            ),
             # We don't support null ARRAY literal and astype conversion for ARRAY now
         ),
-    ]
+    ],
 )
 def test_split(args, memory_leak_check):
     ctx = {
@@ -1104,7 +1183,7 @@ def test_split(args, memory_leak_check):
                     "-",
                     "   ",
                     "None",
-                ]
+                ],
             }
         )
     }
@@ -1118,4 +1197,8 @@ def test_split(args, memory_leak_check):
         check_dtype=False,
         sort_output=False,
         expected_output=answer,
+        # Passing this since _use_dict_str_type=True causes gatherv to fail internally
+        # and is not needed since the output of the actual test is regular string array
+        # (see https://bodo.atlassian.net/browse/BSE-1256)
+        use_dict_encoded_strings=False,
     )

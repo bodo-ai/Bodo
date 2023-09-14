@@ -176,6 +176,18 @@ def test_unbox(array_item_arr_value, memory_leak_check):
     check_func(impl2, (array_item_arr_value,))
 
 
+def test_unbox_dict_str(memory_leak_check):
+    """Test boxing/unboxing array(array) with dict-encoded data (see [BSE-1155])"""
+
+    def impl(arr_arg):
+        return arr_arg
+
+    A1 = np.array([["a1", None, "a2"], None, ["a3"]], object)
+    A2 = np.array([[["1", "2", "8"], ["3"]], [["2", None]]] * 4, dtype=object)
+    check_func(impl, (A1,), use_dict_encoded_strings=True, only_seq=True)
+    check_func(impl, (A2,), use_dict_encoded_strings=True, only_seq=True)
+
+
 @pytest.mark.smoke
 def test_getitem_int(array_item_arr_value, memory_leak_check):
     def test_impl(A, i):

@@ -57,10 +57,17 @@ def test_to_array_scalars(basic_df, memory_leak_check):
     params=[
         pytest.param(
             (
-                pd.Series([423, 647, 0, 51, -425] * 4, dtype='int'),
+                pd.Series([423, 647, 0, 51, -425] * 4, dtype="int"),
                 pd.Series(
-                    [pd.array([423]), pd.array([647]), pd.array([0]), pd.array([51]), pd.array([-425])] * 4
-                )
+                    [
+                        pd.array([423]),
+                        pd.array([647]),
+                        pd.array([0]),
+                        pd.array([51]),
+                        pd.array([-425]),
+                    ]
+                    * 4
+                ),
             ),
             id="integer",
         ),
@@ -68,8 +75,15 @@ def test_to_array_scalars(basic_df, memory_leak_check):
             (
                 pd.Series([4.23, 64.7, None, 0.51, -425.0] * 4),
                 pd.Series(
-                    [pd.array([4.23]), pd.array([64.7]), None, pd.array([0.51]), pd.array([-425.0])] * 4
-                )
+                    [
+                        pd.array([4.23]),
+                        pd.array([64.7]),
+                        None,
+                        pd.array([0.51]),
+                        pd.array([-425.0]),
+                    ]
+                    * 4
+                ),
             ),
             id="float",
         ),
@@ -77,8 +91,15 @@ def test_to_array_scalars(basic_df, memory_leak_check):
             (
                 pd.Series(["ksef", "$@#%", None, "0.51", "1d$g"] * 4),
                 pd.Series(
-                    [pd.array(["ksef"]), pd.array(["$@#%"]), None, pd.array(["0.51"]), pd.array(["1d$g"])] * 4
-                )
+                    [
+                        pd.array(["ksef"]),
+                        pd.array(["$@#%"]),
+                        None,
+                        pd.array(["0.51"]),
+                        pd.array(["1d$g"]),
+                    ]
+                    * 4
+                ),
             ),
             id="string",
         ),
@@ -86,8 +107,15 @@ def test_to_array_scalars(basic_df, memory_leak_check):
             (
                 pd.Series([True, None, False, False, True] * 4),
                 pd.Series(
-                    [pd.array([True]), None, pd.array([False]), pd.array([False]), pd.array([True])] * 4
-                )
+                    [
+                        pd.array([True]),
+                        None,
+                        pd.array([False]),
+                        pd.array([False]),
+                        pd.array([True]),
+                    ]
+                    * 4
+                ),
             ),
             id="bool",
         ),
@@ -100,7 +128,8 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                         bodo.Time(12, 34, 56, 78, 12),
                         None,
                         bodo.Time(12, 34, 56, 78, 12, 34),
-                    ] * 4
+                    ]
+                    * 4
                 ),
                 pd.Series(
                     [
@@ -109,8 +138,9 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                         pd.array([bodo.Time(12, 34, 56, 78, 12)]),
                         None,
                         pd.array([bodo.Time(12, 34, 56, 78, 12, 34)]),
-                    ] * 4
-                )
+                    ]
+                    * 4
+                ),
             ),
             id="time",
         ),
@@ -123,7 +153,8 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                         datetime.date(1970, 1, 1),
                         datetime.date(2020, 11, 23),
                         None,
-                    ] * 4
+                    ]
+                    * 4
                 ),
                 pd.Series(
                     [
@@ -132,8 +163,9 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                         pd.array([datetime.date(1970, 1, 1)]),
                         pd.array([datetime.date(2020, 11, 23)]),
                         None,
-                    ] * 4
-                )
+                    ]
+                    * 4
+                ),
             ),
             id="date",
         ),
@@ -146,7 +178,8 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                         pd.Timestamp("2019-1-24"),
                         pd.Timestamp("2023-7-18"),
                         pd.Timestamp("2020-01-02 01:23:42.728347"),
-                    ] * 4
+                    ]
+                    * 4
                 ),
                 pd.Series(
                     [
@@ -155,8 +188,9 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                         pd.array([pd.Timestamp("2019-1-24")]),
                         pd.array([pd.Timestamp("2023-7-18")]),
                         pd.array([pd.Timestamp("2020-01-02 01:23:42.728347")]),
-                    ] * 4
-                )
+                    ]
+                    * 4
+                ),
             ),
             id="timestamp",
         ),
@@ -181,6 +215,10 @@ def test_to_array_columns(to_array_columns_data, memory_leak_check):
         check_dtype=False,
         sort_output=False,
         expected_output=py_output,
+        # Passing this since _use_dict_str_type=True causes gatherv to fail internally
+        # and is not needed since the output of the actual test is regular string array
+        # (see https://bodo.atlassian.net/browse/BSE-1256)
+        use_dict_encoded_strings=False,
     )
 
 
@@ -214,7 +252,8 @@ def array_df():
                         None,
                         [86956, -958, -345, 49, 2],
                         [-4, 50, -15, 941, 252, -404, 1399],
-                    ] * 4
+                    ]
+                    * 4
                 ),
                 "float_col": pd.Series(
                     [
@@ -223,7 +262,8 @@ def array_df():
                         None,
                         [8.6956, -0.958, -34.5, 4.9, 20.0],
                         [-1.4, 5.0, -15.15, 9.41, 25.2, -40.4, 0.1399],
-                    ] * 4
+                    ]
+                    * 4
                 ),
                 "bool_col": pd.Series(
                     [
@@ -232,7 +272,8 @@ def array_df():
                         [False, False, True],
                         None,
                         [False, True, False, True, False],
-                    ] * 4
+                    ]
+                    * 4
                 ),
                 "string_col": pd.Series(
                     [
@@ -241,7 +282,8 @@ def array_df():
                         None,
                         [],
                         [" ", "^#%&", "VCX:>?", "3ews", "zxcv"],
-                    ] * 4
+                    ]
+                    * 4
                 ),
                 "date_col": pd.Series(
                     [
@@ -263,7 +305,8 @@ def array_df():
                             datetime.date(1981, 8, 31),
                             datetime.date(2019, 11, 12),
                         ],
-                    ] * 4
+                    ]
+                    * 4
                 ),
                 "time_col": pd.Series(
                     [
@@ -272,11 +315,21 @@ def array_df():
                             bodo.Time(12, 0),
                             bodo.Time(1, 1, 3, 1),
                             bodo.Time(2),
-                            bodo.Time(15, 0, 50, 10, 100,),
+                            bodo.Time(
+                                15,
+                                0,
+                                50,
+                                10,
+                                100,
+                            ),
                             bodo.Time(9, 1, 3, 10),
                         ],
                         [],
-                        [bodo.Time(6, 11, 3, 1), bodo.Time(12, 30, 42, 64), bodo.Time(4, 5, 6)],
+                        [
+                            bodo.Time(6, 11, 3, 1),
+                            bodo.Time(12, 30, 42, 64),
+                            bodo.Time(4, 5, 6),
+                        ],
                         [
                             bodo.Time(5, 6, 7, 8),
                             bodo.Time(12, 13, 14, 15, 16, 17),
@@ -285,7 +338,8 @@ def array_df():
                             bodo.Time(3, 59, 6, 25, 757, 3),
                             bodo.Time(11, 59, 59, 100, 100, 50),
                         ],
-                    ] * 4
+                    ]
+                    * 4
                 ),
                 "timestamp_col": pd.Series(
                     [
@@ -307,7 +361,8 @@ def array_df():
                             pd.Timestamp("2019-11-12"),
                         ],
                         None,
-                    ] * 4
+                    ]
+                    * 4
                 ),
                 "nested_array_col": pd.Series(
                     [
@@ -316,7 +371,8 @@ def array_df():
                         [[7, 8, 9], [10, 11]],
                         None,
                         [[12, 13, 14, 15, 16], [17, 18]],
-                    ] * 4
+                    ]
+                    * 4
                 ),
             }
         )
@@ -334,7 +390,7 @@ def array_df():
         "time_col",
         "timestamp_col",
         "nested_array_col",
-    ]
+    ],
 )
 def test_array_item_array_boxing(array_df, col_name, memory_leak_check):
     """Test reading ArrayItemArray"""
@@ -344,7 +400,10 @@ def test_array_item_array_boxing(array_df, col_name, memory_leak_check):
         for i in range(len(py_output["A"])):
             if py_output["A"][i] is not None:
                 py_output["A"][i] = list(
-                    map(lambda x: None if x is None else np.datetime64(x, "ns"), py_output["A"][i])
+                    map(
+                        lambda x: None if x is None else np.datetime64(x, "ns"),
+                        py_output["A"][i],
+                    )
                 )
     check_query(
         query,
@@ -368,7 +427,7 @@ def test_array_item_array_boxing(array_df, col_name, memory_leak_check):
         "time_col",
         "timestamp_col",
         "nested_array_col",
-    ]
+    ],
 )
 @pytest.mark.slow
 def test_array_column_type(array_df, col_name, memory_leak_check):
@@ -379,7 +438,10 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
         for i in range(len(py_output["A"])):
             if py_output["A"][i] is not None:
                 py_output["A"][i] = list(
-                    map(lambda x: None if x is None else np.datetime64(x, "ns"), py_output["A"][i])
+                    map(
+                        lambda x: None if x is None else np.datetime64(x, "ns"),
+                        py_output["A"][i],
+                    )
                 )
     check_query(
         query,
@@ -403,8 +465,9 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
                     "",
                     None,
                     "86956,-958,-345,49,2",
-                    "-4,50,-15,941,252,-404,1399"
-                ] * 4
+                    "-4,50,-15,941,252,-404,1399",
+                ]
+                * 4
             ),
             id="int",
         ),
@@ -417,7 +480,8 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
                     None,
                     "8.695600, -0.958000, -34.500000, 4.900000, 20.000000",
                     "-1.400000, 5.000000, -15.150000, 9.410000, 25.200000, -40.400000, 0.139900",
-                ] * 4
+                ]
+                * 4
             ),
             id="float",
         ),
@@ -430,7 +494,8 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
                     "False.False.True",
                     None,
                     "False.True.False.True.False",
-                ] * 4
+                ]
+                * 4
             ),
             id="bool",
         ),
@@ -443,7 +508,8 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
                     None,
                     "",
                     " | ^#%&| VCX:>?| 3ews| zxcv",
-                ] * 4
+                ]
+                * 4
             ),
             id="string",
         ),
@@ -456,7 +522,8 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
                     None,
                     "",
                     "2012-01-01-2011-03-03-1999-05-02-1981-08-31-2019-11-12",
-                ] * 4
+                ]
+                * 4
             ),
             id="date",
         ),
@@ -469,7 +536,8 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
                     None,
                     "",
                     " | ^#%&| VCX:>?| 3ews| zxcv",
-                ] * 4
+                ]
+                * 4
             ),
             id="time",
             marks=pytest.mark.skip(reason="TODO: Support str() for time type."),
@@ -485,11 +553,12 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
                     "2017-01-11T00:00:00-*-2022-11-06T11:30:15-*-2030-01-01T15:23:42.728347"
                     "-*-1981-08-31T00:00:00-*-2019-11-12T00:00:00",
                     None,
-                ] * 4
+                ]
+                * 4
             ),
             id="timestamp",
         ),
-    ]
+    ],
 )
 def test_array_to_string_column(array_df, query, answer, memory_leak_check):
     """
@@ -546,7 +615,7 @@ def test_array_to_string_column(array_df, query, answer, memory_leak_check):
             "2023-06-13T16:49:50",
             id="timestamp",
         ),
-    ]
+    ],
 )
 def test_array_to_string_scalar(basic_df, input, answer, memory_leak_check):
     """
