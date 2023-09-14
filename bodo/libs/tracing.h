@@ -137,9 +137,16 @@ class ResumableEvent : public Event {
     // Simple RAII context manager to time an iteration
     class Iteration {
        public:
-        ~Iteration() { event.end_iteration(); }
+        void finalize() {
+            if (!finalized) {
+                event.end_iteration();
+                finalized = true;
+            }
+        }
+        ~Iteration() { finalize(); }
 
        private:
+        bool finalized = false;
         Iteration(ResumableEvent& ev) : event(ev) { ev.start_iteration(); }
 
         ResumableEvent& event;
