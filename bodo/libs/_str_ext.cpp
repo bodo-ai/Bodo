@@ -314,6 +314,7 @@ int64_t get_str_len(std::string* str) {
 void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
                           int64_t index) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -343,6 +344,7 @@ void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
 
 void setitem_binary_array(offset_t* offsets, char* data, uint64_t n_bytes,
                           char* str, int64_t len, int64_t index) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -530,6 +532,7 @@ void* np_array_from_string_array(int64_t no_strings,
                                  const offset_t* offset_table,
                                  const char* buffer, const uint8_t* null_bitmap,
                                  const int is_bytes) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -586,6 +589,7 @@ void* np_array_from_string_array(int64_t no_strings,
  * @return void* Pandas ArrowStringArray
  */
 void* pd_pyarrow_array_from_string_array(array_info* str_arr) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -633,6 +637,7 @@ void* array_getptr1(PyArrayObject* arr, npy_intp ind) {
 }
 
 void array_setitem(PyArrayObject* arr, char* p, PyObject* s) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -663,6 +668,7 @@ void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n) {
 }
 
 int is_bool_array(PyArrayObject* arr) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -684,6 +690,7 @@ int is_bool_array(PyArrayObject* arr) {
 }
 
 int is_pd_boolean_array(PyObject* arr) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -716,6 +723,7 @@ int is_pd_boolean_array(PyObject* arr) {
 
 void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
                           int64_t n) {
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -831,6 +839,7 @@ int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
         We assume we have already error checked an allocated the data in Python.
 
     */
+#undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
