@@ -87,8 +87,7 @@ jobs:
       # --no-update-deps ensures that no dependencies are upgraded.
       # If the conda-lock file is out of date, this would cause this installation
       # to fail. To fix, we usually need to update the lock-file.
-      # NOTE: Temporarily removing --no-update-deps
-      mamba install -y bodo=$BODO_VERSION -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$artifactory_channel -c conda-forge
+      mamba install -y bodo=$BODO_VERSION -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$artifactory_channel -c conda-forge --no-update-deps
     displayName: 'Install Bodo from Artifactory'
 
   - script: |
