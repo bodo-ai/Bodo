@@ -3501,18 +3501,7 @@ def overload_dataframe_merge(
     func_text = "def _impl(left, right, how='inner', on=None, left_on=None,\n"
     func_text += "    right_on=None, left_index=False, right_index=False, sort=False,\n"
     func_text += "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None, _bodo_na_equal=True, _bodo_rebalance_output_if_skewed=False):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}', '{}', '{}', False, {}, {}, {}, '{}')\n".format(
-        left_keys,
-        right_keys,
-        how,
-        suffix_x,
-        suffix_y,
-        indicator_val,
-        _bodo_na_equal_val,
-        _bodo_rebalance_output_if_skewed_val,
-        gen_cond,
-    )
-
+    func_text += f"  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {left_keys}, {right_keys}, '{how}', '{suffix_x}', '{suffix_y}', False, {indicator_val}, {_bodo_na_equal_val}, {_bodo_rebalance_output_if_skewed_val}, {gen_cond!r})\n"
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
     _impl = loc_vars["_impl"]

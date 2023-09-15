@@ -94,7 +94,8 @@ public class JoinCodeGen {
 
     boolean updateOnStr = false;
     if (!joinType.equals("cross")) {
-      onStr = makeQuoted(joinCond.emit());
+      // Use Expr.StringLiteral in case there are nested quotes
+      onStr = new Expr.StringLiteral(joinCond.emit()).emit();
       updateOnStr = true;
     }
 
