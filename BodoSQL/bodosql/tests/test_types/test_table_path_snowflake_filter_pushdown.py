@@ -24,6 +24,9 @@ from bodo.tests.utils import (
 pytestmark = pytest_snowflake
 
 
+@pytest.mark.skip(
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
+)
 @pytest.mark.skipif(
     bodo.bodosql_use_streaming_plan,
     reason="Limit Pushdown with Streaming & TablePath Snowflake Tables is Not Supported",
@@ -128,6 +131,9 @@ def test_zero_columns_pruning(memory_leak_check):
         check_logger_msg(stream, "Columns loaded []")
 
 
+@pytest.mark.skip(
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
+)
 @pytest.mark.skipif(
     bodo.bodosql_use_streaming_plan,
     reason="Limit Pushdown with Streaming & TablePath Snowflake Tables is Not Supported",
@@ -170,6 +176,9 @@ def test_snowflake_limit_pushdown(memory_leak_check):
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
+@pytest.mark.skip(
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
+)
 @pytest.mark.skipif(
     bodo.bodosql_use_streaming_plan,
     reason="In Pushdown with Streaming & TablePath Snowflake Tables is Not Supported",

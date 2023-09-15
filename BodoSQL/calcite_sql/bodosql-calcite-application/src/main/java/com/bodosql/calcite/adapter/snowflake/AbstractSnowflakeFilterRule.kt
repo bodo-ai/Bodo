@@ -59,6 +59,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             SqlKind.LESS_THAN_OR_EQUAL,
             SqlKind.GREATER_THAN,
             SqlKind.GREATER_THAN_OR_EQUAL,
+            SqlKind.SEARCH,
             // Logical identity operators.
             SqlKind.IS_FALSE,
             SqlKind.IS_NOT_FALSE,
@@ -72,9 +73,10 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             SqlKind.TIMES,
             SqlKind.DIVIDE,
             SqlKind.MINUS_PREFIX,
-            SqlKind.SEARCH,
-            // Common compute steps.
+            // Common compute steps for selecting rows for comparison.
             SqlKind.COALESCE,
+            SqlKind.LEAST,
+            SqlKind.GREATEST,
         )
 
         private val SUPPORTED_GENERIC_CALL_NAMES = setOf(

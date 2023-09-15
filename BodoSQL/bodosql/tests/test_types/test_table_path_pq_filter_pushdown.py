@@ -121,7 +121,7 @@ def test_table_path_filter_pushdown(datapath, memory_leak_check):
 
 
 @pytest.mark.skip(
-    "BSE-1239 - BodoSQL could pruning breaks filter pushdown for non-snowflake catalog tables"
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
 )
 @pytest.mark.slow
 def test_like_filter_pushdown(datapath, memory_leak_check):
@@ -228,7 +228,7 @@ def test_like_filter_pushdown(datapath, memory_leak_check):
 
 
 @pytest.mark.skip(
-    "BSE-1239 - BodoSQL could pruning breaks filter pushdown for non-snowflake catalog tables"
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
 )
 @pytest.mark.slow
 def test_ilike_filter_pushdown(datapath, memory_leak_check):
@@ -982,7 +982,7 @@ def test_table_path_limit_pushdown_complex(datapath, memory_leak_check):
 
 
 @pytest.mark.skip(
-    "BSE-1239 - BodoSQL could pruning breaks filter pushdown for non-snowflake catalog tables"
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
 )
 @pytest.mark.slow
 def test_boolean_logic_filter_pushdown(datapath, memory_leak_check):
@@ -1102,7 +1102,7 @@ def test_in_filter_pushdown(datapath):
 
 
 @pytest.mark.skip(
-    "BSE-1239 - BodoSQL could pruning breaks filter pushdown for non-snowflake catalog tables"
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
 )
 @pytest.mark.slow
 def test_in_filter_pushdown_e2e(datapath):
@@ -1270,7 +1270,7 @@ def test_not_in_filter_pushdown(datapath):
 
 
 @pytest.mark.skip(
-    "BSE-1239 - BodoSQL could pruning breaks filter pushdown for non-snowflake catalog tables"
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
 )
 def test_not_like_filter_pushdown(datapath, memory_leak_check):
     """
@@ -1360,7 +1360,7 @@ def test_not_like_filter_pushdown(datapath, memory_leak_check):
 
 
 @pytest.mark.skip(
-    "BSE-1239 - BodoSQL could pruning breaks filter pushdown for non-snowflake catalog tables"
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
 )
 def test_not_ilike_filter_pushdown(datapath, memory_leak_check):
     """
@@ -1451,7 +1451,7 @@ def test_not_ilike_filter_pushdown(datapath, memory_leak_check):
 
 
 @pytest.mark.skip(
-    "BSE-1239 - BodoSQL could pruning breaks filter pushdown for non-snowflake catalog tables"
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
 )
 @pytest.mark.slow
 def test_multiple_loads_filter_pushdown(datapath, memory_leak_check):
@@ -1498,7 +1498,7 @@ def test_multiple_loads_filter_pushdown(datapath, memory_leak_check):
 
 
 @pytest.mark.skip(
-    "BSE-1239 - BodoSQL could pruning breaks filter pushdown for non-snowflake catalog tables"
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
 )
 def test_length_filter_pushdown(datapath, memory_leak_check):
     """
@@ -1608,7 +1608,7 @@ def test_trim_filter_pushdown(func_args, datapath, memory_leak_check):
 
 
 @pytest.mark.skip(
-    "BSE-1239 - BodoSQL could pruning breaks filter pushdown for non-snowflake catalog tables"
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
 )
 def test_reverse_filter_pushdown(datapath, memory_leak_check):
     """
