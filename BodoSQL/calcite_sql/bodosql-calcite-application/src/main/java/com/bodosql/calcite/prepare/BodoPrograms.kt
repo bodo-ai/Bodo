@@ -6,6 +6,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.logicalRules.JoinExtractOverRule
 import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
+import com.bodosql.calcite.prepare.BodoRules.SUB_QUERY_REMOVAL_RULES
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin
@@ -37,7 +38,6 @@ import org.apache.calcite.rel.logical.LogicalProject
 import org.apache.calcite.rel.logical.LogicalSort
 import org.apache.calcite.rel.logical.LogicalUnion
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
-import org.apache.calcite.rel.rules.SubQueryRemoveRule
 import org.apache.calcite.rex.RexExecutorImpl
 import org.apache.calcite.sql2rel.RelDecorrelator
 import org.apache.calcite.tools.Program
@@ -53,6 +53,7 @@ object BodoPrograms {
      * and convert logical nodes to physical nodes.
      */
     fun hepStandard(optimize: Boolean = true): Program = Programs.sequence(
+        TrimFieldsProgram(false),
         if (optimize) {
             HepOptimizerProgram(BodoRules.HEURISTIC_RULE_SET)
         } else {
@@ -75,6 +76,7 @@ object BodoPrograms {
     fun standard(optimize: Boolean = true): Program = Programs.sequence(
         // When the HepStandardProgram is removed entirely, we would add the
         // convention when the SnowflakeTableScan is created instead of here.
+        TrimFieldsProgram(false),
         SnowflakeTraitAdder(),
         SnowflakeColumnPruning(),
         if (optimize) {
@@ -186,7 +188,6 @@ object BodoPrograms {
         // Convert calcite logical nodes to bodo logical nodes
         // when necessary.
         LogicalConverterProgram,
-        TrimFieldsProgram(false),
     )
 
     /**
@@ -197,13 +198,16 @@ object BodoPrograms {
         Programs.of(
             HepProgram.builder()
                 .addRuleCollection(
-                    listOf(
-                        SubQueryRemoveRule.Config.FILTER.toRule(),
-                        SubQueryRemoveRule.Config.PROJECT.toRule(),
-                        SubQueryRemoveRule.Config.JOIN.toRule(),
-                        JoinExtractOverRule.Config.DEFAULT.toRule(),
-                        ListAggOptionalReplaceRule.Config.DEFAULT.toRule(),
-                    ),
+                    Iterables.concat(
+                        SUB_QUERY_REMOVAL_RULES,
+                        listOf(
+                            // TODO: Remove
+                            JoinExtractOverRule.Config.DEFAULT.toRule(),
+                            // TODO: Move to the normal HEP step and operate on our logical
+                            // nodes instead of the default.
+                            ListAggOptionalReplaceRule.Config.DEFAULT.toRule(),
+                        ),
+                    ).toList(),
                 )
                 .build(),
             true,
