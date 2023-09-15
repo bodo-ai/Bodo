@@ -2169,8 +2169,10 @@ def overload_get_bin_labels(bins, right=True, include_lowest=True):
             if right and include_lowest:
                 # adjust first interval by precision to account for being right closed
                 breaks[0] = breaks[0] - td64_1
+            # Copying inputs since interval array doesn't support buffer offsets which
+            # are created by slicing yet. See [BSE-1260].
             interval_arr = bodo.libs.interval_arr_ext.init_interval_array(
-                breaks[:-1], breaks[1:]
+                breaks[:-1].copy(), breaks[1:].copy()
             )
             return bodo.hiframes.pd_index_ext.init_interval_index(interval_arr, None)
 
@@ -2183,8 +2185,10 @@ def overload_get_bin_labels(bins, right=True, include_lowest=True):
         if right and include_lowest:
             # adjust lhs of first interval by precision to account for being right closed
             breaks[0] = breaks[0] - 10.0 ** (-precision)
+        # Copying inputs since interval array doesn't support buffer offsets which
+        # are created by slicing yet. See [BSE-1260].
         interval_arr = bodo.libs.interval_arr_ext.init_interval_array(
-            breaks[:-1], breaks[1:]
+            breaks[:-1].copy(), breaks[1:].copy()
         )
         return bodo.hiframes.pd_index_ext.init_interval_index(interval_arr, None)
 
