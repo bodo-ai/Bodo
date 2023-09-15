@@ -50,6 +50,11 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
               in.isNullable()
       );
     }
+    // Calcite natively enables casting STRING -> BINARY AND BINARY -> STRING.
+    // We don't want this behavior so we disable it.
+    if ((SqlTypeUtil.isBinary(in) && expected == SqlTypeFamily.CHARACTER) || (SqlTypeUtil.isCharacter(in) && expected == SqlTypeFamily.BINARY)) {
+      return null;
+    }
     if ((SqlTypeUtil.isNumeric(in) || SqlTypeUtil.isCharacter(in))
         && expected == SqlTypeFamily.BOOLEAN) {
       return factory.createSqlType(SqlTypeName.BOOLEAN);

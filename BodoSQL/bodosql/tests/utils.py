@@ -6,7 +6,7 @@ import os
 import re
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import bodosql
 import numba
@@ -33,6 +33,9 @@ from bodo.tests.utils import (
     reduce_sum,
 )
 
+if TYPE_CHECKING:
+    from pyspark.sql.session import SparkSession
+
 
 class InputDist(Enum):
     """
@@ -49,7 +52,7 @@ class InputDist(Enum):
 def check_query(
     query: str,
     dataframe_dict: Dict[str, pd.DataFrame],
-    spark: Optional[pyspark.sql.session.SparkSession],
+    spark: Optional["SparkSession"],
     named_params: Optional[Dict[str, Any]] = None,
     check_names: bool = True,
     check_dtype: bool = True,
@@ -298,7 +301,12 @@ def check_query(
         print("Pandas Code:")
         print(bc.convert_to_pandas(query, named_params))
 
-    # Determine the spark output.
+    if expected_output is None and spark is None:
+        raise ValueError(
+            "Either `expected_output` or `spark` argument must be set to not None"
+        )
+
+    # Determine the Spark output.
     if expected_output is None:
         spark.catalog.clearCache()
         # If Spark specific inputs aren't provided, use the same
