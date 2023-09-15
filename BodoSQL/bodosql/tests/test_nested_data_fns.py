@@ -237,6 +237,10 @@ def test_to_array_arrays(to_array_columns_data, memory_leak_check):
         check_dtype=False,
         sort_output=False,
         expected_output=py_output,
+        # Passing this since _use_dict_str_type=True causes gatherv to fail internally
+        # and is not needed since the output of the actual test is regular string array
+        # (see https://bodo.atlassian.net/browse/BSE-1256)
+        use_dict_encoded_strings=False,
     )
 
 
