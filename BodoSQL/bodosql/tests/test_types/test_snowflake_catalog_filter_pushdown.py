@@ -377,7 +377,7 @@ def test_snowflake_catalog_coalesce_not_pushdown(memory_leak_check):
         # Pushdown happens in the planner. Check the timer message instead.
         check_logger_msg(
             stream,
-            f'FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."LINEITEM" WHERE COALESCE("L_COMMITDATE", "L_SHIPDATE") > DATE \'1998-10-29\'',
+            f'WHERE COALESCE("L_COMMITDATE", "L_SHIPDATE") > DATE \'1998-10-29\'',
         )
 
 
@@ -1077,7 +1077,7 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B"',
+                f'WHERE "B"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where b or c"
@@ -1162,7 +1162,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE NOT "B"',
+                f'WHERE NOT "B"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where not(b or c)"
@@ -1282,10 +1282,9 @@ def test_snowflake_not_comparison_pushdown(
                 reset_index=True,
                 sort_output=True,
             )
-            # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" = 3',
+                f'WHERE "B" = 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where not (b <= 3)"
@@ -1303,7 +1302,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" > 3',
+                f'WHERE "B" > 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query3 = f"Select a from {table_name} where not (b < 3)"
@@ -1321,7 +1320,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" >= 3',
+                f'WHERE "B" >= 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query4 = f"Select a from {table_name} where not (b >= 3)"
@@ -1339,7 +1338,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" < 3',
+                f'WHERE "B" < 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query5 = f"Select a from {table_name} where not (b > 3)"
@@ -1357,7 +1356,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "B" <= 3',
+                f'WHERE "B" <= 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query6 = f"Select a from {table_name} where NOT((b > 3 OR b < 2) AND C)"
@@ -2455,11 +2454,16 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
                 # Pandas output is non-nullable
                 check_dtype=False,
             )
-            # Pushdown happens in the planner. Check the timer message instead.
-            check_logger_msg(
-                stream,
-                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE COALESCE("L_COMMITDATE", TIMESTAMP \'2023-06-20 00:00:00\') >= TIMESTAMP \'2023-01-20 00:00:00\'',
-            )
+            if bodo.bodosql_use_volcano_plan and bodo.bodosql_use_streaming_plan:
+                # Pushdown happens in the planner. Check the timer message instead.
+                check_logger_msg(
+                    stream,
+                    f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE COALESCE("L_COMMITDATE", TIMESTAMP \'2023-06-20 00:00:00\') >= TIMESTAMP \'2023-01-20 00:00:00\'',
+                )
+            else:
+                # Hep planner doesn't use snowflake filter.
+                check_logger_msg(stream, "Filter pushdown successfully performed")
+                check_logger_msg(stream, r"COALESCE(\"L_COMMITDATE\", {f0}) >= {f1} )")
 
 
 @pytest.mark.parametrize(
@@ -2501,8 +2505,11 @@ def test_least_greatest(
         )
 
         check_logger_msg(stream, f"Columns loaded ['float_col']")
-        check_logger_msg(stream, "Filter pushdown successfully performed")
-        check_logger_msg(stream, sql_func)
+        # Pushdown happens in the planner. Check the timer message instead.
+        check_logger_msg(
+            stream,
+            f'FROM "TEST_DB"."PUBLIC"."NUMERIC_DATA" WHERE {sql_func.upper()}("FLOAT_COL", 1.0) = 1.0',
+        )
 
 
 def test_column_pruning_pushdown_dict_encoding(

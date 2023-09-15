@@ -343,7 +343,7 @@ def test_merge_into_simple_2(iceberg_database, iceberg_table_conn):
 
 
 @pytest.mark.skip(
-    "BSE-1239 - BodoSQL could pruning breaks filter pushdown for non-snowflake catalog tables"
+    "BSE-1239 - BodoSQL column pruning breaks filter pushdown for non-snowflake catalog tables"
 )
 @pytest.mark.slow
 def test_iceberg_in_pushdown(memory_leak_check, iceberg_database, iceberg_table_conn):

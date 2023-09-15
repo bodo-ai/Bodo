@@ -62,10 +62,9 @@ public class BodoRelToSqlConverter extends RelToSqlConverter {
             node = sqlTable;
         } else {
             final List<SqlNode> selectList = new ArrayList<>();
-            final RelDataType tableType = e.getTable().getRowType();
             final RelDataType prunedType = e.getRowType();
             for (int i = 0; i < prunedType.getFieldCount(); i++) {
-                addSelect(selectList, new SqlIdentifier(prunedType.getFieldNames().get(i), SqlParserPos.ZERO), tableType);
+                addSelect(selectList, new SqlIdentifier(prunedType.getFieldNames().get(i), SqlParserPos.ZERO), prunedType);
             }
             final SqlNodeList selectNodeList = new SqlNodeList(selectList, POS);
             node = new SqlSelect(SqlParserPos.ZERO, null, selectNodeList, sqlTable,
