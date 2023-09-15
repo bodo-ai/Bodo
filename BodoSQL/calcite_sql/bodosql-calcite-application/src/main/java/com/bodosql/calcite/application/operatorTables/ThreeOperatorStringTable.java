@@ -44,9 +44,9 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          ReturnTypes.ARG0_NULLABLE,
           // What should be used to infer operand types. We don't use
-          // this so we set it to None.
+          // this, so we set it to NULL.
           null,
           // What Input Types does the function accept? This function accepts only
           // (string, binary)
@@ -69,9 +69,9 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          ReturnTypes.ARG0_NULLABLE,
           // What should be used to infer operand types. We don't use
-          // this so we set it to None.
+          // this, so we set it to NULL.
           null,
           // What Input Types does the function accept? This function accepts only
           // (string, binary)

@@ -1491,7 +1491,8 @@ def test_md5_columns(query, memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.parametrize("func", ["LPAD", "RPAD"])
 def test_binary_pad_2args_errorchecking(func, memory_leak_check):
-    """Test error message is thrown when
+    """
+    Test error message is thrown when
     LPAD/RPAD is used with binary data and 2 arguments.
     """
 
@@ -1499,7 +1500,7 @@ def test_binary_pad_2args_errorchecking(func, memory_leak_check):
     ctx = {
         "table1": pd.DataFrame(
             {
-                "A": np.array([b"abc", b"c", None, b"ccdefg"] * 3, object),
+                "A": np.array([b"abc", b"c", None, b"ccdefg"] * 3, dtype=object),
                 "len": pd.Series(
                     [None, -1, 10, 0] * 3,
                     dtype=pd.Int32Dtype(),
@@ -1509,11 +1510,12 @@ def test_binary_pad_2args_errorchecking(func, memory_leak_check):
     }
     with pytest.raises(
         Exception,
-        match="When base is a binary value, the pad argument must be provided explicitly",
+        match=f".*Cannot apply '{func.upper()}' to arguments of type '{func.upper()}\\(<VARBINARY>, <INTEGER>\\).*'",
     ):
         check_query(
             query,
             ctx,
             None,
-            expected_output="Error",
+            # Pointless output, but must be set
+            expected_output=pd.DataFrame(),
         )
