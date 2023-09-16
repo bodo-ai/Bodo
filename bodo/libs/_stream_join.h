@@ -595,6 +595,8 @@ class HashJoinState : public JoinState {
     // distributed. This is unused if the build table is distributed or
     // the final output is replicated.
     size_t build_na_counter = 0;
+    // Same as build_na_counter but for probe NAs
+    size_t probe_na_counter = 0;
 
     // Counter of number of syncs since previous sync freq update.
     // Set to -1 if not updating adaptively (user has specified sync freq).
