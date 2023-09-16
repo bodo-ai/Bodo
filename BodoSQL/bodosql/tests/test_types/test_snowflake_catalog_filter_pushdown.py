@@ -73,7 +73,7 @@ def test_snowflake_catalog_simple_filter_pushdown(memory_leak_check):
             # Check for filter pushdown
             check_logger_msg(
                 stream,
-                f'FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."LINEITEM" WHERE "L_ORDERKEY" > 10 AND "L_SHIPMODE" LIKE $$AIR%%',
+                f'WHERE "L_ORDERKEY" > 10 AND "L_SHIPMODE" LIKE $$AIR%%',
             )
 
     bc = bodosql.BodoSQLContext(
@@ -2508,7 +2508,7 @@ def test_least_greatest(
         # Pushdown happens in the planner. Check the timer message instead.
         check_logger_msg(
             stream,
-            f'FROM "TEST_DB"."PUBLIC"."NUMERIC_DATA" WHERE {sql_func.upper()}("FLOAT_COL", 1.0) = 1.0',
+            f'WHERE {sql_func.upper()}("FLOAT_COL", 1.0) = 1.0',
         )
 
 
