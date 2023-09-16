@@ -1492,10 +1492,35 @@ uint64_t HashJoinState::op_pool_bytes_allocated() const {
     return this->op_pool->bytes_allocated();
 }
 
-template <bool build_table_outer>
+/**
+ * @brief Filter NA values from input of build/probe consume batch and write to
+ * output buffer in case of outer join.
+ *
+ * @tparam table_outer build/probe table is on outer side of join
+ * @tparam is_probe input is probe input (helps write to output buffer properly)
+ * @param in_table input batch to build/probe
+ * @param n_keys number of key columns in input
+ * @param table_parallel target (build/probe) table is parallel
+ * @param other_table_parallel The other non-target table (build/probe) is
+ * parallel
+ * @param na_counter counter of build/probe NAs so far (helps write output in
+ * replicated case)
+ * @param na_out_buffer output buffer for writing NA rows
+ * @param build_table build table in case of probe input since necessary for
+ * output generation (only used in probe case)
+ * @param build_kept_cols Which columns to generate in the output on the
+ * build side (only used in probe case)
+ * @param probe_kept_cols Which columns to generate in the output on the
+ * probe side (only used in probe case)
+ * @return std::shared_ptr<table_info> input table with NAs filtered out
+ */
+template <bool table_outer, bool is_probe>
 std::shared_ptr<table_info> filter_na_values(
-    HashJoinState* join_state, std::shared_ptr<table_info> in_table,
-    uint64_t n_keys) {
+    std::shared_ptr<table_info> in_table, uint64_t n_keys, bool table_parallel,
+    bool other_table_parallel, size_t& na_counter,
+    ChunkedTableBuilder& na_out_buffer, std::shared_ptr<table_info> build_table,
+    const std::vector<uint64_t> build_kept_cols,
+    const std::vector<uint64_t> probe_kept_cols) {
     bodo::vector<bool> not_na(in_table->nrows(), true);
     bool can_have_na = false;
     for (uint64_t i = 0; i < n_keys; i++) {
@@ -1513,37 +1538,59 @@ std::shared_ptr<table_info> filter_na_values(
         // No NA values, just return.
         return in_table;
     }
+
     // Retrieve table takes a list of columns. Convert the boolean array.
     bodo::vector<int64_t> idx_list;
-    // For appending NAs in outer join.
-    std::vector<bool> append_nas(in_table->nrows(), false);
-    // If we have a replicated build table without a replicated probe table.
-    // then we only add a fraction of NA rows to the output. Otherwise we
-    // add all rows.
-    const bool add_all =
-        join_state->build_parallel || !join_state->probe_parallel;
+    // For appending NAs in outer join (build case).
+    std::vector<bool> append_nas;
+    if (!is_probe) {
+        append_nas.resize(in_table->nrows(), false);
+    }
+
+    // For appending NAs in outer join (probe case).
+    bodo::vector<int64_t> build_idxs;
+    bodo::vector<int64_t> probe_idxs;
+
+    // If we have a replicated build table without a replicated probe table (or
+    // vice versa). then we only add a fraction of NA rows to the output.
+    // Otherwise we add all rows.
+    const bool add_all = table_parallel || !other_table_parallel;
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     for (size_t i = 0; i < in_table->nrows(); i++) {
         if (not_na[i]) {
             idx_list.emplace_back(i);
-        } else if (build_table_outer) {
-            // If build table is replicated but output is not
+        } else if (table_outer) {
+            // If table is replicated but output is not
             // replicated evenly divide NA values across all ranks.
-            append_nas[i] = add_all || ((join_state->build_na_counter %
-                                         n_pes) == static_cast<size_t>(myrank));
-            join_state->build_na_counter++;
+            bool append_na = add_all || ((na_counter % n_pes) ==
+                                         static_cast<size_t>(myrank));
+            if (is_probe) {
+                if (append_na) {
+                    build_idxs.push_back(-1);
+                    probe_idxs.push_back(i);
+                }
+            } else {
+                append_nas[i] = append_na;
+            }
+            na_counter++;
         }
     }
     if (idx_list.size() == in_table->nrows()) {
         // No NA values, skip the copy.
         return in_table;
     } else {
-        if (build_table_outer) {
+        if (table_outer) {
             // If have an outer join we must push the NA values directly to
             // the output, not just filter them.
-            join_state->build_na_key_buffer.AppendBatch(in_table, append_nas);
+            if (is_probe) {
+                na_out_buffer.AppendJoinOutput(
+                    build_table, in_table, build_idxs, probe_idxs,
+                    build_kept_cols, probe_kept_cols);
+            } else {
+                na_out_buffer.AppendBatch(in_table, append_nas);
+            }
         }
         return RetrieveTable(std::move(in_table), std::move(idx_list));
     }
@@ -1615,11 +1662,17 @@ bool join_build_consume_batch(HashJoinState* join_state,
     // output.
     // TODO: Have outer join skip the build table/avoid shuffling.
     if (join_state->build_table_outer) {
-        in_table = filter_na_values<true>(join_state, std::move(in_table),
-                                          join_state->n_keys);
+        in_table = filter_na_values<true, false>(
+            std::move(in_table), join_state->n_keys, join_state->build_parallel,
+            join_state->probe_parallel, join_state->build_na_counter,
+            join_state->build_na_key_buffer, nullptr, std::vector<uint64_t>(),
+            std::vector<uint64_t>());
     } else {
-        in_table = filter_na_values<false>(join_state, std::move(in_table),
-                                           join_state->n_keys);
+        in_table = filter_na_values<false, false>(
+            std::move(in_table), join_state->n_keys, join_state->build_parallel,
+            join_state->probe_parallel, join_state->build_na_counter,
+            join_state->build_na_key_buffer, nullptr, std::vector<uint64_t>(),
+            std::vector<uint64_t>());
     }
 
     // Get hashes of the new batch (different hashes for partitioning and
@@ -1911,6 +1964,15 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     // Non-key DICT columns of probe_table_buffer and probe_shuffle_buffer also
     // share their dictionaries and will also be unified.
     in_table = join_state->UnifyProbeTableDictionaryArrays(in_table);
+
+    // Prune rows with NA keys (necessary to avoid NA imbalance after shuffle).
+    // In case of probe_table_outer = True, write NAs directly to output.
+    in_table = filter_na_values<probe_table_outer, true>(
+        std::move(in_table), join_state->n_keys, join_state->probe_parallel,
+        join_state->build_parallel, join_state->probe_na_counter,
+        *(join_state->output_buffer),
+        active_partition->build_table_buffer.data_table, build_kept_cols,
+        probe_kept_cols);
 
     active_partition->probe_table = in_table;
 
