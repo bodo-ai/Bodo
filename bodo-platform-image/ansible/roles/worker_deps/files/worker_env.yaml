@@ -9,7 +9,7 @@ dependencies:
   - make
   - gcc_linux-64<9.0
   - gxx_linux-64
-  - scikit-learn==1.0.2
+  - scikit-learn==1.1.*
   - sqlalchemy
   - snowflake-sqlalchemy
   - snowflake-connector-python

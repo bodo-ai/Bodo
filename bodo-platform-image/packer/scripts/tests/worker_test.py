@@ -193,7 +193,7 @@ def test_connectors(connector, pip_packages, conda_packages):
 @pytest.mark.parametrize(
     "package, expected_version",
     [
-        ("scikit-learn", "1.0"),
+        ("scikit-learn", "1.1"),
         ("bodo", os.environ["BODO_VERSION"]),
         ("bodo-iceberg-connector", os.environ["ICEBERG_VERSION"]),
         ("bodosql", os.environ["BODOSQL_VERSION"]),
