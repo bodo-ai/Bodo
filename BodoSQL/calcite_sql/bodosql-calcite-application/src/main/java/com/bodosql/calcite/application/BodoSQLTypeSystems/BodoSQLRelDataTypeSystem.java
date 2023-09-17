@@ -18,6 +18,11 @@ public class BodoSQLRelDataTypeSystem implements RelDataTypeSystem {
 
   private final BodoTZInfo defaultTZInfo;
 
+  // This is found in SqlTypeName.
+  // Added it here for simplicity.
+  // TODO (HA): update with other default tickets.
+  public static final int MAX_DATETIME_PRECISION = 9;
+
   /*
   WEEK_START parameter that determines which weekday a week starts with.
   We follow Snowflake behavior, mapping 0 and 1 to Monday (default), and
@@ -58,10 +63,15 @@ public class BodoSQLRelDataTypeSystem implements RelDataTypeSystem {
     return true;
   }
 
+  // TODO: Go over these methods and update default to match Snowflake.
   // All other methods just call the method for defaultTypeSystem
 
   @Override
   public int getMaxScale(SqlTypeName typeName) {
+    switch (typeName) {
+      case DECIMAL:
+        return getMaxNumericScale();
+    }
     return defaultTypeSystem.getMaxScale(typeName);
   }
 
@@ -82,23 +92,56 @@ public class BodoSQLRelDataTypeSystem implements RelDataTypeSystem {
       case INTERVAL_MINUTE_SECOND:
       case INTERVAL_SECOND:
         return SqlTypeName.MAX_INTERVAL_START_PRECISION;
+      case BOOLEAN:
+        return 1;
+      case BINARY:
+        return RelDataType.PRECISION_NOT_SPECIFIED;
+        // Snowflake:
+        // INT , INTEGER , BIGINT , SMALLINT , TINYINT , BYTEINT
+        // Synonymous with NUMBER, except that precision and scale cannot be specified
+      case TINYINT:
+      case SMALLINT:
+        // NOTE Disbling integer as it impacted bitwise and other time epoch tests.
+        // case INTEGER:
+      case BIGINT:
+      case DECIMAL:
+        return getMaxNumericPrecision();
+        // Snowflake: Time precision defaul is 9.
+      case TIME:
+      case TIMESTAMP:
+        return MAX_DATETIME_PRECISION;
     }
     return defaultTypeSystem.getDefaultPrecision(typeName);
   }
 
   @Override
   public int getMaxPrecision(SqlTypeName typeName) {
+    // TODO(HA anothr PR): port other defaults.
+    // These're needed as getCastSpec call getMaxPrecision
+    switch (typeName) {
+      case TINYINT:
+      case SMALLINT:
+      case BIGINT:
+      case DECIMAL:
+        return getMaxNumericPrecision();
+      case TIME:
+      case TIMESTAMP:
+        return MAX_DATETIME_PRECISION;
+      case VARBINARY:
+      case BINARY:
+        return 8388608;
+    }
     return defaultTypeSystem.getMaxPrecision(typeName);
   }
 
   @Override
   public int getMaxNumericScale() {
-    return defaultTypeSystem.getMaxNumericScale();
+    return 37;
   }
 
   @Override
   public int getMaxNumericPrecision() {
-    return defaultTypeSystem.getMaxNumericPrecision();
+    return 38;
   }
 
   @Override

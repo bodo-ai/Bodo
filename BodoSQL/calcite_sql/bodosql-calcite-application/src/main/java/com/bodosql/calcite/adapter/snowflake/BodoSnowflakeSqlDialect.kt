@@ -101,7 +101,8 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
 
                 else -> {}
             }
-            val charSet = if (supportsCharSet()) type.getCharset()?.name() else null
+            // Snowflake doesn't support character set
+            val charSet = null
             return BodoSqlTypeUtil.convertTypeToSpec(type, charSet, maxPrecision, maxScale)
         }
         return BodoSqlTypeUtil.convertTypeToSpec(type)
