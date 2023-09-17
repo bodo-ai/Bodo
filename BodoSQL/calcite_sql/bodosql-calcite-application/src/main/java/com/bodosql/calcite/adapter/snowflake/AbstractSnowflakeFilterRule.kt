@@ -100,9 +100,19 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
 
         /**
          * Casts that we want to push into Snowflake.
+         * Currently, it's only a cast call to/from variant from/to any datatype.
+         * i.e. CAST(VARIANT):DataType or CAST(Datatype):Variant
+         * @param call: Operator call
+         * @return true/false based on whether it's a supported cast operation or not.
          */
         private fun isSupportedCast(call: RexCall): Boolean {
-            return call.kind == SqlKind.CAST && call.getType() is VariantSqlType
+            if (call.kind == SqlKind.CAST) {
+                // Cast to Variant or Cast input is a variant
+                if ((call.getType() is VariantSqlType) || (call.operands[0].type is VariantSqlType)) {
+                    return true
+                }
+            }
+            return false
         }
 
         /**
