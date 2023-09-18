@@ -329,7 +329,6 @@ def test_missing_column_jit(memory_leak_check):
 
 @pytest.mark.slow
 def test_empty_query_python(memory_leak_check):
-
     df = pd.DataFrame({"A": np.arange(100)})
     msg = "BodoSQLContext passed empty query string"
     with pytest.raises(
@@ -402,14 +401,14 @@ def test_str_date_select_cond_fns(fn_name, memory_leak_check):
     with pytest.raises(
         BodoError,
         match=re.escape(
-            f"Cannot infer return type for {fn_name}; operand types: [TIMESTAMP(0), VARCHAR]"
+            f"Cannot infer return type for {fn_name}; operand types: [TIMESTAMP(9), VARCHAR]"
         ),
     ):
         impl(df)
 
 
 @pytest.mark.slow
-@pytest.mark.skip("Need to fix operand typchecking for IF, see BS-581")
+@pytest.mark.skip("Need to fix operand typechecking for IF, see BS-581")
 def test_str_date_select_IF(memory_leak_check):
     """
     Many sql dialects play fast and loose with what is a string and date/timestamp
@@ -435,7 +434,7 @@ def test_str_date_select_IF(memory_leak_check):
     with pytest.raises(
         BodoError,
         match=re.escape(
-            "Cannot infer return type for IF; operand types: [BOOLEAN, TIMESTAMP(0), VARCHAR]"
+            "Cannot infer return type for IF; operand types: [BOOLEAN, TIMESTAMP(9), VARCHAR]"
         ),
     ):
         impl(df)
