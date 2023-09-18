@@ -48,13 +48,14 @@ def test_default_buffer_pool_options():
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+            "BODO_BUFFER_POOL_ENFORCE_MAX_ALLOCATION_LIMIT": None,
         }
     ):
         options = BufferPoolOptions.defaults()
         assert options.memory_size > 0
         assert options.min_size_class == 64
         assert options.max_num_size_classes == 21
-        assert not options.ignore_max_limit_during_allocation
+        assert not options.enforce_max_limit_during_allocation
 
     # Check that specifying the memory explicitly works as
     # expected.
@@ -87,7 +88,7 @@ def test_default_buffer_pool_options():
         assert options.min_size_class == 32
         assert options.max_num_size_classes == 5
 
-    # Check that specifying ignore_max_limit_during_allocation
+    # Check that specifying enforce_max_limit_during_allocation
     # through env vars works as expected
     with temp_env_override(
         {
@@ -95,12 +96,12 @@ def test_default_buffer_pool_options():
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
-            "BODO_BUFFER_POOL_IGNORE_MAX_ALLOCATION_LIMIT": "1",
+            "BODO_BUFFER_POOL_ENFORCE_MAX_ALLOCATION_LIMIT": "1",
         }
     ):
         options = BufferPoolOptions.defaults()
         assert options.memory_size > 0
-        assert options.ignore_max_limit_during_allocation
+        assert options.enforce_max_limit_during_allocation
 
     with temp_env_override(
         {
@@ -108,12 +109,12 @@ def test_default_buffer_pool_options():
             "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
-            "BODO_BUFFER_POOL_IGNORE_MAX_ALLOCATION_LIMIT": "0",
+            "BODO_BUFFER_POOL_ENFORCE_MAX_ALLOCATION_LIMIT": "0",
         }
     ):
         options = BufferPoolOptions.defaults()
         assert options.memory_size > 0
-        assert not options.ignore_max_limit_during_allocation
+        assert not options.enforce_max_limit_during_allocation
 
 
 def test_default_memory_options(tmp_path: Path):
@@ -404,7 +405,10 @@ def test_malloc_allocation():
     """
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -455,7 +459,10 @@ def test_mmap_smallest_size_class_allocation():
     """
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -529,7 +536,10 @@ def test_mmap_medium_size_classes_allocation():
     """
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -614,7 +624,10 @@ def test_mmap_largest_size_class_allocation():
     """
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -662,7 +675,11 @@ def test_larger_than_pool_allocation():
     raises the expected error.
     """
     # Allocate a very small pool for testing
-    options = BufferPoolOptions(memory_size=4, min_size_class=4)
+    options = BufferPoolOptions(
+        memory_size=4,
+        min_size_class=4,
+        enforce_max_limit_during_allocation=True,
+    )
     pool: BufferPool = BufferPool.from_options(options)
 
     alloc_size = (4 * 1024 * 1024) + 1
@@ -717,7 +734,10 @@ def test_alignment():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     malloc_threshold = int(0.75 * 8 * 1024)
@@ -793,7 +813,11 @@ def test_multiple_allocations():
     This is basically an E2E test.
     """
     # Allocate a very small pool for testing
-    options = BufferPoolOptions(memory_size=7, min_size_class=4)
+    options = BufferPoolOptions(
+        memory_size=7,
+        min_size_class=4,
+        enforce_max_limit_during_allocation=True,
+    )
     pool: BufferPool = BufferPool.from_options(options)
 
     # Size Class at index 7 will have capacity: 14 and block_size: 524288 (0.5MiB)
@@ -854,13 +878,21 @@ def test_verify_pool_attributes():
     """
 
     # Verify that max_num_size_classes works as expected
-    options = BufferPoolOptions(memory_size=7, min_size_class=4, max_num_size_classes=5)
+    options = BufferPoolOptions(
+        memory_size=7,
+        min_size_class=4,
+        max_num_size_classes=5,
+        enforce_max_limit_during_allocation=True,
+    )
     pool: BufferPool = BufferPool.from_options(options)
     assert pool.num_size_classes() == 5
     del pool
 
     options = BufferPoolOptions(
-        memory_size=7, min_size_class=4, max_num_size_classes=15
+        memory_size=7,
+        min_size_class=4,
+        max_num_size_classes=15,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     # We can only have a maximum of 11 classes given the memory-size
@@ -893,7 +925,10 @@ def test_reallocate_same_size_malloc():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -931,7 +966,10 @@ def test_reallocate_same_size_mmap():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -967,7 +1005,10 @@ def test_reallocate_malloc_to_mmap():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -1010,7 +1051,10 @@ def test_reallocate_mmap_to_malloc():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -1049,7 +1093,10 @@ def test_reallocate_larger_mem_same_size_class():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class: SizeClass = pool.get_size_class(1)
@@ -1109,7 +1156,10 @@ def test_reallocate_smaller_mem_same_size_class():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class: SizeClass = pool.get_size_class(1)
@@ -1167,7 +1217,10 @@ def test_reallocate_0_to_mmap():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -1226,7 +1279,10 @@ def test_reallocate_0_to_malloc():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -1288,7 +1344,10 @@ def test_reallocate_malloc_to_0():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -1326,7 +1385,10 @@ def test_reallocate_mmap_to_0():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class: SizeClass = pool.get_size_class(1)
@@ -1368,7 +1430,10 @@ def test_reallocate_smaller_mem_diff_size_class():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(7)
@@ -1420,7 +1485,10 @@ def test_reallocate_larger_mem_diff_size_class():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(7)
@@ -1469,7 +1537,11 @@ def test_pyarrow_allocation():
     """
 
     # Allocate a very small pool for testing
-    options = BufferPoolOptions(memory_size=4, min_size_class=4)
+    options = BufferPoolOptions(
+        memory_size=4,
+        min_size_class=4,
+        enforce_max_limit_during_allocation=True,
+    )
     pool: BufferPool = BufferPool.from_options(options)
     arrow_mem_pool_wrapper = get_arrow_memory_pool_wrapper_for_buffer_pool(pool)
     pa.set_memory_pool(arrow_mem_pool_wrapper)
@@ -1532,7 +1604,11 @@ def test_pin_unpin():
     and unpinned frames correctly
     """
     # Allocate a very small pool for testing
-    options = BufferPoolOptions(memory_size=4, min_size_class=1024)
+    options = BufferPoolOptions(
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+    )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
 
@@ -1573,7 +1649,9 @@ def test_oom_all_mem_pinned():
     """
 
     # Allocate a very small pool for testing
-    options = BufferPoolOptions(memory_size=4, min_size_class=1024)
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=1024, enforce_max_limit_during_allocation=True
+    )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
     size_class_2MiB: SizeClass = pool.get_size_class(1)
@@ -1620,7 +1698,9 @@ def test_oom_some_mem_unpinned():
     """
 
     # Allocate a very small pool for testing
-    options = BufferPoolOptions(memory_size=4, min_size_class=1024)
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=1024, enforce_max_limit_during_allocation=True
+    )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
     size_class_2MiB: SizeClass = pool.get_size_class(1)
@@ -1673,7 +1753,9 @@ def test_oom_no_storage():
     """
 
     # Allocate a very small pool for testing
-    options = BufferPoolOptions(memory_size=4, min_size_class=1024)
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=1024, enforce_max_limit_during_allocation=True
+    )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_2MiB: SizeClass = pool.get_size_class(1)
 
@@ -1693,7 +1775,7 @@ def test_oom_no_storage():
     # Trying to allocate 2MiB should fail
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match="Allocation failed. No storage locations provided to evict to.",
+        match="Spilling is not available to free up sufficient space in memory",
     ):
         _: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
 
@@ -1713,20 +1795,22 @@ def test_oom_no_storage():
     del pool
 
 
-def test_larger_than_available_space_allocation_limit_ignored():
+def test_larger_than_available_space_allocation_limit_ignored(capfd):
     """
     Test that trying to allocate more memory than
     space available in the buffer pool doesn't raise
-    an error when ignore_max_limit_during_allocation is True
+    an error when enforce_max_limit_during_allocation is False
     and there actually is enough space in physical memory (and
     a buffer frame of appropriate size is available in the pool).
     Also verifies that if all frames are taken up, the appropriate
-    error is raised even if ignore_max_limit_during_allocation is
-    True.
+    error is raised even if enforce_max_limit_during_allocation is
+    False.
     """
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=4, ignore_max_limit_during_allocation=True
+        memory_size=4,
+        min_size_class=4,
+        enforce_max_limit_during_allocation=False,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -1740,8 +1824,11 @@ def test_larger_than_available_space_allocation_limit_ignored():
     assert pool.max_memory() == 3.5 * 1024 * 1024
 
     # This allocation should now go through since there should be
-    # a free 1MiB frame available.
+    # a free 1MiB frame available. However, a warning should be displayed
+    # on stderr.
     allocation_4: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    _, err = capfd.readouterr()
+    assert "We will try to allocate anyway. This may invoke the OOM killer" in err
 
     # Verify stats after allocation attempt
     assert pool.bytes_allocated() == 4.5 * 1024 * 1024
@@ -1749,7 +1836,11 @@ def test_larger_than_available_space_allocation_limit_ignored():
 
     # Try to fill up all 1MiB frames:
     allocation_5: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    _, err = capfd.readouterr()
+    assert "We will try to allocate anyway. This may invoke the OOM killer" in err
     allocation_6: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    _, err = capfd.readouterr()
+    assert "We will try to allocate anyway. This may invoke the OOM killer" in err
 
     # Try allocating again:
     # Trying to allocate 1MiB should fail
@@ -1758,6 +1849,9 @@ def test_larger_than_available_space_allocation_limit_ignored():
         match="Could not find an empty frame of required size!",
     ):
         _: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    # Verify that a warning was displayed on stderr before it raised the error
+    _, err = capfd.readouterr()
+    assert "We will try to allocate anyway. This may invoke the OOM killer" in err
 
     # Verify stats after allocation attempt
     assert pool.bytes_allocated() == 6.5 * 1024 * 1024
@@ -1769,7 +1863,11 @@ def test_larger_than_available_space_allocation_limit_ignored():
 
     # Unpinning and a new allocation should be fine
     pool.unpin(allocation_6)
+
     allocation_7: BufferPoolAllocation = pool.allocate(512 * 1024)
+    _, err = capfd.readouterr()
+    assert "We will try to allocate anyway. This may invoke the OOM killer" in err
+
     pool.pin(allocation_6)
 
     pool.free(allocation_1)
@@ -1784,6 +1882,213 @@ def test_larger_than_available_space_allocation_limit_ignored():
     del pool
 
 
+def test_allocate_cannot_evict_sufficient_bytes_no_enforcement(tmp_path: Path, capfd):
+    """
+    Test that trying to allocate when there's not enough
+    space in the buffer-pool even after evicting all possible
+    frames, works correctly when max limit enforcement is
+    disabled.
+    Tests for both the frame available and not available
+    cases.
+    """
+    # Allocate a very small pool for testing
+    local_opt = StorageOptions(usable_size=16 * 1024 * 1024, location=bytes(tmp_path))
+    options = BufferPoolOptions(
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=False,
+        storage_options=[local_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    allocation1: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    allocation2: BufferPoolAllocation = pool.allocate(1 * 1024 * 1024)
+    allocation3: BufferPoolAllocation = pool.allocate(1 * 1024 * 1024)
+    pool.unpin(allocation2)
+
+    # Verify stats after allocation + unpin
+    assert pool.bytes_pinned() == 3 * 1024 * 1024
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+
+    # At this point, there's no space left, so allocating 2MiB will
+    # trigger a best effort spill. We will only be able to spill
+    # 1MiB though.
+    allocation4: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    # Verify that a warning is displayed on stderr
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+    # We should've triggered a spill of the unpinned frame
+    assert not allocation2.is_in_memory()
+
+    # Verify stats
+    assert pool.bytes_pinned() == 5 * 1024 * 1024
+    assert pool.bytes_allocated() == 5 * 1024 * 1024
+    assert pool.max_memory() == 5 * 1024 * 1024
+
+    # Reduce memory pressure further by making 1MiB eligible
+    # for eviction.
+    pool.unpin(allocation3)
+
+    # Test for the frame not available case (we're out of 2MiB frames at this point):
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match="Could not find an empty frame of required size!",
+    ):
+        _: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    # Verify that a warning is displayed on stderr
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+
+    # Verify stats
+    assert pool.bytes_pinned() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 5 * 1024 * 1024
+    # We should've triggered a spill of the unpinned frame
+    assert not allocation3.is_in_memory()
+
+    # Do a similar test for malloc
+    allocation5: BufferPoolAllocation = pool.allocate(2 * 1024)
+    # Verify that a warning was displayed on stderr before it raised the error
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+    # These should stay evicted.
+    assert not allocation2.is_in_memory()
+    assert not allocation3.is_in_memory()
+
+    pool.free(allocation1)
+    pool.free(allocation2)
+    pool.free(allocation3)
+    pool.free(allocation4)
+    pool.free(allocation5)
+
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+
+    pool.cleanup()
+    del pool
+
+
+def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
+    tmp_path: Path, capfd
+):
+    """
+    Test that trying to pin an evicted block when there's
+    not enough space in the buffer-pool even after evicting
+    all possible frames, works correctly when the max limit
+    enforcement is disabled.
+    Tests for both the frame available and not available
+    cases.
+    """
+    # Allocate a very small pool for testing
+    local_opt = StorageOptions(usable_size=16 * 1024 * 1024, location=bytes(tmp_path))
+    options = BufferPoolOptions(
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=False,
+        storage_options=[local_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    allocation1: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    allocation2: BufferPoolAllocation = pool.allocate(1 * 1024 * 1024)
+    allocation3: BufferPoolAllocation = pool.allocate(1 * 1024 * 1024)
+    pool.unpin(allocation1)
+    allocation4: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+
+    # Verify stats after allocation + unpin
+    assert pool.bytes_pinned() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert not allocation1.is_in_memory()
+
+    # Make 1MiB eligible for eviction
+    pool.unpin(allocation2)
+
+    # Try to pin allocation1 back:
+    pool.pin(allocation1)
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+
+    assert allocation1.is_in_memory()
+    assert not allocation2.is_in_memory()
+    assert pool.bytes_pinned() == 5 * 1024 * 1024
+    assert pool.bytes_allocated() == 5 * 1024 * 1024
+    assert pool.max_memory() == 5 * 1024 * 1024
+
+    # Reduce memory pressure further
+    pool.unpin(allocation3)
+    pool.unpin(allocation4)
+
+    # Verify stats
+    assert pool.bytes_pinned() == 2 * 1024 * 1024
+    assert pool.bytes_allocated() == 5 * 1024 * 1024
+    assert pool.max_memory() == 5 * 1024 * 1024
+    assert not allocation2.is_in_memory()
+
+    allocation5: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+
+    # Verify stats
+    assert pool.bytes_pinned() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 5 * 1024 * 1024
+    assert not allocation2.is_in_memory()
+    # Best effort spill will spill as much as possible
+    # to get memory pressure under control:
+    assert not allocation3.is_in_memory()
+    assert not allocation4.is_in_memory()
+
+    # Test for the frame not available case (we're out of 2MiB frames at this point):
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match="Pin failed. Unable to find available frame",
+    ):
+        pool.pin(allocation4)
+    # Verify that a warning is displayed on stderr
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+
+    # Verify stats
+    assert pool.bytes_pinned() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 5 * 1024 * 1024
+    assert not allocation2.is_in_memory()
+    assert not allocation3.is_in_memory()
+    assert not allocation4.is_in_memory()
+
+    pool.free(allocation1)
+    pool.free(allocation2)
+    pool.free(allocation3)
+    pool.free(allocation4)
+    pool.free(allocation5)
+
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+
+    pool.cleanup()
+    del pool
+
+
 def test_allocate_spill_eq_block(tmp_path: Path):
     """
     Test that trying to allocate more memory than
@@ -1793,7 +2098,10 @@ def test_allocate_spill_eq_block(tmp_path: Path):
     # Allocate a very small pool for testing
     local_opt = StorageOptions(usable_size=5 * 1024 * 1024, location=bytes(tmp_path))
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=1024, storage_options=[local_opt]
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+        storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
@@ -1850,7 +2158,10 @@ def test_allocate_spill_smaller_blocks(tmp_path: Path):
     # Allocate a very small pool for testing
     local_opt = StorageOptions(usable_size=5 * 1024 * 1024, location=bytes(tmp_path))
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=1024, storage_options=[local_opt]
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+        storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
@@ -1913,7 +2224,10 @@ def test_allocate_spill_larger_block(tmp_path: Path):
     # Allocate a very small pool for testing
     local_opt = StorageOptions(usable_size=5 * 1024 * 1024, location=bytes(tmp_path))
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=1024, storage_options=[local_opt]
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+        storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
@@ -1968,7 +2282,10 @@ def test_repin_eviction(tmp_path: Path):
     # Allocate a very small pool for testing
     local_opt = StorageOptions(usable_size=5 * 1024 * 1024, location=bytes(tmp_path))
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=1024, storage_options=[local_opt]
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+        storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_1MiB: SizeClass = pool.get_size_class(0)
@@ -2043,7 +2360,10 @@ def test_eviction_readback_contents(tmp_path: Path):
     # Allocate a very small pool for testing
     local_opt = StorageOptions(usable_size=5 * 1024 * 1024, location=bytes(tmp_path))
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=1024, storage_options=[local_opt]
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+        storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
     size_class_4MiB: SizeClass = pool.get_size_class(2)
@@ -2103,7 +2423,10 @@ def test_local_spill_file(tmp_path: Path):
     # Allocate a very small pool for testing
     local_opt = StorageOptions(usable_size=4 * 1024 * 1024, location=bytes(tmp_path))
     options = BufferPoolOptions(
-        memory_size=4, min_size_class=1024, storage_options=[local_opt]
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=True,
+        storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -2161,7 +2484,10 @@ def test_buffer_pool_eq():
     default_pool1: BufferPool = BufferPool.default()
     default_pool2: BufferPool = BufferPool.default()
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool1: BufferPool = BufferPool.from_options(options)
     pool2: BufferPool = BufferPool.from_options(options)
@@ -2196,6 +2522,7 @@ def test_spill_on_unpin(tmp_path: Path):
         min_size_class=8,
         max_num_size_classes=10,
         spill_on_unpin=True,
+        enforce_max_limit_during_allocation=True,
         storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
@@ -2254,6 +2581,7 @@ def test_move_on_unpin_move_frame_case(tmp_path: Path):
         min_size_class=8,
         max_num_size_classes=15,
         move_on_unpin=True,
+        enforce_max_limit_during_allocation=True,
         storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
@@ -2298,6 +2626,7 @@ def test_move_on_unpin_swap_frames_case(tmp_path: Path):
         min_size_class=8,
         max_num_size_classes=15,
         move_on_unpin=True,
+        enforce_max_limit_during_allocation=True,
         storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
@@ -2358,6 +2687,7 @@ def test_move_on_unpin_spill_case(tmp_path: Path):
         min_size_class=8,
         max_num_size_classes=15,
         move_on_unpin=True,
+        enforce_max_limit_during_allocation=True,
         storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
@@ -2424,7 +2754,10 @@ def test_operator_pool_attributes():
 
     # Create one with a custom pool
     options = BufferPoolOptions(
-        memory_size=8, min_size_class=8, max_num_size_classes=10
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
     op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool, 0.8)
@@ -2493,7 +2826,9 @@ def test_operator_pool_allocation():
     """
 
     # Allocate a very small pool for testing
-    options = BufferPoolOptions(memory_size=4, min_size_class=8)  # 4MiB, 8KiB
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=8, enforce_max_limit_during_allocation=True
+    )  # 4MiB, 8KiB
     pool: BufferPool = BufferPool.from_options(options)
 
     # Create a small operator pool (512KiB)
@@ -2747,7 +3082,9 @@ def test_operator_pool_pin_unpin():
 
     # Allocate a very small pool for testing
     options = BufferPoolOptions(
-        memory_size=2, min_size_class=8
+        memory_size=2,
+        min_size_class=8,
+        enforce_max_limit_during_allocation=True,
     )  # 2MiB total, 8KiB min size class
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -2972,7 +3309,7 @@ def test_operator_pool_pin_unpin():
     # just the actual allocation amounts)
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match="Allocation failed. No storage locations provided to evict to.",
+        match="Spilling is not available to free up sufficient space in memory",
     ):
         op_pool.allocate(240 * 1024)
 
@@ -3042,7 +3379,11 @@ def test_operator_pool_reallocate_basic():
     """
 
     # Allocate a very small pool for testing
-    options = BufferPoolOptions(memory_size=4, min_size_class=8)  # 4MiB, 8KiB
+    options = BufferPoolOptions(
+        memory_size=4,
+        min_size_class=8,
+        enforce_max_limit_during_allocation=True,
+    )  # 4MiB, 8KiB
     pool: BufferPool = BufferPool.from_options(options)
 
     # Create a small operator pool (512KiB)
@@ -3105,7 +3446,9 @@ def test_operator_pool_reallocate_edge_cases():
     """
 
     # Allocate a very small pool for testing
-    options = BufferPoolOptions(memory_size=4, min_size_class=8)  # 4MiB, 8KiB
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=8, enforce_max_limit_during_allocation=True
+    )  # 4MiB, 8KiB
     pool: BufferPool = BufferPool.from_options(options)
 
     # Create a small operator pool (512KiB)

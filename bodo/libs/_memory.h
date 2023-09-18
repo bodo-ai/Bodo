@@ -139,7 +139,7 @@ struct BufferPoolOptions {
     /// @brief Whether or not to enforce the specified
     /// memory limit during allocations. This is useful
     /// for debugging purposes.
-    bool ignore_max_limit_during_allocation = false;
+    bool enforce_max_limit_during_allocation = false;
 
     /// @brief Config for Storage Managers
     std::vector<std::shared_ptr<StorageOptions>> storage_options;
@@ -869,7 +869,7 @@ class BufferPool final : public IBufferPool {
      * @param alignment Alignment to use. Defaults to 64.
      * @return int64_t Aligned size
      */
-    int64_t size_align(
+    inline int64_t size_align(
         int64_t size, int64_t alignment = arrow::kDefaultBufferAlignment) const;
 
     /**
@@ -881,7 +881,7 @@ class BufferPool final : public IBufferPool {
      * @param size Allocation size
      * @return int64_t Size Class index (in size_classes_)
      */
-    int64_t find_size_class_idx(int64_t size) const;
+    inline int64_t find_size_class_idx(int64_t size) const;
 
     /**
      * @brief Get details about allocation based on the memory address and
@@ -944,16 +944,58 @@ class BufferPool final : public IBufferPool {
      * @brief Evict enough memory for a frame from size class
      * size_class_idx.
      *
-     * This function assumes that there is not enough available
-     * memory to allocate a frame of the specified size class. It
-     * will attempt to evict unpinned frames from size classes of
+     * In case spilling is not enabled/available, it will throw a
+     * runtime_error.
+     *
+     * Note that this function is best-effort. It will spill as many
+     * bytes as possible, and return a boolean specifying whether or not
+     * it was able to spill sufficient bytes. In case there are issues
+     * while trying to spill, it will return a non-OK status.
+     *
+     * It will attempt to evict unpinned frames from size classes of
      * the specified size and below if that would be enough. If
      * not, it will then try to evict frames of larger size classes.
+     * If it cannot find a frame of larger size-class, it will
+     * spill the frames identified earlier (from size classes of the
+     * specified size class and below) to reduce memory pressure as much as
+     * possible.
+     * This ensures that we strike a good balance between only evicting
+     * the required amount of frames and relieving memory pressure.
      *
      * @param size_class_idx Size Class of Frame to make space
-     * available for
+     * available for.
+     *
+     * @return arrow::Result<bool> Whether we were able to spill sufficient
+     * bytes.
      */
-    arrow::Status evict(uint64_t size_class_idx);
+    arrow::Result<bool> best_effort_evict_helper(uint64_t size_class_idx);
+
+    /**
+     * @brief Handle eviction of enough memory for a frame from size class
+     * size_class_idx. This is handled based on 'options_'
+     * (enforce_max_limit_during_allocation in particular) and spilling config.
+     *
+     * Broadly, there are a few cases:
+     * 1. Spilling is available: We will do a best effort spill to make enough
+     *    memory available in the buffer pool. If there's an issue during this,
+     *    we will forward the error status.
+     *    If we are able to free up sufficient bytes, we will return an OK
+     *    Status. If we aren't, we will handle this based on
+     *    enforce_max_limit_during_allocation. If enforcement is on, we will
+     *    return an OutOfMemory status. Otherwise, we will simply print
+     *    a warning to stderr and return an OK status.
+     * 2. If spilling isn't available, we will raise an OutOfMemory status
+     *    if enforce_max_limit_during_allocation is true, else we will
+     *    simply print a warning to stderr and return an OK status.
+     *
+     * @param size_class_idx Size Class of Frame to make space
+     * available for.
+     * @param caller Name of the caller function. This will be used in the
+     * warnings printed to stderr. e.g. 'Allocate' or 'Pin'.
+     * @return ::arrow::Status
+     */
+    ::arrow::Status evict_handler(uint64_t size_class_idx,
+                                  const std::string& caller);
 
     /**
      * @brief Atomically update the number of pinned bytes in the

@@ -48,7 +48,7 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         uint64_t memory_size
         uint64_t min_size_class
         uint64_t max_num_size_classes
-        c_bool ignore_max_limit_during_allocation
+        c_bool enforce_max_limit_during_allocation
         vector[shared_ptr[CStorageOptions]] storage_options
         c_bool spill_on_unpin
         c_bool move_on_unpin
