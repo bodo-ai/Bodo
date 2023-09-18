@@ -92,6 +92,7 @@ object BodoPrograms {
         } else {
             NoopProgram
         },
+        AnalysisSuite.multiJoinAnalyzer,
         RuleSetProgram(
             Iterables.concat(
                 BodoRules.VOLCANO_MINIMAL_RULE_SET,
