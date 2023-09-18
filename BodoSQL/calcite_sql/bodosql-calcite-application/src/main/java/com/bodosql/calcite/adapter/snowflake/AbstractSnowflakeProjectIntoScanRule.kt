@@ -7,7 +7,6 @@ import org.apache.calcite.plan.RelRule
 import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.rules.ProjectRemoveRule
 import org.apache.calcite.rex.RexInputRef
-import org.apache.calcite.util.ImmutableBitSet
 import org.immutables.value.Value
 
 /**
@@ -89,7 +88,7 @@ abstract class AbstractSnowflakeProjectIntoScanRule protected constructor(config
             }
             // Now check that we don't use every column
             val usedColumns = InputFinder.bits(proj.projects, null)
-            return usedColumns != ImmutableBitSet.range(proj.input.getRowType().fieldCount)
+            return usedColumns.cardinality() != proj.input.getRowType().fieldCount
         }
     }
 
