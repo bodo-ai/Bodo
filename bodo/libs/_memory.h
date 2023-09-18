@@ -941,8 +941,7 @@ class BufferPool final : public IBufferPool {
     inline void zero_padding(uint8_t* ptr, size_t size, size_t capacity);
 
     /**
-     * @brief Evict enough memory for a frame from size class
-     * size_class_idx.
+     * @brief Try to evict 'bytes' many bytes.
      *
      * In case spilling is not enabled/available, it will throw a
      * runtime_error.
@@ -952,28 +951,28 @@ class BufferPool final : public IBufferPool {
      * it was able to spill sufficient bytes. In case there are issues
      * while trying to spill, it will return a non-OK status.
      *
+     * The ideal size-class is one that is >= bytes.
      * It will attempt to evict unpinned frames from size classes of
-     * the specified size and below if that would be enough. If
-     * not, it will then try to evict frames of larger size classes.
+     * the ideal size and below if that would be enough. If
+     * not, it will then try to evict frame of a larger size class.
      * If it cannot find a frame of larger size-class, it will
      * spill the frames identified earlier (from size classes of the
-     * specified size class and below) to reduce memory pressure as much as
+     * ideal size class and below) to reduce memory pressure as much as
      * possible.
      * This ensures that we strike a good balance between only evicting
      * the required amount of frames and relieving memory pressure.
      *
-     * @param size_class_idx Size Class of Frame to make space
-     * available for.
+     * @param bytes Number of bytes to attempt to evict
      *
      * @return arrow::Result<bool> Whether we were able to spill sufficient
      * bytes.
      */
-    arrow::Result<bool> best_effort_evict_helper(uint64_t size_class_idx);
+    arrow::Result<bool> best_effort_evict_helper(uint64_t bytes);
 
     /**
-     * @brief Handle eviction of enough memory for a frame from size class
-     * size_class_idx. This is handled based on 'options_'
-     * (enforce_max_limit_during_allocation in particular) and spilling config.
+     * @brief Handle eviction of 'bytes' many bytes. This is handled based on
+     * 'options_' (enforce_max_limit_during_allocation in particular) and
+     * spilling config.
      *
      * Broadly, there are a few cases:
      * 1. Spilling is available: We will do a best effort spill to make enough
@@ -988,14 +987,12 @@ class BufferPool final : public IBufferPool {
      *    if enforce_max_limit_during_allocation is true, else we will
      *    simply print a warning to stderr and return an OK status.
      *
-     * @param size_class_idx Size Class of Frame to make space
-     * available for.
+     * @param bytes Number of bytes to evict
      * @param caller Name of the caller function. This will be used in the
      * warnings printed to stderr. e.g. 'Allocate' or 'Pin'.
      * @return ::arrow::Status
      */
-    ::arrow::Status evict_handler(uint64_t size_class_idx,
-                                  const std::string& caller);
+    ::arrow::Status evict_handler(uint64_t bytes, const std::string& caller);
 
     /**
      * @brief Atomically update the number of pinned bytes in the

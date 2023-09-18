@@ -948,8 +948,7 @@ inline void BufferPool::zero_padding(uint8_t* ptr, size_t size,
     memset(ptr + size, 0, capacity - size);
 }
 
-arrow::Result<bool> BufferPool::best_effort_evict_helper(
-    uint64_t size_class_idx) {
+arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
     if (!this->is_spilling_enabled()) {
         throw std::runtime_error(
             "BufferPool::best_effort_evict_helper: Cannot evict blocks when "
@@ -957,11 +956,17 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(
     }
 
     // Attempt to evict smaller size classes
-    int64_t bytes_rem = this->size_class_bytes_[size_class_idx];
+    int64_t bytes_rem = static_cast<int64_t>(bytes);
+    int64_t ideal_size_class_idx = this->find_size_class_idx(bytes);
+    // If number of bytes to spill is larger than the largest SizeClass,
+    // we will start with the largest SizeClass and work our way down.
+    if (ideal_size_class_idx == -1) {
+        ideal_size_class_idx = this->num_size_classes() - 1;
+    }
     std::vector<uint64_t> evicting_frames_size_class;
     std::vector<uint64_t> evicting_frame_idxs;
 
-    for (int64_t i = size_class_idx; i >= 0; i--) {
+    for (int64_t i = ideal_size_class_idx; i >= 0; i--) {
         auto& size_class = this->size_classes_[i];
         uint64_t num_frames = size_class->getNumBlocks();
         int64_t size_bytes = this->size_class_bytes_[i];
@@ -997,17 +1002,18 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(
             if (!evict_status.ok()) {
                 return evict_status;
             }
-
             this->stats_.UpdateAllocatedBytes(
                 -this->size_class_bytes_[evicting_frames_size_class[i]]);
         }
-
         return true;
     }
 
     // There are not enough small frames to evict to free up enough
-    // space. Thus, we need to find one larger frame to evict instead
-    for (auto i = size_class_idx + 1; i < this->num_size_classes(); i++) {
+    // space. Thus, we need to find one larger frame to evict instead.
+    // In the case that ideal_size_class_idx is already the largest SizeClass,
+    // this loop will never run.
+    for (size_t i = static_cast<size_t>(ideal_size_class_idx) + 1;
+         i < this->num_size_classes(); i++) {
         auto& size_class = this->size_classes_[i];
         auto num_frames = size_class->getNumBlocks();
         for (uint64_t j = 0; j < num_frames; j++) {
@@ -1032,7 +1038,6 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(
         if (!evict_status.ok()) {
             return evict_status;
         }
-
         this->stats_.UpdateAllocatedBytes(
             -this->size_class_bytes_[evicting_frames_size_class[i]]);
     }
@@ -1043,12 +1048,11 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(
     return false;
 }
 
-::arrow::Status BufferPool::evict_handler(uint64_t size_class_idx,
+::arrow::Status BufferPool::evict_handler(uint64_t bytes,
                                           const std::string& caller) {
     // If spilling is available, start spilling
     if (this->is_spilling_enabled()) {
-        ::arrow::Result<bool> evict_res =
-            this->best_effort_evict_helper(size_class_idx);
+        ::arrow::Result<bool> evict_res = this->best_effort_evict_helper(bytes);
         ::arrow::Status evict_status = evict_res.status();
         if (!evict_status.ok()) {
             return evict_status.WithMessage("Error during eviction: " +
@@ -1059,8 +1063,7 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(
                 return ::arrow::Status::OutOfMemory(
                     "Unable to evict enough frames to free up the "
                     "required space (" +
-                    std::to_string(this->size_class_bytes_[size_class_idx]) +
-                    ")");
+                    std::to_string(bytes) + ")");
             } else {
                 // If we weren't able to spill enough bytes, but max limit
                 // enforcement is off, display a warning.
@@ -1082,7 +1085,7 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(
                 << "[WARNING] BufferPool::" << caller
                 << ": Spilling is not available and available memory is less "
                    "than required amount ("
-                << this->size_class_bytes_[size_class_idx]
+                << bytes
                 << "). We will try to allocate anyway. This may invoke the OOM "
                    "killer."
                 << std::endl;
@@ -1148,7 +1151,8 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(
         // If available memory is less than needed, handle it based
         // on spilling config and buffer pool options.
         if (aligned_size > bytes_available_in_mem) {
-            CHECK_ARROW_MEM_RET(this->evict_handler(/*size_class_idx*/ 0,
+            CHECK_ARROW_MEM_RET(this->evict_handler(/*bytes*/ aligned_size -
+                                                        bytes_available_in_mem,
                                                     /*caller*/ "Allocate"),
                                 "BufferPool::Allocate failed: ");
         }
@@ -1234,8 +1238,7 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(
         // on spilling config and buffer pool options.
         if (size_class_bytes > bytes_available_in_mem) {
             int64_t rem_bytes = size_class_bytes - bytes_available_in_mem;
-            int64_t rem_class_idx = this->find_size_class_idx(rem_bytes);
-            CHECK_ARROW_MEM_RET(this->evict_handler(rem_class_idx,
+            CHECK_ARROW_MEM_RET(this->evict_handler(/*bytes*/ rem_bytes,
                                                     /*caller*/ "Allocate"),
                                 "BufferPool::Allocate failed: ");
         }
@@ -1558,8 +1561,7 @@ uint64_t BufferPool::get_memory_size_bytes() const {
         // on spilling config and buffer pool options.
         if (static_cast<int64_t>(block_bytes) > bytes_available_in_mem) {
             int64_t rem_bytes = block_bytes - bytes_available_in_mem;
-            int64_t rem_class_idx = this->find_size_class_idx(rem_bytes);
-            CHECK_ARROW_MEM_RET(this->evict_handler(rem_class_idx,
+            CHECK_ARROW_MEM_RET(this->evict_handler(/*bytes*/ rem_bytes,
                                                     /*caller*/ "Pin"),
                                 "BufferPool::Pin failed: ");
         }
