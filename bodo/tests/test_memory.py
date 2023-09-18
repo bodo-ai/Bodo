@@ -1978,6 +1978,126 @@ def test_allocate_cannot_evict_sufficient_bytes_no_enforcement(tmp_path: Path, c
     del pool
 
 
+def test_allocate_cannot_evict_sufficient_bytes_no_enforcement_very_large_spill(
+    tmp_path: Path, capfd
+):
+    """
+    Test that trying to allocate when there's not enough
+    space in the buffer-pool even after evicting all possible
+    frames, works correctly when max limit enforcement is
+    disabled. In particular, this tests for the case where
+    the amount to be spilled to relieve memory pressure is
+    larger than any SizeClass.
+    """
+    # Allocate a very small pool for testing
+    local_opt = StorageOptions(usable_size=16 * 1024 * 1024, location=bytes(tmp_path))
+    options = BufferPoolOptions(
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=False,
+        storage_options=[local_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Fill up all the frames
+    allocation1: BufferPoolAllocation = pool.allocate(4 * 1024 * 1024)
+    _, err = capfd.readouterr()
+    # No warning on this one
+    assert len(err) == 0
+
+    allocation2: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+    allocation3: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+    allocation4: BufferPoolAllocation = pool.allocate(1 * 1024 * 1024)
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+    allocation5: BufferPoolAllocation = pool.allocate(1 * 1024 * 1024)
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+    allocation6: BufferPoolAllocation = pool.allocate(1 * 1024 * 1024)
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+    allocation7: BufferPoolAllocation = pool.allocate(1 * 1024 * 1024)
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+
+    # Verify stats
+    assert pool.bytes_pinned() == 12 * 1024 * 1024
+    assert pool.bytes_allocated() == 12 * 1024 * 1024
+    assert pool.max_memory() == 12 * 1024 * 1024
+
+    # Unpin some to make them eligible for eviction
+    pool.unpin(allocation1)
+    pool.unpin(allocation2)
+    pool.unpin(allocation3)
+    pool.unpin(allocation4)
+    pool.unpin(allocation5)
+
+    # Verify stats
+    assert pool.bytes_pinned() == 2 * 1024 * 1024
+    assert pool.bytes_allocated() == 12 * 1024 * 1024
+    assert pool.max_memory() == 12 * 1024 * 1024
+
+    # We're 8MiB over-allocated currently (4MiB vs 12MiB). Trying to allocate another 4MiB
+    # will try to spill as much as 4 - (-8) = 12MiB. We'll only be able
+    # to spill 10MiB though.
+    allocation8: BufferPoolAllocation = pool.allocate(4 * 1024 * 1024)
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+
+    # Verify stats
+    assert pool.bytes_pinned() == 6 * 1024 * 1024
+    assert pool.bytes_allocated() == 6 * 1024 * 1024
+    assert pool.max_memory() == 12 * 1024 * 1024
+    assert not allocation1.is_in_memory()
+    assert not allocation2.is_in_memory()
+    assert not allocation3.is_in_memory()
+    assert not allocation4.is_in_memory()
+    assert not allocation5.is_in_memory()
+    assert allocation6.is_in_memory()
+    assert allocation7.is_in_memory()
+    assert allocation8.is_in_memory()
+
+    pool.free(allocation1)
+    pool.free(allocation2)
+    pool.free(allocation3)
+    pool.free(allocation4)
+    pool.free(allocation5)
+    pool.free(allocation6)
+    pool.free(allocation7)
+    pool.free(allocation8)
+
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+
+    pool.cleanup()
+    del pool
+
+
 def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
     tmp_path: Path, capfd
 ):
@@ -2040,10 +2160,9 @@ def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
 
     allocation5: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
     _, err = capfd.readouterr()
-    assert (
-        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
-        in err
-    )
+    # No warning should be raised here. We need to free up 3MiB, and
+    # we can do that by spilling allocation3 and allocation4.
+    assert len(err) == 0
 
     # Verify stats
     assert pool.bytes_pinned() == 4 * 1024 * 1024
