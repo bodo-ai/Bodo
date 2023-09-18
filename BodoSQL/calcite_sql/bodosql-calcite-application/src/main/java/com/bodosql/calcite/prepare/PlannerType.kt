@@ -6,11 +6,6 @@ import org.apache.calcite.plan.RelTrait
 import org.apache.calcite.plan.RelTraitDef
 
 enum class PlannerType {
-    HEURISTIC {
-        override fun programs(): ProgramCollection =
-            ProgramCollection(BodoPrograms::hepStandard)
-    },
-
     VOLCANO {
         override fun programs(): ProgramCollection =
             ProgramCollection(BodoPrograms::standard)

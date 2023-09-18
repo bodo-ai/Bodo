@@ -48,29 +48,6 @@ import org.apache.calcite.tools.Programs
  */
 object BodoPrograms {
     /**
-     * Uses the heuristic planner to perform optimizations using the default
-     * rule set and then utilizes the volcano planner to assign traits
-     * and convert logical nodes to physical nodes.
-     */
-    fun hepStandard(optimize: Boolean = true): Program = Programs.sequence(
-        TrimFieldsProgram(false),
-        if (optimize) {
-            HepOptimizerProgram(BodoRules.HEURISTIC_RULE_SET)
-        } else {
-            NoopProgram
-        },
-        SnowflakeTraitAdder(),
-        SnowflakeColumnPruning(),
-        // Includes minimal set of rules to produce a valid plan.
-        // This is a subset of the heuristic rule set.
-        RuleSetProgram(BodoRules.VOLCANO_MINIMAL_RULE_SET),
-        // Add a final trim step.
-        TrimFieldsProgram(true),
-        DecorateAttributesProgram(),
-        MergeRelProgram(),
-    )
-
-    /**
      * Standard program utilizing the volcano planner to perform optimization and conversion.
      */
     fun standard(optimize: Boolean = true): Program = Programs.sequence(

@@ -405,10 +405,9 @@ def _gen_pd_func_text_and_lowered_globals(
             table_names = bodo_sql_context_type.names
             schema = initialize_schema((param_keys, param_values))
             verbose_level = bodo.user_logging.get_verbose_level()
-            planner_type = _PlannerType.Default.value
             if bodo.bodosql_use_streaming_plan:
                 planner_type = _PlannerType.Streaming.value
-            elif bodo.bodosql_use_volcano_plan:
+            else:
                 planner_type = _PlannerType.Volcano.value
             if bodo_sql_context_type.catalog_type != types.none:
                 generator = RelationalAlgebraGeneratorClass(
