@@ -23,5 +23,5 @@ jobs:
   - script: |
       set -eo pipefail
       cd $(System.DefaultWorkingDirectory)/BodoSQL/calcite_sql/
-      sudo mvn -B -U test
+      sudo mvn -B -U test -DargLine="-DENABLE_PLAN_ANALYSIS=1"
     displayName: 'Run Maven Tests for BodoSQL'
