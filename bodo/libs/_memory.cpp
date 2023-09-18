@@ -788,10 +788,12 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
     // we might preemptively disallow allocations on a rank
     // in case of skew. Thus, we want to be able to attempt
     // allocation even if it's beyond the allocated limit.
-    if (const char* ignore_max_limit_env_ =
-            std::getenv("BODO_BUFFER_POOL_IGNORE_MAX_ALLOCATION_LIMIT")) {
-        options.ignore_max_limit_during_allocation =
-            !std::strcmp(ignore_max_limit_env_, "1");
+    // However, for testing purposes, we can enable this
+    // enforcement.
+    if (const char* enforce_max_limit_env_ =
+            std::getenv("BODO_BUFFER_POOL_ENFORCE_MAX_ALLOCATION_LIMIT")) {
+        options.enforce_max_limit_during_allocation =
+            !std::strcmp(enforce_max_limit_env_, "1");
     }
 
     return options;
@@ -908,7 +910,7 @@ size_t BufferPool::num_size_classes() const {
     return this->size_classes_.size();
 }
 
-int64_t BufferPool::size_align(int64_t size, int64_t alignment) const {
+inline int64_t BufferPool::size_align(int64_t size, int64_t alignment) const {
     const auto remainder = size % alignment;
     return (remainder == 0) ? size : (size + alignment - remainder);
 }
@@ -931,7 +933,7 @@ bool BufferPool::is_spilling_enabled() const {
     return !this->options_.storage_options.empty();
 }
 
-int64_t BufferPool::find_size_class_idx(int64_t size) const {
+inline int64_t BufferPool::find_size_class_idx(int64_t size) const {
     if (static_cast<uint64_t>(size) > this->size_class_bytes_.back()) {
         return -1;
     }
@@ -943,19 +945,26 @@ int64_t BufferPool::find_size_class_idx(int64_t size) const {
 // static
 inline void BufferPool::zero_padding(uint8_t* ptr, size_t size,
                                      size_t capacity) {
-    memset(ptr + size, 0, static_cast<size_t>(capacity - size));
+    memset(ptr + size, 0, capacity - size);
 }
 
-arrow::Status BufferPool::evict(uint64_t size_class_idx) {
+arrow::Result<bool> BufferPool::best_effort_evict_helper(
+    uint64_t size_class_idx) {
+    if (!this->is_spilling_enabled()) {
+        throw std::runtime_error(
+            "BufferPool::best_effort_evict_helper: Cannot evict blocks when "
+            "spilling is not enabled/available!");
+    }
+
     // Attempt to evict smaller size classes
-    uint64_t bytes_rem = this->size_class_bytes_[size_class_idx];
+    int64_t bytes_rem = this->size_class_bytes_[size_class_idx];
     std::vector<uint64_t> evicting_frames_size_class;
     std::vector<uint64_t> evicting_frame_idxs;
 
     for (int64_t i = size_class_idx; i >= 0; i--) {
         auto& size_class = this->size_classes_[i];
-        auto num_frames = size_class->getNumBlocks();
-        auto size_bytes = this->size_class_bytes_[i];
+        uint64_t num_frames = size_class->getNumBlocks();
+        int64_t size_bytes = this->size_class_bytes_[i];
 
         for (uint64_t j = 0; j < num_frames; j++) {
             if (bytes_rem <= 0) {
@@ -974,7 +983,13 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
         }
     }
 
+    // If we've found sufficient frames, evict them and return. In case we
+    // haven't, we'll come back to these after looking through larger
+    // SizeClass-es.
     if (bytes_rem <= 0) {
+        // Evict the identified frames. These shouldn't fail due to spill
+        // locations not found errors since we already checked that spilling is
+        // enabled.
         for (uint32_t i = 0; i < evicting_frame_idxs.size(); i++) {
             auto evict_status =
                 this->size_classes_[evicting_frames_size_class[i]]->EvictFrame(
@@ -987,7 +1002,7 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
                 -this->size_class_bytes_[evicting_frames_size_class[i]]);
         }
 
-        return arrow::Status::OK();
+        return true;
     }
 
     // There are not enough small frames to evict to free up enough
@@ -1003,16 +1018,77 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
                 }
 
                 this->stats_.UpdateAllocatedBytes(-this->size_class_bytes_[i]);
-                return arrow::Status::OK();
+                return true;
             }
         }
     }
 
-    // We couldn't find enough smaller frames
-    // or 1 larger frame to evict
-    return arrow::Status::OutOfMemory(
-        "Unable to evict enough frames to free up the required space (" +
-        std::to_string(bytes_rem) + ")");
+    // If we couldn't find a larger frame, evict the smaller frames that
+    // we'd identified earlier to reduce memory pressure at least a little
+    for (uint32_t i = 0; i < evicting_frame_idxs.size(); i++) {
+        auto evict_status =
+            this->size_classes_[evicting_frames_size_class[i]]->EvictFrame(
+                evicting_frame_idxs[i]);
+        if (!evict_status.ok()) {
+            return evict_status;
+        }
+
+        this->stats_.UpdateAllocatedBytes(
+            -this->size_class_bytes_[evicting_frames_size_class[i]]);
+    }
+
+    // Even though we might have reduced memory pressure by spilling some
+    // frames, since we couldn't find enough smaller frames or 1 larger frame to
+    // evict, we will return false.
+    return false;
+}
+
+::arrow::Status BufferPool::evict_handler(uint64_t size_class_idx,
+                                          const std::string& caller) {
+    // If spilling is available, start spilling
+    if (this->is_spilling_enabled()) {
+        ::arrow::Result<bool> evict_res =
+            this->best_effort_evict_helper(size_class_idx);
+        ::arrow::Status evict_status = evict_res.status();
+        if (!evict_status.ok()) {
+            return evict_status.WithMessage("Error during eviction: " +
+                                            evict_status.message());
+        } else if (bool evicted_sufficient_bytes = evict_res.ValueOrDie();
+                   !evicted_sufficient_bytes) {
+            if (this->options_.enforce_max_limit_during_allocation) {
+                return ::arrow::Status::OutOfMemory(
+                    "Unable to evict enough frames to free up the "
+                    "required space (" +
+                    std::to_string(this->size_class_bytes_[size_class_idx]) +
+                    ")");
+            } else {
+                // If we weren't able to spill enough bytes, but max limit
+                // enforcement is off, display a warning.
+                std::cerr
+                    << "[WARNING] BufferPool::" << caller
+                    << ": Could not spill sufficient bytes. We will try to "
+                       "allocate anyway. This may invoke the OOM killer."
+                    << std::endl;
+            }
+        }
+    } else {
+        if (this->options_.enforce_max_limit_during_allocation) {
+            return ::arrow::Status::OutOfMemory(
+                "Spilling is not available to free up sufficient space in "
+                "memory!");
+        } else {
+            // Raise a warning
+            std::cerr
+                << "[WARNING] BufferPool::" << caller
+                << ": Spilling is not available and available memory is less "
+                   "than required amount ("
+                << this->size_class_bytes_[size_class_idx]
+                << "). We will try to allocate anyway. This may invoke the OOM "
+                   "killer."
+                << std::endl;
+        }
+    }
+    return ::arrow::Status::OK();
 }
 
 ::arrow::Status BufferPool::Allocate(int64_t size, int64_t alignment,
@@ -1053,30 +1129,28 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
         // Use malloc
 
         // If non-pinned memory is less than needed, immediately fail
-        if (!this->options_.ignore_max_limit_during_allocation &&
-            aligned_size > static_cast<int64_t>(this->memory_size_bytes_ -
-                                                this->bytes_pinned())) {
+        // if enforce_max_limit_during_allocation is set.
+        if (this->options_.enforce_max_limit_during_allocation &&
+            aligned_size > (static_cast<int64_t>(this->memory_size_bytes_) -
+                            static_cast<int64_t>(this->bytes_pinned()))) {
             return ::arrow::Status::OutOfMemory(
                 "Allocation failed. Not enough space in the buffer pool to "
                 "allocate (" +
                 std::to_string(size) + ").");
         }
 
-        // If available memory is less than needed, start spilling
+        // Note that this can be negative if max limit isn't
+        // being enforced.
         int64_t bytes_available_in_mem =
             static_cast<int64_t>(this->memory_size_bytes_) -
             this->bytes_allocated();
-        if (!this->options_.ignore_max_limit_during_allocation &&
-            aligned_size > bytes_available_in_mem) {
-            auto evict_status = this->evict(0);
-            if (!evict_status.ok()) {
-                if (evict_status.IsOutOfMemory()) {
-                    return evict_status.WithMessage("Allocation failed. " +
-                                                    evict_status.message());
-                } else {
-                    return evict_status;
-                }
-            }
+
+        // If available memory is less than needed, handle it based
+        // on spilling config and buffer pool options.
+        if (aligned_size > bytes_available_in_mem) {
+            CHECK_ARROW_MEM_RET(this->evict_handler(/*size_class_idx*/ 0,
+                                                    /*caller*/ "Allocate"),
+                                "BufferPool::Allocate failed: ");
         }
 
         // There's essentially two options:
@@ -1136,44 +1210,50 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
             // it. This would be similar to Velox.
         }
 
-        uint64_t size_class_bytes = this->size_class_bytes_[size_class_idx];
+        const int64_t size_class_bytes =
+            this->size_class_bytes_[size_class_idx];
 
         // If non-pinned memory is less than needed, immediately fail
-        if (!this->options_.ignore_max_limit_during_allocation &&
-            size_class_bytes >
-                (this->memory_size_bytes_ - this->bytes_pinned())) {
+        // if enforce_max_limit_during_allocation is set.
+        if (this->options_.enforce_max_limit_during_allocation &&
+            size_class_bytes > (static_cast<int64_t>(this->memory_size_bytes_) -
+                                static_cast<int64_t>(this->bytes_pinned()))) {
             return ::arrow::Status::OutOfMemory(
                 "Allocation failed. Not enough space in the buffer pool to "
                 "allocate (" +
                 std::to_string(size) + ").");
         }
 
-        // If available memory is less than needed, start spilling
-        uint64_t bytes_available_in_mem =
-            this->memory_size_bytes_ -
-            static_cast<uint64_t>(this->bytes_allocated());
-        if (!this->options_.ignore_max_limit_during_allocation &&
-            size_class_bytes > bytes_available_in_mem) {
+        // Note that this can be negative if max limit isn't
+        // being enforced.
+        int64_t bytes_available_in_mem =
+            static_cast<int64_t>(this->memory_size_bytes_) -
+            this->bytes_allocated();
+
+        // If available memory is less than needed, handle it based
+        // on spilling config and buffer pool options.
+        if (size_class_bytes > bytes_available_in_mem) {
             int64_t rem_bytes = size_class_bytes - bytes_available_in_mem;
             int64_t rem_class_idx = this->find_size_class_idx(rem_bytes);
-            auto evict_status = this->evict(rem_class_idx);
-            if (!evict_status.ok()) {
-                if (evict_status.IsOutOfMemory()) {
-                    return evict_status.WithMessage("Allocation failed. " +
-                                                    evict_status.message());
-                } else {
-                    return evict_status;
-                }
-            }
+            CHECK_ARROW_MEM_RET(this->evict_handler(rem_class_idx,
+                                                    /*caller*/ "Allocate"),
+                                "BufferPool::Allocate failed: ");
         }
 
         // Allocate in the identified size-class.
-        // Due to the previous check, we're guaranteed to be able to find a
-        // frame. Proof: We allocated memory_size // block_size many blocks. Say
-        // all frames were taken, that would mean that block_size * num_blocks
-        // many bytes are allocated. Allocating another block would mean that
-        // total memory usage would be greater than memory_size, but we already
-        // checked that there's sufficient memory available for this allocation.
+        // In the case where max limit enforcement is enabled, due to the
+        // previous check, we're guaranteed to be able to find a frame.
+        // Proof:
+        // We allocated memory_size // block_size many blocks. Say all frames
+        // were taken, that would mean that block_size * num_blocks many bytes
+        // are allocated. Allocating another block would mean that total memory
+        // usage would be greater than memory_size, but we already checked that
+        // there's sufficient memory available for this allocation.
+        // However, in the case where max limit enforcement is not enabled,
+        // we may actually have simply run out of frames.
+        // XXX TODO Might need to allocate more frames (2x) when setting
+        // enforce_max_limit_during_allocation as false, so that we don't run
+        // out of frames.
         int64_t frame_idx =
             this->size_classes_[size_class_idx]->AllocateFrame(out);
         if (frame_idx == -1) {
@@ -1458,26 +1538,37 @@ uint64_t BufferPool::get_memory_size_bytes() const {
         // Determine if there is enough space in memory to
         // read-back evicted block
         // If non-pinned memory is less than needed, immediately fail
-        if (block_bytes > (this->memory_size_bytes_ - this->bytes_pinned())) {
+        // if enforce_max_limit_during_allocation is set.
+        if (this->options_.enforce_max_limit_during_allocation &&
+            (static_cast<int64_t>(block_bytes) >
+             (static_cast<int64_t>(this->memory_size_bytes_) -
+              static_cast<int64_t>(this->bytes_pinned())))) {
             return ::arrow::Status::OutOfMemory(
                 "Pin failed. Not enough space in the buffer pool to pin " +
                 std::to_string(size) + " bytes.");
         }
 
-        if (block_bytes >
-            (this->memory_size_bytes_ - this->bytes_allocated())) {
-            int64_t rem_bytes =
-                block_bytes - (static_cast<int64_t>(this->memory_size_bytes_) -
-                               this->bytes_allocated());
+        // Note that this can be negative if max limit isn't
+        // being enforced.
+        int64_t bytes_available_in_mem =
+            static_cast<int64_t>(this->memory_size_bytes_) -
+            this->bytes_allocated();
+
+        // If available memory is less than needed, handle it based
+        // on spilling config and buffer pool options.
+        if (static_cast<int64_t>(block_bytes) > bytes_available_in_mem) {
+            int64_t rem_bytes = block_bytes - bytes_available_in_mem;
             int64_t rem_class_idx = this->find_size_class_idx(rem_bytes);
-            CHECK_ARROW_MEM_RET(this->evict(rem_class_idx),
-                                "Pin failed. Error when evicting frame:");
+            CHECK_ARROW_MEM_RET(this->evict_handler(rem_class_idx,
+                                                    /*caller*/ "Pin"),
+                                "BufferPool::Pin failed: ");
         }
 
         // Find an available frame in the size class
         int64_t frame_idx = size_class->findUnmappedFrame();
         if (frame_idx == -1) {
-            // TODO: Should be impossible at this point, fatal error
+            // Should be impossible at this point unless max limit enforcement
+            // is disabled.
             return ::arrow::Status::OutOfMemory(
                 "Pin failed. Unable to find available frame");
         }
@@ -1486,7 +1577,7 @@ uint64_t BufferPool::get_memory_size_bytes() const {
         CHECK_ARROW_MEM_RET(
             size_class->ReadbackToFrame(ptr, frame_idx, block_id,
                                         storage_manager_idx),
-            "Pin failed. Error when unevicting pinned location.");
+            "Pin failed. Error when reading back block from storage:");
 
         this->update_pinned_bytes(block_bytes);
         this->stats_.UpdateAllocatedBytes(block_bytes);
