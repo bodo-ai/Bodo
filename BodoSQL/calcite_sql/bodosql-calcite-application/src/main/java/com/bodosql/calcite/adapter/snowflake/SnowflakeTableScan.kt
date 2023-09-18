@@ -20,11 +20,6 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
     TableScan(cluster, traitSet, ImmutableList.of(), table), SnowflakeRel {
 
     /**
-     * Comparison for if no columns are pruned.
-     */
-    private val fullBitset = ImmutableBitSet.range(table.getRowType().fieldCount)
-
-    /**
      * This exists to set the type to the original names rather than
      * the lowercase normalized names that the table itself exposes.
      */
@@ -88,7 +83,7 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
      * Does this table scan include column pruning
      */
     fun prunesColumns(): Boolean {
-        return keptColumns != fullBitset
+        return keptColumns.cardinality() != table.getRowType().fieldCount
     }
 
     override fun register(planner: RelOptPlanner) {
