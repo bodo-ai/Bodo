@@ -139,7 +139,7 @@ def get_ami_ids_by_region(fpath):
     return ami_id_by_region
 
 
-IMG_TYPES = ["worker", "jupyter"]
+IMG_TYPES = ["worker"]  # , "jupyter"]
 
 manifest_files = list(filter(lambda x: x.endswith(".json"), os.listdir(".")))
 img_type_manifest_file_prefix_map = gen_manifest_file_prefix_map(IMG_TYPES)
@@ -167,15 +167,15 @@ assert "GIT_SHA" in os.environ
 GIT_SHA = os.environ["GIT_SHA"]
 
 # Make sure each image type has same number of manifest files
-assert (
-    len(
-        set(
-            len(t_manifest_files)
-            for t_manifest_files in img_type_manifest_fpaths_map.values()
-        )
-    )
-    == 1
-), "Some Bodo versions do not have manifest files"
+# assert (
+#     len(
+#         set(
+#             len(t_manifest_files)
+#             for t_manifest_files in img_type_manifest_fpaths_map.values()
+#         )
+#     )
+#     == 1
+# ), "Some Bodo versions do not have manifest files"
 
 # CI packer build step can be green even though packer build failed
 
@@ -186,7 +186,7 @@ for image_type, manifest_fpaths_map in img_type_manifest_fpaths_map.items():
         assert (
             AMI_BUILDER in builder_types
         ), f"AMI build for {manifest_fpaths_map[i]} failed. Successful builds: {builder_types}"
-#         # Make sure each VM type manifest has VMI successfully generated
+        #         # Make sure each VM type manifest has VMI successfully generated
         assert (
             VMI_BUILDER in builder_types
         ), f"VMI build for {manifest_fpaths_map[i]} failed. Successful builds: {builder_types}"
@@ -196,7 +196,6 @@ for image_type, manifest_fpaths_map in img_type_manifest_fpaths_map.items():
 # Creating image create requests
 img_create_requests = []
 for idx in range(NUMBER_OF_BODO_VERSIONS):
-
     ami_types_manifest_fpath_map = {
         ami_type: manifest_fpaths_map[idx]
         for ami_type, manifest_fpaths_map in img_type_manifest_fpaths_map.items()
@@ -255,7 +254,7 @@ for idx in range(NUMBER_OF_BODO_VERSIONS):
             "imagePrefix": img_prefix,
             "region": region,
             "workerImageId": ami_ids_by_type["worker"],
-            "jupyterImageId": ami_ids_by_type["jupyter"],
+            # "jupyterImageId": ami_ids_by_type["jupyter"],
             "imageCloudProvider": "AWS",
         }
         for region, ami_ids_by_type in ami_ids_by_region_by_type.items()
@@ -270,7 +269,7 @@ for idx in range(NUMBER_OF_BODO_VERSIONS):
             "imagePrefix": img_prefix,
             "region": region,
             "workerImageId": vmi_ids_by_type["worker"],
-            "jupyterImageId": vmi_ids_by_type["jupyter"],
+            # "jupyterImageId": vmi_ids_by_type["jupyter"],
             "imageCloudProvider": "AZURE",
         }
         for region, vmi_ids_by_type in vmi_ids_by_region_by_type.items()
