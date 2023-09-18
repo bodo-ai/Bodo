@@ -1,6 +1,5 @@
 package com.bodosql.calcite.traits
 
-import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.utils.AggHelpers
 import com.bodosql.calcite.schema.CatalogSchemaImpl
@@ -189,8 +188,7 @@ class ExpectedBatchingProperty {
          */
         @JvmStatic
         fun aggregateProperty(groupSets: List<ImmutableBitSet>, aggCallList: List<AggregateCall>, rowType: RelDataType): BatchingProperty {
-            var canStream = RelationalAlgebraGenerator.enableGroupbyStreaming &&
-                groupSets.size == 1 && groupSets[0].cardinality() != 0 &&
+            var canStream = groupSets.size == 1 && groupSets[0].cardinality() != 0 &&
                 !AggHelpers.aggContainsFilter(aggCallList) &&
                 aggCallList.all {
                         a ->

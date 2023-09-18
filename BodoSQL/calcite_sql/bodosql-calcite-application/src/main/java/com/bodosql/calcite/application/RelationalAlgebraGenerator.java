@@ -100,9 +100,6 @@ public class RelationalAlgebraGenerator {
   /** The batch size used for streaming. This is configurable for testing purposes. */
   private final int streamingBatchSize;
 
-  /** Enable/Disable groupby streaming. This is configurable for testing purposes */
-  public static boolean enableGroupbyStreaming = false;
-
   /**
    * Hide credential information in any generated code. This is used for code generated in Python by
    * convert_to_pandas() or Java tests so the generated code can be shared.
@@ -177,14 +174,11 @@ public class RelationalAlgebraGenerator {
       int plannerType,
       int verboseLevel,
       int streamingBatchSize,
-      boolean enableGroupbyStreaming,
       boolean hideCredentials) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
     this.streamingBatchSize = streamingBatchSize;
-    // Enable/Disable join streaming.
-    // TODO: Remove when join code generation is stable.
     System.setProperty("calcite.default.charset", "UTF-8");
     CalciteConnection calciteConnection = setupCalciteConnection();
     List<SchemaPlus> defaultSchemas =
@@ -196,7 +190,6 @@ public class RelationalAlgebraGenerator {
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
     this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
-    this.enableGroupbyStreaming = enableGroupbyStreaming;
     this.hideCredentials = hideCredentials;
   }
 
@@ -220,16 +213,12 @@ public class RelationalAlgebraGenerator {
       int plannerType,
       int verboseLevel,
       int streamingBatchSize,
-      boolean enableGroupbyStreaming,
       boolean hideCredentials) {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
     this.streamingBatchSize = streamingBatchSize;
-    this.enableGroupbyStreaming = enableGroupbyStreaming;
     this.hideCredentials = hideCredentials;
-    // Enable/Disable join streaming.
-    // TODO: Remove when join code generation is stable.
     System.setProperty("calcite.default.charset", "UTF-8");
     CalciteConnection calciteConnection = setupCalciteConnection();
     List<SchemaPlus> defaultSchemas =
