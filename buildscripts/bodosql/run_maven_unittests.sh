@@ -16,4 +16,4 @@ export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH
 
 
 # run the maven tests
-cd BodoSQL/calcite_sql; mvn -B -U test; cd ../..
+cd BodoSQL/calcite_sql; mvn -B -U test -DargLine="-DENABLE_PLAN_ANALYSIS=1"; cd ../..
