@@ -354,7 +354,7 @@ cdef class BufferPoolOptions(_Weakrefable):
                  memory_size=None,
                  min_size_class=None,
                  max_num_size_classes=None,
-                 ignore_max_limit_during_allocation=None,
+                 enforce_max_limit_during_allocation=None,
                  storage_options=None,
                  spill_on_unpin=None,
                  move_on_unpin=None):
@@ -370,8 +370,8 @@ cdef class BufferPoolOptions(_Weakrefable):
             self.options.min_size_class = min_size_class
         if max_num_size_classes is not None:
             self.options.max_num_size_classes = max_num_size_classes
-        if ignore_max_limit_during_allocation is not None:
-            self.options.ignore_max_limit_during_allocation = ignore_max_limit_during_allocation
+        if enforce_max_limit_during_allocation is not None:
+            self.options.enforce_max_limit_during_allocation = enforce_max_limit_during_allocation
         if storage_options is not None:
             for option in storage_options:
                 self.c_add_storage(option)
@@ -409,8 +409,8 @@ cdef class BufferPoolOptions(_Weakrefable):
         return self.options.max_num_size_classes
 
     @property
-    def ignore_max_limit_during_allocation(self):
-        return self.options.ignore_max_limit_during_allocation
+    def enforce_max_limit_during_allocation(self):
+        return self.options.enforce_max_limit_during_allocation
 
     @property
     def storage_options(self):
