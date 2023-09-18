@@ -19,7 +19,6 @@ public class PandasGenTest {
 
     String sql = "select CURRENT_DATE()";
     int plannerChoice = RelationalAlgebraGenerator.HEURISTIC_PLANNER;
-    boolean enableStreamingGroupBy = false;
 
     LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
     ArrayList arr = new ArrayList();
@@ -107,7 +106,6 @@ public class PandasGenTest {
             plannerChoice,
             0,
             BatchingProperty.defaultBatchSize,
-            enableStreamingGroupBy,
             true // Always hide credentials
             );
     System.out.println("SQL query:");
