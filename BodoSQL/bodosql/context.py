@@ -156,10 +156,8 @@ _numba_to_sql_param_type_map = {
 #
 # Not intended as a public API.
 class _PlannerType(IntEnum):
-    Default = 0
-    Heuristic = 1
-    Volcano = 2
-    Streaming = 3
+    Volcano = 0
+    Streaming = 1
 
 
 def construct_tz_aware_column_type(typ, col_name, nullable):
@@ -1160,10 +1158,9 @@ class BodoSQLContext:
                 the relational algebra generator.
         """
         verbose_level = bodo.user_logging.get_verbose_level()
-        planner_type = _PlannerType.Default.value
         if bodo.bodosql_use_streaming_plan:
             planner_type = _PlannerType.Streaming.value
-        elif bodo.bodosql_use_volcano_plan:
+        else:
             planner_type = _PlannerType.Volcano.value
         if self.catalog is not None:
             return RelationalAlgebraGeneratorClass(

@@ -14,9 +14,6 @@ parameters:
 - name: BODO_STREAMING_ENABLED
   type: number
   default: 0
-- name: BODO_VOLCANO_ENABLED
-  type: number
-  default: 0
 
 jobs:
 - job: ${{ parameters.name }}
@@ -38,7 +35,7 @@ jobs:
 
   - bash: echo "##vso[task.prependpath]$HOME/mambaforge/bin"
     displayName: Add Mamba to PATH
-  
+
   - script: |
       conda config --set remote_max_retries 5
       conda config --set remote_backoff_factor 60
@@ -116,5 +113,4 @@ jobs:
       SF_USERNAME: $(SNOWFLAKE_USER)
       SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
       BODO_STREAMING_ENABLED: ${{ parameters.BODO_STREAMING_ENABLED }}
-      BODO_VOLCANO_ENABLED: ${{ parameters.BODO_VOLCANO_ENABLED }}
     displayName: 'Test BodoSQL'

@@ -1,6 +1,6 @@
 """Runs the TPCH queries in our codebase via CREATE TABLE ... AS ... SELECT.
 
-This is used for benchmarking the streaming I/O with snowflake. 
+This is used for benchmarking the streaming I/O with snowflake.
 
 Options are explained by invoking python ./run_tpch.py from any directory. There should be a file named SNOWFLAKE_CREDS in this directory
 with the standard bodo snowflake credentials.
@@ -9,7 +9,6 @@ Output file is a csv with columns:
 
 database, schema - the database and schema the tpch query was run on
 streaming(on/off) - whether the query was run with streaming enabled or not
-volcano(on/off) - whether the volcano planner was explicitly requested (note: if streaming is on, then volcano is on)
 batch size - batch size for streaming IO, or NA if the default or not streaming
 N - The iteration number
 Query - The name of the query
@@ -49,35 +48,32 @@ class TestConfig(NamedTuple):
     database: str
     schema: str
     streaming: bool
-    volcano: bool
     local: bool = False
     batch_size: Optional[int] = None
 
     @property
     def name(self) -> str:
-        volcanostr = "volcano" if self.volcano else "novolcano"
         streamingstr = f"streaming-{self.batch_size}" if self.streaming else "batch"
-        return f"{self.database}-{self.schema}-{volcanostr}-{streamingstr}"
+        return f"{self.database}-{self.schema}-{streamingstr}"
 
     @staticmethod
     def _make_csv_header():
-        return ["database", "schema", "streaming", "volcano", "batch size"]
+        return ["database", "schema", "streaming", "batch size"]
 
     def _make_csv_row(self):
         return [
             self.database,
             self.schema,
             "on" if self.streaming else "off",
-            "on" if self.volcano else "off",
             self.batch_size or "N/A",
         ]
 
 
 def DB_CONFIGS(dbname: str, schema: str) -> list[TestConfig]:
     return [
-        TestConfig(database=dbname, schema=schema, streaming=False, volcano=False),
-        TestConfig(database=dbname, schema=schema, streaming=True, volcano=True),
-        TestConfig(database=dbname, schema=schema, streaming=False, volcano=True),
+        TestConfig(database=dbname, schema=schema, streaming=False),
+        TestConfig(database=dbname, schema=schema, streaming=True),
+        TestConfig(database=dbname, schema=schema, streaming=False),
     ]
 
 
@@ -138,12 +134,6 @@ parser.add_argument(
     action="store_true",
 )
 parser.add_argument(
-    "--no-volcano",
-    help="Exclude any test configs with volcano on",
-    default=False,
-    action="store_true",
-)
-parser.add_argument(
     "--memory-profile",
     help="If given, then a dstat mem profile is taken while each query is run",
     default=False,
@@ -151,7 +141,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--check-output",
-    help="Check the output of each query against the non-volcano, non-streaming baseline and don't write back to snowflake",
+    help="Check the output of each query against the non-streaming baseline and don't write back to snowflake",
     default=False,
     action="store_true",
 )
@@ -232,10 +222,6 @@ with open(args.output, "wt") as output:
                             tmp.flush()
 
                             extra_args = []
-                            if test.volcano:
-                                extra_args.append("--volcano")
-                            else:
-                                extra_args.append("--no-volcano")
                             if test.streaming:
                                 extra_args.append("--streaming")
                                 if test.batch_size is not None:
@@ -284,7 +270,7 @@ with open(args.output, "wt") as output:
                             ] + extra_args
                             print("RUN", full_args)
                             env = dict(**os.environ)
-                            # Without this, bodo will re-use plans from streaming/non-streaming or volcano/no-volcano
+                            # Without this, bodo will re-use plans from streaming/non-streaming
                             env["BODO_PLATFORM_CACHE_LOCATION"] = d
                             print("Using cache: ", d)
                             executable = sys.executable

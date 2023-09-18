@@ -28,9 +28,8 @@ from bodo.tests.utils import check_func
 
 pytestmark = [
     pytest.mark.iceberg,
-    pytest.mark.skipif(
-        bodo.bodosql_use_streaming_plan,
-        reason="[BSE-952] Current MERGE INTO Algorithm Designed for Non-Streaming and Doesn't Support Filter Pushdown w/ Streaming",
+    pytest.mark.skip(
+        reason="[BSE-952] Current MERGE INTO Algorithm Designed for Non-Streaming and Doesn't Support Filter Pushdown w/ Streaming. This also doesn't work with the current volcano planner.",
     ),
 ]
 

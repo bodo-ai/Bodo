@@ -412,12 +412,10 @@ def test_snowflake_catalog_limit_pushdown(memory_leak_check):
     with set_logging_stream(logger, 2):
         check_func(impl, (bc, query), py_output=py_output)
 
-        if bodo.bodosql_use_streaming_plan:
-            # TODO: Investigate discrepancy. Why does planner read data now?
-            check_logger_msg(stream, "Columns loaded ['mycol']")
-        else:
-            # Note the only column need is pruned by the planner due to the filter.
-            check_logger_msg(stream, "Columns loaded []")
+        # The planner doesn't fully prune the filter column with the volcano
+        # planner due to the metadata constraints on the RelSubset. This may
+        # change as we increase the number of HEP steps.
+        check_logger_msg(stream, "Columns loaded ['mycol']")
 
         # This should be included in the pushed down SQL query if it
         # succeeds.
@@ -2454,16 +2452,11 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
                 # Pandas output is non-nullable
                 check_dtype=False,
             )
-            if bodo.bodosql_use_streaming_plan:
-                # Pushdown happens in the planner. Check the timer message instead.
-                check_logger_msg(
-                    stream,
-                    f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE COALESCE("L_COMMITDATE", TIMESTAMP \'2023-06-20 00:00:00.000000000\') >= TIMESTAMP \'2023-01-20 00:00:00.000000000\'',
-                )
-            else:
-                # Hep planner doesn't use snowflake filter.
-                check_logger_msg(stream, "Filter pushdown successfully performed")
-                check_logger_msg(stream, r"COALESCE(\"L_COMMITDATE\", {f0}) >= {f1} )")
+            # Pushdown happens in the planner. Check the timer message instead.
+            check_logger_msg(
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE COALESCE("L_COMMITDATE", TIMESTAMP \'2023-06-20 00:00:00.000000000\') >= TIMESTAMP \'2023-01-20 00:00:00.000000000\'',
+            )
 
 
 @pytest.mark.parametrize(
