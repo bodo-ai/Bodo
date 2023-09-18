@@ -80,6 +80,11 @@ object BodoPrograms {
         SnowflakeTraitAdder(),
         SnowflakeColumnPruning(),
         if (optimize) {
+            HepOptimizerProgram(BodoRules.FILTER_PUSH_DOWN_RULES)
+        } else {
+            NoopProgram
+        },
+        if (optimize) {
             Programs.of(
                 HepProgramBuilder()
                     .addRuleInstance(BodoRules.FILTER_INTO_JOIN_RULE)
