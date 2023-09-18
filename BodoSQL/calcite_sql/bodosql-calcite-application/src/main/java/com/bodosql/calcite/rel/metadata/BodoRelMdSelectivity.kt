@@ -10,6 +10,7 @@ import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.sql.SqlKind
 import kotlin.math.max
+import kotlin.math.min
 
 class BodoRelMdSelectivity : RelMdSelectivity() {
 
@@ -115,8 +116,9 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
             }
         }
         val maxSize = max(mq.getRowCount(rel.left), mq.getRowCount(rel.right))
-        // Never let the selectivity drop below the smaller table.
-        return max(supportedSelectivity * unsupportedSelectivity, 1.0 / maxSize) * groupSelectivity
+        // Never let the selectivity drop below the smaller table,
+        // and cap the selectivity to [0, 1.0]
+        return min(max(supportedSelectivity * unsupportedSelectivity, 1.0 / maxSize) * groupSelectivity, 1.0)
     }
 
     override fun getSelectivity(
