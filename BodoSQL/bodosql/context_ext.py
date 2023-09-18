@@ -418,7 +418,6 @@ def _gen_pd_func_text_and_lowered_globals(
                     planner_type,
                     verbose_level,
                     bodo.bodosql_streaming_batch_size,
-                    bodo.enable_groupby_streaming,
                     hide_credentials,
                 )
             else:
@@ -428,7 +427,6 @@ def _gen_pd_func_text_and_lowered_globals(
                     planner_type,
                     verbose_level,
                     bodo.bodosql_streaming_batch_size,
-                    bodo.enable_groupby_streaming,
                     hide_credentials,
                 )
         except Exception as e:
