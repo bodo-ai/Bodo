@@ -193,9 +193,8 @@ public class RelationalAlgebraGenerator {
     this.hideCredentials = hideCredentials;
   }
 
-  public static final int HEURISTIC_PLANNER = 1;
-  public static final int VOLCANO_PLANNER = 2;
-  public static final int STREAMING_PLANNER = 3;
+  public static final int VOLCANO_PLANNER = 0;
+  public static final int STREAMING_PLANNER = 1;
 
   /**
    * Constructor for the relational algebra generator class that accepts a Catalog and Schema
@@ -458,9 +457,8 @@ public class RelationalAlgebraGenerator {
         return PlannerType.VOLCANO;
       case STREAMING_PLANNER:
         return PlannerType.STREAMING;
-      case HEURISTIC_PLANNER:
       default:
-        return PlannerType.HEURISTIC;
+        throw new RuntimeException("Unexpected Planner option");
     }
   }
 }

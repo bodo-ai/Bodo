@@ -157,7 +157,7 @@ stages:
             NP: 1
             PYTEST_MARKER: ${{ format('bodo_{0}of{1} and ({2})', slice, variables.bodo_1p_total, parameters.PYTEST_MARKER) }}
             BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        
+
         ${{ each slice in split(variables.bodo_2p_each, ',') }}:
           ${{ format('BODO_2P_{0}_OF_{1}', slice, variables.bodo_2p_total) }}:
             NP: 2
@@ -180,7 +180,7 @@ stages:
   displayName: 'Test BodoSQL Binary'
   dependsOn: Build_BodoSQL_Binary
   jobs:
-  
+
   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
@@ -225,7 +225,6 @@ stages:
       name: BodoSQL_Streaming_Tests
       CONDA_ENV: run_bodo_sql
       BODO_STREAMING_ENABLED: 1
-      BODO_VOLCANO_ENABLED: 1
       matrix:
         ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
           ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
@@ -246,7 +245,6 @@ stages:
       CONDA_ENV: build_bodo_sql
       CACHE_TEST: true
       BODO_STREAMING_ENABLED: 1
-      BODO_VOLCANO_ENABLED: 1
       matrix:
         TEST_2P:
           NP: 2

@@ -87,11 +87,7 @@ import platform
 
 #### START STREAMING CONFIGURATION ####
 
-# Flag to track if we should use the volcano plan in BodoSQL.
-bodosql_use_volcano_plan = os.environ.get("BODO_VOLCANO_ENABLED", "0") == "1"
 # Flag to track if we should use the streaming plan in BodoSQL.
-# Takes precedence over bodosql_use_volcano_plan and potentially
-# implies bodosql_use_volcano_plan.
 bodosql_use_streaming_plan = os.environ.get("BODO_STREAMING_ENABLED", "1") == "1"
 # Number of rows to process at once for BodoSQL. This is used to test
 # the streaming plan in BodoSQL on the existing unit tests that may only

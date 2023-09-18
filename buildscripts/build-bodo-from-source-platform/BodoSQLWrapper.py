@@ -103,12 +103,6 @@ def load_tables(args):
 
 
 def main(args):
-    if args.volcano:
-        bodo.bodosql_use_volcano_plan = True
-
-    if args.no_volcano:
-        bodo.bodosql_use_volcano_plan = False
-
     if args.streaming:
         bodo.bodosql_use_streaming_plan = True
     else:
@@ -116,8 +110,6 @@ def main(args):
 
     if bodo.get_rank() == 0:
         print(
-            "VOLCANO:",
-            bodo.bodosql_use_volcano_plan,
             "STREAMING: ",
             bodo.bodosql_use_streaming_plan,
         )
@@ -252,18 +244,6 @@ if __name__ == "__main__":
         help="Path to Snowflake credentials file. The following keys must be present: SF_USERNAME, SF_PASSWORD and SF_ACCOUNT. The following keys are optional: SF_WAREHOUSE, SF_DATABASE",
     )
     parser.add_argument("--sf-schema", help="Snowflake schema to use")
-    parser.add_argument(
-        "--volcano",
-        action="store_true",
-        help="Enable the volcano planner",
-        default=False,
-    )
-    parser.add_argument(
-        "--no-volcano",
-        action="store_true",
-        help="Disable the volcano planner",
-        default=False,
-    )
     parser.add_argument(
         "--streaming", action="store_true", help="Enable streaming execution"
     )
