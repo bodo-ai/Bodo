@@ -12,7 +12,7 @@ package com.bodosql.calcite.prepare
 class AnalysisSuite {
     companion object {
         @JvmField
-        val enableAnalysis = System.getProperty("ENABLE_PLAN_ANALYSIS", "") != ""
+        var enableAnalysis = false
 
         val multiJoinAnalyzer = MultiJoinAnalyzerProgram()
     }
