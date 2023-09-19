@@ -29,6 +29,9 @@ ArrayBuildBuffer::ArrayBuildBuffer(
         }
         this->dict_indices = std::make_shared<ArrayBuildBuffer>(
             this->data_array->child_arrays[1]);
+    } else if (_data_array->arr_type == bodo_array_type::ARRAY_ITEM) {
+        this->inner_array_builder = std::make_shared<ArrayBuildBuffer>(
+            this->data_array->child_arrays[0]);
     }
 }
 
@@ -45,6 +48,329 @@ size_t ArrayBuildBuffer::EstimatedSize() const {
         return size;
     };
     return getSizeOfArrayInfo(*data_array);
+}
+
+void ArrayBuildBuffer::UnsafeAppendBatch(
+    const std::shared_ptr<array_info>& in_arr,
+    const std::vector<bool>& append_rows, uint64_t append_rows_sum) {
+#ifndef APPEND_ROWS
+#define APPEND_ROWS(arr_type_exp, dtype_exp)                              \
+    this->UnsafeAppendBatch<arr_type_exp, dtype_exp>(in_arr, append_rows, \
+                                                     append_rows_sum)
+#endif
+    if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        switch (in_arr->dtype) {
+            case Bodo_CTypes::INT8:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT8);
+                break;
+            case Bodo_CTypes::INT16:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT16);
+                break;
+            case Bodo_CTypes::INT32:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32);
+                break;
+            case Bodo_CTypes::INT64:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64);
+                break;
+            case Bodo_CTypes::UINT8:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::UINT8);
+                break;
+            case Bodo_CTypes::UINT16:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::UINT16);
+                break;
+            case Bodo_CTypes::UINT32:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::UINT32);
+                break;
+            case Bodo_CTypes::UINT64:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::UINT64);
+                break;
+            case Bodo_CTypes::FLOAT32:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::FLOAT32);
+                break;
+            case Bodo_CTypes::FLOAT64:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::FLOAT64);
+                break;
+            case Bodo_CTypes::_BOOL:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::_BOOL);
+                break;
+            case Bodo_CTypes::DATETIME:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::DATETIME);
+                break;
+            case Bodo_CTypes::TIMEDELTA:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::TIMEDELTA);
+                break;
+            case Bodo_CTypes::TIME:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::TIME);
+                break;
+            case Bodo_CTypes::DATE:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::DATE);
+                break;
+            case Bodo_CTypes::DECIMAL:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::DECIMAL);
+                break;
+            case Bodo_CTypes::INT128:
+                APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT128);
+                break;
+            default:
+                break;
+        }
+    } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
+        switch (in_arr->dtype) {
+            case Bodo_CTypes::INT8:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::INT8);
+                break;
+            case Bodo_CTypes::INT16:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::INT16);
+                break;
+            case Bodo_CTypes::INT32:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::INT32);
+                break;
+            case Bodo_CTypes::INT64:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::INT64);
+                break;
+            case Bodo_CTypes::UINT8:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::UINT8);
+                break;
+            case Bodo_CTypes::UINT16:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::UINT16);
+                break;
+            case Bodo_CTypes::UINT32:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::UINT32);
+                break;
+            case Bodo_CTypes::UINT64:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::UINT64);
+                break;
+            case Bodo_CTypes::FLOAT32:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::FLOAT32);
+                break;
+            case Bodo_CTypes::FLOAT64:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64);
+                break;
+            case Bodo_CTypes::_BOOL:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::_BOOL);
+                break;
+            case Bodo_CTypes::DATETIME:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME);
+                break;
+            case Bodo_CTypes::TIMEDELTA:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::TIMEDELTA);
+                break;
+            case Bodo_CTypes::TIME:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::TIME);
+                break;
+            case Bodo_CTypes::DATE:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::DATE);
+                break;
+            case Bodo_CTypes::DECIMAL:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::DECIMAL);
+                break;
+            case Bodo_CTypes::INT128:
+                APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::INT128);
+                break;
+            default:
+                break;
+        }
+    } else if (in_arr->arr_type == bodo_array_type::STRING) {
+        if (in_arr->dtype == Bodo_CTypes::STRING) {
+            APPEND_ROWS(bodo_array_type::STRING, Bodo_CTypes::STRING);
+        } else if (in_arr->dtype == Bodo_CTypes::BINARY) {
+            APPEND_ROWS(bodo_array_type::STRING, Bodo_CTypes::BINARY);
+        }
+    } else if (in_arr->arr_type == bodo_array_type::DICT) {
+        if (in_arr->dtype == Bodo_CTypes::STRING) {
+            APPEND_ROWS(bodo_array_type::DICT, Bodo_CTypes::STRING);
+        }
+    } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        if (in_arr->dtype == Bodo_CTypes::LIST) {
+            APPEND_ROWS(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
+        }
+    } else {
+        throw std::runtime_error(
+            "ArrayBuildBuffer::UnsafeAppendBatch: array type " +
+            GetArrType_as_string(this->data_array->arr_type) +
+            " not supported!");
+    }
+#undef APPEND_ROWS
+}
+
+void ArrayBuildBuffer::UnsafeAppendBatch(
+    const std::shared_ptr<array_info>& in_arr) {
+#ifndef APPEND_BATCH_ARRAY
+#define APPEND_BATCH_ARRAY(arr_type_exp, dtype_exp) \
+    this->UnsafeAppendBatch<arr_type_exp, dtype_exp>(in_arr)
+#endif
+    if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        switch (in_arr->dtype) {
+            case Bodo_CTypes::INT8:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::INT8);
+                break;
+            case Bodo_CTypes::INT16:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::INT16);
+                break;
+            case Bodo_CTypes::INT32:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::INT32);
+                break;
+            case Bodo_CTypes::INT64:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::INT64);
+                break;
+            case Bodo_CTypes::UINT8:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::UINT8);
+                break;
+            case Bodo_CTypes::UINT16:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::UINT16);
+                break;
+            case Bodo_CTypes::UINT32:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::UINT32);
+                break;
+            case Bodo_CTypes::UINT64:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::UINT64);
+                break;
+            case Bodo_CTypes::FLOAT32:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::FLOAT32);
+                break;
+            case Bodo_CTypes::FLOAT64:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::FLOAT64);
+                break;
+            case Bodo_CTypes::_BOOL:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::_BOOL);
+                break;
+            case Bodo_CTypes::DATETIME:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::DATETIME);
+                break;
+            case Bodo_CTypes::TIMEDELTA:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::TIMEDELTA);
+                break;
+            case Bodo_CTypes::TIME:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::TIME);
+                break;
+            case Bodo_CTypes::DATE:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::DATE);
+                break;
+            case Bodo_CTypes::DECIMAL:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::DECIMAL);
+                break;
+            case Bodo_CTypes::INT128:
+                APPEND_BATCH_ARRAY(bodo_array_type::NULLABLE_INT_BOOL,
+                                   Bodo_CTypes::INT128);
+                break;
+            default:
+                break;
+        }
+    } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
+        switch (in_arr->dtype) {
+            case Bodo_CTypes::INT8:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::INT8);
+                break;
+            case Bodo_CTypes::INT16:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::INT16);
+                break;
+            case Bodo_CTypes::INT32:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::INT32);
+                break;
+            case Bodo_CTypes::INT64:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::INT64);
+                break;
+            case Bodo_CTypes::UINT8:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::UINT8);
+                break;
+            case Bodo_CTypes::UINT16:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::UINT16);
+                break;
+            case Bodo_CTypes::UINT32:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::UINT32);
+                break;
+            case Bodo_CTypes::UINT64:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::UINT64);
+                break;
+            case Bodo_CTypes::FLOAT32:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY,
+                                   Bodo_CTypes::FLOAT32);
+                break;
+            case Bodo_CTypes::FLOAT64:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY,
+                                   Bodo_CTypes::FLOAT64);
+                break;
+            case Bodo_CTypes::_BOOL:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::_BOOL);
+                break;
+            case Bodo_CTypes::DATETIME:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY,
+                                   Bodo_CTypes::DATETIME);
+                break;
+            case Bodo_CTypes::TIMEDELTA:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY,
+                                   Bodo_CTypes::TIMEDELTA);
+                break;
+            case Bodo_CTypes::TIME:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::TIME);
+                break;
+            case Bodo_CTypes::DATE:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::DATE);
+                break;
+            case Bodo_CTypes::DECIMAL:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY,
+                                   Bodo_CTypes::DECIMAL);
+                break;
+            case Bodo_CTypes::INT128:
+                APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::INT128);
+                break;
+            default:
+                break;
+        }
+    } else if (in_arr->arr_type == bodo_array_type::STRING) {
+        if (in_arr->dtype == Bodo_CTypes::STRING) {
+            APPEND_BATCH_ARRAY(bodo_array_type::STRING, Bodo_CTypes::STRING);
+        } else if (in_arr->dtype == Bodo_CTypes::BINARY) {
+            APPEND_BATCH_ARRAY(bodo_array_type::STRING, Bodo_CTypes::BINARY);
+        }
+    } else if (in_arr->arr_type == bodo_array_type::DICT) {
+        if (in_arr->dtype == Bodo_CTypes::STRING) {
+            APPEND_BATCH_ARRAY(bodo_array_type::DICT, Bodo_CTypes::STRING);
+        }
+    } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        if (in_arr->dtype == Bodo_CTypes::LIST) {
+            APPEND_BATCH_ARRAY(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
+        }
+    } else {
+        throw std::runtime_error(
+            "ArrayBuildBuffer::UnsafeAppendBatch: array type " +
+            GetArrType_as_string(this->data_array->arr_type) +
+            " not supported!");
+    }
+#undef APPEND_BATCH_ARRAY
 }
 
 void ArrayBuildBuffer::IncrementSize() {
@@ -284,6 +610,20 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
                 capacity = new_capacity;
             }
         } break;
+        case bodo_array_type::ARRAY_ITEM: {
+            // update offset and null bitmap buffers
+            if (min_capacity > capacity) {
+                int64_t new_capacity = std::max(min_capacity, capacity * 2);
+                CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(
+                                    (new_capacity + 1) * sizeof(offset_t)),
+                                "Reserve failed!");
+                CHECK_ARROW_MEM(
+                    this->data_array->buffers[1]->Reserve(
+                        arrow::bit_util::BytesForBits(new_capacity)),
+                    "Reserve failed!");
+                capacity = new_capacity;
+            }
+        } break;
         default:
             throw std::runtime_error(
                 "ArrayBuildBuffer::ReserveSize: Invalid array type " +
@@ -321,6 +661,13 @@ void ArrayBuildBuffer::Reset() {
             this->data_array->child_arrays[0] =
                 this->dict_builder->dict_buff->data_array;
         } break;
+        case bodo_array_type::ARRAY_ITEM: {
+            this->inner_array_builder->Reset();
+            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
+                            "ArrayBuildBuffer::Reset: SetSize failed!");
+            CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(0),
+                            "ArrayBuildBuffer::Reset: SetSize failed!");
+        } break;
         default: {
             throw std::runtime_error(
                 "ArrayBuildBuffer::Reset: Invalid array type " +
@@ -343,14 +690,14 @@ TableBuildBuffer::TableBuildBuffer(
         alloc_table(arr_c_types, arr_array_types, pool, std::move(mm));
 
     // initialize array buffer wrappers
-    for (size_t i = 0; i < arr_c_types.size(); i++) {
-        if (arr_array_types[i] == bodo_array_type::DICT) {
+    for (size_t i = 0; i < this->data_table->ncols(); i++) {
+        if (this->data_table->columns[i]->arr_type == bodo_array_type::DICT) {
             // Set the dictionary to the one from the dict builder:
             this->data_table->columns[i]->child_arrays[0] =
                 dict_builders[i]->dict_buff->data_array;
         }
-        array_buffers.emplace_back(this->data_table->columns[i],
-                                   dict_builders[i]);
+        this->array_buffers.emplace_back(this->data_table->columns[i],
+                                         dict_builders[i]);
     }
 }
 
@@ -365,7 +712,7 @@ size_t TableBuildBuffer::EstimatedSize() const {
 void TableBuildBuffer::UnifyTablesAndAppend(
     const std::shared_ptr<table_info>& in_table,
     std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders) {
-    auto unified_table =
+    std::shared_ptr<table_info> unified_table =
         unify_dictionary_arrays_helper(in_table, dict_builders, 0, false);
     ReserveTable(unified_table);
     UnsafeAppendBatch(unified_table);
@@ -520,6 +867,10 @@ void TableBuildBuffer::UnsafeAppendBatch(
         } else if (in_arr->arr_type == bodo_array_type::DICT) {
             if (in_arr->dtype == Bodo_CTypes::STRING) {
                 APPEND_BATCH(bodo_array_type::DICT, Bodo_CTypes::STRING);
+            }
+        } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+            if (in_arr->dtype == Bodo_CTypes::LIST) {
+                APPEND_BATCH(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
             }
         }
     }
@@ -682,6 +1033,10 @@ void TableBuildBuffer::UnsafeAppendBatch(
             if (in_arr->dtype == Bodo_CTypes::STRING) {
                 APPEND_BATCH(bodo_array_type::DICT, Bodo_CTypes::STRING);
             }
+        } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+            if (in_arr->dtype == Bodo_CTypes::LIST) {
+                APPEND_BATCH(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
+            }
         }
     }
 #undef APPEND_BATCH
@@ -795,8 +1150,11 @@ struct TableBuilderState {
         : arr_c_types(std::move(_arr_c_types)),
           arr_array_types(std::move(_arr_array_types)),
           input_dics_unified(_input_dicts_unified) {
+        // Create column to index map
+        const std::vector<size_t> col_to_idx_map(
+            get_col_idx_map(arr_array_types));
         // Create dictionary builders for all columns
-        for (size_t i = 0; i < arr_array_types.size(); i++) {
+        for (size_t i : col_to_idx_map) {
             if (arr_array_types[i] == bodo_array_type::DICT) {
                 std::shared_ptr<array_info> dict = alloc_array(
                     0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
@@ -810,16 +1168,35 @@ struct TableBuilderState {
     }
 };
 
+int get_type_arr_size(int8_t* arr_array_types, int n_arrs) {
+    int type_arr_size = 0, n_col = 0;
+
+    while (n_col < n_arrs) {
+        if (arr_array_types[type_arr_size] != bodo_array_type::ARRAY_ITEM) {
+            ++n_col;
+        }
+        ++type_arr_size;
+    }
+
+    return type_arr_size;
+}
+
 TableBuilderState* table_builder_state_init_py_entry(int8_t* arr_c_types,
                                                      int8_t* arr_array_types,
                                                      int n_arrs,
                                                      bool input_dics_unified) {
-    std::vector<int8_t> ctype_vec(n_arrs);
-    std::vector<int8_t> ctype_arr_vec(n_arrs);
-    for (int i = 0; i < n_arrs; i++) {
-        ctype_vec[i] = arr_c_types[i];
-        ctype_arr_vec[i] = arr_array_types[i];
+    n_arrs = get_type_arr_size(arr_array_types, n_arrs);
+
+    std::vector<int8_t> ctype_vec, ctype_arr_vec;
+
+    ctype_vec.reserve(n_arrs);
+    ctype_arr_vec.reserve(n_arrs);
+
+    for (int i = 0; i < n_arrs; ++i) {
+        ctype_vec.push_back(arr_c_types[i]);
+        ctype_arr_vec.push_back(arr_array_types[i]);
     }
+
     auto* state =
         new TableBuilderState(ctype_vec, ctype_arr_vec, input_dics_unified);
     return state;
@@ -886,8 +1263,11 @@ struct ChunkedTableBuilderState {
                              size_t chunk_size)
         : arr_c_types(std::move(_arr_c_types)),
           arr_array_types(std::move(_arr_array_types)) {
+        // Create column to index map
+        const std::vector<size_t> col_to_idx_map(
+            get_col_idx_map(arr_array_types));
         // Create dictionary builders for all columns
-        for (size_t i = 0; i < arr_array_types.size(); i++) {
+        for (size_t i : col_to_idx_map) {
             if (arr_array_types[i] == bodo_array_type::DICT) {
                 std::shared_ptr<array_info> dict = alloc_array(
                     0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
@@ -906,11 +1286,16 @@ struct ChunkedTableBuilderState {
 ChunkedTableBuilderState* chunked_table_builder_state_init_py_entry(
     int8_t* arr_c_types, int8_t* arr_array_types, int n_arrs,
     int64_t chunk_size) {
-    std::vector<int8_t> ctype_vec(n_arrs);
-    std::vector<int8_t> ctype_arr_vec(n_arrs);
+    n_arrs = get_type_arr_size(arr_array_types, n_arrs);
+
+    std::vector<int8_t> ctype_vec, ctype_arr_vec;
+
+    ctype_vec.reserve(n_arrs);
+    ctype_arr_vec.reserve(n_arrs);
+
     for (int i = 0; i < n_arrs; i++) {
-        ctype_vec[i] = arr_c_types[i];
-        ctype_arr_vec[i] = arr_array_types[i];
+        ctype_vec.push_back(arr_c_types[i]);
+        ctype_arr_vec.push_back(arr_array_types[i]);
     }
 
     return new ChunkedTableBuilderState(ctype_vec, ctype_arr_vec,

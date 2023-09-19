@@ -509,6 +509,11 @@ inline void SetBitTo(std::vector<uint8_t, Alloc>& V, int64_t i,
  * --- child_array[0] is the string array for the dictionary.
  * --- child_array[1] is a Int32 array for the indices. This array and
  *     the main info share a bitmap.
+ * case of ARRAY_ITEM:
+ * --- The length is the number of rows.
+ * --- data1 is for the offsets
+ * --- null_bitmask is the mask
+ * --- child_array[0] is the inner array
  */
 struct array_info {
     bodo_array_type::arr_type_enum arr_type;
@@ -520,7 +525,8 @@ struct array_info {
     // string array. Last element is always the null bitmap buffer.
     std::vector<std::shared_ptr<BodoBuffer>> buffers;
 
-    // Child arrays for nested array cases (dict-encoded arrays only currently)
+    // Child arrays for nested array cases (dict-encoded arrays and nested array
+    // only currently)
     std::vector<std::shared_ptr<array_info>> child_arrays;
     // name of each field in struct array (empty for other arrays)
     std::vector<std::string> field_names;
@@ -594,16 +600,17 @@ struct array_info {
             case bodo_array_type::NUMPY:
             case bodo_array_type::CATEGORICAL:
             case bodo_array_type::INTERVAL:
+            case bodo_array_type::ARRAY_ITEM:
                 return (char*)this->buffers[0]->mutable_data() + this->offset;
             case bodo_array_type::LIST_STRING:
                 return this->child_arrays[0]->data1();
             case bodo_array_type::DICT:
-            case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
             default:
                 return nullptr;
         }
     }
+
     /**
      * @brief returns the first data pointer for the array if any.
      *
@@ -618,16 +625,17 @@ struct array_info {
             case bodo_array_type::NUMPY:
             case bodo_array_type::CATEGORICAL:
             case bodo_array_type::INTERVAL:
+            case bodo_array_type::ARRAY_ITEM:
                 return (char*)this->buffers[0]->mutable_data() + this->offset;
             case bodo_array_type::LIST_STRING:
                 return this->child_arrays[0]->data1();
             case bodo_array_type::DICT:
-            case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
             default:
                 return nullptr;
         }
     }
+
     /**
      * @brief returns the second data pointer for the array if any.
      *
@@ -653,6 +661,7 @@ struct array_info {
                 return nullptr;
         }
     }
+
     /**
      * @brief returns the second data pointer for the array if any.
      *
@@ -678,6 +687,7 @@ struct array_info {
                 return nullptr;
         }
     }
+
     /**
      * @brief returns the third data pointer for the array if any.
      *
@@ -702,6 +712,7 @@ struct array_info {
                 return nullptr;
         }
     }
+
     /**
      * @brief returns the third data pointer for the array if any.
      *
@@ -726,6 +737,7 @@ struct array_info {
                 return nullptr;
         }
     }
+
     /**
      * @brief returns the pointer to null bitmask buffer for the array if any.
      *
@@ -754,6 +766,7 @@ struct array_info {
                 return nullptr;
         }
     }
+
     /**
      * @brief returns the pointer to null bitmask buffer for the array if any.
      *
@@ -960,6 +973,14 @@ struct array_info {
 
     void pin() {
         switch (arr_type) {
+            case bodo_array_type::ARRAY_ITEM:
+                for (auto& buffer : this->buffers) {
+                    buffer->pin();
+                }
+                for (auto& arr : this->child_arrays) {
+                    arr->pin();
+                }
+                break;
             case bodo_array_type::DICT:
             case bodo_array_type::LIST_STRING:
                 for (auto& arr : this->child_arrays) {
@@ -988,6 +1009,14 @@ struct array_info {
                     this->child_arrays[0]->unpin();
                 }
                 this->child_arrays[1]->unpin();
+                break;
+            case bodo_array_type::ARRAY_ITEM:
+                for (auto& buffer : this->buffers) {
+                    buffer->unpin();
+                }
+                for (auto& arr : this->child_arrays) {
+                    arr->unpin();
+                }
                 break;
             case bodo_array_type::LIST_STRING:
                 for (auto& arr : this->child_arrays) {
@@ -1099,6 +1128,33 @@ std::unique_ptr<array_info> alloc_array_item(
     int64_t n_arrays, std::shared_ptr<array_info> inner_arr,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
+/**
+ * @brief Allocate an empty ARRAY_ITEM array with the types within index range
+ * [start_idx, end_idx)
+ *
+ * @return pointer to the allocated array_info
+ */
+std::unique_ptr<array_info> alloc_array_item(
+    int64_t n_arrays, size_t start_idx, size_t end_idx,
+    const std::vector<int8_t>& arr_c_types,
+    const std::vector<int8_t>& arr_array_types,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    const std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
+/**
+ * @brief Allocate an empty ARRAY_ITEM array of the same type as the given
+ * array, similar to alloc_table_like function. Currently only used by
+ * alloc_table_like function.
+ *
+ * @return pointer to the allocated array_info
+ */
+std::unique_ptr<array_info> alloc_array_item_like(
+    std::shared_ptr<array_info> array,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    const std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
 std::unique_ptr<array_info> alloc_categorical(
@@ -1327,15 +1383,47 @@ std::tuple<std::vector<int8_t>, std::vector<int8_t>>
 get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table);
 
 /**
- * @brief Helper function for early reference (and potentially memory) release
- * of a column in a table (to reduce peak memory usage wherever possible). This
- * is useful in performance and memory critical regions to release memory of
- * columns that are no longer needed. However, calling reset on the column is
- * only safe if this is the last reference to the table. We pass the shared_ptr
- * by reference to not incref the table_info during the function call.
- * NOTE: This function is only useful for performance reasons and should only be
- * used when you know what you are doing. See existing usages of this in our
- * code to understand the use cases.
+ * @brief Get the next start and end index of bodo array types array in place.
+ *
+ * For example, given the following inputs:
+ * start_idx = 0, end_idx = 2 i.e. range = [0, 2)
+ * arr_array_types = [ARRAY_ITEM, NULLABLE_INT_BOOL, ARRAY_ITEM, ARRAY_ITEM,
+ * NULLABLE_INT_BOOL, NULLABLE_INT_BOOL]
+ *
+ * The function will modify the range to [2, 5)
+ *
+ * To get the range for the first column i.e. initialization,
+ * call get_next_col_arr_type with end_idx = 0
+ *
+ * @param start_idx Start index (inclusive) of the index range corresponding to
+ * the previous column
+ * @param end_idx End index (exclusive) of the index range corresponding to the
+ * previous column
+ * @param arr_array_types The array of array types for all columns
+ */
+void get_next_col_arr_type(size_t& start_idx, size_t& end_idx,
+                           const std::vector<int8_t>& arr_array_types);
+
+/**
+ * @brief Generate a map from column index to the actual index to the array type
+ * and C type arrays
+ *
+ * @return A vector that maps from the column index to the start index in the
+ * type array
+ */
+std::vector<size_t> get_col_idx_map(const std::vector<int8_t>& arr_array_types);
+
+/**
+ * @brief Helper function for early reference (and potentially memory)
+ * release of a column in a table (to reduce peak memory usage wherever
+ * possible). This is useful in performance and memory critical regions to
+ * release memory of columns that are no longer needed. However, calling
+ * reset on the column is only safe if this is the last reference to the
+ * table. We pass the shared_ptr by reference to not incref the table_info
+ * during the function call. NOTE: This function is only useful for
+ * performance reasons and should only be used when you know what you are
+ * doing. See existing usages of this in our code to understand the use
+ * cases.
  *
  * @param table Shared Pointer to the table, passed by reference.
  * @param col_idx Index of the column to reset.

@@ -1,5 +1,4 @@
 #pragma once
-
 #include "_dict_builder.h"
 #include "_table_builder_utils.h"
 
@@ -10,6 +9,67 @@
 // Keep in sync with value in
 // test_stream_join.py::test_long_strings_chunked_table_builder
 #define DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES 2
+
+#ifndef CASE_APPEND_ROWS_DTYPE
+#define CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE, DTYPE)  \
+    case Bodo_CTypes::DTYPE: {                                    \
+        this->UnsafeAppendRows<ARRAY_TYPE, IN_ARRAY_TYPE, DTYPE>( \
+            in_arr, idxs, idx_start, idx_length);                 \
+    } break;
+#endif
+
+#ifndef CASE_APPEND_ROWS
+#define CASE_APPEND_ROWS(ARRAY_TYPE, IN_ARRAY_TYPE)                            \
+    if (this->data_array->arr_type == ARRAY_TYPE &&                            \
+        in_arr->arr_type == IN_ARRAY_TYPE) {                                   \
+        switch (this->data_array->dtype) {                                     \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::INT8)                          \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::UINT8)                         \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::INT32)                         \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::UINT32)                        \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::INT64)                         \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::FLOAT32)                       \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::FLOAT64)                       \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::UINT64)                        \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::INT16)                         \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::UINT16)                        \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::STRING)                        \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::_BOOL)                         \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::DECIMAL)                       \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::DATE)                          \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::TIME)                          \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::DATETIME)                      \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::TIMEDELTA)                     \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::INT128)                        \
+            CASE_APPEND_ROWS_DTYPE(ARRAY_TYPE, IN_ARRAY_TYPE,                  \
+                                   Bodo_CTypes::BINARY)                        \
+            default:                                                           \
+                throw std::runtime_error(                                      \
+                    "ChunkedTableArrayBuilder::UnsafeAppendRows: data type " + \
+                    GetDtype_as_string(this->data_array->dtype) +              \
+                    " not supported!");                                        \
+        }                                                                      \
+        return;                                                                \
+    }
+#endif
 
 /**
  * @brief Array Builder for Chunked Table Builder.
@@ -30,6 +90,11 @@ struct ChunkedTableArrayBuilder {
     // Dictionary indices buffer for appending dictionary indices (only for
     // dictionary-encoded string arrays)
     std::shared_ptr<ChunkedTableArrayBuilder> dict_indices;
+
+    // Inner array builder
+    // TODO[BSE-1258]: change to chunked buffer to allow pin/unpin each chunk
+    // separately
+    std::shared_ptr<ArrayBuildBuffer> inner_array_builder;
 
     // Current number of elements in the buffers.
     size_t size = 0;
@@ -84,6 +149,64 @@ struct ChunkedTableArrayBuilder {
      * @return false Otherwise.
      */
     bool CanResize();
+
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        CASE_APPEND_ROWS(bodo_array_type::NUMPY, bodo_array_type::NUMPY)
+        CASE_APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                         bodo_array_type::NUMPY)
+        CASE_APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
+                         bodo_array_type::NULLABLE_INT_BOOL)
+        if (this->data_array->arr_type == bodo_array_type::STRING &&
+            in_arr->arr_type == bodo_array_type::STRING) {
+            switch (this->data_array->dtype) {
+                CASE_APPEND_ROWS_DTYPE(bodo_array_type::STRING,
+                                       bodo_array_type::STRING,
+                                       Bodo_CTypes::STRING)
+                CASE_APPEND_ROWS_DTYPE(bodo_array_type::STRING,
+                                       bodo_array_type::STRING,
+                                       Bodo_CTypes::BINARY)
+                default:
+                    throw std::runtime_error(
+                        "ChunkedTableArrayBuilder::UnsafeAppendRows: data "
+                        "type " +
+                        GetDtype_as_string(this->data_array->dtype) +
+                        " not supported!");
+            }
+        } else if (this->data_array->arr_type == bodo_array_type::DICT &&
+                   in_arr->arr_type == bodo_array_type::DICT) {
+            switch (this->data_array->dtype) {
+                CASE_APPEND_ROWS_DTYPE(bodo_array_type::DICT,
+                                       bodo_array_type::DICT,
+                                       Bodo_CTypes::STRING)
+                default:
+                    throw std::runtime_error(
+                        "ChunkedTableArrayBuilder::UnsafeAppendRows: data "
+                        "type " +
+                        GetDtype_as_string(this->data_array->dtype) +
+                        " not supported!");
+            }
+        } else if (this->data_array->arr_type == bodo_array_type::ARRAY_ITEM &&
+                   in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+            switch (this->data_array->dtype) {
+                CASE_APPEND_ROWS_DTYPE(bodo_array_type::ARRAY_ITEM,
+                                       bodo_array_type::ARRAY_ITEM,
+                                       Bodo_CTypes::LIST)
+                default:
+                    throw std::runtime_error(
+                        "ChunkedTableArrayBuilder::UnsafeAppendRows: data "
+                        "type " +
+                        GetDtype_as_string(this->data_array->dtype) +
+                        " not supported!");
+            }
+        } else {
+            throw std::runtime_error(
+                "ArrayBuildBuffer::UnsafeAppendBatch: array type " +
+                GetArrType_as_string(this->data_array->arr_type) +
+                " not supported!");
+        }
+    }
 
     /**
      * @brief Append the rows from in_arr found via
@@ -577,6 +700,30 @@ struct ChunkedTableArrayBuilder {
         this->size += idx_length;
         this->data_array->length = this->size;
     }
+
+    /**
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
+     * This assumes that enough space is available in the buffers
+     * without need to resize. This is useful internally as well
+     * as externally when the caller is tracking available space
+     * themselves.
+     *
+     * This is the implementation where both arrays are nested arrays.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::ARRAY_ITEM &&
+                 in_arr_type == bodo_array_type::ARRAY_ITEM)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length);
 
     /**
      * @brief Determine how many rows can be appended to a given array buffer
