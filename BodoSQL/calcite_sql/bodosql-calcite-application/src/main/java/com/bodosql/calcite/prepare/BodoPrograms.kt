@@ -65,11 +65,6 @@ object BodoPrograms {
         },
         // Multi Join building step.
         if (optimize) {
-            HepOptimizerProgram(BodoRules.FILTER_PUSH_DOWN_RULES)
-        } else {
-            NoopProgram
-        },
-        if (optimize) {
             Programs.of(
                 HepProgramBuilder()
                     // Note: You must build the multi-join BOTTOM_UP
@@ -347,12 +342,11 @@ object BodoPrograms {
         ): RelNode {
             val relBuilder = if (isPhysical) {
                 val physicalBuilder = com.bodosql.calcite.rel.core.BodoPhysicalRelFactories.BODO_PHYSICAL_BUILDER.create(rel.cluster, null)
-                val tmp = physicalBuilder.transform({ t -> t.withBloat(-1) })
-                tmp
+                physicalBuilder.transform({ t -> t.withBloat(-1) })
             } else {
                 com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER.create(rel.cluster, null)
             }
-            return BodoRelFieldTrimmer(null, relBuilder).trim(rel)
+            return BodoRelFieldTrimmer(null, relBuilder, isPhysical).trim(rel)
         }
     }
 
