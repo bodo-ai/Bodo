@@ -53,22 +53,25 @@ void ArrayBuildBuffer::IncrementSize() {
             if (this->data_array->dtype == Bodo_CTypes::_BOOL) {
                 size++;
                 data_array->length = size;
-                CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
-                                    arrow::bit_util::BytesForBits(size), false),
-                                "Resize Failed!");
-                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
-                                    arrow::bit_util::BytesForBits(size), false),
-                                "Resize Failed!");
+                CHECK_ARROW_MEM(
+                    data_array->buffers[0]->Resize(
+                        arrow::bit_util::BytesForBits(size), false),
+                    "ArrayBuildBuffer::IncrementSize: Resize failed!");
+                CHECK_ARROW_MEM(
+                    data_array->buffers[1]->Resize(
+                        arrow::bit_util::BytesForBits(size), false),
+                    "ArrayBuildBuffer::IncrementSize: Resize failed!");
             } else {
                 uint64_t size_type = numpy_item_size[this->data_array->dtype];
                 size++;
                 data_array->length = size;
                 CHECK_ARROW_MEM(
                     data_array->buffers[0]->Resize(size * size_type, false),
-                    "Resize Failed!");
-                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
-                                    arrow::bit_util::BytesForBits(size), false),
-                                "Resize Failed!");
+                    "ArrayBuildBuffer::IncrementSize: Resize failed!");
+                CHECK_ARROW_MEM(
+                    data_array->buffers[1]->Resize(
+                        arrow::bit_util::BytesForBits(size), false),
+                    "ArrayBuildBuffer::IncrementSize: Resize failed!");
             }
         } break;
         case bodo_array_type::STRING: {
@@ -79,10 +82,10 @@ void ArrayBuildBuffer::IncrementSize() {
 
             CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
                                 (size + 1) * sizeof(offset_t), false),
-                            "Resize Failed!");
+                            "ArrayBuildBuffer::IncrementSize: Resize failed!");
             CHECK_ARROW_MEM(data_array->buffers[2]->Resize(
                                 arrow::bit_util::BytesForBits(size), false),
-                            "Resize Failed!");
+                            "ArrayBuildBuffer::IncrementSize: Resize failed!");
         } break;
         case bodo_array_type::DICT: {
             this->dict_indices->IncrementSize();
@@ -95,11 +98,11 @@ void ArrayBuildBuffer::IncrementSize() {
             data_array->length = size;
             CHECK_ARROW_MEM(
                 data_array->buffers[0]->Resize(size * size_type, false),
-                "Resize Failed!");
+                "ArrayBuildBuffer::IncrementSize: Resize failed!");
         } break;
         default:
             throw std::runtime_error(
-                "invalid array type in IncrementSize " +
+                "ArrayBuildBuffer::IncrementSize: Invalid array type " +
                 GetArrType_as_string(this->data_array->arr_type));
     }
 }
@@ -131,8 +134,9 @@ void ArrayBuildBuffer::ReserveSpaceForStringAppend(size_t new_char_count) {
     if (min_capacity_chars > capacity_chars) {
         int64_t new_capacity_chars =
             std::max(min_capacity_chars, capacity_chars * 2);
-        CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(new_capacity_chars),
-                        "Reserve failed!");
+        CHECK_ARROW_MEM(
+            data_array->buffers[0]->Reserve(new_capacity_chars),
+            "ArrayBuildBuffer::ReserveSpaceForStringAppend: Reserve failed!");
     }
 }
 
@@ -231,21 +235,22 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
                     CHECK_ARROW_MEM(
                         this->data_array->buffers[0]->Reserve(
                             arrow::bit_util::BytesForBits(new_capacity)),
-                        "Reserve failed!");
+                        "ArrayBuildBuffer::ReserveSize: Reserve failed!");
                     CHECK_ARROW_MEM(
                         this->data_array->buffers[1]->Reserve(
                             arrow::bit_util::BytesForBits(new_capacity)),
-                        "Reserve failed!");
+                        "ArrayBuildBuffer::ReserveSize: Reserve failed!");
                 } else {
                     uint64_t size_type =
                         numpy_item_size[this->data_array->dtype];
-                    CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(
-                                        new_capacity * size_type),
-                                    "Reserve failed!");
+                    CHECK_ARROW_MEM(
+                        data_array->buffers[0]->Reserve(new_capacity *
+                                                        size_type),
+                        "ArrayBuildBuffer::ReserveSize: Reserve failed!");
                     CHECK_ARROW_MEM(
                         this->data_array->buffers[1]->Reserve(
                             arrow::bit_util::BytesForBits(new_capacity)),
-                        "Reserve failed!");
+                        "ArrayBuildBuffer::ReserveSize: Reserve failed!");
                 }
                 capacity = new_capacity;
             }
@@ -254,13 +259,14 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
             // update offset and null bitmap buffers
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
-                CHECK_ARROW_MEM(data_array->buffers[1]->Reserve(
-                                    (new_capacity + 1) * sizeof(offset_t)),
-                                "Reserve failed!");
+                CHECK_ARROW_MEM(
+                    data_array->buffers[1]->Reserve((new_capacity + 1) *
+                                                    sizeof(offset_t)),
+                    "ArrayBuildBuffer::ReserveSize: Reserve failed!");
                 CHECK_ARROW_MEM(
                     this->data_array->buffers[2]->Reserve(
                         arrow::bit_util::BytesForBits(new_capacity)),
-                    "Reserve failed!");
+                    "ArrayBuildBuffer::ReserveSize: Reserve failed!");
                 capacity = new_capacity;
             }
         } break;
@@ -271,15 +277,16 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
             uint64_t size_type = numpy_item_size[this->data_array->dtype];
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
-                CHECK_ARROW_MEM(this->data_array->buffers[0]->Reserve(
-                                    new_capacity * size_type),
-                                "Reserve failed!");
+                CHECK_ARROW_MEM(
+                    this->data_array->buffers[0]->Reserve(new_capacity *
+                                                          size_type),
+                    "ArrayBuildBuffer::ReserveSize: Reserve failed!");
                 capacity = new_capacity;
             }
         } break;
         default:
             throw std::runtime_error(
-                "invalid array type in ReserveSize " +
+                "ArrayBuildBuffer::ReserveSize: Invalid array type " +
                 GetArrType_as_string(this->data_array->arr_type));
     }
 }
@@ -685,7 +692,7 @@ void TableBuildBuffer::AppendRowKeys(
     uint64_t n_keys) {
     for (size_t i = 0; i < (size_t)n_keys; i++) {
         const std::shared_ptr<array_info>& in_arr = in_table->columns[i];
-        array_buffers[i].AppendRow(in_arr, row_ind);
+        array_buffers[i].UnsafeAppendRow(in_arr, row_ind);
     }
 }
 
