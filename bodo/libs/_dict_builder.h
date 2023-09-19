@@ -31,7 +31,7 @@ struct DictionaryBuilder {
     // hashes of dictionary elements (not actual array elements) to allow
     // consistent hashing (only for dictionary-encoded string arrays that are
     // key columns)
-    std::shared_ptr<bodo::vector<uint32_t>> dict_hashes = nullptr;
+    std::shared_ptr<bodo::vector<uint32_t>> dict_hashes;
     // Input is a key column of its table. This essentially decides
     // whether or not we maintain 'dict_hashes'.
     const bool is_key;

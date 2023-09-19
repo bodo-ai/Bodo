@@ -39,7 +39,8 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
       max_resize_count(_max_resize_count) {
     if (this->data_array->length != 0) {
         throw std::runtime_error(
-            "ChunkedTableArrayBuilder: Length of input array is not 0!");
+            "ChunkedTableArrayBuilder::ChunkedTableArrayBuilder: Length of "
+            "input array is not 0!");
     }
 
     // Get minimum frame size in BufferPool and set that as the
@@ -65,10 +66,12 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
             // TODO XXX Use Reserve here instead of Resize?
             CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
                                 data_buffer_alloc_size, false),
-                            "Resize Failed!");
+                            "ChunkedTableArrayBuilder::"
+                            "ChunkedTableArrayBuilder: Resize failed!");
             CHECK_ARROW_MEM(this->data_array->buffers[1]->Resize(
                                 null_bitmap_buffer_alloc_size, false),
-                            "Resize Failed!");
+                            "ChunkedTableArrayBuilder::"
+                            "ChunkedTableArrayBuilder: Resize failed!");
 
         } break;
         case bodo_array_type::STRING: {
@@ -87,13 +90,16 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
                          min_buffer_allocation_size);
             CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
                                 data_buffer_alloc_size, false),
-                            "Resize Failed!");
+                            "ChunkedTableArrayBuilder::"
+                            "ChunkedTableArrayBuilder: Resize failed!");
             CHECK_ARROW_MEM(this->data_array->buffers[1]->Resize(
                                 offset_buffer_alloc_size, false),
-                            "Resize Failed!");
+                            "ChunkedTableArrayBuilder::"
+                            "ChunkedTableArrayBuilder: Resize failed!");
             CHECK_ARROW_MEM(this->data_array->buffers[2]->Resize(
                                 null_bitmap_buffer_alloc_size, false),
-                            "Resize Failed!");
+                            "ChunkedTableArrayBuilder::"
+                            "ChunkedTableArrayBuilder: Resize failed!");
         } break;
         case bodo_array_type::NUMPY: {
             uint64_t size_type = numpy_item_size[this->data_array->dtype];
@@ -102,18 +108,21 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
                          min_buffer_allocation_size);
             CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
                                 data_buffer_alloc_size, false),
-                            "Resize Failed!");
+                            "ChunkedTableArrayBuilder::"
+                            "ChunkedTableArrayBuilder: Resize failed!");
         } break;
         case bodo_array_type::DICT: {
             if (_dict_builder == nullptr) {
                 throw std::runtime_error(
-                    "ChunkedTableArrayBuilder: dict_builder is nullptr for a "
+                    "ChunkedTableArrayBuilder::ChunkedTableArrayBuilder: "
+                    "dict_builder is nullptr for a "
                     "dict-encoded string array!");
             }
             if (_dict_builder->dict_buff->data_array.get() !=
                 this->data_array->child_arrays[0].get()) {
                 throw std::runtime_error(
-                    "ChunkedTableArrayBuilder: specified dict_builder does not "
+                    "ChunkedTableArrayBuilder::ChunkedTableArrayBuilder: "
+                    "specified dict_builder does not "
                     "match dictionary of _data_array!");
             }
             // Recursively call the constructor on the indices array.
@@ -123,7 +132,8 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
         } break;
         default:
             throw std::runtime_error(
-                "Invalid array type in ChunkedTableArrayBuilder: " +
+                "ChunkedTableArrayBuilder::ChunkedTableArrayBuilder: Invalid "
+                "array type " +
                 GetArrType_as_string(this->data_array->arr_type));
     }
 }
@@ -175,19 +185,22 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
                 std::max(data_buffer_req_size, min_buffer_allocation_size);
             int64_t null_bitmap_buffer_alloc_size = std::max(
                 null_bitmap_buffer_req_size, min_buffer_allocation_size);
-            CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
-                                data_buffer_alloc_size, shrink_to_fit),
-                            "Resize Failed!");
-            CHECK_ARROW_MEM(this->data_array->buffers[1]->Resize(
-                                null_bitmap_buffer_alloc_size, shrink_to_fit),
-                            "Resize Failed!");
-            CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
-                                data_buffer_req_size, /*shrink_to_fit*/ false),
-                            "Resize Failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[0]->Resize(data_buffer_alloc_size,
+                                                     shrink_to_fit),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[1]->Resize(
+                    null_bitmap_buffer_alloc_size, shrink_to_fit),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[0]->Resize(data_buffer_req_size,
+                                                     /*shrink_to_fit*/ false),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
             CHECK_ARROW_MEM(
                 this->data_array->buffers[1]->Resize(
                     null_bitmap_buffer_req_size, /*shrink_to_fit*/ false),
-                "Resize Failed!");
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
 
         } break;
         case bodo_array_type::STRING: {
@@ -203,27 +216,31 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
                 ::arrow::bit_util::BytesForBits(this->size);
             int64_t null_bitmap_buffer_alloc_size = std::max(
                 null_bitmap_buffer_req_size, min_buffer_allocation_size);
-            CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
-                                data_buffer_alloc_size, shrink_to_fit),
-                            "Resize Failed!");
-            CHECK_ARROW_MEM(this->data_array->buffers[1]->Resize(
-                                offset_buffer_alloc_size, shrink_to_fit),
-                            "Resize Failed!");
-            CHECK_ARROW_MEM(this->data_array->buffers[2]->Resize(
-                                null_bitmap_buffer_alloc_size, shrink_to_fit),
-                            "Resize Failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[0]->Resize(data_buffer_alloc_size,
+                                                     shrink_to_fit),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[1]->Resize(offset_buffer_alloc_size,
+                                                     shrink_to_fit),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[2]->Resize(
+                    null_bitmap_buffer_alloc_size, shrink_to_fit),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
             // TODO Replace these Resize calls with SetSize
-            CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
-                                data_buffer_req_size, /*shrink_to_fit*/ false),
-                            "Resize Failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[0]->Resize(data_buffer_req_size,
+                                                     /*shrink_to_fit*/ false),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
             CHECK_ARROW_MEM(
                 this->data_array->buffers[1]->Resize(offset_buffer_req_size,
                                                      /*shrink_to_fit*/ false),
-                "Resize Failed!");
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
             CHECK_ARROW_MEM(
                 this->data_array->buffers[2]->Resize(
                     null_bitmap_buffer_req_size, /*shrink_to_fit*/ false),
-                "Resize Failed!");
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
         } break;
         case bodo_array_type::NUMPY: {
             uint64_t size_type = numpy_item_size[this->data_array->dtype];
@@ -231,12 +248,14 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
                 static_cast<int64_t>(this->size * size_type);
             int64_t data_buffer_alloc_size =
                 std::max(data_buffer_req_size, min_buffer_allocation_size);
-            CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
-                                data_buffer_alloc_size, shrink_to_fit),
-                            "Resize Failed!");
-            CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
-                                data_buffer_req_size, /*shrink_to_fit*/ false),
-                            "Resize Failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[0]->Resize(data_buffer_alloc_size,
+                                                     shrink_to_fit),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[0]->Resize(data_buffer_req_size,
+                                                     /*shrink_to_fit*/ false),
+                "ChunkedTableArrayBuilder::Finalize: Resize failed!");
         } break;
         case bodo_array_type::DICT: {
             // Call recursively on the indices array
@@ -244,7 +263,7 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
         } break;
         default: {
             throw std::runtime_error(
-                "Invalid array type in ChunkedTableArrayBuilder::Finalize: " +
+                "ChunkedTableArrayBuilder::Finalize: Invalid array type " +
                 GetArrType_as_string(this->data_array->arr_type));
         }
     }
@@ -258,21 +277,21 @@ void ChunkedTableArrayBuilder::Reset() {
         // TODO XXX Use SetSize here instead of Resize?
         case bodo_array_type::NULLABLE_INT_BOOL: {
             CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
-                            "Resize failed!");
+                            "ChunkedTableArrayBuilder::Reset: Resize failed!");
             CHECK_ARROW_MEM(data_array->buffers[1]->Resize(0, false),
-                            "Resize failed!");
+                            "ChunkedTableArrayBuilder::Reset: Resize failed!");
         } break;
         case bodo_array_type::NUMPY: {
             CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
-                            "Resize failed!");
+                            "ChunkedTableArrayBuilder::Reset: Resize failed!");
         } break;
         case bodo_array_type::STRING: {
             CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
-                            "Resize failed!");
+                            "ChunkedTableArrayBuilder::Reset: Resize failed!");
             CHECK_ARROW_MEM(data_array->buffers[1]->Resize(0, false),
-                            "Resize failed!");
+                            "ChunkedTableArrayBuilder::Reset: Resize failed!");
             CHECK_ARROW_MEM(data_array->buffers[2]->Resize(0, false),
-                            "Resize failed!");
+                            "ChunkedTableArrayBuilder::Reset: Resize failed!");
         } break;
         case bodo_array_type::DICT: {
             this->dict_indices->Reset();
@@ -283,7 +302,8 @@ void ChunkedTableArrayBuilder::Reset() {
         } break;
         default: {
             throw std::runtime_error(
-                "invalid array type in Clear " +
+                "ChunkedTableArrayBuilder::Reset: Invalid array type in "
+                "Clear " +
                 GetArrType_as_string(data_array->arr_type));
         }
     }

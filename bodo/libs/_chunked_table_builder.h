@@ -26,7 +26,7 @@ struct ChunkedTableArrayBuilder {
     std::shared_ptr<array_info> data_array;
 
     // Shared dictionary builder
-    std::shared_ptr<DictionaryBuilder> dict_builder = nullptr;
+    std::shared_ptr<DictionaryBuilder> dict_builder;
     // Dictionary indices buffer for appending dictionary indices (only for
     // dictionary-encoded string arrays)
     std::shared_ptr<ChunkedTableArrayBuilder> dict_indices;
@@ -826,7 +826,7 @@ struct ChunkedTableArrayBuilder {
         buffer_size = std::max(buffer_size, total_memory);
         CHECK_ARROW_MEM(
             this->data_array->buffers[0]->Resize(buffer_size, false),
-            "Resize Failed!");
+            "ChunkedTableArrayBuilder::AppendRows: Resize failed!");
         // Now simply append into the buffer.
         this->UnsafeAppendRows<out_arr_type, in_arr_type, dtype>(
             in_arr, idxs, idx_start, idx_length);
