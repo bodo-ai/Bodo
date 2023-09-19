@@ -97,7 +97,6 @@ def _get_cat_index_type(elem_type):
 
 @lower_constant(PDCategoricalDtype)
 def lower_constant_categorical_type(context, builder, typ, pyval):
-
     categories = context.get_constant_generic(
         builder, bodo.typeof(pyval.categories), pyval.categories
     )
@@ -1160,7 +1159,6 @@ def categorical_array_setitem(arr, ind, val):
 
     # scalar case
     if isinstance(ind, types.Integer):
-
         if not is_scalar_match:
             raise BodoError(typ_err_msg)
 
@@ -1176,7 +1174,6 @@ def categorical_array_setitem(arr, ind, val):
 
     # array of int indices
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
-
         if not (
             is_scalar_match
             or is_arr_rhs
@@ -1242,7 +1239,6 @@ def categorical_array_setitem(arr, ind, val):
 
     # bool array
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
-
         if not (
             is_scalar_match
             or is_arr_rhs
@@ -1319,7 +1315,6 @@ def categorical_array_setitem(arr, ind, val):
 
     # slice case
     if isinstance(ind, types.SliceType):
-
         if not (
             is_scalar_match
             or is_arr_rhs

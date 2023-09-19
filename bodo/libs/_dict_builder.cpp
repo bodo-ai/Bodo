@@ -26,7 +26,7 @@ inline dict_indices_t DictionaryBuilder::InsertIfNotExists(
         ind = this->dict_str_to_ind->size();
         // TODO: remove std::string() after upgrade to C++23
         (*this->dict_str_to_ind)[std::string(val)] = ind;
-        this->dict_buff->AppendRow(in_arr, idx);
+        this->dict_buff->UnsafeAppendRow(in_arr, idx);
         if (this->is_key) {
             uint32_t hash;
             hash_string_32(&in_data[start_offset], (const int)len,
