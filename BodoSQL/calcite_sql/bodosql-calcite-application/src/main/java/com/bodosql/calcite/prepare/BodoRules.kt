@@ -20,6 +20,12 @@ import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminati
 import com.bodosql.calcite.application.logicalRules.RexSimplificationRule
 import com.bodosql.calcite.application.logicalRules.TrivialProjectJoinTransposeRule
 import com.bodosql.calcite.application.logicalRules.VolcanoAcceptingAggregateProjectPullUpConstantsRule
+import com.bodosql.calcite.prepare.MultiJoinRules.FILTER_MULTI_JOIN_MERGE
+import com.bodosql.calcite.prepare.MultiJoinRules.JOIN_TO_MULTI_JOIN
+import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_BOTH_PROJECT
+import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_LEFT_PROJECT
+import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_RIGHT_PROJECT
+import com.bodosql.calcite.prepare.MultiJoinRules.PROJECT_MULTI_JOIN_MERGE
 import com.bodosql.calcite.rel.core.BodoLogicalRelFactories
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
@@ -36,7 +42,6 @@ import org.apache.calcite.rel.rules.AggregateProjectMergeRule
 import org.apache.calcite.rel.rules.FilterJoinRule
 import org.apache.calcite.rel.rules.JoinCommuteRule
 import org.apache.calcite.rel.rules.JoinPushTransitivePredicatesRule
-import org.apache.calcite.rel.rules.JoinToMultiJoinRule
 import org.apache.calcite.rel.rules.LoptOptimizeJoinRule
 import org.apache.calcite.rel.rules.ProjectAggregateMergeRule
 import org.apache.calcite.rel.rules.ProjectFilterTransposeRule
@@ -389,16 +394,6 @@ object BodoRules {
             .toRule()
 
     /**
-     * Gather join nodes into a single multi join for optimization.
-     */
-    @JvmField
-    val JOIN_TO_MULTI_JOIN: RelOptRule =
-        JoinToMultiJoinRule.Config.DEFAULT
-            .withOperandFor(BodoLogicalJoin::class.java)
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
-            .toRule()
-
-    /**
      * Allow join inputs to be swapped. This is kept to reorder outer joins
      * until we are certain it will be handled by multi-join, but then it should
      * be removed.
@@ -517,7 +512,15 @@ object BodoRules {
      * These are the rules to construct a MultiJoin
      */
     val MULTI_JOIN_CONSTRUCTION_RULES: List<RelOptRule> = listOf(
+        MULTI_JOIN_BOTH_PROJECT,
+        MULTI_JOIN_LEFT_PROJECT,
+        MULTI_JOIN_RIGHT_PROJECT,
         JOIN_TO_MULTI_JOIN,
+        PROJECT_MULTI_JOIN_MERGE,
+        FILTER_MULTI_JOIN_MERGE,
+        // Need to merge filters/projects to prevent blocking multi-joins.
+        PROJECT_MERGE_RULE,
+        FILTER_MERGE_RULE,
     )
 
     /**
