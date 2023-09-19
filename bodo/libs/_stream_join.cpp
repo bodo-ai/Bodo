@@ -814,6 +814,8 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
       build_arr_array_types(build_arr_array_types_),
       probe_arr_c_types(probe_arr_c_types_),
       probe_arr_array_types(probe_arr_array_types_),
+      build_col_to_idx_map(get_col_idx_map(build_arr_array_types_)),
+      probe_col_to_idx_map(get_col_idx_map(probe_arr_array_types_)),
       n_keys(n_keys_),
       cond_func(cond_func_),
       build_table_outer(build_table_outer_),
@@ -827,8 +829,10 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
 
     // Create dictionary builders for key columns:
     for (uint64_t i = 0; i < this->n_keys; i++) {
-        if (build_arr_array_types[i] == bodo_array_type::DICT) {
-            if (probe_arr_array_types[i] != bodo_array_type::DICT) {
+        if (this->build_arr_array_types[this->build_col_to_idx_map[i]] ==
+            bodo_array_type::DICT) {
+            if (this->probe_arr_array_types[this->probe_col_to_idx_map[i]] !=
+                bodo_array_type::DICT) {
                 throw std::runtime_error(
                     "HashJoinState: Key column array types don't match "
                     "between build and probe tables!");
@@ -849,8 +853,9 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
     std::vector<std::shared_ptr<DictionaryBuilder>>
         build_table_non_key_dict_builders;
     // Create dictionary builders for non-key columns in build table:
-    for (size_t i = this->n_keys; i < this->build_arr_array_types.size(); i++) {
-        if (this->build_arr_array_types[i] == bodo_array_type::DICT) {
+    for (size_t i = this->n_keys; i < this->build_col_to_idx_map.size(); i++) {
+        if (this->build_arr_array_types[this->build_col_to_idx_map[i]] ==
+            bodo_array_type::DICT) {
             std::shared_ptr<array_info> dict = alloc_array(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             build_table_non_key_dict_builders.emplace_back(
@@ -863,8 +868,9 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
     std::vector<std::shared_ptr<DictionaryBuilder>>
         probe_table_non_key_dict_builders;
     // Create dictionary builders for non-key columns in probe table:
-    for (size_t i = this->n_keys; i < this->probe_arr_array_types.size(); i++) {
-        if (this->probe_arr_array_types[i] == bodo_array_type::DICT) {
+    for (size_t i = this->n_keys; i < this->probe_col_to_idx_map.size(); i++) {
+        if (this->probe_arr_array_types[this->probe_col_to_idx_map[i]] ==
+            bodo_array_type::DICT) {
             std::shared_ptr<array_info> dict = alloc_array(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             probe_table_non_key_dict_builders.emplace_back(
@@ -904,44 +910,62 @@ void JoinState::InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
     }
     std::vector<int8_t> arr_c_types, arr_array_types;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+
+    // Note: with the support of nested array type, these reserve is not
+    // accurate anymore but still a valid lowerbound
     arr_c_types.reserve(probe_kept_cols.size() + build_kept_cols.size());
     arr_array_types.reserve(probe_kept_cols.size() + build_kept_cols.size());
     dict_builders.reserve(probe_kept_cols.size() + build_kept_cols.size());
+
     for (uint64_t i_col : probe_kept_cols) {
-        bodo_array_type::arr_type_enum arr_type =
-            (bodo_array_type::arr_type_enum)this->probe_arr_array_types[i_col];
-        Bodo_CTypes::CTypeEnum dtype =
-            (Bodo_CTypes::CTypeEnum)this->probe_arr_c_types[i_col];
-        // In the build outer case, we need to make NUMPY arrays
-        // into NULLABLE arrays. Matches the `use_nullable_arrs`
-        // behavior of RetrieveTable.
-        if (this->build_table_outer && ((arr_type == bodo_array_type::NUMPY) &&
-                                        (is_integer(dtype) || is_float(dtype) ||
-                                         dtype == Bodo_CTypes::_BOOL))) {
-            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+        size_t end_idx = i_col == probe_col_to_idx_map.size() - 1
+                             ? this->probe_arr_array_types.size()
+                             : this->probe_col_to_idx_map[i_col + 1];
+        for (size_t i = this->probe_col_to_idx_map[i_col]; i < end_idx; ++i) {
+            bodo_array_type::arr_type_enum arr_type =
+                (bodo_array_type::arr_type_enum)this->probe_arr_array_types[i];
+            Bodo_CTypes::CTypeEnum dtype =
+                (Bodo_CTypes::CTypeEnum)this->probe_arr_c_types[i];
+            // In the build outer case, we need to make NUMPY arrays
+            // into NULLABLE arrays. Matches the `use_nullable_arrs`
+            // behavior of RetrieveTable.
+            if (this->build_table_outer &&
+                ((arr_type == bodo_array_type::NUMPY) &&
+                 (is_integer(dtype) || is_float(dtype) ||
+                  dtype == Bodo_CTypes::_BOOL))) {
+                arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+            }
+            arr_c_types.push_back(dtype);
+            arr_array_types.push_back(arr_type);
         }
-        arr_c_types.push_back(dtype);
-        arr_array_types.push_back(arr_type);
         dict_builders.push_back(this->probe_table_dict_builders[i_col]);
     }
+
     for (uint64_t i_col : build_kept_cols) {
-        bodo_array_type::arr_type_enum arr_type =
-            (bodo_array_type::arr_type_enum)this->build_arr_array_types[i_col];
-        Bodo_CTypes::CTypeEnum dtype =
-            (Bodo_CTypes::CTypeEnum)this->build_arr_c_types[i_col];
-        // In the probe outer case, we need to make NUMPY arrays
-        // into NULLABLE arrays. Matches the `use_nullable_arrs`
-        // behavior of RetrieveTable.
-        // TODO: Move to a helper function.
-        if (this->probe_table_outer && ((arr_type == bodo_array_type::NUMPY) &&
-                                        (is_integer(dtype) || is_float(dtype) ||
-                                         dtype == Bodo_CTypes::_BOOL))) {
-            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+        size_t end_idx = i_col == build_col_to_idx_map.size() - 1
+                             ? this->build_arr_array_types.size()
+                             : this->build_col_to_idx_map[i_col + 1];
+        for (size_t i = this->build_col_to_idx_map[i_col]; i < end_idx; ++i) {
+            bodo_array_type::arr_type_enum arr_type =
+                (bodo_array_type::arr_type_enum)this->build_arr_array_types[i];
+            Bodo_CTypes::CTypeEnum dtype =
+                (Bodo_CTypes::CTypeEnum)this->build_arr_c_types[i];
+            // In the probe outer case, we need to make NUMPY arrays
+            // into NULLABLE arrays. Matches the `use_nullable_arrs`
+            // behavior of RetrieveTable.
+            // TODO: Move to a helper function.
+            if (this->probe_table_outer &&
+                ((arr_type == bodo_array_type::NUMPY) &&
+                 (is_integer(dtype) || is_float(dtype) ||
+                  dtype == Bodo_CTypes::_BOOL))) {
+                arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+            }
+            arr_c_types.push_back(dtype);
+            arr_array_types.push_back(arr_type);
         }
-        arr_c_types.push_back(dtype);
-        arr_array_types.push_back(arr_type);
         dict_builders.push_back(this->build_table_dict_builders[i_col]);
     }
+
     this->output_buffer = std::make_shared<ChunkedTableBuilder>(
         arr_c_types, arr_array_types, dict_builders,
         /*chunk_size*/ this->output_batch_size,
@@ -2534,7 +2558,7 @@ uint32_t get_partition_num_top_bits_by_idx(JoinState* join_state, int64_t idx) {
     try {
         std::vector<std::shared_ptr<JoinPartition>>& partitions =
             ((HashJoinState*)join_state)->partitions;
-        if (idx >= static_cast<int64_t>(partitions.size())) {
+        if (static_cast<size_t>(idx) >= partitions.size()) {
             throw std::runtime_error(
                 "get_partition_num_top_bits_by_idx: partition index " +
                 std::to_string(idx) + " out of bound: " + std::to_string(idx) +
