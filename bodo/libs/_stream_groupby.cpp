@@ -99,10 +99,14 @@ inline void update_groups(
  * @brief Call groupby update function on new input batch data and return the
  * output update table
  *
+ * @tparam is_acc_case Is the function being called in the accumulating code
+ * path. This allows us to specialize certain operations for the large input
+ * case.
  * @param groupby_state streaming groupby state
  * @param in_table input batch table
  * @return std::shared_ptr<table_info> output update table
  */
+template <bool is_acc_case>
 std::shared_ptr<table_info> get_update_table(
     GroupbyState* groupby_state, std::shared_ptr<table_info> in_table) {
     // empty function set means drop_duplicates operation, which doesn't require
@@ -117,12 +121,21 @@ std::shared_ptr<table_info> get_update_table(
         in_table, groupby_state->n_keys, SEED_HASH_GROUPBY_SHUFFLE, false);
 
     std::vector<std::shared_ptr<table_info>> tables = {in_table};
-    // In the case of streaming groupby, we don't need to estimate the number of
-    // unique hashes. We can just use the number of rows in the input table
-    // since the batches are so small. This has been tested to be faster than
-    // estimating the number of unique hashes based on previous batches as well
-    // as using HLL.
-    size_t nunique_hashes = in_table->nrows();
+
+    size_t nunique_hashes = 0;
+    if (is_acc_case) {
+        // In the accumulating code path case, we have the entire input, so
+        // it's better to get an actual estimate using HLL.
+        nunique_hashes = get_nunique_hashes(
+            batch_hashes_groupby, in_table->nrows(), groupby_state->parallel);
+    } else {
+        // In the case of streaming groupby, we don't need to estimate the
+        // number of unique hashes. We can just use the number of rows in the
+        // input table since the batches are so small. This has been tested to
+        // be faster than estimating the number of unique hashes based on
+        // previous batches as well as using HLL.
+        nunique_hashes = in_table->nrows();
+    }
     std::vector<grouping_info> grp_infos;
 
     if (groupby_state->req_extended_group_info) {
@@ -292,7 +305,7 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
     // Unify dictionaries keys to allow consistent hashing and fast key
     // comparison using indices
     in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table, true);
-    in_table = get_update_table(groupby_state, in_table);
+    in_table = get_update_table</*is_acc_case*/ false>(groupby_state, in_table);
 
     // Dictionary hashes for the key columns which will be used for
     // the partitioning hashes:
@@ -557,8 +570,9 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
 
     // compute output when all input batches are accumulated
     if (is_last) {
-        std::shared_ptr<table_info> output_table = get_update_table(
-            groupby_state, groupby_state->local_table_buffer->data_table);
+        std::shared_ptr<table_info> output_table =
+            get_update_table</*is_acc_case*/ true>(
+                groupby_state, groupby_state->local_table_buffer->data_table);
         groupby_state->FinalizeBuild(std::move(output_table));
     }
 
