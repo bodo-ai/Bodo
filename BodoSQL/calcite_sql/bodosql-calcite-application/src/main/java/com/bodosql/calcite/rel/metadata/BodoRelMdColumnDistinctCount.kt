@@ -68,7 +68,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             // For default filters assume the ratio remains the same after filtering.
             val distinctInput = (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
             val ratio = mq.getRowCount(rel) / mq.getRowCount(rel.input)
-            return distinctInput?.times(ratio)
+            return distinctInput?.let { maxOf(distinctInput.times(ratio), 1.0) }
         }
     }
 
@@ -112,9 +112,17 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             } else {
                 column - leftCount
             }
+            // 1.0 if the join can create nulls in this column, otherwise 0.0.
+            val extraValue =
+                if ((isLeftInput && rel.getJoinType().generatesNullsOnLeft()) ||
+                    (!isLeftInput && rel.getJoinType().generatesNullsOnRight())
+                ) { 1.0 } else { 0.0 }
+            // Assume the ratio remains the same after filtering with the caveat that the number
+            // of distinct rows cannot increase as a result of joining, except for one new value
+            // that could be introduced as the result of creating nulls.
             val distinctInput = (mq as BodoRelMetadataQuery).getColumnDistinctCount(input, inputColumn)
-            val ratio = mq.getRowCount(rel) / mq.getRowCount(input)
-            return distinctInput?.times(ratio)
+            val ratio = minOf(mq.getRowCount(rel) / mq.getRowCount(input), 1.0)
+            return distinctInput?.let { maxOf(distinctInput.times(ratio), 1.0) + extraValue }
         }
     }
 
@@ -132,7 +140,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
                 val inputColumn = rel.groupSet.asList()[column]
                 val distinctInput = (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, inputColumn)
                 val ratio = mq.getRowCount(rel) / mq.getRowCount(rel.input)
-                return distinctInput?.times(ratio)
+                return distinctInput?.let { maxOf(distinctInput.times(ratio), 1.0) }
             }
         }
     }
