@@ -1,4 +1,5 @@
 #include "_bodo_common.h"
+#include "_array_utils.h"
 #include "_bodo_to_arrow.h"
 #include "_distributed.h"
 
@@ -174,13 +175,56 @@ std::unique_ptr<array_info> alloc_array_item(
     int64_t n_bytes = (int64_t)((n_arrays + 7) >> 3);
     std::unique_ptr<BodoBuffer> null_bitmap_buffer =
         AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8, pool, std::move(mm));
-    // setting all to non-null to avoid unexpected issues
+    // Set offset buffer to all zeros. Not setting this will result in known
+    // errors as we use offsets[size] as a reference when appending new rows.
+    memset(offsets_buffer->mutable_data(), 0,
+           (n_arrays + 1) * sizeof(offset_t));
+    // Set null bitmask to all ones to avoid unexpected issues
     memset(null_bitmap_buffer->mutable_data(), 0xff, n_bytes);
     return std::make_unique<array_info>(
         bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST, n_arrays,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {std::move(offsets_buffer), std::move(null_bitmap_buffer)}),
         std::vector<std::shared_ptr<array_info>>({inner_arr}));
+}
+
+std::unique_ptr<array_info> alloc_array_item(
+    int64_t n_arrays, size_t start_idx, size_t end_idx,
+    const std::vector<int8_t>& arr_array_types,
+    const std::vector<int8_t>& arr_c_types, bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    if (start_idx + 1 == end_idx) {
+        // We have reached the bottom level of the nested array. Create the
+        // inner array and return.
+        return alloc_array(
+            n_arrays, 0, 0,
+            (bodo_array_type::arr_type_enum)arr_array_types[start_idx],
+            (Bodo_CTypes::CTypeEnum)arr_c_types[start_idx], -1, 0, 0, false,
+            false, false, pool, mm);
+    } else {
+        std::unique_ptr<array_info> inner_array =
+            alloc_array_item(n_arrays, start_idx + 1, end_idx, arr_array_types,
+                             arr_c_types, pool, mm);
+        return alloc_array_item(n_arrays, std::move(inner_array), pool, mm);
+    }
+}
+
+std::unique_ptr<array_info> alloc_array_item_like(
+    std::shared_ptr<array_info> array, bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    if (array->arr_type != bodo_array_type::ARRAY_ITEM) {
+        throw std::runtime_error("alloc_array_item_like: array type (" +
+                                 GetArrType_as_string(array->arr_type) +
+                                 ") not supported: only nested array type "
+                                 "(ARRAY_ITEM) is accepted.");
+    }
+    std::shared_ptr<array_info> inner_array =
+        array->child_arrays[0]->arr_type == bodo_array_type::ARRAY_ITEM
+            ? alloc_array_item_like(array->child_arrays[0], pool, mm)
+            : alloc_array(0, 0, 0, array->child_arrays[0]->arr_type,
+                          array->child_arrays[0]->dtype, -1, 0, 0, false, false,
+                          false, pool, mm);
+    return alloc_array_item(0, inner_array, pool, mm);
 }
 
 std::unique_ptr<array_info> alloc_categorical(
@@ -539,8 +583,15 @@ std::unique_ptr<array_info> alloc_array(
         case bodo_array_type::DICT:
             return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
                                            pool, std::move(mm));
+        case bodo_array_type::ARRAY_ITEM:
+            throw std::runtime_error(
+                "alloc_array: nested array type (ARRAY_ITEM) is not supported "
+                "by alloc_array. Use alloc_array_item or alloc_array_item_like "
+                "instead.");
         default:
-            throw std::runtime_error("Type not covered in alloc_array");
+            throw std::runtime_error("alloc_array: array type (" +
+                                     GetArrType_as_string(arr_type) +
+                                     ") not supported");
     }
 }
 
@@ -843,6 +894,38 @@ get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table) {
         arr_array_types[i] = table->columns[i]->arr_type;
     }
     return std::make_tuple(arr_c_types, arr_array_types);
+}
+
+void get_next_col_arr_type(size_t& start_idx, size_t& end_idx,
+                           const std::vector<int8_t>& arr_array_types) {
+    if (arr_array_types.back() == bodo_array_type::ARRAY_ITEM) {
+        throw std::runtime_error(
+            "get_next_arr_type: The last array type cannot be ARRAY_ITEM: "
+            "inner array type needs to be provided!");
+    }
+    start_idx = end_idx;
+    if (end_idx < arr_array_types.size()) {
+        while (end_idx < arr_array_types.size() &&
+               arr_array_types[end_idx] == bodo_array_type::ARRAY_ITEM) {
+            ++end_idx;
+        }
+        ++end_idx;
+    }
+}
+
+std::vector<size_t> get_col_idx_map(
+    const std::vector<int8_t>& arr_array_types) {
+    std::vector<size_t> col_idx_map;
+
+    size_t start_idx, end_idx = 0;
+    // Get the initial range
+    get_next_col_arr_type(start_idx, end_idx, arr_array_types);
+    while (start_idx < arr_array_types.size()) {
+        col_idx_map.push_back(start_idx);
+        get_next_col_arr_type(start_idx, end_idx, arr_array_types);
+    }
+
+    return col_idx_map;
 }
 
 // get memory alloc/free info from _meminfo.h

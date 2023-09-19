@@ -130,6 +130,22 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
                 this->data_array->child_arrays[1], nullptr, chunk_size,
                 _max_resize_count);
         } break;
+        case bodo_array_type::ARRAY_ITEM: {
+            this->inner_array_builder = std::make_shared<ArrayBuildBuffer>(
+                this->data_array->child_arrays[0]);
+            int64_t offset_buffer_alloc_size = std::max(
+                static_cast<int64_t>((this->capacity + 1) * sizeof(offset_t)),
+                min_buffer_allocation_size);
+            int64_t null_bitmap_buffer_alloc_size =
+                std::max(::arrow::bit_util::BytesForBits(this->capacity),
+                         min_buffer_allocation_size);
+            CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
+                                offset_buffer_alloc_size, false),
+                            "Resize Failed!");
+            CHECK_ARROW_MEM(this->data_array->buffers[1]->Resize(
+                                null_bitmap_buffer_alloc_size, false),
+                            "Resize Failed!");
+        } break;
         default:
             throw std::runtime_error(
                 "ChunkedTableArrayBuilder::ChunkedTableArrayBuilder: Invalid "
@@ -159,6 +175,44 @@ bool ChunkedTableArrayBuilder::CanResize() {
         return (this->resize_count < this->max_resize_count);
     }
     return false;
+}
+
+template <bodo_array_type::arr_type_enum out_arr_type,
+          bodo_array_type::arr_type_enum in_arr_type,
+          Bodo_CTypes::CTypeEnum dtype>
+    requires(out_arr_type == bodo_array_type::ARRAY_ITEM &&
+             in_arr_type == bodo_array_type::ARRAY_ITEM)
+void ChunkedTableArrayBuilder::UnsafeAppendRows(
+    const std::shared_ptr<array_info>& in_arr,
+    const std::span<const int64_t> idxs, size_t idx_start, size_t idx_length) {
+    offset_t* out_offsets = (offset_t*)this->data_array->data1();
+    offset_t* in_offsets = (offset_t*)in_arr->data1();
+
+    uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
+    const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+
+    for (size_t i = 0; i < idx_length; i++) {
+        int64_t row_idx = idxs[i + idx_start];
+        // Copy the offsets
+        offset_t new_length =
+            row_idx < 0 ? 0 : in_offsets[row_idx + 1] - in_offsets[row_idx];
+        out_offsets[this->size + i + 1] =
+            out_offsets[this->size + i] + new_length;
+        // Copy the null bitmap
+        bool null_bit = (row_idx >= 0) && GetBit(in_bitmask, row_idx);
+        SetBitTo(out_bitmask, this->size + i, null_bit);
+        // Append rows for inner array
+        for (offset_t j = in_offsets[row_idx]; j < in_offsets[row_idx + 1];
+             j++) {
+            this->inner_array_builder->ReserveArrayRow(in_arr->child_arrays[0],
+                                                       j);
+            this->inner_array_builder->UnsafeAppendRow(in_arr->child_arrays[0],
+                                                       static_cast<int64_t>(j));
+        }
+    }
+
+    this->size += idx_length;
+    this->data_array->length = this->size;
 }
 
 void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
@@ -261,6 +315,30 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
             // Call recursively on the indices array
             this->dict_indices->Finalize(shrink_to_fit);
         } break;
+        case bodo_array_type::ARRAY_ITEM: {
+            int64_t offset_buffer_req_size =
+                static_cast<int64_t>((this->size + 1) * sizeof(offset_t));
+            int64_t offset_buffer_alloc_size =
+                std::max(offset_buffer_req_size, min_buffer_allocation_size);
+            int64_t null_bitmap_buffer_req_size =
+                ::arrow::bit_util::BytesForBits(this->size);
+            int64_t null_bitmap_buffer_alloc_size = std::max(
+                null_bitmap_buffer_req_size, min_buffer_allocation_size);
+            CHECK_ARROW_MEM(this->data_array->buffers[0]->Resize(
+                                offset_buffer_alloc_size, shrink_to_fit),
+                            "Resize Failed!");
+            CHECK_ARROW_MEM(this->data_array->buffers[1]->Resize(
+                                null_bitmap_buffer_alloc_size, shrink_to_fit),
+                            "Resize Failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[0]->Resize(offset_buffer_req_size,
+                                                     /*shrink_to_fit*/ false),
+                "Resize Failed!");
+            CHECK_ARROW_MEM(
+                this->data_array->buffers[1]->Resize(
+                    null_bitmap_buffer_req_size, /*shrink_to_fit*/ false),
+                "Resize Failed!");
+        } break;
         default: {
             throw std::runtime_error(
                 "ChunkedTableArrayBuilder::Finalize: Invalid array type " +
@@ -322,8 +400,8 @@ ChunkedTableBuilder::ChunkedTableBuilder(
       active_chunk_capacity(chunk_size),
       max_resize_count_for_variable_size_dtypes(
           max_resize_count_for_variable_size_dtypes_) {
-    this->active_chunk_array_builders.reserve(arr_c_types.size());
-    for (size_t i = 0; i < arr_c_types.size(); i++) {
+    this->active_chunk_array_builders.reserve(active_chunk->ncols());
+    for (size_t i = 0; i < active_chunk->ncols(); i++) {
         if (active_chunk->columns[i]->arr_type == bodo_array_type::DICT) {
             // Set the dictionary to the one from the dict builder:
             this->active_chunk->columns[i]->child_arrays[0] =
@@ -458,6 +536,8 @@ void ChunkedTableBuilder::AppendBatch(
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::STRING);
             } else if (in_arr->arr_type == bodo_array_type::DICT) {
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::DICT);
+            } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+                NUM_ROWS_CAN_APPEND_COL(bodo_array_type::ARRAY_ITEM);
             }
         }
         // Append the actual rows.
@@ -843,6 +923,12 @@ void ChunkedTableBuilder::AppendBatch(
                     APPEND_ROWS_COL(bodo_array_type::DICT,
                                     bodo_array_type::DICT, Bodo_CTypes::STRING);
                 }
+            } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+                if (in_arr->dtype == Bodo_CTypes::LIST) {
+                    APPEND_ROWS_COL(bodo_array_type::ARRAY_ITEM,
+                                    bodo_array_type::ARRAY_ITEM,
+                                    Bodo_CTypes::LIST);
+                }
             }
             if (!found_match) {
                 throw std::runtime_error(
@@ -948,6 +1034,8 @@ void ChunkedTableBuilder::AppendJoinOutput(
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::STRING);
             } else if (col->arr_type == bodo_array_type::DICT) {
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::DICT);
+            } else if (col->arr_type == bodo_array_type::ARRAY_ITEM) {
+                NUM_ROWS_CAN_APPEND_COL(bodo_array_type::ARRAY_ITEM);
             }
         }
         // Append the actual rows.
@@ -1222,6 +1310,16 @@ void ChunkedTableBuilder::AppendJoinOutput(
                 if (col->dtype == Bodo_CTypes::STRING) {
                     APPEND_ROWS_COL(bodo_array_type::DICT,
                                     bodo_array_type::DICT, Bodo_CTypes::STRING);
+                }
+            }
+
+            // NESTED ARRAY
+            else if (out_arr_type == bodo_array_type::ARRAY_ITEM &&
+                     in_arr_type == bodo_array_type::ARRAY_ITEM) {
+                if (col->dtype == Bodo_CTypes::LIST) {
+                    APPEND_ROWS_COL(bodo_array_type::ARRAY_ITEM,
+                                    bodo_array_type::ARRAY_ITEM,
+                                    Bodo_CTypes::LIST);
                 }
             }
         }

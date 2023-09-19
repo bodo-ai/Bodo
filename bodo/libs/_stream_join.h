@@ -458,6 +458,9 @@ class JoinState {
     const std::vector<int8_t> build_arr_array_types;
     const std::vector<int8_t> probe_arr_c_types;
     const std::vector<int8_t> probe_arr_array_types;
+    // The map from column index to start index in the type array
+    const std::vector<size_t> build_col_to_idx_map;
+    const std::vector<size_t> probe_col_to_idx_map;
     // Join properties
     const uint64_t n_keys;
     cond_expr_fn_t cond_func;
