@@ -20,7 +20,7 @@ abstract class AnalysisProgram : Program {
     private var inputPlan: RelNode? = null
 
     fun retrieveInputPlan(): RelNode {
-        if (!AnalysisSuite.enableAnalysis) throw Exception("Cannot call retrieveInputPlan unless ENABLE_PLAN_ANALYSIS is set")
+        if (!AnalysisSuite.enableAnalysis) throw Exception("Cannot call retrieveInputPlan unless AnalysisSuite.enableAnalysis is set")
         return inputPlan ?: throw Exception("Cannot call retrieveInputPlan before an analysis program has been run")
     }
 
