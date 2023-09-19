@@ -52,6 +52,11 @@ struct KeyEqualGroupbyTable {
 
 class GroupbyState {
    public:
+    template <bool is_local>
+    using hash_table_t =
+        bodo::unord_map_container<int64_t, int64_t, HashGroupbyTable<is_local>,
+                                  KeyEqualGroupbyTable<is_local>>;
+
     const uint64_t n_keys;
     bool parallel;
     const int64_t output_batch_size;
@@ -62,23 +67,23 @@ class GroupbyState {
     // Current number of groups
     int64_t local_next_group = 0;
     // Map row number to group number
-    bodo::unord_map_container<int64_t, int64_t, HashGroupbyTable<true>,
-                              KeyEqualGroupbyTable<true>>
-        local_build_table;
+    std::unique_ptr<hash_table_t<true>> local_build_table;
     // hashes of data in local_table_buffer
+    // XXX Might be better to use unique_ptrs to guarantee
+    // that memory is released during FinalizeBuild.
     bodo::vector<uint32_t> local_table_groupby_hashes;
     // Current running values (output of "combine" step)
     // Note that in the accumulation case, the "running values" is instead the
     // entire input table.
-    TableBuildBuffer local_table_buffer;
+    std::unique_ptr<TableBuildBuffer> local_table_buffer;
 
     // Shuffle build state
     int64_t shuffle_next_group = 0;
-    bodo::unord_map_container<int64_t, int64_t, HashGroupbyTable<false>,
-                              KeyEqualGroupbyTable<false>>
-        shuffle_build_table;
+    std::unique_ptr<hash_table_t<false>> shuffle_build_table;
+    // XXX Might be better to use unique_ptrs to guarantee
+    // that memory is released during FinalizeBuild.
     bodo::vector<uint32_t> shuffle_table_groupby_hashes;
-    TableBuildBuffer shuffle_table_buffer;
+    std::unique_ptr<TableBuildBuffer> shuffle_table_buffer;
 
     // temporary batch data
     std::shared_ptr<table_info> in_table = nullptr;
@@ -145,6 +150,10 @@ class GroupbyState {
     // Dictionary builders for output columns
     std::vector<std::shared_ptr<DictionaryBuilder>> out_dict_builders;
 
+    // Has all of the input already been processed. This should be
+    // updated after the last input to avoid repeating the final steps.
+    bool build_input_finalized = false;
+
     tracing::ResumableEvent groupby_event;
 
     GroupbyState(std::vector<int8_t> in_arr_c_types,
@@ -156,10 +165,12 @@ class GroupbyState {
         : n_keys(n_keys_),
           parallel(parallel_),
           output_batch_size(output_batch_size_),
-          local_build_table({}, HashGroupbyTable<true>(this),
-                            KeyEqualGroupbyTable<true>(this, n_keys)),
-          shuffle_build_table({}, HashGroupbyTable<false>(this),
-                              KeyEqualGroupbyTable<false>(this, n_keys)),
+          local_build_table(std::make_unique<hash_table_t<true>>(
+              0, HashGroupbyTable<true>(this),
+              KeyEqualGroupbyTable<true>(this, n_keys))),
+          shuffle_build_table(std::make_unique<hash_table_t<false>>(
+              0, HashGroupbyTable<false>(this),
+              KeyEqualGroupbyTable<false>(this, n_keys))),
           f_in_offsets(std::move(f_in_offsets_)),
           f_in_cols(std::move(f_in_cols_)),
           sync_iter(sync_iter_),
@@ -360,12 +371,12 @@ class GroupbyState {
             build_table_non_key_dict_builders.begin(),
             build_table_non_key_dict_builders.end());
 
-        local_table_buffer =
-            TableBuildBuffer(build_arr_c_types, build_arr_array_types,
-                             this->build_table_dict_builders);
-        shuffle_table_buffer =
-            TableBuildBuffer(build_arr_c_types, build_arr_array_types,
-                             this->build_table_dict_builders);
+        local_table_buffer = std::make_unique<TableBuildBuffer>(
+            build_arr_c_types, build_arr_array_types,
+            this->build_table_dict_builders);
+        shuffle_table_buffer = std::make_unique<TableBuildBuffer>(
+            build_arr_c_types, build_arr_array_types,
+            this->build_table_dict_builders);
     }
 
     /**
@@ -434,6 +445,16 @@ class GroupbyState {
     std::shared_ptr<table_info> UnifyOutputDictionaryArrays(
         const std::shared_ptr<table_info>& out_table);
 
+    /**
+     * @brief Finalize the build step. This will clear the build
+     * state, append the output_table to the chunked output buffer
+     * and set build_input_finalized to prevent future repetitions
+     * of the build step.
+     *
+     * @param output_table Output of the groupby operation.
+     */
+    void FinalizeBuild(std::shared_ptr<table_info> output_table);
+
    private:
     /**
      * Helper function that gets the running column types for a given function.
@@ -475,4 +496,15 @@ class GroupbyState {
                 col_set->getRunningValueColumnTypes(in_arr_types, in_dtypes);
         return running_value_arr_types;
     }
+
+    /**
+     * @brief Clear the "build" state. This releases
+     * all memory except for the output buffer.
+     * The output buffer is the only thing we will need
+     * during the output production stage, so all other
+     * memory can be released.
+     * This is meant to be called in FinalizeBuild.
+     *
+     */
+    void ClearBuildState();
 };

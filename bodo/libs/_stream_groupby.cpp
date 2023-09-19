@@ -23,8 +23,8 @@ template <bool is_local>
 bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t iRowA,
                                                 const int64_t iRowB) const {
     const std::shared_ptr<table_info>& build_table =
-        is_local ? this->groupby_state->local_table_buffer.data_table
-                 : this->groupby_state->shuffle_table_buffer.data_table;
+        is_local ? this->groupby_state->local_table_buffer->data_table
+                 : this->groupby_state->shuffle_table_buffer->data_table;
     const std::shared_ptr<table_info>& in_table = this->groupby_state->in_table;
 
     bool is_build_A = iRowA >= 0;
@@ -65,8 +65,8 @@ inline void update_groups(
     // get local or shuffle build state to update
 
     TableBuildBuffer& build_table_buffer =
-        is_local ? groupby_state->local_table_buffer
-                 : groupby_state->shuffle_table_buffer;
+        is_local ? *(groupby_state->local_table_buffer)
+                 : *(groupby_state->shuffle_table_buffer);
     bodo::vector<uint32_t>& build_hashes =
         is_local ? groupby_state->local_table_groupby_hashes
                  : groupby_state->shuffle_table_groupby_hashes;
@@ -261,6 +261,18 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
     //    This inserts a new group to the table if it doesn't exist.
     // 3. Combine update values with local and shuffle build tables.
 
+    if (groupby_state->build_input_finalized) {
+        if (in_table->nrows() != 0) {
+            throw std::runtime_error(
+                "groupby_build_consume_batch: Received non-empty in_table "
+                "after the build was already finalized!");
+        }
+        // Nothing left to do for build
+        // When build is finalized global is_last has been seen so no need
+        // for additional synchronization
+        return true;
+    }
+
     int n_pes, myrank;
     // trace performance
     auto iterationEvent(groupby_state->groupby_event.iteration());
@@ -300,14 +312,14 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
 
     // reserve space in local/shuffle buffers for potential new groups
     // NOTE: only key types are always the same as input
-    groupby_state->local_table_buffer.ReserveTableKeys(in_table,
-                                                       groupby_state->n_keys);
+    groupby_state->local_table_buffer->ReserveTableKeys(in_table,
+                                                        groupby_state->n_keys);
     // TODO[BSE-616]: support variable size output like strings
-    groupby_state->local_table_buffer.ReserveSizeDataColumns(
+    groupby_state->local_table_buffer->ReserveSizeDataColumns(
         in_table->nrows(), groupby_state->n_keys);
-    groupby_state->shuffle_table_buffer.ReserveTableKeys(in_table,
-                                                         groupby_state->n_keys);
-    groupby_state->shuffle_table_buffer.ReserveSizeDataColumns(
+    groupby_state->shuffle_table_buffer->ReserveTableKeys(
+        in_table, groupby_state->n_keys);
+    groupby_state->shuffle_table_buffer->ReserveSizeDataColumns(
         in_table->nrows(), groupby_state->n_keys);
 
     // Fill row group numbers in grouping_info to reuse existing infrastructure.
@@ -328,28 +340,28 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
             !groupby_state->parallel ||
             hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank;
         if (process_on_rank) {
-            update_groups<true>(groupby_state, groupby_state->local_build_table,
-                                local_grp_info, in_table, batch_hashes_groupby,
-                                i_row);
+            update_groups<true>(
+                groupby_state, *(groupby_state->local_build_table),
+                local_grp_info, in_table, batch_hashes_groupby, i_row);
         } else {
             update_groups<false>(
-                groupby_state, groupby_state->shuffle_build_table,
+                groupby_state, *(groupby_state->shuffle_build_table),
                 shuffle_grp_info, in_table, batch_hashes_groupby, i_row);
         }
     }
 
     // combine update data with local/shuffle running values
     combine_input_table(groupby_state,
-                        groupby_state->local_table_buffer.data_table,
+                        groupby_state->local_table_buffer->data_table,
                         local_init_start_row, in_table, local_grp_info);
 
     combine_input_table(groupby_state,
-                        groupby_state->shuffle_table_buffer.data_table,
+                        groupby_state->shuffle_table_buffer->data_table,
                         shuffle_init_start_row, in_table, shuffle_grp_info);
 
     auto [shuffle_now, new_sync_iter, new_adaptive_sync_counter] =
         shuffle_this_iter(groupby_state->parallel, is_last,
-                          groupby_state->shuffle_table_buffer.data_table,
+                          groupby_state->shuffle_table_buffer->data_table,
                           groupby_state->build_iter, groupby_state->sync_iter,
                           groupby_state->prev_shuffle_iter,
                           groupby_state->adaptive_sync_counter);
@@ -360,7 +372,7 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
         groupby_state->prev_shuffle_iter = groupby_state->build_iter;
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
-            groupby_state->shuffle_table_buffer.data_table;
+            groupby_state->shuffle_table_buffer->data_table;
 
         std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
             shuffle_table, groupby_state->n_keys, SEED_HASH_PARTITION,
@@ -378,7 +390,7 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
             shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
                                  comm_info_table, groupby_state->parallel);
         shuffle_hashes.reset();
-        groupby_state->shuffle_table_buffer.Reset();
+        groupby_state->shuffle_table_buffer->Reset();
 
         // unify dictionaries to allow consistent hashing and fast key
         // comparison using indices
@@ -391,27 +403,30 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
         groupby_state->in_table = new_data;
         groupby_state->in_table_hashes = batch_hashes_groupby;
 
-        groupby_state->local_table_buffer.ReserveTable(new_data);
+        groupby_state->local_table_buffer->ReserveTable(new_data);
 
         grouping_info local_grp_info;
         local_grp_info.row_to_group.resize(new_data->nrows());
         int64_t local_init_start_row = groupby_state->local_next_group;
 
         for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
-            update_groups<true>(groupby_state, groupby_state->local_build_table,
-                                local_grp_info, new_data, batch_hashes_groupby,
-                                i_row);
+            update_groups<true>(
+                groupby_state, *(groupby_state->local_build_table),
+                local_grp_info, new_data, batch_hashes_groupby, i_row);
         }
 
         combine_input_table(groupby_state,
-                            groupby_state->local_table_buffer.data_table,
+                            groupby_state->local_table_buffer->data_table,
                             local_init_start_row, new_data, local_grp_info);
     }
+
+    groupby_state->in_table.reset();
+    groupby_state->in_table_hashes.reset();
 
     if (is_last) {
         // call eval() on running values to get final output
         std::shared_ptr<table_info> combine_data =
-            groupby_state->local_table_buffer.data_table;
+            groupby_state->local_table_buffer->data_table;
         eval_groupby_funcs(groupby_state, combine_data);
         std::shared_ptr<table_info> out_table = std::make_shared<table_info>();
         out_table->columns.assign(
@@ -423,12 +438,7 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
             out_table->columns.insert(out_table->columns.end(),
                                       out_cols.begin(), out_cols.end());
         }
-        // TODO(njriasan): Move eval computation directly into the output
-        // buffer.
-        groupby_state->InitOutputBuffer(out_table);
-        out_table = groupby_state->UnifyOutputDictionaryArrays(out_table);
-        groupby_state->output_buffer->AppendBatch(out_table);
-        groupby_state->output_buffer->Finalize();
+        groupby_state->FinalizeBuild(std::move(out_table));
     }
 
     groupby_state->build_iter++;
@@ -448,6 +458,17 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
 bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
                                      std::shared_ptr<table_info> in_table,
                                      bool is_last) {
+    if (groupby_state->build_input_finalized) {
+        if (in_table->nrows() != 0) {
+            throw std::runtime_error(
+                "groupby_acc_build_consume_batch: Received non-empty in_table "
+                "after the build was already finalized!");
+        }
+        // Nothing left to do for build
+        // When build is finalized global is_last has been seen so no need
+        // for additional synchronization
+        return true;
+    }
     int n_pes, myrank;
     // trace performance
     auto iterationEvent(groupby_state->groupby_event.iteration());
@@ -474,8 +495,8 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     std::shared_ptr<uint32_t[]> batch_hashes_partition =
         hash_keys_table(in_table, groupby_state->n_keys, SEED_HASH_PARTITION,
                         groupby_state->parallel, false, dict_hashes);
-    groupby_state->local_table_buffer.ReserveTable(in_table);
-    groupby_state->shuffle_table_buffer.ReserveTable(in_table);
+    groupby_state->local_table_buffer->ReserveTable(in_table);
+    groupby_state->shuffle_table_buffer->ReserveTable(in_table);
 
     std::vector<bool> append_row_to_build_table(in_table->nrows(), false);
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
@@ -484,18 +505,18 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
              hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank);
     }
 
-    groupby_state->local_table_buffer.UnsafeAppendBatch(
+    groupby_state->local_table_buffer->UnsafeAppendBatch(
         in_table, append_row_to_build_table);
     append_row_to_build_table.flip();
     std::vector<bool>& append_row_to_shuffle_table = append_row_to_build_table;
-    groupby_state->shuffle_table_buffer.UnsafeAppendBatch(
+    groupby_state->shuffle_table_buffer->UnsafeAppendBatch(
         in_table, append_row_to_shuffle_table);
 
     batch_hashes_partition.reset();
 
     auto [shuffle_now, new_sync_iter, new_adaptive_sync_counter] =
         shuffle_this_iter(groupby_state->parallel, is_last,
-                          groupby_state->shuffle_table_buffer.data_table,
+                          groupby_state->shuffle_table_buffer->data_table,
                           groupby_state->build_iter, groupby_state->sync_iter,
                           groupby_state->prev_shuffle_iter,
                           groupby_state->adaptive_sync_counter);
@@ -506,7 +527,7 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     if (shuffle_now) {
         groupby_state->prev_shuffle_iter = groupby_state->build_iter;
         std::shared_ptr<table_info> shuffle_table =
-            groupby_state->shuffle_table_buffer.data_table;
+            groupby_state->shuffle_table_buffer->data_table;
 
         std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
             shuffle_table, groupby_state->n_keys, SEED_HASH_PARTITION,
@@ -524,24 +545,21 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
             shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
                                  comm_info_table, groupby_state->parallel);
         shuffle_hashes.reset();
-        groupby_state->shuffle_table_buffer.Reset();
+        groupby_state->shuffle_table_buffer->Reset();
 
         // unify dictionaries to allow consistent hashing and fast key
         // comparison using indices
         new_data = groupby_state->UnifyBuildTableDictionaryArrays(new_data);
 
-        groupby_state->local_table_buffer.ReserveTable(new_data);
-        groupby_state->local_table_buffer.UnsafeAppendBatch(new_data);
+        groupby_state->local_table_buffer->ReserveTable(new_data);
+        groupby_state->local_table_buffer->UnsafeAppendBatch(new_data);
     }
 
     // compute output when all input batches are accumulated
     if (is_last) {
         std::shared_ptr<table_info> output_table = get_update_table(
-            groupby_state, groupby_state->local_table_buffer.data_table);
-        groupby_state->InitOutputBuffer(output_table);
-        output_table = groupby_state->UnifyOutputDictionaryArrays(output_table);
-        groupby_state->output_buffer->AppendBatch(output_table);
-        groupby_state->output_buffer->Finalize();
+            groupby_state, groupby_state->local_table_buffer->data_table);
+        groupby_state->FinalizeBuild(std::move(output_table));
     }
 
     groupby_state->build_iter++;
@@ -732,4 +750,36 @@ GroupbyState::GetDictionaryHashesForKeys() {
         }
     }
     return dict_hashes;
+}
+
+void GroupbyState::ClearBuildState() {
+    this->col_sets.clear();
+    this->local_build_table.reset();
+    this->shuffle_build_table.reset();
+
+    this->local_table_groupby_hashes.resize(0);
+    this->local_table_groupby_hashes.shrink_to_fit();
+    this->shuffle_table_groupby_hashes.resize(0);
+    this->shuffle_table_groupby_hashes.shrink_to_fit();
+
+    this->local_table_buffer.reset();
+    this->shuffle_table_buffer.reset();
+    this->in_table.reset();
+    this->in_table_hashes.reset();
+    this->build_table_dict_builders.clear();
+}
+
+void GroupbyState::FinalizeBuild(std::shared_ptr<table_info> output_table) {
+    // Since we have generated the output, we don't need the build state
+    // anymore, so we can release that memory.
+    this->ClearBuildState();
+    // TODO(njriasan): Move eval computation directly into the output
+    // buffer in the aggregating code path case.
+    this->InitOutputBuffer(output_table);
+    // XXX UnifyOutputDictionaryArrays needs a version that can take the
+    // shared_ptr without reference and free individual columns early.
+    output_table = this->UnifyOutputDictionaryArrays(output_table);
+    this->output_buffer->AppendBatch(output_table);
+    this->output_buffer->Finalize();
+    this->build_input_finalized = true;
 }
