@@ -6,6 +6,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.logicalRules.JoinExtractOverRule
 import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
+import com.bodosql.calcite.prepare.BodoRules.MULTI_JOIN_CONSTRUCTION_RULES
 import com.bodosql.calcite.prepare.BodoRules.SUB_QUERY_REMOVAL_RULES
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
@@ -56,6 +57,13 @@ object BodoPrograms {
         TrimFieldsProgram(false),
         SnowflakeTraitAdder(),
         SnowflakeColumnPruning(),
+        // Filter Push down Step.
+        if (optimize) {
+            HepOptimizerProgram(BodoRules.FILTER_PUSH_DOWN_RULES)
+        } else {
+            NoopProgram
+        },
+        // Multi Join building step.
         if (optimize) {
             HepOptimizerProgram(BodoRules.FILTER_PUSH_DOWN_RULES)
         } else {
@@ -64,9 +72,9 @@ object BodoPrograms {
         if (optimize) {
             Programs.of(
                 HepProgramBuilder()
-                    .addRuleInstance(BodoRules.FILTER_INTO_JOIN_RULE)
+                    // Note: You must build the multi-join BOTTOM_UP
                     .addMatchOrder(HepMatchOrder.BOTTOM_UP)
-                    .addRuleInstance(BodoRules.JOIN_TO_MULTI_JOIN)
+                    .addRuleCollection(MULTI_JOIN_CONSTRUCTION_RULES)
                     .build(),
                 false,
                 BodoRelMetadataProvider(),
