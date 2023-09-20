@@ -561,6 +561,13 @@ class DistributedPass:
             set_last_arg_to_true(self, assign.value)
             return [assign]
 
+        if fdef == (
+            "init_union_state",
+            "bodo.libs.stream_union",
+        ) and self._is_1D_or_1D_Var_arr(lhs):
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
+
         if (
             func_name == "fit"
             and "bodo.libs.xgb_ext" in sys.modules
@@ -2262,9 +2269,7 @@ class DistributedPass:
         if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg"):
             # Dataframe is the 3rd argument (counting from 0)
             df_arg = rhs.args[3].name
-            if self._is_1D_or_1D_Var_arr(df_arg) and set_last_arg_to_true(
-                self, assign.value
-            ):
+            if self._is_1D_or_1D_Var_arr(df_arg):
                 set_last_arg_to_true(self, assign.value)
                 return [assign]
 
