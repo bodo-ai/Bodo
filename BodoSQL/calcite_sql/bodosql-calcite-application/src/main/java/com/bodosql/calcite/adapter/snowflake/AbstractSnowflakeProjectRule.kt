@@ -11,6 +11,8 @@ import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexShuttle
 import org.apache.calcite.rex.RexVisitorImpl
+import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.type.VariantSqlType
 import org.apache.calcite.tools.RelBuilder
 import org.immutables.value.Value
 
@@ -171,6 +173,9 @@ abstract class AbstractSnowflakeProjectRule protected constructor(config: Config
     }
 
     companion object {
+        private val SUPPORTED_CALLS = setOf(
+            SqlKind.CAST,
+        )
 
         /**
          * Class to detect all nodes that can be pushed into a SnowflakeProject.
@@ -179,6 +184,7 @@ abstract class AbstractSnowflakeProjectRule protected constructor(config: Config
          *
          * - Input refs
          * - Calls to GET_PATH (where the first operand is also a pushable node)
+         * - Variant CAST calls
          */
         private class PushableDetectionVisitor(private val pushableNodes: MutableSet<RexNode>) : RexVisitorImpl<Unit>(true) {
             override fun visitInputRef(inputRef: RexInputRef) {
@@ -186,16 +192,51 @@ abstract class AbstractSnowflakeProjectRule protected constructor(config: Config
             }
 
             // Returns whether a rex node can be pushed into Snowflake.
-            fun isPushableCall(node: RexNode): Boolean {
+            fun isPushableNode(node: RexNode): Boolean {
                 if (node is RexInputRef) return true
                 if (node is RexCall) {
-                    return node.operator.name == "GET_PATH" && isPushableCall(node.operands[0])
+                    return (node.operator.name == "GET_PATH" && isPushableNode(node.operands[0])) or isSupportedCall(node)
                 }
                 return false
             }
 
+            /** Calls that can be projected by Snowflake.
+             * Currently only
+             *  CAST(Variant) (from variant to any datatype)
+             * @param node
+             * @return true/false based on whether it's a supported operation or not.
+             */
+            private fun isSupportedCall(node: RexNode): Boolean {
+                if (node is RexCall && SUPPORTED_CALLS.contains(node.kind)) {
+                    return getOperandsToCheck(node).all { child -> isVariantPushableNode(child as RexNode) }
+                } else {
+                    return false
+                }
+            }
+
+            /** Return operands that are needed to check if the call can be pushed
+             * @param call: Operator call
+             * @return list of operands
+             */
+            private fun getOperandsToCheck(call: RexCall): List<RexNode> {
+                if (call.kind == SqlKind.CAST) {
+                    return listOf(call.operands[0])
+                } else {
+                    return call.operands
+                }
+            }
+
+            /** Check whether node can be pushed or not
+             * Node must be variant and is itself a pushable node
+             * @param call: Operator call
+             * @return true/false
+             */
+            private fun isVariantPushableNode(node: RexNode): Boolean {
+                return (node.type is VariantSqlType && isPushableNode(node))
+            }
+
             override fun visitCall(call: RexCall) {
-                if (isPushableCall(call)) {
+                if (isPushableNode(call)) {
                     pushableNodes.add(call)
                 } else {
                     call.operands.forEach { it.accept(this) }
