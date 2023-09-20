@@ -4,8 +4,6 @@ import com.bodosql.calcite.adapter.pandas.PandasRowSample;
 import com.bodosql.calcite.adapter.pandas.PandasSample;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
 import com.bodosql.calcite.rex.RexNamedParam;
-import com.bodosql.calcite.traits.CombineStreamsExchange;
-import com.bodosql.calcite.traits.SeparateStreamExchange;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -104,19 +102,11 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
   private TrimResult trimFieldsNoUsedColumns(
       SingleRel node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
     TrimResult childResult = dispatchTrimFields(node.getInput(), fieldsUsed, extraFields);
-    // If we have stacked exchanges now, remove them.
-    if ((node instanceof SeparateStreamExchange
-            && node.getInput() instanceof CombineStreamsExchange)
-        || (node instanceof CombineStreamsExchange
-            && node.getInput() instanceof SeparateStreamExchange)) {
-      return result(((SingleRel) childResult.left).getInput(), childResult.right);
-    } else {
-      // Prune if there are still unused columns.
-      TrimResult updateResult = insertPruningProjection(childResult, fieldsUsed, extraFields);
-      // Copy the node and return
-      RelNode newNode = node.copy(node.getTraitSet(), List.of(updateResult.left));
-      return result(newNode, updateResult.right);
-    }
+    // Prune if there are still unused columns.
+    TrimResult updateResult = insertPruningProjection(childResult, fieldsUsed, extraFields);
+    // Copy the node and return
+    RelNode newNode = node.copy(node.getTraitSet(), List.of(updateResult.left));
+    return result(newNode, updateResult.right);
   }
 
   public TrimResult trimFields(
@@ -128,16 +118,6 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
       SnowflakeToPandasConverter node,
       ImmutableBitSet fieldsUsed,
       Set<RelDataTypeField> extraFields) {
-    return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
-  }
-
-  public TrimResult trimFields(
-      SeparateStreamExchange node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
-    return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
-  }
-
-  public TrimResult trimFields(
-      CombineStreamsExchange node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
     return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
   }
 

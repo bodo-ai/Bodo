@@ -15,6 +15,7 @@ import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import com.bodosql.calcite.rel.logical.BodoLogicalSort
 import com.bodosql.calcite.rel.logical.BodoLogicalUnion
 import com.bodosql.calcite.rel.metadata.BodoRelMetadataProvider
+import com.bodosql.calcite.traits.BatchingPropertyPass
 import com.google.common.collect.Iterables
 import org.apache.calcite.plan.Context
 import org.apache.calcite.plan.RelOptLattice
@@ -89,6 +90,7 @@ object BodoPrograms {
         // TODO(jsternberg): This can likely be adapted and integrated directly with
         // the VolcanoPlanner, but that hasn't been done so leave this here.
         DecorateAttributesProgram(),
+        BatchingPropertyProgram(),
         MergeRelProgram(),
     )
 
@@ -229,7 +231,7 @@ object BodoPrograms {
                     project.input.accept(this),
                     project.hints,
                     project.projects,
-                    project.rowType,
+                    project.getRowType(),
                 )
 
             override fun visit(filter: LogicalFilter): RelNode =
@@ -285,7 +287,7 @@ object BodoPrograms {
      * runtime checks.
      */
     private class DecorateAttributesProgram : Program by Programs.hep(
-        listOf(PandasRules.PANDAS_JOIN_STREAMING_REBALANCE_OUTPUT_RULE, PandasRules.PANDAS_JOIN_BATCH_REBALANCE_OUTPUT_RULE),
+        listOf(PandasRules.PANDAS_JOIN_REBALANCE_OUTPUT_RULE),
         true,
         DefaultRelMetadataProvider.INSTANCE,
     )
@@ -358,6 +360,20 @@ object BodoPrograms {
             materializations: MutableList<RelOptMaterialization>,
             lattices: MutableList<RelOptLattice>,
         ): RelNode = rel.accept(shuttle)
+    }
+
+    private class BatchingPropertyProgram() : Program {
+        override fun run(
+            planner: RelOptPlanner,
+            rel: RelNode,
+            requiredOutputTraits: RelTraitSet,
+            materializations: MutableList<RelOptMaterialization>,
+            lattices: MutableList<RelOptLattice>,
+        ): RelNode {
+            val physicalBuilder = com.bodosql.calcite.rel.core.BodoPhysicalRelFactories.BODO_PHYSICAL_BUILDER.create(rel.cluster, null)
+            val builder = physicalBuilder.transform({ t -> t.withBloat(-1) })
+            return BatchingPropertyPass.applyBatchingInfo(rel, builder)
+        }
     }
 
     private object NoopProgram : Program {

@@ -37,6 +37,13 @@ class CombineStreamsExchange(cluster: RelOptCluster, traits: RelTraitSet, input:
         return 1
     }
 
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+        return BatchingProperty.SINGLE_BATCH
+    }
+    override fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+        return BatchingProperty.STREAMING
+    }
+
     override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
         TODO("Not yet implemented")
     }

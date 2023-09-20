@@ -2,7 +2,6 @@ package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.table.CatalogTableImpl
-import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner
@@ -52,9 +51,7 @@ class SnowflakeSort private constructor(
             fetch: RexNode?,
             catalogTable: CatalogTableImpl,
         ): SnowflakeSort {
-            // Note: Types may be lazily computed so use getRowType() instead of rowType
-            val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(input.getRowType())
-            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION).replace(batchingProperty)
+            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION)
             return SnowflakeSort(cluster, newTraitSet, input, collation, offset, fetch, catalogTable)
         }
     }

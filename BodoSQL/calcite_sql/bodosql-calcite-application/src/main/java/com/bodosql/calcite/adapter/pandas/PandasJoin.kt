@@ -3,6 +3,7 @@ package com.bodosql.calcite.adapter.pandas
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.rel.core.JoinBase
+import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
@@ -69,14 +70,14 @@ class PandasJoin(
         return PandasJoin(cluster, traitSet, left, right, condition, joinType, rebalanceOutput)
     }
 
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+        return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
+    }
+
     companion object {
         fun create(left: RelNode, right: RelNode, condition: RexNode, joinType: JoinRelType): PandasJoin {
             val cluster = left.cluster
-            // Note: Types may be lazily computed so use getRowType() instead of rowType
-            val leftTypes = ExpectedBatchingProperty.rowTypeToTypes(left.getRowType())
-            val rightTypes = ExpectedBatchingProperty.rowTypeToTypes(right.getRowType())
-            val streamingTrait = ExpectedBatchingProperty.streamingIfPossibleProperty(leftTypes + rightTypes)
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION).replace(streamingTrait)
+            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION)
             return PandasJoin(cluster, traitSet, left, right, condition, joinType)
         }
     }

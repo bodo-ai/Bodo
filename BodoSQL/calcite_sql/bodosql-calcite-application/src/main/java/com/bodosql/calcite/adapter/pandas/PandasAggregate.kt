@@ -3,6 +3,7 @@ package com.bodosql.calcite.adapter.pandas
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.rel.core.AggregateBase
+import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
@@ -40,6 +41,10 @@ class PandasAggregate(
         TODO("Not yet implemented")
     }
 
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+        return ExpectedBatchingProperty.aggregateProperty(groupSets, aggCalls, getRowType())
+    }
+
     companion object {
 
         fun create(
@@ -49,17 +54,7 @@ class PandasAggregate(
             groupSets: List<ImmutableBitSet>,
             aggCalls: List<AggregateCall>,
         ): PandasAggregate {
-            val outputRowType = org.apache.calcite.rel.core.Aggregate.deriveRowType(
-                cluster.typeFactory,
-                input.getRowType(),
-                false,
-                groupSet,
-                groupSets,
-                aggCalls,
-            )
-
-            val streamingTrait = ExpectedBatchingProperty.aggregateProperty(groupSets, aggCalls, outputRowType)
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION).replace(streamingTrait)
+            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION)
             return PandasAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls)
         }
     }

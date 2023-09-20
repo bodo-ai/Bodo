@@ -21,6 +21,6 @@ class PandasValuesRule private constructor(config: Config) : ConverterRule(confi
 
     override fun convert(rel: RelNode): RelNode {
         val values = rel as Values
-        return PandasValues.create(rel.cluster, rel.traitSet, values.rowType, values.tuples)
+        return PandasValues.create(rel.cluster, rel.traitSet, values.getRowType(), values.tuples)
     }
 }

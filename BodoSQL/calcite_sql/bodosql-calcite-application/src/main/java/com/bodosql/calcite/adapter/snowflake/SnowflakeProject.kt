@@ -3,7 +3,6 @@ package com.bodosql.calcite.adapter.snowflake
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.rel.core.ProjectBase
 import com.bodosql.calcite.table.CatalogTableImpl
-import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
@@ -58,9 +57,7 @@ class SnowflakeProject(
             rowType: RelDataType,
             catalogTable: CatalogTableImpl,
         ): SnowflakeProject {
-            // Note: Types may be lazily computed so use getRowType() instead of rowType
-            val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(input.getRowType())
-            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION).replace(batchingProperty)
+            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION)
             return SnowflakeProject(cluster, newTraitSet, input, projects, rowType, catalogTable)
         }
 

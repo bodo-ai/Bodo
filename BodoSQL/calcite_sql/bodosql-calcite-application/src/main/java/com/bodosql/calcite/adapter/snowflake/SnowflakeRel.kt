@@ -53,12 +53,7 @@ interface SnowflakeRel : RelNode {
      * @return the row count according to SF, or null
      */
     fun tryGetExpectedRowCountFromSFQuery(): Double? {
-        // We're disabling getting the expected row count from SF for non-streaming cases,
-        // since we don't want to enable this in production until we have memoization,
-        // and the kinks have been ironed out.
-        val streamingEnabled = this.traitSet.contains(BatchingProperty.STREAMING)
-
-        if (!(streamingEnabled && shouldPushDownMetadataQueryHelper.shouldPushAsMetaDataQuery(this))) {
+        if (!(shouldPushDownMetadataQueryHelper.shouldPushAsMetaDataQuery(this))) {
             return null
         }
 

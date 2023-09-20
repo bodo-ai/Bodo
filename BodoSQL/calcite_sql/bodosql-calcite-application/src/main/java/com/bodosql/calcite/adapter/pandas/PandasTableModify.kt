@@ -4,6 +4,8 @@ import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.table.BodoSqlTable
+import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.plan.RelTraitSet
@@ -53,6 +55,14 @@ class PandasTableModify(
         val relTable = table as RelOptTableImpl
         val bodoSqlTable = relTable.table() as BodoSqlTable
         return bodoSqlTable.name
+    }
+
+    override fun isStreaming() = (input as PandasRel).batchingProperty() == BatchingProperty.STREAMING
+
+    override fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+        val bodoSqlTable = (table as RelOptTableImpl).table() as BodoSqlTable
+        // Note: Types may be lazily computed so use getRowType() instead of rowType
+        return ExpectedBatchingProperty.tableModifyProperty(bodoSqlTable, input.getRowType())
     }
 
     override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {

@@ -157,19 +157,11 @@ abstract class AbstractSnowflakeProjectRule protected constructor(config: Config
     }
 
     private fun extractNodes(call: RelOptRuleCall): Pair<Project, SnowflakeRel> {
-        return when (call.rels.size) {
-            // Inputs are:
-            // Project ->
-            //      CombineStreamsExchange ->
-            //          SnowflakeToPandasConverter ->
-            //             SnowflakeRel
-            4 -> Pair(call.rel(0), call.rel(3))
-            // Inputs are:
-            // Project ->
-            //   SnowflakeToPandasConverter ->
-            //      SnowflakeRel
-            else -> Pair(call.rel(0), call.rel(2))
-        }
+        // Inputs are:
+        // Project ->
+        //   SnowflakeToPandasConverter ->
+        //      SnowflakeRel
+        return Pair(call.rel(0), call.rel(2))
     }
 
     companion object {

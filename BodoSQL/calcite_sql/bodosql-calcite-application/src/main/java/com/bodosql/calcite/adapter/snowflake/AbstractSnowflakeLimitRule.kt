@@ -31,19 +31,11 @@ abstract class AbstractSnowflakeLimitRule protected constructor(config: Config) 
     }
 
     private fun extractNodes(call: RelOptRuleCall): Pair<Sort, SnowflakeRel> {
-        return when (call.rels.size) {
-            // Inputs are:
-            // Sort ->
-            //      CombineStreamsExchange ->
-            //          SnowflakeToPandasConverter ->
-            //             SnowflakeRel
-            4 -> Pair(call.rel(0), call.rel(3))
-            // Inputs are:
-            // Sort ->
-            //   SnowflakeToPandasConverter ->
-            //      SnowflakeRel
-            else -> Pair(call.rel(0), call.rel(2))
-        }
+        // Inputs are:
+        // Sort ->
+        //   SnowflakeToPandasConverter ->
+        //      SnowflakeRel
+        return Pair(call.rel(0), call.rel(2))
     }
 
     companion object {

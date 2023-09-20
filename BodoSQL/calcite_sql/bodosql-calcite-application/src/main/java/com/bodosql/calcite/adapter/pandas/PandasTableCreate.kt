@@ -3,6 +3,8 @@ package com.bodosql.calcite.adapter.pandas
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty.Companion.tableCreateProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
@@ -47,6 +49,13 @@ class PandasTableCreate(
     override fun operationDescriptor() = "writing table"
     override fun loggingTitle() = "IO TIMING"
     override fun nodeDetails() = tableName
+
+    override fun isStreaming() = (input as PandasRel).batchingProperty() == BatchingProperty.STREAMING
+
+    override fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+        // Note: Types may be lazily computed so use getRowType() instead of rowType
+        return tableCreateProperty(schema, input.getRowType())
+    }
 
     override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
         TODO("Not yet implemented")
