@@ -97,7 +97,7 @@ struct ChunkedTableArrayBuilder {
     std::shared_ptr<ArrayBuildBuffer> inner_array_builder;
 
     // Current number of elements in the buffers.
-    size_t size = 0;
+    const uint64_t& size;
     // Maximum number of rows this array is allowed to have.
     const size_t capacity;
 
@@ -251,8 +251,7 @@ struct ChunkedTableArrayBuilder {
             bool null_bit = (row_idx >= 0) && GetBit(in_bitmask, row_idx);
             SetBitTo(out_bitmask, this->size + i, null_bit);
         }
-        this->size += idx_length;
-        data_array->length = this->size;
+        this->data_array->length += idx_length;
     }
 
     /**
@@ -297,8 +296,7 @@ struct ChunkedTableArrayBuilder {
             bool null_bit = (row_idx >= 0) && GetBit(in_bitmask, row_idx);
             SetBitTo(out_bitmask, this->size + i, null_bit);
         }
-        this->size += idx_length;
-        data_array->length = this->size;
+        this->data_array->length += idx_length;
     }
 
     /**
@@ -342,8 +340,7 @@ struct ChunkedTableArrayBuilder {
             bool null_bit = (row_idx >= 0);
             SetBitTo(out_bitmask, this->size + i, null_bit);
         }
-        this->size += idx_length;
-        data_array->length = this->size;
+        this->data_array->length += idx_length;
     }
 
     /**
@@ -386,8 +383,7 @@ struct ChunkedTableArrayBuilder {
             bool null_bit = (row_idx >= 0);
             SetBitTo(out_bitmask, this->size + i, null_bit);
         }
-        this->size += idx_length;
-        data_array->length = this->size;
+        this->data_array->length += idx_length;
     }
 
     /**
@@ -424,8 +420,7 @@ struct ChunkedTableArrayBuilder {
             T new_data = row_idx < 0 ? 0 : in_data[row_idx];
             out_data[this->size + i] = new_data;
         }
-        this->size += idx_length;
-        data_array->length = this->size;
+        this->data_array->length += idx_length;
     }
 
     /**
@@ -470,8 +465,7 @@ struct ChunkedTableArrayBuilder {
             T new_data = row_idx < 0 ? 0 : in_data[row_idx];
             out_data[this->size + i] = new_data;
         }
-        this->size += idx_length;
-        data_array->length = this->size;
+        this->data_array->length += idx_length;
     }
 
     /**
@@ -516,8 +510,7 @@ struct ChunkedTableArrayBuilder {
                 row_idx < 0 ? 0 : arrow::bit_util::GetBit(in_data, row_idx);
             out_data[this->size + i] = new_data;
         }
-        this->size += idx_length;
-        data_array->length = this->size;
+        this->data_array->length += idx_length;
     }
 
     /**
@@ -557,8 +550,7 @@ struct ChunkedTableArrayBuilder {
                                      : in_data[row_idx];
             out_data[this->size + i] = new_data;
         }
-        this->size += idx_length;
-        data_array->length = this->size;
+        this->data_array->length += idx_length;
     }
 
     /**
@@ -601,8 +593,7 @@ struct ChunkedTableArrayBuilder {
                     ? std::numeric_limits<int64_t>::min()
                     : in_data[row_idx];
         }
-        this->size += idx_length;
-        data_array->length = this->size;
+        this->data_array->length += idx_length;
     }
 
     /**
@@ -659,8 +650,7 @@ struct ChunkedTableArrayBuilder {
             bool null_bit = (row_idx >= 0) && GetBit(in_bitmask, row_idx);
             SetBitTo(out_bitmask, this->size + i, null_bit);
         }
-        this->size += idx_length;
-        data_array->length = this->size;
+        this->data_array->length += idx_length;
     }
 
     /**
@@ -697,8 +687,7 @@ struct ChunkedTableArrayBuilder {
                                              bodo_array_type::NULLABLE_INT_BOOL,
                                              Bodo_CTypes::INT32>(
             in_arr->child_arrays[1], idxs, idx_start, idx_length);
-        this->size += idx_length;
-        this->data_array->length = this->size;
+        this->data_array->length += idx_length;
     }
 
     /**
@@ -746,7 +735,8 @@ struct ChunkedTableArrayBuilder {
         const std::shared_ptr<array_info>& in_arr,
         const std::span<const int64_t> idxs, size_t idx_start,
         size_t idx_length) {
-        return std::min(this->capacity - this->size, idx_length);
+        return std::min(this->capacity - static_cast<size_t>(this->size),
+                        idx_length);
     }
 
     /**
@@ -772,7 +762,8 @@ struct ChunkedTableArrayBuilder {
         size_t idx_length) {
         // All types can only return at most as many rows as the capacity
         // allows.
-        size_t max_rows = std::min(this->capacity - this->size, idx_length);
+        size_t max_rows = std::min(
+            this->capacity - static_cast<size_t>(this->size), idx_length);
         // If we have a string array check the memory usage.
         int64_t buffer_size = this->data_array->buffers[0]->size();
         // Compute the total amount of memory needed.
@@ -814,7 +805,8 @@ struct ChunkedTableArrayBuilder {
     size_t NumRowsCanAppend(const std::shared_ptr<array_info>& in_arr,
                             const std::span<const int64_t> idxs,
                             size_t idx_start, size_t idx_length) {
-        return std::min(this->capacity - this->size, idx_length);
+        return std::min(this->capacity - static_cast<size_t>(this->size),
+                        idx_length);
     }
 
     /**
@@ -838,7 +830,8 @@ struct ChunkedTableArrayBuilder {
                             const std::span<const int64_t> idxs,
                             size_t idx_start, size_t idx_length) {
         // String is capped by memory and number of rows.
-        size_t max_rows = std::min(this->capacity - this->size, idx_length);
+        size_t max_rows = std::min(
+            this->capacity - static_cast<size_t>(this->size), idx_length);
         // If we have a string array check the memory usage.
         // TODO: Move to the constructor.
         int64_t max_possible_buffer_size =

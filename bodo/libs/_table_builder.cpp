@@ -8,7 +8,7 @@ ArrayBuildBuffer::ArrayBuildBuffer(
     std::shared_ptr<array_info> _data_array,
     std::shared_ptr<DictionaryBuilder> _dict_builder)
     : data_array(_data_array),
-      size(0),
+      size(_data_array->length),
       capacity(0),
       dict_builder(_dict_builder) {
     if (_data_array->length != 0) {
@@ -377,8 +377,7 @@ void ArrayBuildBuffer::IncrementSize() {
     switch (this->data_array->arr_type) {
         case bodo_array_type::NULLABLE_INT_BOOL: {
             if (this->data_array->dtype == Bodo_CTypes::_BOOL) {
-                size++;
-                data_array->length = size;
+                ++this->data_array->length;
                 CHECK_ARROW_MEM(
                     data_array->buffers[0]->Resize(
                         arrow::bit_util::BytesForBits(size), false),
@@ -389,8 +388,7 @@ void ArrayBuildBuffer::IncrementSize() {
                     "ArrayBuildBuffer::IncrementSize: Resize failed!");
             } else {
                 uint64_t size_type = numpy_item_size[this->data_array->dtype];
-                size++;
-                data_array->length = size;
+                ++this->data_array->length;
                 CHECK_ARROW_MEM(
                     data_array->buffers[0]->Resize(size * size_type, false),
                     "ArrayBuildBuffer::IncrementSize: Resize failed!");
@@ -403,8 +401,7 @@ void ArrayBuildBuffer::IncrementSize() {
         case bodo_array_type::STRING: {
             // NOTE: only increments offset and null bitmap sizes but not data
             // buffer.
-            size++;
-            data_array->length = size;
+            ++this->data_array->length;
 
             CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
                                 (size + 1) * sizeof(offset_t), false),
@@ -415,13 +412,11 @@ void ArrayBuildBuffer::IncrementSize() {
         } break;
         case bodo_array_type::DICT: {
             this->dict_indices->IncrementSize();
-            size++;
-            data_array->length = size;
+            ++this->data_array->length;
         } break;
         case bodo_array_type::NUMPY: {
             uint64_t size_type = numpy_item_size[this->data_array->dtype];
-            size++;
-            data_array->length = size;
+            ++this->data_array->length;
             CHECK_ARROW_MEM(
                 data_array->buffers[0]->Resize(size * size_type, false),
                 "ArrayBuildBuffer::IncrementSize: Resize failed!");
@@ -632,8 +627,6 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
 }
 
 void ArrayBuildBuffer::Reset() {
-    size = 0;
-    data_array->length = 0;
     switch (data_array->arr_type) {
         case bodo_array_type::NULLABLE_INT_BOOL: {
             CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
@@ -674,6 +667,7 @@ void ArrayBuildBuffer::Reset() {
                 GetArrType_as_string(data_array->arr_type));
         }
     }
+    this->data_array->length = 0;
 }
 
 /* ------------------------------------------------------------------------ */
