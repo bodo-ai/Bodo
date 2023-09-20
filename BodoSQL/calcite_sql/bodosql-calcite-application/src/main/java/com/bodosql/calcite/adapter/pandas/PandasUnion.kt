@@ -41,7 +41,11 @@ class PandasUnion(
             inputs: List<RelNode>,
             all: Boolean,
         ): PandasUnion {
-            val streamingTrait = ExpectedBatchingProperty.alwaysSingleBatchProperty()
+            val streamingTrait = ExpectedBatchingProperty.streamingIfPossibleProperty(
+                inputs.flatMap {
+                    ExpectedBatchingProperty.rowTypeToTypes(it.getRowType())
+                },
+            )
             val traitSet = cluster.traitSetOf(PandasRel.CONVENTION).replace(streamingTrait)
             return PandasUnion(cluster, traitSet, inputs, all)
         }

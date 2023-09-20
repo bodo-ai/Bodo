@@ -7,6 +7,7 @@ import math
 import operator
 import types as pytypes
 from collections import namedtuple
+from typing import Any, Callable, Dict, List, Optional
 
 import numba
 import numpy as np
@@ -356,9 +357,10 @@ no_side_effect_call_tuples = {
     ("scalar_optional_getitem", "indexing", "utils", bodo),
     ("bitmap_size", "indexing", "utils", bodo),
     ("get_dt64_bitmap_fill", "indexing", "utils", bodo),
-    # Streaming join
+    # Streaming state init functions
     ("init_join_state", "stream_join", "libs", bodo),
     ("init_groupby_state", "stream_groupby", "libs", bodo),
+    ("init_union_state", "stream_union", "libs", bodo),
     # Datetime utils
     # TODO(njriasan): Move all "pure" datetime_date_ext functions
     # to the same file so can have file level DCE.
@@ -471,17 +473,17 @@ numba.core.ir_utils.remove_call_handlers.append(remove_hiframes)
 
 
 def compile_func_single_block(
-    func,
+    func: Callable,
     args,
-    ret_var,
+    ret_var: ir.Var,
     typing_info=None,
-    extra_globals=None,
-    infer_types=True,
-    run_untyped_pass=False,
+    extra_globals: Optional[Dict[str, Any]] = None,
+    infer_types: bool = True,
+    run_untyped_pass: bool = False,
     flags=None,
-    replace_globals=False,
-    add_default_globals=True,
-):
+    replace_globals: bool = False,
+    add_default_globals: bool = True,
+) -> List[ir.Stmt]:
     """compiles functions that are just a single basic block.
     Does not handle defaults, freevars etc.
     typing_info is a structure that has typingctx, typemap, calltypes

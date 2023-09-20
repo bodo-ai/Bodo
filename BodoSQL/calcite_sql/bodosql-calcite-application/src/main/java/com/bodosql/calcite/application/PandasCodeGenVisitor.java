@@ -413,7 +413,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else if (node instanceof PandasAggregate) {
       this.visitPandasAggregate((PandasAggregate) node);
     } else if (node instanceof PandasUnion) {
-      this.visitLogicalUnion((PandasUnion) node);
+      this.visitPandasUnion((PandasUnion) node);
     } else if (node instanceof PandasIntersect) {
       this.visitLogicalIntersect((PandasIntersect) node);
     } else if (node instanceof PandasMinus) {
@@ -583,22 +583,129 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Visitor for Logical Union node. Code generation for UNION [ALL/DISTINCT] in SQL
+   * Visitor for streaming Pandas Union node
    *
-   * @param node LogicalUnion node to be visited
+   * @param node PandasUnion node to be visited
    */
-  private void visitLogicalUnion(PandasUnion node) {
+  private void visitStreamingPandasUnion(PandasUnion node, RelationalOperatorCache operatorCache) {
+    StreamingRelNodeTimer timerInfo =
+        StreamingRelNodeTimer.createStreamingTimer(
+            this.generatedCode,
+            this.verboseLevel,
+            node.operationDescriptor(),
+            node.loggingTitle(),
+            node.nodeDetails(),
+            node.getTimerType());
+
+    // Visit the input node
+    this.visit(node.getInput(0), 0, node);
+    timerInfo.initializeTimer();
+
+    // Create the state variables
+    StateVariable stateVar = genStateVar();
+    kotlin.Pair<String, Expr> isAll = new kotlin.Pair<>("all", new Expr.BooleanLiteral(node.all));
+    Expr.Call stateCall =
+        new Expr.Call("bodo.libs.stream_union.init_union_state", List.of(), List.of(isAll));
+    Op.Assign unionInit = new Op.Assign(stateVar, stateCall);
+
+    // Fetch the streaming pipeline
+    StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
+
+    // Add Initialization Code
+    timerInfo.insertStateStartTimer();
+    inputPipeline.addInitialization(unionInit);
+    timerInfo.insertStateEndTimer();
+
+    // All but the last union call just requires the union_consume_batch call
+    for (int i = 0; i < node.getInputs().size() - 1; i++) {
+      if (i != 0) {
+        RelNode input = node.getInput(i);
+        this.visit(input, i, node);
+      }
+
+      // Add Union Consume Code in Pipeline Loop
+      BodoEngineTable inputTable = tableGenStack.pop();
+      Expr.Call consumeCall =
+          new Expr.Call(
+              "bodo.libs.stream_union.union_consume_batch",
+              List.of(stateVar, inputTable, new Expr.BooleanLiteral(false)));
+
+      timerInfo.insertLoopOperationStartTimer();
+      generatedCode.add(new Op.Stmt(consumeCall));
+      timerInfo.insertLoopOperationEndTimer();
+
+      // Finalize and add the batch pipeline.
+      generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));
+    }
+
+    // For the last UNION consume call, we need to track is_last and set it
+    // in the pipeline loop
+    RelNode input = node.getInput(node.getInputs().size() - 1);
+    this.visit(input, node.getInputs().size() - 1, node);
+
+    StreamingPipelineFrame pipeline = generatedCode.getCurrentStreamingPipeline();
+    Variable batchExitCond = pipeline.getExitCond();
+    Variable newExitCond = genGenericTempVar();
+
+    BodoEngineTable inputTable = tableGenStack.pop();
+    Expr.Call consumeCall =
+        new Expr.Call(
+            "bodo.libs.stream_union.union_consume_batch",
+            List.of(stateVar, inputTable, batchExitCond));
+
+    timerInfo.insertLoopOperationStartTimer();
+    generatedCode.add(new Op.Assign(newExitCond, consumeCall));
+    timerInfo.insertLoopOperationEndTimer();
+    pipeline.endSection(newExitCond);
+    generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));
+
+    // Create a new pipeline for output of table_builder
+    Variable newFlag = genFinishedStreamingFlag();
+    Variable iterVar = genIterVar();
+    generatedCode.startStreamingPipelineFrame(newFlag, iterVar);
+    StreamingPipelineFrame outputPipeline = generatedCode.getCurrentStreamingPipeline();
+    // Add the output side
+    Variable outTable = genTableVar();
+    Variable outputControl = genOutputControlVar();
+    outputPipeline.addOutputControl(outputControl);
+
+    Expr.Call outputCall =
+        new Expr.Call(
+            "bodo.libs.stream_union.union_produce_batch", List.of(stateVar, outputControl));
+    timerInfo.insertLoopOperationStartTimer();
+    generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), outputCall));
+    timerInfo.insertLoopOperationEndTimer();
+
+    // Append the code to delete the table builder state
+    // Union state is deleted automatically by Numba
+    Op.Stmt deleteState =
+        new Op.Stmt(new Expr.Call("bodo.libs.stream_union.delete_union_state", List.of(stateVar)));
+    outputPipeline.addTermination(deleteState);
+
+    // Add the output table from last pipeline to the stack
+    BodoEngineTable outEngineTable = new BodoEngineTable(outTable.emit(), node);
+    operatorCache.tryCacheNode(node, outEngineTable);
+    tableGenStack.push(outEngineTable);
+    timerInfo.terminateTimer();
+  }
+
+  /**
+   * Visitor for single batch / non-streaming Pandas Union
+   *
+   * @param node PandasUnion node to be visited
+   */
+  private void visitSingleBatchPandasUnion(
+      PandasUnion node, RelationalOperatorCache operatorCache) {
     List<Variable> childExprs = new ArrayList<>();
-    List<List<String>> childExprsColumns = new ArrayList<>();
     BuildContext ctx = new BuildContext(node);
-    // Visit all of the inputs
+    // Visit all the inputs
     for (int i = 0; i < node.getInputs().size(); i++) {
       RelNode input = node.getInput(i);
       this.visit(input, i, node);
       BodoEngineTable inputTable = tableGenStack.pop();
       childExprs.add(ctx.convertTableToDf(inputTable));
-      childExprsColumns.add(input.getRowType().getFieldNames());
     }
+
     singleBatchTimer(
         node,
         () -> {
@@ -606,8 +713,29 @@ public class PandasCodeGenVisitor extends RelVisitor {
           List<String> columnNames = node.getRowType().getFieldNames();
           Expr unionExpr = generateUnionCode(columnNames, childExprs, node.all, this);
           this.generatedCode.add(new Op.Assign(outVar, unionExpr));
-          tableGenStack.push(ctx.convertDfToTable(outVar, node));
+          BodoEngineTable outTable = ctx.convertDfToTable(outVar, node);
+          operatorCache.tryCacheNode(node, outTable);
+          tableGenStack.push(outTable);
         });
+  }
+
+  /**
+   * Visitor for Pandas Union node. Code generation for UNION [ALL/DISTINCT] in SQL
+   *
+   * @param node PandasUnion node to be visited
+   */
+  private void visitPandasUnion(PandasUnion node) {
+    RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
+
+    if (operatorCache.isNodeCached(node)) {
+      tableGenStack.push(operatorCache.getCachedTable(node));
+    } else {
+      if (node.isStreaming()) {
+        visitStreamingPandasUnion(node, operatorCache);
+      } else {
+        visitSingleBatchPandasUnion(node, operatorCache);
+      }
+    }
   }
 
   /**
@@ -1439,7 +1567,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable buildTable = tableGenStack.pop();
 
     // Create the state var.
-    // TODO: Add streaming timer support
     int operatorID = generatedCode.newOperatorID();
     StateVariable groupbyStateVar = genStateVar();
     List<Expr.IntegerLiteral> keyIndiciesList = getStreamingGroupByKeyIndices(node.getGroupSet());

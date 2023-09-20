@@ -2,6 +2,9 @@
 """Array implementation for null array type. This is an array that contains
 all null values and can be cast to any other array type.
 """
+import operator
+
+import numba
 import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, types
@@ -216,3 +219,17 @@ def overload_null_astype(A, dtype, copy=True):
             return bodo.libs.array_kernels.gen_na_array(A._length, _arr_typ, True)
 
         return impl
+
+
+@overload(operator.getitem, no_unliteral=True)
+def str_arr_getitem_slice(A, ind):
+    if A != null_array_type or not isinstance(ind, types.SliceType):
+        return
+
+    def null_arr_slice_impl(A, ind):  # pragma: no cover
+        n = len(A)
+        slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
+        final_len = (slice_idx.stop - slice_idx.start) // slice_idx.step
+        return init_null_array(final_len)
+
+    return null_arr_slice_impl

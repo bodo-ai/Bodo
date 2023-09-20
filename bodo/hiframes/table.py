@@ -4,6 +4,8 @@
 """
 import operator
 from collections import defaultdict
+from functools import cached_property
+from typing import List, Tuple
 
 import numba
 import numpy as np
@@ -49,7 +51,11 @@ from bodo.utils.typing import (
     to_str_arr_if_dict_array,
     unwrap_typeref,
 )
-from bodo.utils.utils import is_whole_slice
+from bodo.utils.utils import (
+    is_whole_slice,
+    numba_to_c_array_type,
+    numba_to_c_type,
+)
 
 
 class Table:
@@ -136,7 +142,12 @@ class TableType(types.ArrayCompatible):
     for each column (important for dataframes with many columns).
     """
 
-    def __init__(self, arr_types, has_runtime_cols=False, dist=None):
+    def __init__(
+        self,
+        arr_types: Tuple[types.ArrayCompatible, ...],
+        has_runtime_cols: bool = False,
+        dist=None,
+    ):
         from bodo.transforms.distributed_analysis import Distribution
 
         self.arr_types = arr_types
@@ -205,6 +216,14 @@ class TableType(types.ArrayCompatible):
         if dist is None:
             dist = self.dist
         return TableType(self.arr_types, self.has_runtime_cols, dist)
+
+    @cached_property
+    def c_array_types(self) -> List[int]:
+        return [numba_to_c_array_type(arr_type) for arr_type in self.arr_types]
+
+    @cached_property
+    def c_dtypes(self) -> List[int]:
+        return [numba_to_c_type(arr_type.dtype) for arr_type in self.arr_types]
 
 
 @typeof_impl.register(Table)

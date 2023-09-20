@@ -23,7 +23,7 @@ class PandasUnionRule private constructor(config: Config) : ConverterRule(config
     override fun convert(rel: RelNode): RelNode {
         val union = rel as Union
         val convention = PandasRel.CONVENTION
-        val batchingProperty = ExpectedBatchingProperty.alwaysSingleBatchProperty()
+        val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(union.getRowType())
         val traitSet = rel.cluster.traitSet().replace(convention).replace(batchingProperty)
         val inputs = union.inputs.map { input ->
             convert(input, input.traitSet.replace(convention).replace(batchingProperty))
