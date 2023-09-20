@@ -106,7 +106,7 @@ public class BodoSQLRelDataTypeSystem implements RelDataTypeSystem {
       case BIGINT:
       case DECIMAL:
         return getMaxNumericPrecision();
-        // Snowflake: Time precision defaul is 9.
+        // Snowflake: Time precision default is 9.
       case TIME:
       case TIMESTAMP:
         return MAX_DATETIME_PRECISION;
