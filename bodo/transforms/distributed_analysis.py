@@ -1627,6 +1627,7 @@ class DistributedAnalysis:
         if fdef in (
             ("init_groupby_state", "bodo.libs.stream_groupby"),
             ("init_table_builder_state", "bodo.libs.table_builder"),
+            ("init_union_state", "bodo.libs.stream_union"),
         ):  # pragma: no cover
             # Initialize groupby state to 1D
             if lhs not in array_dists:
@@ -1689,7 +1690,7 @@ class DistributedAnalysis:
                 )
             )
             self._set_var_dist(lhs, array_dists, out_dist)
-            self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+            array_dists[rhs.args[0].name] = out_dist
             return
 
         if fdef == (
@@ -1707,6 +1708,64 @@ class DistributedAnalysis:
                 Distribution.OneD_Var, array_dists[rhs.args[1].name]
             )
             array_dists[rhs.args[0].name] = out_dist
+            return
+
+        if fdef == ("union_consume_batch", "bodo.libs.stream_union"):
+            state = self.typemap[rhs.args[0].name]
+            if state.all:
+                if array_dists[rhs.args[0].name] == Distribution.REP:
+                    # If the builder is REP then we must set the input table to also
+                    # be REP
+                    array_dists[rhs.args[1].name] = Distribution.REP
+                # If the input is OneD, it the output should be OneD_Var since
+                # appending multiple OneD tables together may break the invariant
+                # that we have only at most 1 extra row on a given rank.
+                out_dist = self._min_dist(
+                    Distribution.OneD_Var, array_dists[rhs.args[1].name]
+                )
+                array_dists[rhs.args[0].name] = out_dist
+            else:
+                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            return
+
+        if fdef == ("union_produce_batch", "bodo.libs.stream_union"):
+            state = self.typemap[rhs.args[0].name]
+            if state.all:
+                if lhs not in array_dists:
+                    # We can pop unequal chunks on each rank. As a result we must
+                    # initialize everything to 1DVar.
+                    self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                lhs_dist = array_dists[lhs][0]
+                out_dist = Distribution(
+                    min(
+                        lhs_dist.value,
+                        array_dists[rhs.args[0].name].value,
+                    )
+                )
+                self._set_var_dist(lhs, array_dists, out_dist)
+                array_dists[rhs.args[0].name] = out_dist
+
+            else:
+                if lhs not in array_dists:
+                    self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+                state_dist = array_dists[rhs.args[0].name]
+
+                out_dist = Distribution(
+                    min(
+                        array_dists[lhs][0].value,
+                        state_dist.value,
+                    )
+                )
+                # Update the output
+                self._set_var_dist(lhs, array_dists, out_dist)
+
+                if out_dist == Distribution.REP:
+                    # Output can convert inputs to REP.
+                    state_dist = Distribution.REP
+
+                # Update the state
+                self._set_var_dist(rhs.args[0].name, array_dists, state_dist, False)
             return
 
         if (

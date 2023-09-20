@@ -16,7 +16,7 @@ from bodo.tests.timezone_common import representative_tz  # noqa
         pytest.param("UNION ALL", id="union_all"),
     ]
 )
-def union_cmds(request):
+def union_cmds(request) -> str:
     return request.param
 
 
@@ -29,7 +29,7 @@ def union_cmds(request):
         pytest.param("INTERSECT ALL", id="intersect_all", marks=pytest.mark.slow),
     ]
 )
-def intersect_cmds(request):
+def intersect_cmds(request) -> str:
     return request.param
 
 
@@ -41,7 +41,7 @@ def intersect_cmds(request):
         pytest.param("MINUS ALL", id="minus_all", marks=pytest.mark.slow),
     ]
 )
-def except_cmds(request):
+def except_cmds(request) -> str:
     return request.param
 
 
@@ -61,7 +61,7 @@ def except_cmds(request):
         pytest.param("MINUS ALL", id="minus_all", marks=pytest.mark.slow),
     ]
 )
-def set_ops_cmds(request):
+def set_ops_cmds(request) -> str:
     return request.param
 
 
@@ -111,6 +111,11 @@ def null_set_dfs(request):
             # Testing how duplicates are handled
             "table1": pd.DataFrame({"A": [1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5]}),
             "table2": pd.DataFrame({"B": [1, 1, 2, 2, 3, 3, 3, 4, 4, 4, 6]}),
+        },
+        {
+            # Integer Promotion
+            "table1": pd.DataFrame({"A": pd.Series([3, 1, 2, 2, 3, 4], dtype="int32")}),
+            "table2": pd.DataFrame({"B": pd.Series([5, 1, 2, 2], dtype="Int8")}),
         },
     ]
 )
@@ -432,7 +437,7 @@ def test_set_ops_scalars(query, py_output, memory_leak_check):
     """
     check_query(
         query,
-        dict(),
+        {},
         None,
         check_names=False,
         expected_output=py_output,

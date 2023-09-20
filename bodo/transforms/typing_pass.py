@@ -3168,6 +3168,9 @@ class TypingTransforms:
         if func_mod == "bodo.libs.stream_groupby":
             return self._run_call_stream_groupby(assign, rhs, func_name)
 
+        if func_mod == "bodo.libs.stream_union":
+            return self._run_call_stream_union(assign, rhs, func_name, label)
+
         if func_mod == "bodo.libs.table_builder":
             return self._run_call_table_builder(assign, rhs, func_name, label)
 
@@ -4463,7 +4466,7 @@ class TypingTransforms:
         func_text: str,
         func_name: str,
         extra_globals: Dict[str, Any],
-        args: Tuple[Any],
+        args: Tuple[Any, ...],
         retvar,
         def_to_replace,
         label_of_replacer: int,
@@ -4823,7 +4826,6 @@ class TypingTransforms:
                 return [assign]
 
             # Fetch the join information from the definition
-            join_state = rhs.args[0]
             join_def = _get_state_defining_call(
                 self.func_ir, join_state, ("init_join_state", "bodo.libs.stream_join")
             )
@@ -5086,6 +5088,97 @@ class TypingTransforms:
                         self.rhs_labels[inst.value] = label
                 self.needs_transform = True
                 self.changed = True
+
+        return [assign]
+
+    def _run_call_stream_union(self, assign, rhs, func_name, label):
+        if func_name == "init_union_state":
+            expected_arg = get_call_expr_arg(
+                "init_union_state",
+                rhs.args,
+                dict(rhs.kws),
+                0,
+                "expected_state_typeref",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+                else:
+                    output_type = unwrap_typeref(expected_type)
+                    if output_type.in_table_types == ():
+                        self.needs_transform = True
+
+        elif func_name == "union_consume_batch":
+            union_state = rhs.args[0]
+            # Load the types
+            state_type = self.typemap.get(union_state.name, None)
+            input_table_type = self.typemap.get(rhs.args[1].name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            # Fetch the union information from the definition
+            union_def = _get_state_defining_call(
+                self.func_ir,
+                union_state,
+                ("init_union_state", "bodo.libs.stream_union"),
+            )
+            if union_def is None:
+                self.needs_transform = True
+                return [assign]
+
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_union_state",
+                union_def.args,
+                dict(union_def.kws),
+                0,
+                "expected_state_typeref",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_state_type = unwrap_typeref(expected_type)
+            if output_state_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            # Check if input table type is in state type
+            # and add if not
+            if input_table_type not in output_state_type.in_table_types:
+                new_state_type = bodo.libs.stream_union.UnionStateType(
+                    output_state_type.all,
+                    (*output_state_type.in_table_types, input_table_type),
+                )
+
+                # Compile a new function with new state
+                func_text = f"""def impl():
+                    return bodo.libs.stream_union.init_union_state(
+                        all=_all,
+                        expected_state_typeref=_expected_state_typeref,
+                    )
+                """
+                self._replace_state_definition(
+                    func_text,
+                    "impl",
+                    {
+                        "_all": output_state_type.all,
+                        "_expected_state_typeref": new_state_type,
+                    },
+                    (),
+                    union_state,
+                    union_def,
+                    label,
+                )
 
         return [assign]
 

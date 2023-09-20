@@ -198,6 +198,7 @@ import bodo.libs.timsort
 import bodo.libs.stream_join
 import bodo.libs.stream_groupby
 import bodo.libs.stream_dict_encoding
+import bodo.libs.stream_union
 import bodo.libs.table_builder
 
 import bodo.io
