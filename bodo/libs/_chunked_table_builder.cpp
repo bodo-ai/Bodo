@@ -33,8 +33,9 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
     std::shared_ptr<array_info> _data_array,
     std::shared_ptr<DictionaryBuilder> _dict_builder, size_t chunk_size,
     size_t _max_resize_count)
-    : data_array(std::move(_data_array)),
+    : data_array(_data_array),
       dict_builder(_dict_builder),
+      size(_data_array->length),
       capacity(chunk_size),
       max_resize_count(_max_resize_count) {
     if (this->data_array->length != 0) {
@@ -211,8 +212,7 @@ void ChunkedTableArrayBuilder::UnsafeAppendRows(
         }
     }
 
-    this->size += idx_length;
-    this->data_array->length = this->size;
+    this->data_array->length += idx_length;
 }
 
 void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
@@ -348,9 +348,7 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
 }
 
 void ChunkedTableArrayBuilder::Reset() {
-    this->size = 0;
-    this->resize_count = 0;
-    this->data_array->length = 0;
+    this->resize_count = this->data_array->length = 0;
     switch (this->data_array->arr_type) {
         // TODO XXX Use SetSize here instead of Resize?
         case bodo_array_type::NULLABLE_INT_BOOL: {

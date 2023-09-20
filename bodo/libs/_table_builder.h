@@ -14,7 +14,7 @@ struct ArrayBuildBuffer {
     // internal array with data values
     std::shared_ptr<array_info> data_array;
     // Current number of elements in the buffer
-    int64_t size;
+    const uint64_t& size;
     // Total capacity for data elements (including current elements,
     // capacity>=size should always be true)
     int64_t capacity;
@@ -81,11 +81,9 @@ struct ArrayBuildBuffer {
                 arrow::bit_util::SetBitTo(out_ptr, this->size,
                                           GetBit(in_ptr, row_ind));
                 bool bit = GetBit(in_bitmask, row_ind);
-                SetBitTo(out_bitmask, this->size, bit);
-                this->size++;
+                SetBitTo(out_bitmask, this->data_array->length++, bit);
             }
         }
-        this->data_array->length = this->size;
     }
 
     /**
@@ -131,11 +129,9 @@ struct ArrayBuildBuffer {
         for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
             if (append_rows[row_ind]) {
                 bool bit = GetBit(in_bitmask, row_ind);
-                SetBitTo(out_bitmask, this->size, bit);
-                this->size++;
+                SetBitTo(out_bitmask, this->data_array->length++, bit);
             }
         }
-        this->data_array->length = this->size;
     }
 
     /**
@@ -203,11 +199,9 @@ struct ArrayBuildBuffer {
             if (append_rows[row_ind]) {
                 // set null bit
                 bool bit = GetBit(in_bitmask, row_ind);
-                SetBitTo(out_bitmask, this->size, bit);
-                this->size++;
+                SetBitTo(out_bitmask, this->data_array->length++, bit);
             }
         }
-        this->data_array->length = this->size;
     }
 
     /**
@@ -235,8 +229,7 @@ struct ArrayBuildBuffer {
         this->dict_indices->UnsafeAppendBatch<
             bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32>(
             in_arr->child_arrays[1], append_rows, append_rows_sum);
-        this->size += append_rows_sum;
-        this->data_array->length = this->size;
+        this->data_array->length += append_rows_sum;
     }
 
     /**
@@ -264,11 +257,9 @@ struct ArrayBuildBuffer {
         const T* in_ptr = (T*)in_arr->data1<arr_type>();
         for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
             if (append_rows[row_ind]) {
-                out_ptr[size] = in_ptr[row_ind];
-                size++;
+                out_ptr[this->data_array->length++] = in_ptr[row_ind];
             }
         }
-        this->data_array->length = size;
     }
 
     /**
@@ -311,8 +302,8 @@ struct ArrayBuildBuffer {
                                         in_offsets[row_ind];
                 inner_array_append_rows_sum +=
                     in_offsets[row_ind + 1] - in_offsets[row_ind];
-                SetBitTo(out_bitmask, this->size, GetBit(in_bitmask, row_ind));
-                ++this->size;
+                SetBitTo(out_bitmask, this->data_array->length++,
+                         GetBit(in_bitmask, row_ind));
             }
             for (offset_t i = in_offsets[row_ind]; i < in_offsets[row_ind + 1];
                  i++) {
@@ -326,8 +317,6 @@ struct ArrayBuildBuffer {
         this->inner_array_builder->UnsafeAppendBatch(
             in_arr->child_arrays[0], inner_array_append_rows,
             inner_array_append_rows_sum);
-
-        this->data_array->length = size;
     }
 
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
@@ -375,17 +364,15 @@ struct ArrayBuildBuffer {
             _copy_bitmap(out_ptr + (this->size >> 3), in_ptr, in_arr->length);
             _copy_bitmap(out_bitmask + (this->size >> 3), in_bitmask,
                          in_arr->length);
-            this->size += in_arr->length;
+            this->data_array->length += in_arr->length;
         } else {
             for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
                 arrow::bit_util::SetBitTo(out_ptr, this->size,
                                           GetBit(in_ptr, row_ind));
                 bool bit = GetBit(in_bitmask, row_ind);
-                SetBitTo(out_bitmask, this->size, bit);
-                this->size++;
+                SetBitTo(out_bitmask, this->data_array->length++, bit);
             }
         }
-        this->data_array->length = this->size;
     }
 
     /**
@@ -421,16 +408,14 @@ struct ArrayBuildBuffer {
             // Fast path for byte aligned null bitmask
             _copy_bitmap(out_bitmask + (this->size >> 3), in_bitmask,
                          in_arr->length);
-            this->size += in_arr->length;
+            this->data_array->length += in_arr->length;
         } else {
             // Slow path for non-byte aligned null bitmask
             for (uint64_t i = 0; i < in_arr->length; i++) {
                 bool bit = GetBit(in_bitmask, i);
-                SetBitTo(out_bitmask, this->size, bit);
-                this->size++;
+                SetBitTo(out_bitmask, this->data_array->length++, bit);
             }
         }
-        this->data_array->length = this->size;
     }
 
     /**
@@ -494,8 +479,7 @@ struct ArrayBuildBuffer {
                 SetBitTo(out_bitmask, this->size + i, bit);
             }
         }
-        this->size += in_arr->length;
-        this->data_array->length = this->size;
+        this->data_array->length += in_arr->length;
     }
 
     // Needs optimized
@@ -521,8 +505,7 @@ struct ArrayBuildBuffer {
             in_arr->child_arrays[1]);
         // Update the size + length which won't be handled by the recursive
         // case.
-        this->size += in_arr->length;
-        this->data_array->length = this->size;
+        this->data_array->length += in_arr->length;
     }
 
     /**
@@ -544,8 +527,7 @@ struct ArrayBuildBuffer {
         char* out_ptr = this->data_array->data1<arr_type>() + size_type * size;
         const char* in_ptr = in_arr->data1<arr_type>();
         memcpy(out_ptr, in_ptr, size_type * in_arr->length);
-        this->size += in_arr->length;
-        this->data_array->length = this->size;
+        this->data_array->length += in_arr->length;
     }
 
     /**
@@ -602,8 +584,7 @@ struct ArrayBuildBuffer {
                 SetBitTo(out_bitmask, this->size + i, bit);
             }
         }
-        this->size += in_arr->length;
-        this->data_array->length = this->size;
+        this->data_array->length += in_arr->length;
     }
 
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr);
@@ -646,8 +627,7 @@ struct ArrayBuildBuffer {
                     SetBitTo((uint8_t*)data_array->null_bitmask<
                                  bodo_array_type::NULLABLE_INT_BOOL>(),
                              size, bit);
-                    size++;
-                    data_array->length = size;
+                    ++this->data_array->length;
                 } else {
                     uint64_t size_type = numpy_item_size[in_arr->dtype];
                     CHECK_ARROW_MEM(
@@ -671,8 +651,7 @@ struct ArrayBuildBuffer {
                     SetBitTo((uint8_t*)data_array->null_bitmask<
                                  bodo_array_type::NULLABLE_INT_BOOL>(),
                              size, bit);
-                    size++;
-                    data_array->length = size;
+                    ++this->data_array->length;
                 }
             } break;
             case bodo_array_type::STRING: {
@@ -715,8 +694,7 @@ struct ArrayBuildBuffer {
                          size, bit);
 
                 // update size state
-                size++;
-                data_array->length = size;
+                ++this->data_array->length;
             } break;
             case bodo_array_type::DICT: {
                 if (!is_matching_dictionary(this->data_array->child_arrays[0],
@@ -726,8 +704,7 @@ struct ArrayBuildBuffer {
                 }
                 this->dict_indices->UnsafeAppendRow(in_arr->child_arrays[1],
                                                     row_ind);
-                size++;
-                data_array->length = size;
+                ++this->data_array->length;
             } break;
             case bodo_array_type::NUMPY: {
                 uint64_t size_type = numpy_item_size[in_arr->dtype];
@@ -739,8 +716,7 @@ struct ArrayBuildBuffer {
                 const char* in_ptr = in_arr->data1<bodo_array_type::NUMPY>() +
                                      size_type * row_ind;
                 memcpy(out_ptr, in_ptr, size_type);
-                size++;
-                data_array->length = size;
+                ++this->data_array->length;
             } break;
             case bodo_array_type::ARRAY_ITEM: {
                 CHECK_ARROW_MEM(
@@ -773,7 +749,7 @@ struct ArrayBuildBuffer {
                 SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
 
                 // update size state
-                data_array->length = ++size;
+                ++this->data_array->length;
             } break;
             default:
                 throw std::runtime_error(
