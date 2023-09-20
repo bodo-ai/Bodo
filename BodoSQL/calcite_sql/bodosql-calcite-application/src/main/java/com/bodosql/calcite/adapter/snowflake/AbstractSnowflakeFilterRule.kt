@@ -38,11 +38,17 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
     }
 
     private fun extractNodes(call: RelOptRuleCall): Pair<Filter, SnowflakeRel> {
-        // Inputs are:
-        // Filter ->
-        //   SnowflakeToPandasConverter ->
-        //      SnowflakeRel
-        return Pair(call.rel(0), call.rel(2))
+        return when (call.rels.size) {
+            // Inputs are:
+            // Filter ->
+            //     SnowflakeToPandasConverter ->
+            //         SnowflakeRel
+            3 -> Pair(call.rel(0), call.rel(2))
+            // Inputs are:
+            // Filter ->
+            //     SnowflakeRel
+            else -> Pair(call.rel(0), call.rel(1))
+        }
     }
 
     companion object {

@@ -3,6 +3,7 @@ package com.bodosql.calcite.prepare
 import com.bodosql.calcite.adapter.pandas.PandasJoin
 import com.bodosql.calcite.adapter.pandas.PandasJoinRule
 import com.bodosql.calcite.adapter.pandas.PandasRules
+import com.bodosql.calcite.adapter.snowflake.SnowflakeFilterLockRule
 import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule
 import com.bodosql.calcite.application.logicalRules.FilterAggregateTransposeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterExtractCaseRule
@@ -429,6 +430,14 @@ object BodoRules {
         .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
         .toRule()
 
+    /**
+     * Converts a PandasFilter to a SnowflakeFilter if it is located directly on top of a
+     * SnowflakeRel.
+     */
+    @JvmField
+    val SNOWFLAKE_FILTER_LOCK_RULE: RelOptRule =
+        SnowflakeFilterLockRule.Config.DEFAULT_CONFIG.toRule()
+
     // RULE GROUPINGS
 
     /**
@@ -466,6 +475,8 @@ object BodoRules {
         JOIN_REORDER_CONDITION_RULE,
         // Process for inserting new filters to push
         JOIN_PUSH_TRANSITIVE_PREDICATES,
+        // Locking in any filters that can become SnowflakeFilter
+        SNOWFLAKE_FILTER_LOCK_RULE,
     )
 
     /**
