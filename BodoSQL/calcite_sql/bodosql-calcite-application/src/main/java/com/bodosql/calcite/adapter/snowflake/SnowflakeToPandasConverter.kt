@@ -8,6 +8,8 @@ import com.bodosql.calcite.ir.Expr.StringLiteral
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
+import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.ConventionTraitDef
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
@@ -52,6 +54,10 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
             getSnowflakeSQL()
         }
         )!!
+
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+        return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
+    }
 
     override fun initStateVariable(ctx: PandasRel.BuildContext): StateVariable {
         val builder = ctx.builder()

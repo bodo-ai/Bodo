@@ -3,7 +3,6 @@ package com.bodosql.calcite.adapter.pandas
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.rel.core.SortBase
-import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelCollation
@@ -48,9 +47,7 @@ class PandasSort(
     companion object {
         fun create(child: RelNode, collation: RelCollation, offset: RexNode?, fetch: RexNode?): PandasSort {
             val cluster = child.cluster
-            val batchingProperty = ExpectedBatchingProperty.alwaysSingleBatchProperty()
             val traitSet = cluster.traitSetOf(PandasRel.CONVENTION)
-                .replace(batchingProperty)
                 .replace(collation)
             return PandasSort(cluster, traitSet, child, collation, offset, fetch)
         }

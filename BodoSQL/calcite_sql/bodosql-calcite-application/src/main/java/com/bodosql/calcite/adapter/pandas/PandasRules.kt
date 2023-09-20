@@ -1,7 +1,5 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.traits.CombineStreamRule
-import com.bodosql.calcite.traits.SeparateStreamsRule
 import org.apache.calcite.plan.RelOptRule
 
 class PandasRules private constructor() {
@@ -57,16 +55,7 @@ class PandasRules private constructor() {
         val PANDAS_TARGET_TABLE_SCAN: RelOptRule = PandasTargetTableScanRule.DEFAULT_CONFIG.toRule()
 
         @JvmField
-        val PANDAS_JOIN_STREAMING_REBALANCE_OUTPUT_RULE: RelOptRule = PandasJoinRebalanceOutputRule.PandasJoinRebalanceStreamingProjectionRule.PandasJoinRebalanceStreamingProjectionRuleConfig.DEFAULT_CONFIG.toRule()
-
-        @JvmField
-        val PANDAS_JOIN_BATCH_REBALANCE_OUTPUT_RULE: RelOptRule = PandasJoinRebalanceOutputRule.PandasJoinRebalanceBatchProjectionRule.PandasJoinRebalanceBatchProjectionRuleConfig.DEFAULT_CONFIG.toRule()
-
-        @JvmField
-        val PANDAS_COMBINE_STREAM_RULE: RelOptRule = CombineStreamRule.DEFAULT_CONFIG.toRule()
-
-        @JvmField
-        val PANDAS_SEPARATE_STREAM_RULE: RelOptRule = SeparateStreamsRule.DEFAULT_CONFIG.toRule()
+        val PANDAS_JOIN_REBALANCE_OUTPUT_RULE: RelOptRule = PandasJoinRebalanceOutputRule.Config.DEFAULT_CONFIG.toRule()
 
         @JvmField
         val PANDAS_RULES: List<RelOptRule> = listOf(
@@ -85,8 +74,6 @@ class PandasRules private constructor() {
             PANDAS_TABLE_CREATE_RULE,
             PANDAS_TABLE_SCAN,
             PANDAS_TARGET_TABLE_SCAN,
-            PANDAS_COMBINE_STREAM_RULE,
-            PANDAS_SEPARATE_STREAM_RULE,
         )
 
         fun rules(): List<RelOptRule> = PANDAS_RULES

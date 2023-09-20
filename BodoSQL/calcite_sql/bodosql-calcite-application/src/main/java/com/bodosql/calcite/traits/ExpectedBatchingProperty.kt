@@ -5,7 +5,6 @@ import com.bodosql.calcite.application.utils.AggHelpers
 import com.bodosql.calcite.schema.CatalogSchemaImpl
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.CatalogTableImpl
-import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexInputRef
@@ -91,14 +90,9 @@ class ExpectedBatchingProperty {
         fun alwaysSingleBatchProperty(): BatchingProperty = getBatchingProperty(false, listOf())
 
         @JvmStatic
-        fun streamingIfPossibleProperty(nodeTypes: List<RelDataType>): BatchingProperty {
-            return getBatchingProperty(true, nodeTypes)
-        }
-
-        @JvmStatic
         fun streamingIfPossibleProperty(rowType: RelDataType): BatchingProperty {
             val nodeTypes = rowTypeToTypes(rowType)
-            return streamingIfPossibleProperty(nodeTypes)
+            return getBatchingProperty(true, nodeTypes)
         }
 
         /**
@@ -135,9 +129,9 @@ class ExpectedBatchingProperty {
          * @return The Batch property.
          */
         @JvmStatic
-        fun projectProperty(nodes: List<RexNode>, inputTraitSet: RelTraitSet): BatchingProperty {
+        fun projectProperty(nodes: List<RexNode>, inputBatchingProperty: BatchingProperty): BatchingProperty {
             val canStream = if (nodes.all { r -> r is RexInputRef || r is RexLiteral }) {
-                columnPruningIsStreaming(inputTraitSet)
+                columnPruningIsStreaming(inputBatchingProperty)
             } else {
                 !RexOver.containsOver(nodes, null)
             }
@@ -153,9 +147,8 @@ class ExpectedBatchingProperty {
          * Determine if we are just pruning columns and or adding
          * literals, do we want to use Streaming.
          */
-        private fun columnPruningIsStreaming(traitSet: RelTraitSet): Boolean {
-            val property = traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) ?: BatchingProperty.NONE
-            return property.satisfies(BatchingProperty.STREAMING)
+        private fun columnPruningIsStreaming(inputBatchingProperty: BatchingProperty): Boolean {
+            return inputBatchingProperty.satisfies(BatchingProperty.STREAMING)
         }
 
         @JvmStatic

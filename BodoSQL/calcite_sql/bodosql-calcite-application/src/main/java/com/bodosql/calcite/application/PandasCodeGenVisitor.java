@@ -1007,10 +1007,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     SqlCreateTable.CreateTableType createTableType = node.getCreateTableType();
 
     // No streaming or single batch case
-    if (node.getInput().getTraitSet().containsIfApplicable(BatchingProperty.SINGLE_BATCH)) {
-      genSingleBatchTableCreate(node, outputSchemaAsCatalog, ifExists, createTableType);
-    } else {
+    if (node.isStreaming()) {
       genStreamingTableCreate(node, outputSchemaAsCatalog, ifExists, createTableType);
+    } else {
+      genSingleBatchTableCreate(node, outputSchemaAsCatalog, ifExists, createTableType);
     }
   }
 
@@ -1281,10 +1281,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
               + "catalog or the SQL TablePath API");
     }
 
-    if (node.getInput().getTraitSet().containsIfApplicable(BatchingProperty.SINGLE_BATCH)) {
-      genSingleBatchInsertInto(node, inTable, colNames, bodoSqlTable);
-    } else {
+    if (node.isStreaming()) {
       genStreamingInsertInto(node, inTable, colNames, bodoSqlTable);
+    } else {
+      genSingleBatchInsertInto(node, inTable, colNames, bodoSqlTable);
     }
   }
 

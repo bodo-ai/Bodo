@@ -8,6 +8,7 @@ import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.core.ProjectBase
+import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty.Companion.projectProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
@@ -222,11 +223,11 @@ class PandasProject(
         val indices = newProjectRefs.map { proj ->
             when (proj) {
                 is RexInputRef -> proj.index
-                is RexLocalRef -> proj.index + input.rowType.fieldCount
+                is RexLocalRef -> proj.index + input.getRowType().fieldCount
                 else -> throw AssertionError("Internal Error: Projection must be InputRef or LocalRef")
             }
         }
-        val logicalTableVar = generateLogicalTableCode(ctx, inputVar, indices, localRefs, input.rowType.fieldCount)
+        val logicalTableVar = generateLogicalTableCode(ctx, inputVar, indices, localRefs, input.getRowType().fieldCount)
         return ctx.returns(logicalTableVar)
     }
 
@@ -296,6 +297,10 @@ class PandasProject(
         return logicalTableVar
     }
 
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+        return projectProperty(projects, inputBatchingProperty)
+    }
+
     companion object {
 
         fun create(input: RelNode, projects: List<RexNode>, fieldNames: List<String?>?): PandasProject {
@@ -312,8 +317,7 @@ class PandasProject(
         fun create(input: RelNode, projects: List<RexNode>, rowType: RelDataType): PandasProject {
             val cluster = input.cluster
             val mq = cluster.metadataQuery
-            val batchProperty = projectProperty(projects, input.traitSet)
-            val traitSet = cluster.traitSet().replace(PandasRel.CONVENTION).replace(batchProperty)
+            val traitSet = cluster.traitSet().replace(PandasRel.CONVENTION)
                 .replaceIfs(RelCollationTraitDef.INSTANCE) {
                     RelMdCollation.project(mq, input, projects)
                 }

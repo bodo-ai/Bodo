@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.rel.core.RowSample
-import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
@@ -21,13 +20,12 @@ class PandasRowSampleRule private constructor(config: Config) : ConverterRule(co
 
     override fun convert(rel: RelNode): RelNode {
         val sample = rel as RowSample
-        val batchingProperty = ExpectedBatchingProperty.alwaysSingleBatchProperty()
         return PandasRowSample.create(
             rel.cluster,
             convert(
                 sample.input,
                 sample.input.traitSet
-                    .replace(PandasRel.CONVENTION).replace(batchingProperty),
+                    .replace(PandasRel.CONVENTION),
             ),
             sample.getRowSamplingParameters(),
         )

@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.table.CatalogTableImpl
-import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptPlanner
@@ -98,10 +97,8 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
         fun create(cluster: RelOptCluster, table: RelOptTable, catalogTable: CatalogTableImpl): SnowflakeTableScan {
             // Note: Types may be lazily computed so use getRowType() instead of rowType
             val rowType = table.getRowType()
-            val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(rowType)
-            val traitSet = cluster.traitSet().replace(batchingProperty)
             val keptColumns = ImmutableBitSet.range(rowType.fieldCount)
-            return SnowflakeTableScan(cluster, traitSet, table, keptColumns, catalogTable)
+            return SnowflakeTableScan(cluster, cluster.traitSet(), table, keptColumns, catalogTable)
         }
     }
 }

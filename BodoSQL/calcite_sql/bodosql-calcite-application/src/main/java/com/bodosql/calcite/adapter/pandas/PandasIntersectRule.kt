@@ -1,6 +1,5 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
@@ -23,10 +22,9 @@ class PandasIntersectRule private constructor(config: Config) : ConverterRule(co
     override fun convert(rel: RelNode): RelNode {
         val intersect = rel as Intersect
         val convention = PandasRel.CONVENTION
-        val batchingProperty = ExpectedBatchingProperty.alwaysSingleBatchProperty()
-        val traitSet = intersect.traitSet.replace(convention).replace(batchingProperty)
+        val traitSet = intersect.traitSet.replace(convention)
         val inputs = intersect.inputs.map { input ->
-            convert(input, input.traitSet.replace(convention).replace(batchingProperty))
+            convert(input, input.traitSet.replace(convention))
         }
         return PandasIntersect(rel.cluster, traitSet, inputs, intersect.all)
     }

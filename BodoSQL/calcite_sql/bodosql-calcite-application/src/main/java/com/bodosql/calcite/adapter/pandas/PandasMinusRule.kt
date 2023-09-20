@@ -1,6 +1,5 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
@@ -22,10 +21,9 @@ class PandasMinusRule private constructor(config: Config) : ConverterRule(config
 
     override fun convert(rel: RelNode): RelNode {
         val minus = rel as Minus
-        val batchingProperty = ExpectedBatchingProperty.alwaysSingleBatchProperty()
-        val traitSet = rel.traitSet.replace(PandasRel.CONVENTION).replace(batchingProperty)
+        val traitSet = rel.traitSet.replace(PandasRel.CONVENTION)
         val inputs = minus.inputs.map { input ->
-            convert(input, input.traitSet.replace(PandasRel.CONVENTION).replace(batchingProperty))
+            convert(input, input.traitSet.replace(PandasRel.CONVENTION))
         }
         return PandasMinus(rel.cluster, traitSet, inputs, minus.all)
     }
