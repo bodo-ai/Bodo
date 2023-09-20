@@ -52,6 +52,7 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         vector[shared_ptr[CStorageOptions]] storage_options
         c_bool spill_on_unpin
         c_bool move_on_unpin
+        c_bool debug_mode
 
         CBufferPoolOptions()
         

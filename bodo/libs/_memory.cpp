@@ -796,6 +796,11 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
             !std::strcmp(enforce_max_limit_env_, "1");
     }
 
+    if (const char* debug_mode_env_ =
+            std::getenv("BODO_BUFFER_POOL_DEBUG_MODE")) {
+        options.debug_mode = !std::strcmp(debug_mode_env_, "1");
+    }
+
     return options;
 }
 
@@ -1064,9 +1069,10 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
                     "Unable to evict enough frames to free up the "
                     "required space (" +
                     std::to_string(bytes) + ")");
-            } else {
+            } else if (this->options_.debug_mode) {
                 // If we weren't able to spill enough bytes, but max limit
-                // enforcement is off, display a warning.
+                // enforcement is off, display a warning if debug mode
+                // is enabled.
                 std::cerr
                     << "[WARNING] BufferPool::" << caller
                     << ": Could not spill sufficient bytes. We will try to "
@@ -1079,8 +1085,8 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
             return ::arrow::Status::OutOfMemory(
                 "Spilling is not available to free up sufficient space in "
                 "memory!");
-        } else {
-            // Raise a warning
+        } else if (this->options_.debug_mode) {
+            // Raise a warning if debug mode is enabled.
             std::cerr
                 << "[WARNING] BufferPool::" << caller
                 << ": Spilling is not available and available memory is less "

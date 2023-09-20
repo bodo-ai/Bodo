@@ -357,7 +357,8 @@ cdef class BufferPoolOptions(_Weakrefable):
                  enforce_max_limit_during_allocation=None,
                  storage_options=None,
                  spill_on_unpin=None,
-                 move_on_unpin=None):
+                 move_on_unpin=None,
+                 debug_mode=None):
         """
         Constructor for BufferPoolOptions.
         If the attributes are not provided, they default
@@ -379,6 +380,8 @@ cdef class BufferPoolOptions(_Weakrefable):
             self.options.spill_on_unpin = spill_on_unpin
         if move_on_unpin is not None:
             self.options.move_on_unpin = move_on_unpin
+        if debug_mode is not None:
+            self.options.debug_mode = debug_mode
 
     cdef void c_add_storage(self, StorageOptions option):
         self.options.storage_options.push_back(option.options)
@@ -426,6 +429,10 @@ cdef class BufferPoolOptions(_Weakrefable):
     @property
     def move_on_unpin(self):
         return self.options.move_on_unpin
+    
+    @property
+    def debug_mode(self):
+        return self.options.debug_mode
 
     @staticmethod
     def defaults():

@@ -162,6 +162,11 @@ struct BufferPoolOptions {
     /// intended for production use cases.
     bool move_on_unpin = false;
 
+    /// @brief Run the buffer pool in debug mode. Currently,
+    /// this will print some warnings in evict_handler when
+    /// enforce_max_limit_during_allocation is false.
+    bool debug_mode = false;
+
     static BufferPoolOptions Defaults();
 };
 

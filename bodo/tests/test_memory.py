@@ -49,6 +49,7 @@ def test_default_buffer_pool_options():
             "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
             "BODO_BUFFER_POOL_ENFORCE_MAX_ALLOCATION_LIMIT": None,
+            "BODO_BUFFER_POOL_DEBUG_MODE": None,
         }
     ):
         options = BufferPoolOptions.defaults()
@@ -56,6 +57,7 @@ def test_default_buffer_pool_options():
         assert options.min_size_class == 64
         assert options.max_num_size_classes == 21
         assert not options.enforce_max_limit_during_allocation
+        assert not options.debug_mode
 
     # Check that specifying the memory explicitly works as
     # expected.
@@ -256,6 +258,11 @@ def test_default_memory_options(tmp_path: Path):
         options = BufferPoolOptions.defaults()
         assert not options.spill_on_unpin
         assert options.move_on_unpin
+
+    # Verify that setting debug-mode works as expected.
+    with temp_env_override({"BODO_BUFFER_POOL_DEBUG_MODE": "1"}):
+        options = BufferPoolOptions.defaults()
+        assert options.debug_mode
 
 
 def test_default_storage_options(tmp_path: Path):
@@ -1811,6 +1818,8 @@ def test_larger_than_available_space_allocation_limit_ignored(capfd):
         memory_size=4,
         min_size_class=4,
         enforce_max_limit_during_allocation=False,
+        # Print warnings so we can verify correct behavior
+        debug_mode=True,
     )
     pool: BufferPool = BufferPool.from_options(options)
 
@@ -1897,6 +1906,8 @@ def test_allocate_cannot_evict_sufficient_bytes_no_enforcement(tmp_path: Path, c
         memory_size=4,
         min_size_class=1024,
         enforce_max_limit_during_allocation=False,
+        # Print warnings so we can verify correct behavior
+        debug_mode=True,
         storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
@@ -1995,6 +2006,8 @@ def test_allocate_cannot_evict_sufficient_bytes_no_enforcement_very_large_spill(
         memory_size=4,
         min_size_class=1024,
         enforce_max_limit_during_allocation=False,
+        # Print warnings so we can verify correct behavior
+        debug_mode=True,
         storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
@@ -2115,6 +2128,8 @@ def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
         memory_size=4,
         min_size_class=1024,
         enforce_max_limit_during_allocation=False,
+        # Print warnings so we can verify correct behavior
+        debug_mode=True,
         storage_options=[local_opt],
     )
     pool: BufferPool = BufferPool.from_options(options)
@@ -2200,6 +2215,61 @@ def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
     pool.free(allocation3)
     pool.free(allocation4)
     pool.free(allocation5)
+
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+
+    pool.cleanup()
+    del pool
+
+
+def test_no_warning_debug_mode_disabled(tmp_path: Path, capfd):
+    """
+    Test that no warnings are displayed when debug mode
+    is disabled.
+    """
+    # Allocate a very small pool for testing
+    local_opt = StorageOptions(usable_size=16 * 1024 * 1024, location=bytes(tmp_path))
+    options = BufferPoolOptions(
+        memory_size=4,
+        min_size_class=1024,
+        enforce_max_limit_during_allocation=False,
+        debug_mode=False,
+        storage_options=[local_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    allocation1: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    allocation2: BufferPoolAllocation = pool.allocate(1 * 1024 * 1024)
+    allocation3: BufferPoolAllocation = pool.allocate(1 * 1024 * 1024)
+    pool.unpin(allocation1)
+    allocation4: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+
+    # Verify stats after allocation + unpin
+    assert pool.bytes_pinned() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert not allocation1.is_in_memory()
+
+    # Make 1MiB eligible for eviction
+    pool.unpin(allocation2)
+
+    # Try to pin allocation1 back. This would display a warning
+    # if debug mode was enabled.
+    pool.pin(allocation1)
+    _, err = capfd.readouterr()
+    assert len(err) == 0
+
+    assert allocation1.is_in_memory()
+    assert not allocation2.is_in_memory()
+    assert pool.bytes_pinned() == 5 * 1024 * 1024
+    assert pool.bytes_allocated() == 5 * 1024 * 1024
+    assert pool.max_memory() == 5 * 1024 * 1024
+
+    pool.free(allocation1)
+    pool.free(allocation2)
+    pool.free(allocation3)
+    pool.free(allocation4)
 
     assert pool.bytes_pinned() == 0
     assert pool.bytes_allocated() == 0
