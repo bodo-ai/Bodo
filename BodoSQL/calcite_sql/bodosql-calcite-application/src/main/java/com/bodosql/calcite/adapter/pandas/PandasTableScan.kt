@@ -6,12 +6,14 @@ import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.table.BodoSqlTable
+import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.prepare.RelOptTableImpl
+import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.TableScan
 
 class PandasTableScan(
@@ -22,6 +24,10 @@ class PandasTableScan(
 
     init {
         assert(convention == PandasRel.CONVENTION)
+    }
+
+    override fun copy(traitSet: RelTraitSet, inputs: MutableList<RelNode>?): RelNode {
+        return PandasTableScan(cluster, traitSet, table)
     }
 
     override fun getTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
@@ -99,7 +105,7 @@ class PandasTableScan(
 
         if (!bodoSQLTable.readRequiresIO()) {
             builder.add(Op.Assign(readDFVar, readExpr))
-            return ctx.convertDfToTable(readDFVar, rowType)
+            return ctx.convertDfToTable(readDFVar, getRowType())
         }
 
         // Check if Casting DF to Remove Categorical Columns is Necessary
@@ -112,14 +118,16 @@ class PandasTableScan(
         }
     }
 
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+        // Note: Types may be lazily computed so use getRowType() instead of rowType
+        val bodoSqlTable = (table as? RelOptTableImpl)?.table() as? BodoSqlTable
+        return ExpectedBatchingProperty.tableReadProperty(bodoSqlTable, getRowType())
+    }
+
     companion object {
         @JvmStatic
         fun create(cluster: RelOptCluster, table: RelOptTable): PandasTableScan {
-            // Note: Types may be lazily computed so use getRowType() instead of rowType
-            val rowType = table.getRowType()
-            val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(rowType)
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION).replace(batchingProperty)
-
+            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION)
             return PandasTableScan(cluster, traitSet, table)
         }
     }

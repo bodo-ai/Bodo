@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.rel.logical.BodoLogicalUnion
-import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
@@ -23,10 +22,9 @@ class PandasUnionRule private constructor(config: Config) : ConverterRule(config
     override fun convert(rel: RelNode): RelNode {
         val union = rel as Union
         val convention = PandasRel.CONVENTION
-        val batchingProperty = ExpectedBatchingProperty.streamingIfPossibleProperty(union.getRowType())
-        val traitSet = rel.cluster.traitSet().replace(convention).replace(batchingProperty)
+        val traitSet = rel.cluster.traitSet().replace(convention)
         val inputs = union.inputs.map { input ->
-            convert(input, input.traitSet.replace(convention).replace(batchingProperty))
+            convert(input, input.traitSet.replace(convention))
         }
         return PandasUnion(rel.cluster, traitSet, inputs, union.all)
     }

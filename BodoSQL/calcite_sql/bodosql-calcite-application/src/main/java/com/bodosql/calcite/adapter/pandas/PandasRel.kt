@@ -8,6 +8,7 @@ import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
@@ -74,6 +75,20 @@ interface PandasRel : RelNode {
      * This should be called from emit.
      */
     fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable)
+
+    /**
+     * What is the expected batching property for the output data given the property
+     * of the inputs. Most implementation will ignore the argument but some nodes may allow
+     * matching it under some circumstances.
+     */
+    fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty = ExpectedBatchingProperty.alwaysSingleBatchProperty()
+
+    /**
+     * The expected batching property for the given input node's property.
+     * Most implementation will ignore the argument but some nodes may allow
+     * matching it under some circumstances.
+     */
+    fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty = expectedOutputBatchingProperty(inputBatchingProperty)
 
     interface Implementor {
         fun visitChild(input: RelNode, ordinal: Int): BodoEngineTable

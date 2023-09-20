@@ -19,9 +19,7 @@ import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.CatalogTableImpl
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
-import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.google.common.collect.ImmutableList
-import net.snowflake.client.jdbc.internal.org.bouncycastle.oer.its.SubjectPermissions.all
 import org.apache.calcite.plan.Context
 import org.apache.calcite.plan.Contexts
 import org.apache.calcite.plan.RelOptCluster
@@ -75,6 +73,8 @@ object BodoPhysicalRelFactories {
         BODO_PHYSICAL_SET_OP_FACTORY,
         BODO_PHYSICAL_AGGREGATE_FACTORY,
         BODO_PHYSICAL_SORT_FACTORY,
+        BODO_PHYSICAL_TABLE_SCAN_FACTORY,
+        BODO_PHYSICAL_VALUES_FACTORY,
     )
 
     @JvmField
@@ -226,8 +226,7 @@ object BodoPhysicalRelFactories {
         rowType: RelDataType,
         tuples: List<ImmutableList<RexLiteral>>,
     ): RelNode {
-        val batchingProperty = ExpectedBatchingProperty.alwaysSingleBatchProperty()
         val immutableTuples = ImmutableList.copyOf(tuples)
-        return PandasValues.create(cluster, cluster.traitSetOf(PandasRel.CONVENTION).replace(batchingProperty), rowType, immutableTuples)
+        return PandasValues.create(cluster, cluster.traitSet().replace(PandasRel.CONVENTION), rowType, immutableTuples)
     }
 }

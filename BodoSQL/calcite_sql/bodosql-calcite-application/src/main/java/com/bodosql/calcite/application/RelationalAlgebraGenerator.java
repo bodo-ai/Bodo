@@ -9,7 +9,6 @@ import com.bodosql.calcite.prepare.PlannerImpl;
 import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
-import com.bodosql.calcite.traits.BatchingProperty;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import java.io.PrintWriter;
@@ -310,11 +309,7 @@ public class RelationalAlgebraGenerator {
       // TODO(jsternberg): Rework this logic because these are some incredibly leaky abstractions.
       // We won't be doing optimizations so transform the relational algebra to use the pandas nodes
       // now. This is a temporary thing while we transition to using the volcano planner.
-      RelTraitSet requiredOutputTraits =
-          planner
-              .getEmptyTraitSet()
-              .replace(PandasRel.CONVENTION)
-              .replace(BatchingProperty.SINGLE_BATCH);
+      RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
       result = result.withRel(planner.transform(2, requiredOutputTraits, result.rel));
       planner.close();
     }
@@ -327,11 +322,7 @@ public class RelationalAlgebraGenerator {
 
   private RelRoot getOptimizedRelationalAlgebra(RelRoot nonOptimizedPlan)
       throws RelConversionException {
-    RelTraitSet requiredOutputTraits =
-        planner
-            .getEmptyTraitSet()
-            .replace(PandasRel.CONVENTION)
-            .replace(BatchingProperty.SINGLE_BATCH);
+    RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
     RelRoot optimizedPlan =
         nonOptimizedPlan.withRel(planner.transform(1, requiredOutputTraits, nonOptimizedPlan.rel));
     planner.close();

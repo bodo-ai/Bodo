@@ -31,19 +31,11 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
     }
 
     private fun extractNodes(call: RelOptRuleCall): Pair<Aggregate, SnowflakeRel> {
-        return when (call.rels.size) {
-            // Inputs are:
-            // Aggregate ->
-            //      CombineStreamsExchange ->
-            //          SnowflakeToPandasConverter ->
-            //             SnowflakeRel
-            4 -> Pair(call.rel(0), call.rel(3))
-            // Inputs are:
-            // Aggregate ->
-            //   SnowflakeToPandasConverter ->
-            //      SnowflakeRel
-            else -> Pair(call.rel(0), call.rel(2))
-        }
+        // Inputs are:
+        // Aggregate ->
+        //   SnowflakeToPandasConverter ->
+        //      SnowflakeRel
+        return Pair(call.rel(0), call.rel(2))
     }
 
     companion object {

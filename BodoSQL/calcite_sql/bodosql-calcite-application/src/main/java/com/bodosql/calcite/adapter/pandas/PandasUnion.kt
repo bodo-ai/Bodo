@@ -3,6 +3,7 @@ package com.bodosql.calcite.adapter.pandas
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.rel.core.UnionBase
+import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -23,6 +24,10 @@ class PandasUnion(
         return PandasUnion(cluster, traitSet, inputs, all)
     }
 
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+        return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
+    }
+
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")
     }
@@ -41,12 +46,7 @@ class PandasUnion(
             inputs: List<RelNode>,
             all: Boolean,
         ): PandasUnion {
-            val streamingTrait = ExpectedBatchingProperty.streamingIfPossibleProperty(
-                inputs.flatMap {
-                    ExpectedBatchingProperty.rowTypeToTypes(it.getRowType())
-                },
-            )
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION).replace(streamingTrait)
+            val traitSet = cluster.traitSet().replace(PandasRel.CONVENTION)
             return PandasUnion(cluster, traitSet, inputs, all)
         }
     }
