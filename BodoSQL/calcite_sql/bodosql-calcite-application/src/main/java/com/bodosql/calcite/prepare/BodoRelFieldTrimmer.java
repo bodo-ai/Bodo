@@ -365,10 +365,17 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     // Create input with trimmed columns.
     final RelNode input = aggregate.getInput();
     final Set<RelDataTypeField> inputExtraFields = Collections.emptySet();
+    final ImmutableBitSet usedInputFields = inputFieldsUsed.build();
+    final TrimResult incompleteTrimResult =
+        trimChild(aggregate, input, usedInputFields, inputExtraFields);
+
+    // Bodo change, always prune all unused input columns
     final TrimResult trimResult =
-        trimChild(aggregate, input, inputFieldsUsed.build(), inputExtraFields);
+        insertPruningProjection(incompleteTrimResult, usedInputFields, inputExtraFields);
+
     final RelNode newInput = trimResult.left;
     final Mapping inputMapping = trimResult.right;
+
     // We have to return group keys and (if present) indicators.
     // So, pretend that the consumer asked for them.
     final int groupCount = aggregate.getGroupSet().cardinality();
