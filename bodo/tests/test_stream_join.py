@@ -2788,8 +2788,8 @@ def test_hash_join_nested_array(memory_leak_check):
             "H": pd.array([5, 6, 7, 8]),
         }
     )
-    build_keys_inds = bodo.utils.typing.MetaType((0, 1))
-    probe_keys_inds = bodo.utils.typing.MetaType((0, 1))
+    build_keys_inds = bodo.utils.typing.MetaType((0,))
+    probe_keys_inds = bodo.utils.typing.MetaType((0,))
     kept_cols = bodo.utils.typing.MetaType((0, 1, 2, 3))
     build_col_meta = bodo.utils.typing.ColNamesMetaType(
         (
@@ -2874,25 +2874,25 @@ def test_hash_join_nested_array(memory_leak_check):
     # Generate expected output for each type of join
     expected_df = pd.DataFrame(
         {
-            "A": np.array([1, 2, 3]),
-            "B": pd.array([[[1, 2], [3]], [[None], [4]], [[5], [6]]]),
-            "C": pd.array([1, 2, 3]),
-            "D": np.array(["1", "2", "3"]),
-            "E": np.array([1, 2, 3]),
-            "F": pd.array([[[1, 2], [3]], [[None], [4]], [[5], [6]]]),
-            "G": pd.array([[[9, 8], [7]], [[None], [6]], [[5], [4]]]),
-            "H": pd.array([5, 6, 7]),
+            "A": np.array([1, 2, 3, 4]),
+            "B": pd.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None]),
+            "C": pd.array([1, 2, 3, 4]),
+            "D": np.array(["1", "2", "3", "4"]),
+            "E": np.array([1, 2, 3, 4]),
+            "F": pd.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None]),
+            "G": pd.array([[[9, 8], [7]], [[None], [6]], [[5], [4]], None]),
+            "H": pd.array([5, 6, 7, 8]),
         }
     )
 
-    # NOTE: sort_output must be set to False here, as sorting nested array type will cause TypeError: unhashable type: 'list'
     check_func(
         test_hash_join,
         (build_table, probe_table),
         py_output=expected_df,
-        check_dtype=False,
         reset_index=True,
-        sort_output=False,
+        convert_columns_to_pandas=True,
+        sort_output=True,
+        only_seq=True,
     )
 
 
@@ -3004,12 +3004,12 @@ def test_nested_loop_join_nested_array(memory_leak_check):
         }
     )
 
-    # NOTE: sort_output must be set to False here, as sorting nested array type will cause TypeError: unhashable type: 'list'
     check_func(
         test_nested_loop_join,
         (build_table, probe_table),
         py_output=expected_df,
-        check_dtype=False,
         reset_index=True,
-        sort_output=False,
+        convert_columns_to_pandas=True,
+        sort_output=True,
+        only_seq=True,
     )
