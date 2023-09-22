@@ -405,6 +405,17 @@ class GroupbyState {
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
     GetDictionaryHashesForKeys();
 
+    /**
+     * @brief Reset the shuffle state. This is meant to be
+     * called after a shuffle operation.
+     * This clears the shuffle hash table, resets the shuffle buffer,
+     * clears the shuffle hashes vector and resets shuffle_next_group
+     * back to 0.
+     * Note that this doesn't release memory.
+     *
+     */
+    void ResetShuffleState();
+
     void InitOutputBuffer(const std::shared_ptr<table_info>& dummy_table) {
         auto [arr_c_types, arr_array_types] =
             get_dtypes_arr_types_from_table(dummy_table);
