@@ -12,6 +12,9 @@ from bodo.ext import memory_budget_cpp
 ll.add_symbol("init_operator_comptroller", memory_budget_cpp.init_operator_comptroller)
 ll.add_symbol("register_operator", memory_budget_cpp.register_operator)
 ll.add_symbol(
+    "compute_satisfiable_budgets", memory_budget_cpp.compute_satisfiable_budgets
+)
+ll.add_symbol(
     "delete_operator_comptroller", memory_budget_cpp.delete_operator_comptroller
 )
 ll.add_symbol("increment_pipeline_id", memory_budget_cpp.increment_pipeline_id)
@@ -61,6 +64,24 @@ def increment_pipeline_id(typingctx):
         )
         fn_typ = cgutils.get_or_insert_function(
             builder.module, fnty, name="increment_pipeline_id"
+        )
+        builder.call(fn_typ, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return
+
+    sig = types.none()
+    return sig, codegen
+
+
+@intrinsic
+def compute_satisfiable_budgets(typingctx):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [],
+        )
+        fn_typ = cgutils.get_or_insert_function(
+            builder.module, fnty, name="compute_satisfiable_budgets"
         )
         builder.call(fn_typ, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
