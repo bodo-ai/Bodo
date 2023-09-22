@@ -403,7 +403,8 @@ bool groupby_build_consume_batch(GroupbyState* groupby_state,
             shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
                                  comm_info_table, groupby_state->parallel);
         shuffle_hashes.reset();
-        groupby_state->shuffle_table_buffer->Reset();
+        // Reset shuffle state:
+        groupby_state->ResetShuffleState();
 
         // unify dictionaries to allow consistent hashing and fast key
         // comparison using indices
@@ -764,6 +765,13 @@ GroupbyState::GetDictionaryHashesForKeys() {
         }
     }
     return dict_hashes;
+}
+
+void GroupbyState::ResetShuffleState() {
+    this->shuffle_build_table->clear();
+    this->shuffle_table_groupby_hashes.resize(0);
+    this->shuffle_next_group = 0;
+    this->shuffle_table_buffer->Reset();
 }
 
 void GroupbyState::ClearBuildState() {
