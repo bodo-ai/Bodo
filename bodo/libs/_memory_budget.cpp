@@ -188,6 +188,10 @@ void increment_pipeline_id() {
     OperatorComptroller::Default()->IncrementPipelineID();
 }
 
+void compute_satisfiable_budgets() {
+    OperatorComptroller::Default()->ComputeSatisfiableBudgets();
+}
+
 void delete_operator_comptroller() { OperatorComptroller::Default()->Reset(); }
 
 PyMODINIT_FUNC PyInit_memory_budget_cpp(void) {
@@ -202,6 +206,7 @@ PyMODINIT_FUNC PyInit_memory_budget_cpp(void) {
     SetAttrStringFromVoidPtr(m, init_operator_comptroller);
     SetAttrStringFromVoidPtr(m, register_operator);
     SetAttrStringFromVoidPtr(m, increment_pipeline_id);
+    SetAttrStringFromVoidPtr(m, compute_satisfiable_budgets);
     SetAttrStringFromVoidPtr(m, delete_operator_comptroller);
     return m;
 }
