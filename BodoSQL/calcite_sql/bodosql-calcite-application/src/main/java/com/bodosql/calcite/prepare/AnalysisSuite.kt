@@ -15,5 +15,6 @@ class AnalysisSuite {
         var enableAnalysis = false
 
         val multiJoinAnalyzer = MultiJoinAnalyzerProgram()
+        val filterPushdownAnalysis = FilterPushdownAnalyzerProgram()
     }
 }

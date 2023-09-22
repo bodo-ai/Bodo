@@ -85,6 +85,9 @@ object BodoPrograms {
                 ifTrue(optimize, BodoRules.VOLCANO_OPTIMIZE_RULE_SET),
             ),
         ),
+        // This analysis pass has to come after VOLCANO_MINIMAL_RULE_SET which
+        // contains the filterPushdown step.
+        AnalysisSuite.filterPushdownAnalysis,
         // Add a final trim step.
         TrimFieldsProgram(true),
         // TODO(jsternberg): This can likely be adapted and integrated directly with
