@@ -32,6 +32,7 @@ class Module(private val frame: Frame) {
         private var parentFrames: Stack<Frame> = Stack()
         private var assignedVariables: Set<Variable> = emptySet()
 
+        private var currentPipeline: Int = 0
         private var operatorCounter: Int = 0
 
         fun newOperatorID() = operatorCounter++
@@ -134,6 +135,9 @@ class Module(private val frame: Frame) {
          */
         fun build(): Module {
             require(parentFrames.empty()) { "Internal Error in module.build: parentFrames stack is not empty" }
+            if (scope.hasOperators()) {
+                scope.addToFrame(functionFrame)
+            }
             return Module(functionFrame)
         }
 
@@ -156,7 +160,8 @@ class Module(private val frame: Frame) {
          */
         fun startStreamingPipelineFrame(exitCond: Variable, iterVar: Variable) {
             parentFrames.add(activeFrame)
-            activeFrame = StreamingPipelineFrame(exitCond, iterVar, scope, parentFrames.size)
+            activeFrame = StreamingPipelineFrame(exitCond, iterVar, scope, currentPipeline)
+            currentPipeline++
         }
 
         /**
@@ -199,8 +204,10 @@ class Module(private val frame: Frame) {
          * only existing for the current pipeline
          */
         fun registerSingleBatchOperatorScope(opID: Int) {
-            scope.startOperator(opID, parentFrames.size)
-            scope.endOperator(opID, parentFrames.size)
+            if (isStreamingFrame()) {
+                scope.startOperator(opID, parentFrames.size)
+                scope.endOperator(opID, parentFrames.size)
+            }
         }
 
         /**

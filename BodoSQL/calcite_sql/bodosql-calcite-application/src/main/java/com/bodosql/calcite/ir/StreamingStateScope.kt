@@ -14,6 +14,10 @@ class StreamingStateScope {
 
     private var operators: HashMap<Int, OperatorPipelineRange> = HashMap()
 
+    fun hasOperators(): Boolean {
+        return operators.isNotEmpty()
+    }
+
     fun startOperator(opID: Int, startPipelineID: Int) {
         if (operators.containsKey(opID)) {
             throw Exception("StreamingStateScope: Repeated Operator ID Found")
@@ -33,14 +37,14 @@ class StreamingStateScope {
 
     fun genOpComptrollerInit(): List<Op> {
         val inits = mutableListOf<Op>(
-            Op.Assign(Variable("comptroller"), Expr.Call("operator_comptroller_init")),
+            Op.Stmt(Expr.Call("bodo.libs.memory_budget.init_operator_comptroller")),
         )
 
         for ((_, op) in operators) {
             inits.add(
                 Op.Stmt(
                     Expr.Call(
-                        "operator_comptroller_register",
+                        "bodo.libs.memory_budget.register_operator",
                         Expr.IntegerLiteral(op.opID),
                         Expr.IntegerLiteral(op.startPipelineID),
                         Expr.IntegerLiteral(op.endPipelineID ?: throw Exception("StreamingStateScope: An Operator's End Pipeline Not Set Before Generating Code")),
@@ -50,8 +54,19 @@ class StreamingStateScope {
             )
         }
 
+        inits.add(Op.Stmt(Expr.Call("bodo.libs.memory_budget.compute_satisfiable_budgets")))
+
         return inits
     }
 
-    fun genOpComptrollerFinalize() {}
+    fun genOpComptrollerFinalize(): Op {
+        return Op.Stmt(Expr.Call("bodo.libs.memory_budget.delete_operator_comptroller"))
+    }
+
+    fun addToFrame(frame: Frame) {
+        if (operators.size > 0) {
+            frame.prependAll(genOpComptrollerInit())
+            frame.addBeforeReturn(genOpComptrollerFinalize())
+        }
+    }
 }

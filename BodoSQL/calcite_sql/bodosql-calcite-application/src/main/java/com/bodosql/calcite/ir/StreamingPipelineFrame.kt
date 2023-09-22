@@ -55,6 +55,14 @@ class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar
     }
 
     /**
+     * Adds the list of operations to the beginning of the active Frame.
+     * @param ops Operations to add to the active Frame.
+     */
+    override fun prependAll(ops: List<Op>) {
+        code.prependAll(ops)
+    }
+
+    /**
      * Adds the operation to the end of the active Frame.
      * @param op Operation to add to the active Frame.
      */
@@ -64,10 +72,19 @@ class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar
 
     /**
      * Adds the list of operations to the end of the active Frame.
-     * @param ops Operation to add to the active Frame.
+     * @param ops Operations to add to the active Frame.
      */
     override fun addAll(ops: List<Op>) {
         code.addAll(ops)
+    }
+
+    /**
+     * Adds the list of operations just before the return statement in the active Frame.
+     * If there is no return statement yet, just add op to the end of the frame.
+     * @param ops Operations to add to the active Frame.
+     */
+    override fun addBeforeReturn(op: Op) {
+        code.addBeforeReturn(op)
     }
 
     /**
