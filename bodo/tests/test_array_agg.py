@@ -305,3 +305,78 @@ def test_array_agg_multiple_orders(memory_leak_check):
         reset_index=True,
         check_dtype=False,
     )
+
+
+def test_array_agg_any_value(memory_leak_check):
+    """
+    Tests ARRAY_AGG followed by a call to ANY_VALUE.
+    """
+
+    def impl(df):
+        arr_agg_res = df.groupby(["key_a", "key_b"], as_index=False, dropna=False).agg(
+            arr_data_i=bodo.utils.utils.ExtendedNamedAgg(
+                column="data_i",
+                aggfunc="array_agg",
+                additional_args=(("order",), (True,), ("last",)),
+            ),
+            arr_data_f=bodo.utils.utils.ExtendedNamedAgg(
+                column="data_f",
+                aggfunc="array_agg",
+                additional_args=(("order",), (True,), ("last",)),
+            ),
+        )
+        any_val_res = (
+            arr_agg_res.groupby(["key_a"], as_index=False, dropna=False)
+            .agg(
+                res_i=pd.NamedAgg("arr_data_i", aggfunc="first"),
+                res_f=pd.NamedAgg("arr_data_f", aggfunc="first"),
+            )
+            .sort_values(by=["key_a"])
+        )
+        return any_val_res
+
+    df = pd.DataFrame(
+        {
+            "key_a": list("BAABAAABACACCAA"),
+            "key_b": list("xxzyxyzzzzyyxxy"),
+            "order": pd.Series([9, 2, 6, 10, 1, 4, 8, 11, 7, 14, 5, 13, 12, 0, -1]),
+            "data_i": pd.Series(
+                [None, 2, 0, None, 1, 1, 2, None, 1, -1, 2, -1, -1, 0, 0],
+                dtype=pd.Int32Dtype(),
+            ),
+            "data_f": pd.Series(
+                [
+                    None,
+                    2.718,
+                    0.0,
+                    None,
+                    3.14,
+                    3.14,
+                    2.718,
+                    None,
+                    3.14,
+                    -1.5,
+                    2.718,
+                    -1.5,
+                    -1.5,
+                    0.0,
+                    0.0,
+                ],
+            ),
+        },
+    )
+    answer = pd.DataFrame(
+        {
+            "key_a": ["A", "B", "C"],
+            "res_i": [[0, 1, 2], [], [-1]],
+            "res_f": [[0.0, 3.14, 2.718], [], [-1.5]],
+        }
+    )
+
+    check_func(
+        impl,
+        (df,),
+        py_output=answer,
+        reset_index=True,
+        check_dtype=False,
+    )
