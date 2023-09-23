@@ -1088,7 +1088,7 @@ void array_agg_operation(
             // If the current group has just ended, the next offset will be the
             // previous offset plus the number of non null elements since the
             // current group started.
-            if (i > 1 && getv<int64_t>(sorted_groups, i) !=
+            if (i > 0 && getv<int64_t>(sorted_groups, i) !=
                              getv<int64_t>(sorted_groups, i - 1)) {
                 offset_buffer[group_idx] = curr_offset;
                 group_idx++;

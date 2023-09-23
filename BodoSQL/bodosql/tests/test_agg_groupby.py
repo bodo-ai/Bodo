@@ -676,49 +676,115 @@ def test_nested_grouping_clauses(
 
 
 @pytest.mark.parametrize(
-    "args",
+    "agg_col",
     [
-        pytest.param(
-            (["A"], ["B"]),
-            id="int32_groupby_string",
-        ),
-        pytest.param((["B"], ["A"]), id="string_groupby_int32", marks=pytest.mark.slow),
-        pytest.param((["C"], ["B"]), id="float_groupby_string", marks=pytest.mark.slow),
-        pytest.param(
-            (["C"], ["A", "B"]), id="float_groupby_int32_string", marks=pytest.mark.slow
-        ),
-        pytest.param(
-            (["A", "B", "C"], ["B"]),
-            id="all_groupby_string",
-        ),
-        pytest.param(
-            (["A", "B", "C"], ["A", "B", "C"]),
-            id="all_groupby_all",
-            marks=pytest.mark.slow,
-        ),
+        pytest.param("A", id="int32_nullable"),
+        pytest.param("B", id="int32_numpy", marks=pytest.mark.slow),
+        pytest.param("C", id="string"),
+        pytest.param("D", id="float", marks=pytest.mark.slow),
+        pytest.param("E", id="bool_nullable", marks=pytest.mark.slow),
+        pytest.param("F", id="bool_numpy", marks=pytest.mark.slow),
+        pytest.param("G", id="int_array"),
+        pytest.param("H", id="string_array"),
     ],
 )
-def test_any_value(args, spark_info, memory_leak_check):
+def test_any_value(agg_col, spark_info, memory_leak_check):
     """Tests ANY_VALUE, which is normally nondeterministic but has been
     implemented in a way that is reproducible (by always returning the first
-    value)"""
+    value). The test data is set up so that each group has all identical values."""
     ctx = {
         "table1": pd.DataFrame(
             {
-                "A": pd.Series([1, 2, 3, 4, None] * 5, dtype=pd.Int32Dtype()),
-                "B": pd.Series(["A", "B", None, "C", "D"] * 5),
-                "C": pd.Series([1.0, None, None, 13.0, -1.5] * 5),
+                "K": pd.Series(
+                    [1, None, 1, 2, 1, None, 1, 2, 3, 2, 1], dtype=pd.Int32Dtype()
+                ),
+                "A": pd.Series(
+                    [5, 0, 5, None, 5, 0, 5, None, 7, None, 5], dtype=pd.Int32Dtype()
+                ),
+                "B": pd.Series([9, 7, 9, -1, 9, 7, 9, -1, 8, -1, 9], dtype=np.int32),
+                "C": pd.Series(["A", "B", "A", "", "A", "B", "A", "", None, "", "A"]),
+                "D": pd.Series(
+                    [
+                        -1.5,
+                        None,
+                        -1.5,
+                        2.718,
+                        -1.5,
+                        None,
+                        -1.5,
+                        2.718,
+                        3.14,
+                        2.718,
+                        -1.5,
+                    ]
+                ),
+                "E": pd.Series(
+                    [
+                        True,
+                        None,
+                        True,
+                        False,
+                        True,
+                        None,
+                        True,
+                        False,
+                        None,
+                        False,
+                        True,
+                    ],
+                    dtype=pd.BooleanDtype(),
+                ),
+                "F": pd.Series(
+                    [
+                        True,
+                        False,
+                        True,
+                        False,
+                        True,
+                        False,
+                        True,
+                        False,
+                        False,
+                        False,
+                        True,
+                    ],
+                    dtype=np.bool8,
+                ),
+                "G": pd.Series(
+                    [
+                        [],
+                        [-1],
+                        [],
+                        [1, 2, 3],
+                        [],
+                        [-1],
+                        [],
+                        [1, 2, 3],
+                        None,
+                        [1, 2, 3],
+                        [],
+                    ]
+                ),
+                "H": pd.Series(
+                    [
+                        ["B", "CD"],
+                        ["A"],
+                        ["B", "CD"],
+                        None,
+                        ["B", "CD"],
+                        ["A"],
+                        ["B", "CD"],
+                        None,
+                        [],
+                        None,
+                        ["B", "CD"],
+                    ]
+                ),
             }
         )
     }
 
-    val_cols, group_cols = args
-    query = (
-        "SELECT "
-        + ", ".join([f"ANY_VALUE({col})" for col in val_cols])
-        + " FROM table1 GROUP BY "
-        + ", ".join(group_cols)
-    )
+    query = f"SELECT K, ANY_VALUE({agg_col}) FROM table1 GROUP BY K ORDER BY K"
 
     check_query(
         query,
@@ -729,6 +795,9 @@ def test_any_value(args, spark_info, memory_leak_check):
         equivalent_spark_query=get_equivalent_spark_agg_query(query),
         # TODO[BE-3456]: enable dict-encoded string test when segfault is fixed
         use_dict_encoded_strings=False,
+        # df.sort_values is unsupported in Python with array item array in the table.
+        # Uses ORDER BY clause instead to get the rows in a consistent order.
+        sort_output=False,
     )
 
 

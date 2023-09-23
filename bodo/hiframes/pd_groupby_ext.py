@@ -352,14 +352,25 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             "For median, only column of integer, float or Decimal type are allowed",
         )
     # [BE-416] Support with list
+    elif (
+        func_name in {"last", "sum", "prod", "min", "max", "count", "nunique", "head"}
+    ) and isinstance(
+        arr_type, ArrayItemArrayType
+    ):  # pragma: no cover
+        return (
+            None,
+            f"column type of list of {in_dtype} is not supported in groupby built-in function {func_name}",
+        )
     # [BE-433] Support with tuples
     elif (
         func_name
         in {"first", "last", "sum", "prod", "min", "max", "count", "nunique", "head"}
-    ) and (isinstance(arr_type, (TupleArrayType, ArrayItemArrayType))):
+    ) and isinstance(
+        arr_type, TupleArrayType
+    ):  # pragma: no cover
         return (
             None,
-            f"column type of list/tuple of {in_dtype} is not supported in groupby built-in function {func_name}",
+            f"column type of tuple of {in_dtype} is not supported in groupby built-in function {func_name}",
         )
 
     elif func_name == "size":
