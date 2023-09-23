@@ -83,6 +83,30 @@ const std::vector<std::shared_ptr<array_info>> BasicColSet::getOutputColumns() {
     return {out_col};
 }
 
+// ############################## First ##############################
+
+FirstColSet::FirstColSet(std::shared_ptr<array_info> in_col, bool combine_step,
+                         bool use_sql_rules)
+    : BasicColSet(in_col, Bodo_FTypes::first, combine_step, use_sql_rules) {}
+
+FirstColSet::~FirstColSet() {}
+
+void FirstColSet::alloc_running_value_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    if (in_col->arr_type == bodo_array_type::ARRAY_ITEM ||
+        in_col->arr_type == bodo_array_type::LIST_STRING) {
+        // For ARRAY_ITEM or LIST_STRING array, allocate a dummy inner array for
+        // now since the true array item array cannot be computed until later.
+        std::shared_ptr<array_info> inner_arr =
+            alloc_numpy(0, Bodo_CTypes::INT8);
+        std::shared_ptr<array_info> out_col =
+            alloc_array_item(num_groups, inner_arr);
+        out_cols.push_back(out_col);
+    } else {
+        BasicColSet::alloc_running_value_columns(num_groups, out_cols);
+    }
+}
+
 // ############################## Mean ##############################
 
 MeanColSet::MeanColSet(std::shared_ptr<array_info> in_col, bool combine_step,
@@ -1802,6 +1826,9 @@ std::unique_ptr<BasicColSet> makeColSet(
                 std::vector<std::shared_ptr<array_info>>(in_cols.begin() + 1,
                                                          in_cols.end()),
                 window_ascending, window_na_position, is_parallel);
+            break;
+        case Bodo_FTypes::first:
+            colset = new FirstColSet(in_cols[0], do_combine, use_sql_rules);
             break;
         default:
             colset =

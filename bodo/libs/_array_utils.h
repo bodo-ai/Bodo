@@ -1378,4 +1378,16 @@ inline void set_arr_item(array_info& arr, size_t idx, T val) {
     SetBitTo((uint8_t*)arr.data1(), idx, val);
 }
 
+/**
+ * Creates a new array by copying an arbitrary subset of rows
+ * from the input array in a desired order with duplicates allowed.
+ *
+ * @param[in] arr the array to copy the rows from.
+ * @param[in] rows_to_select - the vector of row indices to copy
+ * return An array with the elements of arr copied from the rows
+ * in rows_to_select.
+ */
+std::shared_ptr<array_info> select_subset_of_rows(
+    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select);
+
 #endif  // _ARRAY_UTILS_H_INCLUDED

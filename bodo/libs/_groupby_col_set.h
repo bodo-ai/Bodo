@@ -235,6 +235,20 @@ class BasicColSet {
 };
 
 /**
+ * Column Set for the FIRST operation
+ *
+ */
+class FirstColSet : public BasicColSet {
+   public:
+    FirstColSet(std::shared_ptr<array_info> in_col, bool combine_step,
+                bool use_sql_rules);
+    virtual ~FirstColSet();
+    void alloc_running_value_columns(
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+};
+
+/**
  * Column Set for the mean operation
  *
  */

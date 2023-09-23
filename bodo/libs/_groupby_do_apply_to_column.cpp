@@ -1512,6 +1512,56 @@ void apply_to_column_nullable(
 }
 
 /**
+ * @brief Apply the given aggregation function to an input array item array.
+ *
+ * Currently only supported for first, which is used to implement ANY_VALUE.
+ *
+ * @tparam ftype The function type.
+ * @param[in] in_col The input column. This must be a nullable array type.
+ * @param[in, out] out_col The output column.
+ * @param[in, out] aux_cols Auxiliary columns used to for certain operations
+ * that require multiple columns (e.g. mean).
+ * @param[in] grp_info The grouping information.
+ */
+template <int ftype>
+    requires(ftype == Bodo_FTypes::first)
+void apply_to_column_array_item(
+    std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
+    std::vector<std::shared_ptr<array_info>>& aux_cols,
+    const grouping_info& grp_info) {
+    offset_t* in_offset_buffer =
+        (offset_t*)(in_col->buffers[0]->mutable_data());
+    offset_t* out_offset_buffer =
+        (offset_t*)(out_col->buffers[0]->mutable_data());
+    out_offset_buffer[0] = 0;
+    offset_t curr_offset = 0;
+    // Build a vector of which rows to copy to build the new inner array.
+    std::vector<size_t> rows_to_copy;
+    size_t n_groups = grp_info.num_groups;
+    for (size_t i_grp = 0; i_grp < n_groups; i_grp++) {
+        size_t i = grp_info.group_to_first_row[i_grp];
+        if (in_col->get_null_bit(i)) {
+            // If the row is non-null, then the group will map to this inner
+            // array entry.
+            offset_t start_offset = in_offset_buffer[i];
+            offset_t end_offset = in_offset_buffer[i + 1];
+            curr_offset += end_offset - start_offset;
+            for (size_t idx = start_offset; idx < end_offset; idx++) {
+                rows_to_copy.push_back(idx);
+            }
+        } else {
+            // Otherwise, the group will map to null.
+            out_col->set_null_bit(i_grp, false);
+        }
+        out_offset_buffer[i_grp + 1] = curr_offset;
+    }
+    std::shared_ptr<array_info> in_inner_arr = in_col->child_arrays[0];
+    std::shared_ptr<array_info> out_inner_arr = out_col->child_arrays[0];
+    // Copy over the desired subset of the inner array
+    *out_inner_arr = *(select_subset_of_rows(in_inner_arr, rows_to_copy));
+}
+
+/**
  * @brief Apply a function to a column(s), save result to (possibly reduced)
  * output column(s) Semantics of this function right now vary depending on
  * function type (ftype).
@@ -1570,6 +1620,16 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
                                CTYPE>(in_col, out_col, aux_cols, grp_info); \
     }
 #endif
+    // Handle nested array cases separately
+    if (in_col->arr_type == bodo_array_type::ARRAY_ITEM ||
+        in_col->arr_type == bodo_array_type::LIST_STRING) {
+        switch (ftype) {
+            case Bodo_FTypes::first: {
+                return apply_to_column_array_item<Bodo_FTypes::first>(
+                    in_col, out_col, aux_cols, grp_info);
+            }
+        }
+    }
     // Handle string functions where we care about the input separately.
     if (in_col->arr_type == bodo_array_type::STRING ||
         in_col->arr_type == bodo_array_type::LIST_STRING ||
