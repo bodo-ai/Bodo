@@ -2684,6 +2684,30 @@ BodoSQL currently supports the following JSON functions:
     Obeys the following specification: https://docs.snowflake.com/en/sql-reference/functions/json_extract_path_text.html
 
 
+#### GET_PATH
+-   `#!sql GET_PATH(data, path_string)`
+
+    Extracts an entry from a semi-structured data expression based on the path string.
+    Obeys the specification described here: https://docs.snowflake.com/en/sql-reference/functions/get_path
+
+    !!! note
+        Currently only supported under limited conditions where it is possible for the
+        planner to push the extraction of JSON fields into the reader or into a filter
+        that is pushed down. If a usage of `#sql GET_PATH` causes errors, it may mean
+        that it is not currently in one of these limited cases.
+
+    Below are some valid examples of usage and alternative syntax:
+
+    - `#!sql SELECT product_id FROM products WHERE GET_PATH(appearance, 'color') = 'RED'`
+
+    - `#!sql SELECT product_id FROM products WHERE appearance:color = 'RED'`
+
+    - `#!sql SELECT CONCAT_WS(' ', GET_PATH(info, 'first'), GET_PATH(info, 'last')) FROM phone_book'`
+    Note that this case the query creates an implicit cast to `varchar`.
+
+    - `#!sql SELECT CONCAT_WS(' ', info:first, info:last) FROM phone_book'`
+    Note that this case the query creates an implicit cast to `varchar`.
+
 ###   Control Flow Functions
 
 #### DECODE
