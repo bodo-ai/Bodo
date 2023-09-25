@@ -2182,6 +2182,132 @@ def test_snowflake_catalog_array_read(test_db_snowflake_catalog, memory_leak_che
     # proper array reads.
 
 
+@pytest.mark.parametrize(
+    "condition, answer",
+    [
+        pytest.param(
+            "data:container = 'SM'",
+            [0, 4, 11, 13, 16, 17, 20, 24, 31, 33, 36, 37],
+            id="string_to_variant",
+        ),
+        pytest.param(
+            "GET_PATH(data, 'color') LIKE '%o%' AND data:price >= 1025.0",
+            [4, 5, 7, 11, 12, 14, 15, 16, 17, 19, 24, 25, 27, 28, 29, 31, 32, 39],
+            id="variant_to_string_and_float",
+        ),
+    ],
+)
+def test_snowflake_json_filter_pushdown(
+    condition, answer, test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests reading from a Snowflake table with a filter condition based
+    on a JSON field.
+    """
+    # Only test on rank zero
+    if bodo.get_rank() != 0:
+        return
+    query = f"SELECT id FROM BODOSQL_JSON_READ_TEST WHERE {condition}"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    answer_df = pd.DataFrame({"id": answer})
+    out = bc.sql(query)
+    pd.testing.assert_frame_equal(
+        out,
+        answer_df,
+        check_names=False,
+        check_dtype=False,
+        check_index_type=False,
+        check_column_type=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "fields, clauses, answer",
+    [
+        pytest.param(
+            ["LEFT(data:color, 1) AS color_first_letter", "COUNT(*) as color_count"],
+            ["GROUP BY color_first_letter", "ORDER BY color_first_letter"],
+            pd.DataFrame(
+                {
+                    "color_first_letter": list("abcdfghlmoprstvwy"),
+                    "color_count": [2, 2, 2, 1, 5, 1, 1, 1, 4, 2, 4, 3, 5, 3, 1, 1, 2],
+                }
+            ),
+            id="count_color_first_letter",
+        ),
+        pytest.param(
+            ["data:container::varchar AS size", "AVG(data:price::float) AS avg_price"],
+            ["GROUP BY size", "ORDER BY avg_price"],
+            pd.DataFrame(
+                {
+                    "size": ["LG", "WRAP", "MED", "SM", "JUMBO"],
+                    "avg_price": [
+                        1_026.67,
+                        1_028.2525,
+                        1_031.006666667,
+                        1_031.173333333,
+                        1_034.26,
+                    ],
+                }
+            ),
+            id="price_avg_size",
+        ),
+        pytest.param(
+            [
+                "UPPER(data:color) AS ucolor",
+                "WIDTH_BUCKET(data:price::float, 1020, 1040, 25) AS prange",
+            ],
+            ["WHERE data:price < 1025.0", "ORDER BY data:rank::integer"],
+            pd.DataFrame(
+                {
+                    "ucolor": [
+                        "YELLOW",
+                        "PALE",
+                        "YELLOW",
+                        "HOT",
+                        "PURPLE",
+                        "CREAM",
+                        "METALLIC",
+                        "ROSY",
+                    ],
+                    "prange": [3, 3, 2, 2, 6, 6, 4, 4],
+                }
+            ),
+            id="cheap_ranked_colors",
+        ),
+    ],
+)
+def test_snowflake_json_field_pushdown(
+    fields, clauses, answer, test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests reading from a Snowflake table with the extraction of JSON fields ocurring in Snowflake.
+
+    Args:
+        fields: entries that are placed in the SELECT clause of the query.
+        clauses: any additional clauses provided after the FROM clause (e.g. GROUP BY, WHERE, ORDER BY).
+        answer: the expected output for the query.
+    """
+    # Only test on rank zero
+    if bodo.get_rank() != 0:
+        return
+    query = f"SELECT {', '.join(fields)} FROM BODOSQL_JSON_READ_TEST"
+    for clause in clauses:
+        query += f"\n{clause}"
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    out = bc.sql(query)
+    pd.testing.assert_frame_equal(
+        out,
+        answer,
+        check_names=False,
+        check_dtype=False,
+        check_index_type=False,
+        check_column_type=False,
+        rtol=1e-5,
+        atol=1e-8,
+    )
+
+
 def _check_stream_unify_opt(impl, bc, query, fdef, arg_no):
     """Check the IR to make sure unification optimization worked ('fdef' call arg
     'arg_no' is set to types.Omitted(True))
