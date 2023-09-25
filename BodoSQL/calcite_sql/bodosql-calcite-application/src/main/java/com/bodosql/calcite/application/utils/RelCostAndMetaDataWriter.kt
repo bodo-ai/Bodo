@@ -70,15 +70,21 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
         }
 
         // Check if we have distinctiveness information for any of the columns
-        val hasDistinctInfo = (0 until rel.rowType.fieldCount).any { i -> mq.getColumnDistinctCount(rel, i) != null }
-        if (hasDistinctInfo) {
-            // If we do,
-            s.append(", Distinct estimates: ")
-            for (columnIdx in 0 until rel.rowType.fieldCount) {
-                val distinctiveness = mq.getColumnDistinctCount(rel, columnIdx)
-                if (distinctiveness != null) {
-                    val formattedDistinctiveness = DecimalFormat("##0.#E0").format(distinctiveness)
-                    s.append("$$columnIdx = $formattedDistinctiveness values, ")
+        // We don't do this in the case that we're determining what metadata is needed,
+        // because the act of requesting the metadata "mq.getColumnDistinctCount" will make the system assume
+        // that the metadata for this column is needed.
+        if ((System.getenv("BODOSQL_TESTING_FIND_NEEDED_METADATA")?.toIntOrNull() ?: 0) == 0) {
+            val hasDistinctInfo =
+                (0 until rel.rowType.fieldCount).any { i -> mq.getColumnDistinctCount(rel, i) != null }
+            if (hasDistinctInfo) {
+                // If we do,
+                s.append(", Distinct estimates: ")
+                for (columnIdx in 0 until rel.rowType.fieldCount) {
+                    val distinctiveness = mq.getColumnDistinctCount(rel, columnIdx)
+                    if (distinctiveness != null) {
+                        val formattedDistinctiveness = DecimalFormat("##0.#E0").format(distinctiveness)
+                        s.append("$$columnIdx = $formattedDistinctiveness values, ")
+                    }
                 }
             }
         }
