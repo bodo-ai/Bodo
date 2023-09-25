@@ -696,13 +696,36 @@ def test_any_value(agg_col, spark_info, memory_leak_check):
         "table1": pd.DataFrame(
             {
                 "K": pd.Series(
-                    [1, None, 1, 2, 1, None, 1, 2, 3, 2, 1], dtype=pd.Int32Dtype()
+                    [1, None, 1, 2, 1, None, 1, 2, 3, 2, 1, 40, 5, -6, 7],
+                    dtype=pd.Int32Dtype(),
                 ),
                 "A": pd.Series(
-                    [5, 0, 5, None, 5, 0, 5, None, 7, None, 5], dtype=pd.Int32Dtype()
+                    [5, 0, 5, None, 5, 0, 5, None, 7, None, 5, 10, 20, 30, 40],
+                    dtype=pd.Int32Dtype(),
                 ),
-                "B": pd.Series([9, 7, 9, -1, 9, 7, 9, -1, 8, -1, 9], dtype=np.int32),
-                "C": pd.Series(["A", "B", "A", "", "A", "B", "A", "", None, "", "A"]),
+                "B": pd.Series(
+                    [9, 7, 9, -1, 9, 7, 9, -1, 8, -1, 9, 256, 512, 1024, 2048],
+                    dtype=np.int32,
+                ),
+                "C": pd.Series(
+                    [
+                        "A",
+                        "B",
+                        "A",
+                        "",
+                        "A",
+                        "B",
+                        "A",
+                        "",
+                        None,
+                        "",
+                        "A",
+                        "BC",
+                        "DEFG",
+                        "HI",
+                        "JKL",
+                    ]
+                ),
                 "D": pd.Series(
                     [
                         -1.5,
@@ -716,6 +739,10 @@ def test_any_value(agg_col, spark_info, memory_leak_check):
                         3.14,
                         2.718,
                         -1.5,
+                        -1.0,
+                        -0.5,
+                        -0.25,
+                        -0.125,
                     ]
                 ),
                 "E": pd.Series(
@@ -731,6 +758,10 @@ def test_any_value(agg_col, spark_info, memory_leak_check):
                         None,
                         False,
                         True,
+                        True,
+                        False,
+                        None,
+                        True,
                     ],
                     dtype=pd.BooleanDtype(),
                 ),
@@ -744,6 +775,10 @@ def test_any_value(agg_col, spark_info, memory_leak_check):
                         False,
                         True,
                         False,
+                        False,
+                        False,
+                        True,
+                        True,
                         False,
                         False,
                         True,
@@ -763,6 +798,10 @@ def test_any_value(agg_col, spark_info, memory_leak_check):
                         None,
                         [1, 2, 3],
                         [],
+                        [10],
+                        [20, 30],
+                        [40, None],
+                        [50, None, 60, 1],
                     ]
                 ),
                 "H": pd.Series(
@@ -778,6 +817,10 @@ def test_any_value(agg_col, spark_info, memory_leak_check):
                         [],
                         None,
                         ["B", "CD"],
+                        ["A", "B", "C"],
+                        [""],
+                        ["A", "CD", "B"],
+                        ["alphabet", "soup"],
                     ]
                 ),
             }

@@ -710,14 +710,10 @@ def test_last_args(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_first_last_unsupported_types(memory_leak_check):
-    """Test first/last with unsupported Bodo types"""
+def test_last_unsupported_types(memory_leak_check):
+    """Test last with unsupported Bodo types"""
 
-    def impl1(df):
-        A = df.groupby("A").first()
-        return A
-
-    def impl2(df):
+    def impl(df):
         A = df.groupby("A").last()
         return A
 
@@ -740,18 +736,9 @@ def test_first_last_unsupported_types(memory_leak_check):
         }
     )
     err_msg = "not supported in groupby"
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl1)(df_list_int)
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl2)(df_list_int)
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl1)(df_list_float)
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl2)(df_list_float)
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl1)(df_list_bool)
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl2)(df_list_bool)
+    for df in [df_list_int, df_list_bool, df_list_float]:
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(impl)(df)
 
 
 # ------------------------------ df.groupby().mean()/median()------------------------------ #
