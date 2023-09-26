@@ -259,7 +259,12 @@ def test_read_schema_timeout(memory_leak_check):
     import bodo.io.snowflake
 
     def test_impl(conn):
-        return pd.read_sql("Select L_TAX FROM LINEITEM ORDER BY L_TAX LIMIT 10", conn)
+        # We use SYSTEM$WAIT to pause execution for 2s, giving time for the
+        # timeout to kick in and cancel the query
+        return pd.read_sql(
+            "Select SYSTEM$WAIT(2) as x, L_TAX FROM LINEITEM ORDER BY L_TAX LIMIT 10",
+            conn,
+        )
 
     db = "SNOWFLAKE_SAMPLE_DATA"
     schema = "TPCH_SF1"
