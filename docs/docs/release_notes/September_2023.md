@@ -43,3 +43,19 @@ BodoSQL:
 
 - Added support for `HASH(*)`
 - Added support for `PERCENTILE_CONT` and `PERCENTILE_DISC` (non-window support)
+
+### 2023.9.5 New Features and Improvements
+
+
+Compilation / Performance improvements:
+
+- BodoSQL generated plans have been further optimized to reduce runtime and memory usage.
+- Support for executing `UNION` in vectorized mode
+- Support for executing `ARRAY_AGG` on numeric types in a `GROUP BY`
+
+### 2023.9.6 New Features and Improvements
+
+Fix critical bugs in vectorized execution mode.
+
+- BodoSQL generated plans have been further optimized to reduce runtime and memory usage.
+- `GET_PATH` and JSON field accesses via `:` are supported in some usages.
