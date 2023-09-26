@@ -58,9 +58,9 @@ object BodoPrograms {
         TrimFieldsProgram(false),
         SnowflakeTraitAdder(),
         SnowflakeColumnPruning(),
-        // Filter Push down Step.
+        // Simplification & filter pushdown step.
         if (optimize) {
-            HepOptimizerProgram(BodoRules.FILTER_PUSH_DOWN_RULES)
+            HepOptimizerProgram(Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES, BodoRules.CSE_RULES))
         } else {
             NoopProgram
         },
