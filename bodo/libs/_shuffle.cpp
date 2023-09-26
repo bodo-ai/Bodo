@@ -2433,170 +2433,169 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
     }
 }
 
-/* Broadcast the first n_cols of in_table to the other nodes.
-   The ref_table contains only the type information. In order to eliminate
-   it, we would need to have a broadcast_datatype function.
+std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
+                                            std::shared_ptr<array_info> in_arr,
+                                            bool is_parallel, int mpi_root,
+                                            int myrank) {
+    int64_t arr_bcast[7];
+    if (myrank == mpi_root) {
+        if (in_arr->arr_type == bodo_array_type::DICT) {
+            if (!in_arr->child_arrays[0]->is_globally_replicated) {
+                throw std::runtime_error(
+                    "broadcast_array: not supported for DICT arrays without "
+                    "global dictionary.");
+            }
+            // In case of dictionary encoded string arrays,
+            // we assume that the dictionary is global.
+            // Which means we just need to broadcast the indices
+            // array, which is the same logic as NULLABLE_INT_BOOL.
+            in_arr = in_arr->child_arrays[1];
+        }
+        arr_bcast[0] = in_arr->length;
+        arr_bcast[1] = in_arr->dtype;
+        arr_bcast[2] = in_arr->arr_type;
+        arr_bcast[3] = in_arr->n_sub_elems();
+        arr_bcast[4] = in_arr->n_sub_sub_elems();
+        arr_bcast[5] = in_arr->num_categories;
+        arr_bcast[6] = (int64_t)in_arr->precision;
+    }
+    MPI_Bcast(arr_bcast, 7, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
+    int64_t n_rows = arr_bcast[0];
+    Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::CTypeEnum(arr_bcast[1]);
+    bodo_array_type::arr_type_enum arr_type =
+        bodo_array_type::arr_type_enum(arr_bcast[2]);
+    int64_t n_sub_elems = arr_bcast[3];
+    int64_t n_sub_sub_elems = arr_bcast[4];
+    int64_t num_categories = arr_bcast[5];
+    int32_t precision = (int32_t)arr_bcast[6];
 
-   For dict columns, we use the global dictionary from columns of
-   ref_table (since columns in in_table are null on ranks != 0).
-   Ensure that ref_table and in_table share the same dictionary
-   and that it is global.
+    std::shared_ptr<array_info> out_arr;
+    if (arr_type == bodo_array_type::STRUCT) {
+        std::shared_ptr<arrow::Array> ref_array = to_arrow(ref_arr), in_array;
+        if (myrank == mpi_root) {
+            in_array = to_arrow(in_arr);
+        }
+        std::shared_ptr<arrow::Array> array =
+            broadcast_arrow_array(ref_array, in_array);
+        out_arr = arrow_array_to_bodo(array);
+    }
+    if (arr_type == bodo_array_type::ARRAY_ITEM) {
+        MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
+        if (myrank == mpi_root) {
+            out_arr = copy_array(in_arr, /*shallow_copy_inner_array*/ true);
+        } else {
+            out_arr = alloc_array_item(n_rows, nullptr);
+        }
+        out_arr->child_arrays.front() = broadcast_array(
+            ref_arr->child_arrays.front(), out_arr->child_arrays.front(),
+            is_parallel, mpi_root, myrank);
+        MPI_Bcast(out_arr->data1(), n_rows + 1, mpi_typ_offset, mpi_root,
+                  MPI_COMM_WORLD);
+    }
+    if (arr_type == bodo_array_type::NUMPY ||
+        arr_type == bodo_array_type::CATEGORICAL ||
+        arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+        if (myrank == mpi_root) {
+            out_arr = copy_array(in_arr);
+        } else {
+            out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype);
+        }
+        out_arr->precision = precision;
+        uint64_t bcast_size;
+        if (arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+            dtype == Bodo_CTypes::_BOOL) {
+            // Nullable booleans store 1 bit per boolean.
+            mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+            bcast_size = (n_rows + 7) >> 3;
+        } else {
+            bcast_size = n_rows;
+        }
+        MPI_Bcast(out_arr->data1(), bcast_size, mpi_typ, mpi_root,
+                  MPI_COMM_WORLD);
+    }
+    if (arr_type == bodo_array_type::INTERVAL) {
+        MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+        if (myrank == mpi_root) {
+            out_arr = copy_array(in_arr);
+        } else {
+            out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype);
+        }
+        MPI_Bcast(out_arr->data1(), n_rows, mpi_typ, mpi_root, MPI_COMM_WORLD);
+        MPI_Bcast(out_arr->data2(), n_rows, mpi_typ, mpi_root, MPI_COMM_WORLD);
+    }
+    if (arr_type == bodo_array_type::STRING) {
+        MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
+        MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
+        if (myrank == mpi_root) {
+            out_arr = copy_array(in_arr);
+        } else {
+            out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
+                                  arr_type, dtype, -1, 0, num_categories);
+        }
+        MPI_Bcast(out_arr->data1(), n_sub_elems, mpi_typ8, mpi_root,
+                  MPI_COMM_WORLD);
+        MPI_Bcast(out_arr->data2(), n_rows, mpi_typ_offset, mpi_root,
+                  MPI_COMM_WORLD);
+    }
+    if (arr_type == bodo_array_type::LIST_STRING) {
+        MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
+        MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
+        if (myrank == mpi_root) {
+            out_arr = copy_array(in_arr);
+        } else {
+            out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
+                                  arr_type, dtype, -1, 0, num_categories);
+        }
+        MPI_Bcast(out_arr->data1(), n_sub_sub_elems, mpi_typ8, mpi_root,
+                  MPI_COMM_WORLD);
+        MPI_Bcast(out_arr->data2(), n_sub_elems, mpi_typ_offset, mpi_root,
+                  MPI_COMM_WORLD);
+        MPI_Bcast(out_arr->data3(), n_rows, mpi_typ_offset, mpi_root,
+                  MPI_COMM_WORLD);
+        MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+        int n_sub_bytes = (n_sub_elems + 7) >> 3;
+        MPI_Bcast(out_arr->sub_null_bitmask(), n_sub_bytes, mpi_typ, mpi_root,
+                  MPI_COMM_WORLD);
+    }
+    if (arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+        arr_type == bodo_array_type::STRING ||
+        arr_type == bodo_array_type::LIST_STRING ||
+        arr_type == bodo_array_type::ARRAY_ITEM) {
+        // broadcasting the null bitmask
+        MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+        int n_bytes = (n_rows + 7) >> 3;
+        MPI_Bcast(out_arr->null_bitmask(), n_bytes, mpi_typ, mpi_root,
+                  MPI_COMM_WORLD);
+    }
 
-   @param ref_table : the reference table used for the datatype.
-   @param in_table : the table that is broadcasted.
-   @param n_cols : the number of columns in output
-   @param is_parallel: Used to indicate whether tracing should be parallel
-   or not
-   @return the table put in all the nodes
-*/
+    // Handle the case that input arr is DICT (we changed reference of in_arr to
+    // the indices portion earlier).
+    // At this point out_arr is a NULLABLE_INT_BOOL array and contains the
+    // indices.
+    // We assume the ref_table has the correct global dictionary that can be
+    // used for the final dictionary output array.
+    if (ref_arr->arr_type == bodo_array_type::DICT) {
+        // Create a DICT out_arr
+        out_arr = create_dict_string_array(ref_arr->child_arrays[0], out_arr);
+    }
+
+    return out_arr;
+}
+
 std::shared_ptr<table_info> broadcast_table(
     std::shared_ptr<table_info> ref_table, std::shared_ptr<table_info> in_table,
     size_t n_cols, bool is_parallel, int mpi_root) {
     tracing::Event ev("broadcast_table", is_parallel);
-    int n_pes, myrank;
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    int myrank;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     std::vector<std::shared_ptr<array_info>> out_arrs;
+    out_arrs.reserve(n_cols);
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
-        int64_t arr_bcast[7];
-        std::shared_ptr<array_info> in_arr = nullptr;
-        if (myrank == mpi_root) {
-            in_arr = in_table->columns[i_col];
-            if (in_arr->arr_type == bodo_array_type::DICT) {
-                if (!in_arr->child_arrays[0]->is_globally_replicated) {
-                    throw std::runtime_error(
-                        "broadcast_table: Not supported for DICT arrays "
-                        "without global dictionary.");
-                }
-
-                // In case of dictionary encoded string arrays,
-                // we assume that the dictionary is global.
-                // Which means we just need to broadcast the indices
-                // array, which is the same logic as NULLABLE_INT_BOOL.
-                in_arr = in_arr->child_arrays[1];
-            }
-            arr_bcast[0] = in_arr->length;
-            arr_bcast[1] = in_arr->dtype;
-            arr_bcast[2] = in_arr->arr_type;
-            arr_bcast[3] = in_arr->n_sub_elems();
-            arr_bcast[4] = in_arr->n_sub_sub_elems();
-            arr_bcast[5] = in_arr->num_categories;
-            arr_bcast[6] = (int64_t)in_arr->precision;
-        }
-        MPI_Bcast(arr_bcast, 7, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
-        int64_t n_rows = arr_bcast[0];
-        Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::CTypeEnum(arr_bcast[1]);
-        bodo_array_type::arr_type_enum arr_type =
-            bodo_array_type::arr_type_enum(arr_bcast[2]);
-        int64_t n_sub_elems = arr_bcast[3];
-        int64_t n_sub_sub_elems = arr_bcast[4];
-        int64_t num_categories = arr_bcast[5];
-        int32_t precision = (int32_t)arr_bcast[6];
-        //
-        std::shared_ptr<array_info> out_arr = nullptr;
-        if (arr_type == bodo_array_type::STRUCT ||
-            arr_type == bodo_array_type::ARRAY_ITEM) {
-            std::shared_ptr<arrow::Array> ref_array =
-                to_arrow(ref_table->columns[i_col]);
-            std::shared_ptr<arrow::Array> in_array = nullptr;
-            if (myrank == mpi_root) {
-                in_array = to_arrow(in_arr);
-            }
-            std::shared_ptr<arrow::Array> array =
-                broadcast_arrow_array(ref_array, in_array);
-            out_arr = arrow_array_to_bodo(array);
-        }
-        if (arr_type == bodo_array_type::NUMPY ||
-            arr_type == bodo_array_type::CATEGORICAL ||
-            arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            MPI_Datatype mpi_typ = get_MPI_typ(dtype);
-            if (myrank == mpi_root) {
-                out_arr = copy_array(in_arr);
-            } else {
-                out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype);
-            }
-            out_arr->precision = precision;
-            uint64_t bcast_size;
-            if (arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
-                dtype == Bodo_CTypes::_BOOL) {
-                // Nullable booleans store 1 bit per boolean.
-                mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-                bcast_size = (n_rows + 7) >> 3;
-            } else {
-                bcast_size = n_rows;
-            }
-            MPI_Bcast(out_arr->data1(), bcast_size, mpi_typ, mpi_root,
-                      MPI_COMM_WORLD);
-        }
-        if (arr_type == bodo_array_type::INTERVAL) {
-            MPI_Datatype mpi_typ = get_MPI_typ(dtype);
-            if (myrank == mpi_root) {
-                out_arr = copy_array(in_arr);
-            } else {
-                out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype);
-            }
-            MPI_Bcast(out_arr->data1(), n_rows, mpi_typ, mpi_root,
-                      MPI_COMM_WORLD);
-            MPI_Bcast(out_arr->data2(), n_rows, mpi_typ, mpi_root,
-                      MPI_COMM_WORLD);
-        }
-        if (arr_type == bodo_array_type::STRING) {
-            MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
-            MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
-            if (myrank == mpi_root)
-                out_arr = copy_array(in_arr);
-            else
-                out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
-                                      arr_type, dtype, -1, 0, num_categories);
-            MPI_Bcast(out_arr->data1(), n_sub_elems, mpi_typ8, mpi_root,
-                      MPI_COMM_WORLD);
-            MPI_Bcast(out_arr->data2(), n_rows, mpi_typ_offset, mpi_root,
-                      MPI_COMM_WORLD);
-        }
-        if (arr_type == bodo_array_type::LIST_STRING) {
-            MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
-            MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
-            if (myrank == mpi_root)
-                out_arr = copy_array(in_arr);
-            else
-                out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
-                                      arr_type, dtype, -1, 0, num_categories);
-            MPI_Bcast(out_arr->data1(), n_sub_sub_elems, mpi_typ8, mpi_root,
-                      MPI_COMM_WORLD);
-            MPI_Bcast(out_arr->data2(), n_sub_elems, mpi_typ_offset, mpi_root,
-                      MPI_COMM_WORLD);
-            MPI_Bcast(out_arr->data3(), n_rows, mpi_typ_offset, mpi_root,
-                      MPI_COMM_WORLD);
-            MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-            int n_sub_bytes = (n_sub_elems + 7) >> 3;
-            MPI_Bcast(out_arr->sub_null_bitmask(), n_sub_bytes, mpi_typ,
-                      mpi_root, MPI_COMM_WORLD);
-        }
-        if (arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
-            arr_type == bodo_array_type::STRING ||
-            arr_type == bodo_array_type::LIST_STRING) {
-            MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-            int n_bytes = (n_rows + 7) >> 3;
-            MPI_Bcast(out_arr->null_bitmask(), n_bytes, mpi_typ, mpi_root,
-                      MPI_COMM_WORLD);
-        }
-
-        // Handle the case that input arr is DICT (we changed reference of
-        // in_arr to the indices portion earlier).
-        // At this point out_arr is a NULLABLE_INT_BOOL array and contains
-        // the indices.
-        // We assume the ref_table has the correct global
-        // dictionary that can be used for the final dictionary output
-        // array.
-        if (ref_table->columns[i_col]->arr_type == bodo_array_type::DICT) {
-            std::shared_ptr<array_info> ref_arr = ref_table->columns[i_col];
-            std::shared_ptr<array_info> dict_arr = ref_arr->child_arrays[0];
-            // Create a DICT out_arr
-            out_arr = create_dict_string_array(dict_arr, out_arr);
-        }
-        in_arr.reset();
-        out_arrs.push_back(out_arr);
+        out_arrs.push_back(broadcast_array(ref_table->columns[i_col],
+                                           in_table->columns[i_col],
+                                           is_parallel, mpi_root, myrank));
     }
 
     return std::make_shared<table_info>(out_arrs);
@@ -3513,16 +3512,16 @@ std::tuple<bool, uint64_t, int64_t> shuffle_this_iter(
                                                 : adaptive_sync_counter;
 
         // Estimate how many iterations it will take until we need to shuffle
-        // again and update sync frequency (every SYNC_UPDATE_FREQ
-        // syncs and only if adaptive).
+        // again and update sync frequency (every SYNC_UPDATE_FREQ syncs and
+        // only if adaptive).
         if (reduced_shuffle_buffer_size > 0 && iter > prev_shuffle_iter &&
             adaptive_sync_counter != -1 &&
             ((adaptive_sync_counter + 1) % SYNC_UPDATE_FREQ == 0)) {
-            // It took (iter - prev_shuffle_iter) iterations to accumulate a buffer of size reduced_shuffle_buffer_size.
+            // It took (iter - prev_shuffle_iter) iterations to accumulate a
+            // buffer of size reduced_shuffle_buffer_size.
             // Based on this, the new shuffle frequency should be:
             new_sync_iter = (SHUFFLE_THRESHOLD * (iter - prev_shuffle_iter)) /
                             reduced_shuffle_buffer_size;
-
             new_sync_iter = std::max<uint64_t>(new_sync_iter, 1);
             new_sync_iter =
                 std::min<uint64_t>(new_sync_iter, DEFAULT_SYNC_ITERS);

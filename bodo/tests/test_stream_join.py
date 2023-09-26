@@ -2774,18 +2774,18 @@ def test_produce_output(memory_leak_check):
 def test_hash_join_nested_array(memory_leak_check):
     probe_table = pd.DataFrame(
         {
-            "A": np.array([1, 2, 3, 4]),
-            "B": np.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None]),
-            "C": pd.array([1, 2, 3, 4]),
-            "D": np.array(["1", "2", "3", "4"]),
+            "A": np.array([1, 2, 3, 4] * 2),
+            "B": np.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 2),
+            "C": pd.array([1, 2, 3, 4] * 2),
+            "D": np.array(["1", "2", "3", "4"] * 2),
         }
     )
     build_table = pd.DataFrame(
         {
-            "E": np.array([1, 2, 3, 4]),
-            "F": np.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None]),
-            "G": np.array([[[9, 8], [7]], [[None], [6]], [[5], [4]], None]),
-            "H": pd.array([5, 6, 7, 8]),
+            "E": np.array([1, 2, 3, 4] * 2),
+            "F": np.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 2),
+            "G": np.array([[[9, 8], [7]], [[None], [6]], [[5], [4]], None] * 2),
+            "H": pd.array([5, 6, 7, 8] * 2),
         }
     )
     build_keys_inds = bodo.utils.typing.MetaType((0,))
@@ -2874,14 +2874,14 @@ def test_hash_join_nested_array(memory_leak_check):
     # Generate expected output for each type of join
     expected_df = pd.DataFrame(
         {
-            "A": np.array([1, 2, 3, 4]),
-            "B": pd.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None]),
-            "C": pd.array([1, 2, 3, 4]),
-            "D": np.array(["1", "2", "3", "4"]),
-            "E": np.array([1, 2, 3, 4]),
-            "F": pd.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None]),
-            "G": pd.array([[[9, 8], [7]], [[None], [6]], [[5], [4]], None]),
-            "H": pd.array([5, 6, 7, 8]),
+            "A": np.array([1, 2, 3, 4] * 4),
+            "B": pd.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 4),
+            "C": pd.array([1, 2, 3, 4] * 4),
+            "D": np.array(["1", "2", "3", "4"] * 4),
+            "E": np.array([1, 2, 3, 4] * 4),
+            "F": pd.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 4),
+            "G": pd.array([[[9, 8], [7]], [[None], [6]], [[5], [4]], None] * 4),
+            "H": pd.array([5, 6, 7, 8] * 4),
         }
     )
 
@@ -2892,21 +2892,20 @@ def test_hash_join_nested_array(memory_leak_check):
         reset_index=True,
         convert_columns_to_pandas=True,
         sort_output=True,
-        only_seq=True,
     )
 
 
 def test_nested_loop_join_nested_array(memory_leak_check):
     probe_table = pd.DataFrame(
         {
-            "A": np.array([1, 2, 3, 4]),
-            "B": np.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None]),
+            "A": np.array([1, 2, 3, 4] * 2),
+            "B": np.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 2),
         }
     )
     build_table = pd.DataFrame(
         {
-            "C": np.array([2, 3, 4, 5]),
-            "D": np.array([[[9, 8], [7]], [[None], [6]], [[5], [4]], None]),
+            "C": np.array([2, 3, 4, 5] * 2),
+            "D": np.array([[[9, 8], [7]], [[None], [6]], [[5], [4]], None] * 2),
         }
     )
     build_keys_inds = bodo.utils.typing.MetaType(())
@@ -2988,9 +2987,11 @@ def test_nested_loop_join_nested_array(memory_leak_check):
     # Generate expected output for each type of join
     expected_df = pd.DataFrame(
         {
-            "A": np.array([2, 3, 4, 3, 4, 4]),
-            "B": pd.array([[[None], [4]], [[5], [6]], None, [[5], [6]], None, None]),
-            "C": np.array([2, 2, 2, 3, 3, 4]),
+            "A": np.array([2, 3, 4, 3, 4, 4] * 4),
+            "B": pd.array(
+                [[[None], [4]], [[5], [6]], None, [[5], [6]], None, None] * 4
+            ),
+            "C": np.array([2, 2, 2, 3, 3, 4] * 4),
             "D": pd.array(
                 [
                     [[9, 8], [7]],
@@ -3000,6 +3001,7 @@ def test_nested_loop_join_nested_array(memory_leak_check):
                     [[None], [6]],
                     [[5], [4]],
                 ]
+                * 4
             ),
         }
     )
@@ -3011,5 +3013,4 @@ def test_nested_loop_join_nested_array(memory_leak_check):
         reset_index=True,
         convert_columns_to_pandas=True,
         sort_output=True,
-        only_seq=True,
     )

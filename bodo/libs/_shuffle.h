@@ -164,18 +164,38 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
     std::shared_ptr<table_info> in_table, std::shared_ptr<uint32_t[]>& hashes,
     mpi_comm_info const& comm_info);
 
-/** Broadcasting a table.
- * The table in the nodes of rank 0 is broadcast to all nodes.
+/**
+ * @brief Broadcast an array. Child arrays will also be copied.
  *
- * @param ref_table : the reference table used for the types
- * @param in_table  : the input table. It can be a NULL
- *                    for the nodes of rank not equal to 0 since it is not
- *                    read for those nodes.
- * @param n_cols    : the number of columns of the keys.
- * @param is_parallel: Used to indicate whether tracing should be parallel or
- * not
- * @param mpi_root: root rank for broadcast (where data is broadcast from)
- * @return the table equal to in_table but available on all the nodes.
+ * @param ref_arr : the reference array used for the datatype
+ * @param in_arr : the broadcasted array
+ * @param is_parallel : whether tracing should be parallel
+ * @param mpi_root : root rank for broadcast (where data is broadcast from)
+ * @param myrank : current rank
+ * @return the array put in all the nodes
+ */
+std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
+                                            std::shared_ptr<array_info> in_arr,
+                                            bool is_parallel, int mpi_root,
+                                            int myrank);
+
+/**
+ * @brief Broadcast the first n_cols of in_table to the other nodes. The
+ * ref_table contains only the type information. In order to eliminate it, we
+ * would need to have a broadcast_datatype function.
+ *
+ * For dict columns, we use the global dictionary from columns of ref_table
+ * (since columns in in_table can be anything including nullptr on ranks !=
+ * mpi_root) to ensure that ref_table and in_table share the same dictionary and
+ * that it is global.
+ *
+ * @param ref_table : the reference table used for the datatype
+ * @param in_table : the broadcasted table. It can be anything including nullptr
+ * for the nodes of rank not equal to mpi_root.
+ * @param n_cols : the number of columns in output
+ * @param is_parallel : whether tracing should be parallel
+ * @param mpi_root : root rank for broadcast (where data is broadcast from)
+ * @return the table put in all the nodes
  */
 std::shared_ptr<table_info> broadcast_table(
     std::shared_ptr<table_info> ref_table, std::shared_ptr<table_info> in_table,
