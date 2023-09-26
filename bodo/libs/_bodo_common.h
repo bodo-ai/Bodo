@@ -1457,7 +1457,16 @@ int64_t table_global_memory_size(std::shared_ptr<table_info> table);
 /// Initialize numpy_item_size and verify size of dtypes
 void bodo_common_init();
 
-std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> arr);
+/**
+ * @brief Make a copy of the given array
+ *
+ * @param arr the array to be copied
+ * @param shallow_copy_inner_array whether to shallow copy of inner array for
+ * ARRAY_ITEM array
+ * @return The copy
+ */
+std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> arr,
+                                       bool shallow_copy_inner_array = false);
 
 /* Calculate the size of one row
  *

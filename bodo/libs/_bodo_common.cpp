@@ -716,7 +716,8 @@ int64_t table_global_memory_size(std::shared_ptr<table_info> table) {
     return global_size;
 }
 
-std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr) {
+std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
+                                       bool shallow_copy_inner_array) {
     int64_t extra_null_bytes = 0;
     std::shared_ptr<array_info> farr;
     if (earr->arr_type == bodo_array_type::DICT) {
@@ -729,23 +730,28 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr) {
         if (earr->arr_type == bodo_array_type::STRING) {
             array_id = earr->array_id;
         }
-        farr = alloc_array(earr->length, earr->n_sub_elems(),
-                           earr->n_sub_sub_elems(), earr->arr_type, earr->dtype,
-                           array_id, extra_null_bytes, earr->num_categories,
-                           earr->is_globally_replicated,
-                           earr->is_locally_unique, earr->is_locally_sorted);
+        farr =
+            earr->arr_type == bodo_array_type::ARRAY_ITEM
+                ? alloc_array_item(earr->length,
+                                   shallow_copy_inner_array
+                                       ? earr->child_arrays.front()
+                                       : copy_array(earr->child_arrays.front()))
+                : alloc_array(earr->length, earr->n_sub_elems(),
+                              earr->n_sub_sub_elems(), earr->arr_type,
+                              earr->dtype, array_id, extra_null_bytes,
+                              earr->num_categories,
+                              earr->is_globally_replicated,
+                              earr->is_locally_unique, earr->is_locally_sorted);
     }
     if (earr->arr_type == bodo_array_type::NUMPY ||
         earr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
         memcpy(farr->data1(), earr->data1(), siztype * earr->length);
-    }
-    if (earr->arr_type == bodo_array_type::INTERVAL) {
+    } else if (earr->arr_type == bodo_array_type::INTERVAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
         memcpy(farr->data1(), earr->data1(), siztype * earr->length);
         memcpy(farr->data2(), earr->data2(), siztype * earr->length);
-    }
-    if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+    } else if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         int64_t data_copy_size;
         int64_t n_bytes = ((earr->length + 7) >> 3);
         if (earr->dtype == Bodo_CTypes::_BOOL) {
@@ -755,15 +761,13 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr) {
         }
         memcpy(farr->data1(), earr->data1(), data_copy_size);
         memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
-    }
-    if (earr->arr_type == bodo_array_type::STRING) {
+    } else if (earr->arr_type == bodo_array_type::STRING) {
         memcpy(farr->data1(), earr->data1(), earr->n_sub_elems());
         memcpy(farr->data2(), earr->data2(),
                sizeof(offset_t) * (earr->length + 1));
         int64_t n_bytes = ((earr->length + 7) >> 3);
         memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
-    }
-    if (earr->arr_type == bodo_array_type::LIST_STRING) {
+    } else if (earr->arr_type == bodo_array_type::LIST_STRING) {
         memcpy(farr->data1(), earr->data1(), earr->n_sub_sub_elems());
         memcpy(farr->data2(), earr->data2(),
                sizeof(offset_t) * (earr->n_sub_elems() + 1));
@@ -773,6 +777,15 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr) {
         memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
         int64_t n_sub_bytes = ((earr->n_sub_elems() + 7) >> 3);
         memcpy(farr->sub_null_bitmask(), earr->sub_null_bitmask(), n_sub_bytes);
+    } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        memcpy(farr->data1(), earr->data1(),
+               sizeof(offset_t) * (earr->length + 1));
+        int64_t n_bytes = ((earr->length + 7) >> 3);
+        memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
+    } else {
+        throw std::runtime_error(
+            "copy_array: " + GetArrType_as_string(earr->arr_type) +
+            " array not supported yet!");
     }
     return farr;
 }
