@@ -1082,21 +1082,6 @@ void TableBuildBuffer::ReserveTable(const ChunkedTableBuilder& chunked_tb) {
     }
 }
 
-void TableBuildBuffer::ReserveTableKeys(
-    const std::shared_ptr<table_info>& in_table, uint64_t n_keys) {
-    for (size_t i = 0; i < n_keys; i++) {
-        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
-        array_buffers[i].ReserveArray(in_arr);
-    }
-}
-
-void TableBuildBuffer::ReserveSizeDataColumns(uint64_t new_data_len,
-                                              uint64_t n_keys) {
-    for (size_t i = n_keys; i < this->data_table->ncols(); i++) {
-        array_buffers[i].ReserveSize(new_data_len);
-    }
-}
-
 void TableBuildBuffer::Reset() {
     for (size_t i = 0; i < array_buffers.size(); i++) {
         array_buffers[i].Reset();

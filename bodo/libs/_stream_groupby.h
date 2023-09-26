@@ -4,6 +4,7 @@
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 #include "_chunked_table_builder.h"
+#include "_operator_pool.h"
 #include "_table_builder.h"
 
 #include "_groupby.h"
@@ -11,6 +12,13 @@
 #include "_groupby_ftypes.h"
 #include "_groupby_groups.h"
 
+// Default threshold for Groupby operator's OperatorBufferPool
+#define GROUPBY_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD 0.5
+
+// Use all available memory by default
+#define GROUPBY_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL 1.0
+
+class GroupbyPartition;
 class GroupbyState;
 
 template <bool is_local>
@@ -23,10 +31,18 @@ struct HashGroupbyTable {
      * If iRow < 0 then it is in the input table
      *    at index (-iRow - 1).
      *
+     * When is_local = true, build table is the build_table in the
+     * groupby_partition.
+     * When is_local = false, build table is the shuffle_table in the
+     * groupby_state.
+     *
      * @param iRow row number
      * @return hash of row iRow
      */
     uint32_t operator()(const int64_t iRow) const;
+    /// This will be a nullptr when is_local=false
+    GroupbyPartition* groupby_partition;
+    /// This will be a nullptr when is_local=true
     GroupbyState* groupby_state;
 };
 
@@ -41,21 +57,254 @@ struct KeyEqualGroupbyTable {
      * If iRow < 0 then it is in the input table
      *    at index (-iRow - 1).
      *
+     * When is_local = true, build table is the build_table in the
+     * groupby_partition.
+     * When is_local = false, build table is the shuffle_table in the
+     * groupby_state.
+     *
      * @param iRowA is the first row index for the comparison
      * @param iRowB is the second row index for the comparison
      * @return true if equal else false
      */
     bool operator()(const int64_t iRowA, const int64_t iRowB) const;
+    /// This will be a nullptr when is_local=false
+    GroupbyPartition* groupby_partition;
+    /// This will be a nullptr when is_local=true
     GroupbyState* groupby_state;
     const uint64_t n_keys;
 };
 
-class GroupbyState {
+template <bool is_local>
+using grpby_hash_table_t =
+    bodo::unord_map_container<int64_t, int64_t, HashGroupbyTable<is_local>,
+                              KeyEqualGroupbyTable<is_local>>;
+
+/**
+ * @brief Holds the state of a single partition
+ * during Groupby execution. This includes the
+ * logical hashtable (which comprises of the build_table_buffer,
+ * an unordered map which maps rows to groups and the hashes for
+ * the groups), references to the ColSets, etc.
+ * When the partition is not active, it stores the input
+ * in a ChunkedTableBuilder.
+ * 'top_bitmask' and 'num_top_bits' define the partition
+ * itself, i.e. a record is in this partition if the top
+ * 'num_top_bits' bits of its hash are 'top_bitmask'.
+ *
+ */
+class GroupbyPartition {
    public:
-    template <bool is_local>
-    using hash_table_t =
-        bodo::unord_map_container<int64_t, int64_t, HashGroupbyTable<is_local>,
-                                  KeyEqualGroupbyTable<is_local>>;
+    using hash_table_t = grpby_hash_table_t</*is_local*/ true>;
+
+    explicit GroupbyPartition(
+        size_t num_top_bits_, uint32_t top_bitmask_,
+        const std::vector<int8_t>& build_arr_c_types_,
+        const std::vector<int8_t>& build_arr_array_types_,
+        const uint64_t n_keys_,
+        const std::vector<std::shared_ptr<DictionaryBuilder>>&
+            build_table_dict_builders_,
+        const std::vector<std::shared_ptr<BasicColSet>>& col_sets_,
+        const std::vector<int32_t>& f_in_offsets_,
+        const std::vector<int32_t>& f_in_cols_,
+        const std::vector<int32_t>& f_running_value_offsets_,
+        const uint64_t batch_size_, bool is_active_,
+        bool accumulate_before_update_, bool req_extended_group_info_,
+        bool parallel_, bodo::OperatorBufferPool* op_pool_,
+        const std::shared_ptr<::arrow::MemoryManager> op_mm_);
+
+    // The types of the columns in the build table.
+    const std::vector<int8_t> build_arr_c_types;
+    const std::vector<int8_t> build_arr_array_types;
+    // Dictionary builders (shared by all partitions)
+    std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
+
+    // Current number of groups
+    int64_t next_group = 0;
+    // Map row number to group number
+    std::unique_ptr<hash_table_t> build_hash_table;
+    // Hashes of data in build_table_buffer
+    // XXX Might be better to use unique_ptrs to guarantee
+    // that memory is released during FinalizeBuild.
+    bodo::vector<uint32_t> build_table_groupby_hashes;
+    // Current running values (output of "combine" step)
+    // Note that in the accumulation case, the "running values" is instead the
+    // entire input table.
+    std::unique_ptr<TableBuildBuffer> build_table_buffer;
+
+    // Chunked append-only buffer, only used if a partition is inactive and
+    // not yet finalized
+    ChunkedTableBuilder build_table_buffer_chunked;
+
+    // XXX TODO Make both build_table_buffer and build_table_buffer_chunked
+    // unique_ptrs. In ctor, only initialize one of them based on is_active.
+    // If is_active=false, initialize build_table_buffer in "Activate".
+
+    // temporary batch data
+    std::shared_ptr<table_info> in_table = nullptr;
+    std::shared_ptr<uint32_t[]> in_table_hashes = nullptr;
+
+    // ColSets and related information, owned by the GroupbyState and shared
+    // by all partitions
+    const std::vector<std::shared_ptr<BasicColSet>>& col_sets;
+    const std::vector<int32_t>& f_in_offsets;
+    const std::vector<int32_t>& f_in_cols;
+    const std::vector<int32_t>& f_running_value_offsets;
+
+    /// @brief Get number of bits in the 'top_bitmask'.
+    size_t get_num_top_bits() const { return this->num_top_bits; }
+
+    /// @brief Get the 'top_bitmask'.
+    uint32_t get_top_bitmask() const { return this->top_bitmask; }
+
+    /// @brief Check if a row is part of this partition based on its
+    /// partition hash.
+    /// @param hash Partition hash for the row
+    /// @return True if row is part of partition, False otherwise.
+    inline bool is_in_partition(const uint32_t& hash) const;
+
+    /// @brief Is the partition active?
+    inline bool is_active_partition() const { return this->is_active; }
+
+    /**
+     * @brief Update the groups and combine them with values from
+     * the input batch.
+     *
+     * NOTE: Only used in the aggregating code path (i.e.
+     * accumulate_before_update = false)
+     *
+     * @tparam is_active Whether the partition is active. If the partition is
+     * not active, we simply append the input into build_table_buffer_chunked to
+     * be processed later when the partition has been activated.
+     * @param in_table Input batch to update and combine with the current set of
+     * running values.
+     * @param batch_hashes_groupby Groupby Hashes for input batch.
+     */
+    template <bool is_active>
+    void UpdateGroupsAndCombine(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& batch_hashes_groupby);
+
+    /**
+     * @brief Same as above, except we will only process the rows
+     * whose corresponding value in 'append_rows' is true.
+     *
+     * @tparam is_active Whether the partition is active. If the partition is
+     * not active, we simply append the input into build_table_buffer_chunked to
+     * be processed later when the partition has been activated.
+     * @param in_table Input batch to update and combine with the current set of
+     * running values.
+     * @param batch_hashes_groupby Groupby Hashes for input batch.
+     * @param append_rows Bitmask specifying the rows to use for the update and
+     * combine steps.
+     */
+    template <bool is_active>
+    void UpdateGroupsAndCombine(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
+        const std::vector<bool>& append_rows);
+
+    /**
+     * @brief Append an input batch to the 'build_table_buffer'
+     * (or 'build_table_buffer_chunked' if the partition is not active).
+     * No additional computation is done in this case.
+     *
+     * NOTE: Only used in the accumulating code path (i.e.
+     * accumulate_before_update = true)
+     *
+     * @tparam is_active Whether the partition is active. If it is not,
+     * we append into 'build_table_buffer_chunked' instead of
+     * 'build_table_buffer'
+     * @param in_table Input batch to append.
+     */
+    template <bool is_active>
+    void AppendBuildBatch(const std::shared_ptr<table_info>& in_table);
+
+    /**
+     * @brief Same as above, except we only append the rows specified
+     * by the append_rows bitmask.
+     * Note that we reserve space for the entire table before appending,
+     * and not just for the required rows. This is based on the small
+     * batch assumption where over-allocating is faster without increasing
+     * memory usage disproportionately.
+     *
+     * @tparam is_active Whether the partition is active. If it is not,
+     * we append into 'build_table_buffer_chunked' instead of
+     * 'build_table_buffer'
+     * @param in_table Input batch to append rows from.
+     * @param append_rows Bitmask specifying the rows to append.
+     */
+    template <bool is_active>
+    void AppendBuildBatch(const std::shared_ptr<table_info>& in_table,
+                          const std::vector<bool>& append_rows);
+
+    /**
+     * @brief Finalize this partition and return its output.
+     * This will also clear the build state (i.e. all memory
+     * associated with the logical hash table).
+     * This works for both the aggregating and accumulating
+     * cases.
+     *
+     * NOTE: Only active partitions are supported at this point.
+     * Support for inactive partitions will be added in the future.
+     *
+     * @return std::shared_ptr<table_info> Output of this partition.
+     */
+    std::shared_ptr<table_info> Finalize();
+
+   private:
+    const size_t num_top_bits = 0;
+    const uint32_t top_bitmask = 0ULL;
+    const uint64_t n_keys;
+    const bool accumulate_before_update;
+    const bool req_extended_group_info;
+    /// @brief Whether the partition is active / has been activated yet.
+    /// The 0th partition is active to begin with, and other partitions
+    /// are activated at the end of the build step.
+    /// When false, this means that the build data is still in the
+    /// 'build_table_buffer_chunked'. When true, this means that the data has
+    /// been moved to the 'build_table_buffer'.
+    bool is_active = false;
+    const bool parallel;
+
+    // TODO Remove the "maybe_unused"s once we start using the Op-Pool for
+    // allocations.
+
+    /// @brief OperatorBufferPool of the Groupby operator that this is a
+    /// partition in. The pool is owned by the parent GroupbyState, so
+    /// we keep a raw pointer for simplicity.
+    [[maybe_unused]] bodo::OperatorBufferPool* const op_pool;
+    /// @brief Memory manager instance for op_pool.
+    [[maybe_unused]] const std::shared_ptr<::arrow::MemoryManager> op_mm;
+
+    /**
+     * @brief Clear the "build" state. This releases
+     * all memory associated with the logical hash table.
+     * This is meant to be called in FinalizeBuild.
+     *
+     */
+    void ClearBuildState();
+};
+
+class GroupbyState {
+   private:
+    // NOTE: These need to be declared first so that they are
+    // removed at the very end during destruction.
+
+    /// @brief OperatorBufferPool for this operator.
+    const std::unique_ptr<bodo::OperatorBufferPool> op_pool;
+    /// @brief Memory manager for op_pool. This is used during buffer
+    /// allocations.
+    const std::shared_ptr<::arrow::MemoryManager> op_mm;
+
+   public:
+    using shuffle_hash_table_t = grpby_hash_table_t</*is_local*/ false>;
+
+    // Partitioning information.
+    std::vector<std::shared_ptr<GroupbyPartition>> partitions;
+
+    // TODO Decide this dynamically using a heuristic based
+    // on total available memory, total disk space, etc.
+    const size_t max_partition_depth = 6;
 
     const uint64_t n_keys;
     bool parallel;
@@ -63,31 +312,15 @@ class GroupbyState {
 
     std::vector<std::shared_ptr<BasicColSet>> col_sets;
 
-    // Local build state
-    // Current number of groups
-    int64_t local_next_group = 0;
-    // Map row number to group number
-    std::unique_ptr<hash_table_t<true>> local_build_table;
-    // hashes of data in local_table_buffer
-    // XXX Might be better to use unique_ptrs to guarantee
-    // that memory is released during FinalizeBuild.
-    bodo::vector<uint32_t> local_table_groupby_hashes;
-    // Current running values (output of "combine" step)
-    // Note that in the accumulation case, the "running values" is instead the
-    // entire input table.
-    std::unique_ptr<TableBuildBuffer> local_table_buffer;
+    // temporary batch data (for the shuffle case)
+    std::shared_ptr<table_info> in_table = nullptr;
+    std::shared_ptr<uint32_t[]> in_table_hashes = nullptr;
 
     // Shuffle build state
     int64_t shuffle_next_group = 0;
-    std::unique_ptr<hash_table_t<false>> shuffle_build_table;
-    // XXX Might be better to use unique_ptrs to guarantee
-    // that memory is released during FinalizeBuild.
+    std::unique_ptr<shuffle_hash_table_t> shuffle_hash_table;
     bodo::vector<uint32_t> shuffle_table_groupby_hashes;
     std::unique_ptr<TableBuildBuffer> shuffle_table_buffer;
-
-    // temporary batch data
-    std::shared_ptr<table_info> in_table = nullptr;
-    std::shared_ptr<uint32_t[]> in_table_hashes = nullptr;
 
     // indices of input columns for each function
     // f_in_offsets contains the offsets into f_in_cols.
@@ -125,6 +358,11 @@ class GroupbyState {
     bool accumulate_before_update = false;
     bool req_extended_group_info = false;
 
+    // This is used in groupby_agg_build_consume_batch and
+    // groupby_acc_build_consume_batch. We're caching this allocation for
+    // performance reasons.
+    std::vector<bool> append_row_to_build_table;
+
     // Output buffer
     // This will be lazily initialized during the end of
     // the build step to simplify specifying the output column types.
@@ -133,18 +371,16 @@ class GroupbyState {
 
     // Dictionary builders for the key columns. This is
     // always of length n_keys and is nullptr for non DICT keys.
-    // These will be shared between the build_table_buffers and
-    // probe_table_buffers of all partitions and the build_shuffle_buffer
-    // and probe_shuffle_buffer.
+    // These will be shared between the build_shuffle_buffer,
+    // build_table_buffers of all partitions and the output buffer.
     std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders;
 
     // Simple concatenation of key_dict_builders and
-    // non key dict builders
+    // non key dict builders.
     // Key dict builders are always at the beginning of the vector, and non-key
-    // dict builders follow For all columns, if the array type is not dict
+    // dict builders follow. For all columns, if the array type is not dict
     // encoded, the value is nullptr
-    // Note that in the accumulation case, the "build table" is instead the
-    // entire input table.
+    // These will be shared between build_table_buffers of all partitions.
     std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
 
     // Dictionary builders for output columns
@@ -161,223 +397,11 @@ class GroupbyState {
                  std::vector<int32_t> ftypes,
                  std::vector<int32_t> f_in_offsets_,
                  std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
-                 int64_t output_batch_size_, bool parallel_, int64_t sync_iter_)
-        : n_keys(n_keys_),
-          parallel(parallel_),
-          output_batch_size(output_batch_size_),
-          local_build_table(std::make_unique<hash_table_t<true>>(
-              0, HashGroupbyTable<true>(this),
-              KeyEqualGroupbyTable<true>(this, n_keys))),
-          shuffle_build_table(std::make_unique<hash_table_t<false>>(
-              0, HashGroupbyTable<false>(this),
-              KeyEqualGroupbyTable<false>(this, n_keys))),
-          f_in_offsets(std::move(f_in_offsets_)),
-          f_in_cols(std::move(f_in_cols_)),
-          sync_iter(sync_iter_),
-          // Update number of sync iterations adaptively based on batch byte
-          // size if sync_iter == -1 (user hasn't specified number of syncs)
-          adaptive_sync_counter(sync_iter == -1 ? 0 : -1),
-          groupby_event("Groupby") {
-        // Add key column types to running value buffer types (same type as
-        // input)
-        std::vector<int8_t> build_arr_array_types;
-        std::vector<int8_t> build_arr_c_types;
-        for (size_t i = 0; i < n_keys; i++) {
-            build_arr_array_types.push_back(in_arr_array_types[i]);
-            build_arr_c_types.push_back(in_arr_c_types[i]);
-        }
-        // Get offsets of update and combine columns for each function since
-        // some functions have multiple update/combine columns
-        f_running_value_offsets.push_back(n_keys);
-        int32_t curr_running_value_offset = n_keys;
-
-        for (size_t i = 0; i < ftypes.size(); i++) {
-            int ftype = ftypes[i];
-            // NOTE: adding all functions that need accumulating inputs for now
-            // but they may not be supported in streaming groupby yet
-            if (ftype == Bodo_FTypes::median || ftype == Bodo_FTypes::cumsum ||
-                ftype == Bodo_FTypes::cumprod || ftype == Bodo_FTypes::cummin ||
-                ftype == Bodo_FTypes::cummax || ftype == Bodo_FTypes::shift ||
-                ftype == Bodo_FTypes::transform ||
-                ftype == Bodo_FTypes::ngroup || ftype == Bodo_FTypes::window ||
-                ftype == Bodo_FTypes::listagg ||
-                ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::head ||
-                ftype == Bodo_FTypes::gen_udf) {
-                accumulate_before_update = true;
-            }
-            if (ftype == Bodo_FTypes::median || ftype == Bodo_FTypes::cumsum ||
-                ftype == Bodo_FTypes::cumprod || ftype == Bodo_FTypes::cummin ||
-                ftype == Bodo_FTypes::cummax || ftype == Bodo_FTypes::shift ||
-                ftype == Bodo_FTypes::transform ||
-                ftype == Bodo_FTypes::ngroup || ftype == Bodo_FTypes::window ||
-                ftype == Bodo_FTypes::listagg ||
-                ftype == Bodo_FTypes::nunique) {
-                req_extended_group_info = true;
-            }
-        }
-
-        // TODO[BSE-578]: handle all necessary ColSet parameters for BodoSQL
-        // groupby functions
-        std::shared_ptr<array_info> index_col = nullptr;
-
-        // Currently, all SQL aggregations that we support excluding count(*)
-        // drop or ignore na values durring computation. Since count(*) maps to
-        // size, and skip_na_data has no effect on that aggregation, we can
-        // safely set skip_na_data to true for all SQL aggregations. There is an
-        // issue to fix this behavior so that use_sql_rules trumps the value of
-        // skip_na_data: https://bodo.atlassian.net/browse/BSE-841
-        bool skip_na_data = true;
-        bool use_sql_rules = true;
-        std::vector<bool> window_ascending_vect;
-        std::vector<bool> window_na_position_vect;
-
-        // First, get the input column types for each function.
-        std::vector<std::vector<std::shared_ptr<array_info>>>
-            local_input_cols_vec(ftypes.size());
-        std::vector<std::vector<bodo_array_type::arr_type_enum>>
-            in_arr_types_vec(ftypes.size());
-        std::vector<std::vector<Bodo_CTypes::CTypeEnum>> in_dtypes_vec(
-            ftypes.size());
-        for (size_t i = 0; i < ftypes.size(); i++) {
-            // Get the input columns, array types, and dtypes for the current
-            // function
-            std::vector<std::shared_ptr<array_info>>& local_input_cols =
-                local_input_cols_vec.at(i);
-            std::vector<bodo_array_type::arr_type_enum>& in_arr_types =
-                in_arr_types_vec.at(i);
-            std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes =
-                in_dtypes_vec.at(i);
-            for (size_t logical_input_ind = (size_t)f_in_offsets[i];
-                 logical_input_ind < (size_t)f_in_offsets[i + 1];
-                 logical_input_ind++) {
-                size_t physical_input_ind =
-                    (size_t)f_in_cols[logical_input_ind];
-                // set dummy input columns in ColSet since will be replaced by
-                // input batches
-                local_input_cols.push_back(nullptr);
-                in_arr_types.push_back(
-                    (bodo_array_type::arr_type_enum)
-                        in_arr_array_types[physical_input_ind]);
-                in_dtypes.push_back(
-                    (Bodo_CTypes::CTypeEnum)in_arr_c_types[physical_input_ind]);
-            }
-        }
-
-        // Next, perform a check on the running value types.
-        // If any of the running values are of type string,
-        // set accumulate_before_update to true.
-        for (size_t i = 0; i < ftypes.size(); i++) {
-            std::vector<std::shared_ptr<array_info>>& local_input_cols =
-                local_input_cols_vec.at(i);
-            std::vector<bodo_array_type::arr_type_enum>& in_arr_types =
-                in_arr_types_vec.at(i);
-            std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes =
-                in_dtypes_vec.at(i);
-
-            std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-                       std::vector<Bodo_CTypes::CTypeEnum>>
-                running_value_arr_types = this->getRunningValueColumnTypes(
-                    local_input_cols, in_arr_types, in_dtypes, ftypes[i]);
-
-            for (auto t : std::get<0>(running_value_arr_types)) {
-                if (t == bodo_array_type::STRING ||
-                    t == bodo_array_type::DICT) {
-                    accumulate_before_update = true;
-                    break;
-                }
-            }
-        }
-
-        // Finally, now that we know if we need to accumulate all values before
-        // update, do one last iteration to actually create each of the col_sets
-        bool do_combine = !accumulate_before_update;
-        for (size_t i = 0; i < ftypes.size(); i++) {
-            std::vector<std::shared_ptr<array_info>>& local_input_cols =
-                local_input_cols_vec.at(i);
-            std::vector<bodo_array_type::arr_type_enum>& in_arr_types =
-                in_arr_types_vec.at(i);
-            std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes =
-                in_dtypes_vec.at(i);
-
-            std::shared_ptr<BasicColSet> col_set = makeColSet(
-                local_input_cols, index_col, ftypes[i], do_combine,
-                skip_na_data, 0, {0}, 0, parallel, window_ascending_vect,
-                window_na_position_vect, {nullptr}, 0, nullptr, nullptr, 0,
-                nullptr, use_sql_rules);
-
-            if (!accumulate_before_update) {
-                // get update/combine type info to initialize build state
-                std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-                           std::vector<Bodo_CTypes::CTypeEnum>>
-                    running_values_arr_types =
-                        col_set->getRunningValueColumnTypes(in_arr_types,
-                                                            in_dtypes);
-
-                for (auto t : std::get<0>(running_values_arr_types)) {
-                    build_arr_array_types.push_back(t);
-                }
-                for (auto t : std::get<1>(running_values_arr_types)) {
-                    build_arr_c_types.push_back(t);
-                }
-
-                curr_running_value_offset +=
-                    std::get<0>(running_values_arr_types).size();
-                f_running_value_offsets.push_back(curr_running_value_offset);
-            }
-
-            this->col_sets.push_back(col_set);
-        }
-
-        // build buffer types are same as input if just accumulating batches
-        if (accumulate_before_update) {
-            build_arr_array_types = in_arr_array_types;
-            build_arr_c_types = in_arr_c_types;
-        }
-
-        this->key_dict_builders.resize(this->n_keys);
-
-        // Create dictionary builders for key columns:
-        for (uint64_t i = 0; i < this->n_keys; i++) {
-            if (build_arr_array_types[i] == bodo_array_type::DICT) {
-                std::shared_ptr<array_info> dict = alloc_array(
-                    0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-                this->key_dict_builders[i] =
-                    std::make_shared<DictionaryBuilder>(dict, true);
-            } else {
-                this->key_dict_builders[i] = nullptr;
-            }
-        }
-
-        std::vector<std::shared_ptr<DictionaryBuilder>>
-            build_table_non_key_dict_builders;
-        // Create dictionary builders for non-key columns in build table:
-        for (size_t i = this->n_keys; i < build_arr_array_types.size(); i++) {
-            if (build_arr_array_types[i] == bodo_array_type::DICT) {
-                std::shared_ptr<array_info> dict = alloc_array(
-                    0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-                build_table_non_key_dict_builders.emplace_back(
-                    std::make_shared<DictionaryBuilder>(dict, false));
-            } else {
-                build_table_non_key_dict_builders.emplace_back(nullptr);
-            }
-        }
-
-        this->build_table_dict_builders.insert(
-            this->build_table_dict_builders.end(),
-            this->key_dict_builders.begin(), this->key_dict_builders.end());
-
-        this->build_table_dict_builders.insert(
-            this->build_table_dict_builders.end(),
-            build_table_non_key_dict_builders.begin(),
-            build_table_non_key_dict_builders.end());
-
-        local_table_buffer = std::make_unique<TableBuildBuffer>(
-            build_arr_c_types, build_arr_array_types,
-            this->build_table_dict_builders);
-        shuffle_table_buffer = std::make_unique<TableBuildBuffer>(
-            build_arr_c_types, build_arr_array_types,
-            this->build_table_dict_builders);
-    }
+                 int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
+                 // If -1, we'll use 100% of the total buffer
+                 // pool size. Else we'll use the provided size.
+                 int64_t op_pool_size_bytes = -1,
+                 size_t max_partition_depth_ = 5);
 
     /**
      * @brief Unify dictionaries of input table with build table
@@ -406,43 +430,97 @@ class GroupbyState {
     GetDictionaryHashesForKeys();
 
     /**
-     * @brief Reset the shuffle state. This is meant to be
-     * called after a shuffle operation.
-     * This clears the shuffle hash table, resets the shuffle buffer,
-     * clears the shuffle hashes vector and resets shuffle_next_group
-     * back to 0.
-     * Note that this doesn't release memory.
+     * @brief Update the groups and combine with values from the input batch.
+     * It will figure out the correct partition based on the partitioning
+     * hashes.
      *
+     * It is slightly optimized for the case where there's a single partition.
+     *
+     * NOTE: Only used in the aggregating code path (i.e.
+     * accumulate_before_update = false)
+     *
+     * @param in_table Input batch to update and combine using.
+     * @param partitioning_hashes Partitioning hashes for the records.
+     * @param batch_hashes_groupby Groupby hashes for the input batch records.
      */
-    void ResetShuffleState();
+    void UpdateGroupsAndCombine(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+        const std::shared_ptr<uint32_t[]>& batch_hashes_groupby);
 
-    void InitOutputBuffer(const std::shared_ptr<table_info>& dummy_table) {
-        auto [arr_c_types, arr_array_types] =
-            get_dtypes_arr_types_from_table(dummy_table);
-        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders(
-            dummy_table->columns.size(), nullptr);
-        // Keys are always the first columns in groupby output and match input
-        // array types and dictionaries for DICT arrays. See
-        // https://github.com/Bodo-inc/Bodo/blob/f94ab6d2c78e3a536a8383ddf71956cc238fccc8/bodo/libs/_groupby_common.cpp#L604
-        for (size_t i = 0; i < this->n_keys; i++) {
-            dict_builders[i] = this->build_table_dict_builders[i];
-        }
-        // Non-key columns may have different type and/or dictionaries from
-        // input arrays
-        for (size_t i = this->n_keys; i < dummy_table->ncols(); i++) {
-            if (dummy_table->columns[i]->arr_type == bodo_array_type::DICT) {
-                std::shared_ptr<array_info> dict = alloc_array(
-                    0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
-                dict_builders[i] =
-                    std::make_shared<DictionaryBuilder>(dict, false);
-            }
-        }
-        this->output_buffer = std::make_shared<ChunkedTableBuilder>(
-            arr_c_types, arr_array_types, dict_builders,
-            /*chunk_size*/ this->output_batch_size,
-            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
-        this->out_dict_builders = dict_builders;
-    }
+    /**
+     * @brief Same as above, except we will only append rows for which
+     * append_rows bit-vector is true.
+     *
+     * @param in_table Input batch to update and combine using.
+     * @param partitioning_hashes Partitioning hashes for the records.
+     * @param batch_hashes_groupby Groupby hashes for the input batch records.
+     * @param append_rows Bitmask specifying the rows to use.
+     */
+    void UpdateGroupsAndCombine(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+        const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
+        const std::vector<bool>& append_rows);
+
+    /**
+     * @brief Update the groups in the shuffle buffer and combine with values
+     * from the input batch.
+     *
+     * NOTE: Only used in the aggregating code path (i.e.
+     * accumulate_before_update = false)
+     *
+     * @param in_table Input batch to update and combine using.
+     * @param partitioning_hashes Partitioning hashes for the records.
+     * @param batch_hashes_groupby Groupby hashes for the input batch records.
+     * @param not_append_rows Flipped bitmask specifying the rows to use. We use
+     * a flipped bitmask for practical reasons based on how this function is
+     * used. This allows us to avoid doing a .flip() on an existing bitmask.
+     */
+    void UpdateShuffleGroupsAndCombine(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+        const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
+        const std::vector<bool>& not_append_rows);
+
+    /**
+     * @brief Append the input batch to the build_tables of the partitions. The
+     * partition that a row belongs to is determined using the partitioning
+     * hashes.
+     * It is slightly optimized for the single partition case.
+     *
+     * NOTE: Only used in the accumulating code path (i.e.
+     * accumulate_before_update = true)
+     *
+     * @param in_table Input batch to append.
+     * @param partitioning_hashes Partitioning hashes for the input batch
+     * records.
+     */
+    void AppendBuildBatch(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes);
+
+    /**
+     * @brief Same as above, except we only append the rows specified by
+     * the append_rows bitmask.
+     *
+     * @param in_table Input batch to append rows from.
+     * @param partitioning_hashes Partitioning hashes for the input batch
+     * @param append_rows Bitmask specifying the rows to append.
+     */
+    void AppendBuildBatch(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+        const std::vector<bool>& append_rows);
+
+    /**
+     * @brief Initialize the output buffer using schema information
+     * from the dummy table.
+     *
+     * @param dummy_table Dummy table to extract schema information for the
+     * output buffer from.
+     */
+    void InitOutputBuffer(const std::shared_ptr<table_info>& dummy_table);
 
     /**
      * @brief Unify dictionaries of output columns with output buffer.
@@ -457,14 +535,35 @@ class GroupbyState {
         const std::shared_ptr<table_info>& out_table);
 
     /**
-     * @brief Finalize the build step. This will clear the build
-     * state, append the output_table to the chunked output buffer
-     * and set build_input_finalized to prevent future repetitions
-     * of the build step.
+     * @brief Reset the shuffle state. This is meant to be
+     * called after a shuffle operation.
+     * This clears the shuffle hash table, resets the shuffle buffer,
+     * clears the shuffle hashes vector and resets shuffle_next_group
+     * back to 0.
+     * Note that this doesn't release memory.
      *
-     * @param output_table Output of the groupby operation.
      */
-    void FinalizeBuild(std::shared_ptr<table_info> output_table);
+    void ResetShuffleState();
+
+    /**
+     * @brief Finalize the build step. This will finalize all the partitions,
+     * append their outputs to the output buffer, clear the build state and set
+     * build_input_finalized to prevent future repetitions of the build step.
+     *
+     */
+    void FinalizeBuild();
+
+    /**
+     * @brief Disable partitioning by disabling threshold
+     * enforcement in the OperatorBufferPool.
+     *
+     * If threshold enforcement is disabled, the
+     * OperatorPoolThresholdExceededError error will never
+     * be thrown and we will never trigger a partition
+     * split.
+     *
+     */
+    void DisablePartitioning();
 
    private:
     /**
@@ -478,35 +577,18 @@ class GroupbyState {
     getRunningValueColumnTypes(
         std::vector<std::shared_ptr<array_info>> local_input_cols,
         std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes, int ftype) {
-        std::shared_ptr<BasicColSet> col_set =
-            makeColSet(local_input_cols,  // in_cols
-                       nullptr,           // index_col
-                       ftype,             // ftype
-                       true,              // do_combine
-                       true,              // skip_na_data
-                       0,                 // period
-                       {0},               // transform_funcs
-                       0,                 // n_udf
-                       true,              // parallel
-                       {true},            // window_ascending
-                       {true},            // window_na_position
-                       {nullptr},         // window_args
-                       0,                 // n_input_cols
-                       nullptr,           // udf_n_redvars
-                       nullptr,           // udf_table
-                       0,                 // udf_table_idx
-                       nullptr,           // nunique_table
-                       true               // use_sql_rules
-            );
+        std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes, int ftype);
 
-        // get update/combine type info to initialize build state
-        std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-                   std::vector<Bodo_CTypes::CTypeEnum>>
-            running_value_arr_types =
-                col_set->getRunningValueColumnTypes(in_arr_types, in_dtypes);
-        return running_value_arr_types;
-    }
+    /**
+     * @brief Clear the "shuffle" state. This releases
+     * the memory of the logical shuffle hash table, i.e.
+     * the shuffle buffer, shuffle hash-table and shuffle
+     * hashes.
+     *
+     * This is meant to be called in FinalizeBuild.
+     *
+     */
+    void ClearShuffleState();
 
     /**
      * @brief Clear the "build" state. This releases
