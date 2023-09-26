@@ -982,26 +982,6 @@ struct TableBuildBuffer {
     void ReserveTable(const ChunkedTableBuilder& chunked_tb);
 
     /**
-     * @brief Same as ReserveTable but reserves space only for key columns
-     *
-     * @param in_table input table used for finding new buffer sizes to reserve
-     * @param n_keys number of keys
-     */
-    void ReserveTableKeys(const std::shared_ptr<table_info>& in_table,
-                          uint64_t n_keys);
-
-    /**
-     * @brief Reserve enough space to potentially append new_data_len new rows
-     * to data columns.
-     * NOTE: This does not reserve space for variable-sized
-     * elements like strings and nested arrays.
-     *
-     * @param new_data_len number of new rows that need reserved
-     * @param n_keys number of keys
-     */
-    void ReserveSizeDataColumns(uint64_t new_data_len, uint64_t n_keys);
-
-    /**
      * @brief Clear the buffers, i.e. set size to 0.
      * Capacity is not changed and memory is not released.
      * For DICT arrays, the dictionaries are reset to
