@@ -668,10 +668,16 @@ def check_func_1D(
 
     bodo_func = bodo.jit(func, **kwargs)
     bodo_output = bodo_func(*dist_args)
-    if convert_columns_to_pandas:
-        bodo_output = convert_non_pandas_columns(bodo_output)
+    # NOTE: We need to gather the output before converting to pandas.
+    # The rationale behind this:
+    # Suppose we have two output arrays from two ranks: [[1]] (single element nested array), [None].
+    # For bodo_output, if we convert to pandas first, [[1]] will become ["[1]" (string type)], and [None] will become [NaN (float type)]. After gathering, the result will be ["[1]" (string), NaN (float)]
+    # For py_output, since it's predefined by the test writer, it will convert [[1], None] to pandas i.e. ["[1]", "nan"] (both are strings), which does not equal ["[1]" (string), NaN (float)].
+    # Thus, asserting bodo_output = py_output will fail, which is not what we want in this case
     if is_out_distributed:
         bodo_output = _gather_output(bodo_output)
+    if convert_columns_to_pandas:
+        bodo_output = convert_non_pandas_columns(bodo_output)
     if set_columns_name_to_none:
         bodo_output.columns.name = None
     if reorder_columns:
@@ -745,10 +751,12 @@ def check_func_1D_var(
 
     bodo_func = bodo.jit(func, **kwargs)
     bodo_output = bodo_func(*dist_args)
-    if convert_columns_to_pandas:
-        bodo_output = convert_non_pandas_columns(bodo_output)
+    # NOTE: We need to gather the output before converting to pandas.
+    # See note in check_func_1D for the rationale behind this.
     if is_out_distributed:
         bodo_output = _gather_output(bodo_output)
+    if convert_columns_to_pandas:
+        bodo_output = convert_non_pandas_columns(bodo_output)
     if set_columns_name_to_none:
         bodo_output.columns.name = None
     if reorder_columns:
