@@ -456,6 +456,7 @@ object BodoRules {
      */
     val REWRITE_RULES: List<RelOptRule> = listOf(
         FILTER_EXTRACT_CASE_RULE,
+        MIN_ROW_NUMBER_FILTER_RULE,
     )
 
     /**
@@ -492,9 +493,6 @@ object BodoRules {
      */
     val SIMPLIFICATION_RULES: List<RelOptRule> = listOf(
         REX_SIMPLIFICATION_RULE,
-        // Note: This is basically a rewrite that simplifies the plan and should
-        // always be applied if possible.
-        MIN_ROW_NUMBER_FILTER_RULE,
         PROJECT_REDUCE_EXPRESSIONS_RULE,
         FILTER_REDUCE_EXPRESSIONS_RULE,
 
