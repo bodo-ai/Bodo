@@ -2593,9 +2593,11 @@ std::shared_ptr<table_info> broadcast_table(
     std::vector<std::shared_ptr<array_info>> out_arrs;
     out_arrs.reserve(n_cols);
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
-        out_arrs.push_back(broadcast_array(ref_table->columns[i_col],
-                                           in_table->columns[i_col],
-                                           is_parallel, mpi_root, myrank));
+        // NOTE: in_table may not have columns in non-root ranks
+        out_arrs.push_back(broadcast_array(
+            ref_table->columns[i_col],
+            myrank == mpi_root ? in_table->columns[i_col] : nullptr,
+            is_parallel, mpi_root, myrank));
     }
 
     return std::make_shared<table_info>(out_arrs);
