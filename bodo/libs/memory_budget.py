@@ -27,11 +27,11 @@ def init_operator_comptroller(typingctx):
         fn_typ = cgutils.get_or_insert_function(
             builder.module, fnty, name="init_operator_comptroller"
         )
-        ret = builder.call(fn_typ, ())
+        builder.call(fn_typ, ())
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        return context.get_dummy_value()
 
-    sig = types.void()
+    sig = types.none()
     return sig, codegen
 
 
