@@ -1,10 +1,8 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
-import com.bodosql.calcite.application.operatorTables.ThreeOperatorStringTable
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
 import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelRule
@@ -14,7 +12,6 @@ import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.sql.SqlKind
-import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.VariantSqlType
 import org.immutables.value.Value
@@ -82,103 +79,24 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             SqlKind.TIMES,
             SqlKind.DIVIDE,
             SqlKind.MINUS_PREFIX,
-            // String functions,
-            SqlKind.REVERSE,
-            SqlKind.LTRIM,
-            SqlKind.RTRIM,
-            SqlKind.TRIM,
-            SqlKind.CONTAINS,
-            SqlKind.COALESCE,
-            SqlKind.POSITION,
-            SqlKind.LIKE,
-            SqlKind.MOD,
-            SqlKind.CEIL,
-            SqlKind.FLOOR,
             // Common compute steps for selecting rows for comparison.
             SqlKind.COALESCE,
             SqlKind.LEAST,
             SqlKind.GREATEST,
-            // Other functions
-            SqlKind.IN,
         )
 
-        // Note that several of these functions are also have their SqlKind in
-        // SUPPORTED_CALLS. For several functions, we have our own implementations
-        // separate from Calcite which use SqlKind.Other_function.
-        // This is generally due to differences with Calcite vs Snowflake Syntax.
-        // There's no harm in including both for safety, so that is what I've chosen to do.
         private val SUPPORTED_GENERIC_CALL_NAMES = setOf(
-
+            SqlStdOperatorTable.CURRENT_DATE.name,
+            DatetimeOperatorTable.CURDATE.name,
+            DatetimeOperatorTable.GETDATE.name,
+            JsonOperatorTable.GET_PATH.name,
             // String manipulation functions.
             SqlStdOperatorTable.LOWER.name,
             SqlStdOperatorTable.UPPER.name,
             StringOperatorTable.CONCAT.name,
             StringOperatorTable.CONCAT_WS.name,
-            SqlStdOperatorTable.TRIM.name,
-            SqlLibraryOperators.LTRIM.name,
-            SqlLibraryOperators.RTRIM.name,
-            StringOperatorTable.CHARINDEX.name,
-            StringOperatorTable.EDITDISTANCE.name,
-            StringOperatorTable.INITCAP.name,
-            StringOperatorTable.STARTSWITH.name,
-            StringOperatorTable.ENDSWITH.name,
-            StringOperatorTable.REGEXP_LIKE.name,
-            StringOperatorTable.SUBSTR.name,
-            SqlStdOperatorTable.SUBSTRING.name,
-            StringOperatorTable.REGEXP_SUBSTR.name,
-            StringOperatorTable.INSTR.name,
-            StringOperatorTable.REGEXP_INSTR.name,
-            StringOperatorTable.REGEXP_REPLACE.name,
-            StringOperatorTable.REGEXP_COUNT.name,
-            StringOperatorTable.STRTOK.name,
-            StringOperatorTable.LENGTH.name,
-            ThreeOperatorStringTable.LPAD.name,
-            ThreeOperatorStringTable.RPAD.name,
-            SqlStdOperatorTable.TRUNCATE.name,
-            SqlStdOperatorTable.UPPER.name,
-            SqlStdOperatorTable.LOWER.name,
-            StringOperatorTable.REVERSE.name,
-            StringOperatorTable.CONTAINS.name,
-            CastingOperatorTable.TO_CHAR.name,
-
             // This handles ||
             SqlStdOperatorTable.CONCAT.name,
-            SqlStdOperatorTable.ABS.name,
-            SqlStdOperatorTable.SIGN.name,
-            SqlStdOperatorTable.ROUND.name,
-            SqlStdOperatorTable.REPLACE.name,
-            SqlLibraryOperators.TRANSLATE3.name,
-            StringOperatorTable.LEFT.name,
-            StringOperatorTable.RIGHT.name,
-            StringOperatorTable.REPEAT.name,
-            StringOperatorTable.SPLIT.name,
-
-            // Date/Time related functions
-            DatetimeOperatorTable.DATE_TRUNC.name,
-            SqlStdOperatorTable.HOUR.name,
-            SqlStdOperatorTable.MINUTE.name,
-            SqlStdOperatorTable.SECOND.name,
-            SqlStdOperatorTable.YEAR.name,
-            DatetimeOperatorTable.YEAROFWEEK.name,
-            DatetimeOperatorTable.YEAROFWEEKISO.name,
-            SqlStdOperatorTable.DAYOFMONTH.name,
-            SqlStdOperatorTable.DAYOFWEEK.name,
-            SqlStdOperatorTable.DAYOFYEAR.name,
-            SqlStdOperatorTable.WEEK.name,
-            DatetimeOperatorTable.WEEKOFYEAR.name,
-            DatetimeOperatorTable.DAYOFWEEKISO.name,
-            SqlStdOperatorTable.MONTH.name,
-            SqlStdOperatorTable.QUARTER.name,
-            SqlStdOperatorTable.CURRENT_DATE.name,
-            DatetimeOperatorTable.CURDATE.name,
-            DatetimeOperatorTable.GETDATE.name,
-
-            // Math functions
-            SqlStdOperatorTable.CEIL.name,
-            SqlStdOperatorTable.FLOOR.name,
-
-            // Other functions
-            JsonOperatorTable.GET_PATH.name,
         )
 
         @JvmStatic

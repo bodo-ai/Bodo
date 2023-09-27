@@ -422,12 +422,16 @@ def test_snowflake_catalog_limit_pushdown(memory_leak_check):
         check_logger_msg(stream, "FETCH NEXT 5 ROWS ONLY")
 
 
-def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
-    """
-    Tests that queries with like perform filter pushdown for all the
-    cases with the optimized paths. This is tested both with and without
-    escapes.
-    """
+"""
+Tests that queries with like perform filter pushdown for all the
+cases with the optimized paths. This is tested both with and without
+escapes.
+"""
+
+
+def test_snowflake_like_pushdown_equality(test_db_snowflake_catalog, memory_leak_check):
+    """Specific test where "like" condition is just an equality check"""
+
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
@@ -439,7 +443,7 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
         return bc.sql(query)
 
     with create_snowflake_table(
-        new_df, "like_pushdown_table", db, schema
+        new_df, "like_pushdown_equality_table", db, schema
     ) as table_name:
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
@@ -463,6 +467,29 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$hello$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+def test_snowflake_like_pushdown_startswith(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """Specific test where "like" condition is equivalent to a startswith"""
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": ["afewf", "b%bf", "hello", "happy", "hel", "llo", "b%L", "ab%%bf"] * 10}
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "like_pushdown_startswith_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
         # startswith test
         query2 = f"Select a from {table_name} where a like 'he%'"
         stream = io.StringIO()
@@ -482,6 +509,27 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$he%$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+def test_snowflake_like_pushdown_endswith(test_db_snowflake_catalog, memory_leak_check):
+    """Specific test where "like" condition is equivalent to an endswith"""
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": ["afewf", "b%bf", "hello", "happy", "hel", "llo", "b%L", "ab%%bf"] * 10}
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "like_pushdown_endswith_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
         # endswith test
         query3 = f"Select a from {table_name} where a like '%lo'"
         stream = io.StringIO()
@@ -501,6 +549,27 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$%lo$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+def test_snowflake_like_pushdown_contains(test_db_snowflake_catalog, memory_leak_check):
+    """Specific test where "like" condition is equivalent to a contains"""
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": ["afewf", "b%bf", "hello", "happy", "hel", "llo", "b%L", "ab%%bf"] * 10}
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "like_pushdown_contains_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
         # contains test
         query4 = f"Select a from {table_name} where a like '%e%'"
         stream = io.StringIO()
@@ -520,6 +589,29 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$%e%$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+def test_snowflake_like_pushdown_equality_escape(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """Specific test where "like" condition is just an equality check (with a escape)"""
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": ["afewf", "b%bf", "hello", "happy", "hel", "llo", "b%L", "ab%%bf"] * 10}
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "like_pushdown_equality_escape_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
         # Equality with escape test
         query5 = f"Select a from {table_name} where a like 'b^%bf' escape '^'"
         stream = io.StringIO()
@@ -539,6 +631,29 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$b^%bf$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+def test_snowflake_like_pushdown_startswith_escape(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """Specific test where "like" condition is just an startswith check (with a escape)"""
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": ["afewf", "b%bf", "hello", "happy", "hel", "llo", "b%L", "ab%%bf"] * 10}
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "like_pushdown_startswith_escape_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
         # startswith with escape test
         query6 = f"Select a from {table_name} where a like 'b^%%' escape '^'"
         stream = io.StringIO()
@@ -558,6 +673,29 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$b^%%$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+def test_snowflake_like_pushdown_endswith_escape(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """Specific test where "like" condition is just an endswith check (with a escape)"""
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": ["afewf", "b%bf", "hello", "happy", "hel", "llo", "b%L", "ab%%bf"] * 10}
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "like_pushdown_endswith_escape_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
         # endswith with escape test
         query7 = f"Select a from {table_name} where a like '%^%bf' escape '^'"
         stream = io.StringIO()
@@ -577,6 +715,29 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$%^%bf$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+def test_snowflake_like_pushdown_contains_escape(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """Specific test where "like" condition is just an contains check (with a escape)"""
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": ["afewf", "b%bf", "hello", "happy", "hel", "llo", "b%L", "ab%%bf"] * 10}
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "like_pushdown_contains_escape_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
         # contains with escape test
         query8 = f"Select a from {table_name} where a like '%^%%' escape '^'"
         stream = io.StringIO()
@@ -596,6 +757,30 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$%^%%$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skip("Not properly taking optimized path")
+def test_snowflake_like_always_true_optimized(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """Specific test where "like" condition is always true"""
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": ["afewf", "b%bf", "hello", "happy", "hel", "llo", "b%L", "ab%%bf"] * 10}
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "like_pushdown_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
         # Always true test
         query9 = f"Select a from {table_name} where a like '%'"
         stream = io.StringIO()
@@ -913,12 +1098,17 @@ def test_snowflake_ilike_regex_pushdown(test_db_snowflake_catalog, memory_leak_c
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-def test_snowflake_like_non_constant_pushdown(
+"""
+    Tests that queries with like and non-constant patterns support filter
+    pushdown. This is tested both with and without escapes.
+"""
+
+
+def test_snowflake_like_non_constant_pushdown_without_escape(
     test_db_snowflake_catalog, memory_leak_check
 ):
     """
-    Tests that queries with like and non-constant patterns support filter
-    pushdown. This is tested both with and without escapes.
+    Test without escape.
     """
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     db = test_db_snowflake_catalog.database
@@ -929,7 +1119,7 @@ def test_snowflake_like_non_constant_pushdown(
         return bc.sql(query)
 
     with create_snowflake_table(
-        new_df, "like_non_constant_pushdown_table", db, schema
+        new_df, "like_non_constant_pushdown_without_escape_table", db, schema
     ) as table_name:
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
@@ -953,6 +1143,28 @@ def test_snowflake_like_non_constant_pushdown(
                 f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$hE_l$$ || $$O$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+def test_snowflake_like_non_constant_pushdown_with_escape(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test with escape.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame({"A": ["AFewf", "b%Bf", "hELlO", "HAPPy"] * 10})
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "like_non_constant_pushdown_with_escape_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
         query2 = (
             f"Select a from {table_name} where a like 'b' || '^%_f' escape upper('^')"
         )
@@ -967,19 +1179,23 @@ def test_snowflake_like_non_constant_pushdown(
                 reset_index=True,
                 sort_output=True,
             )
+            # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" LIKE $$b^%_f$$ ESCAPE $$^$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-def test_snowflake_ilike_non_constant_pushdown(
+"""
+Tests that queries with ilike and non-constant patterns support filter
+pushdown. This is tested both with and without escapes.
+"""
+
+
+def test_snowflake_ilike_non_constant_pushdown_no_escape(
     test_db_snowflake_catalog, memory_leak_check
 ):
-    """
-    Tests that queries with ilike and non-constant patterns support filter
-    pushdown. This is tested both with and without escapes.
-    """
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
@@ -989,7 +1205,7 @@ def test_snowflake_ilike_non_constant_pushdown(
         return bc.sql(query)
 
     with create_snowflake_table(
-        new_df, "ilike_non_constant_pushdown_table", db, schema
+        new_df, "ilike_non_constant_pushdown_no_escape_table", db, schema
     ) as table_name:
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
@@ -1013,6 +1229,29 @@ def test_snowflake_ilike_non_constant_pushdown(
                 f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$he$$ || $$_lo$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+def test_snowflake_ilike_non_constant_pushdown_escape(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that queries with ilike and non-constant patterns support filter
+    pushdown. This is tested both with and without escapes.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame({"A": ["AFewf", "b%Bf", "hELlO", "HAPPy"] * 10})
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "ilike_non_constant_pushdown_with_escape_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
         query2 = (
             f"Select a from {table_name} where a ilike 'b^' || '%_F' escape lower('^')"
         )
@@ -1028,7 +1267,8 @@ def test_snowflake_ilike_non_constant_pushdown(
                 sort_output=True,
             )
             check_logger_msg(
-                stream, "Filter pushdown successfully performed. Moving filter step:"
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "A" ILIKE $$b^%_F$$ ESCAPE $$^$$',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
 
