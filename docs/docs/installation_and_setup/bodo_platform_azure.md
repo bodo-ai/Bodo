@@ -31,8 +31,7 @@ is displayed on the *Cloud Configuration Form*.
 
 Once you have created a service principal, you need to assign a role to
 it. As shown below, go to the IAM section of your resource group and add a
-`Contributor` Role to the service principal you created for
-the Bodo Platform Application.
+`Contributor` Role and `Storage Blob Data Contributor` Role to the service principal you created for the Bodo Platform Application.
 
 ![Assign SP a Role](../platform_onboarding_screenshots/az-assign-sp-role.gif#center)
 
