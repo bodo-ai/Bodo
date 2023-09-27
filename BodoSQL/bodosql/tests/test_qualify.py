@@ -10,8 +10,6 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
-import bodo
-
 # [BE-3894] TODO: refactor this file like how test_rows.py was refactored
 # for window fusion
 
@@ -87,6 +85,10 @@ def test_qualify_no_bounds(func, cmp, use_dummy_frame, spark_info, memory_leak_c
                     [None if i % 3 == 1 else i * (-1) ** i for i in range(16)],
                     dtype=pd.Int32Dtype(),
                 ),
+                "B": [
+                    None if i % 7 > 4 else bytes(str((2**i) % 31), encoding="utf-8")
+                    for i in range(16)
+                ],
             }
         )
     }
@@ -104,15 +106,16 @@ def test_qualify_no_bounds(func, cmp, use_dummy_frame, spark_info, memory_leak_c
 @pytest.mark.parametrize(
     "func, cmp, frame",
     [
-        pytest.param("MIN(I)", " > 0", "prefix", id="min"),
-        pytest.param("MAX(F)", " > 0", "suffix", id="max"),
-        pytest.param("SUM(F)", " < 0", "sliding", id="sum"),
-        pytest.param("AVG(I)", " > 1", "prefix", id="sum"),
-        pytest.param("VARIANCE_POP(F)", " < 10", "suffix", id="var_pop"),
-        pytest.param("COUNT(S)", " > 1", "prefix", id="count"),
+        pytest.param("MIN(I)", " > 0", "sliding", id="min-int"),
+        pytest.param("MAX(F)", " > 0", "suffix", id="max-float"),
+        pytest.param("SUM(F)", " < 0", "sliding", id="sum-float"),
+        pytest.param("AVG(I)", " > 1", "prefix", id="avg-int"),
+        pytest.param("VARIANCE_POP(F)", " < 10", "suffix", id="var_pop-float"),
+        pytest.param("COUNT(S)", " > 1", "prefix", id="count-string"),
+        pytest.param("COUNT(B)", " % 2 = 0", "suffix", id="count-binary"),
         pytest.param("COUNT(*)", " = 3", "sliding", id="count_star"),
-        pytest.param("FIRST_VALUE(S)", " IS NULL", "sliding", id="first"),
-        pytest.param("LAST_VALUE(S)", " IS NOT NULL", "sliding", id="last"),
+        pytest.param("FIRST_VALUE(S)", " IS NULL", "sliding", id="first-string"),
+        pytest.param("LAST_VALUE(S)", " IS NOT NULL", "sliding", id="last-string"),
     ],
 )
 def test_qualify_with_bounds(func, cmp, frame, spark_info, memory_leak_check):
@@ -131,16 +134,16 @@ def test_qualify_with_bounds(func, cmp, frame, spark_info, memory_leak_check):
 
     query:
         SELECT
-            P, O, I
+            P, O
         FROM table1
         QUALIFY MIN(I) OVER (PARTITION BY P ORDER BY O ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) > 0
 
     However, since Spark does not support QUALIFY syntax, we rewrite this into the following query
     for the purposes of generating a refsol:
-        SELECT P, O, I
+        SELECT P, O
         FROM (
             SELECT
-                P, O, I, MIN(I) OVER (PARTITION BY P ORDER BY O ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) > 0 AS window_val
+                P, O, MIN(I) OVER (PARTITION BY P ORDER BY O ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) > 0 AS window_val
             FROM table1)
         WHERE window_val > 0
     """
@@ -164,6 +167,10 @@ def test_qualify_with_bounds(func, cmp, frame, spark_info, memory_leak_check):
                 ),
                 "F": [np.tan(i) for i in range(16)],
                 "S": [None if i % 5 > 2 else str(2**i) for i in range(16)],
+                "B": [
+                    None if i % 7 > 4 else bytes(str((2**i) % 31), encoding="utf-8")
+                    for i in range(16)
+                ],
             }
         )
     }
@@ -178,355 +185,34 @@ def test_qualify_with_bounds(func, cmp, frame, spark_info, memory_leak_check):
     )
 
 
-@pytest.fixture(
-    params=[
-        pytest.param("MAX", id="MAX"),
-        pytest.param(
-            "MIN",
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-            id="MIN",
-        ),
-        pytest.param("COUNT", id="COUNT", marks=pytest.mark.slow),
-        pytest.param("COUNT(*)", id="COUNT(*)"),
-        pytest.param("FIRST_VALUE", id="FIRST_VALUE"),
-        pytest.param("LAST_VALUE", id="LAST_VALUE", marks=pytest.mark.slow),
-    ]
-)
-def non_numeric_agg_funcs_subset(request):
-    """subset of non_numeric aggregation functions, used for testing windowed behavior"""
-    return request.param
-
-
-@pytest.fixture(
-    params=[
-        pytest.param(
-            ("CURRENT ROW", "UNBOUNDED FOLLOWING"),
-            id="suffix",
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-        ),
-        pytest.param(
-            ("UNBOUNDED PRECEDING", "1 PRECEDING"),
-            id="exclusive_prefix",
-        ),
-        pytest.param(
-            ("1 PRECEDING", "1 FOLLOWING"),
-            id="rolling_3",
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-        ),
-        pytest.param(
-            ("CURRENT ROW", "1 FOLLOWING"),
-            id="rolling2",
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-        ),
-        pytest.param(
-            ("CURRENT ROW", "CURRENT ROW"),
-            id="current_row",
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-        ),
-        pytest.param(
-            ("1 FOLLOWING", "2 FOLLOWING"),
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-            id="2_after",
-        ),
-        pytest.param(
-            ("UNBOUNDED PRECEDING", "2 FOLLOWING"),
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-            id="prefix_plus_2_after",
-        ),
-        pytest.param(
-            ("3 PRECEDING", "UNBOUNDED FOLLOWING"),
-            marks=pytest.mark.skipif(
-                not testing_locally, reason="Fix Memory Leak error"
-            ),
-            id="suffix_plus_2_before",
-        ),
-    ]
-)
-def over_clause_bounds(request):
-    """fixture containing the upper/lower bounds for the SQL OVER clause"""
-    return request.param
-
-
 @pytest.mark.slow
-def test_QUALIFY_upper_lower_bound_timestamp(
-    bodosql_datetime_types,
-    non_numeric_agg_funcs_subset,
-    over_clause_bounds,
-    spark_info,
+def test_qualify_timedelta(
     memory_leak_check,
 ):
-    """Tests Qualify works with windowed agregations when both bounds are specified on timestamp types
-
-    Largley a copy of test_windowed_upper_lower_bound_timestamp in test_rows, that makes use of QUALIFY
+    """
+    Tests QUALIFY works on windowed aggregations when both bounds are specified on timedelta types.
     """
 
-    # COUNT returns an integer value, all others return
-    # timestamp. Make sure we use the correct type for comparison in the qualify clause
-    if non_numeric_agg_funcs_subset.startswith("COUNT"):
-        scalar_filter_val = "2"
-    elif non_numeric_agg_funcs_subset == "MAX":
-        # needed so filtering actually occurs
-        scalar_filter_val = "TIMESTAMP '2020-12-01'"
-    else:
-        scalar_filter_val = "TIMESTAMP '2007-01-01'"
+    query = f"SELECT P, I from table1 QUALIFY MIN(TD) OVER (PARTITION BY P) >= INTERVAL '1' DAYS"
+    df = pd.DataFrame(
+        {
+            "P": [1, 1, 2, 1, 1, 2, 3, 2, 1, 1, 2, 3, 4, 3, 2, 1],
+            "I": list(range(16)),
+            "TD": [np.timedelta64(2**i, "h") for i in range(16)],
+        }
+    )
+    ctx = {"table1": df}
+    answer = df.iloc[[6, 11, 12, 13], [0, 1]]
 
-    if non_numeric_agg_funcs_subset == "COUNT(*)":
-        agg_fn_call = "COUNT(*)"
-    else:
-        agg_fn_call = f"{non_numeric_agg_funcs_subset}(A)"
-
-    # Switched partition/sortby to avoid null
-    window_ASC = f"(PARTITION BY C ORDER BY A ASC ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-    window_DESC = f"(PARTITION BY C ORDER BY A DESC ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-
-    # doing an orderby in the query so it's easier to tell what the error is by visual comparison
-    # should an error occur.
-    query = f"select A, B, C, {agg_fn_call} OVER {window_ASC} as WINDOW_AGG_ASC FROM table1 QUALIFY WINDOW_AGG_ASC > {scalar_filter_val} OR {agg_fn_call} OVER {window_DESC} > {scalar_filter_val} ORDER BY C, A"
-
-    spark_subquery = f"select A, B, C, {agg_fn_call} OVER {window_ASC} as WINDOW_AGG_ASC, {agg_fn_call} OVER {window_DESC} as WINDOW_AGG_DES FROM table1"
-    spark_query = f"select A, B, C, WINDOW_AGG_ASC FROM ({spark_subquery}) where WINDOW_AGG_ASC > {scalar_filter_val} OR WINDOW_AGG_DES > {scalar_filter_val} ORDER BY C, A"
-
-    res = check_query(
+    check_query(
         query,
-        bodosql_datetime_types,
-        spark_info,
-        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
-        sort_output=False,
+        ctx,
+        None,
+        expected_output=answer,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
-        return_seq_dataframe=True,
     )
-
-    # Only check when we have one rank, so we know we're checking the replicated dataframe
-    if bodo.get_size() == 1:
-        out_df = res["output_df"]
-        # ensure that the qualify filter acutally leaves some output, so we can actually test correctness
-        assert len(out_df) > 0, "Qualify filtered output is empty"
-        # ensure that the qualify filter actually filters some of the output, so we can actually test correctness
-        assert len(out_df) < len(
-            bodosql_datetime_types["table1"]
-        ), f"Qualify filtered nothing. Output DF: {out_df}"
-
-
-@pytest.mark.slow
-def test_QUALIFY_upper_lower_bound_string(
-    bodosql_string_types,
-    non_numeric_agg_funcs_subset,
-    over_clause_bounds,
-    spark_info,
-    memory_leak_check,
-):
-    """
-    Tests Qualify works with windowed agregations when both bounds are specified on string types
-    Largley a copy of test_windowed_upper_lower_bound_string in test_rows, that makes use of QUALIFY
-    """
-
-    # COUNT returns an integer value, all others return
-    # string. Make sure we use the correct type for comparison in the qualify clause
-    if non_numeric_agg_funcs_subset.startswith("COUNT"):
-        scalar_filter_val = "2"
-    elif non_numeric_agg_funcs_subset == "LAST_VALUE":
-        scalar_filter_val = "'SpEaK'"
-    else:
-        scalar_filter_val = "'HeLlLllo'"
-
-    if non_numeric_agg_funcs_subset in ["MAX", "MIN"]:
-        pytest.skip()
-    if non_numeric_agg_funcs_subset == "COUNT(*)":
-        agg_fn_call = "COUNT(*)"
-    else:
-        agg_fn_call = f"{non_numeric_agg_funcs_subset}(A)"
-
-    # Switched partition/sortby to avoid null
-    window_ASC = f"(PARTITION BY C ORDER BY A ASC ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-    window_DESC = f"(PARTITION BY C ORDER BY A DESC ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-
-    # doing an orderby in the query so it's easier to tell what the error is by visual comparison
-    # should an error occur.
-    query = f"select A, B, C, {agg_fn_call} OVER {window_ASC} as WINDOW_AGG_ASC FROM table1 QUALIFY WINDOW_AGG_ASC > {scalar_filter_val} OR {agg_fn_call} OVER {window_DESC} > {scalar_filter_val} ORDER BY C, A"
-
-    spark_subquery = f"select A, B, C, {agg_fn_call} OVER {window_ASC} as WINDOW_AGG_ASC, {agg_fn_call} OVER {window_DESC} as WINDOW_AGG_DES FROM table1"
-    spark_query = f"select A, B, C, WINDOW_AGG_ASC FROM ({spark_subquery}) where WINDOW_AGG_ASC > {scalar_filter_val} OR WINDOW_AGG_DES > {scalar_filter_val} ORDER BY C, A"
-
-    res = check_query(
-        query,
-        bodosql_string_types,
-        spark_info,
-        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
-        sort_output=False,
-        check_dtype=False,
-        check_names=False,
-        only_jit_1DVar=True,
-        return_seq_dataframe=True,
-    )
-
-    # Only check when we have one rank, so we know we're checking the replicated dataframe
-    if bodo.get_size() == 1:
-        out_df = res["output_df"]
-        # ensure that the qualify filter acutally leaves some output, so we can actually test correctness
-        assert len(out_df) > 0, "Qualify filtered output is empty"
-        # ensure that the qualify filter actually filters some of the output, so we can actually test correctness
-        assert len(out_df) < len(
-            bodosql_string_types["table1"]
-        ), f"Qualify filtered nothing. Output DF: {out_df}"
-
-
-@pytest.mark.slow
-def test_windowed_upper_lower_bound_binary(
-    bodosql_binary_types,
-    non_numeric_agg_funcs_subset,
-    over_clause_bounds,
-    spark_info,
-    memory_leak_check,
-):
-    """Tests Qualify works for window functions when both bounds are specified on binary types
-
-    Mostly a copy of test_windowed_upper_lower_bound_binary from test_rows.py
-    """
-
-    cols_to_convert = ["A", "B", "C"]
-
-    # COUNT returns an integer value, all others return
-    # a binary type. Make sure we use the correct type for comparison in the qualify clause
-    if non_numeric_agg_funcs_subset.startswith("COUNT"):
-        scalar_filter_val = "1"
-    else:
-        cols_to_convert.append("WINDOW_AGG_ASC")
-        pytest.skip("Currently unable to specify a binary literal in BodoSQL")
-
-    if non_numeric_agg_funcs_subset in ["MAX", "MIN"]:
-        pytest.skip()
-    if non_numeric_agg_funcs_subset == "COUNT(*)":
-        agg_fn_call = "COUNT(*)"
-    else:
-        agg_fn_call = f"{non_numeric_agg_funcs_subset}(A)"
-
-    # manually specified null order to avoid differnce with pySpark: https://bodo.atlassian.net/browse/BS-585
-    window_ASC = f"(PARTITION BY C ORDER BY A ASC NULLS FIRST ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-    window_DESC = f"(PARTITION BY C ORDER BY A DESC NULLS LAST ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-
-    query = f"select A, B, C, {agg_fn_call} OVER {window_ASC} as WINDOW_AGG_ASC FROM table1 QUALIFY WINDOW_AGG_ASC > {scalar_filter_val} OR {agg_fn_call} OVER {window_DESC} > {scalar_filter_val}"
-
-    spark_subquery = f"select A, B, C, {agg_fn_call} OVER {window_ASC} as WINDOW_AGG_ASC, {agg_fn_call} OVER {window_DESC} as WINDOW_AGG_DES FROM table1"
-    spark_query = f"select A, B, C, WINDOW_AGG_ASC FROM ({spark_subquery}) where WINDOW_AGG_ASC > {scalar_filter_val} OR WINDOW_AGG_DES > {scalar_filter_val}"
-
-    res = check_query(
-        query,
-        bodosql_binary_types,
-        spark_info,
-        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
-        sort_output=True,  # For binary, we have to sort the output dataframe in python, as the behavior for sorting behavior for spark differs: BE-3279
-        check_dtype=False,
-        check_names=False,
-        only_jit_1DVar=True,
-        return_seq_dataframe=True,
-        convert_columns_bytearray=cols_to_convert,
-    )
-
-    # Only check when we have one rank, so we know we're checking the replicated dataframe
-    if bodo.get_size() == 1:
-        out_df = res["output_df"]
-        # ensure that the qualify filter acutally leaves some output, so we can actually test correctness
-        assert len(out_df) > 0, "Qualify filtered output is empty"
-        # ensure that the qualify filter actually filters some of the output, so we can actually test correctness
-        assert len(out_df) < len(
-            bodosql_binary_types["table1"]
-        ), f"Qualify filtered nothing. Output DF: {out_df}"
-
-
-@pytest.mark.slow
-def test_QUALIFY_upper_lower_bound_timedelta(
-    bodosql_interval_types,
-    non_numeric_agg_funcs_subset,
-    over_clause_bounds,
-    spark_info,
-    memory_leak_check,
-):
-    """
-    Tests QUALIFY works on windowed agregations when both bounds are specified on timedelta types
-
-    Largely a copy of test_windowed_upper_lower_bound_timedelta from test_rows
-    """
-
-    if non_numeric_agg_funcs_subset.startswith("COUNT"):
-        scalar_filter_val = "2"
-        spark_scalar_filter_val = scalar_filter_val
-    else:
-        scalar_filter_val = "INTERVAL '3' DAYS"
-        spark_scalar_filter_val = (
-            "259200000000000"  # needed as sparksql converts input timedeltas to ints
-        )
-
-    if non_numeric_agg_funcs_subset == "COUNT(*)":
-        agg_fn_call = "COUNT(*)"
-    else:
-        agg_fn_call = f"{non_numeric_agg_funcs_subset}(A)"
-
-    # Switched partition/sortby to avoid null
-    window_ASC = f"(PARTITION BY C ORDER BY A ASC ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-    window_DESC = f"(PARTITION BY C ORDER BY A ASC ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-
-    # doing an orderby in the query so it's easier to tell what the error is by visual comparison
-    # should an error occur.
-    query = f"select A, B, C, {agg_fn_call} OVER {window_ASC} as WINDOW_AGG_ASC FROM table1 QUALIFY WINDOW_AGG_ASC > {scalar_filter_val} OR {agg_fn_call} OVER {window_DESC} > {scalar_filter_val} ORDER BY C, A"
-
-    spark_subquery = f"select A, B, C, {agg_fn_call} OVER {window_ASC} as WINDOW_AGG_ASC, {agg_fn_call} OVER {window_DESC} as WINDOW_AGG_DES FROM table1"
-    spark_query = f"select A, B, C, WINDOW_AGG_ASC FROM ({spark_subquery}) where WINDOW_AGG_ASC > {spark_scalar_filter_val} OR WINDOW_AGG_DES > {spark_scalar_filter_val} ORDER BY C, A"
-
-    if (
-        non_numeric_agg_funcs_subset == "COUNT"
-        or non_numeric_agg_funcs_subset == "COUNT(*)"
-    ):
-        res = check_query(
-            query,
-            bodosql_interval_types,
-            spark_info,
-            equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
-            sort_output=False,
-            check_dtype=False,
-            check_names=False,
-            convert_columns_timedelta=["A", "B", "C"],
-            only_jit_1DVar=True,
-            return_seq_dataframe=True,
-        )
-    else:
-        # need to do a conversion, since spark timedeltas are converted to int64's
-        res = check_query(
-            query,
-            bodosql_interval_types,
-            spark_info,
-            equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
-            sort_output=False,
-            check_dtype=False,
-            check_names=False,
-            convert_columns_timedelta=["A", "B", "C", "WINDOW_AGG_ASC"],
-            only_jit_1DVar=True,
-            return_seq_dataframe=True,
-        )
-
-    if bodo.get_size() == 1:
-        out_df = res["output_df"]
-        # ensure that the qualify filter acutally leaves some output, so we can actually test correctness
-        assert len(out_df) > 0, "Qualify filtered output is empty"
-        # ensure that the qualify filter actually filters some of the output, so we can actually test correctness
-        assert len(out_df) < len(
-            bodosql_interval_types["table1"]
-        ), f"Qualify filtered nothing. Output DF: {out_df}"
 
 
 """
