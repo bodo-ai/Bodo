@@ -142,7 +142,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
 
     def __init__(
         self,
-        data: Optional[Sequence["types.Array"]] = None,
+        data: Optional[Sequence["types.ArrayCompatible"]] = None,
         index=None,
         columns: Optional[Sequence[str]] = None,
         dist=None,

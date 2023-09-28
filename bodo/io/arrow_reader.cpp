@@ -346,6 +346,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
                 case Bodo_CTypes::UINT8:
                 case Bodo_CTypes::INT8:
                 case Bodo_CTypes::DATE:
+                case Bodo_CTypes::DECIMAL:
                     return;
 
                 case Bodo_CTypes::DATETIME:
@@ -917,22 +918,24 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                 auto dict_type =
                     std::dynamic_pointer_cast<arrow::DictionaryType>(
                         field->type());
-                columns.push_back(new PrimitiveBuilder(
+                columns.push_back(std::make_unique<PrimitiveBuilder>(
                     dict_type->index_type(), num_rows, false, is_categorical));
             } else {
-                columns.push_back(new PrimitiveBuilder(
+                columns.push_back(std::make_unique<PrimitiveBuilder>(
                     field->type(), num_rows, nullable_field, is_categorical));
             }
         } else if (arrow::is_binary_like(type) &&
                    (str_as_dict_cols.count(field->name()) > 0)) {
             if (create_dict_from_string) {
-                columns.push_back(new DictionaryEncodedFromStringBuilder(
-                    field->type(), num_rows));
+                columns.push_back(
+                    std::make_unique<DictionaryEncodedFromStringBuilder>(
+                        field->type(), num_rows));
             } else {
                 // Only Snowflake streaming will pass in dict ids.
                 int64_t dict_id = dict_ids.size() > 0 ? dict_ids[i] : -1;
-                columns.push_back(new DictionaryEncodedStringBuilder(
-                    field->type(), num_rows, dict_id));
+                columns.push_back(
+                    std::make_unique<DictionaryEncodedStringBuilder>(
+                        field->type(), num_rows, dict_id));
             }
         } else if (arrow::is_base_binary_like(type)) {
             Bodo_CTypes::CTypeEnum dtype;
@@ -942,15 +945,16 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
             } else {
                 dtype = Bodo_CTypes::BINARY;
             }
-            columns.push_back(new StringBuilder(dtype));
+            columns.push_back(std::make_unique<StringBuilder>(dtype));
         } else if (type == arrow::Type::LIST &&
                    arrow::is_binary_like(
                        field->type()->field(0)->type()->id())) {
-            columns.push_back(new ListStringBuilder());  // list of string
+            columns.push_back(
+                std::make_unique<ListStringBuilder>());  // list of string
         } else if (type == arrow::Type::NA) {
-            columns.push_back(new AllNullsBuilder(num_rows));
+            columns.push_back(std::make_unique<AllNullsBuilder>(num_rows));
         } else {
-            columns.push_back(new ArrowBuilder());
+            columns.push_back(std::make_unique<ArrowBuilder>());
         }
     }
 }
@@ -962,23 +966,24 @@ TableBuilder::TableBuilder(std::shared_ptr<table_info> table,
 
     for (std::shared_ptr<array_info> arr : table->columns) {
         if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            columns.push_back(
-                new PrimitiveBuilder(arr->dtype, num_rows, true, false));
+            columns.push_back(std::make_unique<PrimitiveBuilder>(
+                arr->dtype, num_rows, true, false));
         } else if (arr->arr_type == bodo_array_type::NUMPY) {
-            columns.push_back(
-                new PrimitiveBuilder(arr->dtype, num_rows, false, false));
+            columns.push_back(std::make_unique<PrimitiveBuilder>(
+                arr->dtype, num_rows, false, false));
         } else if (arr->arr_type == bodo_array_type::CATEGORICAL) {
-            columns.push_back(
-                new PrimitiveBuilder(arr->dtype, num_rows, false, true));
+            columns.push_back(std::make_unique<PrimitiveBuilder>(
+                arr->dtype, num_rows, false, true));
         } else if (arr->arr_type == bodo_array_type::DICT) {
-            columns.push_back(new DictionaryEncodedStringBuilder(num_rows));
+            columns.push_back(
+                std::make_unique<DictionaryEncodedStringBuilder>(num_rows));
         } else if (arr->arr_type == bodo_array_type::STRING) {
-            columns.push_back(new StringBuilder(arr->dtype));
+            columns.push_back(std::make_unique<StringBuilder>(arr->dtype));
         } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
-            columns.push_back(new ListStringBuilder());
+            columns.push_back(std::make_unique<ListStringBuilder>());
         } else if (arr->arr_type == bodo_array_type::STRUCT ||
                    arr->arr_type == bodo_array_type::ARRAY_ITEM) {
-            columns.push_back(new ArrowBuilder());
+            columns.push_back(std::make_unique<ArrowBuilder>());
         } else {
             throw std::runtime_error("TableBuilder: array type (" +
                                      GetArrType_as_string(arr->arr_type) +
@@ -1231,9 +1236,14 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
 
             if (act_type->Equals(exp_type) && nullable_eq) {
                 new_cols.push_back(col);
+            }
 
-            } else if ((act_type->bit_width() < exp_type->bit_width()) &&
-                       nullable_eq) {
+            // Float -> Double
+            // Int -> Wider Int
+            // Int -> Wider Decimal
+            // Float / Double -> Wider Decimal
+            else if ((act_type->bit_width() < exp_type->bit_width()) &&
+                     nullable_eq) {
                 // Check if upcast is possible in this case
                 // Dont bother checking if types are compatible, should
                 // be done at compile-time. Only sizes can change.
