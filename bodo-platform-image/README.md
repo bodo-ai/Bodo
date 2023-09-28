@@ -2,7 +2,7 @@
 
 This folder contains scripts for:
 
-1. Building Images(AMI&VM Image)'s containing Bodo executables (we build 2 types of images: worker and jupyter; explained later)
+1. Building Images(AMI&VM Image)'s containing Bodo executables 
 2. Updating the list of available AMIs to amazon account ID's of users allowed
 3. Updating the list of available VMIs
 
@@ -12,10 +12,9 @@ A machine image is a single static unit that contains a pre-configured operating
 An AMI (Amazon Machine Image) is one format example of machine images. It is used specifically for creating EC2 instances.
 Similarly, VM Image is used specifically for creating Azure VM instances.
 
-In our case, machines images are useful for supporting the Bodo platform for running Clusters and Jupyter Notebooks on AWS/AZURE.
+In our case, machines images are useful for supporting the Bodo platform for running Clusters on AWS/AZURE.
 Specifically, we create images for the worker nodes in a given cluster and for nodes hosting the Notebook itself.
 We would like cluster nodes to all have Bodo installed on them with the right configuration.
-Notebook Images are minimal and have JupyterLab and our JupyterLab extension installed. They do not have Bodo installed.
 
 ### Tools for automating the Image creation
 
@@ -44,10 +43,6 @@ Generates `ami_share_requests.json` and `vmi_share_requests.json` from manifest 
 #### get_bodo_versions.py
 
 Get available bodo versions to build images.
-
-#### share_images.py
-
-Shares `ami_share_requests.json` and `vmi_share_requests.json` with the target platform.
 
 #### stage_azure_img_def.sh
 
@@ -86,7 +81,6 @@ The YAML files under the `ansible/` directory are called playbooks. A playbook i
 
 We have 2 different playbooks, one for each node type we would like to create images for.
 
-- `jupyter_playbook.yaml` is for the nodes that will run the Jupyter notebook. It will contains tasks related to installing jupyterlab and nginx on it.
 - `worker_playbook.yaml` is for cluster nodes that will carry the work. It will mainly have bodo and mpi.
 
 We use Intel-MPI by default on both AWS and Azure. On AWS we also install the EFA drivers. Note that it's fine to have the EFA drivers installed even when the image
@@ -156,31 +150,16 @@ In order to build new Images(AMI&VM Image using the same template, specified by 
 
 ```
 cd packer
-packer build -var 'node_role=jupyter' -var 'playbook_file=jupyter_playbook.yaml' templates/images.pkr.hcl
 packer build -var 'node_role=worker' -var 'playbook_file=worker_playbook.yaml' templates/images.pkr.hcl
-```
-
-or you can build AMI or VM image:
-
-```
-packer build -only=amazon-ebs.build -var 'node_role=jupyter' -var 'playbook_file=jupyter_playbook.yaml' templates/images.pkr.hcl
-packer build -only=azure-arm.build -var 'node_role=jupyter' -var 'playbook_file=jupyter_playbook.yaml' templates/images.pkr.hcl
 ```
 
 or you can use json variables files stored in vars directory:
 
 ```
 cd packer
-packer build -var-file vars/jupyter.json templates/images.pkr.hcl
 packer build -var-file vars/worker.json templates/images.pkr.hcl
 ```
 
-In order to share images with different Accounts for AMI or with the platform for Azure run:
-
-```
-bash packer/scripts/share_images.sh jupyter
-bash packer/scripts/share_images.sh worker
-```
 
 ## Confluence Docs
 

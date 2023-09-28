@@ -139,7 +139,7 @@ def get_ami_ids_by_region(fpath):
     return ami_id_by_region
 
 
-IMG_TYPES = ["worker"]  # , "jupyter"]
+IMG_TYPES = ["worker"]
 
 manifest_files = list(filter(lambda x: x.endswith(".json"), os.listdir(".")))
 img_type_manifest_file_prefix_map = gen_manifest_file_prefix_map(IMG_TYPES)
@@ -212,10 +212,7 @@ for idx in range(NUMBER_OF_BODO_VERSIONS):
     )
 
     # This will end up being of the form
-    # {'worker': {'us-east-1': 'ami-XXXX', 'us-east-2': 'ami-XXXX', ...},
-    #  'jupyter': {...},
-    #   ...
-    # }
+    # {'worker': {'us-east-1': 'ami-XXXX', 'us-east-2': 'ami-XXXX', ...}}
     ami_ids_by_type_by_region = {
         t: get_ami_ids_by_region(ami_types_manifest_fpath_map[t])
         for t in ami_types_manifest_fpath_map.keys()
@@ -254,7 +251,6 @@ for idx in range(NUMBER_OF_BODO_VERSIONS):
             "imagePrefix": img_prefix,
             "region": region,
             "workerImageId": ami_ids_by_type["worker"],
-            # "jupyterImageId": ami_ids_by_type["jupyter"],
             "imageCloudProvider": "AWS",
         }
         for region, ami_ids_by_type in ami_ids_by_region_by_type.items()
@@ -269,7 +265,6 @@ for idx in range(NUMBER_OF_BODO_VERSIONS):
             "imagePrefix": img_prefix,
             "region": region,
             "workerImageId": vmi_ids_by_type["worker"],
-            # "jupyterImageId": vmi_ids_by_type["jupyter"],
             "imageCloudProvider": "AZURE",
         }
         for region, vmi_ids_by_type in vmi_ids_by_region_by_type.items()
