@@ -68,11 +68,6 @@ class TableBuilder {
      */
     TableBuilder(std::shared_ptr<table_info> table, const int64_t num_rows);
 
-    ~TableBuilder() {
-        for (auto col : columns)
-            delete col;
-    }
-
     /**
      * Append data from Arrow table to output Bodo table.
      * NOTE: Can pass Arrow table slices.
@@ -84,7 +79,7 @@ class TableBuilder {
     /// in ArrowReader code path
     table_info* get_table() {
         std::vector<std::shared_ptr<array_info>> arrays;
-        for (auto col : columns) {
+        for (auto& col : columns) {
             arrays.push_back(col->get_output());
         }
         return new table_info(arrays);
@@ -111,7 +106,8 @@ class TableBuilder {
     };
 
    private:
-    std::vector<BuilderColumn*> columns;  // output column builders
+    std::vector<std::unique_ptr<BuilderColumn>>
+        columns;  // output column builders
     int64_t total_rows;
     int64_t rem_rows;  // Remaining number of rows to build table
 };

@@ -13,7 +13,14 @@
 
 std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
                                   int const& scale) {
+    // TODO(srilman): I think Arrow Decimal128::ToString() had trailing zeros in
+    // past, but when I tested, it didn't. Maybe we can get rid of this
+    // function entirely
     std::string str = arrow_decimal.ToString(scale);
+    if (str.find('.') == std::string::npos) {
+        return str;
+    }
+
     // str may be of the form 0.45000000000 or 4.000000000
     size_t last_char = str.length();
     while (true) {
@@ -24,7 +31,8 @@ std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
     // position reduce str to 0.45  or 4.
     if (str[last_char - 1] == '.')
         last_char--;
-    // position reduce str to 0.45 or 4
+
+    // Slice String to New Range
     str = str.substr(0, last_char);
     if (str == "0.E-18")
         return "0";
