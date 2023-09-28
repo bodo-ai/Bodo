@@ -496,3 +496,38 @@ def test_unreserved_kw_pt2(spark_info, memory_leak_check):
         ),
         check_names=False,
     )
+
+
+@pytest.mark.slow
+def test_unreserved_kw_pt3(spark_info, memory_leak_check):
+    """Test that "ROW_NUMBER", "INTERVAL", "PERCENT", "COUNT", "TRANSLATE", "ROLLUP", "MATCHES", "ABS", "LAG", "MATCH_NUMBER",
+    can be columns, aliases, or table names
+    """
+    query = "SELECT abs.AB as row_number, abs.count, abs.percent, abs.TRANSLATE as interval, abs.rollup, abs.matches as match_number FROM LAG abs"
+    check_query(
+        query,
+        {
+            "LAG": pd.DataFrame(
+                {
+                    "AB": ["A", "B", "C", "D", "E"],
+                    "COUNT": ["A", "B", "C", "D", "E"],
+                    "PERCENT": ["A", "B", "C", "D", "E"],
+                    "TRANSLATE": ["A", "B", "C", "D", "E"],
+                    "ROLLUP": ["A", "B", "C", "D", "E"],
+                    "MATCHES": ["A", "B", "C", "D", "E"],
+                }
+            )
+        },
+        spark_info,
+        expected_output=pd.DataFrame(
+            {
+                "AB": ["A", "B", "C", "D", "E"],
+                "COUNT": ["A", "B", "C", "D", "E"],
+                "PERCENT": ["A", "B", "C", "D", "E"],
+                "TRANSLATE": ["A", "B", "C", "D", "E"],
+                "ROLLUP": ["A", "B", "C", "D", "E"],
+                "MATCHES": ["A", "B", "C", "D", "E"],
+            }
+        ),
+        check_names=False,
+    )
