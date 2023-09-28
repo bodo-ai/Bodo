@@ -51,7 +51,6 @@ def create_from_env(bodo_version, image_region, image_id, cloud_provider):
         "imageGitSha": "null",
         "region": image_region,
         "workerImageId": image_id,
-        "jupyterImageId": "null",
         "imageCloudProvider": (cloud_provider.upper())
     }]
 
