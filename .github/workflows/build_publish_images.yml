@@ -185,83 +185,8 @@ jobs:
           name: worker-manifest
           path: bodo-platform-image/packer/worker_manifest_*.json
 
-  # build-jupyter:
-  #   needs: [get-bodo-versions]
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: get git_sha
-  #       env:
-  #         GIT_SHA: ${{ github.sha }}
-  #         GITHUB_REF: ${{ github.ref }}
-  #       run: |
-  #         git_sha=$(if [ "$GITHUB_REF" == "refs/heads/master" ]; then echo "master-${GIT_SHA:0:7}"; elif [[ "$GITHUB_REF" =~ refs/tags/v* ]]; then tag=`echo $GITHUB_REF | cut -f3 -d/`; echo "$tag"; else echo "${GIT_SHA:0:7}"; fi)
-  #         echo "SHA=${git_sha}" >> $GITHUB_ENV
-
-  #     - name: Configure Azure Credentials
-  #       uses: azure/login@v1
-  #       with:
-  #         creds: ${{secrets.AZURE_CREDENTIALS}}
-
-  #     - name: Configure AWS Credentials
-  #       uses: aws-actions/configure-aws-credentials@v1
-  #       with:
-  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  #         aws-region: us-east-2
-
-  #     - name: Checkout code
-  #       uses: actions/checkout@v1
-
-  #     - name: Download Artifact Bodo Versions
-  #       uses: actions/download-artifact@v2
-  #       with:
-  #         name: bodo-versions-artifact
-  #         path: bodo-platform-image/
-
-  #     - name: Create Azure image definition
-  #       uses: azure/CLI@v1.0.6
-  #       # For event that is not workflow, we skip the image creation in the build step,
-  #       # and therefore this step is not required.
-  #       if: github.event_name == 'workflow_dispatch'
-  #       env:
-  #         GIT_SHA: ${{ env.SHA }}
-  #       with:
-  #         azcliversion: 2.30.0
-  #         inlineScript: |
-  #           $GITHUB_WORKSPACE/bodo-platform-image/scripts/azure/create_image_definition.sh \
-  #             --image-sha ${GIT_SHA} \
-  #             --node-role jupyter
-
-  #     - name: Build Images
-  #       id: build
-  #       env:
-  #         GITHUB_EVENT: ${{ github.event_name }}
-  #         BOT_GITHUB_USERNAME: ${{ secrets.BOT_GITHUB_USERNAME }}
-  #         BOT_GITHUB_TOKEN: ${{ secrets.BOT_GITHUB_TOKEN }}
-  #         CONDA_USERNAME: ${{ secrets.CONDA_USERNAME }}
-  #         CONDA_TOKEN: ${{ secrets.CONDA_TOKEN }}
-  #         CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-  #         CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-  #         AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-  #         GIT_SHA: ${{ env.SHA }}
-  #       run: |
-  #         cd bodo-platform-image
-  #         cd packer
-  #         arguments=$(if [ "$GITHUB_EVENT" != 'workflow_dispatch' ]; then echo "--skip-create-images"; fi)
-  #         bash build_images_and_gen_manifests.sh \
-  #           $arguments \
-  #           --image-sha $GIT_SHA \
-  #           --node-role jupyter \
-  #           --playbook-file jupyter_playbook.yaml
-
-  #     - name: Upload Packer Manifest
-  #       uses: actions/upload-artifact@v2
-  #       with:
-  #         name: jupyter-manifest
-  #         path: bodo-platform-image/packer/jupyter_manifest_*.json
-
   combine-manifest-gen-ami-entries:
-    needs: [build-worker] #, build-jupyter]
+    needs: [build-worker]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -273,12 +198,6 @@ jobs:
         with:
           name: worker-manifest
           path: bodo-platform-image/
-
-      # - name: Download Jupyter Packer Manifest
-      #   uses: actions/download-artifact@v2
-      #   with:
-      #     name: jupyter-manifest
-      #     path: bodo-platform-image/
 
       - name: Setup Python
         uses: actions/setup-python@v2
