@@ -2687,7 +2687,7 @@ def _nullable_float_arr_maker(L, to_null, to_nan):
     return pd.Series(A)
 
 
-def run_rank0(func, bcast_result=True, result_default=None):
+def run_rank0(func, bcast_result: bool = True, result_default=None):
     """
     Utility function decorator to run a function on just rank 0
     but re-raise any Exceptions safely on all ranks.
