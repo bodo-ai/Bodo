@@ -503,6 +503,7 @@ def test_s3_csv_write_file_prefix(minio_server, s3_bucket, test_df):
     assert all(f.startswith("test-") for f in file_names)
 
 
+@pytest.mark.timeout(1000)
 def test_s3_json_write_file_prefix(minio_server, s3_bucket, test_df):
     """Test S3 to_json with unique distributed file prefix"""
 
@@ -523,6 +524,7 @@ def test_s3_json_write_file_prefix(minio_server, s3_bucket, test_df):
     assert all(f.startswith("test-") for f in file_names)
 
 
+@pytest.mark.timeout(1000)
 @pytest.mark.parametrize(
     "bucket_fixture,bucket_name",
     [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2")],
@@ -548,6 +550,7 @@ def test_s3_json_write_records_lines_seq(
     bodo_write(test_df, f"s3://{bucket_name}/df_records_lines_seq.json")
 
 
+@pytest.mark.timeout(1000)
 def test_s3_json_write_records_lines_1D(minio_server, s3_bucket, test_df):
     """
     test s3 to_json(orient="records", lines=True) in 1D distributed
@@ -562,6 +565,7 @@ def test_s3_json_write_records_lines_1D(minio_server, s3_bucket, test_df):
     bodo_write(_get_dist_arg(test_df, False))
 
 
+@pytest.mark.timeout(1000)
 def test_s3_json_write_records_lines_1D_var(minio_server, s3_bucket, test_df):
     """
     test s3 to_json(orient="records", lines=True) in 1D var
@@ -838,6 +842,7 @@ def test_s3_np_fromfile_1D_var(minio_server, s3_bucket, test_np_arr):
     check_func(test_read, (), py_output=test_np_arr)
 
 
+@pytest.mark.timeout(1000)
 def test_s3_json_read_records_lines_seq(minio_server, s3_bucket, test_df):
     """
     read_json(orient="records", lines=True)
@@ -863,6 +868,7 @@ def test_s3_json_read_records_lines_seq(minio_server, s3_bucket, test_df):
     check_func(test_read_infer_dtype, (), py_output=test_df)
 
 
+@pytest.mark.timeout(1000)
 def test_s3_json_read_records_lines_1D(minio_server, s3_bucket, test_df):
     """
     read_json(orient="records", lines=True)
@@ -887,6 +893,7 @@ def test_s3_json_read_records_lines_1D(minio_server, s3_bucket, test_df):
     check_func(test_read_infer_dtype, (), py_output=test_df)
 
 
+@pytest.mark.timeout(1000)
 def test_s3_json_read_records_lines_1D_var(minio_server, s3_bucket, test_df):
     """
     read_json(orient="records", lines=True)
@@ -913,6 +920,7 @@ def test_s3_json_read_records_lines_1D_var(minio_server, s3_bucket, test_df):
 
 
 @pytest.mark.slow
+@pytest.mark.timeout(1000)
 def test_s3_json_data_has_path(minio_server, s3_bucket, datapath, memory_leak_check):
     """
     test s3 read_json where data includes ://path
@@ -927,7 +935,6 @@ def test_s3_json_data_has_path(minio_server, s3_bucket, datapath, memory_leak_ch
 
 @pytest.mark.skip("DeltaTable doesn't seem to support custom S3 endpoints")
 def test_read_parquet_from_s3_deltalake(minio_server, s3_bucket):
-
     """
     DeltaTable doesn't seem to support custom S3 endpoints, so we can't test
     using MinIO on CI for now.
@@ -973,6 +980,7 @@ def test_read_parquet_from_s3_deltalake(minio_server, s3_bucket):
     check_func(impl, (), py_output=py_output, check_dtype=False)
 
 
+@pytest.mark.timeout(1000)
 def test_read_parquet_glob_s3(minio_server, s3_bucket, datapath, memory_leak_check):
     def test_impl(filename):
         df = pd.read_parquet(filename)
@@ -987,6 +995,7 @@ def test_read_parquet_glob_s3(minio_server, s3_bucket, datapath, memory_leak_che
     check_func(test_impl, (glob_pattern_2,), py_output=pyout, check_dtype=False)
 
 
+@pytest.mark.timeout(1000)
 def test_read_parquet_trailing_sep_s3(
     minio_server, s3_bucket, datapath, memory_leak_check
 ):
@@ -999,6 +1008,7 @@ def test_read_parquet_trailing_sep_s3(
 
 
 @pytest.mark.slow
+@pytest.mark.timeout(1000)
 def test_s3_csv_anon_public_dataset(memory_leak_check):
     """
     Test pd.read_csv(..., storage_options={"anon": True})
@@ -1021,6 +1031,7 @@ def test_s3_csv_anon_public_dataset(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.timeout(1000)
 def test_s3_json_anon_public_dataset(memory_leak_check):
     """
     Test pd.read_json(..., storage_options={"anon": True})
@@ -1044,6 +1055,7 @@ def test_s3_json_anon_public_dataset(memory_leak_check):
         reset_aws_vars(aws_env_vars, orig_env_vars)
 
 
+@pytest.mark.timeout(1000)
 def test_read_parquet_invalid_list_of_files(minio_server, s3_bucket, datapath):
     def test_impl(fnames):
         df = pd.read_parquet(fnames)
