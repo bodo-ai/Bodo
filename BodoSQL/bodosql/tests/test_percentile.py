@@ -8,6 +8,11 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
+from bodo.tests.utils import pytest_slow_unless_groupby
+
+# Skip unless any groupby-related files were changed
+pytestmark = pytest_slow_unless_groupby
+
 
 @pytest.fixture
 def percentile_df_data():

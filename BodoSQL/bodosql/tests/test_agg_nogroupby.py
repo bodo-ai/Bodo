@@ -16,7 +16,11 @@ from bodo.tests.utils import (
     count_array_OneDs,
     count_array_REPs,
     dist_IR_contains,
+    pytest_slow_unless_groupby,
 )
+
+# Skip unless any groupby-related files were changed
+pytestmark = pytest_slow_unless_groupby
 
 
 def test_agg_numeric(

@@ -18,6 +18,10 @@ from bodo.tests.conftest import (  # noqa
 from bodo.tests.test_bodosql_array_kernels.test_bodosql_datetime_array_kernels import (
     diff_fn,
 )
+from bodo.tests.utils import pytest_slow_unless_codegen
+
+# Skip unless any codegen files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.mark.parametrize(

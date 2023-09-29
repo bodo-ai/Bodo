@@ -6,6 +6,12 @@ import numpy as np
 import pandas as pd
 from bodosql.tests.utils import check_query
 
+from bodo.tests.utils import pytest_slow_unless_codegen
+
+# Skip unless any codegen files were changed
+pytestmark = pytest_slow_unless_codegen
+
+
 # the difference in days between the unix epoch and the start of year 0
 dayDeltaUnixY0 = 719528
 # the difference in days seconds between the unix epoch and the start of year 0

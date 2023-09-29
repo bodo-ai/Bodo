@@ -9,7 +9,15 @@ import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
-from bodo.tests.utils import SeriesOptTestPipeline, check_func, dist_IR_contains
+from bodo.tests.utils import (
+    SeriesOptTestPipeline,
+    check_func,
+    dist_IR_contains,
+    pytest_slow_unless_codegen,
+)
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 def verify_dictionary_optimization(func, args, dict_func, output_encoded):

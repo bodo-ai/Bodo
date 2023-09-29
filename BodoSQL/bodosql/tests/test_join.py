@@ -21,6 +21,10 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
+from bodo.tests.utils import pytest_slow_unless_join
+
+# Skip unless any join-related files were changed
+pytestmark = pytest_slow_unless_join
 
 
 @pytest.fixture(params=["INNER", "LEFT", "RIGHT", "FULL OUTER"])

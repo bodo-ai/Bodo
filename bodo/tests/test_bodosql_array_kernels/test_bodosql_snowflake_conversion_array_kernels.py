@@ -9,7 +9,10 @@ from pandas.api.types import is_float_dtype, is_string_dtype
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.libs.bodosql_array_kernels import *
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_slow_unless_codegen
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 true_vals = {"y", "yes", "t", "true", "on", "1"}
 false_vals = {"n", "no", "f", "false", "off", "0"}

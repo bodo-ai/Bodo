@@ -5,13 +5,16 @@ Implements tests for the BodoSQL kernels for SHA2 and other crypto functions.
 # -*- coding: utf-8 -*-
 
 import hashlib
-import numpy as np
+
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import vectorized_sol
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_slow_unless_codegen
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.mark.parametrize(
@@ -29,7 +32,8 @@ from bodo.tests.utils import check_func
                     "'-=:>@#!!@$@#%Q!",
                     None,
                     "3oiurjqwdkKLNDW",
-                ] * 4,
+                ]
+                * 4,
             ),
             256,
             id="256_vector",
@@ -41,7 +45,8 @@ from bodo.tests.utils import check_func
                     None,
                     "pn98oiy7htngiAWE@W#E",
                     "OIJSD8964aflkaw",
-                ] * 4,
+                ]
+                * 4,
             ),
             384,
             id="384_vector",
@@ -63,26 +68,27 @@ from bodo.tests.utils import check_func
                     None,
                     b"'-=:>@lkadjlsx#%Q!",
                     b"+_)()_o8j:OJ",
-                ] * 4,
+                ]
+                * 4,
             ),
             256,
             id="256_binary_vector",
         ),
-    ]
+    ],
 )
 def test_sha2_kernel(msg, digest_size, memory_leak_check):
     """Test sha2 bodo kernel"""
     is_out_distributed = True
 
     def impl(msg, digest_size):
-        return pd.Series(
-            bodo.libs.bodosql_array_kernels.sha2(msg, digest_size)
-        )
+        return pd.Series(bodo.libs.bodosql_array_kernels.sha2(msg, digest_size))
 
     if not isinstance(msg, pd.Series):
         is_out_distributed = False
         # Setting is_output_distributed = False is necessary for scalar test with np > 1
-        impl = lambda msg, digest_size: bodo.libs.bodosql_array_kernels.sha2(msg, digest_size)
+        impl = lambda msg, digest_size: bodo.libs.bodosql_array_kernels.sha2(
+            msg, digest_size
+        )
 
     def scalar_fn(elem, size):
         if pd.isna(elem):
@@ -96,15 +102,25 @@ def test_sha2_kernel(msg, digest_size, memory_leak_check):
         else:
             func = hashlib.sha512
         if isinstance(elem, str):
-            return func(elem.encode('utf-8')).hexdigest()
+            return func(elem.encode("utf-8")).hexdigest()
         else:  # bytes
             return func(elem).hexdigest()
 
-    answer = vectorized_sol((msg, digest_size,), scalar_fn, None)
+    answer = vectorized_sol(
+        (
+            msg,
+            digest_size,
+        ),
+        scalar_fn,
+        None,
+    )
 
     check_func(
         impl,
-        (msg, digest_size,),
+        (
+            msg,
+            digest_size,
+        ),
         py_output=answer,
         is_out_distributed=is_out_distributed,
     )
@@ -124,7 +140,8 @@ def test_sha2_kernel(msg, digest_size, memory_leak_check):
                     "doifqe132e8w7nu",
                     ";'afs['-=:>@#!!@$!",
                     "equ90wd3oiurjq",
-                ] * 4,
+                ]
+                * 4,
             ),
             id="string_vector",
         ),
@@ -139,11 +156,12 @@ def test_sha2_kernel(msg, digest_size, memory_leak_check):
                     b"sx#%Q!'-=:>@lkadjl",
                     b"j:OJ+_)()_o8",
                     None,
-                ] * 4,
+                ]
+                * 4,
             ),
             id="binary_vector",
         ),
-    ]
+    ],
 )
 def test_md5_kernel(msg, memory_leak_check):
     """Test md5 bodo kernel"""
@@ -161,7 +179,7 @@ def test_md5_kernel(msg, memory_leak_check):
         if pd.isna(elem):
             return None
         if isinstance(elem, str):
-            return hashlib.md5(elem.encode('utf-8')).hexdigest()
+            return hashlib.md5(elem.encode("utf-8")).hexdigest()
         else:  # bytes
             return hashlib.md5(elem).hexdigest()
 

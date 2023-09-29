@@ -14,7 +14,10 @@ from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_conversion_arr
     str_to_bool,
 )
 from bodo.tests.timezone_common import representative_tz  # noqa
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_slow_unless_codegen
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.fixture(

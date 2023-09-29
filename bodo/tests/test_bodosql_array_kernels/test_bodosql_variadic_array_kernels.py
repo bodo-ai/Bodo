@@ -16,7 +16,11 @@ from bodo.tests.utils import (
     check_func,
     dist_IR_count,
     find_nested_dispatcher_and_args,
+    pytest_slow_unless_codegen,
 )
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 def coalesce_expected_output(args):

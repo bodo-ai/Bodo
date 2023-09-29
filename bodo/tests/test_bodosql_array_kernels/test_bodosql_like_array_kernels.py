@@ -5,7 +5,10 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_slow_unless_codegen
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 def test_convert_sql_pattern_to_python_compile_time(memory_leak_check):
@@ -197,6 +200,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, like_arr, memory_leak
     Test all of the various paths for LIKE/ILIKE from the like_kernel with a constant
     pattern and escape value.
     """
+
     # Tests without escape
     def test_impl1(arr):
         # Test directly equality

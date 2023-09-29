@@ -29,7 +29,15 @@ from bodo.tests.timezone_common import (  # noqa
     generate_date_trunc_time_func,
     representative_tz,
 )
-from bodo.tests.utils import DistTestPipeline, dist_IR_contains
+from bodo.tests.utils import (
+    DistTestPipeline,
+    dist_IR_contains,
+    pytest_slow_unless_codegen,
+)
+
+# Skip unless any codegen files were changed
+pytestmark = pytest_slow_unless_codegen
+
 
 EQUIVALENT_SPARK_DT_FN_MAP = {
     "WEEK": "WEEKOFYEAR",

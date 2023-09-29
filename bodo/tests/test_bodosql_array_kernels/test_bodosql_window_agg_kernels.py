@@ -12,7 +12,14 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func, nullable_float_arr_maker
+from bodo.tests.utils import (
+    check_func,
+    nullable_float_arr_maker,
+    pytest_slow_unless_codegen,
+)
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 def uniform_distribution(n, seed):

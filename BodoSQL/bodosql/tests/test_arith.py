@@ -11,6 +11,11 @@ from bodosql.tests.utils import (
     create_pyspark_schema_from_dataframe,
 )
 
+from bodo.tests.utils import pytest_slow_unless_codegen
+
+# Skip unless any codegen files were changed
+pytestmark = pytest_slow_unless_codegen
+
 
 @pytest.mark.slow
 def test_basic_arithmetic_select(bodosql_numeric_types, spark_info, memory_leak_check):

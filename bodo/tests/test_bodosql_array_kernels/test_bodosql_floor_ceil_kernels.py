@@ -6,10 +6,12 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_slow_unless_codegen
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
-@pytest.mark.slow
 def test_floor_ceil_float(memory_leak_check):
     """
     Testing the FLOOR and CEIL functions with precisions, with hardcoded answers

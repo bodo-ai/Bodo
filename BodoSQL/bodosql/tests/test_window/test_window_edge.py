@@ -10,6 +10,11 @@ from bodosql.tests.test_window.window_common import (  # noqa
 )
 from bodosql.tests.utils import check_query
 
+from bodo.tests.utils import pytest_slow_unless_window
+
+# Skip unless any window-related files were changed
+pytestmark = pytest_slow_unless_window
+
 
 @pytest.mark.skip("TODO: currently defaults to unbounded window in some case")
 @pytest.mark.parametrize(

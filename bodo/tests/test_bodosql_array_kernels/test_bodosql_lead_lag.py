@@ -12,7 +12,14 @@ import pytest
 
 import bodo
 from bodo.libs.bodosql_lead_lag import lead_lag_seq
-from bodo.tests.utils import check_func, gen_nonascii_list
+from bodo.tests.utils import (
+    check_func,
+    gen_nonascii_list,
+    pytest_slow_unless_codegen,
+)
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.mark.parametrize(

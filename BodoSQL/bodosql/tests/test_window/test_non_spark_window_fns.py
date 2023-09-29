@@ -7,7 +7,10 @@ from bodosql.tests.test_window.window_common import count_window_applies
 from bodosql.tests.utils import check_query
 
 from bodo import Time
-from bodo.tests.utils import nullable_float_arr_maker
+from bodo.tests.utils import nullable_float_arr_maker, pytest_slow_unless_window
+
+# Skip unless any window-related files were changed
+pytestmark = pytest_slow_unless_window
 
 
 @pytest.mark.tz_aware
