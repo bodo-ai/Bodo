@@ -55,6 +55,7 @@ jobs:
       pip install pipx
       pipx run conda-lock install -n ${{ parameters.CONDA_ENV }} $(System.DefaultWorkingDirectory)/buildscripts/envs/conda-lock.yml
     displayName: 'Create Mamba Env'
+    retryCountOnTaskFailure: 5
 
   - script: |
       set -eo pipefail
@@ -109,6 +110,7 @@ jobs:
   - script: |
       buildscripts/setup_minio.sh
     displayName: 'Setup Minio'
+    retryCountOnTaskFailure: 5
 
   - script: |
       set -eo pipefail
@@ -119,6 +121,7 @@ jobs:
       cd azurefs-sas-token-provider
       python setup.py develop
     displayName: "Setup Snowflake ADLS Testing (only Linux)"
+    retryCountOnTaskFailure: 5
 
   - script: |
       set -eo pipefail
@@ -128,6 +131,7 @@ jobs:
       cd iceberg
       pip install -v .
     displayName: "Setup Iceberg Testing"
+    retryCountOnTaskFailure: 5
 
   - script: |
       set -exo pipefail
@@ -143,6 +147,7 @@ jobs:
         sudo $(which unzip) instantclient-basic-macos.x64-19.8.0.0.0dbru.zip -d /usr/local/lib
       fi
     displayName: 'Setup Oracle Database Testing'
+    retryCountOnTaskFailure: 5
 
   - task: DownloadSecureFile@1
     name: testLicense
