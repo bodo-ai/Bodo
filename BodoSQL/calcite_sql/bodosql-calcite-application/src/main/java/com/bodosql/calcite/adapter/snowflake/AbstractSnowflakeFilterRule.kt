@@ -1,15 +1,21 @@
 package com.bodosql.calcite.adapter.snowflake
 
+import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter.Companion.create
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
+import com.bodosql.calcite.rel.logical.BodoLogicalFilter.Companion.create
 import org.apache.calcite.plan.RelOptRuleCall
+import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.plan.RelRule
 import org.apache.calcite.rel.core.Filter
+import org.apache.calcite.rex.RexBuilder
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
+import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexUtil
 import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
@@ -24,20 +30,46 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
         if (call == null) {
             return
         }
+        val builder = call.builder()
         val (filter, rel) = extractNodes(call)
         val catalogTable = rel.getCatalogTable()
 
-        val newNode = SnowflakeFilter.create(
-            filter.cluster,
-            filter.traitSet,
-            rel,
-            filter.condition,
-            catalogTable,
-        )
-        call.transformTo(newNode)
+        // Calculate the subset of the conjunction that is pushable versus the
+        // subset that is not.
+        val (snowflakeConditions, pandasConditions) = extractPushableConditions(filter.condition, filter.cluster.rexBuilder)
+        assert(snowflakeConditions != null)
+
+        if (pandasConditions == null) {
+            // If none of the conditions cannot be pushed, then the entire filter can
+            // become a SnowflakeFilter
+            val newNode = SnowflakeFilter.create(
+                filter.cluster,
+                filter.traitSet,
+                rel,
+                filter.condition,
+                catalogTable,
+            )
+            call.transformTo(newNode)
+        } else {
+            // If at least 1 condition cannot be pushed, split the filter into
+            // the component that can be pushed and the component that can not be.
+
+            // Create the SnowflakeFilter from the subset that is pushable.
+            val childFilter = create(
+                filter.cluster,
+                filter.traitSet,
+                rel,
+                snowflakeConditions!!,
+                catalogTable,
+            )
+            builder.push(childFilter)
+            // Create the PandasFilter from the subset that is not pushable.
+            builder.filter(pandasConditions)
+            call.transformTo(builder.build())
+        }
     }
 
-    private fun extractNodes(call: RelOptRuleCall): Pair<Filter, SnowflakeRel> {
+    protected fun extractNodes(call: RelOptRuleCall): Pair<Filter, SnowflakeRel> {
         return when (call.rels.size) {
             // Inputs are:
             // Filter ->
@@ -101,7 +133,9 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
 
         @JvmStatic
         private fun isSupportedOtherFunction(call: RexCall): Boolean {
-            return (call.kind == SqlKind.OTHER_FUNCTION || call.kind == SqlKind.OTHER) && SUPPORTED_GENERIC_CALL_NAMES.contains(call.operator.name)
+            return (call.kind == SqlKind.OTHER_FUNCTION || call.kind == SqlKind.OTHER) && SUPPORTED_GENERIC_CALL_NAMES.contains(
+                call.operator.name,
+            )
         }
 
         /**
@@ -139,7 +173,14 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
         fun isPushableFilter(filter: Filter): Boolean {
             // Not sure what things are ok to push, but we're going to be fairly conservative
             // and whitelist specific things rather than blacklist.
-            return filter.condition.accept(object : RexVisitorImpl<Boolean?>(true) {
+            return isPushableCondition(filter.condition)
+        }
+
+        @JvmStatic
+        fun isPushableCondition(condition: RexNode): Boolean {
+            // Not sure what things are ok to push, but we're going to be fairly conservative
+            // and whitelist specific things rather than blacklist.
+            return condition.accept(object : RexVisitorImpl<Boolean?>(true) {
                 override fun visitLiteral(literal: RexLiteral): Boolean = true
 
                 override fun visitInputRef(inputRef: RexInputRef?): Boolean = true
@@ -148,7 +189,12 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                     // Allow select operators to be pushed down.
                     // This list is non-exhaustive, but are generally the functions we've seen
                     // and verified to work. Add more as appropriate.
-                    return if (call != null && (SUPPORTED_CALLS.contains(call.kind) || isSupportedOtherFunction(call) || isSupportedCast(call) || isSupportedLike(call))) {
+                    return if (call != null && (
+                            SUPPORTED_CALLS.contains(call.kind) || isSupportedOtherFunction(call) || isSupportedCast(
+                                call,
+                            ) || isSupportedLike(call)
+                            )
+                    ) {
                         // Arguments also need to be pushable.
                         call.operands.all { op -> op.accept(this) ?: false }
                     } else {
@@ -156,6 +202,49 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                     }
                 }
             }) ?: false
+        }
+
+        /**
+         * @param condition The conditions to a filter that are being checked to see if it is a
+         * conjunction of projections that can be partially pushed into Snowflake.
+         * @return A pair of conditions representing the subset of the condition that can be pushed into
+         * Snowflake, and the subset that can not.
+         */
+        @JvmStatic
+        fun extractPushableConditions(
+            condition: RexNode?,
+            builder: RexBuilder?,
+        ): Pair<RexNode?, RexNode?> {
+            var snowflakeConditions: RexNode? = null
+            var pandasConditions: RexNode? = null
+            // Identify which of the conditions in the conjunction are pushable.
+            val pushableConditions: MutableList<RexNode?> = ArrayList()
+            val nonPushableConditions: MutableList<RexNode?> = ArrayList()
+            for (cond in RelOptUtil.conjunctions(condition)) {
+                if (isPushableCondition(cond!!)) {
+                    pushableConditions.add(cond)
+                } else {
+                    nonPushableConditions.add(cond)
+                }
+            }
+            // Construct the two new conjunctions
+            if (pushableConditions.size == 1) {
+                snowflakeConditions = pushableConditions[0]
+            } else if (pushableConditions.size > 1) {
+                snowflakeConditions = RexUtil.composeConjunction(builder, pushableConditions)
+            }
+            if (nonPushableConditions.size == 1) {
+                pandasConditions = nonPushableConditions[0]
+            } else if (nonPushableConditions.size > 1) {
+                pandasConditions = RexUtil.composeConjunction(builder, nonPushableConditions)
+            }
+            return Pair(snowflakeConditions, pandasConditions)
+        }
+
+        @JvmStatic
+        fun isPartiallyPushableFilter(filter: Filter): Boolean {
+            val (first, second) = extractPushableConditions(filter.condition, filter.cluster.rexBuilder)
+            return first != null
         }
     }
 
