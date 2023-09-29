@@ -51,8 +51,8 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
  */
 void idx_n_columns_apply(std::shared_ptr<array_info> out_arr,
                          std::vector<std::shared_ptr<array_info>>& orderby_arrs,
-                         std::vector<bool>& asc_vect,
-                         std::vector<bool>& na_pos_vect,
+                         const std::vector<bool>& asc_vect,
+                         const std::vector<bool>& na_pos_vect,
                          grouping_info const& grp_info, int ftype);
 
 #endif  // _GROUPBY_DO_APPLY_TO_COLUMN_H_INCLUDED

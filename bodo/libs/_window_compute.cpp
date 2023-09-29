@@ -32,7 +32,7 @@
 void min_row_number_filter_window_computation_no_sort(
     std::vector<std::shared_ptr<array_info>>& orderby_arrs,
     std::shared_ptr<array_info> out_arr, grouping_info const& grp_info,
-    std::vector<bool>& asc_vect, std::vector<bool>& na_pos_vect,
+    const std::vector<bool>& asc_vect, const std::vector<bool>& na_pos_vect,
     bool is_parallel, bool use_sql_rules) {
     // To compute min_row_number_filter we want to find the
     // idxmin/idxmax based on the orderby columns. Then in the output
@@ -677,9 +677,9 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                         std::vector<int64_t> window_funcs,
                         std::vector<std::shared_ptr<array_info>> out_arrs,
                         grouping_info const& grp_info,
-                        std::vector<bool>& asc_vect,
-                        std::vector<bool>& na_pos_vect,
-                        std::vector<void*>& window_args, int n_input_cols,
+                        const std::vector<bool>& asc_vect,
+                        const std::vector<bool>& na_pos_vect,
+                        const std::vector<void*>& window_args, int n_input_cols,
                         bool is_parallel, bool use_sql_rules) {
     int64_t window_arg_offset = 0;
     int64_t window_col_offset = input_arrs.size() - n_input_cols;
