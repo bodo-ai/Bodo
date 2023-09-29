@@ -248,11 +248,18 @@ void combine_input_table_helper(
  * @param col_sets ColSets to use for the combine.
  * @param build_table Build table with running values. This may be updated in
  * place.
+ * @param n_keys Number of key columns.
  */
-void eval_groupby_funcs_helper(
+std::shared_ptr<table_info> eval_groupby_funcs_helper(
     const std::vector<int32_t>& f_running_value_offsets,
     const std::vector<std::shared_ptr<BasicColSet>>& col_sets,
-    std::shared_ptr<table_info> build_table) {
+    std::shared_ptr<table_info> build_table, const uint64_t n_keys) {
+    // TODO(njriasan): Move eval computation directly into the output
+    // buffer.
+    std::shared_ptr<table_info> out_table = std::make_shared<table_info>();
+    out_table->columns.assign(build_table->columns.begin(),
+                              build_table->columns.begin() + n_keys);
+
     for (size_t i_colset = 0; i_colset < col_sets.size(); i_colset++) {
         const std::shared_ptr<BasicColSet>& col_set = col_sets[i_colset];
         std::vector<std::shared_ptr<array_info>> out_combine_cols;
@@ -267,7 +274,13 @@ void eval_groupby_funcs_helper(
         // TODO(ehsan): refactor eval not take grouping info input.
         grouping_info dummy_grp_info;
         col_set->eval(dummy_grp_info);
+        const std::vector<std::shared_ptr<array_info>> out_cols =
+            col_set->getOutputColumns();
+        out_table->columns.insert(out_table->columns.end(), out_cols.begin(),
+                                  out_cols.end());
+        col_set->clear();
     }
+    return out_table;
 }
 
 #pragma endregion  // Update -> Combine -> Eval helpers
@@ -494,23 +507,9 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
         // call eval() on running values to get final output
         std::shared_ptr<table_info> combine_data =
             this->build_table_buffer->data_table;
-        // [BSE-1333] TODO Have this return the output instead of having to call
-        // col_set->getOutputColumns
-        eval_groupby_funcs_helper(this->f_running_value_offsets, this->col_sets,
-                                  combine_data);
-
-        // TODO(njriasan): Move eval computation directly into the output
-        // buffer.
-        out_table = std::make_shared<table_info>();
-        out_table->columns.assign(combine_data->columns.begin(),
-                                  combine_data->columns.begin() + this->n_keys);
-        for (std::shared_ptr<BasicColSet> col_set : this->col_sets) {
-            const std::vector<std::shared_ptr<array_info>> out_cols =
-                col_set->getOutputColumns();
-            out_table->columns.insert(out_table->columns.end(),
-                                      out_cols.begin(), out_cols.end());
-            col_set->clear();
-        }
+        out_table = eval_groupby_funcs_helper(this->f_running_value_offsets,
+                                              this->col_sets, combine_data,
+                                              this->n_keys);
     }
 
     // Since we have generated the output, we don't need the build state
