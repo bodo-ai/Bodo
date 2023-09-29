@@ -11,7 +11,14 @@ import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
-from bodo.tests.utils import check_func, gen_nonascii_list
+from bodo.tests.utils import (
+    check_func,
+    gen_nonascii_list,
+    pytest_slow_unless_codegen,
+)
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.mark.parametrize(
@@ -2717,16 +2724,19 @@ def test_trim_ltrim_rtrim(args, memory_leak_check):
             "",
             id="empty separator",
         ),
-    ]
+    ],
 )
 def test_split(string, separator, memory_leak_check):
     is_out_distributed = True
+
     def impl(string, separator):
         return pd.Series(bodo.libs.bodosql_array_kernels.split(string, separator))
 
     if not isinstance(string, pd.Series) and not isinstance(separator, pd.Series):
         is_out_distributed = False
-        impl = lambda string, separator: bodo.libs.bodosql_array_kernels.split(string, separator)
+        impl = lambda string, separator: bodo.libs.bodosql_array_kernels.split(
+            string, separator
+        )
 
     def scalar_fn(string, separator):
         if pd.isna(string) or pd.isna(separator):

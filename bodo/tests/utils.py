@@ -5,6 +5,7 @@ Utility functions for testing such as check_func() that tests a function.
 import io
 import os
 import random
+import re
 import string
 import subprocess
 import time
@@ -2469,13 +2470,22 @@ def compose_decos(decos):
     return composition
 
 
+def get_files_changed():
+    """
+    Returns a list of any files changed.
+    """
+    res = subprocess.run(["git", "diff", "--name-only", "develop"], capture_output=True)
+    return res.stdout.decode("utf-8").strip().split("\n")
+
+
+files_changed = get_files_changed()
+
+
 def check_for_compiler_file_changes():
     """
     Function that returns if any of the files critical to the compiler pipeline were
     altered. If this is True, then a larger subset of tests will be run on CI.
     """
-    res = subprocess.run(["git", "diff", "--name-only", "develop"], capture_output=True)
-    files = res.stdout.decode("utf-8").strip().split("\n")
     core_compiler_files = {
         "bodo/transforms/distributed_pass.py",
         "bodo/transforms/dataframe_pass.py",
@@ -2486,7 +2496,7 @@ def check_for_compiler_file_changes():
         "bodo/utils/transform.py",
         "bodo/utils/typing.py",
     }
-    for filename in files:
+    for filename in files_changed:
         if filename in core_compiler_files:
             return True
     return False
@@ -2535,6 +2545,57 @@ pytest_snowflake = [
     ),
     pytest.mark.flaky(max_runs=3, rerun_filter=_pytest_snowflake_rerun_filter),
 ]
+
+# Flag to ignore the mass slowing of tests unless specific files are changed
+ignore_slow_unless_changed = os.environ.get("BODO_IGNORE_SLOW_UNLESS_CHANGED", False)
+
+
+def pytest_slow_unless_changed(features):
+    """
+    Uses the slow marker unless any of the changed files match any of the regex
+    corresponding to the entries in the features input, or compiler pass files
+    have been changed.
+
+    The defined feature keywords:
+        - groupby: any BodoSQL files relating to aggregation
+        - window: any BodoSQL files relating window functions
+        - joins: any BodoSQL files relating to joins
+        - codegen: any in files relating to BodoSQL codegen
+        - library: any files in bodo/libs
+        - io: any files in bodo/io
+        - hiframes: any files in bodo/hiframes
+    """
+    if ignore_slow_unless_changed:
+        return []
+    known_features = {
+        "groupby": "BodoSQL/calcite_sql/bodosql-calcite-application/src/main/.*Agg.*",
+        "window": "BodoSQL/calcite_sql/bodosql-calcite-application/src/main/.*Window.*",
+        "join": "BodoSQL/calcite_sql/bodosql-calcite-application/src/main/.*Join.*",
+        "codegen": "(BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/application/.*)|(BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/ir/.*)",
+        "library": "bodo/libs/.*",
+        "io": "bodo/io/.*",
+        "hiframes": "bodo/hiframes/.*",
+    }
+    if len(features) == 0:
+        raise Exception(f"Invalid features: {features}")
+    patterns = []
+    for feature in features:
+        if feature not in known_features:
+            raise Exception(f"Invalid features: {features}")
+        patterns.append(f"({known_features[feature]})")
+    p = re.compile("|".join(patterns), re.I)
+    if compiler_files_were_changed or any([p.match(f) for f in files_changed]):
+        return []
+    return [pytest.mark.slow]
+
+
+pytest_slow_unless_codegen = pytest_slow_unless_changed(["library", "codegen"])
+pytest_slow_unless_groupby = pytest_slow_unless_changed(
+    ["library", "codegen", "groupby"]
+)
+pytest_slow_unless_window = pytest_slow_unless_changed(["library", "codegen", "window"])
+pytest_slow_unless_join = pytest_slow_unless_changed(["library", "codegen", "join"])
+
 
 # This is for use as a decorator for a single test function.
 # (@pytest_mark_pandas)

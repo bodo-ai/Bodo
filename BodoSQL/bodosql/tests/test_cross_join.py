@@ -5,8 +5,11 @@ import bodosql
 import pytest
 from bodosql.tests.utils import check_query
 
-from bodo.tests.utils import temp_env_override
+from bodo.tests.utils import pytest_slow_unless_join, temp_env_override
 from bodo.utils.typing import BodoError
+
+# Skip unless any join-related files were changed
+pytestmark = pytest_slow_unless_join
 
 
 @pytest.mark.parametrize("broadcast", [True, False])

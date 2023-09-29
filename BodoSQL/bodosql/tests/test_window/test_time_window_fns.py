@@ -5,6 +5,11 @@ from bodosql.tests.utils import check_query
 
 from bodo import Time
 
+# Skip unless any window-related files were changed
+from bodo.tests.utils import pytest_slow_unless_window
+
+pytestmark = pytest_slow_unless_window
+
 
 @pytest.fixture
 def time_df():

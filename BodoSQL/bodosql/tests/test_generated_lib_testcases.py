@@ -9,6 +9,10 @@ import bodosql
 import pandas as pd
 
 import bodo
+from bodo.tests.utils import pytest_slow_unless_codegen
+
+# Skip unless any codegen files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 def test_strftime_default_input_0():
@@ -47,7 +51,6 @@ def test_strftime_None_Arg_1():
 def test_strftime_optional_num_0():
     @bodo.jit
     def strftime_run_with_optional_args(flag, arg0, arg1, optional_num):
-
         if optional_num == 0:
             if flag:
                 arg0 = None
@@ -81,7 +84,6 @@ def test_strftime_optional_num_0():
 def test_strftime_optional_num_1():
     @bodo.jit
     def strftime_run_with_optional_args(flag, arg0, arg1, optional_num):
-
         if optional_num == 0:
             if flag:
                 arg0 = None
@@ -115,7 +117,6 @@ def test_strftime_optional_num_1():
 def test_strftime_optional_num_2():
     @bodo.jit
     def strftime_run_with_optional_args(flag, arg0, arg1, optional_num):
-
         if optional_num == 0:
             if flag:
                 arg0 = None
@@ -181,7 +182,6 @@ def test_pd_to_datetime_with_format_optional_num_0():
     def pd_to_datetime_with_format_run_with_optional_args(
         flag, arg0, arg1, optional_num
     ):
-
         if optional_num == 0:
             if flag:
                 arg0 = None
@@ -226,7 +226,6 @@ def test_pd_to_datetime_with_format_optional_num_1():
     def pd_to_datetime_with_format_run_with_optional_args(
         flag, arg0, arg1, optional_num
     ):
-
         if optional_num == 0:
             if flag:
                 arg0 = None
@@ -271,7 +270,6 @@ def test_pd_to_datetime_with_format_optional_num_2():
     def pd_to_datetime_with_format_run_with_optional_args(
         flag, arg0, arg1, optional_num
     ):
-
         if optional_num == 0:
             if flag:
                 arg0 = None

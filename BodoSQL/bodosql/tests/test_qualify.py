@@ -17,6 +17,11 @@ from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 # memory issues on CI
 testing_locally = os.environ.get("BODOSQL_TESTING_LOCALLY", False)
 
+from bodo.tests.utils import pytest_slow_unless_window
+
+# Skip unless any window-related files were changed
+pytestmark = pytest_slow_unless_window
+
 
 @pytest.mark.parametrize(
     "func, cmp, use_dummy_frame",

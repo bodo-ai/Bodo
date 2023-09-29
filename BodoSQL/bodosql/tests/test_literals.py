@@ -9,6 +9,11 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
+from bodo.tests.utils import pytest_slow_unless_codegen
+
+# Skip unless any codegen files were changed
+pytestmark = pytest_slow_unless_codegen
+
 
 @pytest.fixture(
     params=[

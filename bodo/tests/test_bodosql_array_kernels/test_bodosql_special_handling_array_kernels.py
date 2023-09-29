@@ -14,9 +14,13 @@ from bodo.tests.utils import (
     _test_equal_guard,
     check_func,
     find_nested_dispatcher_and_args,
+    pytest_slow_unless_codegen,
     reduce_sum,
 )
 from bodo.utils.typing import BodoError
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 def verify_dict_encoded_in_impl(impl, args):

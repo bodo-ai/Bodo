@@ -17,7 +17,14 @@ from bodo.tests.timezone_common import (
     generate_date_trunc_func,
     generate_date_trunc_time_func,
 )
-from bodo.tests.utils import check_func, nanoseconds_to_other_time_units
+from bodo.tests.utils import (
+    check_func,
+    nanoseconds_to_other_time_units,
+    pytest_slow_unless_codegen,
+)
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.mark.parametrize(

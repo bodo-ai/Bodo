@@ -7,6 +7,11 @@ import pytest
 from bodosql.tests.string_ops_common import *  # noqa
 from bodosql.tests.utils import check_query
 
+from bodo.tests.utils import pytest_slow_unless_codegen
+
+# Skip unless any codegen files were changed
+pytestmark = pytest_slow_unless_codegen
+
 
 def test_like(
     bodosql_string_types, regex_string, spark_info, like_expression, memory_leak_check

@@ -95,7 +95,7 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
         // Synonymous with NUMBER, except that precision and scale cannot be specified
       case TINYINT:
       case SMALLINT:
-        // NOTE Disbling integer as it impacted bitwise and other time epoch tests.
+        // NOTE Disabling integer as it impacted bitwise and other time epoch tests.
         // case INTEGER:
       case BIGINT:
       case DECIMAL:

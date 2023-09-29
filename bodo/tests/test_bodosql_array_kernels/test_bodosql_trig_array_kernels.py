@@ -9,7 +9,10 @@ import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_slow_unless_codegen
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 test_arrs = [
     pd.Series([0, 1, -1, 0.5, -0.5, 0.3212, -0.78]),
@@ -89,7 +92,6 @@ def test_trig_single_arg_funcs(arr, func, memory_leak_check):
 
 @pytest.mark.parametrize("func", single_arg_np_list)
 def test_trig_single_arg_option(func, memory_leak_check):
-
     test_impl = "def impl(a, flag0):\n"
     test_impl += "  arg0 = a if flag0 else None\n"
     test_impl += f"  return bodo.libs.bodosql_array_kernels.{func}(arg0)"

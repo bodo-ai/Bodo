@@ -3,6 +3,11 @@ import pandas as pd
 from bodosql.tests.test_window.window_common import count_window_applies
 from bodosql.tests.utils import check_query
 
+from bodo.tests.utils import pytest_slow_unless_window
+
+# Skip unless any window-related files were changed
+pytestmark = pytest_slow_unless_window
+
 
 def test_lead_lag(spark_info, memory_leak_check):
     """Tests the window functions LEAD/LAG with a minimal set of combinations

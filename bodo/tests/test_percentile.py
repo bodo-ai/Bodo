@@ -5,7 +5,10 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_slow_unless_codegen
+
+# Skip unless any library or BodoSQL codegen or files were changed
+pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.fixture(
