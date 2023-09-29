@@ -144,13 +144,13 @@ std::shared_ptr<table_info> get_update_table(
             input_cols.push_back(in_table->columns[f_in_cols[input_ind]]);
         }
         col_set->setInCol(input_cols);
-        col_set->clearUpdateCols();
         std::vector<std::shared_ptr<array_info>> list_arr;
         col_set->alloc_update_columns(update_col_len, list_arr);
         for (auto& e_arr : list_arr) {
             update_table->columns.push_back(e_arr);
         }
         col_set->update(grp_infos);
+        col_set->clear();
     }
 
     return update_table;
@@ -236,6 +236,7 @@ void combine_input_table_helper(
         col_set->setUpdateCols(in_update_cols);
         col_set->setCombineCols(out_combine_cols);
         col_set->combine({grp_info}, init_start_row);
+        col_set->clear();
     }
 }
 
@@ -508,6 +509,7 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
                 col_set->getOutputColumns();
             out_table->columns.insert(out_table->columns.end(),
                                       out_cols.begin(), out_cols.end());
+            col_set->clear();
         }
     }
 

@@ -160,7 +160,8 @@ class BasicColSet {
      *
      * @param new_in_cols new input columns
      */
-    void setInCol(std::vector<std::shared_ptr<array_info>> new_in_cols) {
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) {
         // TODO[BSE-578]: implement setInCol() for other colsets that can have
         // more input columns
         in_col = new_in_cols[0];
@@ -193,19 +194,13 @@ class BasicColSet {
     }
 
     /**
-     * @brief clear the update column vector to allow calling update with new
-     * data batch (used in streaming groupby)
-     *
-     */
-    void clearUpdateCols() { update_cols.clear(); }
-
-    /**
      * @brief Set update columns to allow calling combine with new data batch
      * (used in streaming groupby)
      *
      * @param update_cols_
      */
-    void setUpdateCols(std::vector<std::shared_ptr<array_info>> update_cols_) {
+    virtual void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) {
         update_cols = update_cols_;
     }
 
@@ -215,19 +210,28 @@ class BasicColSet {
      *
      * @param combine_cols_
      */
-    void setCombineCols(
+    virtual void setCombineCols(
         std::vector<std::shared_ptr<array_info>> combine_cols_) {
         combine_cols = combine_cols_;
+    }
+
+    /**
+     * @brief Clear all state of this column set (used in streaming groupby)
+     */
+    virtual void clear() {
+        this->update_cols.clear();
+        this->combine_cols.clear();
+        this->in_col.reset();
     }
 
    protected:
     std::shared_ptr<array_info>
         in_col;  // the input column (from groupby input table) to which
                  // this column set corresponds to
-    int ftype;
-    bool combine_step;   // GroupbyPipeline is going to perform a combine
-                         // operation or not
-    bool use_sql_rules;  // Use SQL rules for aggregation or Pandas?
+    const int ftype;
+    const bool combine_step;   // GroupbyPipeline is going to perform a combine
+                               // operation or not
+    const bool use_sql_rules;  // Use SQL rules for aggregation or Pandas?
     std::vector<std::shared_ptr<array_info>>
         update_cols;  // columns for update step
     std::vector<std::shared_ptr<array_info>>
@@ -334,15 +338,35 @@ class WindowColSet : public BasicColSet {
      */
     virtual const std::vector<std::shared_ptr<array_info>> getOutputColumns();
 
+    virtual void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        throw std::runtime_error(
+            "WindowColSet not implemented for streaming groupby");
+    }
+    virtual void setCombineCols(
+        std::vector<std::shared_ptr<array_info>> combine_cols_) override {
+        throw std::runtime_error(
+            "WindowColSet not implemented for streaming groupby");
+    }
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        throw std::runtime_error(
+            "WindowColSet not implemented for streaming groupby");
+    }
+    virtual void clear() override {
+        throw std::runtime_error(
+            "WindowColSet not implemented for streaming groupby");
+    }
+
    private:
     std::vector<std::shared_ptr<array_info>> input_cols;
-    std::vector<int64_t> window_funcs;
-    std::vector<bool> asc;
-    std::vector<bool> na_pos;
-    std::vector<void*> window_args;
-    int n_input_cols;
-    bool is_parallel;  // whether input column data is distributed or
-                       // replicated
+    const std::vector<int64_t> window_funcs;
+    const std::vector<bool> asc;
+    const std::vector<bool> na_pos;
+    const std::vector<void*> window_args;
+    const int n_input_cols;
+    const bool is_parallel;  // whether input column data is distributed or
+                             // replicated
 };
 
 /**
@@ -372,7 +396,7 @@ class IdxMinMaxColSet : public BasicColSet {
                          int64_t init_start_row = 0);
 
    private:
-    std::shared_ptr<array_info> index_col;
+    const std::shared_ptr<array_info> index_col;
 };
 
 /**
@@ -444,6 +468,11 @@ class VarStdColSet : public BasicColSet {
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
         const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override;
 
+    virtual void clear() override {
+        BasicColSet::clear();
+        this->out_col.reset();
+    }
+
    private:
     std::shared_ptr<array_info> out_col = nullptr;
 };
@@ -488,6 +517,11 @@ class SkewColSet : public BasicColSet {
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
         const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override;
 
+    virtual void clear() override {
+        BasicColSet::clear();
+        this->out_col.reset();
+    }
+
    private:
     std::shared_ptr<array_info> out_col = nullptr;
 };
@@ -512,12 +546,31 @@ class ListAggColSet : public BasicColSet {
     void update(const std::vector<grouping_info>& grp_infos) override;
 
     std::shared_ptr<array_info> getOutputColumn();
+    virtual void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        throw std::runtime_error(
+            "ListAggColSet not implemented for streaming groupby");
+    }
+    virtual void setCombineCols(
+        std::vector<std::shared_ptr<array_info>> combine_cols_) override {
+        throw std::runtime_error(
+            "ListAggColSet not implemented for streaming groupby");
+    }
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        throw std::runtime_error(
+            "ListAggColSet not implemented for streaming groupby");
+    }
+    virtual void clear() override {
+        throw std::runtime_error(
+            "ListAggColSet not implemented for streaming groupby");
+    }
 
    private:
     std::string listagg_sep;
-    std::vector<std::shared_ptr<array_info>> orderby_cols;
-    std::vector<bool> window_ascending;
-    std::vector<bool> window_na_position;
+    const std::vector<std::shared_ptr<array_info>> orderby_cols;
+    const std::vector<bool> window_ascending;
+    const std::vector<bool> window_na_position;
 };
 
 /**
@@ -560,6 +613,11 @@ class KurtColSet : public BasicColSet {
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
         const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override;
 
+    virtual void clear() override {
+        BasicColSet::clear();
+        this->out_col.reset();
+    }
+
    private:
     std::shared_ptr<array_info> out_col = nullptr;
 };
@@ -599,12 +657,31 @@ class UdfColSet : public BasicColSet {
                  int64_t init_start_row = 0) override;
 
     void eval(const grouping_info& grp_info) override;
+    virtual void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        throw std::runtime_error(
+            "UDFColSet not implemented for streaming groupby");
+    }
+    virtual void setCombineCols(
+        std::vector<std::shared_ptr<array_info>> combine_cols_) override {
+        throw std::runtime_error(
+            "UDFColSet not implemented for streaming groupby");
+    }
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        throw std::runtime_error(
+            "UDFColSet not implemented for streaming groupby");
+    }
+    virtual void clear() override {
+        throw std::runtime_error(
+            "UDFColSet not implemented for streaming groupby");
+    }
 
    private:
-    std::shared_ptr<table_info>
-        udf_table;      // the table containing type info for UDF columns
-    int udf_table_idx;  // index to my information in the udf table
-    int n_redvars;      // number of redvar columns this UDF uses
+    const std::shared_ptr<table_info>
+        udf_table;            // the table containing type info for UDF columns
+    const int udf_table_idx;  // index to my information in the udf table
+    const int n_redvars;      // number of redvar columns this UDF uses
 };
 
 /**
@@ -640,10 +717,29 @@ class PercentileColSet : public BasicColSet {
     virtual ~PercentileColSet();
 
     void update(const std::vector<grouping_info>& grp_infos) override;
+    virtual void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        throw std::runtime_error(
+            "PercentileColSet not implemented for streaming groupby");
+    }
+    virtual void setCombineCols(
+        std::vector<std::shared_ptr<array_info>> combine_cols_) override {
+        throw std::runtime_error(
+            "PercentileColSet not implemented for streaming groupby");
+    }
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        throw std::runtime_error(
+            "PercentileColSet not implemented for streaming groupby");
+    }
+    virtual void clear() override {
+        throw std::runtime_error(
+            "PercentileColSet not implemented for streaming groupby");
+    }
 
    private:
-    double percentile;
-    bool interpolate;
+    const double percentile;
+    const bool interpolate;
 };
 
 /**
@@ -660,7 +756,7 @@ class MedianColSet : public BasicColSet {
     void update(const std::vector<grouping_info>& grp_infos) override;
 
    private:
-    bool skip_na_data;
+    const bool skip_na_data;
 };
 
 /**
@@ -668,6 +764,26 @@ class MedianColSet : public BasicColSet {
  *
  */
 class ModeColSet : public BasicColSet {
+    virtual void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        throw std::runtime_error(
+            "ModeColSet not implemented for streaming groupby");
+    }
+    virtual void setCombineCols(
+        std::vector<std::shared_ptr<array_info>> combine_cols_) override {
+        throw std::runtime_error(
+            "ModeColSet not implemented for streaming groupby");
+    }
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        throw std::runtime_error(
+            "ModeColSet not implemented for streaming groupby");
+    }
+    virtual void clear() override {
+        throw std::runtime_error(
+            "ModeColSet not implemented for streaming groupby");
+    }
+
    public:
     ModeColSet(std::shared_ptr<array_info> in_col, bool use_sql_rules);
 
@@ -696,12 +812,31 @@ class ArrayAggColSet : public BasicColSet {
     void update(const std::vector<grouping_info>& grp_infos) override;
 
     const std::vector<std::shared_ptr<array_info>> getOutputColumns() override;
+    virtual void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        throw std::runtime_error(
+            "ArrayAggColSet not implemented for streaming groupby");
+    }
+    virtual void setCombineCols(
+        std::vector<std::shared_ptr<array_info>> combine_cols_) override {
+        throw std::runtime_error(
+            "ArrayAggColSet not implemented for streaming groupby");
+    }
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        throw std::runtime_error(
+            "ArrayAggColSet not implemented for streaming groupby");
+    }
+    virtual void clear() override {
+        throw std::runtime_error(
+            "ArrayAggColSet not implemented for streaming groupby");
+    }
 
    private:
-    std::vector<std::shared_ptr<array_info>> orderby_cols;
-    std::vector<bool> ascending;
-    std::vector<bool> na_position;
-    bool is_parallel;
+    const std::vector<std::shared_ptr<array_info>> orderby_cols;
+    const std::vector<bool> ascending;
+    const std::vector<bool> na_position;
+    const bool is_parallel;
 };
 
 /**
@@ -718,10 +853,15 @@ class NUniqueColSet : public BasicColSet {
 
     void update(const std::vector<grouping_info>& grp_infos) override;
 
+    virtual void clear() override {
+        BasicColSet::clear();
+        this->my_nunique_table.reset();
+    }
+
    private:
-    bool skip_na_data;
+    const bool skip_na_data;
     std::shared_ptr<table_info> my_nunique_table = nullptr;
-    bool is_parallel;
+    const bool is_parallel;
 };
 
 /**
@@ -740,9 +880,28 @@ class CumOpColSet : public BasicColSet {
         std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
     void update(const std::vector<grouping_info>& grp_infos) override;
+    virtual void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        throw std::runtime_error(
+            "CumOpColSet not implemented for streaming groupby");
+    }
+    virtual void setCombineCols(
+        std::vector<std::shared_ptr<array_info>> combine_cols_) override {
+        throw std::runtime_error(
+            "CumOpColSet not implemented for streaming groupby");
+    }
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        throw std::runtime_error(
+            "CumOpColSet not implemented for streaming groupby");
+    }
+    virtual void clear() override {
+        throw std::runtime_error(
+            "CumOpColSet not implemented for streaming groupby");
+    }
 
    private:
-    bool skip_na_data;
+    const bool skip_na_data;
 };
 
 /**
@@ -761,9 +920,28 @@ class ShiftColSet : public BasicColSet {
         std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
     void update(const std::vector<grouping_info>& grp_infos) override;
+    virtual void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        throw std::runtime_error(
+            "ShiftColSet not implemented for streaming groupby");
+    }
+    virtual void setCombineCols(
+        std::vector<std::shared_ptr<array_info>> combine_cols_) override {
+        throw std::runtime_error(
+            "ShiftColSet not implemented for streaming groupby");
+    }
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        throw std::runtime_error(
+            "ShiftColSet not implemented for streaming groupby");
+    }
+    virtual void clear() override {
+        throw std::runtime_error(
+            "ShiftColSet not implemented for streaming groupby");
+    }
 
    private:
-    int64_t periods;
+    const int64_t periods;
 };
 
 /**
@@ -793,9 +971,29 @@ class TransformColSet : public BasicColSet {
     // Fill the output column by copying values from the transform_op_col column
     void eval(const grouping_info& grp_info) override;
 
+    virtual void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        throw std::runtime_error(
+            "TransformColSet not implemented for streaming groupby");
+    }
+    virtual void setCombineCols(
+        std::vector<std::shared_ptr<array_info>> combine_cols_) override {
+        throw std::runtime_error(
+            "TransformColSet not implemented for streaming groupby");
+    }
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        throw std::runtime_error(
+            "TransformColSet not implemented for streaming groupby");
+    }
+    virtual void clear() override {
+        throw std::runtime_error(
+            "TransformColSet not implemented for streaming groupby");
+    }
+
    private:
-    bool is_parallel;
-    int64_t transform_func;
+    const bool is_parallel;
+    const int64_t transform_func;
     std::unique_ptr<BasicColSet> transform_op_col;
 };
 
@@ -817,6 +1015,11 @@ class HeadColSet : public BasicColSet {
     void update(const std::vector<grouping_info>& grp_infos) override;
 
     void set_head_row_list(bodo::vector<int64_t>& row_list);
+
+    virtual void clear() override {
+        BasicColSet::clear();
+        this->head_row_list.clear();
+    }
 
    private:
     bodo::vector<int64_t> head_row_list;
@@ -854,8 +1057,8 @@ class NgroupColSet : public BasicColSet {
     void update(const std::vector<grouping_info>& grp_infos) override;
 
    private:
-    bool is_parallel;  // whether input column data is distributed or
-                       // replicated.
+    const bool is_parallel;  // whether input column data is distributed or
+                             // replicated.
 };
 
 /**

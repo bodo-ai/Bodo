@@ -32,9 +32,9 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
                         std::vector<int64_t> window_funcs,
                         std::vector<std::shared_ptr<array_info>> out_arrs,
                         grouping_info const& grp_info,
-                        std::vector<bool>& asc_vect,
-                        std::vector<bool>& na_pos_vect,
-                        std::vector<void*>& window_args, int n_input_cols,
+                        const std::vector<bool>& asc_vect,
+                        const std::vector<bool>& na_pos_vect,
+                        const std::vector<void*>& window_args, int n_input_cols,
                         bool is_parallel, bool use_sql_rules);
 
 #endif  // _WINDOW_COMPUTE_H_INCLUDED
