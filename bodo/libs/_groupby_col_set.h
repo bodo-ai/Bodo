@@ -319,7 +319,8 @@ class WindowColSet : public BasicColSet {
      * in this case)
      */
     virtual void alloc_running_value_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
     /**
      * Perform update step for this column set. This first shuffles
      * the data based on the orderby condition + group columns and
@@ -329,14 +330,15 @@ class WindowColSet : public BasicColSet {
      * a local reverse shuffle.
      * @param grp_infos: grouping info calculated by GroupbyPipeline
      */
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    virtual void update(const std::vector<grouping_info>& grp_infos) override;
 
     /**
      * Obtain the final output columns resulting from the groupby operation on
      * this column set.
      * @return constant vector of output columns
      */
-    virtual const std::vector<std::shared_ptr<array_info>> getOutputColumns();
+    virtual const std::vector<std::shared_ptr<array_info>> getOutputColumns()
+        override;
 
     virtual void setUpdateCols(
         std::vector<std::shared_ptr<array_info>> update_cols_) override {
