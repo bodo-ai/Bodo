@@ -21,11 +21,18 @@
  * std
  * @param grp_info Grouping information relating rows to the proper group.
  * @param ftype The aggregate function to apply
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
-void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
-                        const std::shared_ptr<array_info>& out_col,
-                        std::vector<std::shared_ptr<array_info>>& aux_cols,
-                        const grouping_info& grp_info, int ftype);
+void do_apply_to_column(
+    const std::shared_ptr<array_info>& in_col,
+    const std::shared_ptr<array_info>& out_col,
+    std::vector<std::shared_ptr<array_info>>& aux_cols,
+    const grouping_info& grp_info, int ftype,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 /**
  * @brief Apply various idx*** operations to a set of N orderby

@@ -3233,7 +3233,9 @@ def test_operator_pool_allocation():
 
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match="Allocation failed. This allocation would lead to more pinned memory than what is allowed for this operator.",
+        match=re.escape(
+            "Allocation failed. This allocation (307200) would lead to more pinned memory (current: 225280) than what is allowed for this operator (524288)."
+        ),
     ):
         # This would take the total to 520KiB, which is higher than
         # 512KiB limit.
@@ -3534,7 +3536,9 @@ def test_operator_pool_pin_unpin():
     assert pool.bytes_pinned() == 640 * 1024
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match="Allocation failed. This allocation would lead to more pinned memory than what is allowed for this operator.",
+        match=re.escape(
+            "Allocation failed. This allocation (92160) would lead to more pinned memory (current: 522240) than what is allowed for this operator (524288)."
+        ),
     ):
         op_pool.pin(allocation3)
     assert op_pool.bytes_allocated() == 1590 * 1024
@@ -3720,7 +3724,9 @@ def test_operator_pool_reallocate_edge_cases():
     allocation = op_pool.allocate(250 * 1024)
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match="Allocation failed. This allocation would lead to more pinned memory than what is allowed for this operator.",
+        match=re.escape(
+            "Allocation failed. This allocation (307200) would lead to more pinned memory (current: 256000) than what is allowed for this operator (524288)."
+        ),
     ):
         op_pool.reallocate(300 * 1024, allocation)
     assert op_pool.bytes_allocated() == 250 * 1024
@@ -3739,7 +3745,9 @@ def test_operator_pool_reallocate_edge_cases():
 
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match="Allocation failed. This allocation would lead to more pinned memory than what is allowed for this operator.",
+        match=re.escape(
+            "Allocation failed. This allocation (563200) would lead to more pinned memory (current: 0) than what is allowed for this operator (524288)."
+        ),
     ):
         op_pool.reallocate(300 * 1024, allocation)
     assert op_pool.bytes_allocated() == 250 * 1024

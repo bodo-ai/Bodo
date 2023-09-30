@@ -27,11 +27,12 @@
  * @param[in] key_dropna whether to allow NA values in group keys or not.
  * @param[in] is_parallel: true if data is distributed
  */
-void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
-                    std::shared_ptr<uint32_t[]>& hashes, size_t nunique_hashes,
-                    std::vector<grouping_info>& grp_infos, const int64_t n_keys,
-                    bool check_for_null_keys, bool key_dropna,
-                    bool is_parallel);
+void get_group_info(
+    std::vector<std::shared_ptr<table_info>>& tables,
+    std::shared_ptr<uint32_t[]>& hashes, size_t nunique_hashes,
+    std::vector<grouping_info>& grp_infos, const int64_t n_keys,
+    bool check_for_null_keys, bool key_dropna, bool is_parallel,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr());
 
 /**
  * Given a set of tables with n key columns, this function calculates the row to
@@ -40,7 +41,7 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
  *
  * @param tables: the tables
  * @param[in] hashes hashes for first table in tables, if they have already
- * been calculated. nullptr otherwise
+ * been calculated. nullptr otherwise.
  * @param[in] nunique_hashes estimated number of unique hashes if hashes are
  * provided (for first table)
  * @param[out] grouping_info structures that map row numbers to group numbers
@@ -48,13 +49,14 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
  * not
  * @param[in] key_dropna whether to allow NA values in group keys or not.
  * @param[in] is_parallel: true if data is distributed
+ * @param[in] pool: TODO
  */
-void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
-                            std::shared_ptr<uint32_t[]>& hashes,
-                            size_t nunique_hashes,
-                            std::vector<grouping_info>& grp_infos,
-                            const int64_t n_keys, const bool consider_missing,
-                            bool key_dropna, bool is_parallel);
+void get_group_info_iterate(
+    std::vector<std::shared_ptr<table_info>>& tables,
+    std::shared_ptr<uint32_t[]>& hashes, size_t nunique_hashes,
+    std::vector<grouping_info>& grp_infos, const int64_t n_keys,
+    const bool consider_missing, bool key_dropna, bool is_parallel,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr());
 
 /**
  * @brief Get total number of groups for input key arrays. This

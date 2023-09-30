@@ -259,11 +259,12 @@ std::shared_ptr<table_info> get_samples_from_table_parallel(
 std::shared_ptr<table_info> sort_values_table_local(
     std::shared_ptr<table_info> in_table, int64_t n_key_t,
     int64_t* vect_ascending, int64_t* na_position, int64_t* dead_keys,
-    bool is_parallel) {
+    bool is_parallel, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     tracing::Event ev("sort_values_table_local", is_parallel);
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_key = size_t(n_key_t);
-    bodo::vector<int64_t> ListIdx(n_rows);
+    bodo::vector<int64_t> ListIdx(n_rows, pool);
     for (size_t i = 0; i < n_rows; i++) {
         ListIdx[i] = i;
     }
@@ -310,7 +311,8 @@ std::shared_ptr<table_info> sort_values_table_local(
 
     std::shared_ptr<table_info> ret_table;
     if (dead_keys == nullptr) {
-        ret_table = RetrieveTable(std::move(in_table), ListIdx, -1);
+        ret_table = RetrieveTable(std::move(in_table), ListIdx, -1, false, pool,
+                                  std::move(mm));
     } else {
         uint64_t n_cols = in_table->ncols();
         std::vector<uint64_t> colInds;
@@ -327,7 +329,8 @@ std::shared_ptr<table_info> sort_values_table_local(
         for (uint64_t i = n_key; i < n_cols; i++) {
             colInds.push_back(i);
         }
-        ret_table = RetrieveTable(std::move(in_table), ListIdx, colInds);
+        ret_table = RetrieveTable(std::move(in_table), ListIdx, colInds, false,
+                                  pool, std::move(mm));
     }
 
     return ret_table;

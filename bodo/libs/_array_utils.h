@@ -322,11 +322,17 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
  * @param std::shared_ptr<array_info> : the input pointer
  * @param ListIdx is the vector of list of rows selected
  * @param use_nullable_arr use nullable int/float output for Numpy array input
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  * @return one array
  */
 std::shared_ptr<array_info> RetrieveArray_SingleColumn(
     std::shared_ptr<array_info> in_arr, const std::span<const int64_t> ListIdx,
-    bool use_nullable_arr = false);
+    bool use_nullable_arr = false,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 /** This function uses the combinatorial information computed in the
  * "ListIdx" array and return the column with the selected rows.
@@ -334,11 +340,17 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn(
  * @param in_arr : the input column
  * @param idx_arr : the index column
  * @param use_nullable_arr use nullable int/float output for Numpy array input
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  * @return one array
  */
 std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
     std::shared_ptr<array_info> in_arr, std::shared_ptr<array_info> idx_arr,
-    bool use_nullable_arr = false);
+    bool use_nullable_arr = false,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 /** This function takes a table, a list of rows and returns the rows obtained
  * by selecting the rows.
@@ -348,12 +360,18 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
  * @param n_cols_arg   : The number of columns selected. If -1 then all are
  * selected
  * @param use_nullable_arr use nullable int/float output for Numpy array input
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  * @return the table output.
  */
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
     const std::span<const int64_t> ListIdx, int const& n_cols_arg = -1,
-    const bool use_nullable_arr = false);
+    const bool use_nullable_arr = false,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 /**
  * @brief select rows and columns in input table specified by list of indices
@@ -363,12 +381,18 @@ std::shared_ptr<table_info> RetrieveTable(
  * @param rowInds list of row indices to select
  * @param colInds list of column indices to select
  * @param use_nullable_arr use nullable int/float output for Numpy array input
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  * @return std::shared_ptr<table_info> output table with selected rows/columns
  */
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
     const std::span<const int64_t> rowInds,
-    std::vector<uint64_t> const& colInds, const bool use_nullable_arr = false);
+    std::vector<uint64_t> const& colInds, const bool use_nullable_arr = false,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
@@ -882,7 +906,7 @@ inline bool does_row_has_nulls(
  * @param is_parallel: true if data is distributed (used to indicate whether
  * tracing should be parallel or not)
  */
-size_t get_nunique_hashes(const std::shared_ptr<uint32_t[]> hashes,
+size_t get_nunique_hashes(const std::shared_ptr</*const*/ uint32_t[]>& hashes,
                           const size_t len, bool is_parallel);
 
 /**
@@ -1386,8 +1410,14 @@ inline void set_arr_item(array_info& arr, size_t idx, T val) {
  * @param[in] rows_to_select - the vector of row indices to copy
  * return An array with the elements of arr copied from the rows
  * in rows_to_select.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
 std::shared_ptr<array_info> select_subset_of_rows(
-    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select);
+    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 #endif  // _ARRAY_UTILS_H_INCLUDED

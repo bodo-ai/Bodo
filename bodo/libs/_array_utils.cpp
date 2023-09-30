@@ -252,11 +252,17 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
  * @param nRowOut number of rows in output array
  * @param use_nullable_arr use nullable integer/float data type if input data is
  * Numpy integer/float
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  * @return std::shared_ptr<array_info> output data array as specified by input
  */
 std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
     std::shared_ptr<array_info> in_arr, const int64_t* in_arr_idxs,
-    size_t nRowOut, bool use_nullable_arr = false) {
+    size_t nRowOut, bool use_nullable_arr = false,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     std::shared_ptr<array_info> out_arr = NULL;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
@@ -268,7 +274,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
     if (use_nullable_arr &&
         (is_integer(dtype) || is_float(dtype) || dtype == Bodo_CTypes::_BOOL)) {
         out_arr = alloc_array(nRowOut, -1, -1,
-                              bodo_array_type::NULLABLE_INT_BOOL, dtype);
+                              bodo_array_type::NULLABLE_INT_BOOL, dtype, -1, 0,
+                              0, false, false, false, pool, std::move(mm));
         char* out_data1 = out_arr->data1();
         if (dtype == Bodo_CTypes::_BOOL) {
             // Boolean needs a special implementation because the output
@@ -298,7 +305,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
             }
         }
     } else {
-        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype);
+        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false,
+                              false, false, pool, std::move(mm));
 
         if (siztype == sizeof(int32_t)) {
             using T = int32_t;
@@ -353,15 +361,22 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
  * @param in_arr_idxs array of indices into input array to create the output
  * array
  * @param nRowOut number of rows in output array
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  * @return std::shared_ptr<array_info> output data array as specified by input
  */
 std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
     std::shared_ptr<array_info> in_arr, const int64_t* in_arr_idxs,
-    size_t nRowOut) {
+    size_t nRowOut,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     std::shared_ptr<array_info> out_arr =
-        alloc_array(nRowOut, -1, -1, arr_type, dtype);
+        alloc_array(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false, false,
+                    false, pool, std::move(mm));
     uint64_t siztype = numpy_item_size[dtype];
 
     if (dtype == Bodo_CTypes::_BOOL) {
@@ -439,7 +454,10 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
 
 std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
     std::shared_ptr<array_info> in_arr, const int64_t* in_arr_idxs,
-    size_t nRowOut, bool use_nullable_arr) {
+    size_t nRowOut, bool use_nullable_arr,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     std::shared_ptr<array_info> out_arr = NULL;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
@@ -449,8 +467,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             // so we need one first loop to determine the needed length. In the
             // second loop, the assignation is made. If the entries are missing
             // then the bitmask is set to false.
-            bodo::vector<offset_t> ListSizes_index(nRowOut);
-            bodo::vector<offset_t> ListSizes_data(nRowOut);
+            bodo::vector<offset_t> ListSizes_index(nRowOut, pool);
+            bodo::vector<offset_t> ListSizes_data(nRowOut, pool);
             int64_t tot_size_index = 0;
             int64_t tot_size_data = 0;
             offset_t* index_offsets = (offset_t*)in_arr->data3();
@@ -475,7 +493,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
                 tot_size_data += size_data;
             }
             out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data,
-                                  arr_type, dtype);
+                                  arr_type, dtype, -1, 0, 0, false, false,
+                                  false, pool, std::move(mm));
             uint8_t* out_sub_null_bitmask =
                 (uint8_t*)out_arr->sub_null_bitmask();
             offset_t pos_index = 0;
@@ -526,7 +545,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             // second loop, the assignation is made. If the entries are missing
             // then the bitmask is set to false.
             int64_t n_chars = 0;
-            bodo::vector<offset_t> ListSizes(nRowOut);
+            bodo::vector<offset_t> ListSizes(nRowOut, pool);
             offset_t* in_offsets = (offset_t*)in_arr->data2();
             char* in_data1 = in_arr->data1();
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -541,7 +560,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
                 ListSizes[iRow] = size;
                 n_chars += size;
             }
-            out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype);
+            out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, -1, 0,
+                                  0, false, false, false, pool, std::move(mm));
             offset_t* out_offsets = (offset_t*)out_arr->data2();
             char* out_data1 = out_arr->data1();
             offset_t pos = 0;
@@ -567,15 +587,15 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
         case bodo_array_type::DICT: {
             std::shared_ptr<array_info> in_indices = in_arr->child_arrays[1];
             std::shared_ptr<array_info> out_indices =
-                RetrieveArray_SingleColumn_F_nullable(in_indices, in_arr_idxs,
-                                                      nRowOut);
+                RetrieveArray_SingleColumn_F_nullable(
+                    in_indices, in_arr_idxs, nRowOut, pool, std::move(mm));
             out_arr =
                 create_dict_string_array(in_arr->child_arrays[0], out_indices);
             break;
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
-            out_arr = RetrieveArray_SingleColumn_F_nullable(in_arr, in_arr_idxs,
-                                                            nRowOut);
+            out_arr = RetrieveArray_SingleColumn_F_nullable(
+                in_arr, in_arr_idxs, nRowOut, pool, std::move(mm));
             break;
         }
         case bodo_array_type::INTERVAL: {
@@ -584,7 +604,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             std::vector<char> vectNaN = RetrieveNaNentry(dtype);
             char* left_data = in_arr->data1();
             char* right_data = in_arr->data2();
-            out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype);
+            out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0,
+                                  false, false, false, pool, std::move(mm));
             char* out_left_data = out_arr->data1();
             char* out_right_data = out_arr->data2();
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -614,7 +635,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
                 RetrieveNaNentry(dtype);  // returns a -1 for integer values.
             char* in_data1 = in_arr->data1();
             int64_t num_categories = in_arr->num_categories;
-            out_arr = alloc_categorical(nRowOut, dtype, num_categories);
+            out_arr = alloc_categorical(nRowOut, dtype, num_categories, pool,
+                                        std::move(mm));
             char* out_data1 = out_arr->data1();
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 int64_t idx = in_arr_idxs[iRow];
@@ -631,11 +653,15 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
         }
         case bodo_array_type::NUMPY: {
             out_arr = RetrieveArray_SingleColumn_F_numpy(
-                in_arr, in_arr_idxs, nRowOut, use_nullable_arr);
+                in_arr, in_arr_idxs, nRowOut, use_nullable_arr, pool,
+                std::move(mm));
             break;
         }
         case bodo_array_type::ARRAY_ITEM:
         case bodo_array_type::STRUCT: {
+            // NOTE: We don't support using custom pool for these dtypes.
+            //   These probably need to be re-written to not go through
+            //   Arrow anyway.
             // Arrow builder for output array. builds it dynamically (buffer
             // sizes are not known in advance)
             std::unique_ptr<arrow::ArrayBuilder> builder;
@@ -678,22 +704,26 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
 
 std::shared_ptr<array_info> RetrieveArray_SingleColumn(
     std::shared_ptr<array_info> in_arr, const std::span<const int64_t> ListIdx,
-    bool use_nullable_arr) {
+    bool use_nullable_arr, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     return RetrieveArray_SingleColumn_F(std::move(in_arr), ListIdx.data(),
-                                        ListIdx.size(), use_nullable_arr);
+                                        ListIdx.size(), use_nullable_arr, pool,
+                                        std::move(mm));
 }
 
 std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
     std::shared_ptr<array_info> in_arr, std::shared_ptr<array_info> idx_arr,
-    bool use_nullable_arr) {
+    bool use_nullable_arr, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     if (idx_arr->dtype != Bodo_CTypes::UINT64) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "UINT64 is the only index type allowed");
         return nullptr;
     }
     size_t siz = idx_arr->length;
-    return RetrieveArray_SingleColumn_F(
-        std::move(in_arr), (int64_t*)idx_arr->data1(), siz, use_nullable_arr);
+    return RetrieveArray_SingleColumn_F(std::move(in_arr),
+                                        (int64_t*)idx_arr->data1(), siz,
+                                        use_nullable_arr, pool, std::move(mm));
 }
 
 std::shared_ptr<array_info> RetrieveArray_TwoColumns(
@@ -1035,7 +1065,8 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
     const std::span<const int64_t> ListIdx, int const& n_cols_arg,
-    const bool use_nullable_arr) {
+    const bool use_nullable_arr, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     size_t n_cols;
     if (n_cols_arg == -1) {
@@ -1046,7 +1077,7 @@ std::shared_ptr<table_info> RetrieveTable(
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
         out_arrs.emplace_back(RetrieveArray_SingleColumn(
-            std::move(in_arr), ListIdx, use_nullable_arr));
+            std::move(in_arr), ListIdx, use_nullable_arr, pool, mm));
         // Release reference (and potentially memory) for the column from this
         // table if this is the last table reference.
         reset_col_if_last_table_ref(in_table, i_col);
@@ -1057,12 +1088,13 @@ std::shared_ptr<table_info> RetrieveTable(
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
     const std::span<const int64_t> rowInds,
-    std::vector<uint64_t> const& colInds, const bool use_nullable_arr) {
+    std::vector<uint64_t> const& colInds, const bool use_nullable_arr,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     for (size_t i_col : colInds) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
         out_arrs.emplace_back(RetrieveArray_SingleColumn(
-            std::move(in_arr), rowInds, use_nullable_arr));
+            std::move(in_arr), rowInds, use_nullable_arr, pool, mm));
         // Release reference (and potentially memory) for the column from this
         // table if this is the last table reference.
         reset_col_if_last_table_ref(in_table, i_col);
@@ -2519,7 +2551,7 @@ void MPI_hyper_log_log_merge(void* in, void* inout, int* len,
 // the hashes with our MurmurHash3_x64_32, and uses 1 MB of memory
 #define HLL_SIZE 20
 
-size_t get_nunique_hashes(const std::shared_ptr<uint32_t[]> hashes,
+size_t get_nunique_hashes(const std::shared_ptr</*const*/ uint32_t[]>& hashes,
                           const size_t len, bool is_parallel) {
     tracing::Event ev("get_nunique_hashes", is_parallel);
     hll::HyperLogLog hll(HLL_SIZE);
@@ -2627,14 +2659,18 @@ std::shared_ptr<array_info> concat_arrays(
 template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
     requires(numpy_array<ArrType> || nullable_array<ArrType>)
 std::shared_ptr<array_info> select_subset_of_rows_numeric_operation(
-    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select) {
+    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     using T = typename dtype_to_type<DType>::type;
     size_t n_rows = rows_to_select.size();
     std::shared_ptr<array_info> out_arr;
     if constexpr (numpy_array<ArrType>) {
-        out_arr = alloc_numpy(n_rows, DType);
+        out_arr = alloc_numpy(n_rows, DType, pool, std::move(mm));
     } else {
-        out_arr = alloc_nullable_array_no_nulls(n_rows, DType, 0);
+        out_arr = alloc_nullable_array_no_nulls(n_rows, DType, 0, pool,
+                                                std::move(mm));
     }
     for (size_t i = 0; i < n_rows; i++) {
         int64_t row_to_select = rows_to_select[i];
@@ -2656,12 +2692,15 @@ std::shared_ptr<array_info> select_subset_of_rows_numeric_operation(
 template <bodo_array_type::arr_type_enum ArrType>
     requires(nullable_array<ArrType> || numpy_array<ArrType>)
 std::shared_ptr<array_info> select_subset_of_rows_numeric(
-    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select) {
+    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
 #define SUBSET_OF_ROWS_NUMERIC_CASE(dtype)                              \
                                                                         \
     case dtype: {                                                       \
         return select_subset_of_rows_numeric_operation<ArrType, dtype>( \
-            arr, rows_to_select);                                       \
+            arr, rows_to_select, pool, std::move(mm));                  \
     }
     switch (arr->dtype) {
         SUBSET_OF_ROWS_NUMERIC_CASE(Bodo_CTypes::UINT8)
@@ -2692,7 +2731,10 @@ std::shared_ptr<array_info> select_subset_of_rows_numeric(
 }
 
 std::shared_ptr<array_info> select_subset_of_rows_string(
-    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select) {
+    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     char* in_chars = (char*)arr->data1();
     offset_t* in_offsets = (offset_t*)arr->data2();
     // Calculate the total number of characters in the output
@@ -2708,7 +2750,8 @@ std::shared_ptr<array_info> select_subset_of_rows_string(
 
     // Allocate the output array
     std::shared_ptr<array_info> out_arr =
-        alloc_string_array(arr->dtype, n_rows, total_chars);
+        alloc_string_array(arr->dtype, n_rows, total_chars, -1, 0, false, false,
+                           false, pool, std::move(mm));
     char* out_chars = (char*)out_arr->data1();
     offset_t* out_offsets = (offset_t*)out_arr->data2();
 
@@ -2732,33 +2775,37 @@ std::shared_ptr<array_info> select_subset_of_rows_string(
 }
 
 std::shared_ptr<array_info> select_subset_of_rows_dict(
-    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select) {
-    std::shared_ptr<array_info> new_indices =
-        select_subset_of_rows(arr->child_arrays[1], rows_to_select);
+    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
+    std::shared_ptr<array_info> new_indices = select_subset_of_rows(
+        arr->child_arrays[1], rows_to_select, pool, std::move(mm));
     std::shared_ptr<array_info> new_dict_arr =
         create_dict_string_array(arr->child_arrays[0], new_indices);
     return new_dict_arr;
 }
 
 std::shared_ptr<array_info> select_subset_of_rows(
-    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select) {
+    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     switch (arr->arr_type) {
         case bodo_array_type::NUMPY: {
             return select_subset_of_rows_numeric<bodo_array_type::NUMPY>(
-                arr, rows_to_select);
-            break;
+                arr, rows_to_select, pool, std::move(mm));
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
             return select_subset_of_rows_numeric<
-                bodo_array_type::NULLABLE_INT_BOOL>(arr, rows_to_select);
-            break;
+                bodo_array_type::NULLABLE_INT_BOOL>(arr, rows_to_select, pool,
+                                                    std::move(mm));
         }
         case bodo_array_type::STRING: {
-            return select_subset_of_rows_string(arr, rows_to_select);
-            break;
+            return select_subset_of_rows_string(arr, rows_to_select, pool,
+                                                std::move(mm));
         }
         case bodo_array_type::DICT: {
-            return select_subset_of_rows_dict(arr, rows_to_select);
+            return select_subset_of_rows_dict(arr, rows_to_select, pool,
+                                              std::move(mm));
         }
         default: {
             throw std::runtime_error(

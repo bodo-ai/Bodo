@@ -265,25 +265,29 @@ std::unique_ptr<array_info> alloc_nullable_array(
 }
 
 std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
-    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes) {
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
     // Same as alloc_nullable_array but we set the null_bitmask
     // such that there are no null values in the output.
     // Useful for cases like allocating indices array of dictionary-encoded
     // string arrays such as input_file_name column where nulls are not possible
-    std::unique_ptr<array_info> arr =
-        alloc_nullable_array(length, typ_enum, extra_null_bytes);
+    std::unique_ptr<array_info> arr = alloc_nullable_array(
+        length, typ_enum, extra_null_bytes, pool, std::move(mm));
     size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     memset(arr->null_bitmask(), 0xff, n_bytes);  // null not possible
     return arr;
 }
 
 std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
-    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes) {
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
     // Same as alloc_nullable_array but we set the null_bitmask
     // such that all values are null values in the output.
     // Useful for cases like the iceberg void transform.
-    std::unique_ptr<array_info> arr =
-        alloc_nullable_array(length, typ_enum, extra_null_bytes);
+    std::unique_ptr<array_info> arr = alloc_nullable_array(
+        length, typ_enum, extra_null_bytes, pool, std::move(mm));
     size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     memset(arr->null_bitmask(), 0x00, n_bytes);  // all nulls
     return arr;
@@ -344,7 +348,8 @@ std::unique_ptr<array_info> alloc_dict_string_array(
 
 std::unique_ptr<array_info> create_string_array(
     Bodo_CTypes::CTypeEnum typ_enum, bodo::vector<uint8_t> const& null_bitmap,
-    bodo::vector<std::string> const& list_string, int64_t array_id) {
+    bodo::vector<std::string> const& list_string, int64_t array_id,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     size_t len = list_string.size();
     // Calculate the number of characters for allocating the string.
     size_t nb_char = 0;
@@ -356,7 +361,8 @@ std::unique_ptr<array_info> create_string_array(
         iter++;
     }
     std::unique_ptr<array_info> out_col =
-        alloc_string_array(typ_enum, len, nb_char, array_id);
+        alloc_string_array(typ_enum, len, nb_char, array_id, 0, false, false,
+                           false, pool, std::move(mm));
     // update string array payload to reflect change
     char* data_o = out_col->data1();
     offset_t* offsets_o = (offset_t*)out_col->data2();
