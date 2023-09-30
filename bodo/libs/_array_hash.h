@@ -14,8 +14,26 @@
 #define SEED_HASH_PIVOT_SHUFFLE 0xb0d01285
 #define SEED_HASH_CONTAINER 0xb0d01284
 
+/// @brief For the hash arrays, both shared_ptrs and unique_ptrs are fine since
+/// we're just populating values into an array. This "concept" allows us to
+/// template the hashing code to be compatible with both. This provides greater
+/// flexibility to the rest of the code base.
+template <typename T>
+struct is_hashes_arr_type : std::false_type {};
+
+template <>
+struct is_hashes_arr_type<std::shared_ptr<uint32_t[]>> : std::true_type {};
+
+template <>
+struct is_hashes_arr_type<std::unique_ptr<uint32_t[]>> : std::true_type {};
+
+template <typename T>
+concept hashes_arr_type = is_hashes_arr_type<T>::value;
+
+template <typename hashes_t>
+    requires(hashes_arr_type<hashes_t>)
 void hash_array_combine(
-    std::unique_ptr<uint32_t[]>& out_hashes, std::shared_ptr<array_info> array,
+    const hashes_t& out_hashes, std::shared_ptr<array_info> array,
     size_t n_rows, const uint32_t seed, bool global_dict_needed,
     bool is_parallel,
     std::shared_ptr<bodo::vector<uint32_t>> dict_hashes = nullptr,
@@ -49,15 +67,47 @@ std::unique_ptr<uint32_t[]> hash_keys(
         dict_hashes = nullptr,
     size_t start_row_offset = 0);
 
+/**
+ * @brief Same as above, except we provide a pre-allocated array to populate.
+ *
+ * @param[in, out] out_hashes: Pre-allocated array that will be populated by
+ * this function.
+ * @param key_arrs: input keys to hashThe hashes on output.
+ * @param seed: the seed of the computation.
+ * @param is_parallel: whether we run in parallel or not.
+ * @param global_dict_needed: Specifies whether the dictionary of dict-encoded
+ * string arrays has to be global or not (for correctness or for performance
+ * -for example avoiding collisions after shuffling-). Throws an error if not
+ * global.
+ * @param dict_hashes: dictionary hashes for dict-encoded string arrays. Integer
+ * indices are hashed if not specified (which can cause errors if used across
+ * arrays with incompatible dictionaries).
+ * NOTE: dict_hashes vector has nullptr elements for other array types (length
+ * is number of key columns).
+ * @param start_row_offset: Index of the first row to hash. Defaults to 0. This
+ * is useful in streaming hash join when we want to compute hashes incrementally
+ * on the tables.
+ */
+template <typename hashes_t>
+    requires(hashes_arr_type<hashes_t>)
+void hash_keys(
+    const hashes_t& out_hashes,
+    std::vector<std::shared_ptr<array_info>> const& key_arrs,
+    const uint32_t seed, bool is_parallel, bool global_dict_needed = true,
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+        dict_hashes = nullptr,
+    size_t start_row_offset = 0);
+
 std::unique_ptr<uint32_t[]> coherent_hash_keys(
     std::vector<std::shared_ptr<array_info>> const& key_arrs,
     std::vector<std::shared_ptr<array_info>> const& ref_key_arrs,
     const uint32_t seed, bool is_parallel);
 
-void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
-                std::shared_ptr<array_info> array, size_t n_rows,
-                const uint32_t seed, bool is_parallel, bool global_dict_needed,
-                bool use_murmurhash = false,
+template <typename hashes_t>
+    requires(hashes_arr_type<hashes_t>)
+void hash_array(const hashes_t& out_hashes, std::shared_ptr<array_info> array,
+                size_t n_rows, const uint32_t seed, bool is_parallel,
+                bool global_dict_needed, bool use_murmurhash = false,
                 std::shared_ptr<bodo::vector<uint32_t>> dict_hashes = nullptr,
                 size_t start_row_offset = 0);
 
@@ -65,7 +115,7 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
  * Function for the getting table keys and returning its hashes
  *
  * @param in_table: the input table
- * @param num_keys : the number of keys
+ * @param num_keys: the number of keys
  * @param seed: the seed of the computation.
  * @param is_parallel: whether we run in parallel or not.
  * @param global_dict_needed: Specifies whether the dictionary of dict-encoded
@@ -78,7 +128,7 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
  * arrays with incompatible dictionaries).
  * NOTE: dict_hashes vector has nullptr elements for other array types (length
  * is number of key columns).
- * @param start_row_offset Index of the first row to hash. Defaults to 0. This
+ * @param start_row_offset: Index of the first row to hash. Defaults to 0. This
  * is useful in streaming hash join when we want to compute hashes incrementally
  * on the tables.
  * @return hash keys
@@ -95,6 +145,46 @@ inline std::unique_ptr<uint32_t[]> hash_keys_table(
         in_table->columns.begin(), in_table->columns.begin() + num_keys);
     return hash_keys(key_arrs, seed, is_parallel, global_dict_needed,
                      dict_hashes, start_row_offset);
+}
+
+/**
+ * @brief Same as the previous function, except we pass in a pre-allocated array
+ * to populate.
+ *
+ * @param[in, out] out_hashes: Pre-allocated array that will be populated by
+ * this function.
+ * @param in_table: the input table
+ * @param num_keys: the number of keys
+ * @param seed: the seed of the computation.
+ * @param is_parallel: whether we run in parallel or not.
+ * @param global_dict_needed: Specifies whether the dictionary of dict-encoded
+ * string arrays has to be global or not (for correctness or for performance
+ * -for example avoiding collisions after shuffling-). Throws an error if not
+ * global. This is ignored for the DICT columns for which non-null dict_hashes
+ * are provided.
+ * @param dict_hashes: dictionary hashes for dict-encoded string arrays. Integer
+ * indices are hashed if not specified (which can cause errors if used across
+ * arrays with incompatible dictionaries).
+ * NOTE: dict_hashes vector has nullptr elements for other array types (length
+ * is number of key columns).
+ * @param start_row_offset: Index of the first row to hash. Defaults to 0. This
+ * is useful in streaming hash join when we want to compute hashes incrementally
+ * on the tables.
+ */
+template <typename hashes_t>
+    requires(hashes_arr_type<hashes_t>)
+inline void hash_keys_table(
+    const hashes_t& out_hashes, std::shared_ptr<table_info> in_table,
+    size_t num_keys, uint32_t seed, bool is_parallel,
+    bool global_dict_needed = true,
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+        dict_hashes = nullptr,
+    size_t start_row_offset = 0) {
+    tracing::Event ev("hash_keys_table", is_parallel);
+    std::vector<std::shared_ptr<array_info>> key_arrs(
+        in_table->columns.begin(), in_table->columns.begin() + num_keys);
+    hash_keys(out_hashes, key_arrs, seed, is_parallel, global_dict_needed,
+              dict_hashes, start_row_offset);
 }
 
 inline std::unique_ptr<uint32_t[]> coherent_hash_keys_table(

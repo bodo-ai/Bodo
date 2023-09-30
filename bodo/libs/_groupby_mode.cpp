@@ -12,16 +12,19 @@
  * @param[in] arr The array to operate on.
  * @param[in, out] out_arr The array to store the result.
  * @param[in] grp_info Information about groupings that are to be operated on.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
  */
 template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
-void mode_operation(std::shared_ptr<array_info> arr,
-                    std::shared_ptr<array_info> out_arr,
-                    const grouping_info& grp_info) {
+void mode_operation(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr()) {
     using T = typename dtype_to_type<DType>::type;
     size_t num_group = grp_info.group_to_first_row.size();
     for (size_t igrp = 0; igrp < num_group; igrp++) {
         // Set up a hashtable with key type T and value type integer
-        bodo::unord_map_container<T, int> counts;
+        bodo::unord_map_container<T, int> counts(pool);
         // Keep track of NaN values seperately
         size_t nan_count = 0;
         // Iterate over all the elements in the group by starting
@@ -78,24 +81,28 @@ void mode_operation(std::shared_ptr<array_info> arr,
  * @param[in] arr: the array to process.
  * @param[in] out_arr: the array to write the result to.
  * @param[in] grp_info: information about the grouping.
- * parallel.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
-template <bodo_array_type::arr_type_enum ArrType>
-void mode_operation_strings(std::shared_ptr<array_info> arr,
-                            std::shared_ptr<array_info> out_arr,
-                            const grouping_info& grp_info) {
+void mode_operation_strings(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     char* data = arr->data1();
     offset_t* offsets = (offset_t*)arr->data2();
     size_t num_groups = out_arr->length;
     // Set up the vectors to store the null bits and the most
     // frequent string for each group
-    bodo::vector<uint8_t> nulls((num_groups + 7) >> 3, 0);
-    bodo::vector<std::string> strings(num_groups);
+    bodo::vector<uint8_t> nulls((num_groups + 7) >> 3, 0, pool);
+    bodo::vector<std::string> strings(num_groups, pool);
     size_t num_group = grp_info.group_to_first_row.size();
     for (size_t igrp = 0; igrp < num_group; igrp++) {
         // Set up a hashtable mapping each string seen in the group
         // to its count
-        bodo::unord_map_container<std::string_view, int> counts;
+        bodo::unord_map_container<std::string_view, int> counts(pool);
         // Iterate over all the elements in the group by starting
         // at the first row in the group and following the
         // next_row_in_group array until we reach -1, indicating
@@ -138,8 +145,8 @@ void mode_operation_strings(std::shared_ptr<array_info> arr,
     }
     // Convert the vectors into a proper string array, and then
     // replace the dummy output array with the new one
-    std::shared_ptr<array_info> new_out_arr =
-        create_string_array(Bodo_CTypes::STRING, nulls, strings);
+    std::shared_ptr<array_info> new_out_arr = create_string_array(
+        Bodo_CTypes::STRING, nulls, strings, -1, pool, std::move(mm));
     *out_arr = std::move(*new_out_arr);
 }
 
@@ -156,11 +163,9 @@ void mode_operation_strings(std::shared_ptr<array_info> arr,
  * @param[in,out] out_arr: the array to write the result to.
  * @param[in] grp_info: information about the grouping.
  */
-template <bodo_array_type::arr_type_enum ArrType>
-    requires(dict_array<ArrType>)
-void mode_operation_strings(std::shared_ptr<array_info> arr,
-                            std::shared_ptr<array_info> out_arr,
-                            const grouping_info& grp_info) {
+void mode_operation_strings_dict(std::shared_ptr<array_info> arr,
+                                 std::shared_ptr<array_info> out_arr,
+                                 const grouping_info& grp_info) {
     drop_duplicates_local_dictionary(arr);
     // after make_dictionary_global_and_unique has already been called, we can
     // find the mode of the strings by finding the mode of the indices, then
@@ -187,82 +192,93 @@ void mode_operation_strings(std::shared_ptr<array_info> arr,
  * @param[in] arr the input array to perform the operation on.
  * @param[in, out] out_arr the output array to write the result.
  * @param[in] grp_info Information about groupings that are to be operated on.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
  */
 template <bodo_array_type::arr_type_enum ArrType>
-void do_mode_computation(std::shared_ptr<array_info> arr,
-                         std::shared_ptr<array_info> out_arr,
-                         const grouping_info& grp_info) {
+void do_mode_computation(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr()) {
     switch (arr->dtype) {
         case Bodo_CTypes::UINT8: {
-            mode_operation<ArrType, Bodo_CTypes::UINT8>(arr, out_arr, grp_info);
+            mode_operation<ArrType, Bodo_CTypes::UINT8>(arr, out_arr, grp_info,
+                                                        pool);
             break;
         }
         case Bodo_CTypes::UINT16: {
-            mode_operation<ArrType, Bodo_CTypes::UINT16>(arr, out_arr,
-                                                         grp_info);
+            mode_operation<ArrType, Bodo_CTypes::UINT16>(arr, out_arr, grp_info,
+                                                         pool);
             break;
         }
         case Bodo_CTypes::UINT32: {
-            mode_operation<ArrType, Bodo_CTypes::UINT32>(arr, out_arr,
-                                                         grp_info);
+            mode_operation<ArrType, Bodo_CTypes::UINT32>(arr, out_arr, grp_info,
+                                                         pool);
             break;
         }
         case Bodo_CTypes::UINT64: {
-            mode_operation<ArrType, Bodo_CTypes::UINT64>(arr, out_arr,
-                                                         grp_info);
+            mode_operation<ArrType, Bodo_CTypes::UINT64>(arr, out_arr, grp_info,
+                                                         pool);
             break;
         }
         case Bodo_CTypes::INT8: {
-            mode_operation<ArrType, Bodo_CTypes::INT8>(arr, out_arr, grp_info);
+            mode_operation<ArrType, Bodo_CTypes::INT8>(arr, out_arr, grp_info,
+                                                       pool);
             break;
         }
         case Bodo_CTypes::INT16: {
-            mode_operation<ArrType, Bodo_CTypes::INT16>(arr, out_arr, grp_info);
+            mode_operation<ArrType, Bodo_CTypes::INT16>(arr, out_arr, grp_info,
+                                                        pool);
             break;
         }
         case Bodo_CTypes::INT32: {
-            mode_operation<ArrType, Bodo_CTypes::INT32>(arr, out_arr, grp_info);
+            mode_operation<ArrType, Bodo_CTypes::INT32>(arr, out_arr, grp_info,
+                                                        pool);
             break;
         }
         case Bodo_CTypes::INT64: {
-            mode_operation<ArrType, Bodo_CTypes::INT64>(arr, out_arr, grp_info);
+            mode_operation<ArrType, Bodo_CTypes::INT64>(arr, out_arr, grp_info,
+                                                        pool);
             break;
         }
         case Bodo_CTypes::FLOAT32: {
             mode_operation<ArrType, Bodo_CTypes::FLOAT32>(arr, out_arr,
-                                                          grp_info);
+                                                          grp_info, pool);
             break;
         }
         case Bodo_CTypes::FLOAT64: {
             mode_operation<ArrType, Bodo_CTypes::FLOAT64>(arr, out_arr,
-                                                          grp_info);
+                                                          grp_info, pool);
             break;
         }
         case Bodo_CTypes::DECIMAL: {
             mode_operation<ArrType, Bodo_CTypes::DECIMAL>(arr, out_arr,
-                                                          grp_info);
+                                                          grp_info, pool);
             break;
         }
         case Bodo_CTypes::DATETIME: {
             mode_operation<ArrType, Bodo_CTypes::DATETIME>(arr, out_arr,
-                                                           grp_info);
+                                                           grp_info, pool);
             break;
         }
         case Bodo_CTypes::TIMEDELTA: {
             mode_operation<ArrType, Bodo_CTypes::TIMEDELTA>(arr, out_arr,
-                                                            grp_info);
+                                                            grp_info, pool);
             break;
         }
         case Bodo_CTypes::TIME: {
-            mode_operation<ArrType, Bodo_CTypes::TIME>(arr, out_arr, grp_info);
+            mode_operation<ArrType, Bodo_CTypes::TIME>(arr, out_arr, grp_info,
+                                                       pool);
             break;
         }
         case Bodo_CTypes::DATE: {
-            mode_operation<ArrType, Bodo_CTypes::DATE>(arr, out_arr, grp_info);
+            mode_operation<ArrType, Bodo_CTypes::DATE>(arr, out_arr, grp_info,
+                                                       pool);
             break;
         }
         case Bodo_CTypes::_BOOL: {
-            mode_operation<ArrType, Bodo_CTypes::_BOOL>(arr, out_arr, grp_info);
+            mode_operation<ArrType, Bodo_CTypes::_BOOL>(arr, out_arr, grp_info,
+                                                        pool);
             break;
         }
         default: {
@@ -274,36 +290,31 @@ void do_mode_computation(std::shared_ptr<array_info> arr,
     }
 }
 
-/**
- * Mode computation for array of any supported array type or dtype.
- * Switches on the array type and forwards to the correct templated
- * helper function.
- *
- * @param[in] arr: array that needs to be mode computed.
- * @param[in,out] out_arr: array to store mode computed values in.
- * @param[in] grp_info: grouping info for the array that is passed.
- */
 void mode_computation(std::shared_ptr<array_info> arr,
                       std::shared_ptr<array_info> out_arr,
-                      const grouping_info& grp_info) {
+                      const grouping_info& grp_info,
+                      bodo::IBufferPool* const pool,
+                      std::shared_ptr<::arrow::MemoryManager> mm) {
     switch (arr->arr_type) {
         case bodo_array_type::NUMPY: {
-            do_mode_computation<bodo_array_type::NUMPY>(arr, out_arr, grp_info);
+            do_mode_computation<bodo_array_type::NUMPY>(arr, out_arr, grp_info,
+                                                        pool);
             break;
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
             do_mode_computation<bodo_array_type::NULLABLE_INT_BOOL>(
-                arr, out_arr, grp_info);
+                arr, out_arr, grp_info, pool);
             break;
         }
         case bodo_array_type::STRING: {
-            mode_operation_strings<bodo_array_type::STRING>(arr, out_arr,
-                                                            grp_info);
+            mode_operation_strings(arr, out_arr, grp_info, pool, std::move(mm));
             break;
         }
         case bodo_array_type::DICT: {
-            mode_operation_strings<bodo_array_type::DICT>(arr, out_arr,
-                                                          grp_info);
+            // NOTE: We don't support custom pools for the DICT case yet.
+            // This is fine since streaming groupby doesn't support
+            // MODE yet anyway (https://bodo.atlassian.net/browse/BSE-1139).
+            mode_operation_strings_dict(arr, out_arr, grp_info);
             break;
         }
         default: {

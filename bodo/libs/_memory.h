@@ -1098,6 +1098,26 @@ class STLBufferPoolAllocator {
 template <typename T, class Allocator = STLBufferPoolAllocator<T>>
 using vector = std::vector<T, Allocator>;
 
+/**
+ * @brief Create a shared_ptr<T[]> whose underlying memory
+ * is allocated through an IBufferPool instance.
+ *
+ * @tparam T Data type for the array.
+ * @param size Number of elements of type T to allocate.
+ * @param pool The pool to use to allocate the required memory.
+ * @return std::shared_ptr<T[]> New allocation.
+ */
+template <typename T>
+std::shared_ptr<T[]> make_shared_arr(
+    size_t size, IBufferPool* const pool = BufferPool::DefaultPtr()) {
+    T* ptr;  // By it's nature, this allocation will not be unpinnable, so this
+             // is fine.
+    CHECK_ARROW_MEM(pool->Allocate(sizeof(T) * size, (uint8_t**)(&ptr)),
+                    "bodo::make_shared_arr: Allocation failed!");
+    return std::shared_ptr<T[]>(
+        ptr, [=](T* pt) { pool->Free((uint8_t*)(pt), sizeof(T) * size); });
+}
+
 /// Helper Functions for using BufferPool in Arrow
 
 /**

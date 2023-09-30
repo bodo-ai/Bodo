@@ -213,21 +213,28 @@ inline void idx_dict_func_apply_to_row(int32_t& org_ind, int32_t& dict_ind,
  * @param[in] in_col The input column. This must be a string column.
  * @param[in, out] out_col The output column.
  * @param[in] grp_info The grouping information.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
-void apply_sum_to_column_string(std::shared_ptr<array_info> in_col,
-                                std::shared_ptr<array_info> out_col,
-                                const grouping_info& grp_info) {
+void apply_sum_to_column_string(
+    std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     // allocate output array (length is number of groups, number of chars same
     // as input)
     size_t num_groups = grp_info.num_groups;
     int64_t n_chars = in_col->n_sub_elems();
     std::shared_ptr<array_info> out_arr =
-        alloc_string_array(out_col->dtype, num_groups, n_chars);
+        alloc_string_array(out_col->dtype, num_groups, n_chars, -1, 0, false,
+                           false, false, pool, std::move(mm));
     size_t n_bytes = (num_groups + 7) >> 3;
     memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
 
     // find offsets for each output string
-    bodo::vector<offset_t> str_offsets(num_groups + 1, 0);
+    bodo::vector<offset_t> str_offsets(num_groups + 1, 0, pool);
     char* data_i = in_col->data1();
     offset_t* offsets_i = (offset_t*)in_col->data2();
     char* data_o = out_arr->data1();
@@ -269,16 +276,22 @@ void apply_sum_to_column_string(std::shared_ptr<array_info> in_col,
  * outputs. This is used by operations like idxmax that require tracking more
  * than 1 value.
  * @param[in] grp_info The grouping information.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
 template <int ftype>
-void apply_to_column_string(std::shared_ptr<array_info> in_col,
-                            std::shared_ptr<array_info> out_col,
-                            std::vector<std::shared_ptr<array_info>>& aux_cols,
-                            const grouping_info& grp_info) {
+void apply_to_column_string(
+    std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
+    std::vector<std::shared_ptr<array_info>>& aux_cols,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     size_t num_groups = grp_info.num_groups;
     size_t n_bytes = (num_groups + 7) >> 3;
-    bodo::vector<uint8_t> V(n_bytes, 0);
-    bodo::vector<std::string> ListString(num_groups);
+    bodo::vector<uint8_t> V(n_bytes, 0, pool);
+    bodo::vector<std::string> ListString(num_groups, pool);
     char* data_i = in_col->data1();
     offset_t* offsets_i = (offset_t*)in_col->data2();
     switch (ftype) {
@@ -291,7 +304,7 @@ void apply_to_column_string(std::shared_ptr<array_info> in_col,
                         getv<int64_t>(out_col, i_grp), getv<int>(in_col, i));
                 }
             }
-            break;
+            return;
         }
         case Bodo_FTypes::bitor_agg:
         case Bodo_FTypes::bitand_agg:
@@ -322,12 +335,13 @@ void apply_to_column_string(std::shared_ptr<array_info> in_col,
                     out_col->set_null_bit(i_grp, true);
                 }
             }
-            break;
+            return;
         }
         // optimized groupby sum for strings (concatenation)
         case Bodo_FTypes::sum: {
-            apply_sum_to_column_string(in_col, out_col, grp_info);
-            break;
+            apply_sum_to_column_string(in_col, out_col, grp_info, pool,
+                                       std::move(mm));
+            return;
         }
         case Bodo_FTypes::idxmax:
         case Bodo_FTypes::idxmin:
@@ -377,10 +391,10 @@ void apply_to_column_string(std::shared_ptr<array_info> in_col,
             // Determining the number of characters in output.
             // Create an intermediate array since the output array is immutable
             // and copy the data over.
-            std::shared_ptr<array_info> new_out_col =
-                create_string_array(out_col->dtype, V, ListString);
+            std::shared_ptr<array_info> new_out_col = create_string_array(
+                out_col->dtype, V, ListString, -1, pool, std::move(mm));
             *out_col = std::move(*new_out_col);
-            break;
+            return;
         }
         default:
             // Computing the strings used in output.
@@ -403,10 +417,10 @@ void apply_to_column_string(std::shared_ptr<array_info> in_col,
                     }
                 }
             }
-            std::shared_ptr<array_info> new_out_col =
-                create_string_array(out_col->dtype, V, ListString);
+            std::shared_ptr<array_info> new_out_col = create_string_array(
+                out_col->dtype, V, ListString, -1, pool, std::move(mm));
             *out_col = std::move(*new_out_col);
-            break;
+            return;
     }
 }
 
@@ -419,10 +433,16 @@ void apply_to_column_string(std::shared_ptr<array_info> in_col,
  * @param[in] in_col: the input dictionary-encoded string array
  * @param[in, out] out_col: the output string array
  * @param[in] grp_info: groupby information
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
-void apply_sum_to_column_dict(std::shared_ptr<array_info> in_col,
-                              std::shared_ptr<array_info> out_col,
-                              const grouping_info& grp_info) {
+void apply_sum_to_column_dict(
+    std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     size_t num_groups = grp_info.num_groups;
     int64_t n_chars = 0;
     size_t n_bytes = (num_groups + 7) >> 3;
@@ -431,7 +451,7 @@ void apply_sum_to_column_dict(std::shared_ptr<array_info> in_col,
     // and find offsets for each output string
     // every string has a start and end offset so len(offsets) == (len(data) +
     // 1)
-    bodo::vector<offset_t> str_offsets(num_groups + 1, 0);
+    bodo::vector<offset_t> str_offsets(num_groups + 1, 0, pool);
     char* data_i = in_col->child_arrays[0]->data1();
     offset_t* offsets_i = (offset_t*)in_col->child_arrays[0]->data2();
     for (size_t i = 0; i < in_col->length; i++) {
@@ -445,7 +465,8 @@ void apply_sum_to_column_dict(std::shared_ptr<array_info> in_col,
     }
 
     std::shared_ptr<array_info> out_arr =
-        alloc_string_array(out_col->dtype, num_groups, n_chars);
+        alloc_string_array(out_col->dtype, num_groups, n_chars, -1, 0, false,
+                           false, false, pool, std::move(mm));
     memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
     char* data_o = out_arr->data1();
     offset_t* offsets_o = (offset_t*)out_arr->data2();
@@ -478,12 +499,18 @@ void apply_sum_to_column_dict(std::shared_ptr<array_info> in_col,
  * @param[in] in_col: the input dictionary encoded string column
  * @param[in, out] out_col: the output dictionary encoded string column
  * @param[in] grp_info: groupby information
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
 template <int ftype>
-void apply_to_column_dict(std::shared_ptr<array_info> in_col,
-                          std::shared_ptr<array_info> out_col,
-                          std::vector<std::shared_ptr<array_info>>& aux_cols,
-                          const grouping_info& grp_info) {
+void apply_to_column_dict(
+    std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
+    std::vector<std::shared_ptr<array_info>>& aux_cols,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     size_t num_groups = grp_info.num_groups;
     size_t n_bytes = (num_groups + 7) >> 3;
     std::shared_ptr<array_info> indices_arr = nullptr;
@@ -491,10 +518,11 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
         ftype != Bodo_FTypes::bitor_agg && ftype != Bodo_FTypes::bitand_agg &&
         ftype != Bodo_FTypes::bitxor_agg) {
         // Allocate the indices. Count and sum don't use this array.
-        indices_arr = alloc_nullable_array(num_groups, Bodo_CTypes::INT32, 0);
+        indices_arr =
+            alloc_nullable_array(num_groups, Bodo_CTypes::INT32, 0, pool, mm);
     }
-    bodo::vector<uint8_t> V(n_bytes,
-                            0);  // bitmask to mark if group's been updated
+    bodo::vector<uint8_t> V(n_bytes, 0,
+                            pool);  // bitmask to mark if group's been updated
     char* data_i = in_col->child_arrays[0]->data1();
     offset_t* offsets_i = (offset_t*)in_col->child_arrays[0]->data2();
     switch (ftype) {
@@ -547,7 +575,8 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
         }
         // optimized groupby sum for strings (concatenation)
         case Bodo_FTypes::sum: {
-            return apply_sum_to_column_dict(in_col, out_col, grp_info);
+            return apply_sum_to_column_dict(in_col, out_col, grp_info, pool,
+                                            std::move(mm));
         }
         case Bodo_FTypes::idxmax:
         case Bodo_FTypes::idxmin:
@@ -663,8 +692,8 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
     // Start at 1 since 0 is is returned by the hashmap if data needs to be
     // inserted.
     int32_t k = 1;
-    bodo::unord_map_container<int32_t, int32_t>
-        old_to_new;  // Maps old index to new index
+    bodo::unord_map_container<int32_t, int32_t> old_to_new(
+        pool);  // Maps old index to new index
     old_to_new.reserve(num_groups);
     for (size_t i = 0; i < num_groups; i++) {
         // check if the value for the group is NaN
@@ -684,8 +713,8 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
     // Create new dict string array from map
     size_t n_dict = old_to_new.size();
     n_bytes = (n_dict + 7) >> 3;
-    bodo::vector<uint8_t> bitmask_vec(n_bytes, 0);
-    bodo::vector<std::string> ListString(n_dict);
+    bodo::vector<uint8_t> bitmask_vec(n_bytes, 0, pool);
+    bodo::vector<std::string> ListString(n_dict, pool);
     for (auto& it : old_to_new) {
         offset_t start_offset = offsets_i[it.first];
         offset_t end_offset = offsets_i[it.first + 1];
@@ -694,8 +723,8 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
         ListString[it.second - 1] = val;  // -1 to account for the 1 offset
         SetBitTo(bitmask_vec.data(), it.second - 1, true);
     }
-    std::shared_ptr<array_info> dict_arr =
-        create_string_array(Bodo_CTypes::STRING, bitmask_vec, ListString);
+    std::shared_ptr<array_info> dict_arr = create_string_array(
+        Bodo_CTypes::STRING, bitmask_vec, ListString, -1, pool, std::move(mm));
     std::shared_ptr<array_info> new_out_col =
         create_dict_string_array(dict_arr, indices_arr);
     // Create an intermediate array since the output array is immutable
@@ -803,12 +832,16 @@ void apply_to_column_categorical(std::shared_ptr<array_info> in_col,
  * @param[in, out] aux_cols Auxillary columns used to for certain operations
  * that require multiple columns (e.g. mean).
  * @param[in] grp_info The grouping information.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
 template <typename T, int ftype, Bodo_CTypes::CTypeEnum DType>
-void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
-                           std::shared_ptr<array_info> out_col,
-                           std::vector<std::shared_ptr<array_info>>& aux_cols,
-                           const grouping_info& grp_info) {
+void apply_to_column_numpy(
+    std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
+    std::vector<std::shared_ptr<array_info>>& aux_cols,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr()) {
     switch (ftype) {
         case Bodo_FTypes::mean: {
             std::shared_ptr<array_info> count_col = aux_cols[0];
@@ -953,7 +986,7 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
         }
         case Bodo_FTypes::first: {
             int64_t n_bytes = ((out_col->length + 7) >> 3);
-            bodo::vector<uint8_t> bitmask_vec(n_bytes, 0);
+            bodo::vector<uint8_t> bitmask_vec(n_bytes, 0, pool);
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 T val = getv<T>(in_col, i);
@@ -1522,13 +1555,19 @@ void apply_to_column_nullable(
  * @param[in, out] aux_cols Auxiliary columns used to for certain operations
  * that require multiple columns (e.g. mean).
  * @param[in] grp_info The grouping information.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
 template <int ftype>
     requires(ftype == Bodo_FTypes::first)
 void apply_to_column_array_item(
     std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
     std::vector<std::shared_ptr<array_info>>& aux_cols,
-    const grouping_info& grp_info) {
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     offset_t* in_offset_buffer =
         (offset_t*)(in_col->buffers[0]->mutable_data());
     offset_t* out_offset_buffer =
@@ -1536,6 +1575,7 @@ void apply_to_column_array_item(
     out_offset_buffer[0] = 0;
     offset_t curr_offset = 0;
     // Build a vector of which rows to copy to build the new inner array.
+    // XXX This should probably be a bodo::vector.
     std::vector<size_t> rows_to_copy;
     size_t n_groups = grp_info.num_groups;
     for (size_t i_grp = 0; i_grp < n_groups; i_grp++) {
@@ -1558,7 +1598,8 @@ void apply_to_column_array_item(
     std::shared_ptr<array_info> in_inner_arr = in_col->child_arrays[0];
     std::shared_ptr<array_info> out_inner_arr = out_col->child_arrays[0];
     // Copy over the desired subset of the inner array
-    *out_inner_arr = *(select_subset_of_rows(in_inner_arr, rows_to_copy));
+    *out_inner_arr = *(
+        select_subset_of_rows(in_inner_arr, rows_to_copy, pool, std::move(mm)));
 }
 
 /**
@@ -1575,31 +1616,43 @@ void apply_to_column_array_item(
  * the intermediate steps of certain operations, such as mean, var, std.
  * @param grp_info The grouping information to determine the row->group
  * mapping.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
 template <typename T, int ftype, Bodo_CTypes::CTypeEnum DType>
-void apply_to_column(const std::shared_ptr<array_info>& in_col,
-                     const std::shared_ptr<array_info>& out_col,
-                     std::vector<std::shared_ptr<array_info>>& aux_cols,
-                     const grouping_info& grp_info) {
+void apply_to_column(
+    const std::shared_ptr<array_info>& in_col,
+    const std::shared_ptr<array_info>& out_col,
+    std::vector<std::shared_ptr<array_info>>& aux_cols,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     switch (in_col->arr_type) {
         case bodo_array_type::CATEGORICAL:
             return apply_to_column_categorical<T, ftype, DType>(in_col, out_col,
                                                                 grp_info);
-        case bodo_array_type::NUMPY:
-            return apply_to_column_numpy<T, ftype, DType>(in_col, out_col,
-                                                          aux_cols, grp_info);
-        case bodo_array_type::DICT:
+        case bodo_array_type::NUMPY: {
+            return apply_to_column_numpy<T, ftype, DType>(
+                in_col, out_col, aux_cols, grp_info, pool);
+        }
+        case bodo_array_type::DICT: {
             return apply_to_column_dict<ftype>(in_col, out_col, aux_cols,
-                                               grp_info);
-        case bodo_array_type::LIST_STRING:
+                                               grp_info, pool, std::move(mm));
+        }
+        case bodo_array_type::LIST_STRING: {
+            // We don't support LIST_STRING in streaming groupby yet,
+            // so we don't need to use the op_pool here.
             return apply_to_column_list_string<ftype>(in_col, out_col,
                                                       grp_info);
-
+        }
         // For the STRING we compute the count, sum, max, min, first, last,
         // idxmin, idxmax, idxmin_na_first, idxmax_na_first
-        case bodo_array_type::STRING:
+        case bodo_array_type::STRING: {
             return apply_to_column_string<ftype>(in_col, out_col, aux_cols,
-                                                 grp_info);
+                                                 grp_info, pool, std::move(mm));
+        }
         case bodo_array_type::NULLABLE_INT_BOOL:
             return apply_to_column_nullable<T, ftype, DType>(
                 in_col, out_col, aux_cols, grp_info);
@@ -1611,13 +1664,16 @@ void apply_to_column(const std::shared_ptr<array_info>& in_col,
 void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
                         const std::shared_ptr<array_info>& out_col,
                         std::vector<std::shared_ptr<array_info>>& aux_cols,
-                        const grouping_info& grp_info, int ftype) {
+                        const grouping_info& grp_info, int ftype,
+                        bodo::IBufferPool* const pool,
+                        std::shared_ptr<::arrow::MemoryManager> mm) {
     // macro to reduce code duplication
 #ifndef APPLY_TO_COLUMN_CALL
-#define APPLY_TO_COLUMN_CALL(FTYPE, CTYPE)                                  \
-    if (ftype == FTYPE && in_col->dtype == CTYPE) {                         \
-        return apply_to_column<typename dtype_to_type<CTYPE>::type, FTYPE,  \
-                               CTYPE>(in_col, out_col, aux_cols, grp_info); \
+#define APPLY_TO_COLUMN_CALL(FTYPE, CTYPE)                                 \
+    if (ftype == FTYPE && in_col->dtype == CTYPE) {                        \
+        return apply_to_column<typename dtype_to_type<CTYPE>::type, FTYPE, \
+                               CTYPE>(in_col, out_col, aux_cols, grp_info, \
+                                      pool, std::move(mm));                \
     }
 #endif
     // Handle nested array cases separately
@@ -1626,7 +1682,7 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
         switch (ftype) {
             case Bodo_FTypes::first: {
                 return apply_to_column_array_item<Bodo_FTypes::first>(
-                    in_col, out_col, aux_cols, grp_info);
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
             }
         }
     }
@@ -1637,58 +1693,59 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
         switch (ftype) {
             // NOTE: The int template argument is not used in this call to
             // apply_to_column
-            case Bodo_FTypes::sum:
+            case Bodo_FTypes::sum: {
                 return apply_to_column<int, Bodo_FTypes::sum,
-                                       Bodo_CTypes::STRING>(in_col, out_col,
-                                                            aux_cols, grp_info);
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
+            }
             case Bodo_FTypes::min:
                 return apply_to_column<int, Bodo_FTypes::min,
-                                       Bodo_CTypes::STRING>(in_col, out_col,
-                                                            aux_cols, grp_info);
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
             case Bodo_FTypes::max:
                 return apply_to_column<int, Bodo_FTypes::max,
-                                       Bodo_CTypes::STRING>(in_col, out_col,
-                                                            aux_cols, grp_info);
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
             case Bodo_FTypes::first:
                 return apply_to_column<int, Bodo_FTypes::first,
-                                       Bodo_CTypes::STRING>(in_col, out_col,
-                                                            aux_cols, grp_info);
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
             case Bodo_FTypes::last:
                 return apply_to_column<int, Bodo_FTypes::last,
-                                       Bodo_CTypes::STRING>(in_col, out_col,
-                                                            aux_cols, grp_info);
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
             case Bodo_FTypes::idxmin:
                 // idxmin handles the na_last case
                 return apply_to_column<int, Bodo_FTypes::idxmin,
-                                       Bodo_CTypes::STRING>(in_col, out_col,
-                                                            aux_cols, grp_info);
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
             case Bodo_FTypes::idxmax:
                 // idxmax handles the na_last case
                 return apply_to_column<int, Bodo_FTypes::idxmax,
-                                       Bodo_CTypes::STRING>(in_col, out_col,
-                                                            aux_cols, grp_info);
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
             case Bodo_FTypes::idxmin_na_first:
                 return apply_to_column<int, Bodo_FTypes::idxmin_na_first,
-                                       Bodo_CTypes::STRING>(in_col, out_col,
-                                                            aux_cols, grp_info);
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
             case Bodo_FTypes::idxmax_na_first:
                 return apply_to_column<int, Bodo_FTypes::idxmax_na_first,
-                                       Bodo_CTypes::STRING>(in_col, out_col,
-                                                            aux_cols, grp_info);
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
             case Bodo_FTypes::bitor_agg:
                 return apply_to_column<int, Bodo_FTypes::bitor_agg,
-                                       Bodo_CTypes::STRING>(in_col, out_col,
-                                                            aux_cols, grp_info);
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
 
             case Bodo_FTypes::bitand_agg:
                 return apply_to_column<int, Bodo_FTypes::bitand_agg,
-                                       Bodo_CTypes::STRING>(in_col, out_col,
-                                                            aux_cols, grp_info);
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
 
             case Bodo_FTypes::bitxor_agg:
                 return apply_to_column<int, Bodo_FTypes::bitxor_agg,
-                                       Bodo_CTypes::STRING>(in_col, out_col,
-                                                            aux_cols, grp_info);
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
         }
     }
     // All other types.
@@ -1718,8 +1775,8 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             // If APPLY_TO_COLUMN_CALL doesn't match then we hit this case.
             // data will be ignored in this case, so type doesn't matter
             return apply_to_column<int8_t, Bodo_FTypes::count,
-                                   Bodo_CTypes::INT8>(in_col, out_col, aux_cols,
-                                                      grp_info);
+                                   Bodo_CTypes::INT8>(
+                in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
         case Bodo_FTypes::sum:
             // SUM
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::sum, Bodo_CTypes::_BOOL)
@@ -2157,8 +2214,8 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             // TODO: Move elsewhere? Every row is processed instead of reduce
             // to groups.
             return apply_to_column<double, Bodo_FTypes::mean_eval,
-                                   Bodo_CTypes::FLOAT64>(in_col, out_col,
-                                                         aux_cols, grp_info);
+                                   Bodo_CTypes::FLOAT64>(
+                in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
 
         case Bodo_FTypes::boolxor_eval:
             // EVAL step for BOOLXOR_AGG. This transforms each group from
@@ -2168,8 +2225,8 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             // TODO: Move elsewhere? Every row is processed instead of reduce
             // to groups.
             return apply_to_column<bool, Bodo_FTypes::boolxor_eval,
-                                   Bodo_CTypes::_BOOL>(in_col, out_col,
-                                                       aux_cols, grp_info);
+                                   Bodo_CTypes::_BOOL>(
+                in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
         case Bodo_FTypes::var_pop_eval:
             // EVAL step for VAR_POP. This transforms each group from several
             // arrays to the final single array output. Note we don't care about
@@ -2178,8 +2235,8 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             // TODO: Move elsewhere? Every row is processed instead of reduce
             // to groups.
             return apply_to_column<double, Bodo_FTypes::var_pop_eval,
-                                   Bodo_CTypes::FLOAT64>(in_col, out_col,
-                                                         aux_cols, grp_info);
+                                   Bodo_CTypes::FLOAT64>(
+                in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
         case Bodo_FTypes::std_pop_eval:
             // EVAL step for STDDEV_POP. This transforms each group from several
             // arrays to the final single array output. Note we don't care about
@@ -2188,8 +2245,8 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             // TODO: Move elsewhere? Every row is processed instead of reduce
             // to groups.
             return apply_to_column<double, Bodo_FTypes::std_pop_eval,
-                                   Bodo_CTypes::FLOAT64>(in_col, out_col,
-                                                         aux_cols, grp_info);
+                                   Bodo_CTypes::FLOAT64>(
+                in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
         case Bodo_FTypes::var_eval:
             // EVAL step for VAR. This transforms each group from several
             // arrays to the final single array output. Note we don't care about
@@ -2198,8 +2255,8 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             // TODO: Move elsewhere? Every row is processed instead of reduce
             // to groups.
             return apply_to_column<double, Bodo_FTypes::var_eval,
-                                   Bodo_CTypes::FLOAT64>(in_col, out_col,
-                                                         aux_cols, grp_info);
+                                   Bodo_CTypes::FLOAT64>(
+                in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
         case Bodo_FTypes::std_eval:
             // EVAL step for STDDEV. This transforms each group from several
             // arrays to the final single array output. Note we don't care about
@@ -2208,8 +2265,8 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             // TODO: Move elsewhere? Every row is processed instead of reduce
             // to groups.
             return apply_to_column<double, Bodo_FTypes::std_eval,
-                                   Bodo_CTypes::FLOAT64>(in_col, out_col,
-                                                         aux_cols, grp_info);
+                                   Bodo_CTypes::FLOAT64>(
+                in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
         case Bodo_FTypes::skew_eval:
             // EVAL step for SKEW. This transforms each group from several
             // arrays to the final single array output. Note we don't care about
@@ -2218,8 +2275,8 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             // TODO: Move elsewhere? Every row is processed instead of reduce
             // to groups.
             return apply_to_column<double, Bodo_FTypes::skew_eval,
-                                   Bodo_CTypes::FLOAT64>(in_col, out_col,
-                                                         aux_cols, grp_info);
+                                   Bodo_CTypes::FLOAT64>(
+                in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
         case Bodo_FTypes::kurt_eval:
             // EVAL step for KURTOSIS. This transforms each group from several
             // arrays to the final single array output. Note we don't care about
@@ -2228,8 +2285,8 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             // TODO: Move elsewhere? Every row is processed instead of reduce
             // to groups.
             return apply_to_column<double, Bodo_FTypes::kurt_eval,
-                                   Bodo_CTypes::FLOAT64>(in_col, out_col,
-                                                         aux_cols, grp_info);
+                                   Bodo_CTypes::FLOAT64>(
+                in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
         default:
             throw std::runtime_error(
                 std::string("do_apply_to_column: unsupported function: ") +

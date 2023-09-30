@@ -33,6 +33,18 @@ struct grouping_info {
     std::shared_ptr<table_info> dispatch_info = nullptr;
     size_t num_groups;
     int mode;  // 1: for the update, 2: for the combine
+
+    /**
+     * @brief Construct a new grouping info object.
+     *
+     * @param pool The memory pool to use for allocating the
+     * various vectors.
+     */
+    grouping_info(bodo::IBufferPool* pool = bodo::BufferPool::DefaultPtr())
+        : row_to_group(pool),
+          group_to_first_row(pool),
+          next_row_in_group(pool),
+          list_missing(pool) {}
 };
 
 /**

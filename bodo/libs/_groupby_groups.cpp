@@ -132,8 +132,8 @@ void get_group_info_impl(
 void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
                     std::shared_ptr<uint32_t[]>& hashes, size_t nunique_hashes,
                     std::vector<grouping_info>& grp_infos, const int64_t n_keys,
-                    bool check_for_null_keys, bool key_dropna,
-                    bool is_parallel) {
+                    bool check_for_null_keys, bool key_dropna, bool is_parallel,
+                    bodo::IBufferPool* const pool) {
     tracing::Event ev("get_group_info", is_parallel);
     if (tables.size() != 1) {
         throw std::runtime_error("get_group_info: expected 1 table input");
@@ -145,12 +145,13 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
             table->columns.begin(), table->columns.begin() + n_keys);
 
     if (!hashes) {
-        hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
+        hashes = bodo::make_shared_arr<uint32_t>(table->nrows(), pool);
+        hash_keys(hashes, key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
         nunique_hashes =
             get_nunique_hashes(hashes, table->nrows(), is_parallel);
     }
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
-    grp_infos.emplace_back();
+    grp_infos.emplace_back(pool);
     grouping_info& grp_info = grp_infos.back();
 
     HashLookupIn32bitTable hash_fct{hashes};
@@ -172,7 +173,7 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
         using rh_flat_t =                                                \
             bodo::unord_map_container<int64_t, int64_t,                  \
                                       HashLookupIn32bitTable, KeyType>;  \
-        rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);         \
+        rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct, pool);   \
         get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table,   \
                             key_cols, hashes, nunique_hashes,            \
                             check_for_null_keys, key_dropna,             \
@@ -209,7 +210,7 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
         using rh_flat_t =                                                  \
             bodo::unord_map_container<int64_t, int64_t,                    \
                                       HashLookupIn32bitTable, KeyType>;    \
-        rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);           \
+        rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct, pool);     \
         get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table,     \
                             key_cols, hashes, nunique_hashes,              \
                             check_for_null_keys, key_dropna,               \
@@ -275,7 +276,7 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
     using rh_flat_t =
         bodo::unord_map_container<int64_t, int64_t, HashLookupIn32bitTable,
                                   KeysEqualComparator>;
-    rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);
+    rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct, pool);
 
     get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table, key_cols,
                         hashes, nunique_hashes, check_for_null_keys, key_dropna,
@@ -287,7 +288,8 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
                             size_t nunique_hashes,
                             std::vector<grouping_info>& grp_infos,
                             const int64_t n_keys, const bool consider_missing,
-                            bool key_dropna, bool is_parallel) {
+                            bool key_dropna, bool is_parallel,
+                            bodo::IBufferPool* const pool) {
     tracing::Event ev("get_group_info_iterate", is_parallel);
     if (tables.size() == 0) {
         throw std::runtime_error("get_group_info: tables is empty");
@@ -304,11 +306,12 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
     // computed with a different seed which leads to extra fake number of
     // groups.
     if (tables.size() > 1 || !hashes) {
-        hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
+        hashes = bodo::make_shared_arr<uint32_t>(table->nrows(), pool);
+        hash_keys(hashes, key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
         nunique_hashes =
             get_nunique_hashes(hashes, table->nrows(), is_parallel);
     }
-    grp_infos.emplace_back();
+    grp_infos.emplace_back(pool);
     grouping_info& grp_info = grp_infos.back();
 
     uint64_t max_rows = 0;
@@ -320,7 +323,7 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
     grp_info.next_row_in_group.reserve(max_rows);
     grp_info.next_row_in_group.resize(table->nrows(), -1);
     grp_info.group_to_first_row.reserve(nunique_hashes * 1.1);
-    bodo::vector<int64_t> active_group_repr;
+    bodo::vector<int64_t> active_group_repr(pool);
     active_group_repr.reserve(nunique_hashes * 1.1);
 
     // TODO Incorporate or adapt other optimizations from `get_group_info`
@@ -333,7 +336,7 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
     // 0 to num_groups - 1)
     int64_t next_group = 1;
     bodo::unord_map_container<multi_col_key, int64_t, multi_col_key_hash>
-        key_to_group;
+        key_to_group(pool);
     key_to_group.reserve(nunique_hashes);
     for (uint64_t i = 0; i < table->nrows(); i++) {
         if (key_drop_nulls) {
@@ -370,8 +373,9 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
         table = tables[j];
         key_cols = std::vector<std::shared_ptr<array_info>>(
             table->columns.begin(), table->columns.begin() + n_keys);
-        hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
-        grp_infos.emplace_back();
+        hashes = bodo::make_shared_arr<uint32_t>(table->nrows(), pool);
+        hash_keys(hashes, key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
+        grp_infos.emplace_back(pool);
         grouping_info& grp_info = grp_infos.back();
         grp_info.row_to_group.resize(table->nrows());
         grp_info.next_row_in_group.resize(table->nrows(), -1);
@@ -410,7 +414,6 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
             grp_info.row_to_group[i] = group - 1;
         }
         hashes.reset();
-        hashes = nullptr;
         grp_info.num_groups = grp_info.group_to_first_row.size();
     }
 

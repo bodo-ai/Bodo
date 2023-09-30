@@ -76,6 +76,18 @@ bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t iRowA,
  * @param req_extended_group_info Whether we need to collect extended group
  * information.
  * @param parallel Only used for tracing purposes.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function. In the accumulate code path case, this is the operator buffer pool.
+ * In the agg case, this is the default BufferPool. This is because in the
+ * accumulate case, we call this function on the entire partition, so we need to
+ * track and enforce memory usage to be able to re-partition and retry in case
+ * of failure. In the agg case, this function is called on an input batch (~4K
+ * rows). We can treat the execution on this small batch as basically scratch
+ * usage, for which the BufferPool is sufficient and using the
+ * Operator-Buffer-Pool (which would enforce thresholds) could be problematic
+ * (it would re-partition the partition which has no bearing on this input
+ * batch).
+ * @param mm Memory manager associated with the pool.
  * @return std::shared_ptr<table_info> Output update table
  */
 template <bool is_acc_case>
@@ -84,17 +96,26 @@ std::shared_ptr<table_info> get_update_table(
     const std::vector<std::shared_ptr<BasicColSet>>& col_sets,
     const std::vector<int32_t>& f_in_offsets,
     const std::vector<int32_t>& f_in_cols, const bool req_extended_group_info,
-    const bool parallel) {
-    // empty function set means drop_duplicates operation, which doesn't require
-    // update
+    const bool parallel,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
+    // Empty function set means drop_duplicates operation, which doesn't require
+    // update. Drop-duplicates only goes through the agg path, so this is safe.
     if (col_sets.size() == 0) {
+        assert(!is_acc_case);
         return in_table;
     }
 
     // similar to update() function of GroupbyPipeline:
     // https://github.com/Bodo-inc/Bodo/blob/58f995dec2507a84afefbb27af01d67bd40fabb4/bodo/libs/_groupby.cpp#L546
+
+    // Allocate the memory for hashes through the pool.
     std::shared_ptr<uint32_t[]> batch_hashes_groupby =
-        hash_keys_table(in_table, n_keys, SEED_HASH_GROUPBY_SHUFFLE, false);
+        bodo::make_shared_arr<uint32_t>(in_table->nrows(), pool);
+    // Compute and fill hashes into allocated memory.
+    hash_keys_table(batch_hashes_groupby, in_table, n_keys,
+                    SEED_HASH_GROUPBY_SHUFFLE, false);
 
     std::vector<std::shared_ptr<table_info>> tables = {in_table};
 
@@ -102,6 +123,8 @@ std::shared_ptr<table_info> get_update_table(
     if (is_acc_case) {
         // In the accumulating code path case, we have the entire input, so
         // it's better to get an actual estimate using HLL.
+        // The HLL only uses ~1MiB of memory, so we don't really need it to
+        // go through the pool.
         nunique_hashes = get_nunique_hashes(batch_hashes_groupby,
                                             in_table->nrows(), parallel);
     } else {
@@ -112,27 +135,32 @@ std::shared_ptr<table_info> get_update_table(
         // previous batches as well as using HLL.
         nunique_hashes = in_table->nrows();
     }
+
     std::vector<grouping_info> grp_infos;
 
     if (req_extended_group_info) {
         // TODO[BSE-578]: set to true when handling cumulative operations that
         // need the list of NA row indexes.
-        const bool consider_missing = false;
-
         get_group_info_iterate(tables, batch_hashes_groupby, nunique_hashes,
-                               grp_infos, n_keys, consider_missing, false,
-                               parallel);
+                               grp_infos, n_keys, /*consider_missing*/ false,
+                               /*key_dropna*/ false, parallel, pool);
     } else {
         get_group_info(tables, batch_hashes_groupby, nunique_hashes, grp_infos,
-                       n_keys, true, false, parallel);
+                       n_keys, /*check_for_null_keys*/ true,
+                       /*key_dropna*/ false, parallel, pool);
     }
+
+    // get_group_info_iterate / get_group_info always reset the pointer,
+    // so this should be a NOP, but we're adding it just to be safe.
+    batch_hashes_groupby.reset();
 
     grouping_info& grp_info = grp_infos[0];
     grp_info.mode = 1;
     size_t num_groups = grp_info.num_groups;
     int64_t update_col_len = num_groups;
     std::shared_ptr<table_info> update_table = std::make_shared<table_info>();
-    alloc_init_keys(tables, update_table, grp_infos, n_keys, num_groups);
+    alloc_init_keys(tables, update_table, grp_infos, n_keys, num_groups, pool,
+                    mm);
 
     for (size_t i = 0; i < col_sets.size(); i++) {
         const std::shared_ptr<BasicColSet>& col_set = col_sets[i];
@@ -145,11 +173,11 @@ std::shared_ptr<table_info> get_update_table(
         }
         col_set->setInCol(input_cols);
         std::vector<std::shared_ptr<array_info>> list_arr;
-        col_set->alloc_update_columns(update_col_len, list_arr);
+        col_set->alloc_update_columns(update_col_len, list_arr, pool, mm);
         for (auto& e_arr : list_arr) {
             update_table->columns.push_back(e_arr);
         }
-        col_set->update(grp_infos);
+        col_set->update(grp_infos, pool, mm);
         col_set->clear();
     }
 
@@ -311,7 +339,7 @@ GroupbyPartition::GroupbyPartition(
           KeyEqualGroupbyTable<true>(this, nullptr, n_keys_))),
       build_table_buffer(std::make_unique<TableBuildBuffer>(
           build_arr_c_types_, build_arr_array_types_,
-          build_table_dict_builders_)),
+          build_table_dict_builders_, op_pool_, op_mm_)),
       build_table_buffer_chunked(
           build_arr_c_types_, build_arr_array_types_,
           build_table_dict_builders_, batch_size_,
@@ -502,7 +530,7 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
         out_table = get_update_table</*is_acc_case*/ true>(
             this->build_table_buffer->data_table, this->n_keys, this->col_sets,
             this->f_in_offsets, this->f_in_cols, this->req_extended_group_info,
-            this->parallel);
+            this->parallel, this->op_pool, this->op_mm);
     } else {
         // call eval() on running values to get final output
         std::shared_ptr<table_info> combine_data =

@@ -45,7 +45,10 @@ void alloc_init_keys(
     const std::vector<std::shared_ptr<table_info>>& from_tables,
     const std::shared_ptr<table_info>& out_table,
     const std::vector<grouping_info>& grp_infos, int64_t num_keys,
-    size_t num_groups);
+    size_t num_groups,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 /**
  * @brief Sorts the local data for an aggregation that has shuffled
@@ -62,6 +65,9 @@ void alloc_init_keys(
  * @param[in] order_offset: What index in asc_vect/na_pos_vect corresponds to
  * the first entry in orderby_cols, in case there is an offset.
  * @param[in] is_parallel: is the operation happening in parallel
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  * @return the sorted table
  */
 std::shared_ptr<table_info> grouped_sort(
@@ -69,6 +75,9 @@ std::shared_ptr<table_info> grouped_sort(
     const std::vector<std::shared_ptr<array_info>>& orderby_cols,
     const std::vector<std::shared_ptr<array_info>>& extra_cols,
     const std::vector<bool>& asc_vect, const std::vector<bool>& na_pos_vect,
-    int64_t order_offset, bool is_parallel);
+    int64_t order_offset, bool is_parallel,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 #endif  // _GROUPBY_COMMON_H_INCLUDED

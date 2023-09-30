@@ -57,9 +57,15 @@ class BasicColSet {
      * @param num_groups number of groups found in the input table
      * @param[in,out] out_cols vector of columns for the update/combine step.
      * This method adds columns to this vector.
+     * @param pool Memory pool to use for allocations during the execution of
+     * this function.
+     * @param mm Memory manager associated with the pool.
      */
     virtual void alloc_running_value_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager());
 
     /**
      * Allocates the running value columns for the update step, places
@@ -78,10 +84,17 @@ class BasicColSet {
      * @param num_groups number of groups found in the input table
      * @param[in,out] out_cols vector of columns for the update step.
      * This method adds columns to this vector.
+     * @param pool Memory pool to use for allocations during the execution of
+     * this function.
+     * @param mm Memory manager associated with the pool.
      */
     virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
-        alloc_running_value_columns(num_groups, out_cols);
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) {
+        this->alloc_running_value_columns(num_groups, out_cols, pool,
+                                          std::move(mm));
         this->update_cols = out_cols;
     }
 
@@ -89,8 +102,15 @@ class BasicColSet {
      * Perform update step for this column set. This will fill my columns with
      * the result of the aggregation operation corresponding to this column set
      * @param grouping info calculated by GroupbyPipeline
+     * @param pool Memory pool to use for allocations during the execution of
+     * this function.
+     * @param mm Memory manager associated with the pool.
      */
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    virtual void update(
+        const std::vector<grouping_info>& grp_infos,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager());
 
     /**
      * When GroupbyPipeline shuffles the table after update, the column set
@@ -248,8 +268,10 @@ class FirstColSet : public BasicColSet {
                 bool use_sql_rules);
     virtual ~FirstColSet();
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 };
 
 /**
@@ -262,9 +284,14 @@ class MeanColSet : public BasicColSet {
                bool use_sql_rules);
     virtual ~MeanColSet();
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
-    void update(const std::vector<grouping_info>& grp_infos) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
     void combine(const grouping_info& grp_info,
                  int64_t init_start_row = 0) override;
     void eval(const grouping_info& grp_info) override;
@@ -319,8 +346,10 @@ class WindowColSet : public BasicColSet {
      * in this case)
      */
     virtual void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
     /**
      * Perform update step for this column set. This first shuffles
      * the data based on the orderby condition + group columns and
@@ -329,8 +358,15 @@ class WindowColSet : public BasicColSet {
      * be correct. If this is a serial operation then we need to execute
      * a local reverse shuffle.
      * @param grp_infos: grouping info calculated by GroupbyPipeline
+     * @param pool Memory pool to use for allocations during the execution of
+     * this function (not actually used)
+     * @param mm Memory manager associated with the pool (not actually used)
      */
-    virtual void update(const std::vector<grouping_info>& grp_infos) override;
+    virtual void update(
+        const std::vector<grouping_info>& grp_infos,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
     /**
      * Obtain the final output columns resulting from the groupby operation on
@@ -384,12 +420,22 @@ class IdxMinMaxColSet : public BasicColSet {
     virtual ~IdxMinMaxColSet();
 
     virtual void alloc_running_value_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager());
 
     virtual void alloc_update_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager());
 
-    virtual void update(const std::vector<grouping_info>& grp_infos);
+    virtual void update(
+        const std::vector<grouping_info>& grp_infos,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager());
 
     virtual void alloc_combine_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
@@ -413,10 +459,15 @@ class BoolXorColSet : public BasicColSet {
     ~BoolXorColSet() override;
 
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 
     void combine(const grouping_info& grp_info,
                  int64_t init_start_row = 0) override;
@@ -442,14 +493,21 @@ class VarStdColSet : public BasicColSet {
     virtual ~VarStdColSet();
 
     void alloc_update_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 
     void alloc_combine_columns(
         size_t num_groups,
@@ -491,14 +549,21 @@ class SkewColSet : public BasicColSet {
     virtual ~SkewColSet();
 
     void alloc_update_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 
     void alloc_combine_columns(
         size_t num_groups,
@@ -542,10 +607,15 @@ class ListAggColSet : public BasicColSet {
     virtual ~ListAggColSet();
 
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 
     std::shared_ptr<array_info> getOutputColumn();
     virtual void setUpdateCols(
@@ -587,14 +657,21 @@ class KurtColSet : public BasicColSet {
     virtual ~KurtColSet();
 
     void alloc_update_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 
     void alloc_combine_columns(
         size_t num_groups,
@@ -637,14 +714,21 @@ class UdfColSet : public BasicColSet {
     virtual ~UdfColSet();
 
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
     void alloc_update_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 
     typename std::vector<std::shared_ptr<array_info>>::iterator
     update_after_shuffle(
@@ -718,7 +802,11 @@ class PercentileColSet : public BasicColSet {
 
     virtual ~PercentileColSet();
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
+
     virtual void setUpdateCols(
         std::vector<std::shared_ptr<array_info>> update_cols_) override {
         throw std::runtime_error(
@@ -755,7 +843,10 @@ class MedianColSet : public BasicColSet {
 
     virtual ~MedianColSet();
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 
    private:
     const bool skip_na_data;
@@ -791,7 +882,10 @@ class ModeColSet : public BasicColSet {
 
     virtual ~ModeColSet();
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 };
 
 /**
@@ -808,10 +902,15 @@ class ArrayAggColSet : public BasicColSet {
     ~ArrayAggColSet() override;
 
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 
     const std::vector<std::shared_ptr<array_info>> getOutputColumns() override;
     virtual void setUpdateCols(
@@ -853,7 +952,10 @@ class NUniqueColSet : public BasicColSet {
 
     virtual ~NUniqueColSet();
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 
     virtual void clear() override {
         BasicColSet::clear();
@@ -878,10 +980,16 @@ class CumOpColSet : public BasicColSet {
     virtual ~CumOpColSet();
 
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
+
     virtual void setUpdateCols(
         std::vector<std::shared_ptr<array_info>> update_cols_) override {
         throw std::runtime_error(
@@ -918,10 +1026,16 @@ class ShiftColSet : public BasicColSet {
     virtual ~ShiftColSet();
 
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
+
     virtual void setUpdateCols(
         std::vector<std::shared_ptr<array_info>> update_cols_) override {
         throw std::runtime_error(
@@ -959,16 +1073,23 @@ class TransformColSet : public BasicColSet {
     virtual ~TransformColSet();
 
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
     void alloc_update_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
     // Call corresponding groupby function operation to compute
     // transform_op_col column.
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 
     // Fill the output column by copying values from the transform_op_col column
     void eval(const grouping_info& grp_info) override;
@@ -1012,9 +1133,15 @@ class HeadColSet : public BasicColSet {
 
     void alloc_running_value_columns(
         size_t update_col_len,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 
     void set_head_row_list(bodo::vector<int64_t>& row_list);
 
@@ -1053,10 +1180,15 @@ class NgroupColSet : public BasicColSet {
      * in this case)
      */
     void alloc_running_value_columns(
-        size_t num_groups,
-        std::vector<std::shared_ptr<array_info>>& out_cols) override;
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 
-    void update(const std::vector<grouping_info>& grp_infos) override;
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
 
    private:
     const bool is_parallel;  // whether input column data is distributed or
