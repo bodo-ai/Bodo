@@ -15,8 +15,12 @@ inline ::arrow::Status OperatorBufferPool::check_limits(int64_t size) const {
     // is within the alloted limit.
     if ((size + this->bytes_pinned()) > this->max_pinned_size_bytes_) {
         return ::arrow::Status::OutOfMemory(
-            "Allocation failed. This allocation would lead to more pinned "
-            "memory than what is allowed for this operator.");
+            "Allocation failed. This allocation (" + std::to_string(size) +
+            ") would lead to more pinned "
+            "memory (current: " +
+            std::to_string(this->bytes_pinned()) +
+            ") than what is allowed for this operator (" +
+            std::to_string(this->max_pinned_size_bytes_) + ").");
     }
     return ::arrow::Status::OK();
 }

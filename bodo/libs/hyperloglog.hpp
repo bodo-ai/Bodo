@@ -18,9 +18,9 @@
 #include <sstream>
 #include <stdexcept>
 #include <vector>
-//#include "murmur3.h"
+// #include "murmur3.h"
 
-//#define HLL_HASH_SEED 313
+// #define HLL_HASH_SEED 313
 
 #if defined(__has_builtin) && (defined(__GNUC__) || defined(__clang__))
 
@@ -114,7 +114,8 @@ class HyperLogLog {
         }
     }
 
-    void addAll(const std::shared_ptr<uint32_t[]> hashes, const size_t len) {
+    void addAll(const std::shared_ptr</*const*/ uint32_t[]>& hashes,
+                const size_t len) {
         for (size_t i = 0; i < len; i++) {
             add(hashes[i]);
         }

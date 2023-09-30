@@ -606,7 +606,8 @@ void alloc_init_keys(
     const std::vector<std::shared_ptr<table_info>>& from_tables,
     const std::shared_ptr<table_info>& out_table,
     const std::vector<grouping_info>& grp_infos, int64_t num_keys,
-    size_t num_groups) {
+    size_t num_groups, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t key_row = 0;
     for (int64_t i = 0; i < num_keys; i++) {
         // Use a raw pointer since we only need temporary read access.
@@ -618,9 +619,9 @@ void alloc_init_keys(
         if (key_col->arr_type == bodo_array_type::NUMPY ||
             key_col->arr_type == bodo_array_type::CATEGORICAL ||
             key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            new_key_col =
-                alloc_array(num_groups, 1, 1, key_col->arr_type, key_col->dtype,
-                            -1, 0, key_col->num_categories);
+            new_key_col = alloc_array(
+                num_groups, 1, 1, key_col->arr_type, key_col->dtype, -1, 0,
+                key_col->num_categories, false, false, false, pool, mm);
             if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                 key_col->dtype == Bodo_CTypes::_BOOL) {
                 // Nullable booleans store 1 bit per boolean
@@ -651,7 +652,8 @@ void alloc_init_keys(
         if (key_col->arr_type == bodo_array_type::DICT) {
             array_info* key_indices = (key_col->child_arrays[1]).get();
             std::shared_ptr<array_info> new_key_indices = alloc_array(
-                num_groups, -1, -1, key_indices->arr_type, key_indices->dtype);
+                num_groups, -1, -1, key_indices->arr_type, key_indices->dtype,
+                -1, 0, 0, false, false, false, pool, mm);
             for (size_t j = 0; j < num_groups; j++) {
                 std::tie(key_col, key_row) =
                     find_key_for_group(j, from_tables, i, grp_infos);
@@ -677,9 +679,12 @@ void alloc_init_keys(
                 in_offsets = (offset_t*)key_col->data2();
                 n_chars += in_offsets[key_row + 1] - in_offsets[key_row];
             }
-            new_key_col =
-                alloc_array(num_groups, n_chars, 1, key_col->arr_type,
-                            key_col->dtype, -1, 0, key_col->num_categories);
+            // XXX Shouldn't we forward the array_id here?
+            new_key_col = alloc_array(
+                num_groups, n_chars, 1, key_col->arr_type, key_col->dtype, -1,
+                0, key_col->num_categories, key_col->is_globally_replicated,
+                key_col->is_locally_unique, key_col->is_locally_sorted, pool,
+                mm);
 
             offset_t* out_offsets = (offset_t*)new_key_col->data2();
             offset_t pos = 0;
@@ -719,7 +724,8 @@ void alloc_init_keys(
             }
             new_key_col =
                 alloc_array(num_groups, n_strings, n_chars, key_col->arr_type,
-                            key_col->dtype, -1, 0, key_col->num_categories);
+                            key_col->dtype, -1, 0, key_col->num_categories,
+                            false, false, false, pool, mm);
             uint8_t* in_sub_null_bitmask =
                 (uint8_t*)key_col->sub_null_bitmask();
             uint8_t* out_sub_null_bitmask =
@@ -770,7 +776,8 @@ std::shared_ptr<table_info> grouped_sort(
     const std::vector<std::shared_ptr<array_info>>& orderby_cols,
     const std::vector<std::shared_ptr<array_info>>& extra_cols,
     const std::vector<bool>& asc_vect, const std::vector<bool>& na_pos_vect,
-    int64_t order_offset, bool is_parallel) {
+    int64_t order_offset, bool is_parallel, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     // Create a new table. We want to sort the table first by
     // the groups and second by the orderby_arr.
     std::shared_ptr<table_info> sort_table = std::make_shared<table_info>();
@@ -783,7 +790,7 @@ std::shared_ptr<table_info> grouped_sort(
     // Wrap the row_to_group in an array info so we can use it
     // to sort.
     std::shared_ptr<array_info> group_arr =
-        alloc_numpy(num_rows, Bodo_CTypes::INT64);
+        alloc_numpy(num_rows, Bodo_CTypes::INT64, pool, mm);
     memcpy(group_arr->data1(), row_to_group.data(),
            sizeof(int64_t) * group_arr->length);
 
@@ -814,7 +821,7 @@ std::shared_ptr<table_info> grouped_sort(
     // sorted table can access it
     std::shared_ptr<table_info> iter_table = sort_values_table_local(
         sort_table, n_keys, vect_ascending, na_position, nullptr,
-        is_parallel /* This is just used for tracing */);
+        is_parallel /* This is just used for tracing */, pool, std::move(mm));
     sort_table.reset();
     return iter_table;
 }

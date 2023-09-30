@@ -31,20 +31,25 @@ BasicColSet::BasicColSet(std::shared_ptr<array_info> in_col, int ftype,
 BasicColSet::~BasicColSet() {}
 
 void BasicColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     bodo_array_type::arr_type_enum arr_type = in_col->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_col->dtype;
     int64_t num_categories = in_col->num_categories;
     std::tie(arr_type, dtype) =
         get_groupby_output_dtype(ftype, arr_type, dtype);
-    out_cols.push_back(
-        alloc_array(num_groups, 1, 1, arr_type, dtype, -1, 0, num_categories));
+    out_cols.push_back(alloc_array(num_groups, 1, 1, arr_type, dtype, -1, 0,
+                                   num_categories, false, false, false, pool,
+                                   std::move(mm)));
 }
 
-void BasicColSet::update(const std::vector<grouping_info>& grp_infos) {
+void BasicColSet::update(const std::vector<grouping_info>& grp_infos,
+                         bodo::IBufferPool* const pool,
+                         std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> aux_cols;
     aggfunc_output_initialize(update_cols[0], ftype, use_sql_rules);
-    do_apply_to_column(in_col, update_cols[0], aux_cols, grp_infos[0], ftype);
+    do_apply_to_column(in_col, update_cols[0], aux_cols, grp_infos[0], ftype,
+                       pool, std::move(mm));
 }
 
 typename std::vector<std::shared_ptr<array_info>>::iterator
@@ -92,18 +97,20 @@ FirstColSet::FirstColSet(std::shared_ptr<array_info> in_col, bool combine_step,
 FirstColSet::~FirstColSet() {}
 
 void FirstColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     if (in_col->arr_type == bodo_array_type::ARRAY_ITEM ||
         in_col->arr_type == bodo_array_type::LIST_STRING) {
         // For ARRAY_ITEM or LIST_STRING array, allocate a dummy inner array for
         // now since the true array item array cannot be computed until later.
         std::shared_ptr<array_info> inner_arr =
-            alloc_numpy(0, Bodo_CTypes::INT8);
+            alloc_numpy(0, Bodo_CTypes::INT8, pool, mm);
         std::shared_ptr<array_info> out_col =
-            alloc_array_item(num_groups, inner_arr);
+            alloc_array_item(num_groups, inner_arr, pool, std::move(mm));
         out_cols.push_back(out_col);
     } else {
-        BasicColSet::alloc_running_value_columns(num_groups, out_cols);
+        BasicColSet::alloc_running_value_columns(num_groups, out_cols, pool,
+                                                 std::move(mm));
     }
 }
 
@@ -116,23 +123,28 @@ MeanColSet::MeanColSet(std::shared_ptr<array_info> in_col, bool combine_step,
 MeanColSet::~MeanColSet() {}
 
 void MeanColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     std::shared_ptr<array_info> c1 =
         alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::FLOAT64);  // for sum and result
+                    Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool,
+                    mm);  // for sum and result
     std::shared_ptr<array_info> c2 =
         alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::UINT64);  // for counts
+                    Bodo_CTypes::UINT64, -1, 0, 0, false, false, false, pool,
+                    std::move(mm));  // for counts
     out_cols.push_back(c1);
     out_cols.push_back(c2);
 }
 
-void MeanColSet::update(const std::vector<grouping_info>& grp_infos) {
+void MeanColSet::update(const std::vector<grouping_info>& grp_infos,
+                        bodo::IBufferPool* const pool,
+                        std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> aux_cols = {this->update_cols[1]};
     aggfunc_output_initialize(this->update_cols[0], this->ftype, use_sql_rules);
     aggfunc_output_initialize(this->update_cols[1], this->ftype, use_sql_rules);
     do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
-                       grp_infos[0], this->ftype);
+                       grp_infos[0], this->ftype, pool, std::move(mm));
 }
 
 void MeanColSet::combine(const grouping_info& grp_info,
@@ -173,33 +185,39 @@ IdxMinMaxColSet::IdxMinMaxColSet(std::shared_ptr<array_info> in_col,
 IdxMinMaxColSet::~IdxMinMaxColSet() {}
 
 void IdxMinMaxColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // output column containing index values. dummy for now. will be
     // assigned the real data at the end of update()
     std::shared_ptr<array_info> out_col =
-        alloc_array(num_groups, 1, 1, index_col->arr_type, index_col->dtype);
+        alloc_array(num_groups, 1, 1, index_col->arr_type, index_col->dtype, -1,
+                    0, 0, false, false, false, pool, mm);
     // create array to store min/max value
-    std::shared_ptr<array_info> max_col =
-        alloc_array(num_groups, 1, 1, this->in_col->arr_type,
-                    this->in_col->dtype);  // for min/max
+    std::shared_ptr<array_info> max_col = alloc_array(
+        num_groups, 1, 1, this->in_col->arr_type, this->in_col->dtype, -1, 0, 0,
+        false, false, false, pool, std::move(mm));  // for min/max
 
     out_cols.push_back(out_col);
     out_cols.push_back(max_col);
 }
 
 void IdxMinMaxColSet::alloc_update_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
-    alloc_running_value_columns(num_groups, out_cols);
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    this->alloc_running_value_columns(num_groups, out_cols, pool, mm);
     this->update_cols = out_cols;
 
     // create array to store index position of min/max value
     std::shared_ptr<array_info> index_pos_col = alloc_array(
-        num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::UINT64);
+        num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::UINT64, -1, 0, 0,
+        false, false, false, pool, std::move(mm));
 
     update_cols.push_back(index_pos_col);
 }
 
-void IdxMinMaxColSet::update(const std::vector<grouping_info>& grp_infos) {
+void IdxMinMaxColSet::update(const std::vector<grouping_info>& grp_infos,
+                             bodo::IBufferPool* const pool,
+                             std::shared_ptr<::arrow::MemoryManager> mm) {
     std::shared_ptr<array_info> index_pos_col = this->update_cols[2];
     std::vector<std::shared_ptr<array_info>> aux_cols = {index_pos_col};
     if (this->ftype == Bodo_FTypes::idxmax) {
@@ -212,11 +230,12 @@ void IdxMinMaxColSet::update(const std::vector<grouping_info>& grp_infos) {
     }
     aggfunc_output_initialize(index_pos_col, Bodo_FTypes::count,
                               use_sql_rules);  // zero init
-    do_apply_to_column(this->in_col, this->update_cols[1], aux_cols,
-                       grp_infos[0], this->ftype);
 
-    std::shared_ptr<array_info> real_out_col =
-        RetrieveArray_SingleColumn_arr(index_col, index_pos_col);
+    do_apply_to_column(this->in_col, this->update_cols[1], aux_cols,
+                       grp_infos[0], this->ftype, pool, mm);
+
+    std::shared_ptr<array_info> real_out_col = RetrieveArray_SingleColumn_arr(
+        index_col, index_pos_col, false, pool, std::move(mm));
     std::shared_ptr<array_info> out_col = this->update_cols[0];
     *out_col = std::move(*real_out_col);
     this->update_cols.pop_back();
@@ -267,23 +286,26 @@ BoolXorColSet::BoolXorColSet(std::shared_ptr<array_info> in_col, int ftype,
 BoolXorColSet::~BoolXorColSet() {}
 
 void BoolXorColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
-    std::shared_ptr<array_info> one_col =
-        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::_BOOL);
-    std::shared_ptr<array_info> two_col =
-        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::_BOOL);
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::shared_ptr<array_info> one_col = alloc_array(
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+        Bodo_CTypes::_BOOL, -1, 0, 0, false, false, false, pool, mm);
+    std::shared_ptr<array_info> two_col = alloc_array(
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+        Bodo_CTypes::_BOOL, -1, 0, 0, false, false, false, pool, std::move(mm));
     aggfunc_output_initialize(one_col, this->ftype, use_sql_rules);
     aggfunc_output_initialize(two_col, this->ftype, use_sql_rules);
     out_cols.push_back(one_col);
     out_cols.push_back(two_col);
 }
 
-void BoolXorColSet::update(const std::vector<grouping_info>& grp_infos) {
+void BoolXorColSet::update(const std::vector<grouping_info>& grp_infos,
+                           bodo::IBufferPool* const pool,
+                           std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> aux_cols = {this->update_cols[1]};
     do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
-                       grp_infos[0], this->ftype);
+                       grp_infos[0], this->ftype, pool, std::move(mm));
 }
 
 void BoolXorColSet::combine(const grouping_info& grp_info,
@@ -335,16 +357,18 @@ VarStdColSet::VarStdColSet(std::shared_ptr<array_info> in_col, int ftype,
 VarStdColSet::~VarStdColSet() {}
 
 void VarStdColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
-    std::shared_ptr<array_info> count_col =
-        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::UINT64);
-    std::shared_ptr<array_info> mean_col =
-        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::FLOAT64);
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::shared_ptr<array_info> count_col = alloc_array(
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+        Bodo_CTypes::UINT64, -1, 0, 0, false, false, false, pool, mm);
+    std::shared_ptr<array_info> mean_col = alloc_array(
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool, mm);
     std::shared_ptr<array_info> m2_col =
         alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::FLOAT64);
+                    Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool,
+                    std::move(mm));
     aggfunc_output_initialize(count_col, Bodo_FTypes::count,
                               use_sql_rules);  // zero initialize
     aggfunc_output_initialize(mean_col, Bodo_FTypes::count,
@@ -357,7 +381,8 @@ void VarStdColSet::alloc_running_value_columns(
 }
 
 void VarStdColSet::alloc_update_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Starting index for the loop where we copy the running value column into
     // update_cols. 1 if we are not doing a combine and therefore allocating
     // out_col, 0 otherwise.
@@ -369,7 +394,8 @@ void VarStdColSet::alloc_update_columns(
         // need to create output column now
         std::shared_ptr<array_info> col =
             alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                        Bodo_CTypes::FLOAT64);  // for result
+                        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false,
+                        pool, mm);  // for result
         // Initialize as ftype to match nullable behavior
         aggfunc_output_initialize(col, this->ftype,
                                   use_sql_rules);  // zero initialize
@@ -377,7 +403,8 @@ void VarStdColSet::alloc_update_columns(
         this->out_col = col;
         init_start++;
     }
-    this->alloc_running_value_columns(num_groups, out_cols);
+    this->alloc_running_value_columns(num_groups, out_cols, pool,
+                                      std::move(mm));
 
     // Add every value to update cols, except the first one
     //(the output column)
@@ -386,11 +413,13 @@ void VarStdColSet::alloc_update_columns(
     }
 }
 
-void VarStdColSet::update(const std::vector<grouping_info>& grp_infos) {
+void VarStdColSet::update(const std::vector<grouping_info>& grp_infos,
+                          bodo::IBufferPool* const pool,
+                          std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> aux_cols = {
         this->update_cols[0], this->update_cols[1], this->update_cols[2]};
     do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
-                       grp_infos[0], this->ftype);
+                       grp_infos[0], this->ftype, pool, std::move(mm));
 }
 
 void VarStdColSet::alloc_combine_columns(
@@ -502,19 +531,21 @@ SkewColSet::SkewColSet(std::shared_ptr<array_info> in_col, int ftype,
 SkewColSet::~SkewColSet() {}
 
 void SkewColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
-    std::shared_ptr<array_info> count_col =
-        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::UINT64);
-    std::shared_ptr<array_info> m1_col =
-        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::FLOAT64);
-    std::shared_ptr<array_info> m2_col =
-        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::FLOAT64);
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::shared_ptr<array_info> count_col = alloc_array(
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+        Bodo_CTypes::UINT64, -1, 0, 0, false, false, false, pool, mm);
+    std::shared_ptr<array_info> m1_col = alloc_array(
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool, mm);
+    std::shared_ptr<array_info> m2_col = alloc_array(
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool, mm);
     std::shared_ptr<array_info> m3_col =
         alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::FLOAT64);
+                    Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool,
+                    std::move(mm));
     aggfunc_output_initialize(count_col, Bodo_FTypes::count,
                               use_sql_rules);  // zero initialize
     aggfunc_output_initialize(m1_col, Bodo_FTypes::count,
@@ -530,7 +561,8 @@ void SkewColSet::alloc_running_value_columns(
 }
 
 void SkewColSet::alloc_update_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Starting index for the loop where we copy the running value column into
     // update_cols. 1 if we are not doing a combine and therefore allocating
     // out_col, 0 otherwise.
@@ -542,7 +574,8 @@ void SkewColSet::alloc_update_columns(
         // need to create output column now
         std::shared_ptr<array_info> col =
             alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                        Bodo_CTypes::FLOAT64);  // for result
+                        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false,
+                        pool, mm);  // for result
         // Initialize as ftype to match nullable behavior
         aggfunc_output_initialize(col, this->ftype,
                                   use_sql_rules);  // zero initialize
@@ -550,7 +583,8 @@ void SkewColSet::alloc_update_columns(
         this->out_col = col;
         init_start++;
     }
-    this->alloc_running_value_columns(num_groups, out_cols);
+    this->alloc_running_value_columns(num_groups, out_cols, pool,
+                                      std::move(mm));
 
     // Add every value to update cols, except the first one
     //(the output column)
@@ -559,12 +593,14 @@ void SkewColSet::alloc_update_columns(
     }
 }
 
-void SkewColSet::update(const std::vector<grouping_info>& grp_infos) {
+void SkewColSet::update(const std::vector<grouping_info>& grp_infos,
+                        bodo::IBufferPool* const pool,
+                        std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> aux_cols = {
         this->update_cols[0], this->update_cols[1], this->update_cols[2],
         this->update_cols[3]};
     do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
-                       grp_infos[0], this->ftype);
+                       grp_infos[0], this->ftype, pool, std::move(mm));
 }
 
 void SkewColSet::alloc_combine_columns(
@@ -692,12 +728,14 @@ ListAggColSet::ListAggColSet(
 ListAggColSet::~ListAggColSet() {}
 
 void ListAggColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Because we can't do a proper allocation until after the shuffle has
     // ocurred, we allocate a dummy update column here. We then overwrite the
     // internally stored value in the update function.
-
-    out_cols.push_back(alloc_string_array(Bodo_CTypes::STRING, 0, 0));
+    out_cols.push_back(alloc_string_array(Bodo_CTypes::STRING, 0, 0, -1, 0,
+                                          false, false, false, pool,
+                                          std::move(mm)));
 }
 
 // Struct that contains templated helper functions
@@ -765,14 +803,17 @@ std::shared_ptr<array_info> get_traversal_order(
     const std::shared_ptr<array_info> in_col,
     const std::vector<bool> window_ascending,
     const std::vector<std::shared_ptr<array_info>> orderby_cols,
-    const std::vector<bool> window_na_position) {
+    const std::vector<bool> window_na_position,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     int64_t n_sort_keys = orderby_cols.size();
     int64_t num_rows = in_col->length;
 
     // Append an index column so we can find the original
     // index in the out array.
     std::shared_ptr<array_info> idx_arr =
-        alloc_numpy(num_rows, Bodo_CTypes::INT64);
+        alloc_numpy(num_rows, Bodo_CTypes::INT64, pool, mm);
     for (int64_t i = 0; i < num_rows; i++) {
         getv<int64_t>(idx_arr, i) = i;
     }
@@ -814,11 +855,11 @@ std::shared_ptr<array_info> get_traversal_order(
     // XXX: We don't need the entire chunk of data sorted,
     // just the final column. We could do a partial sort to avoid
     // the overhead of sorting the orderby columns in the future.
-    std::shared_ptr<table_info> iter_table =
-        sort_values_table_local(sort_table, n_sort_keys, window_ascending_real,
-                                window_na_position_real, dead_keys.data(),
-                                // TODO: set this correctly
-                                false /* This is just used for tracing */);
+    std::shared_ptr<table_info> iter_table = sort_values_table_local(
+        sort_table, n_sort_keys, window_ascending_real, window_na_position_real,
+        dead_keys.data(),
+        // TODO: set this correctly
+        false /* This is just used for tracing */, pool, std::move(mm));
     // All keys are dead so the sorted_idx is column 0.
     std::shared_ptr<array_info> sorted_idx = iter_table->columns[0];
     return sorted_idx;
@@ -844,8 +885,10 @@ void listagg_update_helper(
     const std::vector<std::shared_ptr<array_info>>& update_cols,
     const std::vector<bool>& window_ascending,
     const std::vector<std::shared_ptr<array_info>>& orderby_cols,
-    const std::vector<bool>& window_na_position,
-    const std::string listagg_sep) {
+    const std::vector<bool>& window_na_position, const std::string listagg_sep,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     const grouping_info grp_info = grp_infos.at(0);
     const size_t listagg_sep_len = listagg_sep.length();
     const size_t num_groups = grp_info.num_groups;
@@ -862,7 +905,7 @@ void listagg_update_helper(
 
     //----------Step 0, find the traversal order of the input array----------
     std::shared_ptr<array_info> traversal_order = get_traversal_order(
-        in_col, window_ascending, orderby_cols, window_na_position);
+        in_col, window_ascending, orderby_cols, window_na_position, pool, mm);
 
     //----------Step 1, Find the expected length of each output string----------
 
@@ -873,10 +916,11 @@ void listagg_update_helper(
     // during step 1
     // In the final step, we will use this array to store the offsets of the
     // current end of each of the output strings.
-    bodo::vector<offset_t> str_offsets(num_groups + 1, 0);
+    bodo::vector<offset_t> str_offsets(num_groups + 1, 0, pool);
 
     // Initialize bool array to False
-    bodo::vector<bool> seen_non_nulls = bodo::vector<bool>(num_groups, false);
+    bodo::vector<bool> seen_non_nulls =
+        bodo::vector<bool>(num_groups, false, pool);
 
     // First, we need to figure out the length of each of the output strings
     // for each group we store this information in str_offsets
@@ -920,7 +964,8 @@ void listagg_update_helper(
     //----------Step 3, Allocate the output array, and set the offsets
     // accordingly----------
     std::shared_ptr<array_info> real_out_arr = alloc_string_array(
-        Bodo_CTypes::CTypeEnum::STRING, num_groups, total_output_size);
+        Bodo_CTypes::CTypeEnum::STRING, num_groups, total_output_size, -1, 0,
+        false, false, false, pool, mm);
     char* data_out = real_out_arr->data1();
 
     offset_t* offsets_out = (offset_t*)real_out_arr->data2();
@@ -946,7 +991,8 @@ void listagg_update_helper(
 
     // Initialize bool array to False
     // Used to track if we should insert the separator string or not
-    bodo::vector<bool> seen_non_nulls_2 = bodo::vector<bool>(num_groups, false);
+    bodo::vector<bool> seen_non_nulls_2 =
+        bodo::vector<bool>(num_groups, false, pool);
 
     // copy characters to output
     for (size_t j = 0; j < in_col->length; j++) {
@@ -989,7 +1035,9 @@ void listagg_update_helper(
     *out_col = std::move(*real_out_arr);
 }
 
-void ListAggColSet::update(const std::vector<grouping_info>& grp_infos) {
+void ListAggColSet::update(const std::vector<grouping_info>& grp_infos,
+                           bodo::IBufferPool* const pool,
+                           std::shared_ptr<::arrow::MemoryManager> mm) {
     if (this->combine_step) {
         throw std::runtime_error(
             "Internal error in ListAggColSet::update: listAgg must always "
@@ -1005,12 +1053,14 @@ void ListAggColSet::update(const std::vector<grouping_info>& grp_infos) {
             listagg_update_helper<false>(
                 grp_infos, this->in_col, this->update_cols,
                 this->window_ascending, this->orderby_cols,
-                this->window_na_position, this->listagg_sep);
+                this->window_na_position, this->listagg_sep, pool,
+                std::move(mm));
         } else if (in_col->arr_type == bodo_array_type::arr_type_enum::DICT) {
             listagg_update_helper<true>(
                 grp_infos, this->in_col, this->update_cols,
                 this->window_ascending, this->orderby_cols,
-                this->window_na_position, this->listagg_sep);
+                this->window_na_position, this->listagg_sep, pool,
+                std::move(mm));
         } else {
             throw std::runtime_error(
                 "Internal error in ListAggColSet::update: input "
@@ -1043,16 +1093,22 @@ ArrayAggColSet::ArrayAggColSet(
 ArrayAggColSet::~ArrayAggColSet() {}
 
 void ArrayAggColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     Bodo_CTypes::CTypeEnum dtype = in_col->dtype;
     // Need to allocate a dummy inner column for now since we cannot allocate
     // the real array until we know the sizes; the real inner array will be
     // handled later.
-    std::shared_ptr inner_arr = alloc_array(0, 1, 1, in_col->arr_type, dtype);
-    out_cols.push_back(alloc_array_item(num_groups, inner_arr));
+    std::shared_ptr inner_arr =
+        alloc_array(0, 1, 1, in_col->arr_type, dtype, -1, 0, 0, false, false,
+                    false, pool, mm);
+    out_cols.push_back(
+        alloc_array_item(num_groups, inner_arr, pool, std::move(mm)));
 }
 
-void ArrayAggColSet::update(const std::vector<grouping_info>& grp_infos) {
+void ArrayAggColSet::update(const std::vector<grouping_info>& grp_infos,
+                            bodo::IBufferPool* const pool,
+                            std::shared_ptr<::arrow::MemoryManager> mm) {
     if (this->combine_step) {
         throw std::runtime_error(
             "Internal error in ArrayAggColSet::update: array_agg must always "
@@ -1073,7 +1129,8 @@ void ArrayAggColSet::update(const std::vector<grouping_info>& grp_infos) {
                 (GetArrType_as_string(in_col->arr_type)));
         }
         array_agg_computation(in_col, update_cols[0], orderby_cols, ascending,
-                              na_position, grp_infos[0], is_parallel);
+                              na_position, grp_infos[0], is_parallel, pool,
+                              std::move(mm));
     }
 }
 
@@ -1092,7 +1149,8 @@ KurtColSet::KurtColSet(std::shared_ptr<array_info> in_col, int ftype,
 KurtColSet::~KurtColSet() {}
 
 void KurtColSet::alloc_update_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Starting index for the loop where we copy the running value column into
     // update_cols. 1 if we are not doing a combine and therefore allocating
     // out_col, 0 otherwise.
@@ -1104,7 +1162,8 @@ void KurtColSet::alloc_update_columns(
         // need to create output column now
         std::shared_ptr<array_info> col =
             alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                        Bodo_CTypes::FLOAT64);  // for result
+                        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false,
+                        pool, mm);  // for result
         // Initialize as ftype to match nullable behavior
         aggfunc_output_initialize(col, this->ftype,
                                   use_sql_rules);  // zero initialize
@@ -1112,7 +1171,8 @@ void KurtColSet::alloc_update_columns(
         this->out_col = col;
         init_start++;
     }
-    this->alloc_running_value_columns(num_groups, out_cols);
+    this->alloc_running_value_columns(num_groups, out_cols, pool,
+                                      std::move(mm));
 
     // Add every value to update cols, except the first one
     //(the output column)
@@ -1122,22 +1182,24 @@ void KurtColSet::alloc_update_columns(
 }
 
 void KurtColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
-    std::shared_ptr<array_info> count_col =
-        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::UINT64);
-    std::shared_ptr<array_info> m1_col =
-        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::FLOAT64);
-    std::shared_ptr<array_info> m2_col =
-        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::FLOAT64);
-    std::shared_ptr<array_info> m3_col =
-        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::FLOAT64);
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::shared_ptr<array_info> count_col = alloc_array(
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+        Bodo_CTypes::UINT64, -1, 0, 0, false, false, false, pool, mm);
+    std::shared_ptr<array_info> m1_col = alloc_array(
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool, mm);
+    std::shared_ptr<array_info> m2_col = alloc_array(
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool, mm);
+    std::shared_ptr<array_info> m3_col = alloc_array(
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool, mm);
     std::shared_ptr<array_info> m4_col =
         alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::FLOAT64);
+                    Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool,
+                    std::move(mm));
     aggfunc_output_initialize(count_col, Bodo_FTypes::count,
                               use_sql_rules);  // zero initialize
     aggfunc_output_initialize(m1_col, Bodo_FTypes::count,
@@ -1155,12 +1217,14 @@ void KurtColSet::alloc_running_value_columns(
     out_cols.push_back(m4_col);
 }
 
-void KurtColSet::update(const std::vector<grouping_info>& grp_infos) {
+void KurtColSet::update(const std::vector<grouping_info>& grp_infos,
+                        bodo::IBufferPool* const pool,
+                        std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> aux_cols = {
         this->update_cols[0], this->update_cols[1], this->update_cols[2],
         this->update_cols[3], this->update_cols[4]};
     do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
-                       grp_infos[0], this->ftype);
+                       grp_infos[0], this->ftype, pool, std::move(mm));
 }
 
 void KurtColSet::eval(const grouping_info& grp_info) {
@@ -1268,14 +1332,16 @@ UdfColSet::UdfColSet(std::shared_ptr<array_info> in_col, bool combine_step,
 UdfColSet::~UdfColSet() {}
 
 void UdfColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     throw std::runtime_error(
         "Internal error in UdfColSet::alloc_running_value_columns: UdfColSet "
         "should never be call alloc_running_value_columns");
 }
 
 void UdfColSet::alloc_update_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     int offset = 0;
 
     if (this->combine_step) {
@@ -1292,7 +1358,8 @@ void UdfColSet::alloc_update_columns(
         Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
         int64_t num_categories = udf_table->columns[i]->num_categories;
         out_cols.push_back(alloc_array(num_groups, 1, 1, arr_type, dtype, -1, 0,
-                                       num_categories));
+                                       num_categories, false, false, false,
+                                       pool, mm));
 
         if (!this->combine_step) {
             this->update_cols.push_back(out_cols.back());
@@ -1300,7 +1367,9 @@ void UdfColSet::alloc_update_columns(
     }
 }
 
-void UdfColSet::update(const std::vector<grouping_info>& grp_infos) {
+void UdfColSet::update(const std::vector<grouping_info>& grp_infos,
+                       bodo::IBufferPool* const pool,
+                       std::shared_ptr<::arrow::MemoryManager> mm) {
     // do nothing because this is done in JIT-compiled code (invoked
     // from GroupbyPipeline once for all udf columns sets)
 }
@@ -1376,9 +1445,11 @@ PercentileColSet::PercentileColSet(std::shared_ptr<array_info> in_col,
 
 PercentileColSet::~PercentileColSet() {}
 
-void PercentileColSet::update(const std::vector<grouping_info>& grp_infos) {
+void PercentileColSet::update(const std::vector<grouping_info>& grp_infos,
+                              bodo::IBufferPool* const pool,
+                              std::shared_ptr<::arrow::MemoryManager> mm) {
     percentile_computation(this->in_col, this->update_cols[0], this->percentile,
-                           this->interpolate, grp_infos[0]);
+                           this->interpolate, grp_infos[0], pool);
 }
 
 // ############################## Median ##############################
@@ -1390,9 +1461,11 @@ MedianColSet::MedianColSet(std::shared_ptr<array_info> in_col,
 
 MedianColSet::~MedianColSet() {}
 
-void MedianColSet::update(const std::vector<grouping_info>& grp_infos) {
+void MedianColSet::update(const std::vector<grouping_info>& grp_infos,
+                          bodo::IBufferPool* const pool,
+                          std::shared_ptr<::arrow::MemoryManager> mm) {
     median_computation(this->in_col, this->update_cols[0], grp_infos[0],
-                       this->skip_na_data, use_sql_rules);
+                       this->skip_na_data, use_sql_rules, pool);
 }
 
 // ############################## Mode ##############################
@@ -1402,9 +1475,18 @@ ModeColSet::ModeColSet(std::shared_ptr<array_info> in_col, bool use_sql_rules)
 
 ModeColSet::~ModeColSet() {}
 
-void ModeColSet::update(const std::vector<grouping_info>& grp_infos) {
+void ModeColSet::update(const std::vector<grouping_info>& grp_infos,
+                        bodo::IBufferPool* const pool,
+                        std::shared_ptr<::arrow::MemoryManager> mm) {
     aggfunc_output_initialize(update_cols[0], ftype, use_sql_rules);
-    mode_computation(this->in_col, this->update_cols[0], grp_infos[0]);
+    // Mode is not supported with streaming groupby yet, so we don't
+    // technically need to use the custom pool for it yet
+    // (https://bodo.atlassian.net/browse/BSE-1139).
+    // However we've added support for it in most places anyway, except for the
+    // DICT case. That should be handled as part of the task that enables
+    // streaming MODE.
+    mode_computation(this->in_col, this->update_cols[0], grp_infos[0], pool,
+                     std::move(mm));
 }
 
 // ############################## NUnique ##############################
@@ -1421,7 +1503,9 @@ NUniqueColSet::NUniqueColSet(std::shared_ptr<array_info> in_col,
 
 NUniqueColSet::~NUniqueColSet() {}
 
-void NUniqueColSet::update(const std::vector<grouping_info>& grp_infos) {
+void NUniqueColSet::update(const std::vector<grouping_info>& grp_infos,
+                           bodo::IBufferPool* const pool,
+                           std::shared_ptr<::arrow::MemoryManager> mm) {
     // to support nunique for dictionary-encoded arrays we only need to
     // perform the nunqiue operation on the indices array(child_arrays[1]),
     // which is a int32_t numpy array.
@@ -1437,11 +1521,12 @@ void NUniqueColSet::update(const std::vector<grouping_info>& grp_infos) {
                                   use_sql_rules);  // zero initialize
         nunique_computation(std::move(input_col), this->update_cols[0],
                             grp_infos[my_nunique_table->id], this->skip_na_data,
-                            is_parallel);
+                            is_parallel, pool);
     } else {
         // use default grouping_info
         nunique_computation(std::move(input_col), this->update_cols[0],
-                            grp_infos[0], this->skip_na_data, is_parallel);
+                            grp_infos[0], this->skip_na_data, is_parallel,
+                            pool);
     }
 }
 
@@ -1455,7 +1540,8 @@ CumOpColSet::CumOpColSet(std::shared_ptr<array_info> in_col, int ftype,
 CumOpColSet::~CumOpColSet() {}
 
 void CumOpColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // NOTE: output size of cum ops is the same as input size
     //       (NOT the number of groups)
     bodo_array_type::arr_type_enum out_type = this->in_col->arr_type;
@@ -1466,12 +1552,16 @@ void CumOpColSet::alloc_running_value_columns(
     }
     out_cols.push_back(alloc_array(this->in_col->length, 1, 1, out_type,
                                    this->in_col->dtype, -1, 0,
-                                   this->in_col->num_categories));
+                                   this->in_col->num_categories, false, false,
+                                   false, pool, std::move(mm)));
 }
 
-void CumOpColSet::update(const std::vector<grouping_info>& grp_infos) {
+void CumOpColSet::update(const std::vector<grouping_info>& grp_infos,
+                         bodo::IBufferPool* const pool,
+                         std::shared_ptr<::arrow::MemoryManager> mm) {
     cumulative_computation(this->in_col, this->update_cols[0], grp_infos[0],
-                           this->ftype, this->skip_na_data);
+                           this->ftype, this->skip_na_data, pool,
+                           std::move(mm));
 }
 
 // ############################## Shift ##############################
@@ -1482,17 +1572,21 @@ ShiftColSet::ShiftColSet(std::shared_ptr<array_info> in_col, int ftype,
 ShiftColSet::~ShiftColSet() {}
 
 void ShiftColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // NOTE: output size of shift is the same as input size
     //       (NOT the number of groups)
     out_cols.push_back(alloc_array(this->in_col->length, 1, 1,
                                    this->in_col->arr_type, this->in_col->dtype,
-                                   -1, 0, this->in_col->num_categories));
+                                   -1, 0, this->in_col->num_categories, false,
+                                   false, false, pool, std::move(mm)));
 }
 
-void ShiftColSet::update(const std::vector<grouping_info>& grp_infos) {
+void ShiftColSet::update(const std::vector<grouping_info>& grp_infos,
+                         bodo::IBufferPool* const pool,
+                         std::shared_ptr<::arrow::MemoryManager> mm) {
     shift_computation(this->in_col, this->update_cols[0], grp_infos[0],
-                      this->periods);
+                      this->periods, pool, std::move(mm));
 }
 
 // ############################## Transform ##############################
@@ -1512,7 +1606,8 @@ TransformColSet::TransformColSet(std::shared_ptr<array_info> in_col, int ftype,
 TransformColSet::~TransformColSet() {}
 
 void TransformColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Get output column type based on transform_func and its in_col
     // datatype
     auto arr_type = this->in_col->arr_type;
@@ -1523,21 +1618,26 @@ void TransformColSet::alloc_running_value_columns(
     // NOTE: output size of transform is the same as input size
     //       (NOT the number of groups)
     out_cols.push_back(alloc_array(this->in_col->length, 1, 1, arr_type, dtype,
-                                   -1, 0, num_categories));
+                                   -1, 0, num_categories, false, false, false,
+                                   pool, std::move(mm)));
 }
 
 void TransformColSet::alloc_update_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // Allocate child column that does the actual computation
     std::vector<std::shared_ptr<array_info>> list_arr;
 
-    transform_op_col->alloc_update_columns(num_groups, list_arr);
+    transform_op_col->alloc_update_columns(num_groups, list_arr, pool, mm);
 
-    this->alloc_running_value_columns(num_groups, out_cols);
+    this->alloc_running_value_columns(num_groups, out_cols, pool,
+                                      std::move(mm));
     this->update_cols.push_back(out_cols.back());
 }
 
-void TransformColSet::update(const std::vector<grouping_info>& grp_infos) {
+void TransformColSet::update(const std::vector<grouping_info>& grp_infos,
+                             bodo::IBufferPool* const pool,
+                             std::shared_ptr<::arrow::MemoryManager> mm) {
     transform_op_col->update(grp_infos);
     aggfunc_output_initialize(this->update_cols[0], transform_func,
                               use_sql_rules);
@@ -1570,17 +1670,22 @@ HeadColSet::HeadColSet(std::shared_ptr<array_info> in_col, int ftype,
 HeadColSet::~HeadColSet() {}
 
 void HeadColSet::alloc_running_value_columns(
-    size_t update_col_len, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t update_col_len, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // NOTE: output size of head is dependent on number of rows to
     // get from each group. This is computed in
     // GroupbyPipeline::update().
     out_cols.push_back(alloc_array(update_col_len, 1, 1, this->in_col->arr_type,
                                    this->in_col->dtype, -1, 0,
-                                   this->in_col->num_categories));
+                                   this->in_col->num_categories, false, false,
+                                   false, pool, std::move(mm)));
 }
 
-void HeadColSet::update(const std::vector<grouping_info>& grp_infos) {
-    head_computation(this->in_col, this->update_cols[0], head_row_list);
+void HeadColSet::update(const std::vector<grouping_info>& grp_infos,
+                        bodo::IBufferPool* const pool,
+                        std::shared_ptr<::arrow::MemoryManager> mm) {
+    head_computation(this->in_col, this->update_cols[0], head_row_list, pool,
+                     std::move(mm));
 }
 
 void HeadColSet::set_head_row_list(bodo::vector<int64_t>& row_list) {
@@ -1608,7 +1713,8 @@ WindowColSet::WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
 WindowColSet::~WindowColSet() {}
 
 void WindowColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t window_col_offset = input_cols.size() - n_input_cols;
     // Allocate one output coumn for each window function call
     for (int64_t window_func : window_funcs) {
@@ -1656,17 +1762,22 @@ void WindowColSet::alloc_running_value_columns(
         // a dummy column is created at this stage
         if (arr_type == bodo_array_type::STRING ||
             arr_type == bodo_array_type::DICT) {
-            c = alloc_string_array(Bodo_CTypes::STRING, 0, 0, 0);
+            c = alloc_string_array(Bodo_CTypes::STRING, 0, 0, 0, 0, false,
+                                   false, false, pool, mm);
         } else {
             c = alloc_array(this->input_cols[0]->length, -1, -1, arr_type,
-                            dtype);
+                            dtype, -1, 0, 0, false, false, false, pool, mm);
             aggfunc_output_initialize(c, window_func, use_sql_rules);
         }
         out_cols.push_back(c);
     }
 }
 
-void WindowColSet::update(const std::vector<grouping_info>& grp_infos) {
+void WindowColSet::update(const std::vector<grouping_info>& grp_infos,
+                          bodo::IBufferPool* const pool,
+                          std::shared_ptr<::arrow::MemoryManager> mm) {
+    // Doesn't go through streaming, so we don't need to use
+    // Op-Pool with this.
     window_computation(this->input_cols, window_funcs, this->update_cols,
                        grp_infos[0], asc, na_pos, window_args, n_input_cols,
                        is_parallel, use_sql_rules);
@@ -1687,7 +1798,8 @@ NgroupColSet::NgroupColSet(std::shared_ptr<array_info> in_col,
 NgroupColSet::~NgroupColSet() {}
 
 void NgroupColSet::alloc_running_value_columns(
-    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     bodo_array_type::arr_type_enum arr_type = this->in_col->arr_type;
     Bodo_CTypes::CTypeEnum dtype = this->in_col->dtype;
     int64_t num_categories = this->in_col->num_categories;
@@ -1696,10 +1808,13 @@ void NgroupColSet::alloc_running_value_columns(
     // NOTE: output size of ngroup is the same as input size
     //       (NOT the number of groups)
     out_cols.push_back(alloc_array(this->in_col->length, 1, 1, arr_type, dtype,
-                                   -1, 0, num_categories));
+                                   -1, 0, num_categories, false, false, false,
+                                   pool, std::move(mm)));
 }
 
-void NgroupColSet::update(const std::vector<grouping_info>& grp_infos) {
+void NgroupColSet::update(const std::vector<grouping_info>& grp_infos,
+                          bodo::IBufferPool* const pool,
+                          std::shared_ptr<::arrow::MemoryManager> mm) {
     ngroup_computation(this->in_col, this->update_cols[0], grp_infos[0],
                        is_parallel);
 }

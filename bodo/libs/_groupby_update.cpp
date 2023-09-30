@@ -253,18 +253,23 @@ void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
  * @param[in] grp_info: groupby information
  * @param[in] ftype: for string only cumsum is supported
  * @param[in] skipna: Whether to skip NA values.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
-void cumulative_computation_string(std::shared_ptr<array_info> arr,
-                                   std::shared_ptr<array_info> out_arr,
-                                   grouping_info const& grp_info,
-                                   int32_t const& ftype, bool const& skipna) {
+void cumulative_computation_string(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    grouping_info const& grp_info, int32_t const& ftype, bool const& skipna,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     if (ftype != Bodo_FTypes::cumsum) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "So far only cumulative sums for strings");
     }
     int64_t n = arr->length;
     using T = std::pair<bool, std::string>;
-    bodo::vector<T> null_bit_val_vec(n);
+    bodo::vector<T> null_bit_val_vec(n, pool);
     uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask();
     char* data = arr->data1();
     offset_t* offsets = (offset_t*)arr->data2();
@@ -305,14 +310,14 @@ void cumulative_computation_string(std::shared_ptr<array_info> arr,
     }
     // Now writing down in the array.
     size_t n_bytes = (n + 7) >> 3;
-    bodo::vector<uint8_t> Vmask(n_bytes, 0);
-    bodo::vector<std::string> ListString(n);
+    bodo::vector<uint8_t> Vmask(n_bytes, 0, pool);
+    bodo::vector<std::string> ListString(n, pool);
     for (int64_t i = 0; i < n; i++) {
         SetBitTo(Vmask.data(), i, !null_bit_val_vec[i].first);
         ListString[i] = null_bit_val_vec[i].second;
     }
-    std::shared_ptr<array_info> new_out_col =
-        create_string_array(out_arr->dtype, Vmask, ListString);
+    std::shared_ptr<array_info> new_out_col = create_string_array(
+        out_arr->dtype, Vmask, ListString, -1, pool, std::move(mm));
     *out_arr = std::move(*new_out_col);
 }
 
@@ -332,10 +337,16 @@ void cumulative_computation_string(std::shared_ptr<array_info> arr,
  * @param[in] grp_info: groupby information
  * @param[in] ftype: for dictionary encoded strings, only cumsum is supported
  * @param[in] skipna: Whether to skip NA values.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
 void cumulative_computation_dict_encoded_string(
     std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
-    grouping_info const& grp_info, int32_t const& ftype, bool const& skipna) {
+    grouping_info const& grp_info, int32_t const& ftype, bool const& skipna,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     if (ftype != Bodo_FTypes::cumsum) {
         Bodo_PyErr_SetString(
             PyExc_RuntimeError,
@@ -343,8 +354,9 @@ void cumulative_computation_dict_encoded_string(
     }
     int64_t n = arr->length;
     using T = std::pair<bool, std::string>;
-    bodo::vector<T> null_bit_val_vec(n);  // a temporary vector that stores the
-                                          // null bit and value for each row
+    bodo::vector<T> null_bit_val_vec(
+        n, pool);  // a temporary vector that stores the
+                   // null bit and value for each row
     uint8_t* null_bitmask = (uint8_t*)arr->child_arrays[1]->null_bitmask();
     char* data = arr->child_arrays[0]->data1();
     offset_t* offsets = (offset_t*)arr->child_arrays[0]->data2();
@@ -389,29 +401,32 @@ void cumulative_computation_dict_encoded_string(
     }
     // Now writing down in the array.
     size_t n_bytes = (n + 7) >> 3;
-    bodo::vector<uint8_t> Vmask(n_bytes, 0);
-    bodo::vector<std::string> ListString(n);
+    bodo::vector<uint8_t> Vmask(n_bytes, 0, pool);
+    bodo::vector<std::string> ListString(n, pool);
     for (int64_t i = 0; i < n; i++) {
         SetBitTo(Vmask.data(), i, !null_bit_val_vec[i].first);
         ListString[i] = null_bit_val_vec[i].second;
     }
-    std::shared_ptr<array_info> new_out_col =
-        create_string_array(out_arr->dtype, Vmask, ListString);
+    std::shared_ptr<array_info> new_out_col = create_string_array(
+        out_arr->dtype, Vmask, ListString, -1, pool, std::move(mm));
     *out_arr = std::move(*new_out_col);
 }
 
 void cumulative_computation(std::shared_ptr<array_info> arr,
                             std::shared_ptr<array_info> out_arr,
                             grouping_info const& grp_info, int32_t const& ftype,
-                            bool const& skipna) {
+                            bool const& skipna, bodo::IBufferPool* const pool,
+                            std::shared_ptr<::arrow::MemoryManager> mm) {
     Bodo_CTypes::CTypeEnum dtype = arr->dtype;
     if (arr->arr_type == bodo_array_type::STRING) {
         return cumulative_computation_string(arr, out_arr, grp_info, ftype,
-                                             skipna);
+                                             skipna, pool, std::move(mm));
     } else if (arr->arr_type == bodo_array_type::DICT) {
         return cumulative_computation_dict_encoded_string(
-            arr, out_arr, grp_info, ftype, skipna);
+            arr, out_arr, grp_info, ftype, skipna, pool, std::move(mm));
     } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
+        // We don't support LIST_STRING in streaming yet, so we don't
+        // need to pass the Op-Pool here.
         return cumulative_computation_list_string(arr, out_arr, grp_info, ftype,
                                                   skipna);
     } else {
@@ -471,9 +486,11 @@ void cumulative_computation(std::shared_ptr<array_info> arr,
 
 void head_computation(std::shared_ptr<array_info> arr,
                       std::shared_ptr<array_info> out_arr,
-                      const bodo::vector<int64_t>& row_list) {
-    std::shared_ptr<array_info> updated_col =
-        RetrieveArray_SingleColumn(std::move(arr), row_list);
+                      const bodo::vector<int64_t>& row_list,
+                      bodo::IBufferPool* const pool,
+                      std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::shared_ptr<array_info> updated_col = RetrieveArray_SingleColumn(
+        std::move(arr), row_list, false, pool, std::move(mm));
     *out_arr = std::move(*updated_col);
 }
 
@@ -503,16 +520,16 @@ void ngroup_computation(std::shared_ptr<array_info> arr,
 
 template <bodo_array_type::arr_type_enum ArrayType,
           Bodo_CTypes::CTypeEnum DType>
-void percentile_computation_util(std::shared_ptr<array_info> arr,
-                                 std::shared_ptr<array_info> out_arr,
-                                 double percentile, bool interpolate,
-                                 grouping_info const& grp_info) {
+void percentile_computation_util(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    double percentile, bool interpolate, grouping_info const& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr()) {
     using T = typename dtype_to_type<DType>::type;
     // Iterate across each group to find its percentile value
     for (size_t igrp = 0; igrp < grp_info.num_groups; igrp++) {
         // Set up a vector that will contain all of the values from the current
         // group as a double.
-        std::vector<double> vect;
+        bodo::vector<double> vect(pool);
         for (int64_t i = grp_info.group_to_first_row[igrp]; i != -1;
              i = grp_info.next_row_in_group[i]) {
             if (!is_null_at<ArrayType, T, DType>(*arr, i)) {
@@ -586,64 +603,64 @@ void percentile_computation_util(std::shared_ptr<array_info> arr,
 }
 
 template <bodo_array_type::arr_type_enum ArrayType>
-void percentile_computation_dtype_helper(std::shared_ptr<array_info> arr,
-                                         std::shared_ptr<array_info> out_arr,
-                                         double percentile, bool interpolate,
-                                         grouping_info const& grp_info) {
+void percentile_computation_dtype_helper(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    double percentile, bool interpolate, grouping_info const& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr()) {
     switch (arr->dtype) {
         case Bodo_CTypes::INT8: {
             percentile_computation_util<ArrayType, Bodo_CTypes::INT8>(
-                arr, out_arr, percentile, interpolate, grp_info);
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         case Bodo_CTypes::UINT8: {
             percentile_computation_util<ArrayType, Bodo_CTypes::UINT8>(
-                arr, out_arr, percentile, interpolate, grp_info);
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         case Bodo_CTypes::INT16: {
             percentile_computation_util<ArrayType, Bodo_CTypes::INT16>(
-                arr, out_arr, percentile, interpolate, grp_info);
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         case Bodo_CTypes::UINT16: {
             percentile_computation_util<ArrayType, Bodo_CTypes::UINT16>(
-                arr, out_arr, percentile, interpolate, grp_info);
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         case Bodo_CTypes::INT32: {
             percentile_computation_util<ArrayType, Bodo_CTypes::INT32>(
-                arr, out_arr, percentile, interpolate, grp_info);
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         case Bodo_CTypes::UINT32: {
             percentile_computation_util<ArrayType, Bodo_CTypes::UINT32>(
-                arr, out_arr, percentile, interpolate, grp_info);
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         case Bodo_CTypes::INT64: {
             percentile_computation_util<ArrayType, Bodo_CTypes::INT64>(
-                arr, out_arr, percentile, interpolate, grp_info);
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         case Bodo_CTypes::UINT64: {
             percentile_computation_util<ArrayType, Bodo_CTypes::UINT64>(
-                arr, out_arr, percentile, interpolate, grp_info);
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         case Bodo_CTypes::FLOAT32: {
             percentile_computation_util<ArrayType, Bodo_CTypes::FLOAT32>(
-                arr, out_arr, percentile, interpolate, grp_info);
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         case Bodo_CTypes::FLOAT64: {
             percentile_computation_util<ArrayType, Bodo_CTypes::FLOAT64>(
-                arr, out_arr, percentile, interpolate, grp_info);
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         case Bodo_CTypes::DECIMAL: {
             percentile_computation_util<ArrayType, Bodo_CTypes::DECIMAL>(
-                arr, out_arr, percentile, interpolate, grp_info);
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         default: {
@@ -657,17 +674,18 @@ void percentile_computation_dtype_helper(std::shared_ptr<array_info> arr,
 void percentile_computation(std::shared_ptr<array_info> arr,
                             std::shared_ptr<array_info> out_arr,
                             double percentile, bool interpolate,
-                            grouping_info const& grp_info) {
+                            grouping_info const& grp_info,
+                            bodo::IBufferPool* const pool) {
     switch (arr->arr_type) {
         case bodo_array_type::NUMPY: {
             percentile_computation_dtype_helper<bodo_array_type::NUMPY>(
-                arr, out_arr, percentile, interpolate, grp_info);
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
             percentile_computation_dtype_helper<
-                bodo_array_type::NULLABLE_INT_BOOL>(arr, out_arr, percentile,
-                                                    interpolate, grp_info);
+                bodo_array_type::NULLABLE_INT_BOOL>(
+                arr, out_arr, percentile, interpolate, grp_info, pool);
             break;
         }
         default: {
@@ -683,7 +701,8 @@ void percentile_computation(std::shared_ptr<array_info> arr,
 void median_computation(std::shared_ptr<array_info> arr,
                         std::shared_ptr<array_info> out_arr,
                         grouping_info const& grp_info, bool const& skipna,
-                        bool const use_sql_rules) {
+                        bool const use_sql_rules,
+                        bodo::IBufferPool* const pool) {
     size_t num_group = grp_info.group_to_first_row.size();
     size_t siztype = numpy_item_size[arr->dtype];
     std::string error_msg = std::string("There is no median for the ") +
@@ -702,7 +721,7 @@ void median_computation(std::shared_ptr<array_info> arr,
     auto median_operation = [&](auto const& isnan_entry) -> void {
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             int64_t i = grp_info.group_to_first_row[igrp];
-            std::vector<double> ListValue;
+            bodo::vector<double> ListValue(pool);
             bool HasNaN = false;
             while (true) {
                 if (i == -1) {
@@ -771,7 +790,9 @@ void median_computation(std::shared_ptr<array_info> arr,
 
 void shift_computation(std::shared_ptr<array_info> arr,
                        std::shared_ptr<array_info> out_arr,
-                       grouping_info const& grp_info, int64_t const& periods) {
+                       grouping_info const& grp_info, int64_t const& periods,
+                       bodo::IBufferPool* const pool,
+                       std::shared_ptr<::arrow::MemoryManager> mm) {
     size_t num_rows = grp_info.row_to_group.size();
     size_t num_groups = grp_info.num_groups;
     int64_t tmp_periods = periods;
@@ -789,7 +810,7 @@ void shift_computation(std::shared_ptr<array_info> arr,
         sign = 1;
     }
 
-    bodo::vector<int64_t> row_list(num_rows);
+    bodo::vector<int64_t> row_list(num_rows, pool);
     if (tmp_periods == 0) {
         for (size_t i = 0; i < num_rows; i++) {
             row_list[i] = i;
@@ -799,11 +820,11 @@ void shift_computation(std::shared_ptr<array_info> arr,
         int64_t cur_pos;   // new value for current row
         int64_t prev_val;  // previous value
         bodo::vector<int64_t> nrows_per_group(
-            num_groups);  // array holding number of rows per group
+            num_groups, pool);  // array holding number of rows per group
         bodo::vector<std::vector<int64_t>> p_values(
-            num_groups,
-            std::vector<int64_t>(tmp_periods));  // 2d array holding most recent
-                                                 // N=periods elements per group
+            num_groups, std::vector<int64_t>(tmp_periods),
+            pool);  // 2d array holding most recent
+                    // N=periods elements per group
         // For each row value, find if it should be NaN or it will get a value
         // that is N=periods away from it. It's a NaN if it's row_number <
         // periods, otherwise get it's new value from (row_number -/+ periods)
@@ -827,8 +848,8 @@ void shift_computation(std::shared_ptr<array_info> arr,
         }  // end-row_loop
     }
     // 2. Retrieve column and put it in update_cols
-    std::shared_ptr<array_info> updated_col =
-        RetrieveArray_SingleColumn(std::move(arr), row_list);
+    std::shared_ptr<array_info> updated_col = RetrieveArray_SingleColumn(
+        std::move(arr), row_list, false, pool, std::move(mm));
     *out_arr = std::move(*updated_col);
 }
 
@@ -1009,7 +1030,10 @@ void array_agg_operation(
     std::shared_ptr<array_info> out_arr,
     const std::vector<std::shared_ptr<array_info>>& orderby_cols,
     const std::vector<bool>& ascending, const std::vector<bool>& na_position,
-    const grouping_info& grp_info, bool is_parallel) {
+    const grouping_info& grp_info, bool is_parallel,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     using T = typename dtype_to_type<DType>::type;
 
     size_t num_group = grp_info.group_to_first_row.size();
@@ -1020,7 +1044,7 @@ void array_agg_operation(
     // are internally sorted in the desired manner)
     std::shared_ptr<table_info> sorted_table =
         grouped_sort(grp_info, orderby_cols, {in_arr}, ascending, na_position,
-                     1, is_parallel);
+                     1, is_parallel, pool, mm);
     int64_t n_sort_cols = orderby_cols.size() + 1;
 
     // At this stage, the implementations diverge depending on the input
@@ -1066,7 +1090,8 @@ void array_agg_operation(
             }
         }
         std::shared_ptr<array_info> data_without_nulls =
-            alloc_nullable_array_no_nulls(non_null_count, in_arr->dtype, 0);
+            alloc_nullable_array_no_nulls(non_null_count, in_arr->dtype, 0,
+                                          pool, std::move(mm));
 
         // If the input data is Decimal, ensure the output array has the same
         // precision/scale.
@@ -1113,13 +1138,16 @@ void array_agg_dtype_helper(
     std::shared_ptr<array_info> out_arr,
     const std::vector<std::shared_ptr<array_info>>& orderby_cols,
     const std::vector<bool>& ascending, const std::vector<bool>& na_position,
-    const grouping_info& grp_info, bool is_parallel) {
-#define ARRAY_AGG_DTYPE_CASE(dtype)                                           \
-    case dtype: {                                                             \
-        array_agg_operation<ArrType, dtype>(in_arr, out_arr, orderby_cols,    \
-                                            ascending, na_position, grp_info, \
-                                            is_parallel);                     \
-        break;                                                                \
+    const grouping_info& grp_info, bool is_parallel,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
+#define ARRAY_AGG_DTYPE_CASE(dtype)                                            \
+    case dtype: {                                                              \
+        array_agg_operation<ArrType, dtype>(in_arr, out_arr, orderby_cols,     \
+                                            ascending, na_position, grp_info,  \
+                                            is_parallel, pool, std::move(mm)); \
+        break;                                                                 \
     }
     switch (in_arr->dtype) {
         ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::UINT8)
@@ -1147,18 +1175,19 @@ void array_agg_computation(
     std::shared_ptr<array_info> out_arr,
     const std::vector<std::shared_ptr<array_info>>& orderby_cols,
     const std::vector<bool>& ascending, const std::vector<bool>& na_position,
-    const grouping_info& grp_info, bool is_parallel) {
+    const grouping_info& grp_info, bool is_parallel,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     switch (in_arr->arr_type) {
         case bodo_array_type::NUMPY: {
             array_agg_dtype_helper<bodo_array_type::NUMPY>(
                 in_arr, out_arr, orderby_cols, ascending, na_position, grp_info,
-                is_parallel);
+                is_parallel, pool, std::move(mm));
             break;
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
             array_agg_dtype_helper<bodo_array_type::NULLABLE_INT_BOOL>(
                 in_arr, out_arr, orderby_cols, ascending, na_position, grp_info,
-                is_parallel);
+                is_parallel, pool, std::move(mm));
             break;
         }
         default: {
@@ -1174,7 +1203,8 @@ void array_agg_computation(
 void nunique_computation(std::shared_ptr<array_info> arr,
                          std::shared_ptr<array_info> out_arr,
                          grouping_info const& grp_info, bool const& dropna,
-                         bool const& is_parallel) {
+                         bool const& is_parallel,
+                         bodo::IBufferPool* const pool) {
     tracing::Event ev("nunique_computation", is_parallel);
     size_t num_group = grp_info.group_to_first_row.size();
     if (num_group == 0) {
@@ -1221,7 +1251,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
         bodo::unord_set_container<
             int64_t, HashNuniqueComputationNumpyOrNullableIntBool,
             KeyEqualNuniqueComputationNumpyOrNullableIntBool>
-            eset({}, hash_fct, equal_fct);
+            eset({}, hash_fct, equal_fct, pool);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
 
@@ -1262,7 +1292,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
             arr, in_index_offsets, in_data_offsets, sub_null_bitmask, seed};
         bodo::unord_set_container<int64_t, HashNuniqueComputationListString,
                                   KeyEqualNuniqueComputationListString>
-            eset({}, hash_fct, equal_fct);
+            eset({}, hash_fct, equal_fct, pool);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
 
@@ -1298,7 +1328,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
         KeyEqualNuniqueComputationString equal_fct{arr, in_offsets};
         bodo::unord_set_container<int64_t, HashNuniqueComputationString,
                                   KeyEqualNuniqueComputationString>
-            eset({}, hash_fct, equal_fct);
+            eset({}, hash_fct, equal_fct, pool);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
 
@@ -1334,7 +1364,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
         bodo::unord_set_container<
             int64_t, HashNuniqueComputationNumpyOrNullableIntBool,
             KeyEqualNuniqueComputationNumpyOrNullableIntBool>
-            eset({}, hash_fct, equal_fct);
+            eset({}, hash_fct, equal_fct, pool);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
 

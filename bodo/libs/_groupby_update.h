@@ -34,11 +34,16 @@ int get_combine_func(int update_ftype);
  * @param[in] grp_info The grouping information.
  * @param[in] ftype The function type.
  * @param[in] skipna Whether to skip NA values.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
-void cumulative_computation(std::shared_ptr<array_info> arr,
-                            std::shared_ptr<array_info> out_arr,
-                            grouping_info const& grp_info, int32_t const& ftype,
-                            bool const& skipna);
+void cumulative_computation(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    grouping_info const& grp_info, int32_t const& ftype, bool const& skipna,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 // HEAD
 
@@ -48,10 +53,16 @@ void cumulative_computation(std::shared_ptr<array_info> arr,
  * @param[in] arr column on which we do the computation
  * @param[out] out_arr output column data
  * @param[in] row_list: row indices to copy
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
-void head_computation(std::shared_ptr<array_info> arr,
-                      std::shared_ptr<array_info> out_arr,
-                      const bodo::vector<int64_t>& row_list);
+void head_computation(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    const bodo::vector<int64_t>& row_list,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 // NGROUP
 
@@ -88,11 +99,13 @@ void ngroup_computation(std::shared_ptr<array_info> arr,
  * @param[in] grp_info: The grouping information.
  * @param[in] skipna: Whether to skip NA values.
  * @param[in] use_sql_rules: Should allocation use SQL rules.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
  */
-void percentile_computation(std::shared_ptr<array_info> arr,
-                            std::shared_ptr<array_info> out_arr,
-                            double percentile, bool interpolate,
-                            grouping_info const& grp_info);
+void percentile_computation(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    double percentile, bool interpolate, grouping_info const& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr());
 
 // MEDIAN
 
@@ -105,11 +118,13 @@ void percentile_computation(std::shared_ptr<array_info> arr,
  * @param[in] grp_info: The grouping information.
  * @param[in] skipna: Whether to skip NA values.
  * @param[in] use_sql_rules: Should allocation use SQL rules.
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
  */
-void median_computation(std::shared_ptr<array_info> arr,
-                        std::shared_ptr<array_info> out_arr,
-                        grouping_info const& grp_info, bool const& skipna,
-                        bool const use_sql_rules);
+void median_computation(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    grouping_info const& grp_info, bool const& skipna, bool const use_sql_rules,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr());
 
 // MODE
 
@@ -137,10 +152,16 @@ void mode_computation(std::shared_ptr<array_info> arr,
  * @param[out] out_arr column data after being shifted
  * @param[in] grp_info: grouping_info about groups and rows organization
  * @param[in] periods: Number of periods to shift
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
-void shift_computation(std::shared_ptr<array_info> arr,
-                       std::shared_ptr<array_info> out_arr,
-                       grouping_info const& grp_info, int64_t const& periods);
+void shift_computation(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    grouping_info const& grp_info, int64_t const& periods,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 // Skew
 
@@ -253,14 +274,19 @@ void boolxor_combine(const std::shared_ptr<array_info>& one_col_in,
  * organized.
  * @param[in] is_parallel Is the computation happening in parallel (used for
  * tracing).
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
  */
 void array_agg_computation(
     const std::shared_ptr<array_info>& in_arr,
     std::shared_ptr<array_info> out_arr,
-
     const std::vector<std::shared_ptr<array_info>>& orderby_cols,
     const std::vector<bool>& ascending, const std::vector<bool>& na_position,
-    const grouping_info& grp_info, bool is_parallel);
+    const grouping_info& grp_info, bool is_parallel,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 // NUNIQUE
 
@@ -276,10 +302,12 @@ void array_agg_computation(
  * values from the nunique computation.
  * @param is_parallel: true if data is distributed (used to indicate whether
  * tracing should be parallel or not)
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
  */
-void nunique_computation(std::shared_ptr<array_info> arr,
-                         std::shared_ptr<array_info> out_arr,
-                         grouping_info const& grp_info, bool const& dropna,
-                         bool const& is_parallel);
+void nunique_computation(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    grouping_info const& grp_info, bool const& dropna, bool const& is_parallel,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr());
 
 #endif  // _GROUPBY_UPDATE_H_INCLUDED

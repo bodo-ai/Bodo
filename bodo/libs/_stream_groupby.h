@@ -266,15 +266,12 @@ class GroupbyPartition {
     bool is_active = false;
     const bool parallel;
 
-    // TODO Remove the "maybe_unused"s once we start using the Op-Pool for
-    // allocations.
-
     /// @brief OperatorBufferPool of the Groupby operator that this is a
     /// partition in. The pool is owned by the parent GroupbyState, so
     /// we keep a raw pointer for simplicity.
-    [[maybe_unused]] bodo::OperatorBufferPool* const op_pool;
+    bodo::OperatorBufferPool* const op_pool;
     /// @brief Memory manager instance for op_pool.
-    [[maybe_unused]] const std::shared_ptr<::arrow::MemoryManager> op_mm;
+    const std::shared_ptr<::arrow::MemoryManager> op_mm;
 
     /**
      * @brief Clear the "build" state. This releases
