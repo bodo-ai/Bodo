@@ -332,7 +332,7 @@ object BodoPrograms {
     }
 
     private class SnowflakeColumnPruning : Program by Programs.hep(
-        listOf(SnowflakeProjectIntoScanRule.Config.LOGICAL_CONFIG.toRule()),
+        listOf(SnowflakeProjectIntoScanRule.Config.BODO_LOGICAL_CONFIG.toRule()),
         true,
         DefaultRelMetadataProvider.INSTANCE,
     )
