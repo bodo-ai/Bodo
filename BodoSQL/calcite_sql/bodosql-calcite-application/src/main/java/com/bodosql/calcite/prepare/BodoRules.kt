@@ -34,8 +34,11 @@ import com.bodosql.calcite.rel.logical.BodoLogicalFilter
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import com.bodosql.calcite.rel.logical.BodoLogicalSort
+import com.bodosql.calcite.rel.logical.BodoLogicalUnion
 import com.google.common.collect.Iterables
 import org.apache.calcite.plan.RelOptRule
+import org.apache.calcite.plan.RelRule.OperandBuilder
+import org.apache.calcite.plan.RelRule.OperandTransform
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateJoinRemoveRule
@@ -49,6 +52,7 @@ import org.apache.calcite.rel.rules.ProjectFilterTransposeRule
 import org.apache.calcite.rel.rules.ProjectMergeRule
 import org.apache.calcite.rel.rules.ProjectRemoveRule
 import org.apache.calcite.rel.rules.SubQueryRemoveRule
+import org.apache.calcite.rel.rules.UnionMergeRule
 
 object BodoRules {
     // INDIVIDUAL RULES
@@ -438,6 +442,22 @@ object BodoRules {
     val SNOWFLAKE_FILTER_LOCK_RULE: RelOptRule =
         SnowflakeFilterLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER).toRule()
 
+    /**
+     * Merge two UNION operators together into a single UNION operator.
+     * The rule will check that the ALL values are compatible.
+     *
+     * TODO: Investigate how to improve this rule. The current rule's requirement for binary inputs potentially
+     * prevent full flattening.
+     */
+    @JvmField
+    val UNION_MERGE_RULE: RelOptRule =
+        UnionMergeRule.Config.DEFAULT.withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER).withOperandSupplier { b0: OperandBuilder ->
+            b0.operand(BodoLogicalUnion::class.java).inputs(
+                OperandTransform { b1: OperandBuilder -> b1.operand(RelNode::class.java).anyInputs() },
+                OperandTransform { b2: OperandBuilder -> b2.operand(RelNode::class.java).anyInputs() },
+            )
+        }.withDescription("BodoUnionMergeRule").toRule()
+
     // RULE GROUPINGS
 
     /**
@@ -541,7 +561,7 @@ object BodoRules {
     )
 
     /**
-     * Rules that use an Aggregate to remove another rule.
+     * Rules that use an Aggregate to remove another operator.
      */
     private val AGGREGATE_OPERATOR_REMOVAL_RULES: List<RelOptRule> = listOf(
         AGGREGATE_PROJECT_MERGE_RULE,
@@ -551,7 +571,7 @@ object BodoRules {
     )
 
     /**
-     * Rules that use a Project to remove another rule.
+     * Rules that use a Project to remove another operator.
      */
     private val PROJECT_OPERATOR_REMOVAL_RULES: List<RelOptRule> = listOf(
         PROJECT_MERGE_RULE,
@@ -560,11 +580,19 @@ object BodoRules {
     )
 
     /**
+     * Rules that use a UNION to remove another operator.
+     */
+    private val UNION_OPERATOR_REMOVAL_RULES: List<RelOptRule> = listOf(
+        UNION_MERGE_RULE,
+    )
+
+    /**
      * All rules that involve removing 1 or more operators.
      */
     val OPERATOR_REMOVAL_RULES: List<RelOptRule> = Iterables.concat(
         AGGREGATE_OPERATOR_REMOVAL_RULES,
         PROJECT_OPERATOR_REMOVAL_RULES,
+        UNION_OPERATOR_REMOVAL_RULES,
     ).toList()
 
     /**
@@ -638,5 +666,6 @@ object BodoRules {
         LOPT_OPTIMIZE_JOIN_RULE,
         AGGREGATE_CONSTANT_PULL_UP_RULE,
         TRIVIAL_PROJECT_FILTER_TRANSPOSE,
+        UNION_MERGE_RULE,
     )
 }
