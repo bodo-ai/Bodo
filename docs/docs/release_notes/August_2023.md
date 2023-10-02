@@ -1,0 +1,41 @@
+Bodo 2023.8 Release (Date: 08/31/2023) {#August_2023}
+====================================================
+
+## New Features and Improvements
+
+Bodo:
+- Vectorized query engine:
+
+  Several operations (join and reads) now operate in 'vectorized'
+  mode. Only results that are in use are kept in memory or read
+  in. This leads to drastically improved memory performance and avoids
+  OOM errors in many cases. There is a slight performance degradation
+  in this mode, but this will improve with coming releases.
+
+  Some operations, such as GROUP BY and window functions are not yet
+  vectorized.
+
+  Vectorized execution mode can be disabled by setting the environment variable `BODO_STREAMING_ENABLED` to `"0"`.
+
+- Common subcolumn elimination in planner
+- Better selectivity in metadata pushdown query
+- Better type size estimates in planner
+- Support `ignore_index=True` in `df.drop_duplicates`
+
+BodoSQL:
+
+Added support for the following functions:
+
+- PERCENTILE_CONT
+- SHA2
+- MD5
+
+Parity improvements:
+- Make treatment of type keywords compatible with Snowflake SQL
+
+Planner improvements:
+
+- Improved planner based common sub-expression elimination
+- Improved planner estimations for column selectivity
+- Improved planner estimations for column sizes
+- Planner based Snowflake pushdown support for `getdate()`, `current_date()`, and intervals
