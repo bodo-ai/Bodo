@@ -371,6 +371,7 @@ if is_testing:
             "bodo/tests/test_memory_budget.cpp",
             "bodo/tests/test_table_builder.cpp",
             "bodo/tests/test_table_generator.cpp",
+            "bodo/tests/test_test_framework.cpp",
             "bodo/tests/test_array_item_array.cpp",
         ]
     )

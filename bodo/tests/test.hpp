@@ -10,6 +10,7 @@
 #pragma once
 
 #include <functional>
+#include <iostream>
 #include <map>
 #include <source_location>
 #include <string>
@@ -50,12 +51,16 @@ class suite {
     /// @tparam T Callable type
     /// @param initializer This function is called to construct all tests in the
     /// suite. It should call the `test` function to define individual tests.
+    /// @param no_set_current for testing only - skips modifying global suite
+    /// registry
     /// @param location Automatically set to the current source location
     template <typename T>
-    suite(T initializer,
+    suite(T initializer, bool no_set_current = false,
           const std::source_location location = std::source_location::current())
         : filename_(location.file_name()) {
-        set_current(this);
+        if (!no_set_current) {
+            set_current(this);
+        }
         initializer();
     }
 
@@ -71,7 +76,46 @@ class suite {
     /// @param lineno Line in the source file where the test was defined.
     template <typename T>
     void add_test(const std::string &nm, T func, int lineno) {
-        tests_.insert(std::make_pair(nm, test_case(func, lineno)));
+        auto wrapped_test = [&]() {
+            if (before_each_) {
+                (*before_each_)();
+            }
+
+            func();
+
+            if (after_each_) {
+                (*after_each_)();
+            }
+        };
+        tests_.insert(std::make_pair(nm, test_case(wrapped_test, lineno)));
+    }
+
+    /// @brief Register a callback to fire after every test in the suite
+    /// Note that this must come before any test definitions.
+    /// @tparam T The callable type
+    /// @param func Callable to run after every test
+    template <typename T>
+    void after_each(T func) {
+        if (!tests_.empty()) {
+            std::cerr << "Cannot register after_each after registering tests"
+                      << std::endl;
+            throw new std::exception();
+        }
+        after_each_ = func;
+    }
+
+    /// @brief Register a callback to fire before every test in the suite
+    /// Note that this must come before any test definitions.
+    /// @tparam T The callable type
+    /// @param func Callable to run before every test
+    template <typename T>
+    void before_each(T func) {
+        if (!tests_.empty()) {
+            std::cerr << "Cannot register before_each after registering tests"
+                      << std::endl;
+            throw new std::exception();
+        }
+        before_each_ = func;
     }
 
     /// @brief Get all tests by name
@@ -85,6 +129,9 @@ class suite {
    private:
     std::string filename_;
     std::map<std::string, test_case> tests_;
+
+    std::optional<std::function<void()>> before_each_;
+    std::optional<std::function<void()>> after_each_;
 
     static void set_current(suite *st);
 };
@@ -102,7 +149,25 @@ template <typename TestFunc>
 void test(const std::string &nm, TestFunc func,
           std::source_location location = std::source_location::current()) {
     suite::get_current()->add_test(nm, func, location.line());
-};
+}
+
+/// @brief Register a callback to fire after every test in the suite
+/// Note that this must come before any test definitions.
+/// @tparam TestFunc The callable type
+/// @param func Callable to run after every test
+template <typename TestFunc>
+void after_each(TestFunc func) {
+    suite::get_current()->after_each(func);
+}
+
+/// @brief Register a callback to fire before every test in the suite
+/// Note that this must come before any test definitions.
+/// @tparam TestFunc The callable type
+/// @param func Callable to run before every test
+template <typename TestFunc>
+void before_each(TestFunc func) {
+    suite::get_current()->before_each(func);
+}
 
 /// @brief Helper function to throw an exception and report an error if a
 /// condition fails
