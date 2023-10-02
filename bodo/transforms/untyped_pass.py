@@ -592,6 +592,12 @@ class UntypedPass:
         else:
             func_name, func_mod = fdef
 
+        # Erroring for SnowflakeCatalog.from_conn_str inside of JIT
+        if fdef == ("from_conn_str", "bodosql.SnowflakeCatalog"):
+            raise BodoError(
+                "SnowflakeCatalog.from_conn_str: This constructor can not be called from inside of a Bodo-JIT function. Please construct the SnowflakeCatalog in regular Python."
+            )
+
         # handling pd.DataFrame() here since input can be constant dictionary
         if fdef == ("DataFrame", "pandas"):
             return self._handle_pd_DataFrame(assign, lhs, rhs, label)

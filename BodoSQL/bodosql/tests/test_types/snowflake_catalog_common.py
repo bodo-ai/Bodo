@@ -49,3 +49,14 @@ def snowflake_sample_data_snowflake_catalog(request):
     single element.
     """
     return request.param
+
+
+@pytest.fixture
+def snowflake_sample_data_conn_str():
+    """
+    The snowflake_sample_data in connection string form. Used primarily
+    for SnowflakeCatalog.from_conn_str tests
+    """
+    user = os.environ.get("SF_USERNAME", "")
+    password = os.environ.get("SF_PASSWORD", "")
+    return f"snowflake://{user}:{password}@bodopartner.us-east-1/SNOWFLAKE_SAMPLE_DATA/TPCH_SF1?warehouse=DEMO_WH&query_tag=folder%3Dfolder1%2B+folder2%26"

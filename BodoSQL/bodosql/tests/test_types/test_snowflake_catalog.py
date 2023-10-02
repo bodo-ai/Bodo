@@ -9,6 +9,7 @@ import io
 import os
 import random
 import time
+from urllib.parse import urlencode
 
 import bodosql
 import numpy as np
@@ -16,6 +17,7 @@ import pandas as pd
 import pytest
 from bodosql.tests.test_datetime_fns import compute_valid_times
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
+    snowflake_sample_data_conn_str,
     snowflake_sample_data_snowflake_catalog,
     test_db_snowflake_catalog,
 )
@@ -156,6 +158,84 @@ def test_snowflake_catalog_constructor(memory_leak_check):
     # check_func(impl4, ())
 
 
+@pytest.mark.parametrize(
+    "conn_str",
+    [
+        # Basic Connection Str
+        "snowflake://myusername:mypassword@myaccount/mydatabase?warehouse=mywarehouse",
+        # With Schema
+        "snowflake://myusername:mypassword@myaccount/mydatabase/myschema?warehouse=mywarehouse",
+        # Additional Connection Param. Note, order of params matter for test
+        "snowflake://myusername:mypassword@myaccount/mydatabase/myschema?role=USERADMIN&warehouse=mywarehouse",
+    ],
+)
+def test_snowflake_catalog_from_conn_str(conn_str: str):
+    c = bodosql.SnowflakeCatalog.from_conn_str(conn_str)
+
+    params = c.connection_params.copy()
+    params["warehouse"] = c.warehouse
+
+    schema = params.pop("schema", None)
+    schema_str = f"/{schema}" if schema is not None else ""
+
+    params_sorted = sorted(params.items())
+    expected = f"snowflake://{c.username}:{c.password}@{c.account}/{c.database}{schema_str}?{urlencode(params_sorted)}"
+    assert (
+        expected == conn_str
+    ), "Connection String from SnowflakeCatalog does not match input arg"
+
+
+@pytest.mark.parametrize(
+    "conn_str",
+    [
+        # Not a URL at all
+        "test",
+        # Non-Snowflake location
+        "http://myaccount/mydatabase",
+        # Invalid Connection Params
+        "snowflake://myusername:mypassword@myaccount?test?test2",
+    ],
+)
+def test_snowflake_catalog_from_conn_str_invalid_err(conn_str):
+    """Test that invalid URIs fail when parsing"""
+    with pytest.raises(BodoError, match="Invalid Snowflake Connection URI Provided"):
+        bodosql.SnowflakeCatalog.from_conn_str(conn_str)
+
+
+@pytest.mark.parametrize(
+    "conn_str",
+    [
+        # Missing Username and Password
+        "snowflake://myaccount/mydatabase",
+        # Missing Username
+        "snowflake://:mypassword@myaccount/mydatabase",
+        # Missing Password
+        "snowflake://myusername@myaccount/mydatabase",
+        # Missing Database
+        "snowflake://myusername:mypassword@myaccount",
+        # Missing Warehouse
+        "snowflake://myusername:mypassword@myaccount/mydatabase",
+    ],
+)
+def test_snowflake_catalog_from_conn_str_missing_err(conn_str):
+    """Test that valid URIs fail due to missing contents"""
+    with pytest.raises(BodoError, match="`conn_str` must contain a"):
+        bodosql.SnowflakeCatalog.from_conn_str(conn_str)
+
+
+def test_snowflake_catalog_from_conn_str_jit_err():
+    def impl():
+        return bodosql.SnowflakeCatalog.from_conn_str(
+            "snowflake://user:pass@acc/db/schema"
+        )
+
+    with pytest.raises(
+        BodoError,
+        match="This constructor can not be called from inside of a Bodo-JIT function",
+    ):
+        bodo.jit(impl)()  # type: ignore
+
+
 def test_snowflake_catalog_read(
     snowflake_sample_data_snowflake_catalog, memory_leak_check
 ):
@@ -168,6 +248,22 @@ def test_snowflake_catalog_read(
         get_snowflake_connection_string(
             snowflake_sample_data_snowflake_catalog.database, "TPCH_SF1"
         ),
+    )
+    check_func(impl, (bc,), py_output=py_output)
+
+
+def test_snowflake_catalog_from_conn_str_read(
+    snowflake_sample_data_conn_str: str, memory_leak_check
+):
+    def impl(bc):
+        return bc.sql("SELECT r_name FROM TPCH_SF1.REGION ORDER BY r_name")
+
+    bc = bodosql.BodoSQLContext(
+        catalog=bodosql.SnowflakeCatalog.from_conn_str(snowflake_sample_data_conn_str)
+    )
+    py_output = pd.read_sql(
+        "Select r_name from REGION ORDER BY r_name",
+        snowflake_sample_data_conn_str,
     )
     check_func(impl, (bc,), py_output=py_output)
 
