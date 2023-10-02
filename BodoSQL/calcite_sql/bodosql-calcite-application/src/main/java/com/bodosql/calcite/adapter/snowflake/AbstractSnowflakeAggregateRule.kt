@@ -5,6 +5,7 @@ import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelRule
 import org.apache.calcite.rel.core.Aggregate
 import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.util.Util.isDistinct
 import org.immutables.value.Value
 
 @BodoSQLStyleImmutable
@@ -50,17 +51,30 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
             SqlKind.AVG,
         )
 
+        /**
+         * Determine if an Aggregate matches a distinct operation that we
+         * want to push to Snowflake. Right now we just check that it matches
+         * a distinct but in the future we may want to check metadata for if
+         * a distinct is advisable.
+         */
+        @JvmStatic
+        private fun isPushableDistinct(aggregate: Aggregate): Boolean {
+            return aggregate.aggCallList.isEmpty() && Aggregate.isSimple(aggregate)
+        }
+
         @JvmStatic
         fun isPushableAggregate(aggregate: Aggregate): Boolean {
-            // We only allow aggregates to be pushed if there's no grouping
+            // We only allow aggregates to be pushed if there's no grouping,
             // and they are one of our supported functions.
-            return aggregate.groupSet.isEmpty &&
-                aggregate.aggCallList.isNotEmpty() &&
-                aggregate.aggCallList.all { agg ->
-                    SUPPORTED_AGGREGATES.contains(agg.aggregation.kind) &&
-                        !agg.hasFilter() &&
-                        !agg.isDistinct
-                }
+            return (
+                aggregate.groupSet.isEmpty &&
+                    aggregate.aggCallList.isNotEmpty() &&
+                    aggregate.aggCallList.all { agg ->
+                        SUPPORTED_AGGREGATES.contains(agg.aggregation.kind) &&
+                            !agg.hasFilter() &&
+                            !agg.isDistinct
+                    }
+                ) || isPushableDistinct(aggregate)
         }
     }
 
