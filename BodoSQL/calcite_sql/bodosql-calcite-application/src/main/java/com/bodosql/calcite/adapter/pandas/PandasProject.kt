@@ -105,7 +105,7 @@ class PandasProject(
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
         val readerVar = builder.symbolTable.genStateVar()
-        currentPipeline.initializeStreamingState(ctx.operatorID(), Op.Assign(readerVar, Expr.Call("bodo.libs.stream_dict_encoding.init_dict_encoding_state")))
+        currentPipeline.initializeStreamingState(ctx.operatorID(), Op.Assign(readerVar, Expr.Call("bodo.libs.stream_dict_encoding.init_dict_encoding_state", Expr.IntegerLiteral(ctx.operatorID()))))
         return readerVar
     }
 

@@ -63,6 +63,7 @@ def hash_join_common_impl(df1, df2, op_pool_size_bytes, build_outer, probe_outer
 
     def impl(df1, df2, op_pool_size_bytes):
         join_state = init_join_state(
+            -1,
             build_keys_inds,
             probe_keys_inds,
             build_col_meta,
@@ -101,7 +102,7 @@ def hash_join_common_impl(df1, df2, op_pool_size_bytes, build_outer, probe_outer
         T3 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), kept_cols, 2
         )
-        _table_builder = bodo.libs.table_builder.init_table_builder_state()
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
         while not is_last3:
             T4 = bodo.hiframes.table.table_local_filter(
                 T3, slice((_temp2 * 4000), ((_temp2 + 1) * 4000))

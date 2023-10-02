@@ -241,7 +241,7 @@ def _init_chunked_table_builder_state(
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def init_table_builder_state(
-    expected_state_type=None, use_chunked_builder=False, input_dicts_unified=False
+    operator_id, expected_state_type=None, use_chunked_builder=False, input_dicts_unified=False
 ):
     """Initialize the C++ TableBuilderState pointer"""
     expected_state_type = unwrap_typeref(expected_state_type)
@@ -262,6 +262,7 @@ def init_table_builder_state(
         ), "Error in init_table_builder_state: expected_state_type.is_chunked_builder must be True if use_chunked_builder is True"
 
         def impl(
+            operator_id,
             expected_state_type=None,
             use_chunked_builder=False,
             input_dicts_unified=False,
@@ -277,6 +278,7 @@ def init_table_builder_state(
     else:
 
         def impl(
+            operator_id,
             expected_state_type=None,
             use_chunked_builder=False,
             input_dicts_unified=False,

@@ -100,6 +100,7 @@ public interface BodoSQLCatalog {
    * Generates the code necessary to produce the streaming write initialization code from the given
    * catalog.
    *
+   * @param operatorID ID of operation to use for retrieving memory budget.
    * @param schemaName Name of the schema to use when writing.
    * @param tableName Name of the table to use when writing.
    * @param ifExists Behavior to perform if the table already exists
@@ -107,6 +108,7 @@ public interface BodoSQLCatalog {
    * @return The generated code to produce the write-initialization code
    */
   Expr generateStreamingWriteInitCode(
+      Expr.IntegerLiteral operatorID,
       String schemaName,
       String tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,

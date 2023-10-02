@@ -141,9 +141,10 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    *
    * @return The generated streaming code to write the table.
    */
-  public Expr generateStreamingWriteInitCode() {
+  public Expr generateStreamingWriteInitCode(Expr.IntegerLiteral operatorID) {
     return this.getCatalogSchema()
-        .generateStreamingWriteInitCode(this.getName(), BodoSQLCatalog.ifExistsBehavior.APPEND);
+        .generateStreamingWriteInitCode(
+            operatorID, this.getName(), BodoSQLCatalog.ifExistsBehavior.APPEND);
   }
 
   public Expr generateStreamingWriteAppendCode(

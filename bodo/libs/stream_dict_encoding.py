@@ -69,7 +69,7 @@ register_model(DictionaryEncodingStateType)(models.OpaqueModel)
 
 
 @intrinsic
-def init_dict_encoding_state(typingctx):
+def init_dict_encoding_state(typingctx, operator_id):
     """Initialize the C++ DictionaryEncodingState pointer"""
 
     def codegen(context, builder, sig, args):
@@ -81,7 +81,7 @@ def init_dict_encoding_state(typingctx):
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
-    sig = dictionary_encoding_state_type()
+    sig = dictionary_encoding_state_type(types.int64)
     return sig, codegen
 
 

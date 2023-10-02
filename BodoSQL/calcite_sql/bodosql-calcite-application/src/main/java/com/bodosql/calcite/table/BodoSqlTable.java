@@ -206,7 +206,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    *
    * @return The generated streaming code to write the table.
    */
-  public abstract Expr generateStreamingWriteInitCode();
+  public abstract Expr generateStreamingWriteInitCode(Expr.IntegerLiteral operatorID);
 
   public abstract Expr generateStreamingWriteAppendCode(
       Variable stateVarName,

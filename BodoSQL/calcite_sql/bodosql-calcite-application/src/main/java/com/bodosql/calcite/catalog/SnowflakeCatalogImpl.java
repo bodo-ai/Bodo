@@ -768,12 +768,14 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
 
   @Override
   public Expr generateStreamingWriteInitCode(
+      Expr.IntegerLiteral operatorID,
       String schemaName,
       String tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
     return new Expr.Call(
         "bodo.io.snowflake_write.snowflake_writer_init",
+        operatorID,
         new Expr.StringLiteral(generatePythonConnStr(schemaName)),
         new Expr.StringLiteral(tableName),
         new Expr.StringLiteral(schemaName),

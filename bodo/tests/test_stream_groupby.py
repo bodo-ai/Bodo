@@ -35,7 +35,9 @@ def test_groupby_basic(func_name, memory_leak_check):
     f_in_cols = bodo.utils.typing.MetaType((1,))
 
     def test_groupby(df):
-        groupby_state = init_groupby_state(keys_inds, fnames, f_in_offsets, f_in_cols)
+        groupby_state = init_groupby_state(
+            -1, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
         is_last1 = False
         _iter_1 = 0
         T1 = bodo.hiframes.table.logical_table_to_table(
@@ -104,7 +106,9 @@ def test_groupby_drop_duplicates(memory_leak_check):
     f_in_cols = bodo.utils.typing.MetaType(())
 
     def test_groupby(df):
-        groupby_state = init_groupby_state(keys_inds, fnames, f_in_offsets, f_in_cols)
+        groupby_state = init_groupby_state(
+            -1, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
         is_last1 = False
         _iter_1 = 0
         T1 = bodo.hiframes.table.logical_table_to_table(
@@ -170,7 +174,9 @@ def test_groupby_key_reorder(memory_leak_check):
     f_in_cols = bodo.utils.typing.MetaType((0,))
 
     def test_groupby(df):
-        groupby_state = init_groupby_state(keys_inds, fnames, f_in_offsets, f_in_cols)
+        groupby_state = init_groupby_state(
+            -1, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
         is_last1 = False
         _iter_1 = 0
         T1 = bodo.hiframes.table.logical_table_to_table(
@@ -236,7 +242,9 @@ def test_groupby_dict_str(func_name, memory_leak_check):
     f_in_cols = bodo.utils.typing.MetaType((1,))
 
     def test_groupby(df):
-        groupby_state = init_groupby_state(keys_inds, fnames, f_in_offsets, f_in_cols)
+        groupby_state = init_groupby_state(
+            -1, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
         is_last1 = False
         _iter_1 = 0
         T1 = bodo.hiframes.table.logical_table_to_table(
@@ -302,7 +310,9 @@ def test_produce_output(memory_leak_check):
 
     @bodo.jit
     def test_groupby(df):
-        groupby_state = init_groupby_state(keys_inds, fnames, f_in_offsets, f_in_cols)
+        groupby_state = init_groupby_state(
+            -1, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
         _temp1 = 0
         is_last1 = False
         T1 = bodo.hiframes.table.logical_table_to_table(
