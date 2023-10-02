@@ -210,7 +210,7 @@ source "amazon-ebs" "aws-ebs-build" {
     VantaDescription      = "Resource provisioned for creating machine images."
     VantaNoAlert          = "This resource is used to generate a machine image, and is not a production resource."
     VantaNonProd          = true
-    VantaOwner            = "vignesh@bodo.ai"
+    VantaOwner            = "ehsan@bodo.ai"
   }
   skip_create_ami = var.skip_create_image
   # This is a source image on top of that we are building our image
@@ -234,7 +234,7 @@ source "azure-arm" "azure-arm-build" {
     VantaDescription      = "Resource provisioned for creating machine images."
     VantaNoAlert          = "This resource is used to generate a machine image, and is not a production resource."
     VantaNonProd          = true
-    VantaOwner            = "vignesh@bodo.ai"
+    VantaOwner            = "ehsan@bodo.ai"
   }
   client_id                         = var.azure_client_id
   client_secret                     = var.azure_client_secret
