@@ -18,7 +18,6 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelVisitor
 import org.apache.calcite.rel.convert.ConverterImpl
-import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.core.Values
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.rel2sql.BodoRelToSqlConverter
@@ -213,7 +212,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
             var originalColumns: MutableList<Int> = (0..<node.getRowType().fieldCount).toMutableList()
 
             override fun visit(node: RelNode, ordinal: Int, parent: RelNode?) {
-                if (node is Project) {
+                if (node is SnowflakeProject) {
                     for (i in 0..<originalColumns.size) {
                         val project = node.projects[originalColumns[i]]
                         if (project !is RexInputRef) {
@@ -221,6 +220,19 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
                         }
                         // Remap to the original location.
                         originalColumns[i] = project.index
+                    }
+                    node.childrenAccept(this)
+                } else if (node is SnowflakeAggregate) {
+                    // Re-map columns to either the group or original column and
+                    // then visit the children.
+                    val groups = node.groupSet.toList()
+                    if (node.aggCallList.isNotEmpty()) {
+                        // Note: This is enforced in canUseOptimizedReadSqlPath
+                        throw RuntimeException("getOriginalColumnIndices() only support select distinct")
+                    }
+                    for (i in 0..<originalColumns.size) {
+                        val index = originalColumns[i]
+                        originalColumns[i] = groups[index]
                     }
                     node.childrenAccept(this)
                 } else if (node is SnowflakeFilter || node is SnowflakeSort) {
@@ -257,26 +269,31 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
                     return
                 }
 
-                if (node is Project) {
-                    for (proj in node.projects) {
-                        if (proj !is RexInputRef) {
-                            // This is already enforced in the SnowflakeProject, but this will
-                            // help protect against unexpected changes.
-                            seenInvalidNode = true
-                            break
-                        }
+                if (node is SnowflakeProject) {
+                    // This is already enforced in the SnowflakeProject, but this will
+                    // help protect against unexpected changes.
+                    if (node.projects.any { x -> x !is RexInputRef }) {
+                        seenInvalidNode = true
+                    } else {
+                        node.childrenAccept(this)
                     }
-                    node.childrenAccept(this)
                 } else if (node is SnowflakeFilter || node is SnowflakeSort) {
                     // Enable moving past filters to get the original table
                     // for filter and limit.
                     node.childrenAccept(this)
+                } else if (node is SnowflakeAggregate) {
+                    // Aggregates may change types except for distinct,
+                    // so we don't want to point to the original table.
+                    if (node.aggCallList.isNotEmpty()) {
+                        seenInvalidNode = true
+                    } else {
+                        node.childrenAccept(this)
+                    }
                 } else if (node is SnowflakeTableScan || node is Values) {
                     // Found the root table.
                     return
                 } else {
-                    seenInvalidNode = true
-                    return
+                    throw RuntimeException("canUseOptimizedReadSqlPath(): Unexpected SnowflakeRel encountered. Please explicitly support each SnowflakeRel")
                 }
             }
         }
