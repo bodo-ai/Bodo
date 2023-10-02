@@ -133,7 +133,8 @@ public class LocalTableImpl extends BodoSqlTable {
    *
    * @return The generated streaming code to write the table.
    */
-  public Expr generateStreamingWriteInitCode() {
+  @Override
+  public Expr generateStreamingWriteInitCode(Expr.IntegerLiteral operatorID) {
     throw new RuntimeException("Internal error: Streaming not supported for non-snowflake tables");
   }
 

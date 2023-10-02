@@ -777,6 +777,7 @@ register_model(JoinStateType)(models.OpaqueModel)
 @intrinsic
 def _init_join_state(
     typingctx,
+    operator_id,
     build_arr_dtypes,
     build_arr_array_types,
     n_build_arrs,
@@ -792,6 +793,7 @@ def _init_join_state(
     """Initialize C++ JoinState pointer
 
     Args:
+        operator_id (int64): ID of this operator (used for looking up budget),
         build_arr_dtypes (int8*): pointer to array of ints representing array dtypes
                                    (as provided by numba_to_c_type)
         build_arr_array_types (int8*): pointer to array of ints representing array types
@@ -816,6 +818,7 @@ def _init_join_state(
 
     def codegen(context, builder, sig, args):
         (
+            _,  # operator_id (TODO(aneesh): use operator_id in C++)
             build_arr_dtypes,
             build_arr_array_types,
             n_build_arrs,
@@ -880,6 +883,7 @@ def _init_join_state(
         return ret
 
     sig = output_type(
+        types.int64,
         types.voidptr,
         types.voidptr,
         types.int32,
@@ -897,6 +901,7 @@ def _init_join_state(
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def init_join_state(
+    operator_id,
     build_key_inds,
     probe_key_inds,
     build_colnames,
@@ -997,6 +1002,7 @@ def init_join_state(
         cfunc_native_name = general_cond_cfunc.native_name
 
         def impl_nonequi(
+            operator_id,
             build_key_inds,
             probe_key_inds,
             build_colnames,
@@ -1014,6 +1020,7 @@ def init_join_state(
             )
             cfunc_cond = get_join_cond_addr(cfunc_native_name)
             return _init_join_state(
+                operator_id,
                 build_arr_dtypes.ctypes,
                 build_arr_array_types.ctypes,
                 n_build_arrs,
@@ -1030,6 +1037,7 @@ def init_join_state(
         return impl_nonequi
 
     def impl(
+        operator_id,
         build_key_inds,
         probe_key_inds,
         build_colnames,
@@ -1043,6 +1051,7 @@ def init_join_state(
         probe_parallel=False,
     ):  # pragma: no cover
         return _init_join_state(
+            operator_id,
             build_arr_dtypes.ctypes,
             build_arr_array_types.ctypes,
             n_build_arrs,

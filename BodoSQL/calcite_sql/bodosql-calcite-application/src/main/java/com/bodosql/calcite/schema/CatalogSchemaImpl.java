@@ -138,17 +138,18 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
   }
 
   public Expr generateStreamingWriteInitCode(
+      Expr.IntegerLiteral operatorID,
       String tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
     return this.catalog.generateStreamingWriteInitCode(
-        this.getName(), tableName, ifExists, createTableType);
+        operatorID, this.getName(), tableName, ifExists, createTableType);
   }
 
   public Expr generateStreamingWriteInitCode(
-      String tableName, BodoSQLCatalog.ifExistsBehavior ifExists) {
+      Expr.IntegerLiteral operatorID, String tableName, BodoSQLCatalog.ifExistsBehavior ifExists) {
     return this.catalog.generateStreamingWriteInitCode(
-        this.getName(), tableName, ifExists, SqlCreateTable.CreateTableType.DEFAULT);
+        operatorID, this.getName(), tableName, ifExists, SqlCreateTable.CreateTableType.DEFAULT);
   }
 
   public Expr generateStreamingWriteAppendCode(

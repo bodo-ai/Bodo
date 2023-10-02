@@ -26,7 +26,7 @@ def test_table_builder_empty(memory_leak_check):
         T1 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), global_1, 2
         )
-        table_builder = bodo.libs.table_builder.init_table_builder_state()
+        table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
 
         bodo.libs.table_builder.table_builder_append(table_builder, T1)
         T2 = bodo.libs.table_builder.table_builder_finalize(table_builder)
@@ -54,7 +54,7 @@ def test_table_builder(df1_len, df2_len, memory_leak_check):
         T2 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), global_1, 2
         )
-        table_builder = bodo.libs.table_builder.init_table_builder_state()
+        table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
 
         bodo.libs.table_builder.table_builder_append(table_builder, T1)
         bodo.libs.table_builder.table_builder_append(table_builder, T2)
@@ -101,7 +101,7 @@ def test_table_builder_with_strings(memory_leak_check):
         T2 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), global_1, 1
         )
-        table_builder = bodo.libs.table_builder.init_table_builder_state()
+        table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
 
         bodo.libs.table_builder.table_builder_append(table_builder, T1)
         bodo.libs.table_builder.table_builder_append(table_builder, T2)
@@ -129,7 +129,7 @@ def test_table_builder_types_across_scopes(memory_leak_check):
         T1 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), global_1, 1
         )
-        table_builder = bodo.libs.table_builder.init_table_builder_state()
+        table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
 
         while True:
             bodo.libs.table_builder.table_builder_append(table_builder, T1)
@@ -153,7 +153,7 @@ def test_table_builder(memory_leak_check):
 
     def f(df):
         idx = df.index
-        state = bodo.libs.table_builder.init_table_builder_state()
+        state = bodo.libs.table_builder.init_table_builder_state(-1)
         # Note that the for loop is necessary,
         # _replace_state_definition requires that the init_table_builder_state
         # is not in the same basic block as the append.
@@ -178,7 +178,7 @@ def test_chunked_table_builder_simple(memory_leak_check):
     def f(df):
         idx = df.index
         state = bodo.libs.table_builder.init_table_builder_state(
-            use_chunked_builder=True
+            -1, use_chunked_builder=True
         )
         for i in range(1):
             table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
@@ -204,7 +204,7 @@ def test_chunked_table_builder_multiple_chunks(memory_leak_check):
     def f(df):
         idx = df.index
         state = bodo.libs.table_builder.init_table_builder_state(
-            use_chunked_builder=True
+            -1, use_chunked_builder=True
         )
         for i in range(num_iters):
             table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)

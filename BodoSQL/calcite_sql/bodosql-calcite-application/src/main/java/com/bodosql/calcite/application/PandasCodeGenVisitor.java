@@ -103,7 +103,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private final Module.Builder generatedCode;
 
   // Note that a given query can only have one MERGE INTO statement. Therefore,
-  // we can statically define the variable names we'll use for the iceberg file list and snapshot
+  // we can statically define the variable names we'll use for the iceberg file
+  // list and snapshot
   // id,
   // since we'll only be using these variables once per query
   private static final String icebergFileListVarName = "__bodo_Iceberg_file_list";
@@ -115,28 +116,32 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private static final String MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change";
 
   /*
-  Hashmap containing globals that need to be lowered into the output func_text. Used for lowering
-  metadata types to improve compilation speed.
-  hashmap maps String variable names to their String value.
-  For example loweredGlobals = {"x": "ColumnMetaDataType(('A', 'B', 'C'))"} would lead to the
-  a func_text generation/execution that is equivalent to the following:
-
-  x = ColumnMetaDataType(('A', 'B', 'C'))
-  def impl(...):
-   ...
-   init_dataframe( _, _, x)
-   ...
-
-  (Note, we do not actually generate the above func text, we pass the values as globals when calling exec in python. See
-   context.py and context_ext.py for more info)
-  */
+   * Hashmap containing globals that need to be lowered into the output func_text.
+   * Used for lowering
+   * metadata types to improve compilation speed.
+   * hashmap maps String variable names to their String value.
+   * For example loweredGlobals = {"x": "ColumnMetaDataType(('A', 'B', 'C'))"}
+   * would lead to the
+   * a func_text generation/execution that is equivalent to the following:
+   *
+   * x = ColumnMetaDataType(('A', 'B', 'C'))
+   * def impl(...):
+   * ...
+   * init_dataframe( _, _, x)
+   * ...
+   *
+   * (Note, we do not actually generate the above func text, we pass the values as
+   * globals when calling exec in python. See
+   * context.py and context_ext.py for more info)
+   */
   private final HashMap<String, String> loweredGlobals;
 
   // The original SQL query. This is used for any operations that must be entirely
   // pushed into a remote db (e.g. Snowflake)
   private final String originalSQLQuery;
 
-  // Debug flag set for certain tests in our test suite. Causes the codegen to return simply return
+  // Debug flag set for certain tests in our test suite. Causes the codegen to
+  // return simply return
   // the delta table
   // when encountering a merge into operation
   private final boolean debuggingDeltaTable;
@@ -447,7 +452,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // For information on how this node handles codegen, please see:
     // https://bodo.atlassian.net/wiki/spaces/B/pages/1337524225/Code+Generation+Design+WIP
 
-    // If we're in a distributed situation, we expect our child to return a distributed dataframe,
+    // If we're in a distributed situation, we expect our child to return a
+    // distributed dataframe,
     // and a flag that indicates if it's run out of output.
     this.visit(node.getInput(0), 0, node);
 
@@ -460,7 +466,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
         operatorID,
         new Op.Assign(
             batchAccumulatorVariable,
-            new Expr.Call("bodo.libs.table_builder.init_table_builder_state", List.of())));
+            new Expr.Call(
+                "bodo.libs.table_builder.init_table_builder_state",
+                new Expr.IntegerLiteral(operatorID))));
 
     // Append to the list at the end of the loop.
     List<Expr> args = new ArrayList<>();
@@ -469,7 +477,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Op appendStatement =
         new Op.Stmt(new Expr.Call("bodo.libs.table_builder.table_builder_append", args));
     generatedCode.add(appendStatement);
-    // Finally, concatenate the batches in the accumulator into a table to use in regular code.
+    // Finally, concatenate the batches in the accumulator into a table to use in
+    // regular code.
     Variable accumulatedTable = genTableVar();
     Expr concatenatedTable =
         new Expr.Call(
@@ -604,16 +613,19 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Create the state variables
     StateVariable stateVar = genStateVar();
     kotlin.Pair<String, Expr> isAll = new kotlin.Pair<>("all", new Expr.BooleanLiteral(node.all));
+    int operatorID = this.generatedCode.newOperatorID();
     Expr.Call stateCall =
-        new Expr.Call("bodo.libs.stream_union.init_union_state", List.of(), List.of(isAll));
+        new Expr.Call(
+            "bodo.libs.stream_union.init_union_state",
+            List.of(new Expr.IntegerLiteral(operatorID)),
+            List.of(isAll));
     Op.Assign unionInit = new Op.Assign(stateVar, stateCall);
 
     // Fetch the streaming pipeline
     StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
-
     // Add Initialization Code
     timerInfo.insertStateStartTimer();
-    inputPipeline.addInitialization(unionInit);
+    inputPipeline.initializeStreamingState(operatorID, unionInit);
     timerInfo.insertStateEndTimer();
 
     // All but the last union call just requires the union_consume_batch call
@@ -680,7 +692,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Union state is deleted automatically by Numba
     Op.Stmt deleteState =
         new Op.Stmt(new Expr.Call("bodo.libs.stream_union.delete_union_state", List.of(stateVar)));
-    outputPipeline.addTermination(deleteState);
+    outputPipeline.deleteStreamingState(operatorID, deleteState);
 
     // Add the output table from last pipeline to the stack
     BodoEngineTable outEngineTable = new BodoEngineTable(outTable.emit(), node);
@@ -931,9 +943,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     int operatorID = this.generatedCode.newOperatorID();
     // TODO: Move to a wrapper function to avoid the timerInfo calls.
     // This requires more information about the high level design of the streaming
-    // operators since there are several parts (e.g. state, multiple loop sections, etc.)
-    // At this time it seems like it would be too much work to have a clean interface.
-    // There may be a need to pass in several lambdas, so other changes may be needed to avoid
+    // operators since there are several parts (e.g. state, multiple loop sections,
+    // etc.)
+    // At this time it seems like it would be too much work to have a clean
+    // interface.
+    // There may be a need to pass in several lambdas, so other changes may be
+    // needed to avoid
     // constant rewriting.
     StreamingRelNodeTimer timerInfo =
         StreamingRelNodeTimer.createStreamingTimer(
@@ -949,7 +964,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.insertStateStartTimer();
     Expr writeInitCode =
         outputSchemaAsCatalog.generateStreamingWriteInitCode(
-            node.getTableName(), ifExists, createTableType);
+            new Expr.IntegerLiteral(operatorID), node.getTableName(), ifExists, createTableType);
     Variable writerVar = this.genWriterVar();
     currentPipeline.initializeStreamingState(operatorID, new Op.Assign(writerVar, writeInitCode));
     timerInfo.insertStateEndTimer();
@@ -1056,12 +1071,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
           List<String> currentDeltaDfColNames = input.getRowType().getFieldNames();
 
           if (this.debuggingDeltaTable) {
-            // If this environment variable is set, we're only testing the generation of the delta
+            // If this environment variable is set, we're only testing the generation of the
+            // delta
             // table.
             // Just return the delta table.
-            // We drop no-ops from the delta table, as a few Calcite Optimizations can result in
+            // We drop no-ops from the delta table, as a few Calcite Optimizations can
+            // result in
             // their
-            // being removed from the table, and their presence/lack thereof shouldn't impact
+            // being removed from the table, and their presence/lack thereof shouldn't
+            // impact
             // anything in
             // the
             // final implementation, but it can cause issues when testing the delta table
@@ -1097,9 +1115,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
                       + " the SQL TablePath API");
             }
 
-            // note table.getColumnNames does NOT include ROW_ID or MERGE_ACTION_ENUM_COL_NAME
-            // column names,  because of the way they are added plan in calcite (extension fields)
-            // We know that the row ID and merge columns exist in the input table due to our code
+            // note table.getColumnNames does NOT include ROW_ID or
+            // MERGE_ACTION_ENUM_COL_NAME
+            // column names, because of the way they are added plan in calcite (extension
+            // fields)
+            // We know that the row ID and merge columns exist in the input table due to our
+            // code
             // invariants
             List<String> targetTableFinalColumnNames = bodoSqlTable.getColumnNames();
             List<String> deltaTableExpectedColumnNames;
@@ -1203,9 +1224,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // TODO: Move to a wrapper function to avoid the timerInfo calls.
     // This requires more information about the high level design of the streaming
-    // operators since there are several parts (e.g. state, multiple loop sections, etc.)
-    // At this time it seems like it would be too much work to have a clean interface.
-    // There may be a need to pass in several lambdas, so other changes may be needed to avoid
+    // operators since there are several parts (e.g. state, multiple loop sections,
+    // etc.)
+    // At this time it seems like it would be too much work to have a clean
+    // interface.
+    // There may be a need to pass in several lambdas, so other changes may be
+    // needed to avoid
     // constant rewriting.
     StreamingRelNodeTimer timerInfo =
         StreamingRelNodeTimer.createStreamingTimer(
@@ -1219,7 +1243,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // First, create the writer state before the loop
     timerInfo.insertStateStartTimer();
-    Expr writeInitCode = bodoSqlTable.generateStreamingWriteInitCode();
+    Expr writeInitCode =
+        bodoSqlTable.generateStreamingWriteInitCode(new Expr.IntegerLiteral(operatorID));
     Variable writerVar = this.genWriterVar();
     currentPipeline.initializeStreamingState(operatorID, new Op.Assign(writerVar, writeInitCode));
     timerInfo.insertStateEndTimer();
@@ -1326,7 +1351,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     for (int i = 0; i < newColNames.size(); i++) {
       if (!oldColNames.get(i).equals(newColNames.get(i))) {
         if (!hasRename) {
-          // Only generate the rename if at least 1 column needs renaming to avoid any empty
+          // Only generate the rename if at least 1 column needs renaming to avoid any
+          // empty
           // dictionary issues.
           outputCode.append(".rename(columns={");
           hasRename = true;
@@ -1415,7 +1441,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     final List<Integer> groupingVariables = node.getGroupSet().asList();
     final List<ImmutableBitSet> groups = node.getGroupSets();
 
-    // Based on the calcite code that we've seen generated, we assume that every Logical Aggregation
+    // Based on the calcite code that we've seen generated, we assume that every
+    // Logical Aggregation
     // node has
     // at least one grouping set.
     assert groups.size() > 0;
@@ -1424,7 +1451,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable outVar = this.genDfVar();
     final List<AggregateCall> aggCallList = node.getAggCallList();
 
-    // Expected output column names according to the calcite plan, contains any/all of the
+    // Expected output column names according to the calcite plan, contains any/all
+    // of the
     // expected aliases
 
     List<String> aggCallNames = new ArrayList<>();
@@ -1455,7 +1483,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
           boolean distIfNoGroup = groups.size() > 1;
 
-          // Naive implementation for handling multiple aggregation groups, where we repeatedly
+          // Naive implementation for handling multiple aggregation groups, where we
+          // repeatedly
           // call group by, and append the dataframes together
           for (int i = 0; i < groups.size(); i++) {
             List<Integer> curGroup = groups.get(i).toList();
@@ -1486,7 +1515,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 this.generatedCode.add(prependOp);
               }
             }
-            // assign each of the generated dataframes their own variable, for greater clarity in
+            // assign each of the generated dataframes their own variable, for greater
+            // clarity in
             // the
             // generated code
             Variable outDf = this.genDfVar();
@@ -1495,17 +1525,20 @@ public class PandasCodeGenVisitor extends RelVisitor {
           }
           // If we have multiple groups, append the dataframes together
           if (groups.size() > 1 || hasMissingColsGroup) {
-            // It is not guaranteed that a particular input column exists in any of the output
+            // It is not guaranteed that a particular input column exists in any of the
+            // output
             // dataframes,
             // but Calcite expects
             // All input dataframes to be carried into the output. It is also not
-            // guaranteed that the output dataframes contain the columns in the order expected by
+            // guaranteed that the output dataframes contain the columns in the order
+            // expected by
             // calcite.
             // In order to ensure that we have all the input columns in the output,
             // we create a dummy dataframe that has all the columns with
             // a length of 0. The ordering is handled by a loc after the concat
 
-            // We initialize the dummy column like this, as Bodo will default these columns to
+            // We initialize the dummy column like this, as Bodo will default these columns
+            // to
             // string type if we initialize empty columns.
             List<String> concatDfs = new ArrayList<>();
             if (hasMissingColsGroup) {
@@ -1521,8 +1554,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
             // Generate the concatenation expression
             StringBuilder concatExprRaw = new StringBuilder(concatDataFrames(concatDfs).emit());
 
-            // Sort the output dataframe, so that they are in the ordering expected by Calcite
-            // Needed in the case that the topmost dataframe in the concat does not contain all
+            // Sort the output dataframe, so that they are in the ordering expected by
+            // Calcite
+            // Needed in the case that the topmost dataframe in the concat does not contain
+            // all
             // the
             // columns in the correct ordering
             concatExprRaw.append(".loc[:, [");
@@ -1579,8 +1614,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Expr.Call stateCall =
         new Expr.Call(
             "bodo.libs.stream_groupby.init_groupby_state",
-            List.of(keyIndices, fnames, offset, cols),
-            List.of());
+            new Expr.IntegerLiteral(operatorID),
+            keyIndices,
+            fnames,
+            offset,
+            cols);
     Op.Assign groupbyInit = new Op.Assign(groupbyStateVar, stateCall);
     // Fetch the streaming pipeline
     StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
@@ -1742,13 +1780,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
             BodoSqlTable table;
 
             // TODO(jsternberg): The proper way to do this is to have the individual nodes
-            // handle the code generation. Due to the way the code generation is constructed,
-            // we can't really do that so we're just going to hack around it for now to avoid
+            // handle the code generation. Due to the way the code generation is
+            // constructed,
+            // we can't really do that so we're just going to hack around it for now to
+            // avoid
             // a large refactor
             RelOptTableImpl relTable = (RelOptTableImpl) nodeCasted.getTable();
             table = (BodoSqlTable) relTable.table();
 
-            // IsTargetTableScan is always true, we check for this at the start of the function.
+            // IsTargetTableScan is always true, we check for this at the start of the
+            // function.
             outTable = visitSingleBatchTableScanCommon(nodeCasted, table, isTargetTableScan);
           }
           operatorCache.tryCacheNode(nodeCasted, outTable);
@@ -1898,9 +1939,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void visitStreamingPandasJoin(PandasJoin node) {
     // TODO: Move to a wrapper function to avoid the timerInfo calls.
     // This requires more information about the high level design of the streaming
-    // operators since there are several parts (e.g. state, multiple loop sections, etc.)
-    // At this time it seems like it would be too much work to have a clean interface.
-    // There may be a need to pass in several lambdas, so other changes may be needed to avoid
+    // operators since there are several parts (e.g. state, multiple loop sections,
+    // etc.)
+    // At this time it seems like it would be too much work to have a clean
+    // interface.
+    // There may be a need to pass in several lambdas, so other changes may be
+    // needed to avoid
     // constant rewriting.
     int operatorID = this.generatedCode.newOperatorID();
     StreamingRelNodeTimer timerInfo =
@@ -1923,7 +1967,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.insertStateStartTimer();
     JoinInfo joinInfo = node.analyzeCondition();
     Pair<Variable, Variable> keyIndices = getStreamingJoinKeyIndices(joinInfo, this);
-    // SQL convention is that probe table is on the left and build table is on the right.
+    // SQL convention is that probe table is on the left and build table is on the
+    // right.
     List<String> probeNodeNames = node.getLeft().getRowType().getFieldNames();
     List<String> buildNodeNames = node.getRight().getRowType().getFieldNames();
     // Fetch the names for each child.
@@ -1956,6 +2001,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         new Expr.Call(
             "bodo.libs.stream_join.init_join_state",
             List.of(
+                new Expr.IntegerLiteral(operatorID),
                 keyIndices.right,
                 keyIndices.left,
                 buildNamesGlobal,
@@ -2177,9 +2223,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
         @NotNull Function2<? super PandasRel.BuildContext, ? super StateVariable, Unit> deleteFn) {
       // TODO: Move to a wrapper function to avoid the timerInfo calls.
       // This requires more information about the high level design of the streaming
-      // operators since there are several parts (e.g. state, multiple loop sections, etc.)
-      // At this time it seems like it would be too much work to have a clean interface.
-      // There may be a need to pass in several lambdas, so other changes may be needed to avoid
+      // operators since there are several parts (e.g. state, multiple loop sections,
+      // etc.)
+      // At this time it seems like it would be too much work to have a clean
+      // interface.
+      // There may be a need to pass in several lambdas, so other changes may be
+      // needed to avoid
       // constant rewriting.
       StreamingRelNodeTimer timerInfo =
           StreamingRelNodeTimer.createStreamingTimer(
