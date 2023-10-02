@@ -172,6 +172,10 @@ variable "skip_create_image" {
   default = true
 }
 
+variable "build_name" {
+  type = string
+}
+
 locals {
   image_name = "bodo_${var.node_role}_${var.image_sha}_${var.bodo_version_short}"
 }
@@ -216,14 +220,14 @@ source "amazon-ebs" "aws-ebs-build" {
   ssh_username    = var.aws_ssh_username
   tags            = {
     AMISha      = var.image_sha
-    BodoVersion = var.bodo_version
+    BodoVersion = var.build_name
     Role        = var.node_role
   }
 }
 
 source "azure-arm" "azure-arm-build" {
   azure_tags = {
-    BodoVersion           = var.bodo_version
+    BodoVersion           = var.build_name
     Role                  = var.node_role
     VMISha                = var.image_sha
     VantaContainsUserData = false
@@ -338,7 +342,7 @@ build {
 
   post-processor "manifest" {
     custom_data = {
-      bodo_version = var.bodo_version
+      bodo_version = var.build_name
       img_prefix   = var.image_sha
     }
 
