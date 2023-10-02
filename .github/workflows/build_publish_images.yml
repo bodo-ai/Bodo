@@ -5,13 +5,13 @@ on:
     branches:
       - develop
     paths:
-      - 'bodo-platform-image/**'
+      - "bodo-platform-image/**"
 
   pull_request:
     branches:
       - develop
     paths:
-      - 'bodo-platform-image/**'
+      - "bodo-platform-image/**"
 
   workflow_dispatch:
     inputs:
@@ -40,11 +40,6 @@ on:
         description: Conda Channel to install bodo-iceberg-connector from, for major releases specify bodo.ai and for minor release and RCs specify bodo.ai/label/dev
         required: false
         default: "bodo.ai"
-
-      addToBodoVersionsTable:
-        description: First add to the bodo versions table in the backend (with supported=true)
-        type: boolean
-        default: false
 
       publishDev:
         description: Share with the Dev/Testing platform.
@@ -77,6 +72,7 @@ jobs:
       addToBodoVersionsTable: ${{ steps.setup_variables.outputs.addToBodoVersionsTable }}
       pushImage: ${{ steps.setup_variables.outputs.pushImage }}
       buildName: ${{ steps.setup_variables.outputs.buildName }}
+      skipCreateImages: ${{ steps.setup_variables.outputs.skipCreateImages }}
     steps:
       - name: Set variables
         id: setup_variables
@@ -85,7 +81,7 @@ jobs:
             echo "publishDev=true" >> $GITHUB_OUTPUT
             echo "publishStaging=true" >> $GITHUB_OUTPUT
             echo "publishProduction=false" >> $GITHUB_OUTPUT
-          
+
             wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
             chmod +x miniconda.sh
             ./miniconda.sh -b
@@ -97,22 +93,22 @@ jobs:
             echo "bodoVersion=$BODO_VERSION" >> $GITHUB_OUTPUT  
             echo "bodoSQLVersion=$SQL_VERSION" >> $GITHUB_OUTPUT 
             echo "icebergConnectorVersion=$ICEBERG_VERSION" >> $GITHUB_OUTPUT
-          
+
             echo "bodoSQLCondaChannel=bodo.ai/label/dev" >> $GITHUB_OUTPUT 
             echo "bodoIcebergCondaChannel=bodo.ai/label/dev" >> $GITHUB_OUTPUT
             echo "pythonVersion=3.10" >> $GITHUB_OUTPUT
             echo "addToBodoVersionsTable=true" >> $GITHUB_OUTPUT
-          
+
             echo "buildName=dev${BODO_VERSION}.b${{ github.run_number }}" >> $GITHUB_OUTPUT
           else
             echo "publishDev=${{ github.event.inputs.publishDev }}" >> $GITHUB_OUTPUT
             echo "publishStaging=${{ github.event.inputs.publishStaging }}" >> $GITHUB_OUTPUT
             echo "publishProduction=${{ github.event.inputs.publishProduction }}" >> $GITHUB_OUTPUT
-          
+
             echo "bodoVersion=${{ github.event.inputs.bodoVersion }}" >> $GITHUB_OUTPUT
             echo "bodoSQLVersion=${{ github.event.inputs.bodoSQLVersion }}" >> $GITHUB_OUTPUT
             echo "icebergConnectorVersion=${{ github.event.inputs.icebergConnectorVersion }}" >> $GITHUB_OUTPUT
-          
+
             echo "bodoSQLCondaChannel=${{ github.event.inputs.bodoSQLCondaChannel }}" >> $GITHUB_OUTPUT 
             echo "bodoIcebergCondaChannel=${{ github.event.inputs.bodoIcebergCondaChannel }}" >> $GITHUB_OUTPUT
             echo "pythonVersion=${{ github.event.inputs.pythonVersion }}" >> $GITHUB_OUTPUT
@@ -120,11 +116,13 @@ jobs:
             
             echo "buildName=${{ github.event.inputs.bodoVersion }}" >> $GITHUB_OUTPUT
           fi
-          
+
           if [[ "${{github.event_name}}" == "workflow_dispatch" ]]; then
             echo "pushImage=true" >> $GITHUB_OUTPUT
+            echo "skipCreateImages=false" >> $GITHUB_OUTPUT
           else
             echo "pushImage=false" >> $GITHUB_OUTPUT
+            echo "skipCreateImages=true" >> $GITHUB_OUTPUT
           fi
           echo "Running workflow with following variables:"
           cat $GITHUB_OUTPUT
@@ -136,22 +134,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v1
 
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
-
-      - name: "Install dependencies"
-        run: |
-          set -xe
-          python -VV
-          python -m site
-          python -m pip install requests
-
       - name: Get Bodo Version from setup
         env:
           BODO_VERSION: ${{ needs.setup.outputs.bodoVersion }}
         run: |
+          # Replace the version in the file with the user provided input
           echo "$BODO_VERSION" > bodo-platform-image/bodo_versions.txt
 
       - name: Upload Bodo Versions Artifact
@@ -198,6 +185,9 @@ jobs:
         # For event that is not workflow, we skip the image creation in the build step,
         # and therefore this step is not required.
         uses: azure/CLI@v1.0.6
+        if: |
+          needs.setup.outputs.pushImage == 'true' &&
+          needs.setup.outputs.skipCreateImages == 'false'
         env:
           GIT_SHA: ${{ env.SHA }}
         with:
@@ -220,6 +210,7 @@ jobs:
           CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           GIT_SHA: ${{ env.SHA }}
+          SKIP_CREATE_IMAGES: ${{ needs.setup.outputs.skipCreateImages }}
           PYTHON_VERSION: ${{ needs.setup.outputs.pythonVersion }}
           BODOSQL_VERSION: ${{ needs.setup.outputs.bodoSQLVersion }}
           BODOSQL_CHANNEL: ${{ needs.setup.outputs.bodoSQLCondaChannel }}
@@ -231,7 +222,9 @@ jobs:
         run: |
           cd bodo-platform-image
           cd packer
+          arguments=$(if [ "$SKIP_CREATE_IMAGES" == 'true' ]; then echo "--skip-create-images"; fi)
           bash build_images_and_gen_manifests.sh \
+            $arguments \
             --image-sha $GIT_SHA \
             --node-role worker \
             --playbook-file worker_playbook.yaml \
@@ -245,6 +238,7 @@ jobs:
 
   combine-manifest-gen-ami-entries:
     needs: [setup, build-worker]
+    if: needs.setup.outputs.skipCreateImages == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -273,7 +267,7 @@ jobs:
         with:
           name: img-entries-request-json
           path: bodo-platform-image/img_share_requests.json
-        if: needs.setup.outputs.pushImage == 'true'
+
   # TESTING
   share-images-with-testing-platform:
     needs: [setup, combine-manifest-gen-ami-entries]
@@ -315,45 +309,6 @@ jobs:
           sleep 120
           cd bodo-platform-image
           python manage_images.py
-
-  add-bodo-version-to-testing-backend:
-    runs-on: ubuntu-latest
-    needs: [setup, combine-manifest-gen-ami-entries]
-    if: |
-      needs.setup.outputs.pushImage == 'true' &&
-      needs.setup.outputs.addToBodoVersionsTable == 'true' &&
-      needs.setup.outputs.publishDev == 'true'
-    env:
-      AUTH_SERVICE_URL: "https://bodo-test.frontegg.com"
-      BOT_PLATFORM_USERNAME: ${{ secrets.BOT_TESTING_PLATFORM_USERNAME }}
-      BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_TESTING_PLATFORM_PASSWORD }}
-      BACKEND_SERVICE_URL: "https://api-testing.bodo.ai"
-      BODO_VERSION: ${{ needs.setup.outputs.bodoVersion }}
-      BUILD_NAME: ${{ needs.setup.outputs.buildName }}
-      BODO_CONDA_INSTALL_LINK: "bodo.jfrog.io/artifactory/api/conda/bodo.ai-platform"
-      ORGANIZATION_UUID: ${{ secrets.TESTING_ORGANIZATION_UUID }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v1
-
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
-
-      - name: "Install dependencies"
-        run: |
-          set -xe
-          python -VV
-          python -m site
-          python -m pip install requests
-
-      - name: Add Bodo Version to Testing Platform Backend
-        id: add-bodo-version
-        run: |
-          cd bodo-platform-image
-          python add_bodo_version.py
-
 
   # DEVELOPMENT
   share-images-with-dev-platform:
@@ -397,45 +352,6 @@ jobs:
           cd bodo-platform-image
           python manage_images.py
 
-  add-bodo-version-to-staging-backend:
-    needs: [setup, combine-manifest-gen-ami-entries]
-    runs-on: ubuntu-latest
-    if: |
-      needs.setup.outputs.pushImage == 'true' &&
-      needs.setup.outputs.addToBodoVersionsTable == 'true' &&
-      needs.setup.outputs.publishStaging == 'true'
-    env:
-      AUTH_SERVICE_URL: "https://bodo-staging.frontegg.com"
-      BOT_PLATFORM_USERNAME: ${{ secrets.BOT_STAGING_PLATFORM_USERNAME }}
-      BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_STAGING_PLATFORM_PASSWORD }}
-      BACKEND_SERVICE_URL: "https://api-staging.bodo.ai"
-      BODO_VERSION: ${{ needs.setup.outputs.bodoVersion }}
-      BUILD_NAME: ${{ needs.setup.outputs.buildName }}
-      BODO_CONDA_INSTALL_LINK: "bodo.jfrog.io/artifactory/api/conda/bodo.ai-platform"
-      ORGANIZATION_UUID: ${{ secrets.STAGING_ORGANIZATION_UUID }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v1
-
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
-
-      - name: "Install dependencies"
-        run: |
-          set -xe
-          python -VV
-          python -m site
-          python -m pip install requests
-
-      - name: Add Bodo Version to Staging Platform Backend
-        id: add-bodo-version
-        run: |
-          cd bodo-platform-image
-          python add_bodo_version.py
-
-
   # STAGING
   share-images-with-staging-platform:
     needs: [setup, combine-manifest-gen-ami-entries]
@@ -478,46 +394,6 @@ jobs:
           cd bodo-platform-image
           python manage_images.py
 
-  add-bodo-version-to-dev-backend:
-    runs-on: ubuntu-latest
-    needs: [setup, combine-manifest-gen-ami-entries]
-    if: |
-      needs.setup.outputs.pushImage == 'true' &&
-      needs.setup.outputs.addToBodoVersionsTable == 'true' &&
-      needs.setup.outputs.publishDev == 'true'
-    env:
-      AUTH_SERVICE_URL: "https://bodo-dev.frontegg.com"
-      BOT_PLATFORM_USERNAME: ${{ secrets.BOT_DEV_PLATFORM_USERNAME }}
-      BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_DEV_PLATFORM_PASSWORD }}
-      BACKEND_SERVICE_URL: "https://api-dev.bodo.ai"
-      BODO_VERSION: ${{ needs.setup.outputs.bodoVersion }}
-      BUILD_NAME: ${{ needs.setup.outputs.buildName }}
-      BODO_CONDA_INSTALL_LINK: "bodo.jfrog.io/artifactory/api/conda/bodo.ai-platform"
-      ORGANIZATION_UUID: ${{ secrets.DEV_ORGANIZATION_UUID }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v1
-
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
-
-      - name: "Install dependencies"
-        run: |
-          set -xe
-          python -VV
-          python -m site
-          python -m pip install requests
-
-      - name: Add Bodo Version to Dev Platform Backend
-        id: add-bodo-version
-        run: |
-          cd bodo-platform-image
-          python add_bodo_version.py
-
-
-
   # PRODUCTION
   share-images-with-prod-platform:
     needs: [setup, combine-manifest-gen-ami-entries]
@@ -559,41 +435,3 @@ jobs:
           sleep 120
           cd bodo-platform-image
           python manage_images.py
-
-  add-bodo-version-to-prod-backend:
-    needs: [setup, combine-manifest-gen-ami-entries]
-    runs-on: ubuntu-latest
-    if: |
-      needs.setup.outputs.pushImage == 'true' &&
-      needs.setup.outputs.addToBodoVersionsTable == 'true' &&
-      needs.setup.outputs.publishProduction == 'true'
-    env:
-      AUTH_SERVICE_URL: "https://bodo-prod.frontegg.com"
-      BOT_PLATFORM_USERNAME: ${{ secrets.BOT_PROD_PLATFORM_USERNAME }}
-      BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_PROD_PLATFORM_PASSWORD }}
-      BACKEND_SERVICE_URL: "https://api.bodo.ai"
-      BODO_VERSION: ${{ needs.setup.outputs.bodoVersion }}
-      BUILD_NAME: ${{ needs.setup.outputs.buildName }}
-      BODO_CONDA_INSTALL_LINK: "bodo.jfrog.io/artifactory/api/conda/bodo.ai-platform"
-      ORGANIZATION_UUID: ${{ secrets.PROD_ORGANIZATION_UUID }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v1
-
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
-
-      - name: "Install dependencies"
-        run: |
-          set -xe
-          python -VV
-          python -m site
-          python -m pip install requests
-
-      - name: Add Bodo Version to Prod Platform Backend
-        id: add-bodo-version
-        run: |
-          cd bodo-platform-image
-          python add_bodo_version.py
