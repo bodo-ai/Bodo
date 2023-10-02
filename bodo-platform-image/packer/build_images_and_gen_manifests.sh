@@ -52,6 +52,11 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
+    --build-name)
+      BUILD_NAME="$2"
+      shift
+      shift
+      ;;
     -*|--*)
       echo "Unknown option $1"
       exit 1
@@ -65,6 +70,7 @@ echo "--node-role: $NODE_ROLE"
 echo "--playbook-file: $PLAYBOOK_FILE"
 echo "--bodo-version-file: $BODO_VERSION_FILE"
 echo "--skip-create-images: $SKIP_CREATE_IMAGE"
+echo "--build-name: $BUILD_NAME"
 
 # Check if all required values are set
 if [[ -z $IMAGE_SHA || -z $NODE_ROLE || -z $PLAYBOOK_FILE || -z $BODO_VERSION_FILE || -z $SKIP_CREATE_IMAGE ]]; then
@@ -92,6 +98,7 @@ while read -r LINE; do
       -var "image_sha=${IMAGE_SHA}" \
       -var "bodo_version=${bodo_version}" \
       -var "bodo_version_short=${bodo_version_short}" \
+      -var "build_name=${BUILD_NAME}" \
       -var "skip_create_image=${SKIP_CREATE_IMAGE}" \
       -var "ind=${ind}" \
       "${TEMPLATE_FILE}"
