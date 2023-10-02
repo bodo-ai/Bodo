@@ -22,6 +22,7 @@ from numba.extending import (
     unbox,
 )
 
+from bodo.io.snowflake import parse_conn_str
 from bodo.utils.typing import (
     BodoError,
     get_literal_value,
@@ -107,7 +108,9 @@ def _create_java_snowflake_catalog(
     for key, value in connection_params.items():
         properties.put(key, value)
     # Create the Snowflake catalog
-    return SnowflakeCatalogImplClass(username, password, account, database, warehouse, properties)
+    return SnowflakeCatalogImplClass(
+        username, password, account, database, warehouse, properties
+    )
 
 
 class SnowflakeCatalog(DatabaseCatalog):
@@ -146,6 +149,48 @@ class SnowflakeCatalog(DatabaseCatalog):
             # after validation.
             connection_params = deepcopy(connection_params)
         self.connection_params = connection_params
+
+    @classmethod
+    def from_conn_str(cls, conn_str: str) -> "SnowflakeCatalog":
+        conn_contents = parse_conn_str(conn_str, strict_parsing=True)
+        ref_str = "See https://docs.snowflake.com/developer-guide/python-connector/sqlalchemy#connection-parameters for constructing a connection URL."
+
+        # Parse Required Parameters Out of conn_contents
+        # TODO: Output of parse_conn_str is better as NamedTuple
+        # But what argument are required for Snowflake SQLAlchemy
+        # Snowflake Docs have more details
+        if (username := conn_contents.pop("user", None)) is None:
+            raise BodoError(
+                f"SnowflakeCatalog.from_conn_str: `conn_str` must contain a user login name. {ref_str}"
+            )
+        if (password := conn_contents.pop("password", None)) is None:
+            raise BodoError(
+                f"SnowflakeCatalog.from_conn_str: `conn_str` must contain a password. {ref_str}"
+            )
+        if (account := conn_contents.pop("account", None)) is None:
+            raise BodoError(
+                f"SnowflakeCatalog.from_conn_str: `conn_str` must contain an an account identifier or URL. {ref_str}"
+            )
+        if (warehouse := conn_contents.pop("warehouse", None)) is None:
+            raise BodoError(
+                f"SnowflakeCatalog.from_conn_str: `conn_str` must contain a warehouse name as an additional connection parameter. {ref_str}"
+            )
+        if (database := conn_contents.pop("database", None)) is None:
+            raise BodoError(
+                f"SnowflakeCatalog.from_conn_str: `conn_str` must contain a database name in the URI path. {ref_str}"
+            )
+
+        # Remaining parameters in conn_contents are still passed in
+        # Example: schema, role_name, etc
+        # TODO: Does BodoSQL support session_parameters (its a dict, but can it be flattened?)
+        return cls(
+            username,
+            password,
+            account,
+            warehouse,
+            database,
+            connection_params=conn_contents,
+        )
 
     def get_java_object(self):
         return _create_java_snowflake_catalog(

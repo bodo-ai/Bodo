@@ -5,7 +5,16 @@ import time
 import traceback
 import warnings
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Callable, Dict, List, Literal, Optional, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Tuple,
+)
 from urllib.parse import parse_qsl, urlparse
 from uuid import uuid4
 
@@ -357,11 +366,13 @@ def escape_col_name(col_name: str) -> str:
     return '"{}"'.format(col_name.replace('"', '""'))
 
 
-def snowflake_connect(
-    conn_str: str, is_parallel: bool = False
-) -> "SnowflakeConnection":  # pragma: no cover
+def parse_conn_str(conn_str: str, strict_parsing: bool = False) -> Dict[str, Any]:
     """
-    From Snowflake connection URL, connect to Snowflake.
+    Parse a Snowflake Connection URL into Individual Components,
+    and save to a dict.
+
+    Used for connecting to Snowflake from Pandas API, and passing
+    a connection string to bodosql.SnowflakeCatalog
 
     Args:
         conn_str: Snowflake connection URL in the following format:
@@ -373,15 +384,28 @@ def snowflake_connect(
             your account identifier. Snowflake automatically appends the domain
             name to your account identifier to create the required connection.
             (https://docs.snowflake.com/en/user-guide/sqlalchemy.html#connection-parameters)
-        is_parallel: True if this function being is called from all
-            ranks, and False otherwise
+        strict_parsing: Whether to throw an error or not if query parameters are invalid or
+            incorrectly formatted. Only true for SnowflakeCatalog.from_conn_str
 
-    Returns
-        conn: Snowflake Connection object
+    Returns:
+        Dictionary of contents. Some expected fields include:
+            - user
+            - password
+            - account
+            - port (optional, usually unspecified)
+            - database
+            - schema
+            - session_parameters: Dict[str, str] of special preset params
+            - ...
     """
-    ev = tracing.Event("snowflake_connect", is_parallel=is_parallel)
 
     u = urlparse(conn_str)
+    if u.scheme != "snowflake":
+        raise BodoError(
+            f"Invalid Snowflake Connection URI Provided: Starts with {u.scheme}:// but expected to start with snowflake://.\n"
+            "See https://docs.snowflake.com/developer-guide/python-connector/sqlalchemy#connection-parameters for more details on how to construct a valid connection URI"
+        )
+
     params = {}
     if u.username:
         params["user"] = u.username
@@ -411,7 +435,12 @@ def snowflake_connect(
             params["schema"] = schema
     if u.query:
         # query contains warehouse_name and role_name
-        for key, val in parse_qsl(u.query):
+        try:
+            contents = parse_qsl(u.query, strict_parsing=strict_parsing)
+        except ValueError as e:
+            raise BodoError(f"Invalid Snowflake Connection URI Provided: {e.args[0]}")
+
+        for key, val in contents:
             params[key] = val
             if key == "session_parameters":
                 # Snowflake connector appends to session_parameters and
@@ -420,6 +449,26 @@ def snowflake_connect(
                 import json
 
                 params[key] = json.loads(val)
+
+    return params
+
+
+def snowflake_connect(
+    conn_str: str, is_parallel: bool = False
+) -> "SnowflakeConnection":  # pragma: no cover
+    """
+    From Snowflake connection URL, connect to Snowflake.
+
+    Args:
+        conn_str: Snowflake Connection URL. See parse_conn_str for specific format
+        is_parallel: True if this function being is called from all
+            ranks, and False otherwise
+
+    Returns
+        conn: Snowflake Connection object
+    """
+    ev = tracing.Event("snowflake_connect", is_parallel=is_parallel)
+    params = parse_conn_str(conn_str)
 
     # Set a short login timeout so people don't have to wait the default
     # 60 seconds to find out they added the wrong credentials.
