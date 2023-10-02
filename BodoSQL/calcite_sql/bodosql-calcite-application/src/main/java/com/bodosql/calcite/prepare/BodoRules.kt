@@ -4,6 +4,7 @@ import com.bodosql.calcite.adapter.pandas.PandasJoin
 import com.bodosql.calcite.adapter.pandas.PandasJoinRule
 import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilterLockRule
+import com.bodosql.calcite.application.logicalRules.BodoJoinPushTransitivePredicatesRule
 import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule
 import com.bodosql.calcite.application.logicalRules.FilterAggregateTransposeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterExtractCaseRule
@@ -42,7 +43,6 @@ import org.apache.calcite.rel.rules.AggregateJoinTransposeRule
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule
 import org.apache.calcite.rel.rules.FilterJoinRule
 import org.apache.calcite.rel.rules.JoinCommuteRule
-import org.apache.calcite.rel.rules.JoinPushTransitivePredicatesRule
 import org.apache.calcite.rel.rules.LoptOptimizeJoinRule
 import org.apache.calcite.rel.rules.ProjectAggregateMergeRule
 import org.apache.calcite.rel.rules.ProjectFilterTransposeRule
@@ -214,7 +214,7 @@ object BodoRules {
      */
     @JvmField
     val JOIN_PUSH_TRANSITIVE_PREDICATES: RelOptRule =
-        JoinPushTransitivePredicatesRule.Config.DEFAULT
+        BodoJoinPushTransitivePredicatesRule.Config.DEFAULT
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
