@@ -305,6 +305,7 @@ register_model(GroupbyStateType)(models.OpaqueModel)
 @intrinsic
 def _init_groupby_state(
     typingctx,
+    operator_id,
     build_arr_dtypes,
     build_arr_array_types,
     n_build_arrs,
@@ -318,6 +319,7 @@ def _init_groupby_state(
     """Initialize C++ GroupbyState pointer
 
     Args:
+        operator_id (int64): ID of this operator (used for looking up budget),
         build_arr_dtypes (int8*): pointer to array of ints representing array dtypes
                                    (as provided by numba_to_c_type)
         build_arr_array_types (int8*): pointer to array of ints representing array types
@@ -330,6 +332,7 @@ def _init_groupby_state(
 
     def codegen(context, builder, sig, args):
         (
+            _,  # operator_id (TODO(aneesh) use this in C++)
             build_arr_dtypes,
             build_arr_array_types,
             n_build_arrs,
@@ -337,7 +340,7 @@ def _init_groupby_state(
             f_in_offsets,
             f_in_cols,
             n_funcs,
-            _,
+            _,  # output_state_type
             parallel,
         ) = args
         n_keys = context.get_constant(types.uint64, output_type.n_keys)
@@ -382,6 +385,7 @@ def _init_groupby_state(
         return ret
 
     sig = output_type(
+        types.int64,
         types.voidptr,
         types.voidptr,
         types.int32,
@@ -397,6 +401,7 @@ def _init_groupby_state(
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def init_groupby_state(
+    operator_id,
     key_inds,
     fnames,  # fnames matches function names in supported_agg_funcs
     f_in_offsets,
@@ -430,6 +435,7 @@ def init_groupby_state(
     n_funcs = len(output_type.fnames)
 
     def impl(
+        operator_id,
         key_inds,
         fnames,
         f_in_offsets,
@@ -438,6 +444,7 @@ def init_groupby_state(
         parallel=False,
     ):  # pragma: no cover
         return _init_groupby_state(
+            operator_id,
             build_arr_dtypes.ctypes,
             build_arr_array_types.ctypes,
             n_build_arrs,

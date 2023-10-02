@@ -171,6 +171,7 @@ register_model(UnionStateType)(models.OpaqueModel)
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def init_union_state(
+    operator_id,
     all=False,
     expected_state_typeref=None,
     parallel=False,
@@ -202,6 +203,7 @@ def init_union_state(
     if all_const:
 
         def impl(
+            operator_id,
             all=False,
             expected_state_typeref=None,
             parallel=False,
@@ -221,11 +223,13 @@ def init_union_state(
         f_in_cols = np.array([], np.int32)
 
         def impl(
+            operator_id,
             all=False,
             expected_state_typeref=None,
             parallel=False,
         ):
             return bodo.libs.stream_groupby._init_groupby_state(
+                operator_id,
                 arr_dtypes.ctypes,
                 arr_array_types.ctypes,
                 n_arrs,

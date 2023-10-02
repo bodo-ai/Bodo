@@ -249,7 +249,7 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
         is_last1 = False
         _iter_1 = 0
         state_1 = pd.read_parquet(customer_path, _bodo_chunksize=4000)
-        state_2 = bodo.libs.stream_union.init_union_state(all=all)
+        state_2 = bodo.libs.stream_union.init_union_state(-1, all=all)
         while not is_last1:
             T1, is_last1 = bodo.io.arrow_reader.read_arrow_next(state_1, True)
             T3 = bodo.hiframes.table.table_subset(T1, global_2, False)
@@ -270,7 +270,7 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
 
         is_last3 = False
         _iter_3 = 0
-        table_builder = bodo.libs.table_builder.init_table_builder_state()
+        table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
         while not is_last3:
             T5, is_last3 = bodo.libs.stream_union.union_produce_batch(state_2, True)
             bodo.libs.table_builder.table_builder_append(table_builder, T5)

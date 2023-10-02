@@ -4573,7 +4573,7 @@ class TypingTransforms:
                 "init_table_builder_state",
                 rhs.args,
                 dict(rhs.kws),
-                0,
+                1,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -4609,7 +4609,7 @@ class TypingTransforms:
                 "init_table_builder_state",
                 builder_def.args,
                 dict(builder_def.kws),
-                0,
+                1,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -4629,7 +4629,7 @@ class TypingTransforms:
                     "init_table_builder_state",
                     builder_def.args,
                     dict(builder_def.kws),
-                    1,
+                    2,
                     "use_chunked_builder",
                     default=None,
                     use_default=True,
@@ -4648,11 +4648,24 @@ class TypingTransforms:
                         should_use_chunked_builder_type
                     )
 
+                operator_id_var = get_call_expr_arg(
+                    "init_table_builder_state",
+                    builder_def.args,
+                    dict(builder_def.kws),
+                    0,
+                    "operator_id",
+                    default=-1,
+                    use_default=True,
+                )
+                operator_id = self.typemap.get(operator_id_var.name, None)
+                assert isinstance(operator_id, numba.core.types.scalars.IntegerLiteral)
+                operator_id = operator_id.literal_value
+
                 inputs_unified_arg = get_call_expr_arg(
                     "init_table_builder_state",
                     builder_def.args,
                     dict(builder_def.kws),
-                    2,
+                    3,
                     "input_dicts_unified",
                     default=None,
                     use_default=True,
@@ -4673,9 +4686,11 @@ class TypingTransforms:
                 new_type = bodo.libs.table_builder.TableBuilderStateType(
                     input_table_type, should_use_chunked_builder_arg
                 )
+
                 func_text = (
                     "def impl():\n"
                     "  return bodo.libs.table_builder.init_table_builder_state(\n"
+                    "    operator_id,\n"
                     "    expected_state_type=_expected_state_type,\n"
                     "    use_chunked_builder=_should_use_chunked_builder_arg,\n"
                     f"    {inputs_unified_txt}\n"
@@ -4686,6 +4701,7 @@ class TypingTransforms:
                     func_text,
                     "impl",
                     {
+                        "operator_id": operator_id,
                         "_expected_state_type": new_type,
                         "_should_use_chunked_builder_arg": should_use_chunked_builder_arg,
                         "_inputs_unified_arg": inputs_unified_arg,
@@ -4708,7 +4724,7 @@ class TypingTransforms:
                 "snowflake_writer_init",
                 rhs.args,
                 dict(rhs.kws),
-                5,
+                6,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -4748,7 +4764,7 @@ class TypingTransforms:
                 "snowflake_writer_init",
                 writer_init_def.args,
                 dict(writer_init_def.kws),
-                5,
+                6,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -4795,7 +4811,7 @@ class TypingTransforms:
                 "init_join_state",
                 rhs.args,
                 dict(rhs.kws),
-                7,
+                8,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -4837,7 +4853,7 @@ class TypingTransforms:
                 "init_join_state",
                 join_def.args,
                 dict(join_def.kws),
-                7,
+                8,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -4880,6 +4896,7 @@ class TypingTransforms:
                         input_table_type,
                     )
                 params = [
+                    "operator_id",
                     "build_key_inds",
                     "probe_key_inds",
                     "build_column_names",
@@ -4887,14 +4904,14 @@ class TypingTransforms:
                     "build_outer",
                     "probe_outer",
                 ]
-                args = join_def.args[:6]
+                args = join_def.args[:7]
 
                 # Fetch the op_pool_size_bytes argument
                 op_pool_size_bytes_var = get_call_expr_arg(
                     "init_join_state",
                     join_def.args,
                     dict(join_def.kws),
-                    6,
+                    7,
                     "op_pool_size_bytes",
                     default=None,
                     use_default=True,
@@ -4913,7 +4930,7 @@ class TypingTransforms:
                     "init_join_state",
                     join_def.args,
                     dict(join_def.kws),
-                    8,
+                    9,
                     "non_equi_condition",
                     default=None,
                     use_default=True,
@@ -4930,6 +4947,7 @@ class TypingTransforms:
                 # Compile a new function.
                 func_text = f"""def impl({", ".join(params)}):
                     return bodo.libs.stream_join.init_join_state(
+                        operator_id,
                         build_key_inds,
                         probe_key_inds,
                         build_column_names,
@@ -4963,7 +4981,7 @@ class TypingTransforms:
                 "init_groupby_state",
                 rhs.args,
                 dict(rhs.kws),
-                4,
+                5,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5006,7 +5024,7 @@ class TypingTransforms:
                 "init_groupby_state",
                 groupby_def.args,
                 dict(groupby_def.kws),
-                4,
+                5,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5030,10 +5048,11 @@ class TypingTransforms:
                     input_table_type,
                 )
 
-                args = groupby_def.args[:4]
+                args = groupby_def.args[:5]
                 # Compile a new function.
-                func_text = f"""def impl(key_inds, ftypes, f_in_offsets, f_in_cols):
+                func_text = f"""def impl(operator_id, key_inds, ftypes, f_in_offsets, f_in_cols):
                     return bodo.libs.stream_groupby.init_groupby_state(
+                        operator_id,
                         key_inds,
                         ftypes,
                         f_in_offsets,
@@ -5097,7 +5116,7 @@ class TypingTransforms:
                 "init_union_state",
                 rhs.args,
                 dict(rhs.kws),
-                0,
+                1,
                 "expected_state_typeref",
                 default=None,
                 use_default=True,
@@ -5138,7 +5157,7 @@ class TypingTransforms:
                 "init_union_state",
                 union_def.args,
                 dict(union_def.kws),
-                0,
+                1,
                 "expected_state_typeref",
                 default=None,
                 use_default=True,
@@ -5161,12 +5180,14 @@ class TypingTransforms:
                 )
 
                 # Compile a new function with new state
-                func_text = f"""def impl():
+                func_text = f"""def impl(operator_id):
                     return bodo.libs.stream_union.init_union_state(
+                        operator_id,
                         all=_all,
                         expected_state_typeref=_expected_state_typeref,
                     )
                 """
+                args = union_def.args[:1]
                 self._replace_state_definition(
                     func_text,
                     "impl",
@@ -5174,7 +5195,7 @@ class TypingTransforms:
                         "_all": output_state_type.all,
                         "_expected_state_typeref": new_state_type,
                     },
-                    (),
+                    args,
                     union_state,
                     union_def,
                     label,

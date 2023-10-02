@@ -366,6 +366,7 @@ def begin_write_transaction(cursor, location, sf_schema, if_exists, table_type):
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def snowflake_writer_init(
+    operator_id,
     conn,
     table_name,
     schema,
@@ -386,7 +387,7 @@ def snowflake_writer_init(
     )
 
     func_text = (
-        "def impl(conn, table_name, schema, if_exists, table_type, expected_state_type=None, input_dicts_unified=False, _is_parallel=False):\n"
+        "def impl(operator_id, conn, table_name, schema, if_exists, table_type, expected_state_type=None, input_dicts_unified=False, _is_parallel=False):\n"
         "    ev = tracing.Event('snowflake_writer_init', is_parallel=_is_parallel)\n"
         "    location = ''\n"
     )
