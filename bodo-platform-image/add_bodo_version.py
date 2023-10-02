@@ -8,6 +8,7 @@ assert "BOT_PLATFORM_USERNAME" in os.environ
 assert "BOT_PLATFORM_PASSWORD" in os.environ
 assert "BACKEND_SERVICE_URL" in os.environ
 assert "BODO_VERSION" in os.environ
+assert "BUILD_NAME" in os.environ
 assert "BODO_CONDA_INSTALL_LINK" in os.environ
 assert "ORGANIZATION_UUID" in os.environ
 
@@ -24,7 +25,7 @@ print("Login successful...")
 print("Triggering bodoVersion endpoint on backend with the access token...")
 header = {'Authorization': 'Bearer ' + access_token}
 bodoVersionData = {
-    "bodoVersion": "%s" % os.environ["BODO_VERSION"],
+    "bodoVersion": "%s" % os.environ["BUILD_NAME"],
     "condaInstallLink": "%s" % os.environ["BODO_CONDA_INSTALL_LINK"],
     "supported": "true"
 }
