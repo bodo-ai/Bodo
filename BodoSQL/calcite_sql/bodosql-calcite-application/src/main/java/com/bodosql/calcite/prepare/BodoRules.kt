@@ -436,7 +436,7 @@ object BodoRules {
      */
     @JvmField
     val SNOWFLAKE_FILTER_LOCK_RULE: RelOptRule =
-        SnowflakeFilterLockRule.Config.DEFAULT_CONFIG.toRule()
+        SnowflakeFilterLockRule.Config.DEFAULT_CONFIG.withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER).toRule()
 
     // RULE GROUPINGS
 
