@@ -2,7 +2,7 @@
 
 This folder contains scripts for:
 
-1. Building Images(AMI&VM Image)'s containing Bodo executables 
+1. Building Images(AMI&VM Image)'s containing Bodo executables
 2. Updating the list of available AMIs to amazon account ID's of users allowed
 3. Updating the list of available VMIs
 
@@ -32,17 +32,9 @@ Ansible automates the process of configuring hosts with different configurations
 
 ## Folder Structure
 
-#### add_bodo_version.py
-
-Adds bodo versions to the target platform.
-
 #### gen_images_entries_from_manifests.py
 
 Generates `ami_share_requests.json` and `vmi_share_requests.json` from manifest files produced from `packer build`.
-
-#### get_bodo_versions.py
-
-Get available bodo versions to build images.
 
 #### stage_azure_img_def.sh
 
@@ -159,7 +151,6 @@ or you can use json variables files stored in vars directory:
 cd packer
 packer build -var-file vars/worker.json templates/images.pkr.hcl
 ```
-
 
 ## Confluence Docs
 
