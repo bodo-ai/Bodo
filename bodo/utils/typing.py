@@ -2591,7 +2591,6 @@ def error_on_nested_arrays(table_type):
             arr_type,
             (
                 bodo.MapArrayType,
-                bodo.StructArrayType,
                 bodo.TupleArrayType,
                 bodo.IntervalArrayType,
             ),

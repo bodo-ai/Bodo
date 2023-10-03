@@ -172,7 +172,7 @@ std::unique_ptr<array_info> alloc_array_item(
     const std::shared_ptr<::arrow::MemoryManager> mm) {
     std::unique_ptr<BodoBuffer> offsets_buffer =
         AllocateBodoBuffer(n_arrays + 1, Bodo_CType_offset, pool, mm);
-    int64_t n_bytes = (int64_t)((n_arrays + 7) >> 3);
+    int64_t n_bytes = (n_arrays + 7) >> 3;
     std::unique_ptr<BodoBuffer> null_bitmap_buffer =
         AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8, pool, std::move(mm));
     // Set offset buffer to all zeros. Not setting this will result in known
@@ -209,22 +209,81 @@ std::unique_ptr<array_info> alloc_array_item(
     }
 }
 
-std::unique_ptr<array_info> alloc_array_item_like(
-    std::shared_ptr<array_info> array, bodo::IBufferPool* const pool,
+std::unique_ptr<array_info> alloc_struct(
+    int64_t length, std::vector<std::shared_ptr<array_info>> child_arrays,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    int64_t n_bytes = (length + 7) >> 3;
+    std::unique_ptr<BodoBuffer> buffer_bitmask =
+        AllocateBodoBuffer(n_bytes, pool, std::move(mm));
+    // Set null bitmask to all ones to avoid unexpected issues
+    memset(buffer_bitmask->mutable_data(), 0xff, n_bytes);
+    return std::make_unique<array_info>(
+        bodo_array_type::STRUCT, Bodo_CTypes::CTypeEnum::STRUCT, length,
+        std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer_bitmask)}),
+        std::move(child_arrays));
+}
+
+std::unique_ptr<array_info> alloc_struct(
+    int64_t length, size_t start_idx, size_t end_idx,
+    const std::vector<int8_t>& arr_array_types,
+    const std::vector<int8_t>& arr_c_types, bodo::IBufferPool* const pool,
     const std::shared_ptr<::arrow::MemoryManager> mm) {
-    if (array->arr_type != bodo_array_type::ARRAY_ITEM) {
-        throw std::runtime_error("alloc_array_item_like: array type (" +
-                                 GetArrType_as_string(array->arr_type) +
-                                 ") not supported: only nested array type "
-                                 "(ARRAY_ITEM) is accepted.");
+    std::vector<size_t> col_to_idx_map =
+        get_col_idx_map(arr_array_types, start_idx + 2, end_idx);
+    std::vector<std::shared_ptr<array_info>> child_arrays;
+
+    child_arrays.reserve(col_to_idx_map.size());
+    for (size_t i = 0; i < col_to_idx_map.size(); ++i) {
+        size_t col_start_idx = col_to_idx_map[i],
+               col_end_idx = i + 1 == col_to_idx_map.size()
+                                 ? end_idx
+                                 : col_to_idx_map[i + 1];
+        bodo_array_type::arr_type_enum arr_type =
+            (bodo_array_type::arr_type_enum)arr_array_types[col_start_idx];
+        Bodo_CTypes::CTypeEnum dtype =
+            (Bodo_CTypes::CTypeEnum)arr_c_types[col_start_idx];
+        if (arr_type == bodo_array_type::ARRAY_ITEM) {
+            child_arrays.push_back(
+                alloc_array_item(length, col_start_idx, col_end_idx,
+                                 arr_array_types, arr_c_types, pool, mm));
+        } else if (arr_type == bodo_array_type::STRUCT) {
+            child_arrays.push_back(alloc_struct(length, col_start_idx,
+                                                col_end_idx, arr_array_types,
+                                                arr_c_types, pool, mm));
+        } else {
+            child_arrays.push_back(alloc_array(length, 0, 0, arr_type, dtype,
+                                               -1, 0, 0, false, false, false,
+                                               pool, mm));
+        }
     }
-    std::shared_ptr<array_info> inner_array =
-        array->child_arrays[0]->arr_type == bodo_array_type::ARRAY_ITEM
-            ? alloc_array_item_like(array->child_arrays[0], pool, mm)
-            : alloc_array(0, 0, 0, array->child_arrays[0]->arr_type,
-                          array->child_arrays[0]->dtype, -1, 0, 0, false, false,
-                          false, pool, mm);
-    return alloc_array_item(0, inner_array, pool, mm);
+
+    return alloc_struct(length, std::move(child_arrays), pool, mm);
+}
+
+std::unique_ptr<array_info> alloc_array_like(std::shared_ptr<array_info> in_arr,
+                                             bool reuse_dictionaries) {
+    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+    if (arr_type == bodo_array_type::ARRAY_ITEM) {
+        return alloc_array_item(0,
+                                alloc_array_like(in_arr->child_arrays.front()));
+    } else if (arr_type == bodo_array_type::STRUCT) {
+        std::vector<std::shared_ptr<array_info>> child_arrays;
+        child_arrays.reserve(in_arr->child_arrays.size());
+        for (std::shared_ptr<array_info> child_array : in_arr->child_arrays) {
+            child_arrays.push_back(alloc_array_like(child_array));
+        }
+        return alloc_struct(0, std::move(child_arrays));
+    } else {
+        std::unique_ptr<array_info> out_arr =
+            alloc_array(0, 0, 0, arr_type, dtype);
+        // For dict encoded columns, re-use the same dictionary if
+        // reuse_dictionaries = true
+        if (reuse_dictionaries && (arr_type == bodo_array_type::DICT)) {
+            out_arr->child_arrays.front() = in_arr->child_arrays.front();
+        }
+        return out_arr;
+    }
 }
 
 std::unique_ptr<array_info> alloc_categorical(
@@ -303,7 +362,7 @@ std::unique_ptr<array_info> alloc_string_array(
         AllocateBodoBuffer(n_chars, Bodo_CTypes::UINT8, pool, mm);
     std::unique_ptr<BodoBuffer> offsets_buffer =
         AllocateBodoBuffer(length + 1, Bodo_CType_offset, pool, mm);
-    int64_t n_bytes = (int64_t)((length + 7) / 8) + extra_null_bytes;
+    int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     std::unique_ptr<BodoBuffer> null_bitmap_buffer =
         AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8, pool, std::move(mm));
     // setting all to non-null to avoid unexpected issues
@@ -471,7 +530,7 @@ std::unique_ptr<array_info> alloc_list_string_array(
     std::shared_ptr<::arrow::MemoryManager> mm) {
     std::unique_ptr<BodoBuffer> offsets_buffer =
         AllocateBodoBuffer(length + 1, Bodo_CType_offset, pool, mm);
-    int64_t n_bytes = (int64_t)((length + 7) / 8) + extra_null_bytes;
+    int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     std::unique_ptr<BodoBuffer> null_bitmap_buffer =
         AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8, pool, std::move(mm));
     // setting all to non-null to avoid unexpected issues
@@ -538,7 +597,7 @@ void decref_numpy_payload(numpy_arr_payload arr) {
 /**
  * The allocations array function for the function.
  *
- * In the case of NUMPY/CATEGORICAL or NULLABLE_INT_BOOL,
+ * In the case of NUMPY, CATEGORICAL, NULLABLE_INT_BOOL or STRUCT:
  * -- length is the number of rows, and n_sub_elems, n_sub_sub_elems do not
  * matter.
  * In the case of STRING:
@@ -591,9 +650,13 @@ std::unique_ptr<array_info> alloc_array(
                                            pool, std::move(mm));
         case bodo_array_type::ARRAY_ITEM:
             throw std::runtime_error(
-                "alloc_array: nested array type (ARRAY_ITEM) is not supported "
-                "by alloc_array. Use alloc_array_item or alloc_array_item_like "
+                "alloc_array: ARRAY_ITEM array is not supported by "
+                "alloc_array. Use alloc_array_item or alloc_array_like "
                 "instead.");
+        case bodo_array_type::STRUCT:
+            throw std::runtime_error(
+                "alloc_array: STRUCT array is not supported by alloc_array. "
+                "Use alloc_struct or alloc_array_like instead.");
         default:
             throw std::runtime_error("alloc_array: array type (" +
                                      GetArrType_as_string(arr_type) +
@@ -915,34 +978,113 @@ get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table) {
     return std::make_tuple(arr_c_types, arr_array_types);
 }
 
-void get_next_col_arr_type(size_t& start_idx, size_t& end_idx,
-                           const std::vector<int8_t>& arr_array_types) {
-    if (arr_array_types.back() == bodo_array_type::ARRAY_ITEM) {
-        throw std::runtime_error(
-            "get_next_arr_type: The last array type cannot be ARRAY_ITEM: "
-            "inner array type needs to be provided!");
+/**
+ * @brief Get the next start and end index of bodo array types array in place.
+ *
+ * For example, given the following inputs:
+ * col_start_idx = 0, col_end_idx = 2 i.e. range = [0, 2)
+ * arr_array_types = [ARRAY_ITEM, NULLABLE_INT_BOOL, ARRAY_ITEM, ARRAY_ITEM,
+ * NULLABLE_INT_BOOL, NULLABLE_INT_BOOL]
+ *
+ * The function will modify the range to [2, 5)
+ *
+ * To get the range for the first column i.e. initialization,
+ * call get_next_col_arr_type with col_end_idx = 0
+ *
+ * @param[in, out] col_start_idx Start index (inclusive) of the index range
+ * corresponding to the previous column
+ * @param[in, out] col_end_idx End index (exclusive) of the index range
+ * corresponding to the previous column
+ * @param[in] arr_array_types The array of array types for all columns
+ * @param[in] arr_end_idx End index (exclusive) of the array type array. This
+ * parameter is used mostly for recursive call on type subarray when handling
+ * STRUCT column.
+ */
+void get_next_col_arr_type(size_t& col_start_idx, size_t& col_end_idx,
+                           const std::vector<int8_t>& arr_array_types,
+                           size_t arr_end_idx) {
+    if (col_end_idx >= arr_end_idx) {
+        throw std::runtime_error("get_next_col_arr_type: index " +
+                                 std::to_string(col_end_idx) +
+                                 " out of bound!");
     }
-    start_idx = end_idx;
-    if (end_idx < arr_array_types.size()) {
-        while (end_idx < arr_array_types.size() &&
-               arr_array_types[end_idx] == bodo_array_type::ARRAY_ITEM) {
-            ++end_idx;
+    col_start_idx = col_end_idx;
+    if (arr_array_types[col_end_idx] == bodo_array_type::ARRAY_ITEM) {
+        do {
+            ++col_end_idx;
+        } while (col_end_idx < arr_end_idx &&
+                 arr_array_types[col_end_idx] == bodo_array_type::ARRAY_ITEM);
+        if (col_end_idx >= arr_end_idx) {
+            throw std::runtime_error(
+                "The last array type cannot be ARRAY_ITEM: inner array type "
+                "needs to be provided!");
         }
-        ++end_idx;
+        ++col_end_idx;
+    } else if (arr_array_types[col_end_idx] == bodo_array_type::STRUCT) {
+        int8_t tot = arr_array_types[col_end_idx + 1];
+        col_end_idx += 2;
+        while (tot--) {
+            get_next_col_arr_type(col_end_idx, col_end_idx, arr_array_types,
+                                  arr_end_idx);
+        }
+    } else {
+        ++col_end_idx;
     }
 }
 
-std::vector<size_t> get_col_idx_map(
-    const std::vector<int8_t>& arr_array_types) {
+/**
+ * @brief Overloading of the previous get_next_col_arr_type to make
+ * arr_array_types.size() the default value for arr_end_idx
+ */
+inline void get_next_col_arr_type(size_t& col_start_idx, size_t& col_end_idx,
+                                  const std::vector<int8_t>& arr_array_types) {
+    get_next_col_arr_type(col_start_idx, col_end_idx, arr_array_types,
+                          arr_array_types.size());
+}
+
+/**
+ * @brief Get the start index of next bodo array types array in place. This
+ * function is used when you don't care about the end index / length of the
+ * output.
+ *
+ * For example, given the following inputs:
+ * col_idx = 0
+ * arr_array_types = [ARRAY_ITEM, NULLABLE_INT_BOOL, ARRAY_ITEM, ARRAY_ITEM,
+ * NULLABLE_INT_BOOL, NULLABLE_INT_BOOL]
+ *
+ * The function will modify col_idx to 2
+ *
+ * @param[in, out] col_idx Column index of the index range corresponding to the
+ * previous column
+ * @param[in] arr_array_types The array of array types for all columns
+ * @param[in] arr_end_idx End index (exclusive) of the array type array. This
+ * parameter is used mostly for recursive call on type subarray when handling
+ * STRUCT array.
+ */
+inline void get_next_col_arr_type(size_t& col_idx,
+                                  const std::vector<int8_t>& arr_array_types,
+                                  size_t arr_end_idx) {
+    get_next_col_arr_type(col_idx, col_idx, arr_array_types, arr_end_idx);
+}
+
+/**
+ * @brief Overloading of the previous get_next_col_arr_type to make
+ * arr_array_types.size() the default value for arr_end_idx
+ */
+inline void get_next_col_arr_type(size_t& col_idx,
+                                  const std::vector<int8_t>& arr_array_types) {
+    get_next_col_arr_type(col_idx, col_idx, arr_array_types,
+                          arr_array_types.size());
+}
+
+std::vector<size_t> get_col_idx_map(const std::vector<int8_t>& arr_array_types,
+                                    size_t arr_start_idx, size_t arr_end_idx) {
     std::vector<size_t> col_idx_map;
 
-    size_t start_idx, end_idx = 0;
-    // Get the initial range
-    get_next_col_arr_type(start_idx, end_idx, arr_array_types);
-    while (start_idx < arr_array_types.size()) {
-        col_idx_map.push_back(start_idx);
-        get_next_col_arr_type(start_idx, end_idx, arr_array_types);
-    }
+    do {
+        col_idx_map.push_back(arr_start_idx);
+        get_next_col_arr_type(arr_start_idx, arr_array_types);
+    } while (arr_start_idx < arr_end_idx);
 
     return col_idx_map;
 }

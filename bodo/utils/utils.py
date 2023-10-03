@@ -9,7 +9,7 @@ import re
 import sys
 import warnings
 from enum import Enum
-from typing import List
+from typing import Iterable
 
 import numba
 import numpy as np
@@ -87,7 +87,7 @@ class CTypeEnum(Enum):
     # NOTE: currently, only used for handling decimal array's data array for scatterv
     # since it handles the data array inside decimal array separately
     Int128 = 17
-    # NOTE: 17 is used by LIST_STRING in bodo_common.h
+    # NOTE: 18 is used by LIST_STRING in bodo_common.h
     LIST = 19
     STRUCT = 20
     BINARY = 21
@@ -174,7 +174,7 @@ def get_constant(func_ir, var, default=NOT_CONSTANT):
 
 def numba_to_c_type(t) -> int:  # pragma: no cover
     """
-    Derive the enum value for the dtype of the array being passed to C++. Nested array types (ArrayItemArrayType) are not supported. For nested array types, use numba_to_c_types instead.
+    Derive the enum value for the dtype of the array being passed to C++. Semi-structured array types (ArrayItemArrayType, StructArrayType, MapArrayType, TupleArrayType) are not supported. Please use numba_to_c_types instead.
 
     Args:
         t: Dtype that needs to be passed to C++.
@@ -184,20 +184,19 @@ def numba_to_c_type(t) -> int:  # pragma: no cover
     """
     if isinstance(t, bodo.libs.decimal_arr_ext.Decimal128Type):
         return CTypeEnum.Decimal.value
-
-    if isinstance(t, PandasDatetimeTZDtype):
+    elif isinstance(t, PandasDatetimeTZDtype):
         return CTypeEnum.Datetime.value
-
-    if isinstance(t, PandasTimestampType):  # pragma: no cover
+    elif isinstance(t, PandasTimestampType):
         return CTypeEnum.Int64.value
-
-    if isinstance(t, bodo.hiframes.time_ext.TimeType):
+    elif isinstance(t, bodo.hiframes.time_ext.TimeType):
         return CTypeEnum.Time.value
+    else:
+        return _numba_to_c_type_map[t]
 
-    return _numba_to_c_type_map[t]
 
-
-def numba_to_c_types(arr_types: List) -> np.ndarray:  # pragma: no cover
+def numba_to_c_types(
+    arr_types: Iterable[types.ArrayCompatible],
+) -> np.ndarray:  # pragma: no cover
     """
     Derive the enum value for a list of array dtypes passed to C++.
 
@@ -209,16 +208,21 @@ def numba_to_c_types(arr_types: List) -> np.ndarray:  # pragma: no cover
     """
     c_types = []
     for arr_type in arr_types:
-        while isinstance(arr_type, bodo.ArrayItemArrayType):
-            c_types.append(CTypeEnum.LIST.value)
-            arr_type = arr_type.dtype
-        c_types.append(numba_to_c_type(arr_type.dtype))
+        if isinstance(arr_type, bodo.StructArrayType):
+            c_types.append(CTypeEnum.STRUCT.value)
+            c_types.append(len(arr_type.data))
+            c_types.extend(numba_to_c_types(arr_type.data))
+        else:
+            while isinstance(arr_type, bodo.ArrayItemArrayType):
+                c_types.append(CTypeEnum.LIST.value)
+                arr_type = arr_type.dtype
+            c_types.append(numba_to_c_type(arr_type.dtype))
     return np.array(c_types, dtype=np.int8)
 
 
 def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no cover
     """
-    Derive the enum value for the array being passed to C++. Nested array types (ArrayItemArrayType) are not supported. For nested array types, use numba_to_c_array_types instead.
+    Derive the enum value for the array being passed to C++. Semi-structured array types (ArrayItemArrayType, StructArrayType, MapArrayType, TupleArrayType) are not supported. Please use numba_to_c_array_types instead.
 
     Args:
         arr_type (types.ArrayCompatible): An array type that needs
@@ -265,12 +269,12 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
         return CArrayTypeEnum.INTERVAL.value
     elif arr_type == bodo.dict_str_arr_type:
         return CArrayTypeEnum.DICT.value
-    else:  # pragma: no cover
+    else:
         raise BodoError(f"Unsupported Array Type '{arr_type}' in numba_to_c_array_type")
 
 
 def numba_to_c_array_types(
-    arr_types: List[types.ArrayCompatible],
+    arr_types: Iterable[types.ArrayCompatible],
 ) -> np.ndarray:  # pragma: no cover
     """
     Derive the enum value for a list of array dtypes passed to C++.
@@ -283,10 +287,15 @@ def numba_to_c_array_types(
     """
     c_arr_types = []
     for arr_type in arr_types:
-        while isinstance(arr_type, bodo.ArrayItemArrayType):
-            c_arr_types.append(CArrayTypeEnum.ARRAY_ITEM.value)
-            arr_type = arr_type.dtype
-        c_arr_types.append(numba_to_c_array_type(arr_type))
+        if isinstance(arr_type, bodo.StructArrayType):
+            c_arr_types.append(CArrayTypeEnum.STRUCT.value)
+            c_arr_types.append(len(arr_type.data))
+            c_arr_types.extend(numba_to_c_array_types(arr_type.data))
+        else:
+            while isinstance(arr_type, bodo.ArrayItemArrayType):
+                c_arr_types.append(CArrayTypeEnum.ARRAY_ITEM.value)
+                arr_type = arr_type.dtype
+            c_arr_types.append(numba_to_c_array_type(arr_type))
     return np.array(c_arr_types, dtype=np.int8)
 
 

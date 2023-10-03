@@ -85,16 +85,16 @@ struct ChunkedTableArrayBuilder {
     // Internal array with data values
     std::shared_ptr<array_info> data_array;
 
+    // Child array builders
+    // TODO[BSE-1258]: change to chunked buffer to allow pin/unpin each chunk
+    // separately
+    std::vector<ArrayBuildBuffer> child_array_builders;
+
     // Shared dictionary builder
     std::shared_ptr<DictionaryBuilder> dict_builder;
     // Dictionary indices buffer for appending dictionary indices (only for
     // dictionary-encoded string arrays)
     std::shared_ptr<ChunkedTableArrayBuilder> dict_indices;
-
-    // Inner array builder
-    // TODO[BSE-1258]: change to chunked buffer to allow pin/unpin each chunk
-    // separately
-    std::shared_ptr<ArrayBuildBuffer> inner_array_builder;
 
     // Current number of elements in the buffers.
     const uint64_t& size;
@@ -200,9 +200,22 @@ struct ChunkedTableArrayBuilder {
                         GetDtype_as_string(this->data_array->dtype) +
                         " not supported!");
             }
+        } else if (this->data_array->arr_type == bodo_array_type::STRUCT &&
+                   in_arr->arr_type == bodo_array_type::STRUCT) {
+            switch (this->data_array->dtype) {
+                CASE_APPEND_ROWS_DTYPE(bodo_array_type::STRUCT,
+                                       bodo_array_type::STRUCT,
+                                       Bodo_CTypes::STRUCT)
+                default:
+                    throw std::runtime_error(
+                        "ChunkedTableArrayBuilder::UnsafeAppendRows: data "
+                        "type " +
+                        GetDtype_as_string(this->data_array->dtype) +
+                        " not supported!");
+            }
         } else {
             throw std::runtime_error(
-                "ArrayBuildBuffer::UnsafeAppendBatch: array type " +
+                "ChunkedTableArrayBuilder::UnsafeAppendRows: array type " +
                 GetArrType_as_string(this->data_array->arr_type) +
                 " not supported!");
         }
@@ -691,14 +704,8 @@ struct ChunkedTableArrayBuilder {
     }
 
     /**
-     * @brief Append the rows from in_arr found via
-     * idxs[idx_start: idx_start + idx_length] into this array.
-     * This assumes that enough space is available in the buffers
-     * without need to resize. This is useful internally as well
-     * as externally when the caller is tracking available space
-     * themselves.
-     *
-     * This is the implementation where both arrays are nested arrays.
+     * @brief UnsafeAppendRows implementation where both arrays are nested
+     * arrays.
      *
      * @param in_arr The array from which we are inserting.
      * @param idxs The indices giving which rows in in_arr we want to insert.
@@ -710,6 +717,24 @@ struct ChunkedTableArrayBuilder {
               Bodo_CTypes::CTypeEnum dtype>
         requires(out_arr_type == bodo_array_type::ARRAY_ITEM &&
                  in_arr_type == bodo_array_type::ARRAY_ITEM)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length);
+
+    /**
+     * @brief UnsafeAppendRows implementation where both arrays are struct
+     * arrays.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::STRUCT &&
+                 in_arr_type == bodo_array_type::STRUCT)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
                           const std::span<const int64_t> idxs, size_t idx_start,
                           size_t idx_length);

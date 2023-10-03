@@ -260,7 +260,7 @@ from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.primitive_arr_ext import PrimitiveArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.nullable_tuple_ext import NullableTupleType
-from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.libs.csr_matrix_ext import CSRMatrixType
 from bodo.libs.matrix_ext import MatrixType
