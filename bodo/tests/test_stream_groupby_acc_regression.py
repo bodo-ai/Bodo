@@ -162,7 +162,7 @@ def impl(conn_str):  # Codegen change: add conn_str
     _temp25 = _temp24 - _temp22
     _temp21 = _temp21 + _temp25
     __bodo_streaming_batches_table_builder_1 = (
-        bodo.libs.table_builder.init_table_builder_state()
+        bodo.libs.table_builder.init_table_builder_state(-1)
     )
     while not (_temp17):
         _temp3 = time.time()
