@@ -30,8 +30,13 @@ ArrayBuildBuffer::ArrayBuildBuffer(
         this->dict_indices = std::make_shared<ArrayBuildBuffer>(
             this->data_array->child_arrays[1]);
     } else if (_data_array->arr_type == bodo_array_type::ARRAY_ITEM) {
-        this->inner_array_builder = std::make_shared<ArrayBuildBuffer>(
+        this->child_array_builders.emplace_back(
             this->data_array->child_arrays[0]);
+    } else if (_data_array->arr_type == bodo_array_type::STRUCT) {
+        for (const std::shared_ptr<array_info>& child_array :
+             this->data_array->child_arrays) {
+            this->child_array_builders.emplace_back(child_array);
+        }
     }
 }
 
@@ -201,6 +206,10 @@ void ArrayBuildBuffer::UnsafeAppendBatch(
         if (in_arr->dtype == Bodo_CTypes::LIST) {
             APPEND_ROWS(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
         }
+    } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
+        if (in_arr->dtype == Bodo_CTypes::STRUCT) {
+            APPEND_ROWS(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
+        }
     } else {
         throw std::runtime_error(
             "ArrayBuildBuffer::UnsafeAppendBatch: array type " +
@@ -363,6 +372,10 @@ void ArrayBuildBuffer::UnsafeAppendBatch(
     } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
         if (in_arr->dtype == Bodo_CTypes::LIST) {
             APPEND_BATCH_ARRAY(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
+        }
+    } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
+        if (in_arr->dtype == Bodo_CTypes::STRUCT) {
+            APPEND_BATCH_ARRAY(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
         }
     } else {
         throw std::runtime_error(
@@ -609,13 +622,24 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
             // update offset and null bitmap buffers
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
-                CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(
-                                    (new_capacity + 1) * sizeof(offset_t)),
-                                "Reserve failed!");
+                CHECK_ARROW_MEM(
+                    data_array->buffers[0]->Reserve((new_capacity + 1) *
+                                                    sizeof(offset_t)),
+                    "ArrayBuildBuffer::ReserveSize: Reserve failed!");
                 CHECK_ARROW_MEM(
                     this->data_array->buffers[1]->Reserve(
                         arrow::bit_util::BytesForBits(new_capacity)),
-                    "Reserve failed!");
+                    "ArrayBuildBuffer::ReserveSize: Reserve failed!");
+                capacity = new_capacity;
+            }
+        } break;
+        case bodo_array_type::STRUCT: {
+            if (min_capacity > capacity) {
+                int64_t new_capacity = std::max(min_capacity, capacity * 2);
+                CHECK_ARROW_MEM(
+                    this->data_array->buffers[0]->Reserve(
+                        arrow::bit_util::BytesForBits(new_capacity)),
+                    "ArrayBuildBuffer::ReserveSize: Reserve failed!");
                 capacity = new_capacity;
             }
         } break;
@@ -655,10 +679,18 @@ void ArrayBuildBuffer::Reset() {
                 this->dict_builder->dict_buff->data_array;
         } break;
         case bodo_array_type::ARRAY_ITEM: {
-            this->inner_array_builder->Reset();
+            this->child_array_builders.front().Reset();
             CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
                             "ArrayBuildBuffer::Reset: SetSize failed!");
             CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(0),
+                            "ArrayBuildBuffer::Reset: SetSize failed!");
+        } break;
+        case bodo_array_type::STRUCT: {
+            for (ArrayBuildBuffer child_array_builder :
+                 this->child_array_builders) {
+                child_array_builder.Reset();
+            }
+            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
                             "ArrayBuildBuffer::Reset: SetSize failed!");
         } break;
         default: {
@@ -866,6 +898,10 @@ void TableBuildBuffer::UnsafeAppendBatch(
             if (in_arr->dtype == Bodo_CTypes::LIST) {
                 APPEND_BATCH(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
             }
+        } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
+            if (in_arr->dtype == Bodo_CTypes::STRUCT) {
+                APPEND_BATCH(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
+            }
         }
     }
 #undef APPEND_BATCH
@@ -1031,6 +1067,10 @@ void TableBuildBuffer::UnsafeAppendBatch(
             if (in_arr->dtype == Bodo_CTypes::LIST) {
                 APPEND_BATCH(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
             }
+        } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
+            if (in_arr->dtype == Bodo_CTypes::STRUCT) {
+                APPEND_BATCH(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
+            }
         }
     }
 #undef APPEND_BATCH
@@ -1151,7 +1191,14 @@ int get_type_arr_size(int8_t* arr_array_types, int n_arrs) {
     int type_arr_size = 0, n_col = 0;
 
     while (n_col < n_arrs) {
-        if (arr_array_types[type_arr_size] != bodo_array_type::ARRAY_ITEM) {
+        if (arr_array_types[type_arr_size] == bodo_array_type::STRUCT) {
+            type_arr_size +=
+                get_type_arr_size(arr_array_types + type_arr_size + 2,
+                                  arr_array_types[type_arr_size + 1]) +
+                1;
+            ++n_col;
+        } else if (arr_array_types[type_arr_size] !=
+                   bodo_array_type::ARRAY_ITEM) {
             ++n_col;
         }
         ++type_arr_size;

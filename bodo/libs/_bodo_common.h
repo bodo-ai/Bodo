@@ -506,14 +506,19 @@ inline void SetBitTo(std::vector<uint8_t, Alloc>& V, int64_t i,
  * --- data3 is for the index_offsets
  * --- null_bitmask for whether the data is missing or not.
  * case of DICT:
- * --- child_array[0] is the string array for the dictionary.
- * --- child_array[1] is a Int32 array for the indices. This array and
+ * --- child_arrays[0] is the string array for the dictionary.
+ * --- child_arrays[1] is a Int32 array for the indices. This array and
  *     the main info share a bitmap.
  * case of ARRAY_ITEM:
  * --- The length is the number of rows.
  * --- data1 is for the offsets
  * --- null_bitmask is the mask
- * --- child_array[0] is the inner array
+ * --- child_arrays[0] is the inner array
+ * case of STRUCT:
+ * --- The length is the number of rows.
+ * --- null_bitmask is the mask
+ * --- child_arrays is the arrays for all fields
+ * --- field_names is the field names
  */
 struct array_info {
     bodo_array_type::arr_type_enum arr_type;
@@ -525,8 +530,7 @@ struct array_info {
     // string array. Last element is always the null bitmap buffer.
     std::vector<std::shared_ptr<BodoBuffer>> buffers;
 
-    // Child arrays for nested array cases (dict-encoded arrays and nested array
-    // only currently)
+    // Child arrays for dict-encoded, nested and struct array
     std::vector<std::shared_ptr<array_info>> child_arrays;
     // name of each field in struct array (empty for other arrays)
     std::vector<std::string> field_names;
@@ -572,6 +576,9 @@ struct array_info {
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
+          buffers(std::move(_buffers)),
+          child_arrays(std::move(_child_arrays)),
+          field_names(std::move(_field_names)),
           precision(_precision),
           scale(_scale),
           num_categories(_num_categories),
@@ -579,11 +586,7 @@ struct array_info {
           is_globally_replicated(_is_globally_replicated),
           is_locally_unique(_is_locally_unique),
           is_locally_sorted(_is_locally_sorted),
-          offset(_offset) {
-        this->buffers = std::move(_buffers);
-        this->child_arrays = std::move(_child_arrays);
-        this->field_names = std::move(_field_names);
-    }
+          offset(_offset) {}
 
     /**
      * @brief returns the first data pointer for the array if any.
@@ -974,6 +977,7 @@ struct array_info {
     void pin() {
         switch (arr_type) {
             case bodo_array_type::ARRAY_ITEM:
+            case bodo_array_type::STRUCT:
                 for (auto& buffer : this->buffers) {
                     buffer->pin();
                 }
@@ -1011,6 +1015,7 @@ struct array_info {
                 this->child_arrays[1]->unpin();
                 break;
             case bodo_array_type::ARRAY_ITEM:
+            case bodo_array_type::STRUCT:
                 for (auto& buffer : this->buffers) {
                     buffer->unpin();
                 }
@@ -1118,6 +1123,16 @@ std::unique_ptr<array_info> alloc_array(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+/**
+ * @brief Allocate an empty array with the same schema as 'in_arr', similar to
+ * alloc_table_like function. Currently only used by alloc_table_like function.
+ *
+ * @param in_arr Reference array
+ * @return pointer to the allocated array
+ */
+std::unique_ptr<array_info> alloc_array_like(std::shared_ptr<array_info> in_arr,
+                                             bool reuse_dictionaries = true);
+
 std::unique_ptr<array_info> alloc_numpy(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
@@ -1145,14 +1160,28 @@ std::unique_ptr<array_info> alloc_array_item(
         bodo::default_buffer_memory_manager());
 
 /**
- * @brief Allocate an empty ARRAY_ITEM array of the same type as the given
- * array, similar to alloc_table_like function. Currently only used by
- * alloc_table_like function.
+ * @brief Allocate a STRUCT array
+ * @param length length of the STRUCT array
+ * @param child_arrays child arrays of the STRUCT array
  *
  * @return pointer to the allocated array_info
  */
-std::unique_ptr<array_info> alloc_array_item_like(
-    std::shared_ptr<array_info> array,
+std::unique_ptr<array_info> alloc_struct(
+    int64_t length, std::vector<std::shared_ptr<array_info>> child_arrays,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
+/**
+ * @brief Allocate an empty STRUCT array with the types within index range
+ * [start_idx, end_idx)
+ *
+ * @return pointer to the allocated array_info
+ */
+std::unique_ptr<array_info> alloc_struct(
+    int64_t length, size_t start_idx, size_t end_idx,
+    const std::vector<int8_t>& arr_array_types,
+    const std::vector<int8_t>& arr_c_types,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     const std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -1395,35 +1424,28 @@ std::tuple<std::vector<int8_t>, std::vector<int8_t>>
 get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table);
 
 /**
- * @brief Get the next start and end index of bodo array types array in place.
- *
- * For example, given the following inputs:
- * start_idx = 0, end_idx = 2 i.e. range = [0, 2)
- * arr_array_types = [ARRAY_ITEM, NULLABLE_INT_BOOL, ARRAY_ITEM, ARRAY_ITEM,
- * NULLABLE_INT_BOOL, NULLABLE_INT_BOOL]
- *
- * The function will modify the range to [2, 5)
- *
- * To get the range for the first column i.e. initialization,
- * call get_next_col_arr_type with end_idx = 0
- *
- * @param start_idx Start index (inclusive) of the index range corresponding to
- * the previous column
- * @param end_idx End index (exclusive) of the index range corresponding to the
- * previous column
- * @param arr_array_types The array of array types for all columns
- */
-void get_next_col_arr_type(size_t& start_idx, size_t& end_idx,
-                           const std::vector<int8_t>& arr_array_types);
-
-/**
  * @brief Generate a map from column index to the actual index to the array type
  * and C type arrays
  *
+ * @param arr_array_types The array of array types for all columns
+ * @param arr_start_idx Start index (inclusive) of the index range that needs
+ * converting to column-index map
+ * @param arr_end_idx End index (exclusive) of the index range that needs
+ * converting to column-index map
  * @return A vector that maps from the column index to the start index in the
  * type array
  */
-std::vector<size_t> get_col_idx_map(const std::vector<int8_t>& arr_array_types);
+std::vector<size_t> get_col_idx_map(const std::vector<int8_t>& arr_array_types,
+                                    size_t arr_start_idx, size_t arr_end_idx);
+
+/**
+ * @brief Overloading of get_col_idx_map to make (0, arr_array_types.size())
+ * i.e. the whole type array the default value for (arr_start_idx, arr_end_idx)
+ */
+inline std::vector<size_t> get_col_idx_map(
+    const std::vector<int8_t>& arr_array_types) {
+    return get_col_idx_map(arr_array_types, 0, arr_array_types.size());
+}
 
 /**
  * @brief Helper function for early reference (and potentially memory)

@@ -7,9 +7,9 @@
 #include <queue>
 #include "arrow_reader.h"
 
-#include "../libs/_chunked_table_builder.h"
 #include "../libs/_dict_builder.h"
 #include "../libs/_distributed.h"
+#include "../libs/_table_builder.h"
 
 // -------- SnowflakeReader --------
 

@@ -77,7 +77,9 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         std::vector<std::shared_ptr<arrow::Field>> fields;
         for (size_t i = 0; i < array->child_arrays.size(); i++) {
             std::shared_ptr<array_info> child_arr = array->child_arrays[i];
-            std::string field_name = array->field_names[i];
+            std::string field_name = array->field_names.empty()
+                                         ? std::string()
+                                         : array->field_names[i];
             std::shared_ptr<arrow::Array> inner_array;
             std::shared_ptr<arrow::DataType> inner_type = bodo_array_to_arrow(
                 pool, child_arr, &inner_array, convert_timedelta_to_int64, tz,
