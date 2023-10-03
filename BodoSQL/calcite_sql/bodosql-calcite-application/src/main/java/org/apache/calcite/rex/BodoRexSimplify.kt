@@ -1,6 +1,9 @@
 package org.apache.calcite.rex
 
+import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen
+import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
+import org.apache.calcite.avatica.util.TimeUnit
 import org.apache.calcite.plan.RelOptPredicateList
 import org.apache.calcite.sql.SqlBinaryOperator
 import org.apache.calcite.sql.SqlKind
@@ -11,6 +14,7 @@ import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.Bug
 import org.apache.calcite.util.DateString
+import org.apache.calcite.util.TimeString
 import org.apache.calcite.util.TimestampString
 import java.math.BigDecimal
 import java.util.*
@@ -134,6 +138,75 @@ class BodoRexSimplify(
     }
 
     /**
+     * Convert a SQL literal being cast to a timestamp with the default Snowflake
+     * parsing to a timestamp literal. If the parsed date doesn't match our supported
+     * formats then we return the original date.
+     *
+     * @param call The original call to cast the string to a timestamp
+     * @param literal The string literal being casted
+     * @return Either the simplified timestamp literal, or the original call
+     */
+    private fun stringLiteralToTimestamp(call: RexCall, literal: RexLiteral): RexNode {
+        // Convert a SQL literal being cast to a timestamp with the default Snowflake
+        // parsing to a timestamp literal. If the parsed date doesn't match our supported
+        // formats then we return the original cast call.
+        var literalString = literal.value2.toString()
+
+        var year = 0
+        var month = 0
+        var day = 0
+        var hour = 0
+        var minute = 0
+        var second = 0
+        var subsecond = ""
+        var result: RexNode = call
+
+        // The basic Snowflake (date-only) pattern without whitespace.
+        val dateStringPattern = Pattern.compile("^(\\d{4})-(\\d{2})-(\\d{2})")
+        val dateStringMatcher = dateStringPattern.matcher(literalString)
+        if (dateStringMatcher.find()) {
+            year = Integer.valueOf(dateStringMatcher.group(1))
+            month = Integer.valueOf(dateStringMatcher.group(2))
+            day = Integer.valueOf(dateStringMatcher.group(3))
+            literalString = literalString.substring(dateStringMatcher.end())
+
+            // The basic pattern for the time component of a timestamp following the date component
+            val timeStringPattern = Pattern.compile("^[ T](\\d{2}):(\\d{2}):(\\d{2})")
+            val timeStringMatcher = timeStringPattern.matcher(literalString)
+            if (timeStringMatcher.find()) {
+                hour = Integer.valueOf(timeStringMatcher.group(1))
+                minute = Integer.valueOf(timeStringMatcher.group(2))
+                second = Integer.valueOf(timeStringMatcher.group(3))
+                literalString = literalString.substring(timeStringMatcher.end())
+
+                // The pattern for the sub-second components of a timestamp string.
+                val subsecondStringPattern = Pattern.compile("^(\\d{1,9})")
+                val subsecondStringMatcher = subsecondStringPattern.matcher(literalString)
+                if (subsecondStringMatcher.find()) {
+                    subsecond = subsecondStringMatcher.group(1)
+                    literalString = literalString.substring(timeStringMatcher.end())
+                }
+            }
+            // Verify that the remainder of the string is either empty or "+00:00"
+            if (literalString.isEmpty() || literalString == "+00:00") {
+                var tsString = TimestampString(
+                    Integer.valueOf(year),
+                    Integer.valueOf(month),
+                    Integer.valueOf(day),
+                    Integer.valueOf(hour),
+                    Integer.valueOf(minute),
+                    Integer.valueOf(second),
+                )
+                if (subsecond != "") {
+                    tsString = tsString.withFraction(subsecond)
+                }
+                result = rexBuilder.makeTimestampLiteral(tsString, call.getType().precision)
+            }
+        }
+        return result
+    }
+
+    /**
      * Simplify to_timestamp for supported literals. Note this only
      * supports TZ-Naive timestamps.
      */
@@ -142,6 +215,9 @@ class BodoRexSimplify(
             val literal = call.operands[0] as RexLiteral
             when (literal.typeName) {
                 SqlTypeName.NULL -> rexBuilder.makeNullLiteral(call.getType())
+                SqlTypeName.VARCHAR,
+                SqlTypeName.CHAR,
+                -> stringLiteralToTimestamp(call, literal)
                 SqlTypeName.DATE -> dateLiteralToTimestamp(literal, call.getType().precision)
                 else -> call
             }
@@ -163,53 +239,50 @@ class BodoRexSimplify(
     }
 
     /**
+     * Takes in the arguments to an addition or subtraction where one argument is a date
+     * and the other is an interval, then returns the arguments such that the date is
+     * first & the interval is second, as well as the sign to multiply the offset by.
+     *
+     * @param lit1 The lhs operand of the operation
+     * @param lit2 The rhs operand of the operaiton
+     * @param isPlus Whether the operation was a +
+     * @return
+     */
+    private fun getDateMathArguments(lit1: RexLiteral, lit2: RexLiteral, isPlus: Boolean) : Triple<RexLiteral, RexLiteral, Int> {
+        val multiplier = if (isPlus) { 1 } else { -1 }
+        return if (lit1.type.sqlTypeName in listOf(SqlTypeName.DATE, SqlTypeName.TIMESTAMP)) {
+            Triple(lit1, lit2, multiplier)
+        } else {
+            Triple(lit2, lit1, -multiplier)
+        }
+    }
+
+    /**
      * Compute the PLUS/MINUS operator between two literals. This extends
      * Calcite's behavior, so we only support Timestamp +/- Interval
      */
     private fun bodoLiteralPlusMinus(call: RexCall, lit1: RexLiteral, lit2: RexLiteral, isPlus: Boolean): RexNode {
-        val type1 = lit1.getType()
-        val type2 = lit2.getType()
-        val supportedIntervals = listOf(SqlTypeName.INTERVAL_DAY, SqlTypeName.INTERVAL_MONTH)
-        return if ((type1.sqlTypeName == SqlTypeName.DATE && supportedIntervals.contains(type2.sqlTypeName)) || (isPlus && supportedIntervals.contains(type1.sqlTypeName) && type2.sqlTypeName == SqlTypeName.DATE)) {
-            val firstDate = type1.sqlTypeName == SqlTypeName.DATE
-            val dateLiteral = if (firstDate) {
-                lit1
-            } else {
-                lit2
-            }!!
+        val supportedIntervals = listOf(SqlTypeName.INTERVAL_DAY, SqlTypeName.INTERVAL_MONTH, SqlTypeName.INTERVAL_YEAR)
+        if ((lit1.type.sqlTypeName in listOf(SqlTypeName.DATE, SqlTypeName.TIMESTAMP) && supportedIntervals.contains(lit2.type.sqlTypeName)) || (isPlus && supportedIntervals.contains(lit1.type.sqlTypeName) && lit2.type.sqlTypeName in listOf(SqlTypeName.DATE, SqlTypeName.TIMESTAMP))) {
+            val (dateLiteral, intervalLiteral, signMultiplier) = getDateMathArguments(lit1, lit2, isPlus)
             val calendarVal = dateLiteral.getValueAs(Calendar::class.java)!!
-            val intervalLiteral = if (firstDate) {
-                lit2
-            } else {
-                lit1
-            }!!
             val intervalDecimal = intervalLiteral.getValueAs(BigDecimal::class.java)!!
-            val isMonths = if (firstDate) {
-                type2.sqlTypeName == SqlTypeName.INTERVAL_MONTH
-            } else {
-                type1.sqlTypeName == SqlTypeName.INTERVAL_MONTH
+            val (intervalInt, calendarUnit) = when (intervalLiteral.type.sqlTypeName) {
+                // Years and months have the integer value already represented in the correct scale
+                SqlTypeName.INTERVAL_YEAR ->  Pair(intervalDecimal.toInt(), Calendar.YEAR)
+                SqlTypeName.INTERVAL_MONTH ->  Pair(intervalDecimal.toInt(), Calendar.MONTH)
+                // Days have their integer values represented in milliseconds
+                SqlTypeName.INTERVAL_DAY -> Pair(intervalDecimal.divide(BigDecimal(24 * 60 * 60 * 1000)).toInt(), Calendar.DAY_OF_MONTH)
+                else  -> return call
             }
-            val intervalInt = if (isMonths) {
-                // Unit is already in months
-                intervalDecimal
+            calendarVal.add(calendarUnit, intervalInt * signMultiplier)
+            if (dateLiteral.type.sqlTypeName == SqlTypeName.DATE) {
+                return rexBuilder.makeDateLiteral(DateString.fromCalendarFields(calendarVal))
             } else {
-                // Convert ms to Days
-                intervalDecimal.divide(BigDecimal(24 * 60 * 60 * 1000))
-            }.toInt()
-            val unit = if (isMonths) {
-                Calendar.MONTH
-            } else {
-                Calendar.DAY_OF_MONTH
+                return rexBuilder.makeTimestampLiteral(TimestampString.fromCalendarFields(calendarVal), 9)
             }
-            if (isPlus) {
-                calendarVal.add(unit, intervalInt)
-            } else {
-                calendarVal.add(unit, -intervalInt)
-            }
-            rexBuilder.makeDateLiteral(DateString(calendarVal.get(Calendar.YEAR), calendarVal.get(Calendar.MONTH) + 1, calendarVal.get(Calendar.DAY_OF_MONTH)))
-        } else {
-            call
         }
+        return call
     }
 
     /**
@@ -241,24 +314,15 @@ class BodoRexSimplify(
     }
 
     /**
-     * Simplify Bodo calls that involve the + operator
+     * Simplify Bodo calls that involve the + and - operators
      * and are not implemented in Calcite
      */
-    private fun simplifyBodoPlus(call: RexCall): RexNode {
-        return if (call.operands.size == 2 && call.operands[0] is RexLiteral && call.operands[1] is RexLiteral) {
-            bodoLiteralPlusMinus(call, call.operands[0] as RexLiteral, call.operands[1] as RexLiteral, true)
-        } else {
-            call
-        }
-    }
-
-    /**
-     * Simplify Bodo calls that involve the - operator
-     * and are not implemented in Calcite
-     */
-    private fun simplifyBodoMinus(call: RexCall): RexNode {
-        return if (call.operands.size == 2 && call.operands[0] is RexLiteral && call.operands[1] is RexLiteral) {
-            bodoLiteralPlusMinus(call, call.operands[0] as RexLiteral, call.operands[1] as RexLiteral, false)
+    private fun simplifyBodoPlusMinus(call: RexCall, isPlus: Boolean): RexNode {
+        if (call.operands.size != 2) return call
+        val firstArg = call.operands[0]
+        val secondArg = call.operands[1]
+        return if (firstArg is RexLiteral && secondArg is RexLiteral) {
+            bodoLiteralPlusMinus(call, firstArg, secondArg, isPlus)
         } else {
             call
         }
@@ -411,25 +475,6 @@ class BodoRexSimplify(
     }
 
     /**
-     * @param e The call to <, <=, > or >= where the second operand is a call to LEAST or GREATEST
-     * @return An equivalent expression where the call to LEAST or GREATEST is eliminated by
-     * distributing the comparison across the arguments, for example:
-     *
-     * D >= LEAST(A, B, C)  --> A <= D AND B <= D AND C <= D
-     */
-    private fun simplifyCompareLeastGreatestRhs(e: RexCall): RexNode {
-        // Switch the argument order
-        val lhs = e.operands[1] as RexCall
-        val leastGreatestArgs = lhs.operands
-        val rhs = e.operands[0]
-        // Flip the comparison
-        val comparison = (e.operator as SqlBinaryOperator).reverse()!!
-        // The operation will become a conjunction if it is a </<= with GREATEST or a >/>= with LEAST
-        val isConjunction = (comparison.kind.belongsTo(listOf(SqlKind.LESS_THAN, SqlKind.LESS_THAN_OR_EQUAL))) == (lhs.kind == SqlKind.GREATEST)
-        return simplifyCompareLeastGreatest(leastGreatestArgs, rhs, comparison, isConjunction)
-    }
-
-    /**
      * @param e The call to <, <=, > or >=
      * @return The same call but with the argument order and comparison switched.
      *
@@ -443,23 +488,247 @@ class BodoRexSimplify(
     }
 
     /**
+     * @param e The RexNode being checked
+     * @return Whether the node is a call to a function that adds
+     * to a date/time/timestamp using the Snowflake function syntax,
+     * e.g. DATEADD(DAY, 1, T).
+     *
+     * Only allows DATEADD and TIMEADD with 3 arguments. The DATEADD
+     * with 2 arguments (or DATE_ADD) use a different form, and
+     * TIMESTAMPADD is elaborated into another form during conversion.
+     */
+    private fun isSnowflakeDateaddOp(e: RexNode): Boolean {
+        if (e is RexCall) {
+            return e.operator.name in listOf(DatetimeOperatorTable.DATEADD.name, DatetimeOperatorTable.TIMEADD.name) && e.operands.size == 3
+        }
+        return false
+    }
+
+    /**
+     * Converts a date unit string to a pair of a calendar field enum and a
+     * multiplier such that the unit string can be expressed as the field times
+     * the multiplier.
+     *
+     * @param unit The date unit as a (lowercase) string
+     * @return The field enum and multiplier corresponding to the unit, or null if
+     * the string does not match one of the units.
+     */
+    private fun getDateUnitAsCalendarAndMultiplier(unit: String) : Pair<Int, Int>? {
+        return when (unit) {
+            "year" -> Pair(Calendar.YEAR, 1)
+            "quarter" -> Pair(Calendar.MONTH, 4)
+            "month" -> Pair(Calendar.MONTH, 1)
+            "week" -> Pair(Calendar.WEEK_OF_YEAR, 1)
+            "day" -> Pair(Calendar.DAY_OF_YEAR, 1)
+            else -> return null
+        }
+    }
+
+    /**
+     * Converts a time unit string to the corresponding amount of milliseconds.
+     *
+     * @param unit The time unit as a (lowercase) string
+     * @return The multiplier corresponding to the number of milliseconds,
+     * or null if the string does not match one of the units.
+     */
+    private fun getTimeUnitAsMultiplier(unit: String) : Long? {
+        return when (unit) {
+            "hour" -> NANOSEC_PER_HOUR
+            "minute" -> NANOSEC_PER_MINUTE
+            "second" -> NANOSEC_PER_SECOND
+            "millisecond" -> NANOSEC_PER_MILLISECOND
+            "microsecond" -> NANOSEC_PER_MICROSECOND
+            "nanosecond" -> 1
+            else -> return null
+        }
+    }
+
+    /**
+     * Takes a string representing a time/timestamp and extracts the
+     * components smaller than milliseconds in nanoseconds, as an integer.
+     *
+     * For example: "12:30:45.25091" -> 910_000
+     * For example: "1999-12-31 11:59:59.987654321" -> 654_321
+     *
+     * @param s The string representing a time/timestamp
+     * @return The sub-milliseconds component of the string in nanoseconds.
+     */
+    private fun getSubMilliAsNs(s: String): Int {
+        val dotIndex: Int = s.indexOf('.')
+        var nsString = if (dotIndex >= 0) { s.drop(dotIndex + 4) } else { "" }
+        var paddedNsString = nsString.padEnd(6, '0')
+        return paddedNsString.toInt()
+    }
+
+    /**
+     * Calculates the new DateLiteral expression caused by adding a specific amount of
+     * a date unit to a starting date, or the original expression if that fails.
+     *
+     * @param original The original call to DATEADD
+     * @param date The starting date
+     * @param unit The unit to add
+     * @param offset The amount of the unit to add
+     * @return The new DateLiteral, or the original call if the simplification fails.
+     */
+    private fun simplifyAddToDate(original: RexNode, date: Calendar, unit: String, offset: Int): RexNode {
+        val unitAndMultiplier = getDateUnitAsCalendarAndMultiplier(unit) ?: return original
+        val (field, multiplier) = unitAndMultiplier
+        date.add(field, offset * multiplier)
+        return rexBuilder.makeDateLiteral(DateString.fromCalendarFields(date))
+    }
+
+    /**
+     * Calculates the new TimeLiteral expression caused by adding a specific amount of
+     * a time unit to a starting time, or the original expression if that fails.
+     *
+     * @param original The original call to DATEADD
+     * @param time The starting time
+     * @param unit The unit to add
+     * @param offset The amount of the unit to add
+     * @return The new TimeLiteral, or the original call if the simplification fails.
+     */
+    private fun simplifyAddToTime(original: RexNode, time: TimeString, unit: String, offset: Int): RexNode {
+        val multiplier: Long = getTimeUnitAsMultiplier(unit) ?: return original
+        // Convert the time to nanoseconds since midnight
+        val milli = time.millisOfDay
+        val subMilli = getSubMilliAsNs(time.toString())
+        val asNs = milli * NANOSEC_PER_MILLISECOND + subMilli
+        // Add the desired offset to the total nanoseconds since midnight, dealing with overflow
+        // to the next/previous day if necessary
+        val newNs = Math.floorMod(asNs + multiplier * offset, NANOSEC_PER_DAY)
+        // Extract the various components of the new time
+        val hour = newNs / NANOSEC_PER_HOUR
+        val minute = (newNs / NANOSEC_PER_MINUTE) % 60
+        val second = (newNs / NANOSEC_PER_SECOND) % 60
+        val subsecond = newNs % NANOSEC_PER_SECOND
+        // Use the components to construct the new time
+        var newTime = TimeString(hour.toInt(), minute.toInt(), second.toInt()).withNanos(subsecond.toInt())
+        return rexBuilder.makeTimeLiteral(newTime, 9)
+    }
+
+    /**
+     * Calculates the new TimestampLiteral expression caused by adding a specific amount of
+     * a date/time unit to a starting time, or the original expression if that fails.
+     *
+     * @param original The original call to DATEADD
+     * @param time The starting timestamp
+     * @param unit The unit to add
+     * @param offset The amount of the unit to add
+     * @return The new TimestampLiteral, or the original call if the simplification fails.
+     */
+    private fun simplifyAddToTimestamp(original: RexNode, timestamp: TimestampString, unit: String, offset: Int): RexNode {
+        // Extract the sub-second components of the original timestamp
+        val millisEpoch = timestamp.millisSinceEpoch
+        val subMilli = getSubMilliAsNs(timestamp.toString())
+        if (unit in listOf("year", "quarter", "month", "week", "day")) {
+            val unitAndMultiplier = getDateUnitAsCalendarAndMultiplier(unit) ?: return original
+            // Calculate the entire sub-second component in nanoseconds.
+            val ns = ((millisEpoch % 1000) * NANOSEC_PER_MILLISECOND + subMilli).toInt()
+            // Add the date unit to the original timestamp
+            val date = timestamp.toCalendar()
+            val (field, multiplier) = unitAndMultiplier
+            date.add(field, offset * multiplier)
+            // Reconstruct the timestamp by replacing the subsecond components with the
+            // subsecond components of the original timestamp
+            val ts = TimestampString.fromCalendarFields(date).withNanos(ns)
+            return rexBuilder.makeTimestampLiteral(ts, 9)
+        } else {
+            val multiplier: Long = getTimeUnitAsMultiplier(unit) ?: return original
+            // Calculate the total number of nanoseconds since the unix epoch
+            val ns = millisEpoch * NANOSEC_PER_MILLISECOND + subMilli
+            // Add the timedelta to the number of nanoseconds and extract the
+            // new milliseconds since the epoch as well as the subsecond components
+            val newNs = ns + offset * multiplier
+            val newMsEpoch = newNs / NANOSEC_PER_MILLISECOND
+            val newSubsecond = newNs % NANOSEC_PER_SECOND
+            // Reconstruct the timestamp using the milliseconds since the unix epoch,
+            // then replace the subsecond components with the correct subsecond amounts
+            val ts = TimestampString.fromMillisSinceEpoch(newMsEpoch).withNanos(newSubsecond.toInt())
+            return rexBuilder.makeTimestampLiteral(ts, 9)
+        }
+    }
+
+    /**
+     * @param e A call to DATEADD or an equivalent function in 3-argument form
+     * @return If the call has all-literal arguments, returns the result of
+     * the corresponding date arithmetic. Otherwise, returns hte original call.
+     * For example: DATEADD(YEAR, 2, DATE '2023-9-27') -> DATE '2025-9-27'
+     */
+    private fun simplifySnowflakeDateaddOp(e: RexCall): RexNode {
+        if (!e.operands.all { it is RexLiteral }) {
+            return e
+        }
+        val unitLiteral = e.operands[0] as RexLiteral
+        val offset = (e.operands[1] as RexLiteral).getValueAs(Integer::class.java)!!.toInt()
+        val base = e.operands[2] as RexLiteral
+
+        // Extract the time unit, either as a unit literal or a string literal
+        val isSymbol = unitLiteral.typeName == SqlTypeName.SYMBOL
+        val unitStr = if (isSymbol) { unitLiteral.getValueAs(TimeUnit::class.java)!!.toString() } else { unitLiteral.getValueAs(String::class.java)!! }
+        val dateTimeType = DatetimeFnCodeGen.getDateTimeDataType(base)
+        val unit = DatetimeFnCodeGen.standardizeTimeUnit(e.operator.name, unitStr, dateTimeType)
+        val isTime = dateTimeType == DatetimeFnCodeGen.DateTimeType.TIME
+
+        // Ensure that we only allow tz-naive timestamps
+        if (base.type is BasicSqlType) {
+
+            if (base.typeName == SqlTypeName.DATE) {
+                // If the first argument is a date but the unit is a time unit, upcast
+                // to timestamp then use timestamp addition
+                val dateLiteral = base.getValueAs(DateString::class.java)!!
+                val calendar = dateLiteral.toCalendar()
+                if (isTime) {
+                    val timestampLiteral = TimestampString(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH), 0, 0, 0)
+                    return simplifyAddToTimestamp(e, timestampLiteral, unit, offset)
+                } else {
+                    return simplifyAddToDate(e, calendar, unit, offset)
+                }
+            }
+
+            if (base.typeName == SqlTypeName.TIME) {
+                // Throw an error if trying to add a non-time unit to a time literal
+                if (!isTime) throw Exception("Invalid operation: $e")
+                val timeLiteral = base.getValueAs(TimeString::class.java)!!
+                return simplifyAddToTime(e, timeLiteral, unit, offset)
+            }
+
+            if (base.typeName == SqlTypeName.TIMESTAMP) {
+                val timestampLiteral = base.getValueAs(TimestampString::class.java)!!
+                return simplifyAddToTimestamp(e, timestampLiteral, unit, offset)
+            }
+        }
+
+        return e
+    }
+
+    /**
      * Implementation of simplifyUnknownAs where we simplify custom Bodo functions
      * and then dispatch to the regular RexSimplifier.
      */
     override fun simplify(e: RexNode, unknownAs: RexUnknownAs): RexNode {
         val simplifiedNode = when (e.kind) {
             SqlKind.CAST -> simplifyBodoCast(e as RexCall)
-            SqlKind.PLUS -> simplifyBodoPlus(e as RexCall)
-            SqlKind.MINUS -> simplifyBodoMinus(e as RexCall)
+            SqlKind.PLUS -> simplifyBodoPlusMinus(e as RexCall, true)
+            SqlKind.MINUS -> simplifyBodoPlusMinus(e as RexCall, false)
             SqlKind.TIMES -> simplifyBodoTimes(e as RexCall)
             else -> when {
                 isConcat(e) -> simplifyConcat(e as RexCall)
                 isStringCapitalizationOp(e) -> simplifyStringCapitalizationOp(e as RexCall)
+                isSnowflakeDateaddOp(e) -> simplifySnowflakeDateaddOp(e as RexCall)
                 isCompareLeastGreatest(e, 0) -> simplifyCompareLeastGreatest(e as RexCall)
                 isCompareLeastGreatest(e, 1) -> simplifyCompareLeastGreatest(reverseComparison(e as RexCall) as RexCall)
                 else -> e
             }
         }
         return super.simplify(simplifiedNode, unknownAs)
+    }
+
+    companion object {
+        const val NANOSEC_PER_DAY : Long = 86_400_000_000_000
+        const val NANOSEC_PER_HOUR : Long = 3_600_000_000_000
+        const val NANOSEC_PER_MINUTE : Long = 60_000_000_000
+        const val NANOSEC_PER_SECOND : Long = 1_000_000_000
+        const val NANOSEC_PER_MILLISECOND : Long = 1_000_000
+        const val NANOSEC_PER_MICROSECOND : Long = 1_000
     }
 }
