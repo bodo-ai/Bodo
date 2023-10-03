@@ -79,12 +79,15 @@ public class RelationalOperatorCache {
     StreamingPipelineFrame frame = tableAndFrame.getSecond();
     Variable tableBuilderState = builder.getSymbolTable().genStateVar();
 
-    frame.addInitialization(
+    int operatorID = this.builder.newOperatorID();
+
+    frame.initializeStreamingState(
+        operatorID,
         new Op.Assign(
             tableBuilderState,
             new Expr.Call(
                 "bodo.libs.table_builder.init_table_builder_state",
-                List.of(),
+                List.of(new Expr.IntegerLiteral(operatorID)),
                 List.of(new Pair<>("use_chunked_builder", Expr.True.INSTANCE)))));
 
     frame.add(
@@ -109,7 +112,8 @@ public class RelationalOperatorCache {
                 "bodo.libs.table_builder.table_builder_pop_chunk", List.of(tableBuilderState))));
     builder
         .getCurrentStreamingPipeline()
-        .addTermination(
+        .deleteStreamingState(
+            operatorID,
             new Op.Stmt(
                 new Expr.Call(
                     "bodo.libs.table_builder.delete_table_builder_state",
