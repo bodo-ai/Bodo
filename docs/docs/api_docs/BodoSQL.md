@@ -1303,6 +1303,17 @@ BodoSQL Currently supports the following Numeric Functions:
     value that considers the values in each column. The hash function is
     deterministic across multiple ranks or multiple sessions.
 
+    Also supports the syntactic sugar forms `#!sql HASH(*)` and `#!sql HASH(T.*)`
+    as shortcuts for referencing all of the columns in a table, or multiple tables.
+    For example, if `#!sql T1` has columns `A` and `B`, and `T2` has columns
+    `A`, `E` and `I`, then the following query:
+
+    `#!sql SELECT HASH(*), HASH(T1.*) FROM T1 INNER JOIN T2 ON T1.A=T2.I`
+
+    Would be syntactic sugar for the following:
+
+    `#!sql SELECT HASH(T1.A, T1.B, T2.A, T2.E, T2.I), HASH(T1.A, T1.B) FROM T1 INNER JOIN T2 ON T1.A=T2.I`
+
 
 ###  Data Generation Functions
 
@@ -1438,7 +1449,19 @@ numeric types
 
     !!! note
         This aggregation function is currently only supported with a `GROUP BY` clause.
-        In case of a tie, BodoSQL will choose a value arbitrarily based on performance considerations.
+
+#### ARRAY_AGG
+-   `#!sql ARRAY_AGG(A) [WITHIN GROUP(ORDER BY orderby_terms)]`
+
+    Combines all the values in column `A` within each group into a single array.
+
+    Optionally allows using a `WITHIN GROUP` clause to specify how the values should
+    be ordered before being combined into an array. If no clause is specified, then the ordering
+    is unpredictable.
+
+    !!! note
+        This aggregation function is currently only supported with a `GROUP BY` clause,
+        without a `DISTINCT` CLAUSE, and on numerical data (integers, floats, etc.).
 
 #### APPROX_PERCENTILE
 -   `#!sql APPROX_PERCENTILE(A, q)`
@@ -2660,6 +2683,30 @@ BodoSQL currently supports the following JSON functions:
 
     Obeys the following specification: https://docs.snowflake.com/en/sql-reference/functions/json_extract_path_text.html
 
+
+#### GET_PATH
+-   `#!sql GET_PATH(data, path_string)`
+
+    Extracts an entry from a semi-structured data expression based on the path string.
+    Obeys the specification described here: https://docs.snowflake.com/en/sql-reference/functions/get_path
+
+    !!! note
+        Currently only supported under limited conditions where it is possible for the
+        planner to push the extraction of JSON fields into the reader or into a filter
+        that is pushed down. If a usage of `#sql GET_PATH` causes errors, it may mean
+        that it is not currently in one of these limited cases.
+
+    Below are some valid examples of usage and alternative syntax:
+
+    - `#!sql SELECT product_id FROM products WHERE GET_PATH(appearance, 'color') = 'RED'`
+
+    - `#!sql SELECT product_id FROM products WHERE appearance:color = 'RED'`
+
+    - `#!sql SELECT CONCAT_WS(' ', GET_PATH(info, 'first'), GET_PATH(info, 'last')) FROM phone_book'`
+    Note that this case the query creates an implicit cast to `varchar`.
+
+    - `#!sql SELECT CONCAT_WS(' ', info:first, info:last) FROM phone_book'`
+    Note that this case the query creates an implicit cast to `varchar`.
 
 ###   Control Flow Functions
 
