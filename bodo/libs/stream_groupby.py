@@ -332,7 +332,7 @@ def _init_groupby_state(
 
     def codegen(context, builder, sig, args):
         (
-            _,  # operator_id (TODO(aneesh) use this in C++)
+            operator_id,
             build_arr_dtypes,
             build_arr_array_types,
             n_build_arrs,
@@ -351,6 +351,7 @@ def _init_groupby_state(
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
+                lir.IntType(64),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(32),
@@ -368,6 +369,7 @@ def _init_groupby_state(
             builder.module, fnty, name="groupby_state_init_py_entry"
         )
         input_args = (
+            operator_id,
             build_arr_dtypes,
             build_arr_array_types,
             n_build_arrs,

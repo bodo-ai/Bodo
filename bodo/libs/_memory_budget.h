@@ -49,6 +49,8 @@ class OperatorComptroller {
     /**
      * @brief Get the budget for a given operator in the current pipeline
      * @param operator_id The operator owning the budget returned
+     * If the operator_id is invalid (< 0), returns -1 to signify unlimited
+     * budget
      */
     int64_t GetOperatorBudget(int64_t operator_id);
 
@@ -80,7 +82,7 @@ class OperatorComptroller {
 
     std::vector<size_t> pipeline_remaining_budget;
     std::vector<size_t> pipeline_remaining_operators;
-    std::vector<size_t> operator_allocated_budget;
+    std::vector<int64_t> operator_allocated_budget;
 
     struct OperatorRequest {
         int64_t min_pipeline_id;

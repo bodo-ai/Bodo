@@ -51,12 +51,16 @@ void OperatorComptroller::IncrementPipelineID() {
 }
 
 int64_t OperatorComptroller::GetOperatorBudget(int64_t operator_id) {
+    if (operator_id < 0) {
+        return -1;
+    }
     return operator_allocated_budget[operator_id];
 }
 
 void OperatorComptroller::ReduceOperatorBudget(int64_t operator_id,
                                                size_t budget) {
-    if (operator_allocated_budget[operator_id] <= budget) {
+    if (operator_allocated_budget[operator_id] <=
+        static_cast<int64_t>(budget)) {
         throw std::runtime_error(
             "New budget is not strictly less than old budget");
     }
@@ -95,6 +99,14 @@ void OperatorComptroller::IncreaseOperatorBudget(int64_t operator_id) {
 }
 
 void OperatorComptroller::ComputeSatisfiableBudgets() {
+    // Tests might have set their own max budgets
+    if (this->pipeline_remaining_budget.size() !=
+        static_cast<size_t>(this->num_pipelines)) {
+        size_t total_mem = bodo::BufferPool::Default()->get_memory_size_bytes();
+        for (int64_t i = 0; i < this->num_pipelines; i++) {
+            SetMemoryBudget(i, total_mem);
+        }
+    }
     pipeline_remaining_budget.resize(this->num_pipelines);
     pipeline_remaining_operators.resize(this->num_pipelines);
 
@@ -103,6 +115,18 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
              pipeline_id <= req.max_pipeline_id; pipeline_id++) {
             pipeline_remaining_operators[pipeline_id]++;
         }
+    }
+
+    char* use_mem_budget = std::getenv("BODO_USE_MEMORY_BUDGETS");
+    if (!use_mem_budget || strcmp(use_mem_budget, "1") != 0) {
+        // Until more work is done to refine the memory estimates, disable
+        // memory budgeting by default so that performance doesn't degrade.
+        for (int64_t op_id = 0;
+             op_id < static_cast<int64_t>(operator_allocated_budget.size());
+             op_id++) {
+            operator_allocated_budget[op_id] = -1;
+        }
+        return;
     }
 
     while (true) {
@@ -179,6 +203,9 @@ void init_operator_comptroller() {
 
 void register_operator(int64_t operator_id, int64_t min_pipeline_id,
                        int64_t max_pipeline_id, int64_t estimate) {
+    if (estimate < 0) {
+        estimate = bodo::BufferPool::Default()->get_memory_size_bytes();
+    }
     OperatorComptroller::Default()->RegisterOperator(
         operator_id, min_pipeline_id, max_pipeline_id,
         static_cast<size_t>(estimate));
