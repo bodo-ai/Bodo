@@ -4780,12 +4780,12 @@ class TypingTransforms:
                 return [assign]
 
             if input_table_type != output_type.input_table_type:
-                args = writer_init_def.args[:5]
+                args = writer_init_def.args[:6]
                 new_type = bodo.io.snowflake_write.SnowflakeWriterType(input_table_type)
                 func_text = (
-                    "def impl(conn, table_name, schema, if_exists, table_type):\n"
+                    "def impl(operator_id, conn, table_name, schema, if_exists, table_type):\n"
                     "  return bodo.io.snowflake_write.snowflake_writer_init(\n"
-                    "    conn, table_name, schema, if_exists, table_type, \n"
+                    "    operator_id, conn, table_name, schema, if_exists, table_type, \n"
                     "    expected_state_type=_expected_state_type\n"
                     "  )\n"
                 )
