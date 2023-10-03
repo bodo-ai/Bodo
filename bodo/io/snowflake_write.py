@@ -410,7 +410,7 @@ def snowflake_writer_init(
         "    writer['copy_into_prev_sfqid'] = ''\n"
         "    writer['file_count_global_prev'] = 0\n"
         "    writer['upload_threads_exists'] = False\n"
-        "    writer['batches'] = bodo.libs.table_builder.init_table_builder_state(table_builder_state_type, input_dicts_unified=input_dicts_unified)\n"
+        "    writer['batches'] = bodo.libs.table_builder.init_table_builder_state(operator_id, table_builder_state_type, input_dicts_unified=input_dicts_unified)\n"
         "    writer['curr_mem_size'] = 0\n"
         # Connect to Snowflake on rank 0 and get internal stage credentials
         # Note: Identical to the initialization code in df.to_sql()

@@ -191,6 +191,7 @@ def test_streaming_write(
                 f"SELECT * FROM {table_r}", conn_r, _bodo_chunksize=sf_read_chunk_size
             )  # type: ignore
             writer = snowflake_writer_init(
+                -1,
                 conn_w,
                 table_w,
                 "PUBLIC",

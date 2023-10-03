@@ -1669,6 +1669,7 @@ def test_batched_write_agg(
                 f"SELECT * FROM {table_r} LIMIT 10000", conn_r, _bodo_chunksize=1000
             )  # type: ignore
             writer = snowflake_writer_init(
+                -1,
                 conn_w,
                 table_w,
                 "PUBLIC",
