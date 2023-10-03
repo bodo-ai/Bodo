@@ -3,6 +3,9 @@
 #include "./test.hpp"
 
 bodo::tests::suite memory_budget_tests([] {
+    bodo::tests::before_each([] { setenv("BODO_USE_MEMORY_BUDGETS", "1", 1); });
+    bodo::tests::after_each([] { unsetenv("BODO_USE_MEMORY_BUDGETS"); });
+
     bodo::tests::test("test_exception_if_increment_called_before_init", [] {
         bool passed = false;
         auto comptroller = OperatorComptroller::Default();

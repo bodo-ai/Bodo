@@ -1,5 +1,6 @@
 #include "_stream_join.h"
 #include "_distributed.h"
+#include "_memory_budget.h"
 #include "_shuffle.h"
 
 /* --------------------------- HashHashJoinTable -------------------------- */
@@ -2297,11 +2298,18 @@ bool join_probe_consume_batch(HashJoinState* join_state,
  * @return JoinState* join state to return to Python
  */
 JoinState* join_state_init_py_entry(
-    int8_t* build_arr_c_types, int8_t* build_arr_array_types, int n_build_arrs,
-    int8_t* probe_arr_c_types, int8_t* probe_arr_array_types, int n_probe_arrs,
-    uint64_t n_keys, bool build_table_outer, bool probe_table_outer,
-    cond_expr_fn_t cond_func, bool build_parallel, bool probe_parallel,
-    int64_t output_batch_size, int64_t sync_iter, int64_t op_pool_size_bytes) {
+    int64_t operator_id, int8_t* build_arr_c_types,
+    int8_t* build_arr_array_types, int n_build_arrs, int8_t* probe_arr_c_types,
+    int8_t* probe_arr_array_types, int n_probe_arrs, uint64_t n_keys,
+    bool build_table_outer, bool probe_table_outer, cond_expr_fn_t cond_func,
+    bool build_parallel, bool probe_parallel, int64_t output_batch_size,
+    int64_t sync_iter, int64_t op_pool_size_bytes) {
+    // If the memory budget has not been explicitly set, then ask the
+    // OperatorComptroller for the budget.
+    if (op_pool_size_bytes == -1) {
+        op_pool_size_bytes =
+            OperatorComptroller::Default()->GetOperatorBudget(operator_id);
+    }
     // nested loop join is required if there are no equality keys
     if (n_keys == 0) {
         return new NestedLoopJoinState(

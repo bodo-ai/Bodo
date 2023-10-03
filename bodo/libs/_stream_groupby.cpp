@@ -5,6 +5,7 @@
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_groupby_common.h"
+#include "_memory_budget.h"
 #include "_shuffle.h"
 
 /* --------------------------- HashGroupbyTable --------------------------- */
@@ -1594,10 +1595,12 @@ table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
  * @return GroupbyState* groupby state to return to Python
  */
 GroupbyState* groupby_state_init_py_entry(
-    int8_t* build_arr_c_types, int8_t* build_arr_array_types, int n_build_arrs,
-    int32_t* ftypes, int32_t* f_in_offsets, int32_t* f_in_cols, int n_funcs,
-    uint64_t n_keys, int64_t output_batch_size, bool parallel,
-    int64_t sync_iter) {
+    int64_t operator_id, int8_t* build_arr_c_types,
+    int8_t* build_arr_array_types, int n_build_arrs, int32_t* ftypes,
+    int32_t* f_in_offsets, int32_t* f_in_cols, int n_funcs, uint64_t n_keys,
+    int64_t output_batch_size, bool parallel, int64_t sync_iter) {
+    int64_t op_pool_size_bytes =
+        OperatorComptroller::Default()->GetOperatorBudget(operator_id);
     return new GroupbyState(
         std::vector<int8_t>(build_arr_c_types,
                             build_arr_c_types + n_build_arrs),
@@ -1608,7 +1611,7 @@ GroupbyState* groupby_state_init_py_entry(
         std::vector<int32_t>(f_in_offsets, f_in_offsets + n_funcs + 1),
         std::vector<int32_t>(f_in_cols, f_in_cols + f_in_offsets[n_funcs]),
 
-        n_keys, output_batch_size, parallel, sync_iter);
+        n_keys, output_batch_size, parallel, sync_iter, op_pool_size_bytes);
 }
 
 /**
