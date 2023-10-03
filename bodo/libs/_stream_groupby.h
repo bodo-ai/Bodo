@@ -395,10 +395,7 @@ class GroupbyState {
                  std::vector<int32_t> f_in_offsets_,
                  std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
                  int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
-                 // If -1, we'll use 100% of the total buffer
-                 // pool size. Else we'll use the provided size.
-                 int64_t op_pool_size_bytes = -1,
-                 size_t max_partition_depth_ = 5);
+                 int64_t op_pool_size_bytes, size_t max_partition_depth_ = 5);
 
     /**
      * @brief Unify dictionaries of input table with build table
