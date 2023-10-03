@@ -11,22 +11,23 @@
  *
  */
 struct ArrayBuildBuffer {
-    // internal array with data values
+    // Internal array with data values
     std::shared_ptr<array_info> data_array;
+
     // Current number of elements in the buffer
     const uint64_t& size;
     // Total capacity for data elements (including current elements,
     // capacity>=size should always be true)
     int64_t capacity;
 
+    // Child array builders
+    std::vector<ArrayBuildBuffer> child_array_builders;
+
     // Shared dictionary builder
     std::shared_ptr<DictionaryBuilder> dict_builder;
     // dictionary indices buffer for appending dictionary indices (only for
     // dictionary-encoded string arrays)
     std::shared_ptr<ArrayBuildBuffer> dict_indices;
-
-    // Inner array builder (for nested arrays)
-    std::shared_ptr<ArrayBuildBuffer> inner_array_builder;
 
     /**
      * @brief Construct a new ArrayBuildBuffer for the provided data array.
@@ -281,10 +282,10 @@ struct ArrayBuildBuffer {
         CHECK_ARROW_MEM(
             data_array->buffers[0]->SetSize(sizeof(offset_t) *
                                             (this->size + 1 + append_rows_sum)),
-            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
         CHECK_ARROW_MEM(
             data_array->buffers[1]->SetSize(size + append_rows_sum),
-            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
 
         offset_t* out_offsets = (offset_t*)this->data_array->data1<arr_type>();
         const offset_t* in_offsets = (offset_t*)in_arr->data1<arr_type>();
@@ -311,12 +312,51 @@ struct ArrayBuildBuffer {
             }
         }
 
-        this->inner_array_builder->ReserveArray(in_arr->child_arrays[0],
-                                                inner_array_append_rows,
-                                                inner_array_append_rows_sum);
-        this->inner_array_builder->UnsafeAppendBatch(
+        this->child_array_builders.front().ReserveArray(
             in_arr->child_arrays[0], inner_array_append_rows,
             inner_array_append_rows_sum);
+        this->child_array_builders.front().UnsafeAppendBatch(
+            in_arr->child_arrays[0], inner_array_append_rows,
+            inner_array_append_rows_sum);
+    }
+
+    /**
+     * @brief Append a new data batch to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam DType data type of the data array
+     * @param in_arr input table with the new data
+     * @param append_rows bitmask indicating whether to append the row
+     * @param append_rows_sum number of rows to append
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(arr_type == bodo_array_type::STRUCT)
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
+                           const std::vector<bool>& append_rows,
+                           uint64_t append_rows_sum) {
+        CHECK_ARROW_MEM(
+            data_array->buffers[0]->SetSize(size + append_rows_sum),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
+
+        uint8_t* out_bitmask =
+            (uint8_t*)this->data_array->null_bitmask<arr_type>();
+        const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask<arr_type>();
+
+        for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+            if (append_rows[row_ind]) {
+                bool bit = GetBit(in_bitmask, row_ind);
+                SetBitTo(out_bitmask, this->data_array->length++, bit);
+            }
+        }
+
+        for (size_t i = 0; i < in_arr->child_arrays.size(); ++i) {
+            this->child_array_builders[i].ReserveArray(
+                in_arr->child_arrays[i], append_rows, append_rows_sum);
+            this->child_array_builders[i].UnsafeAppendBatch(
+                in_arr->child_arrays[i], append_rows, append_rows_sum);
+        }
     }
 
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
@@ -535,10 +575,8 @@ struct ArrayBuildBuffer {
      * there is already enough space reserved (with ReserveArray).
      *
      * @tparam arr_type type of the data array
-     * @tparam is_bool whether the data array is boolean (only used
-     *  if arr_type is NULLABLE_INT_BOOL)
+     * @tparam DType data type of the data array
      * @param in_arr input table with the new data element
-     * @param row_ind index of data in input
      */
     template <bodo_array_type::arr_type_enum arr_type,
               Bodo_CTypes::CTypeEnum DType>
@@ -548,19 +586,21 @@ struct ArrayBuildBuffer {
         offset_t* in_offsets = (offset_t*)in_arr->data1<arr_type>();
 
         // Reserve space for and append inner array
-        this->inner_array_builder->ReserveArray(in_arr->child_arrays[0]);
-        this->inner_array_builder->UnsafeAppendBatch(in_arr->child_arrays[0]);
+        this->child_array_builders.front().ReserveArray(
+            in_arr->child_arrays[0]);
+        this->child_array_builders.front().UnsafeAppendBatch(
+            in_arr->child_arrays[0]);
 
         // Set new buffer sizes. Required space should've been reserved
         // beforehand.
         CHECK_ARROW_MEM(
             data_array->buffers[0]->SetSize((this->size + 1 + in_arr->length) *
                                             sizeof(offset_t)),
-            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
         CHECK_ARROW_MEM(
             data_array->buffers[1]->SetSize(
                 arrow::bit_util::BytesForBits(this->size + in_arr->length)),
-            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize Failed!:");
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
 
         // Copy offsets
         for (uint64_t row_ind = 1; row_ind <= in_arr->length; row_ind++) {
@@ -568,6 +608,50 @@ struct ArrayBuildBuffer {
                 curr_offsets[this->size] + in_offsets[row_ind];
             curr_offsets[size + row_ind] = offset_val;
         }
+
+        // Copy bitmap
+        uint8_t* out_bitmask =
+            (uint8_t*)this->data_array->null_bitmask<arr_type>();
+        const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask<arr_type>();
+        if ((size & 7) == 0) {
+            // Fast path for byte aligned null bitmask
+            _copy_bitmap(out_bitmask + (this->size >> 3), in_bitmask,
+                         in_arr->length);
+        } else {
+            // Slow path for non-byte aligned null bitmask
+            for (uint64_t i = 0; i < in_arr->length; i++) {
+                bool bit = GetBit(in_bitmask, i);
+                SetBitTo(out_bitmask, this->size + i, bit);
+            }
+        }
+        this->data_array->length += in_arr->length;
+    }
+
+    /**
+     * @brief Append a new data element to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam DType data type of the data array
+     * @param in_arr input table with the new data element
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(arr_type == bodo_array_type::STRUCT)
+    void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr) {
+        // Reserve space for and append child arrays
+        for (size_t i = 0; i < in_arr->child_arrays.size(); ++i) {
+            this->child_array_builders[i].ReserveArray(in_arr->child_arrays[i]);
+            this->child_array_builders[i].UnsafeAppendBatch(
+                in_arr->child_arrays[i]);
+        }
+
+        // Set new buffer sizes. Required space should've been reserved
+        // beforehand.
+        CHECK_ARROW_MEM(
+            data_array->buffers[0]->SetSize(
+                arrow::bit_util::BytesForBits(this->size + in_arr->length)),
+            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
 
         // Copy bitmap
         uint8_t* out_bitmask =
@@ -627,7 +711,6 @@ struct ArrayBuildBuffer {
                     SetBitTo((uint8_t*)data_array->null_bitmask<
                                  bodo_array_type::NULLABLE_INT_BOOL>(),
                              size, bit);
-                    ++this->data_array->length;
                 } else {
                     uint64_t size_type = numpy_item_size[in_arr->dtype];
                     CHECK_ARROW_MEM(
@@ -651,7 +734,6 @@ struct ArrayBuildBuffer {
                     SetBitTo((uint8_t*)data_array->null_bitmask<
                                  bodo_array_type::NULLABLE_INT_BOOL>(),
                              size, bit);
-                    ++this->data_array->length;
                 }
             } break;
             case bodo_array_type::STRING: {
@@ -692,9 +774,6 @@ struct ArrayBuildBuffer {
                 SetBitTo((uint8_t*)data_array
                              ->null_bitmask<bodo_array_type::STRING>(),
                          size, bit);
-
-                // update size state
-                ++this->data_array->length;
             } break;
             case bodo_array_type::DICT: {
                 if (!is_matching_dictionary(this->data_array->child_arrays[0],
@@ -704,7 +783,6 @@ struct ArrayBuildBuffer {
                 }
                 this->dict_indices->UnsafeAppendRow(in_arr->child_arrays[1],
                                                     row_ind);
-                ++this->data_array->length;
             } break;
             case bodo_array_type::NUMPY: {
                 uint64_t size_type = numpy_item_size[in_arr->dtype];
@@ -716,7 +794,6 @@ struct ArrayBuildBuffer {
                 const char* in_ptr = in_arr->data1<bodo_array_type::NUMPY>() +
                                      size_type * row_ind;
                 memcpy(out_ptr, in_ptr, size_type);
-                ++this->data_array->length;
             } break;
             case bodo_array_type::ARRAY_ITEM: {
                 CHECK_ARROW_MEM(
@@ -724,7 +801,7 @@ struct ArrayBuildBuffer {
                                                     sizeof(offset_t)),
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
                 CHECK_ARROW_MEM(
-                    data_array->buffers[1]->Resize(
+                    data_array->buffers[1]->SetSize(
                         arrow::bit_util::BytesForBits(size + 1)),
                     "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
 
@@ -738,24 +815,40 @@ struct ArrayBuildBuffer {
                 // append inner array
                 for (offset_t i = in_offsets[row_ind];
                      i < in_offsets[row_ind + 1]; i++) {
-                    this->inner_array_builder->ReserveArrayRow(
+                    this->child_array_builders.front().ReserveArrayRow(
                         in_arr->child_arrays[0], i);
-                    this->inner_array_builder->UnsafeAppendRow(
+                    this->child_array_builders.front().UnsafeAppendRow(
                         in_arr->child_arrays[0], i);
                 }
 
                 // set null bit
                 bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
                 SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+            } break;
+            case bodo_array_type::STRUCT: {
+                CHECK_ARROW_MEM(
+                    data_array->buffers[0]->SetSize(
+                        arrow::bit_util::BytesForBits(size + 1)),
+                    "ArrayBuildBuffer::UnsafeAppendRow: SetSize failed!");
 
-                // update size state
-                ++this->data_array->length;
+                // append child array
+                for (size_t i = 0; i < in_arr->child_arrays.size(); ++i) {
+                    this->child_array_builders[i].ReserveArrayRow(
+                        in_arr->child_arrays[i], row_ind);
+                    this->child_array_builders[i].UnsafeAppendRow(
+                        in_arr->child_arrays[i], row_ind);
+                }
+
+                // set null bit
+                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
+                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
             } break;
             default:
                 throw std::runtime_error(
                     "ArrayBuildBuffer::UnsafeAppendRow: Invalid array type " +
                     GetArrType_as_string(in_arr->arr_type));
         }
+        ++this->data_array->length;
     }
 
     /**
@@ -767,9 +860,11 @@ struct ArrayBuildBuffer {
 
     /**
      * @brief Reserve enough space to potentially append all contents of input
-     * array to buffer. NOTE: This requires reserving space for variable-sized
-     * elements like strings and nested arrays. NOTE: For ARRAY_ITEM array,
-     * ReserveArray only reserve space for buffers and NOT the inner array.
+     * array to buffer. This requires reserving space for variable-sized
+     * elements like strings.
+     *
+     * NOTE: For semi-structured data array (ARRAY_ITEM and STRUCT),
+     * ReserveArray only reserve space for the buffers and NOT the child arrays.
      * Reserving space for inner array seperately is required before appending.
      *
      * @param in_arr input array used for finding new buffer sizes to reserve
@@ -785,10 +880,6 @@ struct ArrayBuildBuffer {
     /**
      * @brief Reserve enough space to be able to append the selected column
      * of all finalized chunks of a ChunkedTableBuilder.
-     * NOTE: This requires reserving space for variable-sized elements like
-     * strings and nested arrays. NOTE: For ARRAY_ITEM array, ReserveArray only
-     * reserve space for buffers and NOT the inner array. Reserving space for
-     * inner array seperately is required before appending.
      *
      * @param chunked_tb The ChunkedTableBuilder whose chunks we must copy over.
      * @param array_idx Index of the array to reserve space for.
@@ -798,6 +889,7 @@ struct ArrayBuildBuffer {
 
     /**
      * @brief Reserved enouch space to append in_arr[row_idx] as a row.
+     *
      * @param in_arr input array used for finding new buffer sizes to reserve
      * @param row_idx index of input array used for finding new buffer sizes to
      * reserve

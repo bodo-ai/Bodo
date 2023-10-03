@@ -23,15 +23,31 @@ std::shared_ptr<array_info> get_sample_array_item() {
     return arr;
 }
 
-const std::vector<int8_t> sample_array_types{bodo_array_type::NUMPY,
-                                             bodo_array_type::ARRAY_ITEM,
-                                             bodo_array_type::ARRAY_ITEM,
-                                             bodo_array_type::DICT,
-                                             bodo_array_type::ARRAY_ITEM,
-                                             bodo_array_type::STRING,
-                                             bodo_array_type::NULLABLE_INT_BOOL,
-                                             bodo_array_type::ARRAY_ITEM,
-                                             bodo_array_type::CATEGORICAL};
+std::shared_ptr<array_info> get_sample_struct() {
+    // Create the child array containing numbers from 0 to 9
+    std::shared_ptr<array_info> child_array =
+        alloc_numpy(10, Bodo_CTypes::INT64);
+    for (int64_t i = 0; i < 10; i++) {
+        getv<int64_t>(child_array, i) = i;
+    }
+    // Create the array item array with one child array
+    return alloc_struct(10,
+                        std::vector<std::shared_ptr<array_info>>{child_array});
+}
+
+const std::vector<int8_t> sample_array_types{
+    bodo_array_type::NUMPY,
+    bodo_array_type::ARRAY_ITEM,
+    bodo_array_type::ARRAY_ITEM,
+    bodo_array_type::DICT,
+    bodo_array_type::ARRAY_ITEM,
+    bodo_array_type::STRING,
+    bodo_array_type::STRUCT,
+    2,
+    bodo_array_type::NULLABLE_INT_BOOL,
+    bodo_array_type::ARRAY_ITEM,
+    bodo_array_type::CATEGORICAL,
+    bodo_array_type::NULLABLE_INT_BOOL};
 
 static bodo::tests::suite tests([] {
     bodo::tests::test("test_array_item_construction", [] {
@@ -59,9 +75,10 @@ static bodo::tests::suite tests([] {
         bodo::tests::check(row_4 == "[[7,8,9]]");
     });
 
-    bodo::tests::test("test_array_item_like_construction", [] {
+    bodo::tests::test("test_alloc_array_like", [] {
+        // ARRAY_ITEM
         std::shared_ptr<array_info> arr =
-            alloc_array_item_like(get_sample_array_item());
+            alloc_array_like(get_sample_array_item());
         bodo::tests::check(arr->length == 0);
         bodo::tests::check(
             ((offset_t*)arr->data1<bodo_array_type::ARRAY_ITEM>())[0] == 0);
@@ -69,41 +86,32 @@ static bodo::tests::suite tests([] {
         bodo::tests::check(arr->child_arrays[0]->arr_type ==
                            bodo_array_type::NUMPY);
         bodo::tests::check(arr->child_arrays[0]->length == 0);
-    });
-
-    bodo::tests::test("test_get_next_col_arr_type", [] {
-        size_t start_idx = 123456789;  // some random value
-        size_t end_idx = 0;
-        get_next_col_arr_type(start_idx, end_idx, sample_array_types);
-        bodo::tests::check(start_idx == 0);
-        bodo::tests::check(end_idx == 1);
-        get_next_col_arr_type(start_idx, end_idx, sample_array_types);
-        bodo::tests::check(start_idx == 1);
-        bodo::tests::check(end_idx == 4);
-        get_next_col_arr_type(start_idx, end_idx, sample_array_types);
-        bodo::tests::check(start_idx == 4);
-        bodo::tests::check(end_idx == 6);
-        get_next_col_arr_type(start_idx, end_idx, sample_array_types);
-        bodo::tests::check(start_idx == 6);
-        bodo::tests::check(end_idx == 7);
-        get_next_col_arr_type(start_idx, end_idx, sample_array_types);
-        bodo::tests::check(start_idx == 7);
-        bodo::tests::check(end_idx == 9);
+        // STRUCT
+        arr = alloc_array_like(get_sample_struct());
+        bodo::tests::check(arr->length == 0);
+        bodo::tests::check(arr->arr_type == bodo_array_type::STRUCT);
+        bodo::tests::check(arr->dtype == Bodo_CTypes::STRUCT);
+        bodo::tests::check(arr->child_arrays.size() == 1);
+        bodo::tests::check(arr->child_arrays[0]->arr_type ==
+                           bodo_array_type::NUMPY);
+        bodo::tests::check(arr->child_arrays[0]->length == 0);
     });
 
     bodo::tests::test("test_get_col_idx_map", [] {
         std::vector<int8_t> arr_array_types(sample_array_types);
         bodo::tests::check(get_col_idx_map(arr_array_types) ==
-                           std::vector<size_t>{0, 1, 4, 6, 7});
+                           std::vector<size_t>{0, 1, 4, 6, 11});
+        bodo::tests::check(get_col_idx_map(arr_array_types, 8, 11) ==
+                           std::vector<size_t>{8, 9});
+        arr_array_types.pop_back();
         arr_array_types.pop_back();
         bool exception_caught = false;
         try {
             get_col_idx_map(arr_array_types);
         } catch (std::runtime_error& ex) {
-            bodo::tests::check(
-                std::string(ex.what()) ==
-                "get_next_arr_type: The last array type cannot be ARRAY_ITEM: "
-                "inner array type needs to be provided!");
+            bodo::tests::check(std::string(ex.what()) ==
+                               "The last array type cannot be ARRAY_ITEM: "
+                               "inner array type needs to be provided!");
             exception_caught = true;
         }
         bodo::tests::check(exception_caught);
