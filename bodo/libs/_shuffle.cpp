@@ -2470,28 +2470,6 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
     int32_t precision = (int32_t)arr_bcast[6];
 
     std::shared_ptr<array_info> out_arr;
-    if (arr_type == bodo_array_type::STRUCT) {
-        std::shared_ptr<arrow::Array> ref_array = to_arrow(ref_arr), in_array;
-        if (myrank == mpi_root) {
-            in_array = to_arrow(in_arr);
-        }
-        std::shared_ptr<arrow::Array> array =
-            broadcast_arrow_array(ref_array, in_array);
-        out_arr = arrow_array_to_bodo(array);
-    }
-    if (arr_type == bodo_array_type::ARRAY_ITEM) {
-        MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
-        if (myrank == mpi_root) {
-            out_arr = copy_array(in_arr, /*shallow_copy_inner_array*/ true);
-        } else {
-            out_arr = alloc_array_item(n_rows, nullptr);
-        }
-        out_arr->child_arrays.front() = broadcast_array(
-            ref_arr->child_arrays.front(), out_arr->child_arrays.front(),
-            is_parallel, mpi_root, myrank);
-        MPI_Bcast(out_arr->data1(), n_rows + 1, mpi_typ_offset, mpi_root,
-                  MPI_COMM_WORLD);
-    }
     if (arr_type == bodo_array_type::NUMPY ||
         arr_type == bodo_array_type::CATEGORICAL ||
         arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -2513,8 +2491,7 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
         }
         MPI_Bcast(out_arr->data1(), bcast_size, mpi_typ, mpi_root,
                   MPI_COMM_WORLD);
-    }
-    if (arr_type == bodo_array_type::INTERVAL) {
+    } else if (arr_type == bodo_array_type::INTERVAL) {
         MPI_Datatype mpi_typ = get_MPI_typ(dtype);
         if (myrank == mpi_root) {
             out_arr = copy_array(in_arr);
@@ -2523,8 +2500,7 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
         }
         MPI_Bcast(out_arr->data1(), n_rows, mpi_typ, mpi_root, MPI_COMM_WORLD);
         MPI_Bcast(out_arr->data2(), n_rows, mpi_typ, mpi_root, MPI_COMM_WORLD);
-    }
-    if (arr_type == bodo_array_type::STRING) {
+    } else if (arr_type == bodo_array_type::STRING) {
         MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
         MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
         if (myrank == mpi_root) {
@@ -2537,8 +2513,7 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
                   MPI_COMM_WORLD);
         MPI_Bcast(out_arr->data2(), n_rows, mpi_typ_offset, mpi_root,
                   MPI_COMM_WORLD);
-    }
-    if (arr_type == bodo_array_type::LIST_STRING) {
+    } else if (arr_type == bodo_array_type::LIST_STRING) {
         MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
         MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
         if (myrank == mpi_root) {
@@ -2557,11 +2532,37 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
         int n_sub_bytes = (n_sub_elems + 7) >> 3;
         MPI_Bcast(out_arr->sub_null_bitmask(), n_sub_bytes, mpi_typ, mpi_root,
                   MPI_COMM_WORLD);
+    } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
+        MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
+        if (myrank == mpi_root) {
+            out_arr = copy_array(in_arr, /*shallow_copy_child_arrays*/ true);
+        } else {
+            out_arr = alloc_array_item(n_rows, nullptr);
+        }
+        out_arr->child_arrays.front() = broadcast_array(
+            ref_arr->child_arrays.front(), out_arr->child_arrays.front(),
+            is_parallel, mpi_root, myrank);
+        MPI_Bcast(out_arr->data1(), n_rows + 1, mpi_typ_offset, mpi_root,
+                  MPI_COMM_WORLD);
+    } else if (arr_type == bodo_array_type::STRUCT) {
+        if (myrank == mpi_root) {
+            out_arr = copy_array(in_arr, /*shallow_copy_child_arrays*/ true);
+        } else {
+            out_arr =
+                alloc_struct(n_rows, std::vector<std::shared_ptr<array_info>>(
+                                         ref_arr->child_arrays.size()));
+        }
+        for (size_t i = 0; i < out_arr->child_arrays.size(); ++i) {
+            out_arr->child_arrays[i] = broadcast_array(
+                ref_arr->child_arrays[i], out_arr->child_arrays[i], is_parallel,
+                mpi_root, myrank);
+        }
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
         arr_type == bodo_array_type::STRING ||
         arr_type == bodo_array_type::LIST_STRING ||
-        arr_type == bodo_array_type::ARRAY_ITEM) {
+        arr_type == bodo_array_type::ARRAY_ITEM ||
+        arr_type == bodo_array_type::STRUCT) {
         // broadcasting the null bitmask
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
         int n_bytes = (n_rows + 7) >> 3;

@@ -3138,6 +3138,7 @@ def test_hash_join_struct_array(memory_leak_check):
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
+            -1,
             build_keys_inds,
             probe_keys_inds,
             build_col_meta,
@@ -3164,7 +3165,7 @@ def test_hash_join_struct_array(memory_leak_check):
         T3 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), kept_cols, 2
         )
-        _table_builder = bodo.libs.table_builder.init_table_builder_state()
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
 
         while not is_last3:
             T4 = bodo.hiframes.table.table_local_filter(
@@ -3349,6 +3350,7 @@ def test_nested_loop_join_struct_array(memory_leak_check):
 
     def test_nested_loop_join(df1, df2):
         join_state = init_join_state(
+            -1,
             build_keys_inds,
             probe_keys_inds,
             build_col_meta,
@@ -3376,7 +3378,7 @@ def test_nested_loop_join_struct_array(memory_leak_check):
         T3 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), kept_cols, 2
         )
-        _table_builder = bodo.libs.table_builder.init_table_builder_state()
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
 
         while not is_last3:
             T4 = bodo.hiframes.table.table_local_filter(
