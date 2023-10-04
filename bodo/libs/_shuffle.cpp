@@ -792,7 +792,7 @@ array_info* drop_duplicates_local_dictionary_py_entry(
         return new array_info(*dict_arr);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -2034,7 +2034,7 @@ std::shared_ptr<table_info> shuffle_table(std::shared_ptr<table_info> in_table,
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
-        return NULL;
+        return nullptr;
     }
 
     const bool delete_hashes = bool(hashes);
@@ -2087,7 +2087,7 @@ table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys,
         return new table_info(*out);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -2146,7 +2146,7 @@ std::shared_ptr<table_info> coherent_shuffle_table(
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
-        return NULL;
+        return nullptr;
     }
     const bool delete_hashes = bool(hashes);
     mpi_comm_info comm_info(in_table->columns);
@@ -3009,7 +3009,7 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
             rows_pos += siz;
         }
         //
-        std::shared_ptr<array_info> out_arr = NULL;
+        std::shared_ptr<array_info> out_arr = nullptr;
         if (arr_type == bodo_array_type::STRUCT ||
             arr_type == bodo_array_type::ARRAY_ITEM) {
             std::shared_ptr<arrow::Array> array = to_arrow(in_arr);
@@ -3058,7 +3058,7 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                 }
             } else {
                 MPI_Datatype mpi_typ = get_MPI_typ(dtype);
-                char* data1_ptr = NULL;
+                char* data1_ptr = nullptr;
                 if (myrank == mpi_root || all_gather) {
                     out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype,
                                           -1, 0, num_categories);
@@ -3076,8 +3076,8 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
             int64_t n_rows_tot = 0;
             for (int i_p = 0; i_p < n_pes; i_p++)
                 n_rows_tot += arr_gath_r[3 * i_p];
-            char* data1_ptr = NULL;
-            char* data2_ptr = NULL;
+            char* data1_ptr = nullptr;
+            char* data2_ptr = nullptr;
             if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, -1,
                                       0, num_categories);
@@ -3102,7 +3102,7 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                 n_chars_tot += arr_gath_r[3 * i_p + 1];
             }
             // Doing the characters
-            char* data1_ptr = NULL;
+            char* data1_ptr = nullptr;
             if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, n_chars_tot, -1, arr_type,
                                       dtype, -1, 0, num_categories);
@@ -3171,7 +3171,7 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
             MPI_Gengatherv(sub_null_bitmask_i, n_bytes, mpi_typ8, V.data(),
                            n_sub_bytes_count.data(), n_sub_bytes_disp.data(),
                            mpi_typ8, mpi_root, MPI_COMM_WORLD, all_gather);
-            char* data1_ptr = NULL;
+            char* data1_ptr = nullptr;
             if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, n_sub_elems_tot,
                                       n_sub_sub_elems_tot, arr_type, dtype, -1,
@@ -3286,8 +3286,7 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
             if (all_gather || myrank == mpi_root) {
                 out_arr =
                     create_dict_string_array(in_arr->child_arrays[0], out_arr);
-            }  // else out_arr is already NULL, so doesn't need to be
-               // handled
+            }  // else out_arr is already nullptr, so doesn't need to be handled
         }
         in_arr.reset();
         out_arrs.push_back(out_arr);
@@ -3433,7 +3432,7 @@ table_info* shuffle_renormalization_group_py_entrypt(
         return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -3457,7 +3456,7 @@ table_info* shuffle_renormalization_py_entrypt(table_info* in_table, int random,
         return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 

@@ -238,7 +238,7 @@ class BodoBuffer : public arrow::ResizableBuffer {
     }
 
     /// @brief Wrapper for Pinning Buffers
-    inline void pin() {
+    void pin() {
         NRT_MemInfo_Pin(this->meminfo);
         // If the buffer was spilled, its data pointer could have changed upon
         // restoring it to memory. Therefore, we need to resynchronize the
@@ -248,7 +248,7 @@ class BodoBuffer : public arrow::ResizableBuffer {
     }
 
     /// @brief Wrapper for Unpinning Buffers
-    inline void unpin() { NRT_MemInfo_Unpin(this->meminfo); }
+    void unpin() { NRT_MemInfo_Unpin(this->meminfo); }
 
     template <typename X, typename... Args>
     friend class ::bodo::pin_guard;
@@ -596,7 +596,7 @@ struct array_info {
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
         requires(arr_type == bodo_array_type::UNKNOWN)
-    inline char* data1() const {
+    char* data1() const {
         switch (this->arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::STRING:
@@ -621,7 +621,7 @@ struct array_info {
      */
     template <bodo_array_type::arr_type_enum arr_type>
         requires(arr_type != bodo_array_type::UNKNOWN)
-    inline char* data1() const {
+    char* data1() const {
         switch (arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::STRING:
@@ -647,7 +647,7 @@ struct array_info {
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
         requires(arr_type == bodo_array_type::UNKNOWN)
-    inline char* data2() const {
+    char* data2() const {
         switch (this->arr_type) {
             case bodo_array_type::STRING:
             case bodo_array_type::INTERVAL:
@@ -673,7 +673,7 @@ struct array_info {
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
         requires(arr_type != bodo_array_type::UNKNOWN)
-    inline char* data2() const {
+    char* data2() const {
         switch (arr_type) {
             case bodo_array_type::STRING:
             case bodo_array_type::INTERVAL:
@@ -699,7 +699,7 @@ struct array_info {
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
         requires(arr_type == bodo_array_type::UNKNOWN)
-    inline char* data3() const {
+    char* data3() const {
         switch (this->arr_type) {
             case bodo_array_type::LIST_STRING:
                 return (char*)this->buffers[0]->mutable_data();
@@ -724,7 +724,7 @@ struct array_info {
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
         requires(arr_type != bodo_array_type::UNKNOWN)
-    inline char* data3() const {
+    char* data3() const {
         switch (arr_type) {
             case bodo_array_type::LIST_STRING:
                 return (char*)this->buffers[0]->mutable_data();
@@ -749,7 +749,7 @@ struct array_info {
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
         requires(arr_type == bodo_array_type::UNKNOWN)
-    inline char* null_bitmask() const {
+    char* null_bitmask() const {
         switch (this->arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::LIST_STRING:
@@ -778,7 +778,7 @@ struct array_info {
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
         requires(arr_type != bodo_array_type::UNKNOWN)
-    inline char* null_bitmask() const {
+    char* null_bitmask() const {
         switch (arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::LIST_STRING:
@@ -871,7 +871,7 @@ struct array_info {
 
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
-    inline bool get_null_bit(size_t idx) const {
+    bool get_null_bit(size_t idx) const {
         return GetBit((uint8_t*)null_bitmask<arr_type>(), idx);
     }
 
@@ -970,7 +970,7 @@ struct array_info {
     }
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
-    inline void set_null_bit(size_t idx, bool bit) {
+    void set_null_bit(size_t idx, bool bit) {
         SetBitTo((uint8_t*)null_bitmask<arr_type>(), idx, bit);
     }
 
