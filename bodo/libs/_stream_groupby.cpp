@@ -338,13 +338,6 @@ GroupbyPartition::GroupbyPartition(
       build_hash_table(std::make_unique<hash_table_t>(
           0, HashGroupbyTable<true>(this, nullptr),
           KeyEqualGroupbyTable<true>(this, nullptr, n_keys_))),
-      build_table_buffer(std::make_unique<TableBuildBuffer>(
-          build_arr_c_types_, build_arr_array_types_,
-          build_table_dict_builders_, op_pool_, op_mm_)),
-      build_table_buffer_chunked(
-          build_arr_c_types_, build_arr_array_types_,
-          build_table_dict_builders_, batch_size_,
-          DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES),
       col_sets(col_sets_),
       f_in_offsets(f_in_offsets_),
       f_in_cols(f_in_cols_),
@@ -356,8 +349,21 @@ GroupbyPartition::GroupbyPartition(
       req_extended_group_info(req_extended_group_info_),
       is_active(is_active_),
       parallel(parallel_),
+      batch_size(batch_size_),
       op_pool(op_pool_),
-      op_mm(op_mm_) {}
+      op_mm(op_mm_) {
+    if (this->is_active) {
+        this->build_table_buffer = std::make_unique<TableBuildBuffer>(
+            this->build_arr_c_types, this->build_arr_array_types,
+            this->build_table_dict_builders, this->op_pool, this->op_mm);
+    } else {
+        this->build_table_buffer_chunked =
+            std::make_unique<ChunkedTableBuilder>(
+                this->build_arr_c_types, this->build_arr_array_types,
+                this->build_table_dict_builders, this->batch_size,
+                DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
+    }
+}
 
 inline bool GroupbyPartition::is_in_partition(const uint32_t& hash) const {
     if (this->num_top_bits == 0) {
@@ -418,7 +424,7 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         this->in_table_hashes.reset();
     } else {
         // Append into the ChunkedTableBuilder
-        this->build_table_buffer_chunked.AppendBatch(in_table);
+        this->build_table_buffer_chunked->AppendBatch(in_table);
     }
 }
 
@@ -472,7 +478,7 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         this->in_table_hashes.reset();
     } else {
         // Append into the ChunkedTableBuilder
-        this->build_table_buffer_chunked.AppendBatch(in_table, append_rows);
+        this->build_table_buffer_chunked->AppendBatch(in_table, append_rows);
     }
 }
 
@@ -488,7 +494,7 @@ void GroupbyPartition::AppendBuildBatch(
         this->build_table_buffer->UnsafeAppendBatch(in_table);
     } else {
         // Append into the ChunkedTableBuilder
-        this->build_table_buffer_chunked.AppendBatch(in_table);
+        this->build_table_buffer_chunked->AppendBatch(in_table);
     }
 }
 
@@ -505,8 +511,138 @@ void GroupbyPartition::AppendBuildBatch(
         this->build_table_buffer->UnsafeAppendBatch(in_table, append_rows);
     } else {
         // Append into the ChunkedTableBuilder
-        this->build_table_buffer_chunked.AppendBatch(in_table, append_rows);
+        this->build_table_buffer_chunked->AppendBatch(in_table, append_rows);
     }
+}
+
+template <bool is_active>
+std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
+    size_t num_levels) {
+    if (!this->accumulate_before_update) {
+        throw std::runtime_error(
+            "GroupbyPartition::SplitPartition: Splitting partitions is not yet "
+            "supported in the Agg case.");
+    }
+
+    if (num_levels != 1) {
+        throw std::runtime_error(
+            "GroupbyPartition::SplitPartition: We currently only support "
+            "splitting a partition into 2 at a time.");
+    }
+    constexpr size_t uint32_bits = sizeof(uint32_t) * CHAR_BIT;
+    if (this->num_top_bits >= (uint32_bits - 1)) {
+        throw std::runtime_error(
+            "Cannot split the partition further. Out of hash bits.");
+    }
+
+    // Release hash-table memory (technically not required in the acc case)
+    this->build_hash_table.reset();
+
+    // Get dictionary hashes from the dict-builders of build table.
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+        dict_hashes = std::make_shared<
+            bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>();
+    dict_hashes->reserve(this->n_keys);
+    for (uint64_t i = 0; i < this->n_keys; i++) {
+        if (this->build_table_dict_builders[i] == nullptr) {
+            dict_hashes->push_back(nullptr);
+        } else {
+            dict_hashes->emplace_back(
+                this->build_table_dict_builders[i]->GetDictionaryHashes());
+        }
+    }
+
+    // Create the two new partitions. These will differ on the next bit.
+    std::shared_ptr<GroupbyPartition> new_part1 =
+        std::make_shared<GroupbyPartition>(
+            this->num_top_bits + 1, (this->top_bitmask << 1),
+            this->build_arr_c_types, this->build_arr_array_types, this->n_keys,
+            this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
+            this->f_in_cols, this->f_running_value_offsets, this->batch_size,
+            is_active, this->accumulate_before_update,
+            this->req_extended_group_info, this->parallel, this->op_pool,
+            this->op_mm);
+
+    std::shared_ptr<GroupbyPartition> new_part2 =
+        std::make_shared<GroupbyPartition>(
+            this->num_top_bits + 1, (this->top_bitmask << 1) + 1,
+            this->build_arr_c_types, this->build_arr_array_types, this->n_keys,
+            this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
+            this->f_in_cols, this->f_running_value_offsets, this->batch_size,
+            false, this->accumulate_before_update,
+            this->req_extended_group_info, this->parallel, this->op_pool,
+            this->op_mm);
+
+    std::vector<bool> append_partition1;
+    if (is_active) {
+        // In the active case, partition this->build_table_buffer directly
+
+        // Compute partitioning hashes
+        std::shared_ptr<uint32_t[]> build_table_partitioning_hashes =
+            hash_keys_table(this->build_table_buffer->data_table, this->n_keys,
+                            SEED_HASH_PARTITION, false, false, dict_hashes);
+
+        // Put the build data in the new partitions.
+        append_partition1.resize(this->build_table_buffer->data_table->nrows(),
+                                 false);
+
+        for (size_t i_row = 0;
+             i_row < this->build_table_buffer->data_table->nrows(); i_row++) {
+            append_partition1[i_row] = new_part1->is_in_partition(
+                build_table_partitioning_hashes[i_row]);
+        }
+
+        // Calculate number of rows going to 1st new partition
+        uint64_t append_partition1_sum = std::accumulate(
+            append_partition1.begin(), append_partition1.end(), (uint64_t)0);
+
+        // Reserve space for append
+        new_part1->build_table_buffer->ReserveTable(
+            this->build_table_buffer->data_table, append_partition1,
+            append_partition1_sum);
+        new_part1->build_table_buffer->UnsafeAppendBatch(
+            this->build_table_buffer->data_table, append_partition1,
+            append_partition1_sum);
+
+        append_partition1.flip();
+        std::vector<bool>& append_partition2 = append_partition1;
+
+        new_part2->build_table_buffer_chunked->AppendBatch(
+            this->build_table_buffer->data_table, append_partition2);
+    } else {
+        // In the inactive case, partition build_table_buffer_chunked chunk by
+        // chunk
+        this->build_table_buffer_chunked->Finalize();
+        // Just in case we started the activation and some columns
+        // reserved memory during ActivatePartition.
+        this->build_table_buffer.reset();
+
+        while (!this->build_table_buffer_chunked->chunks.empty()) {
+            auto [build_table_chunk, build_table_nrows_chunk] =
+                this->build_table_buffer_chunked->PopChunk();
+            // Compute partitioning hashes
+            std::shared_ptr<uint32_t[]> build_table_partitioning_hashes_chunk =
+                hash_keys_table(build_table_chunk, this->n_keys,
+                                SEED_HASH_PARTITION, false, false, dict_hashes);
+
+            append_partition1.resize(build_table_nrows_chunk, false);
+            for (int64_t i_row = 0; i_row < build_table_nrows_chunk; i_row++) {
+                append_partition1[i_row] = new_part1->is_in_partition(
+                    build_table_partitioning_hashes_chunk[i_row]);
+            }
+
+            new_part1->build_table_buffer_chunked->AppendBatch(
+                build_table_chunk, append_partition1);
+
+            append_partition1.flip();
+            std::vector<bool>& append_partition2 = append_partition1;
+
+            new_part2->build_table_buffer_chunked->AppendBatch(
+                build_table_chunk, append_partition2);
+        }
+    }
+
+    return {new_part1, new_part2};
 }
 
 void GroupbyPartition::ClearBuildState() {
@@ -518,13 +654,42 @@ void GroupbyPartition::ClearBuildState() {
     this->in_table_hashes.reset();
 }
 
-std::shared_ptr<table_info> GroupbyPartition::Finalize() {
-    if (!this->is_active) {
-        // Should never reach this point.
-        throw std::runtime_error(
-            "GroupbyPartition::Finalize: Inactive partitions are not supported "
-            "yet!");
+void GroupbyPartition::ActivatePartition() {
+    if (this->is_active) {
+        return;
     }
+
+    /// Concatenate all build chunks into contiguous build buffer
+
+    // Finalize the chunked table builder:
+    this->build_table_buffer_chunked->Finalize();
+
+    // Initialize build_table_buffer
+    this->build_table_buffer = std::make_unique<TableBuildBuffer>(
+        this->build_arr_c_types, this->build_arr_array_types,
+        this->build_table_dict_builders, this->op_pool, this->op_mm);
+
+    // Do a single ReserveTable call to allocate all required space in a
+    // single call:
+    this->build_table_buffer->ReserveTable(*(this->build_table_buffer_chunked));
+
+    // This will work without error because we've already allocated
+    // all the required space:
+    while (!this->build_table_buffer_chunked->chunks.empty()) {
+        auto [build_table_chunk, build_table_nrows_chunk] =
+            this->build_table_buffer_chunked->PopChunk();
+        this->build_table_buffer->UnsafeAppendBatch(build_table_chunk);
+    }
+
+    // Mark this partition as activated once we've moved the data
+    // from the chunked buffer to a contiguous buffer:
+    this->is_active = true;
+}
+
+std::shared_ptr<table_info> GroupbyPartition::Finalize() {
+    // Make sure this partition is active. This is idempotent
+    // and hence a NOP if the partition is already active.
+    this->ActivatePartition();
 
     std::shared_ptr<table_info> out_table;
     if (accumulate_before_update) {
@@ -592,7 +757,10 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
     // it if the table is replicated (similar to Join).
     this->DisablePartitioning();
 
-    // TODO Add a partitioning debug env var similar to join.
+    if (char* debug_partitioning_env_ =
+            std::getenv("BODO_DEBUG_STREAM_GROUPBY_PARTITIONING")) {
+        this->debug_partitioning = !std::strcmp(debug_partitioning_env_, "1");
+    }
 
     // Add key column types to running value buffer types (same type as
     // input)
@@ -834,6 +1002,58 @@ void GroupbyState::DisablePartitioning() {
     this->op_pool->DisableThresholdEnforcement();
 }
 
+void GroupbyState::SplitPartition(size_t idx) {
+    if (this->partitions[idx]->get_num_top_bits() >=
+        this->max_partition_depth) {
+        // TODO Eventually, this should lead to falling back
+        // to nested loop join for this partition.
+        // (https://bodo.atlassian.net/browse/BSE-535).
+        throw std::runtime_error(
+            "GroupbyState::SplitPartition: Cannot split partition beyond max "
+            "partition depth of: " +
+            std::to_string(max_partition_depth));
+    }
+
+    // Threshold enforcement should already be disabled in the
+    // replicated build case, so SplitPartition should never get called.
+    // We're adding this check to protect against edge cases.
+    if (!this->parallel) {
+        throw std::runtime_error(
+            "GroupbyState::SplitPartition: We cannot split a partition "
+            "when the build table is replicated!");
+    }
+
+    if (this->debug_partitioning) {
+        std::cerr << "[DEBUG] Splitting partition " << idx << "." << std::endl;
+    }
+
+    // Temporarily disable threshold enforcement during partition
+    // split.
+    this->op_pool->DisableThresholdEnforcement();
+
+    // Call SplitPartition on the idx'th partition:
+    std::vector<std::shared_ptr<GroupbyPartition>> new_partitions;
+    if (this->partitions[idx]->is_active_partition()) {
+        new_partitions = this->partitions[idx]->SplitPartition<true>();
+    } else {
+        new_partitions = this->partitions[idx]->SplitPartition<false>();
+    }
+    // Remove the current partition (this should release its memory)
+    this->partitions.erase(this->partitions.begin() + idx);
+    // Insert the new partitions in its place
+    this->partitions.insert(this->partitions.begin() + idx,
+                            new_partitions.begin(), new_partitions.end());
+
+    // Re-enable threshold enforcement now that we have split the
+    // partition successfully.
+    this->op_pool->EnableThresholdEnforcement();
+
+    // TODO Check if the new active partition needs to be split up further.
+    // XXX Might not be required if we split proactively and there isn't
+    // a single hot key (in which case we need to fall back to sorted
+    // aggregation for this partition).
+}
+
 void GroupbyState::UpdateGroupsAndCombine(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes,
@@ -979,7 +1199,7 @@ void GroupbyState::UpdateShuffleGroupsAndCombine(
     this->in_table_hashes.reset();
 }
 
-void GroupbyState::AppendBuildBatch(
+void GroupbyState::AppendBuildBatchHelper(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes) {
     if (this->partitions.size() == 1) {
@@ -1022,6 +1242,32 @@ void GroupbyState::AppendBuildBatch(
 
 void GroupbyState::AppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
+    const std::shared_ptr<uint32_t[]>& partitioning_hashes) {
+    while (true) {
+        try {
+            this->AppendBuildBatchHelper(in_table, partitioning_hashes);
+            break;
+        } catch (
+            bodo::OperatorBufferPool::OperatorPoolThresholdExceededError&) {
+            // Split the 0th partition into 2 in case of an
+            // OperatorPoolThresholdExceededError. This will always succeed
+            // since it creates one active and another inactive partition.
+            // The new active partition can only be as large as the original
+            // partition, and since threshold enforcement is disabled, it
+            // should fit in memory.
+            if (this->debug_partitioning) {
+                std::cerr << "[DEBUG] GroupbyState::AppendBuildBatch[2]: "
+                             "Encountered OperatorPoolThresholdExceededError."
+                          << std::endl;
+            }
+
+            this->SplitPartition(0);
+        }
+    }
+}
+
+void GroupbyState::AppendBuildBatchHelper(
+    const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes,
     const std::vector<bool>& append_rows) {
     if (this->partitions.size() == 1) {
@@ -1063,6 +1309,34 @@ void GroupbyState::AppendBuildBatch(
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
         this->partitions[i_part]->AppendBuildBatch<false>(
             in_table, append_rows_by_partition[i_part]);
+    }
+}
+
+void GroupbyState::AppendBuildBatch(
+    const std::shared_ptr<table_info>& in_table,
+    const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+    const std::vector<bool>& append_rows) {
+    while (true) {
+        try {
+            this->AppendBuildBatchHelper(in_table, partitioning_hashes,
+                                         append_rows);
+            break;
+        } catch (
+            bodo::OperatorBufferPool::OperatorPoolThresholdExceededError&) {
+            // Split the 0th partition into 2 in case of an
+            // OperatorPoolThresholdExceededError. This will always succeed
+            // since it creates one active and another inactive partition.
+            // The new active partition can only be as large as the original
+            // partition, and since threshold enforcement is disabled, it
+            // should fit in memory.
+            if (this->debug_partitioning) {
+                std::cerr << "[DEBUG] GroupbyState::AppendBuildBatch[3]: "
+                             "Encountered OperatorPoolThresholdExceededError."
+                          << std::endl;
+            }
+
+            this->SplitPartition(0);
+        }
     }
 }
 
@@ -1182,21 +1456,61 @@ void GroupbyState::FinalizeBuild() {
     this->ClearShuffleState();
 
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
-        // Finalize the partition and get output from it.
-        // TODO: Write output directly into the GroupybyState's output buffer
-        // instead of returning the output.
-        std::shared_ptr<table_info> output_table =
-            this->partitions[i_part]->Finalize();
-        // Since we have generated the output, we don't need the partition
-        // anymore, so we can release that memory.
-        this->partitions[i_part].reset();
-        if (i_part == 0) {
-            this->InitOutputBuffer(output_table);
+        // TODO Add logic to check if partition is too big
+        // (build_table_buffer size + approximate hash table size) and needs
+        // to be repartitioned upfront.
+
+        while (true) {
+            bool exception_caught = true;
+            std::shared_ptr<table_info> output_table;
+            try {
+                // Finalize the partition and get output from it.
+                // TODO: Write output directly into the GroupybyState's output
+                // buffer instead of returning the output.
+                output_table = this->partitions[i_part]->Finalize();
+                exception_caught = false;
+            } catch (
+                bodo::OperatorBufferPool::OperatorPoolThresholdExceededError&) {
+                // Split the partition into 2. This will always succeed. If
+                // the partition is inactive, we create 2 new inactive
+                // partitions that take up no memory from the
+                // OperatorBufferPool. If the partition is active, it
+                // creates one active and another inactive partition. The
+                // new active partition can only be as large as the original
+                // partition, and since threshold enforcement is disabled,
+                // it should fit in memory just fine.
+                if (this->debug_partitioning) {
+                    std::cerr
+                        << "[DEBUG] GroupbyState::FinalizeBuild: "
+                           "Encountered OperatorPoolThresholdExceededError "
+                           "while finalizing partition "
+                        << i_part << "." << std::endl;
+                }
+
+                this->SplitPartition(i_part);
+            }
+
+            if (!exception_caught) {
+                // Since we have generated the output, we don't need the
+                // partition anymore, so we can release that memory.
+                this->partitions[i_part].reset();
+                if (i_part == 0) {
+                    this->InitOutputBuffer(output_table);
+                }
+                // XXX TODO UnifyOutputDictionaryArrays needs a version that can
+                // take the shared_ptr without reference and free individual
+                // columns early.
+                output_table = this->UnifyOutputDictionaryArrays(output_table);
+                this->output_buffer->AppendBatch(output_table);
+                break;
+            }
         }
-        // XXX TODO UnifyOutputDictionaryArrays needs a version that can take
-        // the shared_ptr without reference and free individual columns early.
-        output_table = this->UnifyOutputDictionaryArrays(output_table);
-        this->output_buffer->AppendBatch(output_table);
+    }
+
+    if (this->debug_partitioning) {
+        std::cerr << "[DEBUG] GroupbyState::FinalizeBuild: Total number of "
+                     "partitions: "
+                  << this->partitions.size() << "." << std::endl;
     }
 
     this->output_buffer->Finalize();
@@ -1428,6 +1742,7 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
             (!groupby_state->parallel ||
              hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank));
     }
+
     groupby_state->AppendBuildBatch(in_table, batch_hashes_partition,
                                     append_row_to_build_table);
 
@@ -1485,7 +1800,7 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
 
         // Append input rows to local or shuffle buffer:
         batch_hashes_partition = hash_keys_table(
-            in_table, groupby_state->n_keys, SEED_HASH_PARTITION,
+            new_data, groupby_state->n_keys, SEED_HASH_PARTITION,
             groupby_state->parallel, false, dict_hashes);
 
         // XXX Technically, we don't need the partition hashes if
