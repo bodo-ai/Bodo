@@ -1495,12 +1495,12 @@ void bodo_common_init();
  * @brief Make a copy of the given array
  *
  * @param arr the array to be copied
- * @param shallow_copy_inner_array whether to shallow copy of inner array for
- * ARRAY_ITEM array
+ * @param shallow_copy_child_arrays whether to shallow copy of child arrays for
+ * ARRAY_ITEM and STRUCT array
  * @return The copy
  */
 std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> arr,
-                                       bool shallow_copy_inner_array = false);
+                                       bool shallow_copy_child_arrays = false);
 
 /* Calculate the size of one row
  *
