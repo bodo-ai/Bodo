@@ -786,32 +786,37 @@ int64_t table_global_memory_size(std::shared_ptr<table_info> table) {
 }
 
 std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
-                                       bool shallow_copy_inner_array) {
-    int64_t extra_null_bytes = 0;
+                                       bool shallow_copy_child_arrays) {
     std::shared_ptr<array_info> farr;
+    // Copy child arrays
     if (earr->arr_type == bodo_array_type::DICT) {
         std::shared_ptr<array_info> dictionary =
             copy_array(earr->child_arrays[0]);
         std::shared_ptr<array_info> indices = copy_array(earr->child_arrays[1]);
         farr = create_dict_string_array(dictionary, indices);
-    } else {
-        int64_t array_id = -1;
-        if (earr->arr_type == bodo_array_type::STRING) {
-            array_id = earr->array_id;
+    } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        farr = alloc_array_item(earr->length,
+                                shallow_copy_child_arrays
+                                    ? earr->child_arrays.front()
+                                    : copy_array(earr->child_arrays.front()));
+    } else if (earr->arr_type == bodo_array_type::STRUCT) {
+        std::vector<std::shared_ptr<array_info>> child_arrays(
+            earr->child_arrays);
+        if (!shallow_copy_child_arrays) {
+            for (size_t i = 0; i < child_arrays.size(); ++i) {
+                child_arrays[i] = copy_array(earr->child_arrays[i]);
+            }
         }
-        farr =
-            earr->arr_type == bodo_array_type::ARRAY_ITEM
-                ? alloc_array_item(earr->length,
-                                   shallow_copy_inner_array
-                                       ? earr->child_arrays.front()
-                                       : copy_array(earr->child_arrays.front()))
-                : alloc_array(earr->length, earr->n_sub_elems(),
-                              earr->n_sub_sub_elems(), earr->arr_type,
-                              earr->dtype, array_id, extra_null_bytes,
-                              earr->num_categories,
-                              earr->is_globally_replicated,
-                              earr->is_locally_unique, earr->is_locally_sorted);
+        farr = alloc_struct(earr->length, child_arrays);
+    } else {
+        farr = alloc_array(
+            earr->length, earr->n_sub_elems(), earr->n_sub_sub_elems(),
+            earr->arr_type, earr->dtype,
+            earr->arr_type == bodo_array_type::STRING ? earr->array_id : -1, 0,
+            earr->num_categories, earr->is_globally_replicated,
+            earr->is_locally_unique, earr->is_locally_sorted);
     }
+    // Copy buffers
     if (earr->arr_type == bodo_array_type::NUMPY ||
         earr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
@@ -849,6 +854,9 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
     } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
         memcpy(farr->data1(), earr->data1(),
                sizeof(offset_t) * (earr->length + 1));
+        int64_t n_bytes = ((earr->length + 7) >> 3);
+        memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
+    } else if (earr->arr_type == bodo_array_type::STRUCT) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
         memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
     } else {
