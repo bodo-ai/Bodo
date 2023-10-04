@@ -57,8 +57,8 @@ global_2 = MetaType((0, 1, 2, 3, 4))
 global_3 = MetaType((0, 1, 2, 3))
 global_1 = MetaType((4,))
 global_6 = ColNamesMetaType(("EXPR$0", "EXPR$1", "EXPR$2", "EXPR$3", "l_comment"))
-global_4 = MetaType(("sum", "sum", "max", "nunique"))
-global_5 = MetaType((1, 2, 0, 3, 4))
+global_4 = MetaType(("median", "sum", "max", "max"))
+global_5 = MetaType((1, 2, 3, 4, 0))
 
 
 @bodo.jit
@@ -67,10 +67,10 @@ def impl(conn_str):  # Codegen change: add conn_str
     Simple read from Snowflake followed by a group by.
     The equivalent SQL query is:
         select
-            sum(l_orderkey),
+            median(l_orderkey),
             sum(l_extendedprice),
             max(l_shipinstruct),
-            nunique(l_shipmode),
+            max(l_shipmode),
             l_comment
         from
             lineitem
@@ -116,7 +116,7 @@ def impl(conn_str):  # Codegen change: add conn_str
     _temp1 = 0.0
     _temp2 = time.time()
     state_2 = bodo.libs.stream_groupby.init_groupby_state(
-        global_1, global_4, global_2, global_3
+        1, global_1, global_4, global_2, global_3
     )
     _temp12 = time.time()
     _temp13 = _temp12 - _temp2
@@ -157,12 +157,12 @@ def impl(conn_str):  # Codegen change: add conn_str
     _produce_output_2 = True
     _temp21 = 0.0
     _temp22 = time.time()
-    state_3 = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
+    state_3 = bodo.libs.stream_dict_encoding.init_dict_encoding_state(2)
     _temp24 = time.time()
     _temp25 = _temp24 - _temp22
     _temp21 = _temp21 + _temp25
     __bodo_streaming_batches_table_builder_1 = (
-        bodo.libs.table_builder.init_table_builder_state(-1)
+        bodo.libs.table_builder.init_table_builder_state(3)
     )
     while not (_temp17):
         _temp3 = time.time()
@@ -191,12 +191,12 @@ def impl(conn_str):  # Codegen change: add conn_str
         concat_time += time.time() - t_concat
         _iter_2 = _iter_2 + 1
     bodo.libs.stream_groupby.delete_groupby_state(state_2)
-    _temp20 = "PandasAggregate(group=[{2}], EXPR$0=[SUM($0)], EXPR$1=[SUM($1)], EXPR$3=[MIN($3)], EXPR$4=[MAX($4)])"
+    _temp20 = "PandasAggregate(group=[{4}], EXPR$0=[MEDIAN($0)], EXPR$1=[SUM($1)], EXPR$2=[MAX($2)], EXPR$3=[MAX($3)])"
     bodo.user_logging.log_message(
         "RELNODE_TIMING", f"""Execution time for RelNode {_temp20}: {_temp1}"""
     )
     bodo.libs.stream_dict_encoding.delete_dict_encoding_state(state_3)
-    _temp28 = "PandasProject(EXPR$0=[$1], EXPR$1=[$2], l_shipinstruct=[$0], EXPR$3=[$3], EXPR$4=[$4])"
+    _temp28 = "PandasProject(EXPR$0=[$1], EXPR$1=[$2], EXPR$2=[$3], EXPR$3=[$4], l_comment=[$0])"
     bodo.user_logging.log_message(
         "RELNODE_TIMING", f"""Execution time for RelNode {_temp28}: {_temp21}"""
     )
