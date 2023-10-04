@@ -730,9 +730,8 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr) {
         earr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
         return siztype * earr->length;
-    }
-    if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
-        earr->arr_type == bodo_array_type::DICT) {
+    } else if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+               earr->arr_type == bodo_array_type::DICT) {
         if (earr->arr_type == bodo_array_type::DICT) {
             // TODO also contribute dictionary size, but note that when
             // table_global_memory_size() calls this function, it's not supposed
@@ -747,22 +746,27 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr) {
             uint64_t siztype = numpy_item_size[earr->dtype];
             return n_bytes + siztype * earr->length;
         }
-    }
-    if (earr->arr_type == bodo_array_type::STRING) {
+    } else if (earr->arr_type == bodo_array_type::STRING) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
         return earr->n_sub_elems() + sizeof(offset_t) * (earr->length + 1) +
                n_bytes;
-    }
-    if (earr->arr_type == bodo_array_type::LIST_STRING) {
+    } else if (earr->arr_type == bodo_array_type::LIST_STRING) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
         int64_t n_sub_bytes = ((earr->n_sub_elems() + 7) >> 3);
         return earr->n_sub_sub_elems() +
                sizeof(offset_t) * (earr->n_sub_elems() + 1) +
                sizeof(offset_t) * (earr->length + 1) + n_bytes + n_sub_bytes;
-    }
-    if (earr->arr_type == bodo_array_type::STRUCT ||
-        earr->arr_type == bodo_array_type::ARRAY_ITEM) {
-        return arrow_array_memory_size(to_arrow(earr));
+    } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        int64_t n_bytes = ((earr->length + 7) >> 3);
+        return n_bytes + sizeof(offset_t) * (earr->length + 1) +
+               array_memory_size(earr->child_arrays.front());
+    } else if (earr->arr_type == bodo_array_type::STRUCT) {
+        int64_t n_bytes = ((earr->length + 7) >> 3), child_array_size = 0;
+        for (const std::shared_ptr<array_info>& child_array :
+             earr->child_arrays) {
+            child_array_size += array_memory_size(child_array);
+        }
+        return n_bytes + child_array_size;
     }
     Bodo_PyErr_SetString(PyExc_RuntimeError,
                          "Type not covered in array_memory_size");
