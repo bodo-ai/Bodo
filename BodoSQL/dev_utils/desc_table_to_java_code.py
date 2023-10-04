@@ -35,6 +35,8 @@ def getBodoSQLColumnDataTypeString(df, i):
         return "BodoSQLColumnDataType.DATE"
     elif snowflakeTypeName == "VARIANT":
         return "BodoSQLColumnDataType.VARIANT"
+    elif snowflakeTypeName == "ARRAY":
+        return "BodoSQLColumnDataType.ARRAY"
     elif snowflakeTypeName == "OBJECT":
         return "BodoSQLColumnDataType.JSON_OBJECT"
     else:
