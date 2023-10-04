@@ -1093,10 +1093,10 @@ std::vector<size_t> get_col_idx_map(const std::vector<int8_t>& arr_array_types,
                                     size_t arr_start_idx, size_t arr_end_idx) {
     std::vector<size_t> col_idx_map;
 
-    do {
+    while (arr_start_idx < arr_end_idx) {
         col_idx_map.push_back(arr_start_idx);
         get_next_col_arr_type(arr_start_idx, arr_array_types);
-    } while (arr_start_idx < arr_end_idx);
+    }
 
     return col_idx_map;
 }

@@ -116,4 +116,10 @@ static bodo::tests::suite tests([] {
         }
         bodo::tests::check(exception_caught);
     });
+
+    bodo::tests::test("test_empty_col_idx_map", [] {
+        std::vector<int8_t> arr_array_types;
+        bodo::tests::check(get_col_idx_map(arr_array_types) ==
+                           std::vector<size_t>());
+    });
 });
