@@ -248,7 +248,7 @@ class BodoRexSimplify(
      * @param isPlus Whether the operation was a +
      * @return
      */
-    private fun getDateMathArguments(lit1: RexLiteral, lit2: RexLiteral, isPlus: Boolean) : Triple<RexLiteral, RexLiteral, Int> {
+    private fun getDateMathArguments(lit1: RexLiteral, lit2: RexLiteral, isPlus: Boolean): Triple<RexLiteral, RexLiteral, Int> {
         val multiplier = if (isPlus) { 1 } else { -1 }
         return if (lit1.type.sqlTypeName in listOf(SqlTypeName.DATE, SqlTypeName.TIMESTAMP)) {
             Triple(lit1, lit2, multiplier)
@@ -268,12 +268,13 @@ class BodoRexSimplify(
             val calendarVal = dateLiteral.getValueAs(Calendar::class.java)!!
             val intervalDecimal = intervalLiteral.getValueAs(BigDecimal::class.java)!!
             val (intervalInt, calendarUnit) = when (intervalLiteral.type.sqlTypeName) {
-                // Years and months have the integer value already represented in the correct scale
-                SqlTypeName.INTERVAL_YEAR ->  Pair(intervalDecimal.toInt(), Calendar.YEAR)
-                SqlTypeName.INTERVAL_MONTH ->  Pair(intervalDecimal.toInt(), Calendar.MONTH)
+                // Years & Months have the integer value represented in months
+                SqlTypeName.INTERVAL_YEAR,
+                SqlTypeName.INTERVAL_MONTH,
+                -> Pair(intervalDecimal.toInt(), Calendar.MONTH)
                 // Days have their integer values represented in milliseconds
                 SqlTypeName.INTERVAL_DAY -> Pair(intervalDecimal.divide(BigDecimal(24 * 60 * 60 * 1000)).toInt(), Calendar.DAY_OF_MONTH)
-                else  -> return call
+                else -> return call
             }
             calendarVal.add(calendarUnit, intervalInt * signMultiplier)
             if (dateLiteral.type.sqlTypeName == SqlTypeName.DATE) {
@@ -513,10 +514,10 @@ class BodoRexSimplify(
      * @return The field enum and multiplier corresponding to the unit, or null if
      * the string does not match one of the units.
      */
-    private fun getDateUnitAsCalendarAndMultiplier(unit: String) : Pair<Int, Int>? {
+    private fun getDateUnitAsCalendarAndMultiplier(unit: String): Pair<Int, Int>? {
         return when (unit) {
             "year" -> Pair(Calendar.YEAR, 1)
-            "quarter" -> Pair(Calendar.MONTH, 4)
+            "quarter" -> Pair(Calendar.MONTH, 3)
             "month" -> Pair(Calendar.MONTH, 1)
             "week" -> Pair(Calendar.WEEK_OF_YEAR, 1)
             "day" -> Pair(Calendar.DAY_OF_YEAR, 1)
@@ -531,7 +532,7 @@ class BodoRexSimplify(
      * @return The multiplier corresponding to the number of milliseconds,
      * or null if the string does not match one of the units.
      */
-    private fun getTimeUnitAsMultiplier(unit: String) : Long? {
+    private fun getTimeUnitAsMultiplier(unit: String): Long? {
         return when (unit) {
             "hour" -> NANOSEC_PER_HOUR
             "minute" -> NANOSEC_PER_MINUTE
@@ -570,10 +571,10 @@ class BodoRexSimplify(
      * @param offset The amount of the unit to add
      * @return The new DateLiteral, or the original call if the simplification fails.
      */
-    private fun simplifyAddToDate(original: RexNode, date: Calendar, unit: String, offset: Int): RexNode {
+    private fun simplifyAddToDate(original: RexNode, date: Calendar, unit: String, offset: Long): RexNode {
         val unitAndMultiplier = getDateUnitAsCalendarAndMultiplier(unit) ?: return original
         val (field, multiplier) = unitAndMultiplier
-        date.add(field, offset * multiplier)
+        date.add(field, offset.toInt() * multiplier)
         return rexBuilder.makeDateLiteral(DateString.fromCalendarFields(date))
     }
 
@@ -587,7 +588,7 @@ class BodoRexSimplify(
      * @param offset The amount of the unit to add
      * @return The new TimeLiteral, or the original call if the simplification fails.
      */
-    private fun simplifyAddToTime(original: RexNode, time: TimeString, unit: String, offset: Int): RexNode {
+    private fun simplifyAddToTime(original: RexNode, time: TimeString, unit: String, offset: Long): RexNode {
         val multiplier: Long = getTimeUnitAsMultiplier(unit) ?: return original
         // Convert the time to nanoseconds since midnight
         val milli = time.millisOfDay
@@ -616,7 +617,7 @@ class BodoRexSimplify(
      * @param offset The amount of the unit to add
      * @return The new TimestampLiteral, or the original call if the simplification fails.
      */
-    private fun simplifyAddToTimestamp(original: RexNode, timestamp: TimestampString, unit: String, offset: Int): RexNode {
+    private fun simplifyAddToTimestamp(original: RexNode, timestamp: TimestampString, unit: String, offset: Long): RexNode {
         // Extract the sub-second components of the original timestamp
         val millisEpoch = timestamp.millisSinceEpoch
         val subMilli = getSubMilliAsNs(timestamp.toString())
@@ -627,7 +628,7 @@ class BodoRexSimplify(
             // Add the date unit to the original timestamp
             val date = timestamp.toCalendar()
             val (field, multiplier) = unitAndMultiplier
-            date.add(field, offset * multiplier)
+            date.add(field, offset.toInt() * multiplier)
             // Reconstruct the timestamp by replacing the subsecond components with the
             // subsecond components of the original timestamp
             val ts = TimestampString.fromCalendarFields(date).withNanos(ns)
@@ -659,7 +660,7 @@ class BodoRexSimplify(
             return e
         }
         val unitLiteral = e.operands[0] as RexLiteral
-        val offset = (e.operands[1] as RexLiteral).getValueAs(Integer::class.java)!!.toInt()
+        val offset = (e.operands[1] as RexLiteral).getValueAs(BigDecimal::class.java)!!.toLong()
         val base = e.operands[2] as RexLiteral
 
         // Extract the time unit, either as a unit literal or a string literal
@@ -667,11 +668,10 @@ class BodoRexSimplify(
         val unitStr = if (isSymbol) { unitLiteral.getValueAs(TimeUnit::class.java)!!.toString() } else { unitLiteral.getValueAs(String::class.java)!! }
         val dateTimeType = DatetimeFnCodeGen.getDateTimeDataType(base)
         val unit = DatetimeFnCodeGen.standardizeTimeUnit(e.operator.name, unitStr, dateTimeType)
-        val isTime = dateTimeType == DatetimeFnCodeGen.DateTimeType.TIME
+        val isTime = unit in listOf("hour", "minute", "second", "millisecond", "microsecond", "nanosecond")
 
         // Ensure that we only allow tz-naive timestamps
         if (base.type is BasicSqlType) {
-
             if (base.typeName == SqlTypeName.DATE) {
                 // If the first argument is a date but the unit is a time unit, upcast
                 // to timestamp then use timestamp addition
@@ -724,11 +724,11 @@ class BodoRexSimplify(
     }
 
     companion object {
-        const val NANOSEC_PER_DAY : Long = 86_400_000_000_000
-        const val NANOSEC_PER_HOUR : Long = 3_600_000_000_000
-        const val NANOSEC_PER_MINUTE : Long = 60_000_000_000
-        const val NANOSEC_PER_SECOND : Long = 1_000_000_000
-        const val NANOSEC_PER_MILLISECOND : Long = 1_000_000
-        const val NANOSEC_PER_MICROSECOND : Long = 1_000
+        const val NANOSEC_PER_DAY: Long = 86_400_000_000_000
+        const val NANOSEC_PER_HOUR: Long = 3_600_000_000_000
+        const val NANOSEC_PER_MINUTE: Long = 60_000_000_000
+        const val NANOSEC_PER_SECOND: Long = 1_000_000_000
+        const val NANOSEC_PER_MILLISECOND: Long = 1_000_000
+        const val NANOSEC_PER_MICROSECOND: Long = 1_000
     }
 }
