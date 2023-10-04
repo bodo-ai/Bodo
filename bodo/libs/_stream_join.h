@@ -224,6 +224,7 @@ class JoinPartition {
      * NOTE: The function assumes that the partition is pinned
      * when it's called.
      *
+     * @tparam is_active Is this an active partition.
      * @param num_levels Number of levels to split the partition. Only '1' is
      * supported at this point.
      * @return std::vector<std::shared_ptr<JoinPartition>>

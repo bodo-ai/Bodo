@@ -135,8 +135,8 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
     assert(this->pinned_);
     if (num_levels != 1) {
         throw std::runtime_error(
-            "We currently only support splitting a partition into 2 at a "
-            "time.");
+            "JoinPartition::SplitPartition: We currently only support "
+            "splitting a partition into 2 at a time.");
     }
     constexpr size_t uint32_bits = sizeof(uint32_t) * CHAR_BIT;
     if (this->num_top_bits >= (uint32_bits - 1)) {
@@ -147,6 +147,17 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
     // Release the hash-table memory:
     this->build_hash_table_guard.reset();
     this->build_hash_table.reset();
+    // Release group info memory:
+    this->num_rows_in_group_guard.reset();
+    this->num_rows_in_group.reset();
+    this->build_row_to_group_map_guard.reset();
+    this->build_row_to_group_map.reset();
+    this->groups_guard.value()->resize(0);
+    this->groups_guard.value()->shrink_to_fit();
+    this->groups_guard.reset();
+    this->groups_offsets_guard.value()->resize(0);
+    this->groups_offsets_guard.value()->shrink_to_fit();
+    this->groups_offsets_guard.reset();
 
     // Get dictionary hashes from the dict-builders of build table.
     // Dictionaries of key columns are shared between build and probe tables,
@@ -264,6 +275,9 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
         // In the inactive case, partition build_table_buffer chunk by chunk
         this->build_table_buffer_chunked.Finalize();
 
+        // XXX TODO Free build_table_buffer in case we started activation and
+        // some columns reserved memory during Activate.
+
         while (!this->build_table_buffer_chunked.chunks.empty()) {
             auto [build_table_chunk, build_table_nrows_chunk] =
                 this->build_table_buffer_chunked.PopChunk();
@@ -274,9 +288,6 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
                                 SEED_HASH_PARTITION, false, false, dict_hashes);
 
             // Put the build data in the sub partitions.
-            // XXX Might be faster to pre-calculate the required
-            // sizes, build a bitmap, pre-allocated space and then append
-            // into the new partitions.
             append_partition1.resize(build_table_nrows_chunk, false);
             for (int64_t i_row = 0; i_row < build_table_nrows_chunk; i_row++) {
                 append_partition1[i_row] = new_part1->is_in_partition(
@@ -1092,7 +1103,8 @@ void HashJoinState::SplitPartition(size_t idx) {
         // to nested loop join for this partition.
         // (https://bodo.atlassian.net/browse/BSE-535).
         throw std::runtime_error(
-            "Cannot split partition beyond max partition depth of: " +
+            "HashJoinState::SplitPartition: Cannot split partition beyond max "
+            "partition depth of: " +
             std::to_string(max_partition_depth));
     }
 
