@@ -111,7 +111,7 @@ def impl(conn_str):  # Codegen change: add conn_str
     _temp1 = 0.0
     _temp2 = time.time()
     state_2 = bodo.libs.stream_groupby.init_groupby_state(
-        global_1, global_4, global_2, global_3
+        1, global_1, global_4, global_2, global_3
     )
     _temp12 = time.time()
     _temp13 = _temp12 - _temp2
@@ -151,7 +151,7 @@ def impl(conn_str):  # Codegen change: add conn_str
     _iter_2 = 0
     _produce_output_2 = True
     __bodo_streaming_batches_table_builder_1 = (
-        bodo.libs.table_builder.init_table_builder_state(-1)
+        bodo.libs.table_builder.init_table_builder_state(2)
     )
     while not (_temp17):
         _temp3 = time.time()
