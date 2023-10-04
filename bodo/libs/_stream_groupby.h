@@ -133,11 +133,7 @@ class GroupbyPartition {
 
     // Chunked append-only buffer, only used if a partition is inactive and
     // not yet finalized
-    ChunkedTableBuilder build_table_buffer_chunked;
-
-    // XXX TODO Make both build_table_buffer and build_table_buffer_chunked
-    // unique_ptrs. In ctor, only initialize one of them based on is_active.
-    // If is_active=false, initialize build_table_buffer in "Activate".
+    std::unique_ptr<ChunkedTableBuilder> build_table_buffer_chunked;
 
     // temporary batch data
     std::shared_ptr<table_info> in_table = nullptr;
@@ -238,6 +234,32 @@ class GroupbyPartition {
                           const std::vector<bool>& append_rows);
 
     /**
+     * @brief Split the partition into 2^num_levels partitions.
+     * This will produce a new set of partitions, each with their
+     * new build_table_buffer and build_table_join_hashes.
+     * If the partition is active, this create one active and 2^num_levels - 1
+     * inactive partitions. If the partition is inactive, this
+     * creates 2^num_levels inactive partitions.
+     *
+     * @tparam is_active Is this an active partition.
+     * @param num_levels Number of levels to split the partition. Only '1' is
+     * supported at this point.
+     * @return std::vector<std::shared_ptr<GroupbyPartition>>
+     */
+    template <bool is_active>
+    std::vector<std::shared_ptr<GroupbyPartition>> SplitPartition(
+        size_t num_levels = 1);
+
+    /**
+     * @brief Activate this partition as part of the FinalizeBuild process.
+     * If the partition is inactive, this simply moves the data from
+     * build_table_buffer_chunked to build_table_buffer. We then mark the
+     * partition as active
+     *
+     */
+    void ActivatePartition();
+
+    /**
      * @brief Finalize this partition and return its output.
      * This will also clear the build state (i.e. all memory
      * associated with the logical hash table).
@@ -265,6 +287,7 @@ class GroupbyPartition {
     /// been moved to the 'build_table_buffer'.
     bool is_active = false;
     const bool parallel;
+    const uint64_t batch_size;
 
     /// @brief OperatorBufferPool of the Groupby operator that this is a
     /// partition in. The pool is owned by the parent GroupbyState, so
@@ -387,6 +410,10 @@ class GroupbyState {
     // updated after the last input to avoid repeating the final steps.
     bool build_input_finalized = false;
 
+    /// @brief Whether we should print debug information
+    /// about partitioning such as when a partition is split.
+    bool debug_partitioning = false;
+
     tracing::ResumableEvent groupby_event;
 
     GroupbyState(std::vector<int8_t> in_arr_c_types,
@@ -483,6 +510,11 @@ class GroupbyState {
      * hashes.
      * It is slightly optimized for the single partition case.
      *
+     * In case of a threshold enforcement error, this process is retried after
+     * splitting the 0th partition (which is only one that the enforcement error
+     * could've come from). This is done until we successfully append the batch
+     * or we go over max partition depth while splitting the 0th partition.
+     *
      * NOTE: Only used in the accumulating code path (i.e.
      * accumulate_before_update = true)
      *
@@ -559,6 +591,15 @@ class GroupbyState {
      */
     void DisablePartitioning();
 
+    // Temporarily public for testing.
+    /**
+     * @brief Split the partition at index 'idx' into two partitions.
+     * This must only be called in the event of a threshold enforcement error.
+     *
+     * @param idx Index of the partition (in this->partitions) to split.
+     */
+    void SplitPartition(size_t idx);
+
    private:
     /**
      * Helper function that gets the running column types for a given function.
@@ -572,6 +613,20 @@ class GroupbyState {
         std::vector<std::shared_ptr<array_info>> local_input_cols,
         std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
         std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes, int ftype);
+
+    /// @brief Helpers for AppendBuildBatch with most of the core logic
+    /// for appending a build side batch to the Join state. These are the
+    /// functions that are retried in AppendBuildBatch in case the 0th partition
+    /// needs to be split to fit within the memory threshold assigned to this
+    /// partition.
+    void AppendBuildBatchHelper(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+        const std::vector<bool>& append_rows);
+
+    void AppendBuildBatchHelper(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes);
 
     /**
      * @brief Clear the "shuffle" state. This releases
