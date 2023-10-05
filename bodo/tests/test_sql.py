@@ -214,7 +214,6 @@ def test_sql_single_column(memory_leak_check):
 
     conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
     with ensure_clean_mysql_psql_table(conn) as table_name:
-
         query1 = f"select A, B, C from `{table_name}`"
         query2 = f"select * from `{table_name}`"
 
@@ -496,7 +495,7 @@ def test_write_sql_oracle(is_distributed, memory_leak_check):
     bodo.barrier()
 
 
-def test_to_sql_invalid_password(memory_leak_check):
+def test_to_sql_invalid_password():
     """
     Tests df.to_sql when writing with an invalid password
     and thus triggering an exception. This checks that a
@@ -635,6 +634,7 @@ def test_postgres_read_sql_join(memory_leak_check):
     """Test SQL query join PostgreSQL DB"""
 
     conn = "postgresql+psycopg2://" + postgres_user_pass_and_hostname + "/TEST_DB"
+
     # 1 and 2 Taken from
     # https://github.com/YashMotwani/Sakila-DVD-Rental-database-Analysis/blob/master/Yash_Investigate_Relational_Database.txt
     def impl(conn):

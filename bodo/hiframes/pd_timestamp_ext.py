@@ -1141,11 +1141,9 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
     return impl
 
 
-@overload(str, no_unliteral=True)
-def ts_str_overload(a):
-    # isoformat omits nanosecond values, see BE-1407
-    if isinstance(a, PandasTimestampType):
-        return lambda a: a.isoformat(" ")
+@overload_method(PandasTimestampType, "__str__")
+def timestamp_str_overload(a):
+    return lambda a: a.isoformat(" ")  # pragma: no cover
 
 
 @intrinsic
@@ -2940,7 +2938,7 @@ def typeof_python_calendar(val, c):
     return types.Tuple([types.StringLiteral(v) for v in val])
 
 
-@overload(str)
+@overload_method(types.NPDatetime, "__str__")
 def overload_datetime64_str(val):
     if val == bodo.datetime64ns:
         # for right now, just going to use isoformat. This will omit fractional values,

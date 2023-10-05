@@ -58,6 +58,14 @@ def datapath() -> DataPath:
     return deco
 
 
+@pytest.fixture(scope="session", autouse=True)
+def enable_numba_alloc_stats():
+    """Enable Numba's allocation stat collection for memory_leak_check below"""
+    from numba.core.runtime import _nrt_python
+
+    _nrt_python.memsys_enable_stats()
+
+
 @pytest.fixture(scope="function")
 def memory_leak_check():
     """

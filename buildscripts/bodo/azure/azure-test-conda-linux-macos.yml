@@ -130,7 +130,7 @@ jobs:
 
       cd iceberg
       pip install -v .
-    displayName: "Setup Iceberg Testing"
+    displayName: "Build Iceberg Connector"
     retryCountOnTaskFailure: 5
 
   - script: |

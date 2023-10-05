@@ -197,7 +197,6 @@ def test_week_neg(week_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_week_mul_int(memory_leak_check, week_value, offset_multiplier):
-
     # Objects won't match exactly, so test mul by checking that addition in Python
     # has the same result
     timestamp_val = pd.Timestamp(
@@ -491,7 +490,6 @@ def test_month_begin_neg(month_begin_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_month_begin_mul_int(month_begin_value, offset_multiplier, memory_leak_check):
-
     # Objects won't match exactly, so test mul by checking that addition in Python
     # has the same result
     timestamp_val = pd.Timestamp(
@@ -783,7 +781,6 @@ def test_month_end_neg(month_end_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_month_end_mul_int(month_end_value, offset_multiplier, memory_leak_check):
-
     # Objects won't match exactly, so test mul by checking that addition in Python
     # has the same result
     timestamp_val = pd.Timestamp(
@@ -1108,7 +1105,7 @@ def test_date_offset_constructor(memory_leak_check):
         assert timestamp_val + py_outputs[i] == timestamp_val + bodo_outputs[i]
 
 
-def _get_flag_sign_dateoffset_pd(date_offset_value, is_sub=False, is_series=False):
+def _get_flag_sign_dateoffset_pd(date_offset_value, is_sub=False):
     """Get nanoseconds values to add to/subtract from regular Pandas output.
         If normalization is False, that means we have to include nanoseconds.
         In general, we add it in all non-normalization cases except if
@@ -1118,8 +1115,6 @@ def _get_flag_sign_dateoffset_pd(date_offset_value, is_sub=False, is_series=Fals
     Args:
         date_offset_value (DateOffset): dateoffset variable.
         is_sub (bool, optional): subtract operation. Defaults to False.
-        is_series (bool, optional): Whether we're computing offset for a Series variable or not.
-                                    Defaults to False.
 
     Returns:
         flag: should we add the nanoseconds to py_output or not.
@@ -1147,12 +1142,7 @@ def _get_flag_sign_dateoffset_pd(date_offset_value, is_sub=False, is_series=Fals
         # NOTE: date_offset_value12 is using nanosecond.
         # In this case, Pandas doesn't add so we need to include it manually.
         if len(date_offset_value.kwds) == 1 and "nanoseconds" in date_offset_value.kwds:
-            if is_series:
-                nanoseconds = nanoseconds * date_offset_value.n
-                if is_sub:
-                    sign = -1
-            else:
-                flag = False
+            flag = False
         # date_offset_value0 is empty
         elif len(date_offset_value.kwds) == 0:
             flag = False
@@ -1229,9 +1219,7 @@ def test_date_offset_add_series(date_offset_value, memory_leak_check):
 
     S = pd.Series(pd.date_range(start="2018-04-24", end="2020-04-29", periods=5))
     py_output = test_impl(date_offset_value, S)
-    add_flag, sign, nanoseconds = _get_flag_sign_dateoffset_pd(
-        date_offset_value, is_series=True
-    )
+    add_flag, sign, nanoseconds = _get_flag_sign_dateoffset_pd(date_offset_value)
     if add_flag:
         # NOTE: There's PerformanceWarning:
         # Non-vectorized DateOffset being applied to Series or DatetimeIndex.
@@ -1318,9 +1306,7 @@ def test_date_offset_sub_series(date_offset_value, memory_leak_check):
 
     S = pd.Series(pd.date_range(start="2018-04-24", end="2020-04-29", periods=5))
     py_output = test_impl(S, date_offset_value)
-    add_flag, sign, nanoseconds = _get_flag_sign_dateoffset_pd(
-        -date_offset_value, True, True
-    )
+    add_flag, sign, nanoseconds = _get_flag_sign_dateoffset_pd(-date_offset_value, True)
     if add_flag:
         # NOTE: There's PerformanceWarning:
         # Non-vectorized DateOffset being applied to Series or DatetimeIndex.

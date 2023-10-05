@@ -63,14 +63,10 @@ if pandas_version < (1, 4):
 def ArrowStringArray__init__(self, values):
     import pyarrow as pa
     from pandas.core.arrays.string_ import StringDtype
+    from pandas.core.arrays.string_arrow import ArrowStringArray
 
+    super(ArrowStringArray, self).__init__(values)
     self._dtype = StringDtype(storage="pyarrow")
-    if isinstance(values, pa.Array):
-        self._data = pa.chunked_array([values])
-    elif isinstance(values, pa.ChunkedArray):
-        self._data = values
-    else:
-        raise ValueError(f"Unsupported type '{type(values)}' for ArrowStringArray")
 
     # Bodo change: allow Arrow LargeStringArray (64-bit offsets) type created by Bodo
     # also allow dict-encoded string arrays from Bodo
@@ -95,7 +91,7 @@ if _check_pandas_change:
     lines = inspect.getsource(pd.core.arrays.string_arrow.ArrowStringArray.__init__)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "cbb9683b2e91867ef12470d4fda28ca6243fbb7b4f78ac2472fca805607c0942"
+        != "2b9106983d8d35cd024233abc1201cde4de1941584b902b0e2350bcbdfaa291c"
     ):  # pragma: no cover
         warnings.warn(
             "pd.core.arrays.string_arrow.ArrowStringArray.__init__ has changed"
@@ -105,27 +101,52 @@ pd.core.arrays.string_arrow.ArrowStringArray.__init__ = ArrowStringArray__init__
 
 
 # Bodo change to allow dict-encoded arrays
-def factorize(self, na_sentinel: int = -1):
-    import numpy as np
+def factorize(
+    self,
+    na_sentinel: int | lib.NoDefault = lib.no_default,
+    use_na_sentinel: bool | lib.NoDefault = lib.no_default,
+):
     import pyarrow as pa
+    from pandas.core.algorithms import resolve_na_sentinel
 
+    resolved_na_sentinel = resolve_na_sentinel(na_sentinel, use_na_sentinel)
     # Bodo change:
     # Arrow's ChunkedArray.dictionary_encode() doesn't work for arrays that are
     # dict-encoded already so needs a check to be avoided.
-    encoded = (
-        self._data
-        if pa.types.is_dictionary(self._data.type)
-        else self._data.dictionary_encode()
-    )
+    if pd.compat.pa_version_under4p0:
+        encoded = (
+            self._data
+            if pa.types.is_dictionary(self._data.type)
+            else self._data.dictionary_encode()
+        )
+    else:
+        null_encoding = "mask" if resolved_na_sentinel is not None else "encode"
+        encoded = (
+            self._data
+            if pa.types.is_dictionary(self._data.type)
+            else self._data.dictionary_encode(null_encoding=null_encoding)
+        )
     indices = pa.chunked_array(
         [c.indices for c in encoded.chunks], type=encoded.type.index_type
     ).to_pandas()
     if indices.dtype.kind == "f":
-        indices[np.isnan(indices)] = na_sentinel
+        indices[np.isnan(indices)] = (
+            resolved_na_sentinel if resolved_na_sentinel is not None else -1
+        )
     indices = indices.astype(np.int64, copy=False)
 
     if encoded.num_chunks:
         uniques = type(self)(encoded.chunk(0).dictionary)
+        if resolved_na_sentinel is None and pd.compat.pa_version_under4p0:
+            # TODO: share logic with BaseMaskedArray.factorize
+            # Insert na with the proper code
+            na_mask = indices.values == -1
+            na_index = na_mask.argmax()
+            if na_mask[na_index]:
+                na_code = 0 if na_index == 0 else indices[:na_index].max() + 1
+                uniques = uniques.insert(na_code, self.dtype.na_value)
+                indices[indices >= na_code] += 1
+                indices[indices == -1] = na_code
     else:
         uniques = type(self)(pa.array([], type=encoded.type.value_type))
 
@@ -133,17 +154,17 @@ def factorize(self, na_sentinel: int = -1):
 
 
 if _check_pandas_change:
-    lines = inspect.getsource(pd.core.arrays.string_arrow.ArrowStringArray.factorize)
+    lines = inspect.getsource(pd.core.arrays.ArrowExtensionArray.factorize)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "80669a609cfe11b362dacec6bba8e5bf41418b35d0d8b58246a548858320efd9"
+        != "e9408b1ac5c424efc2e6343d6a99be636eed7c99014348cda173a7c23abf276c"
     ):  # pragma: no cover
         warnings.warn(
             "pd.core.arrays.string_arrow.ArrowStringArray.factorize has changed"
         )
 
 
-pd.core.arrays.string_arrow.ArrowStringArray.factorize = factorize
+pd.core.arrays.ArrowExtensionArray.factorize = factorize
 
 
 def to_numpy(
@@ -202,7 +223,7 @@ if _check_pandas_change:  # pragma: no cover
     lines = inspect.getsource(pd.core.computation.ops.FuncNode.__init__)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "2207410cf00628243d6994f708f05b324cdac1ecf0b02e199f5bbfe6972fd4fa"
+        != "dec403a61ed8a58a2b29f3e2e8d49d6398adc7e27a226fe870d2e4b62d5c5475"
     ):
         warnings.warn("pd.core.computation.ops.FuncNode.__init__ has changed")
 

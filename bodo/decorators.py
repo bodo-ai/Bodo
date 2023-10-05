@@ -160,6 +160,12 @@ detail""",
         ),
     )
 
+    dbg_directives_only = Option(
+        type=bool,
+        default=False,
+        doc=("Make debug emissions directives-only. " "Used when generating lineinfo."),
+    )
+
     # Bodo change: add Bodo-specific options
     all_args_distributed_block = Option(
         type=bool,
@@ -235,7 +241,7 @@ if bodo.numba_compat._check_numba_change:
     lines = inspect.getsource(numba.core.compiler.Flags)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "76e32e82ab2ba19f4480a9facca588318be51dce074fe4733ad8aa08d20db8e1"
+        != "abbea523772f28f6d0b2f2d10bf0d666428fbbb6f06527a08ea252118c2f8bf9"
     ):  # pragma: no cover
         warnings.warn("numba.core.compiler.Flags has changed")
 

@@ -197,7 +197,7 @@ def add_agg_cfunc_sym(typingctx, func, sym):
     return types.none(func, sym), codegen
 
 
-@numba.jit
+@numba.njit
 def get_agg_udf_addr(name):
     """Resolve address of cfunc given by its symbol name"""
     with numba.objmode(addr="int64"):
@@ -2812,6 +2812,15 @@ def compile_to_optimized_ir(func, arg_typs, typingctx, targetctx):
         f_ir, typemap, calltypes, return_type, typingctx, targetctx, options, flags, {}
     )
     parfor_pass.run()
+    parfor_pass = numba.parfors.parfor.ParforFusionPass(
+        f_ir, typemap, calltypes, return_type, typingctx, targetctx, options, flags, {}
+    )
+    parfor_pass.run()
+    parfor_pass = numba.parfors.parfor.ParforPreLoweringPass(
+        f_ir, typemap, calltypes, return_type, typingctx, targetctx, options, flags, {}
+    )
+    parfor_pass.run()
+
     # TODO(ehsan): remove when this PR is merged and released in Numba:
     # https://github.com/numba/numba/pull/6519
     remove_dels(f_ir.blocks)

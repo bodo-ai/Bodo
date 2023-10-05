@@ -120,7 +120,7 @@ def typeof_pd_index(val, c):
     ):
         # At least some index values contain the actual dtype in
         # Pandas 1.4.
-        if isinstance(val.dtype, pd.core.arrays.integer._IntegerDtype):
+        if isinstance(val.dtype, pd.core.arrays.integer.IntegerDtype):
             # Get the numpy dtype
             numpy_dtype = val.dtype.numpy_dtype
             # Convert the numpy dtype to the Numba type
@@ -5125,8 +5125,6 @@ def overload_inferred_type(I):
     # Note: does not return the correct type if the underlying data came
     # from a pd.array
     if isinstance(I, NumericIndexType):
-        if isinstance(I.dtype, types.Boolean):
-            return lambda I: np.dtype("O")  # pragma: no cover
         dtype = I.dtype
         return lambda I: dtype  # pragma: no cover
 
@@ -5984,8 +5982,7 @@ def overload_is_numeric_numeric(I):
 
 @overload_method(NumericIndexType, "is_object", inline="always")
 def overload_is_object_numeric(I):
-    truth = isinstance(I.dtype, types.Boolean)
-    return lambda I: truth  # pragma: no cover
+    return lambda I: False  # pragma: no cover
 
 
 @overload_method(StringIndexType, "is_object", inline="always")

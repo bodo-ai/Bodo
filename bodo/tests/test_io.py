@@ -1172,7 +1172,7 @@ def test_csv_sep_arg(datapath, memory_leak_check):
             check_dtype=False,
         )
     else:
-        assert pandas_version == (1, 4), "Check if this test is still valid"
+        assert pandas_version in ((1, 4), (1, 5)), "Check if this test is still valid"
         with pytest.raises(
             BodoError, match=r".*Specified \\n as separator or delimiter.*"
         ):
@@ -1575,7 +1575,6 @@ def test_csv_dir_str_arr_multi(datapath, memory_leak_check):
         uncompress_dir(fname)
 
 
-@pytest.mark.smoke
 def test_excel1(datapath, memory_leak_check):
     """Test pd.read_excel()"""
 
@@ -1627,6 +1626,7 @@ def test_excel1(datapath, memory_leak_check):
     assert pandas_version in (
         (1, 3),
         (1, 4),
+        (1, 5),
     ), "`name` na-filtering issue for 1.4, check if it's fixed in later versions"
     if pandas_version == (1, 3):
         check_func(test_impl3, (fname,), is_out_distributed=False)

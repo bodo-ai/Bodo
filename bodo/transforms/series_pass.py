@@ -2749,6 +2749,40 @@ class SeriesPass:
                 self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
+        # Replace with Bodo's parallel implementation (numba's version isn't parallel)
+        if fdef == ("nan_to_num", "numpy"):
+            in_data = get_call_expr_arg("nan_to_num", rhs.args, dict(rhs.kws), 0, "x")
+            in_data_type = self.typemap[in_data.name]
+            if (
+                bodo.utils.utils.is_array_typ(in_data_type, False)
+                and in_data_type.ndim <= 2
+            ):
+                arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+                kw_typs = {
+                    name: self.typemap[v.name] for name, v in dict(rhs.kws).items()
+                }
+                impl = bodo.libs.array_kernels.np_nan_to_num(*arg_typs, **kw_typs)
+                return replace_func(
+                    self,
+                    impl,
+                    rhs.args,
+                    pysig=numba.core.utils.pysignature(impl),
+                    kws=dict(rhs.kws),
+                )
+
+        # Replace np.linspace with Bodo's parallel implementation
+        if fdef == ("linspace", "numpy"):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            impl = bodo.libs.array_kernels.np_linspace(*arg_typs, **kw_typs)
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
         # dummy count loop to support len of group in agg UDFs
         if fdef == ("dummy_agg_count", "bodo.ir.aggregate"):
             func_text = (

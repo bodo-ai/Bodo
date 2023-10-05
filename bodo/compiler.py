@@ -31,7 +31,7 @@ from numba.core.typed_passes import (
     InlineOverloads,
     IRLegalization,
     NopythonTypeInference,
-    ParforPass,
+    ParforPreLoweringPass,
     PreParforPass,
 )
 from numba.core.untyped_passes import (
@@ -118,9 +118,9 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
         # Series (e.g. S.var is not the same as np.var(S))
         add_pass_before(pm, BodoSeriesPass, PreParforPass)
         if distributed:
-            pm.add_pass_after(BodoDistributedPass, ParforPass)
+            pm.add_pass_after(BodoDistributedPass, ParforPreLoweringPass)
         else:
-            pm.add_pass_after(LowerParforSeq, ParforPass)
+            pm.add_pass_after(LowerParforSeq, ParforPreLoweringPass)
             pm.add_pass_after(LowerBodoIRExtSeq, LowerParforSeq)
 
         # Decref right before dels are inserted so the IR won't change anymore.
@@ -811,7 +811,6 @@ class BodoTableColumnDelPass(AnalysisPass):
         FunctionPass.__init__(self)
 
     def run_pass(self, state):
-
         table_decref_pass = TableColumnDelPass(
             state.func_ir,
             state.typingctx,

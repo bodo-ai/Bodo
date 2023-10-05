@@ -22,12 +22,12 @@ requirements:
     # distutils/extension uses.
     # TODO[BE-3467]: remove distutils
     - setuptools <63
-    - numba =0.56.4
+    - numba =0.57.1
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
-    - numpy >=1.18,<1.24
+    - numpy >=1.23
     - cython <3.0
-    - pandas >=1.3.*,<1.5
+    - pandas >=1.5.1,<2.0
     - fsspec >=2021.09
     - pyarrow =11.0.0
     - boost-cpp =1.82
@@ -45,7 +45,7 @@ requirements:
   run:
     - python
     - {{ pin_compatible('numpy') }}
-    - pandas >=1.3.*,<1.5
+    - pandas >=1.5.1,<2.0
     - fsspec >=2021.09
     - pyarrow =11.0.0
     - numba
@@ -64,7 +64,7 @@ requirements:
   run_constrained:
     - matplotlib <= 3.5.1
   run_constrained:
-    - numpy >=1.18,<1.24
+    - numpy >=1.23
   run_constrained:
     - scikit-learn =1.1.*
 

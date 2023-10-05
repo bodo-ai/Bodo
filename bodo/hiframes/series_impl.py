@@ -5042,7 +5042,13 @@ def overload_np_where(condition, x, y):
         else:
             out_dtype = to_nullable_type(x)
     elif x_data == y_data and not is_nullable:
-        out_dtype = dtype_to_array_type(x_dtype)
+        # dtype_to_array_type uses nullable bool array by default which is wrong here
+        # (see test_numpy_array.py::test_np_select_set_default[arr_tuple_val0])
+        out_dtype = (
+            types.Array(types.bool_, 1, "C")
+            if x_dtype == types.bool_
+            else dtype_to_array_type(x_dtype)
+        )
     # output is string if any input is string
     elif x_dtype == string_type or y_dtype == string_type:
         out_dtype = bodo.string_array_type

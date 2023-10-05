@@ -110,7 +110,8 @@ def test_setitem_slice(memory_leak_check):
             (-1, 7.8),
             (3, 4.0),
             (-3, -1.2),
-        ]
+        ],
+        object,
     )
     i = slice(1, 3)
     val = A[:2]
@@ -185,7 +186,8 @@ def test_nbytes(memory_leak_check):
             (3.1, 4.1),
             (-3.1, -1.1),
             (5.1, 9.1),
-        ]
+        ],
+        object,
     )
     check_func(impl, (tuple_value,), py_output=113, only_seq=True)
     py_out = 112 + bodo.get_size()  # one byte for null_bitmap per rank

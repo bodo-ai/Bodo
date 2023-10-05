@@ -25,7 +25,7 @@ def get_spark():
         SparkSession.builder.appName("Iceberg with Spark")
         .config(
             "spark.jars.packages",
-            "org.apache.iceberg:iceberg-spark-runtime-3.2_2.12:1.1.0",
+            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.3.1",
         )
         .config(
             "spark.sql.catalog.hadoop_prod", "org.apache.iceberg.spark.SparkCatalog"

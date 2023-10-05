@@ -38,6 +38,26 @@ static inline void SetBit(uint8_t* bits, int64_t i) {
     bits[i / 8] |= kBitmask[i % 8];
 }
 
+// Copied _PyLong_DigitValue from CPython internals (seems not exported in
+// Python 3.11, causing compilation errors).
+// https://github.com/python/cpython/blob/869f177b5cd5c2a2a015e4658cbbb0e9566210f7/Objects/longobject.c#L2203
+unsigned char _DigitValue[256] = {
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 0,  1,  2,  3,  4,  5,  6,  7,  8,
+    9,  37, 37, 37, 37, 37, 37, 37, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+    21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 37, 37, 37, 37,
+    37, 37, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+    27, 28, 29, 30, 31, 32, 33, 34, 35, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37,
+    37, 37, 37, 37, 37, 37, 37, 37, 37,
+};
+
 void* init_string_const(char* in_str, int64_t size);
 void dtor_str_arr_split_view(str_arr_split_view_payload* in_str_arr,
                              int64_t size, void* in);
@@ -864,8 +884,8 @@ int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
         }
         CHECK((end - data) >= 2,
               "bytes.fromhex, must provide two hex values per byte");
-        top = _PyLong_DigitValue[*data++];
-        bot = _PyLong_DigitValue[*data++];
+        top = _DigitValue[*data++];
+        bot = _DigitValue[*data++];
         CHECK(top < 16, "bytes.fromhex: unsupport character");
         CHECK(bot < 16, "bytes.fromhex: unsupport character");
         output[length++] = (unsigned char)((top << 4) + bot);

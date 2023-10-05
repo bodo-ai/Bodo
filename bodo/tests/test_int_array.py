@@ -7,7 +7,6 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.pandas_compat import pandas_version
 from bodo.tests.utils import check_func
 
 
@@ -318,14 +317,6 @@ def test_list(memory_leak_check):
     [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat],
 )
 def test_unary_ufunc(ufunc):
-    # IntegerArray is buggy as of Pandas 1.3.0 and doesn't put NA mask on output yet
-    assert pandas_version in ((1, 3), (1, 4)), "revisit Pandas issues for int arr"
-
-    # As of 1.3.*, these functions still do not properly put NA masks on the output
-    # and do not produce the correct result
-    if ufunc in (np.logical_not, np.isnan, np.isinf, np.isfinite, np.signbit):
-        return
-
     def test_impl(A):
         return ufunc(A)
 
@@ -352,18 +343,11 @@ def test_unary_ufunc_explicit_np(memory_leak_check):
     "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2 and f.nout == 1]
 )
 def test_binary_ufunc(ufunc, memory_leak_check):
-    # IntegerArray is buggy in Pandas 1.1.* and 1.2.0 and doesn't put NA mask on output yet
-
-    assert pandas_version in ((1, 3), (1, 4)), "revisit Pandas issues for int arr"
     # Need suppport for floating array when doing true division
     if ufunc == np.true_divide:
         check_dtype = False
     else:
         check_dtype = True
-
-    # See in version 1.3.x if those issues will be resolved.
-    if ufunc in (np.logical_and, np.logical_or, np.logical_xor):
-        return
 
     def test_impl(A1, A2):
         return ufunc(A1, A2)
