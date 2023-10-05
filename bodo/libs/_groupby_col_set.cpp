@@ -74,7 +74,9 @@ void BasicColSet::combine(const grouping_info& grp_info,
                        combine_ftype);
 }
 
-void BasicColSet::eval(const grouping_info& grp_info) {}
+void BasicColSet::eval(const grouping_info& grp_info,
+                       bodo::IBufferPool* const pool,
+                       std::shared_ptr<::arrow::MemoryManager> mm) {}
 
 const std::vector<std::shared_ptr<array_info>> BasicColSet::getOutputColumns() {
     std::vector<std::shared_ptr<array_info>>* mycols;
@@ -162,14 +164,18 @@ void MeanColSet::combine(const grouping_info& grp_info,
                        grp_info, Bodo_FTypes::sum);
 }
 
-void MeanColSet::eval(const grouping_info& grp_info) {
+void MeanColSet::eval(const grouping_info& grp_info,
+                      bodo::IBufferPool* const pool,
+                      std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> aux_cols;
     if (this->combine_step) {
         do_apply_to_column(this->combine_cols[1], this->combine_cols[0],
-                           aux_cols, grp_info, Bodo_FTypes::mean_eval);
+                           aux_cols, grp_info, Bodo_FTypes::mean_eval, pool,
+                           std::move(mm));
     } else {
         do_apply_to_column(this->update_cols[1], this->update_cols[0], aux_cols,
-                           grp_info, Bodo_FTypes::mean_eval);
+                           grp_info, Bodo_FTypes::mean_eval, pool,
+                           std::move(mm));
     }
 }
 
@@ -321,7 +327,9 @@ void BoolXorColSet::combine(const grouping_info& grp_info,
     boolxor_combine(one_col_in, two_col_in, one_col_out, two_col_out, grp_info);
 }
 
-void BoolXorColSet::eval(const grouping_info& grp_info) {
+void BoolXorColSet::eval(const grouping_info& grp_info,
+                         bodo::IBufferPool* const pool,
+                         std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>>* mycols;
     if (this->combine_step) {
         mycols = &this->combine_cols;
@@ -332,7 +340,7 @@ void BoolXorColSet::eval(const grouping_info& grp_info) {
     // and two_col as the aux column
     std::vector<std::shared_ptr<array_info>> aux_cols = {mycols->at(1)};
     do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
-                       Bodo_FTypes::boolxor_eval);
+                       Bodo_FTypes::boolxor_eval, pool, std::move(mm));
 }
 
 std::tuple<std::vector<bodo_array_type::arr_type_enum>,
@@ -460,7 +468,9 @@ void VarStdColSet::combine(const grouping_info& grp_info,
                 mean_col_out, m2_col_out, grp_info);
 }
 
-void VarStdColSet::eval(const grouping_info& grp_info) {
+void VarStdColSet::eval(const grouping_info& grp_info,
+                        bodo::IBufferPool* const pool,
+                        std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>>* mycols;
     if (this->combine_step) {
         mycols = &this->combine_cols;
@@ -474,9 +484,9 @@ void VarStdColSet::eval(const grouping_info& grp_info) {
     // allocate output if not done already (streaming groupby doesn't call
     // alloc_combine_columns)
     if (this->out_col == nullptr) {
-        this->out_col = alloc_array(combine_cols[0]->length, 1, 1,
-                                    bodo_array_type::NULLABLE_INT_BOOL,
-                                    Bodo_CTypes::FLOAT64);
+        this->out_col = alloc_array(
+            combine_cols[0]->length, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+            Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool, mm);
         // Initialize as ftype to match nullable behavior
         aggfunc_output_initialize(this->out_col, this->ftype,
                                   use_sql_rules);  // zero initialize
@@ -485,22 +495,22 @@ void VarStdColSet::eval(const grouping_info& grp_info) {
     switch (this->ftype) {
         case Bodo_FTypes::var_pop: {
             do_apply_to_column(this->out_col, this->out_col, aux_cols, grp_info,
-                               Bodo_FTypes::var_pop_eval);
+                               Bodo_FTypes::var_pop_eval, pool, std::move(mm));
             break;
         }
         case Bodo_FTypes::std_pop: {
             do_apply_to_column(this->out_col, this->out_col, aux_cols, grp_info,
-                               Bodo_FTypes::std_pop_eval);
+                               Bodo_FTypes::std_pop_eval, pool, std::move(mm));
             break;
         }
         case Bodo_FTypes::var: {
             do_apply_to_column(this->out_col, this->out_col, aux_cols, grp_info,
-                               Bodo_FTypes::var_eval);
+                               Bodo_FTypes::var_eval, pool, std::move(mm));
             break;
         }
         case Bodo_FTypes::std: {
             do_apply_to_column(this->out_col, this->out_col, aux_cols, grp_info,
-                               Bodo_FTypes::std_eval);
+                               Bodo_FTypes::std_eval, pool, std::move(mm));
             break;
         }
     }
@@ -645,7 +655,9 @@ void SkewColSet::combine(const grouping_info& grp_info,
                  m1_col_out, m2_col_out, m3_col_out, grp_info);
 }
 
-void SkewColSet::eval(const grouping_info& grp_info) {
+void SkewColSet::eval(const grouping_info& grp_info,
+                      bodo::IBufferPool* const pool,
+                      std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>>* mycols;
     if (this->combine_step) {
         mycols = &this->combine_cols;
@@ -656,9 +668,9 @@ void SkewColSet::eval(const grouping_info& grp_info) {
     // allocate output if not done already (streaming groupby doesn't call
     // alloc_combine_columns)
     if (this->out_col == nullptr) {
-        this->out_col = alloc_array(mycols->at(0)->length, 1, 1,
-                                    bodo_array_type::NULLABLE_INT_BOOL,
-                                    Bodo_CTypes::FLOAT64);
+        this->out_col = alloc_array(
+            mycols->at(0)->length, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+            Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool, mm);
         // Initialize as ftype to match nullable behavior
         aggfunc_output_initialize(this->out_col, this->ftype,
                                   use_sql_rules);  // zero initialize
@@ -667,7 +679,7 @@ void SkewColSet::eval(const grouping_info& grp_info) {
     std::vector<std::shared_ptr<array_info>> aux_cols = {
         mycols->at(0), mycols->at(1), mycols->at(2), mycols->at(3)};
     do_apply_to_column(this->out_col, this->out_col, aux_cols, grp_info,
-                       Bodo_FTypes::skew_eval);
+                       Bodo_FTypes::skew_eval, pool, std::move(mm));
 }
 
 std::tuple<std::vector<bodo_array_type::arr_type_enum>,
@@ -1227,7 +1239,9 @@ void KurtColSet::update(const std::vector<grouping_info>& grp_infos,
                        grp_infos[0], this->ftype, pool, std::move(mm));
 }
 
-void KurtColSet::eval(const grouping_info& grp_info) {
+void KurtColSet::eval(const grouping_info& grp_info,
+                      bodo::IBufferPool* const pool,
+                      std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>>* mycols;
     if (this->combine_step) {
         mycols = &this->combine_cols;
@@ -1238,9 +1252,9 @@ void KurtColSet::eval(const grouping_info& grp_info) {
     // allocate output if not done already (streaming groupby doesn't call
     // alloc_combine_columns)
     if (this->out_col == nullptr) {
-        this->out_col = alloc_array(mycols->at(0)->length, 1, 1,
-                                    bodo_array_type::NULLABLE_INT_BOOL,
-                                    Bodo_CTypes::FLOAT64);
+        this->out_col = alloc_array(
+            mycols->at(0)->length, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+            Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool, mm);
         // Initialize as ftype to match nullable behavior
         aggfunc_output_initialize(this->out_col, this->ftype,
                                   use_sql_rules);  // zero initialize
@@ -1250,7 +1264,7 @@ void KurtColSet::eval(const grouping_info& grp_info) {
         mycols->at(0), mycols->at(1), mycols->at(2), mycols->at(3),
         mycols->at(4)};
     do_apply_to_column(this->out_col, this->out_col, aux_cols, grp_info,
-                       Bodo_FTypes::kurt_eval);
+                       Bodo_FTypes::kurt_eval, pool, std::move(mm));
 }
 
 void KurtColSet::alloc_combine_columns(
@@ -1401,7 +1415,9 @@ void UdfColSet::combine(const grouping_info& grp_info, int64_t init_start_row) {
     // from GroupbyPipeline once for all udf columns sets)
 }
 
-void UdfColSet::eval(const grouping_info& grp_info) {
+void UdfColSet::eval(const grouping_info& grp_info,
+                     bodo::IBufferPool* const pool,
+                     std::shared_ptr<::arrow::MemoryManager> mm) {
     // do nothing because this is done in JIT-compiled code (invoked
     // from GroupbyPipeline once for all udf columns sets)
 }
@@ -1643,10 +1659,12 @@ void TransformColSet::update(const std::vector<grouping_info>& grp_infos,
                               use_sql_rules);
 }
 
-void TransformColSet::eval(const grouping_info& grp_info) {
+void TransformColSet::eval(const grouping_info& grp_info,
+                           bodo::IBufferPool* const pool,
+                           std::shared_ptr<::arrow::MemoryManager> mm) {
     // Needed to get final result for transform operation on
     // transform_op_col
-    transform_op_col->eval(grp_info);
+    transform_op_col->eval(grp_info, pool, mm);
     // copy_values need to know type of the data it'll copy.
     // Hence we use switch case on the column dtype
     std::vector<std::shared_ptr<array_info>> out_cols;
@@ -1658,7 +1676,7 @@ void TransformColSet::eval(const grouping_info& grp_info) {
 
     assert(this->update_cols.size() == 1);
     copy_values_transform(this->update_cols[0], child_out_col, grp_info,
-                          this->is_parallel);
+                          this->is_parallel, pool, std::move(mm));
 }
 
 // ############################## Head ##############################
