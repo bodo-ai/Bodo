@@ -8,6 +8,9 @@
 #include "_memory_budget.h"
 #include "_shuffle.h"
 
+#define MAX_SHUFFLE_TABLE_SIZE 50 * 1024 * 1024
+#define MAX_SHUFFLE_HASHTABLE_SIZE 50 * 1024 * 1024
+
 /* --------------------------- HashGroupbyTable --------------------------- */
 
 template <bool is_local>
@@ -1427,9 +1430,25 @@ GroupbyState::GetDictionaryHashesForKeys() {
 }
 
 void GroupbyState::ResetShuffleState() {
+    if (this->shuffle_hash_table->get_allocator().size() >
+        MAX_SHUFFLE_HASHTABLE_SIZE) {
+        // If the shuffle hash table is too large, reset it.
+        // This shouldn't happen often in practice, but is a safeguard.
+        this->shuffle_hash_table.reset();
+        this->shuffle_hash_table = std::make_unique<shuffle_hash_table_t>(
+            0, HashGroupbyTable<false>(nullptr, this),
+            KeyEqualGroupbyTable<false>(nullptr, this, this->n_keys));
+    }
     this->shuffle_hash_table->clear();
-    this->shuffle_table_groupby_hashes.resize(0);
+    if (this->shuffle_table_groupby_hashes.get_allocator().size() >
+        MAX_SHUFFLE_TABLE_SIZE) {
+        // If the shuffle hashes vector is too large, reallocate it to the maximum size
+        this->shuffle_table_groupby_hashes.resize(MAX_SHUFFLE_TABLE_SIZE /
+                                                  sizeof(uint32_t));
+        this->shuffle_table_groupby_hashes.shrink_to_fit();
+    }
     this->shuffle_next_group = 0;
+    this->shuffle_table_groupby_hashes.resize(0);
     this->shuffle_table_buffer->Reset();
 }
 
@@ -1951,3 +1970,6 @@ PyMODINIT_FUNC PyInit_stream_groupby_cpp(void) {
     SetAttrStringFromVoidPtr(m, delete_groupby_state);
     return m;
 }
+
+#undef MAX_SHUFFLE_HASHTABLE_SIZE
+#undef MAX_SHUFFLE_TABLE_SIZE
