@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -351,3 +352,140 @@ def test_produce_output(memory_leak_check):
 
     # Ensure that the output is empty if produce_output is False
     assert not test_groupby(pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}))[1]
+
+
+def test_groupby_acc_path_fallback(memory_leak_check):
+    """
+    Test that functions like mean/count/sum/skew/kurtosis/etc.
+    work correctly even when they go through the fallback
+    ACC path (due to having one or more running values that
+    are strings or because one of the functions is nunique/median).
+    """
+    keys_inds = bodo.utils.typing.MetaType((0,))
+    out_cols = [
+        "A",
+        "B_max",
+        "B_min",
+        "C_sum",
+        "C_count",
+        "C_mean",
+        "D_skew",
+        "D_kurtosis",
+        "E_var",
+        "E_std",
+        "F_boolxor_agg",
+    ]
+    out_col_meta = bodo.utils.typing.ColNamesMetaType(tuple(out_cols))
+    in_kept_cols = bodo.utils.typing.MetaType((0, 1, 2, 3, 4, 5))
+    batch_size = 3
+    fnames = bodo.utils.typing.MetaType(
+        (
+            "max",
+            "min",
+            "sum",
+            "count",
+            "mean",
+            "skew",
+            "kurtosis",
+            "var",
+            "std",
+            "boolxor_agg",
+        )
+    )
+    f_in_cols = bodo.utils.typing.MetaType((1, 1, 2, 2, 2, 3, 3, 4, 4, 5))
+    f_in_offsets = bodo.utils.typing.MetaType((0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+
+    def impl(df):
+        groupby_state = init_groupby_state(
+            -1, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
+        is_last1 = False
+        _iter_1 = 0
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df),
+            (),
+            in_kept_cols,
+            6,
+        )
+        _temp1 = bodo.hiframes.table.local_len(T1)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
+            )
+            is_last1 = (_iter_1 * batch_size) >= _temp1
+            T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1)
+            _iter_1 = _iter_1 + 1
+
+        is_last2 = False
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        while not is_last2:
+            out_table, is_last2 = groupby_produce_output_batch(groupby_state, True)
+            bodo.libs.table_builder.table_builder_append(_table_builder, out_table)
+        delete_groupby_state(groupby_state)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, out_col_meta
+        )
+        return out_df
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 4, 5, 6, 5, 4] * 100, dtype="Int64"),
+            # The min/max on this column is what will force the accumulating path.
+            "B": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 100
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 25
+            ),
+            "C": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 50,
+                dtype=np.float32,
+            ),
+            "D": np.array(
+                list(np.arange(23, 39)) * 50,
+                dtype=np.uint64,
+            ),
+            "E": np.array(
+                (list(np.arange(98, 106)) * 50) + (list(np.arange(32, 40)) * 50),
+                dtype=np.float32,
+            ),
+            "F": np.array(
+                [True] + [False] * 799,
+                dtype=bool,
+            ),
+        }
+    )
+
+    expected_df = df.groupby("A", as_index=False).agg(
+        {
+            "B": ["max", "min"],
+            "C": ["sum", "count", "mean"],
+            "D": ["skew", pd.Series.kurt],
+            "E": ["var", "std"],
+        }
+    )
+    expected_df.reset_index(inplace=True, drop=True)
+    expected_df.columns = out_cols[:-1]
+    expected_df["F_boolxor_agg"] = False
+    expected_df["F_boolxor_agg"][expected_df["A"] == 1] = True
+
+    check_func(
+        impl,
+        (df,),
+        py_output=expected_df,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
