@@ -16,11 +16,7 @@ class PandasSort(
     collation: RelCollation,
     offset: RexNode?,
     fetch: RexNode?,
-) : SortBase(cluster, traitSet, input, collation, offset, fetch), PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
+) : SortBase(cluster, traitSet.replace(PandasRel.CONVENTION), input, collation, offset, fetch), PandasRel {
 
     override fun copy(
         traitSet: RelTraitSet,
@@ -47,8 +43,7 @@ class PandasSort(
     companion object {
         fun create(child: RelNode, collation: RelCollation, offset: RexNode?, fetch: RexNode?): PandasSort {
             val cluster = child.cluster
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION)
-                .replace(collation)
+            val traitSet = cluster.traitSet().replace(collation)
             return PandasSort(cluster, traitSet, child, collation, offset, fetch)
         }
     }

@@ -22,11 +22,7 @@ class PandasJoin(
     condition: RexNode,
     joinType: JoinRelType,
     val rebalanceOutput: Boolean,
-) : JoinBase(cluster, traitSet, ImmutableList.of(), left, right, condition, joinType), PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
+) : JoinBase(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), left, right, condition, joinType), PandasRel {
 
     constructor(
         cluster: RelOptCluster,
@@ -77,8 +73,7 @@ class PandasJoin(
     companion object {
         fun create(left: RelNode, right: RelNode, condition: RexNode, joinType: JoinRelType): PandasJoin {
             val cluster = left.cluster
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION)
-            return PandasJoin(cluster, traitSet, left, right, condition, joinType)
+            return PandasJoin(cluster, cluster.traitSet(), left, right, condition, joinType)
         }
     }
 }

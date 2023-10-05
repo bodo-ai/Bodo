@@ -21,7 +21,7 @@ class SnowflakeSort private constructor(
     fetch: RexNode?,
     private val catalogTable: CatalogTableImpl,
 ) :
-    Sort(cluster, traitSet, input, collation, offset, fetch), SnowflakeRel {
+    Sort(cluster, traitSet.replace(SnowflakeRel.CONVENTION), input, collation, offset, fetch), SnowflakeRel {
 
     override fun copy(
         traitSet: RelTraitSet,
@@ -51,8 +51,7 @@ class SnowflakeSort private constructor(
             fetch: RexNode?,
             catalogTable: CatalogTableImpl,
         ): SnowflakeSort {
-            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION)
-            return SnowflakeSort(cluster, newTraitSet, input, collation, offset, fetch, catalogTable)
+            return SnowflakeSort(cluster, traitSet, input, collation, offset, fetch, catalogTable)
         }
     }
 }

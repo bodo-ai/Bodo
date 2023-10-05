@@ -17,7 +17,7 @@ class SnowflakeFilter private constructor(
     input: RelNode,
     condition: RexNode,
     private val catalogTable: CatalogTableImpl,
-) : Filter(cluster, traitSet, input, condition), SnowflakeRel {
+) : Filter(cluster, traitSet.replace(SnowflakeRel.CONVENTION), input, condition), SnowflakeRel {
 
     override fun copy(traitSet: RelTraitSet, input: RelNode, condition: RexNode): Filter {
         return SnowflakeFilter(cluster, traitSet, input, condition, catalogTable)
@@ -37,8 +37,7 @@ class SnowflakeFilter private constructor(
             condition: RexNode,
             catalogTable: CatalogTableImpl,
         ): SnowflakeFilter {
-            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION)
-            return SnowflakeFilter(cluster, newTraitSet, input, condition, catalogTable)
+            return SnowflakeFilter(cluster, traitSet, input, condition, catalogTable)
         }
     }
 

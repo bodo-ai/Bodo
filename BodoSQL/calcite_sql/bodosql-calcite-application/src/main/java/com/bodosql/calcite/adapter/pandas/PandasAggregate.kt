@@ -19,11 +19,7 @@ class PandasAggregate(
     groupSet: ImmutableBitSet,
     groupSets: List<ImmutableBitSet>?,
     aggCalls: List<AggregateCall>,
-) : AggregateBase(cluster, traitSet, ImmutableList.of(), input, groupSet, groupSets, aggCalls), PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
+) : AggregateBase(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), input, groupSet, groupSets, aggCalls), PandasRel {
 
     override fun copy(traitSet: RelTraitSet, input: RelNode, groupSet: ImmutableBitSet, groupSets: List<ImmutableBitSet>?, aggCalls: List<AggregateCall>): PandasAggregate {
         return PandasAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls)
@@ -54,8 +50,7 @@ class PandasAggregate(
             groupSets: List<ImmutableBitSet>,
             aggCalls: List<AggregateCall>,
         ): PandasAggregate {
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION)
-            return PandasAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls)
+            return PandasAggregate(cluster, cluster.traitSet(), input, groupSet, groupSets, aggCalls)
         }
     }
 }

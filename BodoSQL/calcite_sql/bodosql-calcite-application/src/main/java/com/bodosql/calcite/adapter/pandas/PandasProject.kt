@@ -30,11 +30,7 @@ class PandasProject(
     input: RelNode,
     projects: List<RexNode>,
     rowType: RelDataType,
-) : ProjectBase(cluster, traitSet, ImmutableList.of(), input, projects, rowType), PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
+) : ProjectBase(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), input, projects, rowType), PandasRel {
 
     override fun copy(traitSet: RelTraitSet, input: RelNode, projects: List<RexNode>, rowType: RelDataType): PandasProject {
         return PandasProject(cluster, traitSet, input, projects, rowType)
@@ -317,7 +313,7 @@ class PandasProject(
         fun create(input: RelNode, projects: List<RexNode>, rowType: RelDataType): PandasProject {
             val cluster = input.cluster
             val mq = cluster.metadataQuery
-            val traitSet = cluster.traitSet().replace(PandasRel.CONVENTION)
+            val traitSet = cluster.traitSet()
                 .replaceIfs(RelCollationTraitDef.INSTANCE) {
                     RelMdCollation.project(mq, input, projects)
                 }

@@ -16,11 +16,7 @@ class PandasTargetTableScan(
     cluster: RelOptCluster,
     traitSet: RelTraitSet,
     table: RelOptTable,
-) : TableScan(cluster, traitSet, ImmutableList.of(), table), PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
+) : TableScan(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), table), PandasRel {
 
     override fun copy(traitSet: RelTraitSet, inputs: MutableList<RelNode>?): RelNode {
         return PandasTargetTableScan(cluster, traitSet, table)

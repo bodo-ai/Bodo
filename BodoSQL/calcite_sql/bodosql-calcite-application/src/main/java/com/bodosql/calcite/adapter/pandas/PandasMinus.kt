@@ -12,11 +12,7 @@ class PandasMinus(
     traitSet: RelTraitSet,
     inputs: List<RelNode>,
     all: Boolean,
-) : Minus(cluster, traitSet, inputs, all), PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
+) : Minus(cluster, traitSet.replace(PandasRel.CONVENTION), inputs, all), PandasRel {
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>, all: Boolean): PandasMinus {
         return PandasMinus(cluster, traitSet, inputs, all)

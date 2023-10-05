@@ -26,12 +26,7 @@ class SnowflakeProject(
     projects: List<RexNode>,
     rowType: RelDataType,
     private val catalogTable: CatalogTableImpl,
-) : ProjectBase(cluster, traitSet, ImmutableList.of(), input, projects, rowType), SnowflakeRel {
-
-    init {
-        // SnowflakeProject should always have the Snowflake convention.
-        assert(convention == SnowflakeRel.CONVENTION)
-    }
+) : ProjectBase(cluster, traitSet.replace(SnowflakeRel.CONVENTION), ImmutableList.of(), input, projects, rowType), SnowflakeRel {
 
     override fun copy(
         traitSet: RelTraitSet,
@@ -57,8 +52,7 @@ class SnowflakeProject(
             rowType: RelDataType,
             catalogTable: CatalogTableImpl,
         ): SnowflakeProject {
-            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION)
-            return SnowflakeProject(cluster, newTraitSet, input, projects, rowType, catalogTable)
+            return SnowflakeProject(cluster, traitSet, input, projects, rowType, catalogTable)
         }
 
         @JvmStatic

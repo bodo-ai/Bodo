@@ -12,11 +12,10 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.SingleRel
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 
-class CombineStreamsExchange(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) : SingleRel(cluster, traits, input), PandasRel {
+class CombineStreamsExchange(cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode) : SingleRel(cluster, traitSet.replace(PandasRel.CONVENTION), input), PandasRel {
 
     init {
-        assert(convention == PandasRel.CONVENTION)
-        assert(traits.contains(BatchingProperty.SINGLE_BATCH))
+        assert(traitSet.contains(BatchingProperty.SINGLE_BATCH))
     }
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode? {
