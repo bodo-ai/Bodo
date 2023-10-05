@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.pandas.window
 
+import com.bodosql.calcite.adapter.pandas.ArrayRexToPandasTranslator
 import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator
 import com.bodosql.calcite.application.BodoSQLCodegenException
@@ -35,11 +36,11 @@ internal class Group(
      * Constructs the aggregate function that will be passed to apply.
      */
     fun emit(ctx: PandasRel.BuildContext): List<Variable> {
-        val rexTranslator = ctx.rexTranslator(input)
-
+        val arrayRexTranslator = ctx.arrayRexTranslator(input)
         // Retrieve the partition keys and the ordering keys.
-        val partitionKeys = partitionBy(rexTranslator)
-        val orderKeys = orderBy(rexTranslator)
+        val partitionKeys = partitionBy(arrayRexTranslator)
+        val orderKeys = orderBy(arrayRexTranslator)
+        val rexTranslator = ctx.rexTranslator(input)
         val fields = aggregateInputs(rexTranslator)
 
         // Generate the appropriate function invocation for this group of aggregates.
@@ -240,7 +241,7 @@ internal class Group(
         val header = emitWindowApplyFuncHeader(builder, argumentDf, orderKeys, fields)
 
         // perform rex over operation on each
-        // Construct local refs so we can access the data.
+        // Construct local refs, so we can access the data.
         val localRefs = fields.map {
             Expr.Index(header.input, Expr.StringLiteral(it.name))
         }
@@ -539,17 +540,17 @@ internal class Group(
     /**
      * Computes the partition column names along with the accessor expression for constructing the column.
      */
-    private fun partitionBy(rexTranslator: RexToPandasTranslator): List<PartitionKey> =
+    private fun partitionBy(arrayRexToPandasTranslator: ArrayRexToPandasTranslator): List<PartitionKey> =
         window.partitionKeys
-            .mapIndexed { i, n -> PartitionKey("GRPBY_COL_$i", n.accept(rexTranslator)) }
+            .mapIndexed { i, n -> PartitionKey("GRPBY_COL_$i", arrayRexToPandasTranslator.apply(n)) }
 
     /**
      * Computes the ordering column names along with the accessor expression for constructing the column.
      */
-    private fun orderBy(rexTranslator: RexToPandasTranslator): List<OrderKey> =
+    private fun orderBy(arrayRexToPandasTranslator: ArrayRexToPandasTranslator): List<OrderKey> =
         window.orderKeys
             .mapIndexed { i, collation ->
-                val expr = collation.left.accept(rexTranslator)
+                val expr = arrayRexToPandasTranslator.apply(collation.left)
                 val (name, asc) = when (collation.direction) {
                     // Choose a name to help make this more readable.
                     RelFieldCollation.Direction.ASCENDING -> Pair("ASC_COL_$i", true)

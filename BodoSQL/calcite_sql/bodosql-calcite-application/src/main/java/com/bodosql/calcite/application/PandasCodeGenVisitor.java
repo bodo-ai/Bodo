@@ -28,6 +28,7 @@ import static com.bodosql.calcite.application.utils.Utils.makeQuoted;
 import static com.bodosql.calcite.application.utils.Utils.sqlTypenameToPandasTypename;
 import static com.bodosql.calcite.application.utils.Utils.stringsToStringLiterals;
 
+import com.bodosql.calcite.adapter.pandas.ArrayRexToPandasTranslator;
 import com.bodosql.calcite.adapter.pandas.PandasAggregate;
 import com.bodosql.calcite.adapter.pandas.PandasIntersect;
 import com.bodosql.calcite.adapter.pandas.PandasJoin;
@@ -2175,6 +2176,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
         this, this.generatedCode, this.typeSystem, nodeId, input, localRefs);
   }
 
+  private ArrayRexToPandasTranslator getArrayRexTranslator(int nodeId, BodoEngineTable input) {
+    return new ArrayRexToPandasTranslator(this, this.generatedCode, this.typeSystem, nodeId, input);
+  }
+
   private StreamingRexToPandasTranslator getStreamingRexTranslator(
       int nodeId,
       BodoEngineTable input,
@@ -2306,6 +2311,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     public RexToPandasTranslator rexTranslator(
         @NotNull final BodoEngineTable input, @NotNull final List<? extends Expr> localRefs) {
       return getRexTranslator(node.getId(), input, localRefs);
+    }
+
+    @NotNull
+    @Override
+    public ArrayRexToPandasTranslator arrayRexTranslator(@NotNull final BodoEngineTable input) {
+      return getArrayRexTranslator(node.getId(), input);
     }
 
     @NotNull
