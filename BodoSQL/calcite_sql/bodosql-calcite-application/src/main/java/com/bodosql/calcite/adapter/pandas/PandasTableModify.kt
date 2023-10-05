@@ -26,14 +26,10 @@ class PandasTableModify(
     sourceExpressionList: List<RexNode>?,
     flattened: Boolean,
 ) : TableModify(
-    cluster, traitSet, table, catalogReader,
+    cluster, traitSet.replace(PandasRel.CONVENTION), table, catalogReader,
     input, operation, updateColumnList, sourceExpressionList, flattened,
 ),
     PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): PandasTableModify {
         return PandasTableModify(

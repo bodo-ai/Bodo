@@ -21,11 +21,7 @@ class PandasTableCreate(
     isReplace: Boolean,
     createTableType: SqlCreateTable.CreateTableType,
     path: List<String>,
-) : LogicalTableCreate(cluster, traitSet, input, schema, tableName, isReplace, createTableType, path), PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
+) : LogicalTableCreate(cluster, traitSet.replace(PandasRel.CONVENTION), input, schema, tableName, isReplace, createTableType, path), PandasRel {
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): PandasTableCreate {
         return PandasTableCreate(

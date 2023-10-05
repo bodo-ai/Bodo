@@ -8,11 +8,10 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.SingleRel
 
-class SeparateStreamExchange(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) : SingleRel(cluster, traits, input), PandasRel {
+class SeparateStreamExchange(cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode) : SingleRel(cluster, traitSet.replace(PandasRel.CONVENTION), input), PandasRel {
 
     init {
-        assert(convention == PandasRel.CONVENTION)
-        assert(traits.contains(BatchingProperty.STREAMING))
+        assert(traitSet.contains(BatchingProperty.STREAMING))
     }
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode? {

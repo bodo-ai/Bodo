@@ -15,11 +15,7 @@ class PandasRowSample(
     traitSet: RelTraitSet,
     child: RelNode,
     val params: RelOptRowSamplingParameters,
-) : SingleRel(cluster, traitSet, child), PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
+) : SingleRel(cluster, traitSet.replace(PandasRel.CONVENTION), child), PandasRel {
 
     override fun explainTerms(pw: RelWriter): RelWriter {
         return super.explainTerms(pw)
@@ -50,7 +46,7 @@ class PandasRowSample(
     companion object {
         fun create(cluster: RelOptCluster, input: RelNode, params: RelOptRowSamplingParameters): PandasRowSample {
             val mq = cluster.metadataQuery
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION)
+            val traitSet = cluster.traitSet()
                 .replaceIfs(RelCollationTraitDef.INSTANCE) {
                     mq.collations(input)
                 }
