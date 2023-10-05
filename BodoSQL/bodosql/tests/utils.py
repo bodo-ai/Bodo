@@ -17,13 +17,16 @@ from mpi4py import MPI
 from pyspark.sql.functions import col
 from pyspark.sql.types import (
     ByteType,
+    DayTimeIntervalType,
     DoubleType,
     FloatType,
     IntegerType,
     LongType,
     ShortType,
+    StringType,
     StructField,
     StructType,
+    TimestampType,
 )
 
 import bodo
@@ -1212,7 +1215,7 @@ def convert_nullable_object(df):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.core.arrays.boolean.BooleanDtype,
                     pd.StringDtype,
                 ),
@@ -1225,7 +1228,7 @@ def convert_nullable_object(df):
             if isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.core.arrays.boolean.BooleanDtype,
                     pd.StringDtype,
                 ),
@@ -1388,21 +1391,36 @@ def create_pyspark_schema_from_dataframe(df):
     DataFrame. This is used for tests whose output depends on
     maintaining precision.
     """
-    int_byte_type_map = {
-        1: ByteType(),
-        2: ShortType(),
-        4: IntegerType(),
-        8: LongType(),
+    from numba.core import types
+
+    bodo_to_pyspark_dtype_map = {
+        types.int8: ByteType(),
+        types.uint8: ByteType(),
+        types.int16: ShortType(),
+        types.uint16: ShortType(),
+        types.int32: IntegerType(),
+        types.uint32: IntegerType(),
+        types.int64: LongType(),
+        types.uint64: LongType(),
+        types.float32: FloatType(),
+        types.float64: DoubleType(),
+        bodo.datetime64ns: TimestampType(),
+        bodo.timedelta64ns: DayTimeIntervalType(),
     }
-    float_byte_type_map = {4: FloatType(), 8: DoubleType()}
+
+    df_type = bodo.typeof(df)
 
     field_list = []
-    for i, col in enumerate(df.columns):
-        dtype = df.dtypes[i]
-        if np.issubdtype(dtype, np.integer):
-            pyspark_type = int_byte_type_map[dtype.itemsize]
-        elif np.issubdtype(dtype, np.floating):
-            pyspark_type = float_byte_type_map[dtype.itemsize]
+    for col, arr_type in zip(df_type.columns, df_type.data):
+        if (
+            isinstance(
+                arr_type, (types.Array, bodo.IntegerArrayType, bodo.FloatingArrayType)
+            )
+            or arr_type == bodo.boolean_array_type
+        ):
+            pyspark_type = bodo_to_pyspark_dtype_map[arr_type.dtype]
+        elif arr_type == bodo.string_array_type:
+            pyspark_type = StringType()
         else:
             raise TypeError("Type mapping to Pyspark Schema not implemented yet.")
         field_list.append(StructField(col, pyspark_type, True))

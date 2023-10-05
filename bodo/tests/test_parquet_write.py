@@ -185,6 +185,132 @@ def test_pq_write_metadata(df, index_name, memory_leak_check):
             shutil.rmtree("bodo_metadatatest.pq", ignore_errors=True)
 
 
+def gen_dataframe(num_elements, write_index):
+    """Generates a dataframe for Parquet read/write test below"""
+    df = pd.DataFrame()
+    cur_col = 0
+    for dtype in [
+        "int8",
+        "uint8",
+        "int16",
+        "uint16",
+        "int32",
+        "uint32",
+        "int64",
+        "uint64",
+        "float32",
+        "float64",
+        "bool",
+        "String",
+        "Binary",
+        "Int8",
+        "UInt8",
+        "Int16",
+        "UInt16",
+        "Int32",
+        "UInt32",
+        "Int64",
+        "UInt64",
+        "Float32",
+        "Float64",
+        "Decimal",
+        "Date",
+        "Datetime",
+        "nested_arrow0",
+        "nested_arrow1",
+        "nested_arrow2",
+    ]:
+        col_name = "col_" + str(cur_col)
+        if dtype == "String":
+            # missing values every 5 elements
+            data = [str(x) * 3 if x % 5 != 0 else None for x in range(num_elements)]
+            df[col_name] = data
+        elif dtype == "Binary":
+            # missing values every 5 elements
+            data = [
+                str(x).encode() * 3 if x % 5 != 0 else None for x in range(num_elements)
+            ]
+            df[col_name] = data
+        elif dtype == "bool":
+            data = [True if x % 2 == 0 else False for x in range(num_elements)]
+            df[col_name] = np.array(data, dtype="bool")
+        elif dtype.startswith("Int") or dtype.startswith("UInt"):
+            # missing values every 5 elements
+            data = [x if x % 5 != 0 else np.nan for x in range(num_elements)]
+            df[col_name] = pd.Series(data, dtype=dtype)
+        elif dtype.startswith("Float"):
+            # missing values every 5 elements
+            data = [x if x % 5 != 0 else None for x in range(num_elements)]
+            df[col_name] = pd.Series(data, dtype=dtype)
+        elif dtype == "Decimal":
+            assert num_elements % 8 == 0
+            data = np.array(
+                [
+                    Decimal("1.6"),
+                    None,
+                    Decimal("-0.222"),
+                    Decimal("1111.316"),
+                    Decimal("1234.00046"),
+                    Decimal("5.1"),
+                    Decimal("-11131.0056"),
+                    Decimal("0.0"),
+                ]
+                * (num_elements // 8)
+            )
+            df[col_name] = pd.Series(data, dtype=object)
+        elif dtype == "Date":
+            dates = pd.Series(
+                pd.date_range(
+                    start="1998-04-24", end="1998-04-29", periods=num_elements
+                )
+            )
+            df[col_name] = dates.dt.date
+        elif dtype == "Datetime":
+            dates = pd.Series(
+                pd.date_range(
+                    start="1998-04-24", end="1998-04-29", periods=num_elements
+                )
+            )
+            if num_elements >= 20:
+                # set some elements to NaT
+                dates[4] = None
+                dates[17] = None
+            df[col_name] = dates
+            df._datetime_col = col_name
+        elif dtype == "nested_arrow0":
+            # Disabling Nones because currently they very easily induce
+            # typing errors during unboxing for nested lists.
+            # _infer_ndarray_obj_dtype in boxing.py needs to be made more robust.
+            # TODO: include Nones
+            df[col_name] = pd.Series(gen_random_arrow_list_list_int(2, 0, num_elements))
+        elif dtype == "nested_arrow1":
+            df[col_name] = pd.Series(
+                gen_random_arrow_array_struct_int(10, num_elements)
+            )
+        elif dtype == "nested_arrow2":
+            # TODO: Include following types when they are supported in PYARROW:
+            # We cannot read this dataframe in bodo. Fails at unboxing.
+            # df_bug1 = pd.DataFrame({"X": gen_random_arrow_list_list_double(2, -0.1, n)})
+            # This dataframe can be written by the code. However we cannot read
+            # due to a limitation in pyarrow
+            # df_bug2 = pd.DataFrame({"X": gen_random_arrow_array_struct_list_int(10, n)})
+            df[col_name] = pd.Series(gen_random_arrow_struct_struct(10, num_elements))
+        else:
+            df[col_name] = np.arange(num_elements, dtype=dtype)
+        cur_col += 1
+    if write_index == "string":
+        # set a string index
+        max_zeros = len(str(num_elements - 1))
+        df.index = [
+            ("0" * (max_zeros - len(str(val)))) + str(val)
+            for val in range(num_elements)
+        ]  # type: ignore
+    elif write_index == "numeric":
+        # set a numeric index (not range)
+        df.index = [v**2 for v in range(num_elements)]  # type: ignore
+    return df
+
+
 @pytest.mark.slow
 def test_read_write_parquet(memory_leak_check):
     def write(df, filename):
@@ -203,135 +329,6 @@ def test_read_write_parquet(memory_leak_check):
         if hasattr(df, "_datetime_col"):
             df[df._datetime_col] = df[df._datetime_col].dt.floor("ms")
         df.to_parquet(filename)
-
-    def gen_dataframe(num_elements, write_index):
-        df = pd.DataFrame()
-        cur_col = 0
-        for dtype in [
-            "int8",
-            "uint8",
-            "int16",
-            "uint16",
-            "int32",
-            "uint32",
-            "int64",
-            "uint64",
-            "float32",
-            "float64",
-            "bool",
-            "String",
-            "Binary",
-            "Int8",
-            "UInt8",
-            "Int16",
-            "UInt16",
-            "Int32",
-            "UInt32",
-            "Int64",
-            "UInt64",
-            "Float32",
-            "Float64",
-            "Decimal",
-            "Date",
-            "Datetime",
-            "nested_arrow0",
-            "nested_arrow1",
-            "nested_arrow2",
-        ]:
-            col_name = "col_" + str(cur_col)
-            if dtype == "String":
-                # missing values every 5 elements
-                data = [str(x) * 3 if x % 5 != 0 else None for x in range(num_elements)]
-                df[col_name] = data
-            elif dtype == "Binary":
-                # missing values every 5 elements
-                data = [
-                    str(x).encode() * 3 if x % 5 != 0 else None
-                    for x in range(num_elements)
-                ]
-                df[col_name] = data
-            elif dtype == "bool":
-                data = [True if x % 2 == 0 else False for x in range(num_elements)]
-                df[col_name] = np.array(data, dtype="bool")
-            elif dtype.startswith("Int") or dtype.startswith("UInt"):
-                # missing values every 5 elements
-                data = [x if x % 5 != 0 else np.nan for x in range(num_elements)]
-                df[col_name] = pd.Series(data, dtype=dtype)
-            elif dtype.startswith("Float"):
-                # missing values every 5 elements
-                data = [x if x % 5 != 0 else None for x in range(num_elements)]
-                df[col_name] = pd.Series(data, dtype=dtype)
-            elif dtype == "Decimal":
-                assert num_elements % 8 == 0
-                data = np.array(
-                    [
-                        Decimal("1.6"),
-                        None,
-                        Decimal("-0.222"),
-                        Decimal("1111.316"),
-                        Decimal("1234.00046"),
-                        Decimal("5.1"),
-                        Decimal("-11131.0056"),
-                        Decimal("0.0"),
-                    ]
-                    * (num_elements // 8)
-                )
-                df[col_name] = pd.Series(data, dtype=object)
-            elif dtype == "Date":
-                dates = pd.Series(
-                    pd.date_range(
-                        start="1998-04-24", end="1998-04-29", periods=num_elements
-                    )
-                )
-                df[col_name] = dates.dt.date
-            elif dtype == "Datetime":
-                dates = pd.Series(
-                    pd.date_range(
-                        start="1998-04-24", end="1998-04-29", periods=num_elements
-                    )
-                )
-                if num_elements >= 20:
-                    # set some elements to NaT
-                    dates[4] = None
-                    dates[17] = None
-                df[col_name] = dates
-                df._datetime_col = col_name
-            elif dtype == "nested_arrow0":
-                # Disabling Nones because currently they very easily induce
-                # typing errors during unboxing for nested lists.
-                # _infer_ndarray_obj_dtype in boxing.py needs to be made more robust.
-                # TODO: include Nones
-                df[col_name] = pd.Series(
-                    gen_random_arrow_list_list_int(2, 0, num_elements)
-                )
-            elif dtype == "nested_arrow1":
-                df[col_name] = pd.Series(
-                    gen_random_arrow_array_struct_int(10, num_elements)
-                )
-            elif dtype == "nested_arrow2":
-                # TODO: Include following types when they are supported in PYARROW:
-                # We cannot read this dataframe in bodo. Fails at unboxing.
-                # df_bug1 = pd.DataFrame({"X": gen_random_arrow_list_list_double(2, -0.1, n)})
-                # This dataframe can be written by the code. However we cannot read
-                # due to a limitation in pyarrow
-                # df_bug2 = pd.DataFrame({"X": gen_random_arrow_array_struct_list_int(10, n)})
-                df[col_name] = pd.Series(
-                    gen_random_arrow_struct_struct(10, num_elements)
-                )
-            else:
-                df[col_name] = np.arange(num_elements, dtype=dtype)
-            cur_col += 1
-        if write_index == "string":
-            # set a string index
-            max_zeros = len(str(num_elements - 1))
-            df.index = [
-                ("0" * (max_zeros - len(str(val)))) + str(val)
-                for val in range(num_elements)
-            ]  # type: ignore
-        elif write_index == "numeric":
-            # set a numeric index (not range)
-            df.index = [v**2 for v in range(num_elements)]  # type: ignore
-        return df
 
     n_pes = bodo.get_size()
     NUM_ELEMS = 80  # length of each column in generated dataset
@@ -369,11 +366,11 @@ def test_read_write_parquet(memory_leak_check):
 
                 # to test equality, we have to coerce datetime columns to ms
                 # because pandas writes to parquet as datetime64[ms]
-                df[df._datetime_col] = df[df._datetime_col].astype("datetime64[ms]")
+                df[df._datetime_col] = df[df._datetime_col].dt.floor("ms")
                 # need to coerce column from bodo-generated parquet to ms (note
                 # that the column has us precision because Arrow cpp converts
                 # nanoseconds to microseconds when writing to parquet version 1)
-                df2[df._datetime_col] = df2[df._datetime_col].astype("datetime64[ms]")
+                df2[df._datetime_col] = df2[df._datetime_col].dt.floor("ms")
 
                 # read dataframes must be same as original except for dtypes
                 passed = _test_equal_guard(
@@ -406,7 +403,7 @@ def test_read_write_parquet(memory_leak_check):
             df = gen_dataframe(NUM_ELEMS, write_index)
             # to test equality, we have to coerce datetime columns to ms
             # because pandas writes to parquet as datetime64[ms]
-            df[df._datetime_col] = df[df._datetime_col].astype("datetime64[ms]")
+            df[df._datetime_col] = df[df._datetime_col].dt.floor("ms")
             if bodo.get_rank() == 0:
                 df.to_parquet("_test_io___.pq")
             bodo.barrier()

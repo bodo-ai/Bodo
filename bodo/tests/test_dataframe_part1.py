@@ -1790,7 +1790,7 @@ def test_df_quantile(df_value, memory_leak_check):
         return
 
     # pandas returns object Series for some reason when input has IntegerArray
-    if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer.IntegerDtype):
         return
 
     # boolean input fails in Pandas with Numpy 1.20
@@ -2043,7 +2043,7 @@ def test_df_idxmax_all_types_axis0(df_value, memory_leak_check):
             gen_output = True
 
         # This isn't supported in Pandas
-        if isinstance(dtype, pd.core.arrays.integer._IntegerDtype):
+        if isinstance(dtype, pd.core.arrays.integer.IntegerDtype):
             gen_output = True
 
         # not supported for Strings or Bytes, This isn't supported in Pandas
@@ -2079,7 +2079,7 @@ def test_df_idxmax_all_types_axis0(df_value, memory_leak_check):
                     df_value[colname] = column
                     na_dropped = column.dropna()
                     series_val = na_dropped.index[na_dropped.values.codes.argmax()]
-                elif isinstance(column.dtype, pd.core.arrays.integer._IntegerDtype):
+                elif isinstance(column.dtype, pd.core.arrays.integer.IntegerDtype):
                     series_val = test_impl(
                         column.dropna().astype(column.dtype.numpy_dtype)
                     )
@@ -2135,7 +2135,7 @@ def test_df_idxmin_all_types_axis0(df_value, memory_leak_check):
             gen_output = True
 
         # This isn't supported in Pandas
-        if isinstance(dtype, pd.core.arrays.integer._IntegerDtype):
+        if isinstance(dtype, pd.core.arrays.integer.IntegerDtype):
             gen_output = True
 
         # not supported for Strings or Bytes, This isn't supported in Pandas
@@ -2171,7 +2171,7 @@ def test_df_idxmin_all_types_axis0(df_value, memory_leak_check):
                     df_value[colname] = column
                     na_dropped = column.dropna()
                     series_val = na_dropped.index[na_dropped.values.codes.argmin()]
-                elif isinstance(column.dtype, pd.core.arrays.integer._IntegerDtype):
+                elif isinstance(column.dtype, pd.core.arrays.integer.IntegerDtype):
                     series_val = test_impl(
                         column.dropna().astype(column.dtype.numpy_dtype)
                     )
@@ -2364,7 +2364,7 @@ def test_df_set_index(df_value, memory_leak_check):
         return df.set_index("A")
 
     # TODO: [BE-284] fix nullable int. Produces the incorrect value when there are nulls.
-    if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer.IntegerDtype):
         return
 
     # # TODO(ehsan): test non-str columns using 'df_value.columns[0]' instead of 'A" when

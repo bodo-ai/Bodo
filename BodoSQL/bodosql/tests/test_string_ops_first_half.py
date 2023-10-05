@@ -1033,7 +1033,7 @@ def test_strtok(args, spark_info, memory_leak_check):
         pytest.param(
             (
                 "SELECT SPLIT('www.bodo.ai', '.')",
-                pd.Series([pd.array(["www", "bodo", "ai"])]),
+                pd.Series([pd.array(["www", "bodo", "ai"], "string[pyarrow]")]),
             ),
             id="all_scalar",
         ),
@@ -1042,10 +1042,17 @@ def test_strtok(args, spark_info, memory_leak_check):
                 "SELECT SPLIT(A, ' ') FROM table1",
                 pd.Series(
                     [
-                        pd.array(["alphabet", "soup", "is", "delicious"]),
-                        pd.array(["aaeaaeieaaeioiea"]),
-                        pd.array(["A.BCD.E.FGH.I.JKLMN.O.PQRST.U.VWXYZ"]),
-                        pd.array(["415-555-1234,", "412-555-2345,", "937-555-3456"]),
+                        pd.array(
+                            ["alphabet", "soup", "is", "delicious"], "string[pyarrow]"
+                        ),
+                        pd.array(["aaeaaeieaaeioiea"], "string[pyarrow]"),
+                        pd.array(
+                            ["A.BCD.E.FGH.I.JKLMN.O.PQRST.U.VWXYZ"], "string[pyarrow]"
+                        ),
+                        pd.array(
+                            ["415-555-1234,", "412-555-2345,", "937-555-3456"],
+                            "string[pyarrow]",
+                        ),
                         pd.array(
                             [
                                 "a",
@@ -1077,7 +1084,8 @@ def test_strtok(args, spark_info, memory_leak_check):
                                 "",
                                 "j",
                                 "",
-                            ]
+                            ],
+                            "string[pyarrow]",
                         ),
                         None,
                     ]
@@ -1090,8 +1098,10 @@ def test_strtok(args, spark_info, memory_leak_check):
                 "SELECT SPLIT(A, B) FROM table1",
                 pd.Series(
                     [
-                        pd.array(["alphabet", "soup", "is", "delicious"]),
-                        pd.array(["", "", "ie", "ioiea"]),
+                        pd.array(
+                            ["alphabet", "soup", "is", "delicious"], "string[pyarrow]"
+                        ),
+                        pd.array(["", "", "ie", "ioiea"], "string[pyarrow]"),
                         pd.array(
                             [
                                 "A",
@@ -1104,7 +1114,8 @@ def test_strtok(args, spark_info, memory_leak_check):
                                 "PQRST",
                                 "U",
                                 "VWXYZ",
-                            ]
+                            ],
+                            "string[pyarrow]",
                         ),
                         pd.array(
                             [
@@ -1115,9 +1126,13 @@ def test_strtok(args, spark_info, memory_leak_check):
                                 "2345, 937",
                                 "555",
                                 "3456",
-                            ]
+                            ],
+                            "string[pyarrow]",
                         ),
-                        pd.array(["a  b", " c  d e", "  f g", "  h  i", "  j "]),
+                        pd.array(
+                            ["a  b", " c  d e", "  f g", "  h  i", "  j "],
+                            "string[pyarrow]",
+                        ),
                         None,
                     ]
                 ),
@@ -1129,8 +1144,10 @@ def test_strtok(args, spark_info, memory_leak_check):
                 "SELECT CASE WHEN A IS NULL THEN NULL ELSE SPLIT(A, B) END FROM table1",
                 pd.Series(
                     [
-                        pd.array(["alphabet", "soup", "is", "delicious"]),
-                        pd.array(["", "", "ie", "ioiea"]),
+                        pd.array(
+                            ["alphabet", "soup", "is", "delicious"], "string[pyarrow]"
+                        ),
+                        pd.array(["", "", "ie", "ioiea"], "string[pyarrow]"),
                         pd.array(
                             [
                                 "A",
@@ -1143,7 +1160,8 @@ def test_strtok(args, spark_info, memory_leak_check):
                                 "PQRST",
                                 "U",
                                 "VWXYZ",
-                            ]
+                            ],
+                            "string[pyarrow]",
                         ),
                         pd.array(
                             [
@@ -1154,9 +1172,13 @@ def test_strtok(args, spark_info, memory_leak_check):
                                 "2345, 937",
                                 "555",
                                 "3456",
-                            ]
+                            ],
+                            "string[pyarrow]",
                         ),
-                        pd.array(["a  b", " c  d e", "  f g", "  h  i", "  j "]),
+                        pd.array(
+                            ["a  b", " c  d e", "  f g", "  h  i", "  j "],
+                            "string[pyarrow]",
+                        ),
                         None,
                     ]
                 ),

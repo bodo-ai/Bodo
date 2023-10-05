@@ -84,7 +84,7 @@ def test_distinct_datetime(bodosql_datetime_types, spark_info, memory_leak_check
     check_query(query, bodosql_datetime_types, spark_info)
 
 
-def test_distinct_interval(bodosql_interval_types, spark_info, memory_leak_check):
+def test_distinct_interval(bodosql_interval_types, memory_leak_check):
     """
     Tests distinct works in the simple case for timedelta
     """
@@ -95,7 +95,12 @@ def test_distinct_interval(bodosql_interval_types, spark_info, memory_leak_check
             table1
         """
     check_query(
-        query, bodosql_interval_types, spark_info, convert_columns_timedelta=["A"]
+        query,
+        bodosql_interval_types,
+        None,
+        expected_output=pd.DataFrame(
+            {"A": bodosql_interval_types["table1"]["A"].unique()}
+        ),
     )
 
 
@@ -110,7 +115,7 @@ def test_distinct_within_table(join_dataframes, spark_info, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -257,15 +262,19 @@ def test_is_not_distinct_from_date(bodosql_date_types, spark_info, memory_leak_c
     )
 
 
-def test_is_distinct_from_interval(
-    bodosql_interval_types, spark_info, memory_leak_check
-):
+def test_is_distinct_from_interval(bodosql_interval_types, memory_leak_check):
     """
     Test IS DISTINCT FROM for interval types
     """
     query = f"SELECT A IS DISTINCT FROM B FROM table1"
+    df = bodosql_interval_types["table1"]
     check_query(
-        query, bodosql_interval_types, spark_info, check_dtype=False, check_names=False
+        query,
+        bodosql_interval_types,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=pd.DataFrame({"A": df.A != df.B}),
     )
 
 

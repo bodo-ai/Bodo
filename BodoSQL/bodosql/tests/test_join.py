@@ -40,7 +40,7 @@ def test_join(
     # float to object
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(x, pd.core.arrays.integer.IntegerDtype)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -83,7 +83,7 @@ def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -121,7 +121,7 @@ def test_join_alias(join_dataframes, spark_info, memory_leak_check):
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(x, pd.core.arrays.integer.IntegerDtype)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -161,7 +161,7 @@ def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check)
     # float to object
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(x, pd.core.arrays.integer.IntegerDtype)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -200,7 +200,7 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -249,7 +249,7 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -288,7 +288,7 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -332,7 +332,7 @@ def test_join_different_size_tables(
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),

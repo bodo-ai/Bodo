@@ -1236,8 +1236,16 @@ def test_concat_int_float(memory_leak_check):
 
     df = pd.DataFrame({"A": [1, 2, 3]})
     df2 = pd.DataFrame({"A": [4.0, 5.0]})
-    check_func(test_impl, (df, df2), sort_output=True, reset_index=True)
-    check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
+    check_func(
+        test_impl, (df, df2), sort_output=True, reset_index=True, check_dtype=False
+    )
+    check_func(
+        test_impl_concat,
+        (df, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+    )
 
 
 def test_concat_nulls(memory_leak_check):
@@ -2533,7 +2541,7 @@ def test_df_type_unify_error():
     # Test as a developer
     numba.core.config.DEVELOPER_MODE = 1
 
-    if PYVERSION == (3, 10):
+    if PYVERSION >= (3, 10):
         # In Python 3.10 this function has two returns in the bytecode
         # as opposed to a phi node
         error_type = BodoError

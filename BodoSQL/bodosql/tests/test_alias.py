@@ -47,7 +47,7 @@ def test_as_on_colnames(join_dataframes, spark_info, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -122,7 +122,7 @@ def test_as_on_tablenames(join_dataframes, spark_info, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -197,7 +197,7 @@ def test_cyclic_alias(join_dataframes, spark_info, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -243,7 +243,7 @@ def test_col_aliased_to_tablename(join_dataframes, spark_info, memory_leak_check
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -288,7 +288,7 @@ def test_table_aliased_to_colname(join_dataframes, spark_info, memory_leak_check
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -333,7 +333,7 @@ def test_multitable_renamed_projection(join_dataframes, spark_info, memory_leak_
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -394,7 +394,7 @@ def test_implicit_table_alias(join_dataframes, spark_info, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),

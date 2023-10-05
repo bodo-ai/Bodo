@@ -124,7 +124,6 @@ def test_datetime_dateoffset_arith(
 @pytest.mark.slow
 def test_interval_arith(
     bodosql_interval_types,
-    spark_info,
     datetime_arith_ops,
     timedelta_named_params,
     memory_leak_check,
@@ -135,12 +134,16 @@ def test_interval_arith(
     query = f"""
         SELECT @a {datetime_arith_ops} A as colname from table1
         """
+    A = bodosql_interval_types["table1"]["A"]
+    a = timedelta_named_params["a"]
+    expected_output = (a + A) if datetime_arith_ops == "+" else (a - A)
+    expected_output = expected_output.to_frame()
     check_query(
         query,
         bodosql_interval_types,
-        spark_info,
+        None,
         named_params=timedelta_named_params,
         check_dtype=False,
         check_names=False,
-        convert_columns_timedelta=["colname"],
+        expected_output=expected_output,
     )

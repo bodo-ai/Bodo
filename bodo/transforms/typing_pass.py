@@ -401,6 +401,9 @@ class TypingTransforms:
         # Flag indicating if we should try rerunning typing pass again after running DCE
         # to enable further optimizations
         self.rerun_after_dce = False
+        # get Scope object for easier access
+        assert len(self.func_ir.blocks) > 0, "Invalid empty function IR"
+        self.scope = next(iter(self.func_ir.blocks.values())).scope
 
     def run(self):
         blocks = self.func_ir.blocks
@@ -1555,7 +1558,7 @@ class TypingTransforms:
         expr_value = ir.Const(None, loc)
         # Generate a variable from the Expr
         new_name = mk_unique_var("dummy_var")
-        new_var = ir.Var(ir.Scope(None, loc), new_name, loc)
+        new_var = ir.Var(self.scope, new_name, loc)
         new_assign = ir.Assign(target=new_var, value=expr_value, loc=loc)
         # Append the assign so we update the IR.
         new_ir_assigns.append(new_assign)
@@ -1677,7 +1680,7 @@ class TypingTransforms:
         expr_value = ir.Const(True, col_def.loc)
         # Generate a variable from the Expr
         new_name = mk_unique_var("true_var")
-        new_var = ir.Var(ir.Scope(None, col_def.loc), new_name, col_def.loc)
+        new_var = ir.Var(self.scope, new_name, col_def.loc)
         new_assign = ir.Assign(target=new_var, value=expr_value, loc=col_def.loc)
         # Append the assign so we update the IR.
         new_ir_assigns.append(new_assign)
@@ -1937,7 +1940,7 @@ class TypingTransforms:
         expr_value = ir.Expr.build_tuple(args[1:], call_def.loc)
         # Generate a variable from the Expr
         new_name = mk_unique_var("bodosql_kernel_var")
-        new_var = ir.Var(ir.Scope(None, call_def.loc), new_name, call_def.loc)
+        new_var = ir.Var(self.scope, new_name, call_def.loc)
         new_assign = ir.Assign(target=new_var, value=expr_value, loc=call_def.loc)
         # Append the assign so we update the IR.
         new_ir_assigns.append(new_assign)
@@ -2083,7 +2086,7 @@ class TypingTransforms:
             expr_value = ir.Const(final_pattern, call_def.loc)
         # Generate a variable from the Expr
         new_name = mk_unique_var("like_python_var")
-        new_var = ir.Var(ir.Scope(None, call_def.loc), new_name, call_def.loc)
+        new_var = ir.Var(self.scope, new_name, call_def.loc)
         new_assign = ir.Assign(target=new_var, value=expr_value, loc=call_def.loc)
         # Append the assign so we update the IR.
         new_ir_assigns.append(new_assign)
@@ -2519,7 +2522,7 @@ class TypingTransforms:
                 expr_value = ir.Const(None, var_def.loc)
                 new_name = mk_unique_var("dummy_var")
 
-                new_var = ir.Var(ir.Scope(None, var_def.loc), new_name, var_def.loc)
+                new_var = ir.Var(self.scope, new_name, var_def.loc)
                 new_assign = ir.Assign(
                     target=new_var, value=expr_value, loc=var_def.loc
                 )
@@ -2575,7 +2578,7 @@ class TypingTransforms:
                         expr_value = ir.Expr.build_tuple(args[1:], var_def.loc)
                         new_name = mk_unique_var("tuple_var")
 
-                    new_var = ir.Var(ir.Scope(None, var_def.loc), new_name, var_def.loc)
+                    new_var = ir.Var(self.scope, new_name, var_def.loc)
                     new_assign = ir.Assign(
                         target=new_var, value=expr_value, loc=var_def.loc
                     )
@@ -2600,7 +2603,7 @@ class TypingTransforms:
                 expr_value = ir.Const(None, var_def.loc)
                 # Generate a variable from the Expr
                 new_name = mk_unique_var("dummy_var")
-                new_var = ir.Var(ir.Scope(None, var_def.loc), new_name, var_def.loc)
+                new_var = ir.Var(self.scope, new_name, var_def.loc)
                 new_assign = ir.Assign(
                     target=new_var, value=expr_value, loc=var_def.loc
                 )

@@ -382,8 +382,10 @@ def test_pq_array_item(datapath):
 
     check_func(test_impl, (datapath("list_int.pq"),))
 
-    a = np.array([[2.0, -3.2], [2.2, 1.3], None, [4.1, 5.2, 6.3], [], [1.1, 1.2]])
-    b = np.array([[1, 3], [2], None, [4, 5, 6], [], [1, 1]])
+    a = np.array(
+        [[2.0, -3.2], [2.2, 1.3], None, [4.1, 5.2, 6.3], [], [1.1, 1.2]], object
+    )
+    b = np.array([[1, 3], [2], None, [4, 5, 6], [], [1, 1]], object)
     # for list of bools there are some things missing like (un)boxing
     # c = np.array([[True, False], None, None, [True, True, True], [False, False], []])
     df = pd.DataFrame({"A": a, "B": b})
@@ -394,9 +396,10 @@ def test_pq_array_item(datapath):
         check_func(test_impl, ("test_pq_list_item.pq",))
 
     a = np.array(
-        [[[2.0], [-3.2]], [[2.2, 1.3]], None, [[4.1, 5.2], [6.3]], [], [[1.1, 1.2]]]
+        [[[2.0], [-3.2]], [[2.2, 1.3]], None, [[4.1, 5.2], [6.3]], [], [[1.1, 1.2]]],
+        object,
     )
-    b = np.array([[[1], [3]], [[2]], None, [[4, 5, 6]], [], [[1, 1]]])
+    b = np.array([[[1], [3]], [[2]], None, [[4, 5, 6]], [], [[1, 1]]], object)
     df = pd.DataFrame({"A": a, "B": b})
     with ensure_clean("test_pq_list_item.pq"):
         if bodo.get_rank() == 0:

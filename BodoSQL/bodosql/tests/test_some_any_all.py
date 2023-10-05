@@ -111,6 +111,11 @@ def test_some_any_all_interval_non_null_tuples(
     else:
         spark_query = f"SELECT A FROM table1 WHERE A {comparison_ops} 3600000000000 AND A {comparison_ops} 2000000000 AND A {comparison_ops} -259200000000000"
 
+    # Convert Spark input to int since it doesn't support timedelta nulls properly
+    df = bodosql_interval_types["table1"].copy()
+    for col in df.columns.copy():
+        df[col] = df[col].astype(int)
+
     check_query(
         query,
         bodosql_interval_types,
@@ -118,6 +123,7 @@ def test_some_any_all_interval_non_null_tuples(
         check_dtype=False,
         convert_columns_timedelta=["A"],
         equivalent_spark_query=spark_query,
+        spark_dataframe_dict={"table1": df},
     )
 
 

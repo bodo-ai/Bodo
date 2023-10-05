@@ -3005,7 +3005,7 @@ def _dtype_val_to_arr_type(t, func_name, loc):
         return CategoricalArrayType(typ)
 
     # nullable int types
-    if isinstance(t, pd.core.arrays.integer._IntegerDtype):  # pragma: no cover
+    if isinstance(t, pd.core.arrays.integer.IntegerDtype):  # pragma: no cover
         dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(t, None)
         return IntegerArrayType(dtype.dtype)
 

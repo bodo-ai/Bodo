@@ -1009,18 +1009,6 @@ def overload_bool_arr_all(A, skipna=True):
     return impl
 
 
-@overload(str, no_unliteral=True)
-def overload_str_bool(val):
-    if val == types.bool_:
-
-        def impl(val):  # pragma: no cover
-            if val:
-                return "True"
-            return "False"
-
-        return impl
-
-
 @overload_method(BooleanArrayType, "to_numpy", no_unliteral=True)
 def overload_bool_arr_to_numpy(A, dtype=None, copy=False, na_value=None):
     # TODO: support the proper default value for dtype and na_value

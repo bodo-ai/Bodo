@@ -296,7 +296,7 @@ def test_time_comparison_operators_within_table(
 
 
 def test_comparison_operators_interval_within_table(
-    bodosql_interval_types, comparison_ops, spark_info, memory_leak_check
+    bodosql_interval_types, comparison_ops, memory_leak_check
 ):
     """
     Tests that the basic comparison operators work with Timedelta data within the same table
@@ -309,12 +309,22 @@ def test_comparison_operators_interval_within_table(
         WHERE
             A {comparison_ops} C
         """
+    # NOTE: this assumes that the input data doesn't require comparing two nulls in <=>
+    pd_op = (
+        "=="
+        if comparison_ops in ("=", "<=>")
+        else "!="
+        if comparison_ops == "<>"
+        else comparison_ops
+    )
+    expected_output = bodosql_interval_types["table1"].query(f"A {pd_op} C")[["A", "C"]]
     check_query(
         query,
         bodosql_interval_types,
-        spark_info,
+        None,
         check_dtype=False,
         convert_columns_timedelta=["A", "C"],
+        expected_output=expected_output,
     )
 
 
@@ -362,7 +372,7 @@ def test_where_and(join_dataframes, spark_info, memory_leak_check):
 
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(x, pd.core.arrays.integer.IntegerDtype)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -406,7 +416,7 @@ def test_where_or(join_dataframes, spark_info, memory_leak_check):
 
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(x, pd.core.arrays.integer.IntegerDtype)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -460,9 +470,7 @@ def test_between_date(spark_info, between_clause, memory_leak_check):
     )
 
 
-def test_between_interval(
-    bodosql_interval_types, between_clause, spark_info, memory_leak_check
-):
+def test_between_interval(bodosql_interval_types, between_clause, memory_leak_check):
     """
     tests that between works for interval values
     """
@@ -474,35 +482,20 @@ def test_between_interval(
         WHERE
             table1.A {between_clause} Interval 1 SECOND AND Interval 1 DAY
     """
-
-    # Using integer values for spark, since spark casts the input
-    # pd timedeltas to integer ns values.
+    df = bodosql_interval_types["table1"]
+    filter_rows = (df.A > datetime.timedelta(seconds=1)) & (
+        df.A < datetime.timedelta(days=1)
+    )
     if between_clause == "NOT BETWEEN":
-        spark_query = f"""
-        SELECT
-            A, B, C
-        FROM
-            table1
-        WHERE
-            NOT (table1.A BETWEEN 1000000000 AND 86400000000000)
-    """
-    else:
-        spark_query = f"""
-        SELECT
-            A, B, C
-        FROM
-            table1
-        WHERE
-            table1.A BETWEEN 1000000000 AND 86400000000000
-    """
+        filter_rows = ~filter_rows
+    expected_output = df[filter_rows]
 
     check_query(
         query,
         bodosql_interval_types,
-        spark_info,
+        None,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
-        convert_columns_timedelta=["A", "B", "C"],
+        expected_output=expected_output,
     )
 
 

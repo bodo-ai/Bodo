@@ -220,23 +220,27 @@ def test_count_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_count_interval(bodosql_interval_types, spark_info, memory_leak_check):
+def test_count_interval(bodosql_interval_types, memory_leak_check):
     """test various count queries on Timedelta data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1",
         bodosql_interval_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        expected_output=pd.DataFrame(
+            {"B": [bodosql_interval_types["table1"]["B"].nunique()]}
+        ),
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
         bodosql_interval_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        expected_output=pd.DataFrame({"B": [len(bodosql_interval_types["table1"])]}),
     )
 
 
@@ -357,7 +361,7 @@ def test_max_datetime_types(bodosql_datetime_types, spark_info, memory_leak_chec
 
 
 @pytest.mark.slow
-def test_max_interval_types(bodosql_interval_types, spark_info, memory_leak_check):
+def test_max_interval_types(bodosql_interval_types, memory_leak_check):
     """
     Simple test to ensure that max is working on timedelta types
     """
@@ -370,10 +374,12 @@ def test_max_interval_types(bodosql_interval_types, spark_info, memory_leak_chec
     check_query(
         query,
         bodosql_interval_types,
-        spark_info,
+        None,
         check_names=False,
-        convert_columns_timedelta=["output"],
         is_out_distributed=False,
+        expected_output=pd.DataFrame(
+            {"output": [bodosql_interval_types["table1"]["A"].max()]}
+        ),
     )
 
 

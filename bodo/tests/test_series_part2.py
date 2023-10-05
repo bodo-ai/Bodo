@@ -769,7 +769,7 @@ def test_series_idxmin(series_val, memory_leak_check):
         )
         na_dropped = series_val.dropna()
         py_output = na_dropped.index[na_dropped.values.codes.argmin()]
-    elif isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    elif isinstance(series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         py_output = test_impl(series_val.dropna().astype(series_val.dtype.numpy_dtype))
     else:
         py_output = None
@@ -819,7 +819,7 @@ def test_series_idxmax(series_val, memory_leak_check):
         )
         na_dropped = series_val.dropna()
         py_output = na_dropped.index[na_dropped.values.codes.argmax()]
-    elif isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    elif isinstance(series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         py_output = test_impl(series_val.dropna().astype(series_val.dtype.numpy_dtype))
     else:
         py_output = None
@@ -1093,7 +1093,7 @@ def test_series_isin_large_random(memory_leak_check):
 @pytest.mark.parametrize("k", [0, 1, 2, 3])
 def test_series_nlargest(numeric_series_val, k, memory_leak_check):
     # TODO: support nullable int
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         return
 
     def test_impl(S, k):
@@ -1118,7 +1118,7 @@ def test_series_nlargest_non_index(memory_leak_check):
 @pytest.mark.parametrize("k", [0, 1, 2, 3])
 def test_series_nsmallest(numeric_series_val, k, memory_leak_check):
     # TODO: support nullable int
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         return
 
     def test_impl(S, k):
@@ -1314,7 +1314,7 @@ def test_series_append_multi(series_val, ignore_index, memory_leak_check):
 
 @pytest.mark.slow
 def test_series_quantile(numeric_series_val, memory_leak_check):
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         # as of Pandas 1.3, quantile throws an error when called on nullable integer Series
         # In bodo, this doesn't cause an error at the moment.
         py_out = (
@@ -1427,7 +1427,8 @@ def test_series_describe(numeric_series_val, memory_leak_check):
     def test_impl(A):
         return A.describe(datetime_is_numeric=True)
 
-    check_func(test_impl, (numeric_series_val,), False)
+    # Pandas 1.5 makes the output nullable Float64 for some reason
+    check_func(test_impl, (numeric_series_val,), False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1784,7 +1785,7 @@ def test_series_replace_list_scalar(S, to_replace_list, value, memory_leak_check
         return A.replace(to_replace, val)
 
     # Pandas 1.2.0 seems to convert the array from Int64 to int64.
-    if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(S.dtype, pd.core.arrays.integer.IntegerDtype):
         check_dtype = False
     else:
         check_dtype = True
@@ -1943,7 +1944,7 @@ def test_series_pct_change(numeric_series_val, periods, memory_leak_check):
         return
 
     # TODO: support nullable int
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         return
 
     def test_impl(A, periods):
@@ -3228,7 +3229,7 @@ def is_where_mask_supported_series(S):
     return True
 
 
-def test_series_np_select(series_val, memory_leak_check):
+def test_series_np_select(series_val):
     """tests np select for nullable series"""
     np.random.seed(42)
 
@@ -3294,7 +3295,9 @@ def test_series_np_select(series_val, memory_leak_check):
         if infered_typ == bodo.timedelta64ns:
             # need to do a bit of conversion in this case, numpy does a cast to int
             # when the np output is an object array
-            py_out = np.array(pd.Series(py_out).astype("timedelta64[ns]"))
+            py_out = np.array(
+                pd.Series(py_out).replace(pd.NA, np.nan).astype("timedelta64[ns]")
+            )
     else:
         py_out = None
 
@@ -3354,7 +3357,9 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
             py_out = np.array(pd.Series(py_out).astype("datetime64[ns]"))
         if infered_typ == bodo.timedelta64ns:
             # need to do a bit of conversion in this case, again, numpy does a wierd conversion
-            py_out = np.array(pd.Series(py_out).astype("timedelta64[ns]"))
+            py_out = np.array(
+                pd.Series(py_out).replace(pd.NA, np.nan).astype("timedelta64[ns]")
+            )
         if isinstance(infered_typ, bodo.PDCategoricalDtype):
             if isinstance(
                 series_val.dtype.categories, (pd.TimedeltaIndex, pd.DatetimeIndex)

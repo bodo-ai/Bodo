@@ -75,6 +75,14 @@ def datapath():
     return deco
 
 
+@pytest.fixture(scope="session", autouse=True)
+def enable_numba_alloc_stats():
+    """Enable Numba's allocation stat collection for memory_leak_check"""
+    from numba.core.runtime import _nrt_python
+
+    _nrt_python.memsys_enable_stats()
+
+
 @pytest.fixture(scope="module")
 def spark_info():
     spark = SparkSession.builder.appName("TestSQL").getOrCreate()

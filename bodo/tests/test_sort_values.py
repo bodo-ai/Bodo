@@ -2321,7 +2321,8 @@ def test_sort_list_list(memory_leak_check):
             [[[4, 5, 6], [32]], [[1]], [[1, 2]]],
             [],
             [[[], [1]], None, [[1, 4]], []],
-        ]
+        ],
+        object,
     )
     df = pd.DataFrame({"A": [8, 7, 6, 5, 1, 4, 2, 3, 0], "B": data})
 

@@ -218,14 +218,12 @@ def str_to_decimal(typingctx, val, precision_tp, scale_tp=None):
 # If you write Decimal("4.0"), Decimal("4.00"), or Decimal("4")
 # their python output is "4.0", "4.00", and "4"
 # but for Bodo thei output is always "4"
-@overload(str, no_unliteral=True)
+@overload_method(Decimal128Type, "__str__")
 def overload_str_decimal(val):
-    if isinstance(val, Decimal128Type):
+    def impl(val):  # pragma: no cover
+        return decimal_to_str(val)
 
-        def impl(val):  # pragma: no cover
-            return decimal_to_str(val)
-
-        return impl
+    return impl
 
 
 @intrinsic
@@ -296,7 +294,6 @@ def lower_constant_decimal(context, builder, ty, pyval):
 
 @overload(Decimal, no_unliteral=True)
 def decimal_constructor_overload(value="0", context=None):
-
     if not is_overload_none(context):  # pragma: no cover
         raise BodoError("decimal.Decimal() context argument not supported yet")
 
@@ -681,7 +678,6 @@ def decimal_arr_setitem(A, idx, val):
             # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
             return impl_scalar
         else:
-
             # [BE-4399] make a more efficient way to insert integers/floats into
             # a Decimal array
             def impl_scalar(A, idx, val):  # pragma: no cover
@@ -700,7 +696,6 @@ def decimal_arr_setitem(A, idx, val):
 
     # index is integer array/list
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
-
         if isinstance(val, Decimal128Type):
             return lambda A, idx, val: array_setitem_int_index(
                 A, idx, decimal128type_to_int128(val)
@@ -714,7 +709,6 @@ def decimal_arr_setitem(A, idx, val):
 
     # bool array
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
-
         if isinstance(val, Decimal128Type):
             return lambda A, idx, val: array_setitem_bool_index(
                 A, idx, decimal128type_to_int128(val)
@@ -727,7 +721,6 @@ def decimal_arr_setitem(A, idx, val):
 
     # slice case
     if isinstance(idx, types.SliceType):
-
         if isinstance(val, Decimal128Type):
             return lambda A, idx, val: array_setitem_slice_index(
                 A, idx, decimal128type_to_int128(val)

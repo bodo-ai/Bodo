@@ -8,7 +8,10 @@ import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
+from bodosql.tests.utils import (
+    check_query,
+    create_pyspark_schema_from_dataframe,
+)
 
 import bodo
 from bodo.libs.bodosql_datetime_array_kernels import (
@@ -219,18 +222,6 @@ def dt_fn_dataframe():
         {
             "timestamps": timestamps,
             "timestamps_normalized": normalized_ts,
-            "intervals": [
-                np.timedelta64(10, "Y"),
-                np.timedelta64(9, "M"),
-                np.timedelta64(8, "W"),
-                np.timedelta64(6, "h"),
-                np.timedelta64(5, "m"),
-                None,
-                np.timedelta64(4, "s"),
-                np.timedelta64(3, "ms"),
-                np.timedelta64(2000000, "us"),
-                None,
-            ],
             "datetime_strings": dt_strings,
             "invalid_dt_strings": invalid_dt_strings,
             "positive_integers": pd.Series(
@@ -1081,6 +1072,10 @@ def test_monthname_cols(
 
     spark_query = "SELECT DATE_FORMAT(timestamps, 'MMMM') from table1"
 
+    pyspark_schemas = {}
+    for table_name, df in dt_fn_dataframe.items():
+        pyspark_schemas[table_name] = create_pyspark_schema_from_dataframe(df)
+
     check_query(
         query,
         dt_fn_dataframe,
@@ -1088,6 +1083,7 @@ def test_monthname_cols(
         check_names=False,
         check_dtype=False,
         equivalent_spark_query=spark_query,
+        pyspark_schemas=pyspark_schemas,
     )
 
 
@@ -2793,25 +2789,40 @@ def test_subdate_cols_td_arg1(
     subdate_equiv_fns,
     dt_fn_dataframe,
     timestamp_date_string_cols,
-    spark_info,
     memory_leak_check,
 ):
     """tests that date_sub/subdate works on timedelta 2nd arguments, with column inputs"""
     query = f"SELECT {subdate_equiv_fns}({timestamp_date_string_cols}, intervals) from table1"
 
+    # add interval column separately here since PySpark fails on timedelta nulls in
+    # other tests
+    in_dfs = {"table1": dt_fn_dataframe["table1"].copy()}
+    in_dfs["table1"]["intervals"] = [
+        np.timedelta64(10, "Y"),
+        np.timedelta64(9, "M"),
+        np.timedelta64(8, "W"),
+        np.timedelta64(6, "h"),
+        np.timedelta64(5, "m"),
+        None,
+        np.timedelta64(4, "s"),
+        np.timedelta64(3, "ms"),
+        np.timedelta64(2000000, "us"),
+        None,
+    ]
+
     expected_output = pd.DataFrame(
         {
             "unknown_column_name": pd.to_datetime(
-                dt_fn_dataframe["table1"][timestamp_date_string_cols]
+                in_dfs["table1"][timestamp_date_string_cols]
             )
-            - dt_fn_dataframe["table1"]["intervals"]
+            - in_dfs["table1"]["intervals"]
         }
     )
 
     check_query(
         query,
-        dt_fn_dataframe,
-        spark_info,
+        in_dfs,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=expected_output,
@@ -2823,25 +2834,40 @@ def test_subdate_td_scalars(
     subdate_equiv_fns,
     dt_fn_dataframe,
     timestamp_date_string_cols,
-    spark_info,
     memory_leak_check,
 ):
     """tests that subdate works on timedelta 2nd arguments, with scalar inputs"""
     query = f"SELECT CASE WHEN {subdate_equiv_fns}({timestamp_date_string_cols}, intervals) < TIMESTAMP '1700-01-01' THEN TIMESTAMP '1970-01-01' ELSE {subdate_equiv_fns}({timestamp_date_string_cols}, intervals) END from table1"
 
+    # add interval column separately here since PySpark fails on timedelta nulls in
+    # other tests
+    in_dfs = {"table1": dt_fn_dataframe["table1"].copy()}
+    in_dfs["table1"]["intervals"] = [
+        np.timedelta64(10, "Y"),
+        np.timedelta64(9, "M"),
+        np.timedelta64(8, "W"),
+        np.timedelta64(6, "h"),
+        np.timedelta64(5, "m"),
+        None,
+        np.timedelta64(4, "s"),
+        np.timedelta64(3, "ms"),
+        np.timedelta64(2000000, "us"),
+        None,
+    ]
+
     expected_output = pd.DataFrame(
         {
             "unknown_column_name": pd.to_datetime(
-                dt_fn_dataframe["table1"][timestamp_date_string_cols]
+                in_dfs["table1"][timestamp_date_string_cols]
             )
-            - dt_fn_dataframe["table1"]["intervals"]
+            - in_dfs["table1"]["intervals"]
         }
     )
 
     check_query(
         query,
-        dt_fn_dataframe,
-        spark_info,
+        in_dfs,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=expected_output,

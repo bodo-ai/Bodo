@@ -914,6 +914,7 @@ def test_sum_string(memory_leak_check):
     assert pandas_version in (
         (1, 3),
         (1, 4),
+        (1, 5),
     ), "String sum will raise a TypeError in a later Pandas version."
 
     def impl(df):
@@ -940,6 +941,7 @@ def test_sum_binary(memory_leak_check):
     assert pandas_version in (
         (1, 3),
         (1, 4),
+        (1, 5),
     ), "Object sum will raise a TypeError in a later Pandas version."
 
     def impl(df):
@@ -1090,6 +1092,7 @@ def test_random_string_sum_min_max_first_last(memory_leak_check):
     assert pandas_version in (
         (1, 3),
         (1, 4),
+        (1, 5),
     ), "String sum will raise a TypeError in a later Pandas version."
 
     def impl1(df):
@@ -1143,6 +1146,7 @@ def test_random_binary_sum_min_max_first_last(memory_leak_check):
     assert pandas_version in (
         (1, 3),
         (1, 4),
+        (1, 5),
     ), "Object sum will raise a TypeError in a later Pandas version."
 
     def impl1(df):
@@ -1200,6 +1204,7 @@ def test_groupby_missing_entry(is_slow_run, memory_leak_check):
     assert pandas_version in (
         (1, 3),
         (1, 4),
+        (1, 5),
     ), "String sum will raise a TypeError in a later Pandas version."
 
     def test_drop_sum(df):
@@ -1615,8 +1620,23 @@ def test_cumsum_exscan_categorical_random(memory_leak_check):
     )
     check_func(f1, (df1,), check_dtype=False)
     check_func(f2, (df1,), check_dtype=False)
-    check_func(f1, (df2,), check_dtype=False)
-    check_func(f2, (df2,), check_dtype=False)
+    # Replace NaN in Pandas output (Pandas bug) to avoid output comparison issues
+    check_func(
+        f1,
+        (df2,),
+        check_dtype=False,
+        py_output=df2.groupby("A")
+        .cumsum(skipna=False)
+        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        f2,
+        (df2,),
+        check_dtype=False,
+        py_output=df2.groupby("A")
+        .cumsum(skipna=True)
+        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
 
 
 @pytest_mark_pandas
@@ -1659,7 +1679,14 @@ def test_cumsum_exscan_multikey_random(memory_leak_check):
             "E": list_E_i_null,
         }
     )
-    check_func(f, (df,), check_dtype=False)
+    check_func(
+        f,
+        (df,),
+        check_dtype=False,
+        py_output=df.groupby(["A", "B"])
+        .cumsum()
+        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
 
 
 @pytest_mark_pandas
@@ -1672,6 +1699,7 @@ def test_sum_max_min_list_string_random(memory_leak_check):
     assert pandas_version in (
         (1, 3),
         (1, 4),
+        (1, 5),
     ), "String sum will raise a TypeError in a later Pandas version."
 
     def test_impl1(df1):
@@ -3581,9 +3609,31 @@ def test_cumsum_large_random_numpy(memory_leak_check):
         {"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)},
         index=get_random_array(nb, 100),
     )
-    check_func(impl1, (df1,), sort_output=True)
-    check_func(impl2, (df1,), sort_output=True)
-    check_func(impl3, (df1,), sort_output=True)
+    # Replace NaN in Pandas output (Pandas bug) to avoid output comparison issues
+    check_func(
+        impl1,
+        (df1,),
+        sort_output=True,
+        py_output=df1.groupby("A")["B"]
+        .cumsum()
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl2,
+        (df1,),
+        sort_output=True,
+        py_output=df1.groupby("A")["B"]
+        .cumsum(skipna=True)
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl3,
+        (df1,),
+        sort_output=True,
+        py_output=df1.groupby("A")["B"]
+        .cumsum(skipna=False)
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
 
 
 @pytest_mark_pandas
@@ -3767,12 +3817,54 @@ def test_groupby_cumsum(memory_leak_check):
         },
         index=np.arange(52, 62),
     )
-    check_func(impl1, (df1,), sort_output=True)
-    check_func(impl1, (df2,), sort_output=True)
-    check_func(impl1, (df3,), sort_output=True)
-    check_func(impl2, (df1,), sort_output=True)
-    check_func(impl2, (df2,), sort_output=True)
-    check_func(impl2, (df3,), sort_output=True)
+    check_func(
+        impl1,
+        (df1,),
+        sort_output=True,
+        py_output=df1.groupby("A")
+        .cumsum(skipna=False)
+        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl1,
+        (df2,),
+        sort_output=True,
+        py_output=df2.groupby("A")
+        .cumsum(skipna=False)
+        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl1,
+        (df3,),
+        sort_output=True,
+        py_output=df3.groupby("A")
+        .cumsum(skipna=False)
+        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl2,
+        (df1,),
+        sort_output=True,
+        py_output=df1.groupby("A")
+        .cumsum(skipna=True)
+        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl2,
+        (df2,),
+        sort_output=True,
+        py_output=df2.groupby("A")
+        .cumsum(skipna=True)
+        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
+    check_func(
+        impl2,
+        (df3,),
+        sort_output=True,
+        py_output=df3.groupby("A")
+        .cumsum(skipna=True)
+        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
 
 
 @pytest_mark_pandas
@@ -3813,13 +3905,21 @@ def test_groupby_multi_labels_cumsum_multi_cols(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
-            "B": [1, 2, 3, 2, 1, 1, 1],
-            "C": [3, 5, 6, 5, 4, 4, 3],
+            "B": pd.array([1, 2, 3, 2, 1, 1, 1], "Int64"),
+            "C": pd.array([3, 5, 6, 5, 4, 4, 3], "Int64"),
             "D": [3.1, 1.1, 6.0, np.nan, 4.0, np.nan, 3],
         },
         index=np.arange(10, 17),
     )
-    check_func(impl, (df,), sort_output=True)
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        check_dtype=False,
+        py_output=df.groupby(["A", "B"])[["C", "D"]]
+        .cumsum()
+        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+    )
 
 
 @pytest_mark_pandas
@@ -4839,24 +4939,14 @@ def test_std(test_df_int_no_null, memory_leak_check):
 def test_std_one_col(test_df, memory_leak_check):
     """
     Test Groupby.std() with one column selected
-    ---
-    For the df.groupby("A")["B"].std() we have an error for test_df1
-    This is due to a bug in pandas. See
-    https://github.com/pandas-dev/pandas/issues/35516
     """
-
-    assert pandas_version in (
-        (1, 3),
-        (1, 4),
-    ), "revisit the df.groupby(A)[B].std() issue at next pandas version."
 
     # TODO: std _is_ supported by Pandas groupby on categorical columns
     if isinstance(test_df.iloc[:, 0].dtype, pd.CategoricalDtype):
         return
 
     def impl1(df):
-        #        A = df.groupby("A")["B"].std()
-        A = df.groupby("A")["B"].var()
+        A = df.groupby("A")["B"].std()
         return A
 
     def impl2(n):
@@ -6595,7 +6685,8 @@ def test_groupby_transform_nullable(memory_leak_check):
     check_func(impl_first, (df,))
     check_func(impl_last, (df,))
     check_func(impl_nunique, (df,))
-    check_func(impl_sum, (df,))
+    # NOTE: Pandas 1.5 doesn't return sum output for non-numerics
+    check_func(impl_sum, (df[["A", "G"]],))
 
 
 @pytest_mark_pandas

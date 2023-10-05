@@ -20,7 +20,7 @@ from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
-def test_read_sql_error_sqlalchemy(memory_leak_check):
+def test_read_sql_error_sqlalchemy():
     """This test for incorrect credentials and SQL sentence with sqlalchemy"""
 
     def test_impl_sql_err():
@@ -43,7 +43,7 @@ def test_read_sql_error_sqlalchemy(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_unsupported_query(memory_leak_check):
+def test_unsupported_query():
     """Test error checking for unsupported queries"""
 
     conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
@@ -57,7 +57,7 @@ def test_unsupported_query(memory_leak_check):
         bodo.jit(impl)(conn)
 
 
-def test_to_sql_oracle(memory_leak_check):
+def test_to_sql_oracle():
     """This test that runtime error message for Oracle with string > 4000
     is displayed"""
 

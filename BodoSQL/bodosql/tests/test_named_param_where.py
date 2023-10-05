@@ -120,7 +120,6 @@ def test_datetime_compare(
 @pytest.mark.slow
 def test_interval_compare(
     bodosql_interval_types,
-    spark_info,
     comparison_ops,
     timedelta_named_params,
     memory_leak_check,
@@ -136,11 +135,20 @@ def test_interval_compare(
         WHERE
             @a {comparison_ops} C
         """
+    # NOTE: this assumes that the input data doesn't require comparing two nulls in <=>
+    pd_op = (
+        "=="
+        if comparison_ops in ("=", "<=>")
+        else "!="
+        if comparison_ops == "<>"
+        else comparison_ops
+    )
+    a = timedelta_named_params["a"]
     check_query(
         query,
         bodosql_interval_types,
-        spark_info,
+        None,
         named_params=timedelta_named_params,
         check_dtype=False,
-        convert_columns_timedelta=["A"],
+        expected_output=bodosql_interval_types["table1"].query(f"@a {pd_op} C")[["A"]],
     )

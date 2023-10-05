@@ -89,7 +89,9 @@ def test_string_having(
     )
 
 
-def test_datetime_having(bodosql_datetime_types, spark_info, timestamp_named_params, memory_leak_check):
+def test_datetime_having(
+    bodosql_datetime_types, spark_info, timestamp_named_params, memory_leak_check
+):
     """
     Tests that having works with datetime data and timestamp named parameters
     """
@@ -114,7 +116,7 @@ def test_datetime_having(bodosql_datetime_types, spark_info, timestamp_named_par
 
 
 def test_interval_having(
-    bodosql_interval_types, spark_info, timedelta_named_params, memory_leak_check
+    bodosql_interval_types, timedelta_named_params, memory_leak_check
 ):
     """
     Tests that having works with interval data and Timedelta named parameters
@@ -129,11 +131,18 @@ def test_interval_having(
         HAVING
             @a > B
         """
+    expected_output = (
+        bodosql_interval_types["table1"].groupby("B", as_index=False)["A"].count()
+    )
+    expected_output = expected_output[
+        expected_output.B < timedelta_named_params["a"]
+    ].drop(columns="B")
     check_query(
         query,
         bodosql_interval_types,
-        spark_info,
+        None,
         named_params=timedelta_named_params,
         check_dtype=False,
         check_names=False,
+        expected_output=expected_output,
     )

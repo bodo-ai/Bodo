@@ -517,6 +517,28 @@ inline std::unique_ptr<array_info> lead_lag_seq_wrapper(
         }
     }
 }
+
+// For binary and string values, value of T (which is char*) is directly passed
+// from Python instead of T*
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(DType == Bodo_CTypes::BINARY || DType == Bodo_CTypes::STRING)
+inline array_info *lead_lag_seq_py_helper(
+    const std::shared_ptr<array_info> &in_col, int64_t shift_amt,
+    void *default_fill_raw, int64_t default_fill_val_len, bool ignore_nulls) {
+    using T = typename dtype_to_type<DType>::type;
+    std::optional<T> default_fill_val = std::nullopt;
+
+    if (default_fill_raw != nullptr) {
+        const auto fill_val_casted = static_cast<T>(default_fill_raw);
+        default_fill_val = std::make_optional(fill_val_casted);
+    }
+
+    return lead_lag_seq_wrapper<ArrType, DType, T>(
+               in_col, shift_amt, default_fill_val, ignore_nulls,
+               default_fill_val_len)
+        .release();
+}
+
 /*
  * Small helper to reduce sheer quantity of duplicated code in lead_lag_seq_py.
  * Effectively converts values from C types to C++ types, namely creates

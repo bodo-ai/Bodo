@@ -236,7 +236,7 @@ def test_ndim(memory_leak_check):
     def test_impl(A):
         return A.ndim
 
-    A = np.array([[1, 2, 3], [2]])
+    A = np.array([[1, 2, 3], [2]], object)
     assert bodo.jit(test_impl)(A) == test_impl(A)
 
 
@@ -245,7 +245,7 @@ def test_shape(memory_leak_check):
     def test_impl(A):
         return A.shape
 
-    A = np.array([[1, 2, 3], [2], None, []])
+    A = np.array([[1, 2, 3], [2], None, []], object)
     assert bodo.jit(test_impl)(A) == test_impl(A)
 
 
@@ -254,7 +254,7 @@ def test_dtype(memory_leak_check):
     def test_impl(A):
         return A.dtype
 
-    A = np.array([[1, 2, 3], [2], None, []])
+    A = np.array([[1, 2, 3], [2], None, []], object)
     assert bodo.jit(test_impl)(A) == test_impl(A)
 
 
