@@ -2815,7 +2815,7 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE COALESCE(""",
+                f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE COALESCE("L_COMMITDATE", TIMESTAMP '2023-06-20 00:00:00') >= TIMESTAMP '2023-01-20 00:00:00'""",
             )
 
 
