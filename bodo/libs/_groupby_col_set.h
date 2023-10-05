@@ -163,8 +163,15 @@ class BasicColSet {
      * with the final result of the aggregation operation corresponding to this
      * column set
      * @param grouping info calculated by GroupbyPipeline
+     * @param pool Memory pool to use for allocations during the execution of
+     * this function.
+     * @param mm Memory manager associated with the pool.
      */
-    virtual void eval(const grouping_info& grp_info);
+    virtual void eval(
+        const grouping_info& grp_info,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager());
 
     /**
      * Obtain the final output columns resulting from the groupby operation on
@@ -294,7 +301,10 @@ class MeanColSet : public BasicColSet {
                     bodo::default_buffer_memory_manager()) override;
     void combine(const grouping_info& grp_info,
                  int64_t init_start_row = 0) override;
-    void eval(const grouping_info& grp_info) override;
+    void eval(const grouping_info& grp_info,
+              bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+              std::shared_ptr<::arrow::MemoryManager> mm =
+                  bodo::default_buffer_memory_manager()) override;
 
     std::tuple<std::vector<bodo_array_type::arr_type_enum>,
                std::vector<Bodo_CTypes::CTypeEnum>>
@@ -472,7 +482,10 @@ class BoolXorColSet : public BasicColSet {
     void combine(const grouping_info& grp_info,
                  int64_t init_start_row = 0) override;
 
-    void eval(const grouping_info& grp_info) override;
+    void eval(const grouping_info& grp_info,
+              bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+              std::shared_ptr<::arrow::MemoryManager> mm =
+                  bodo::default_buffer_memory_manager()) override;
 
     std::tuple<std::vector<bodo_array_type::arr_type_enum>,
                std::vector<Bodo_CTypes::CTypeEnum>>
@@ -516,7 +529,10 @@ class VarStdColSet : public BasicColSet {
     void combine(const grouping_info& grp_info,
                  int64_t init_start_row = 0) override;
 
-    void eval(const grouping_info& grp_info) override;
+    void eval(const grouping_info& grp_info,
+              bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+              std::shared_ptr<::arrow::MemoryManager> mm =
+                  bodo::default_buffer_memory_manager()) override;
 
     const std::vector<std::shared_ptr<array_info>> getOutputColumns() override {
         return {out_col};
@@ -572,7 +588,10 @@ class SkewColSet : public BasicColSet {
     void combine(const grouping_info& grp_info,
                  int64_t init_start_row = 0) override;
 
-    void eval(const grouping_info& grp_info) override;
+    void eval(const grouping_info& grp_info,
+              bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+              std::shared_ptr<::arrow::MemoryManager> mm =
+                  bodo::default_buffer_memory_manager()) override;
 
     const std::vector<std::shared_ptr<array_info>> getOutputColumns() override {
         return {out_col};
@@ -680,7 +699,10 @@ class KurtColSet : public BasicColSet {
     void combine(const grouping_info& grp_info,
                  int64_t init_start_row = 0) override;
 
-    void eval(const grouping_info& grp_info) override;
+    void eval(const grouping_info& grp_info,
+              bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+              std::shared_ptr<::arrow::MemoryManager> mm =
+                  bodo::default_buffer_memory_manager()) override;
 
     const std::vector<std::shared_ptr<array_info>> getOutputColumns() override {
         return {out_col};
@@ -742,7 +764,11 @@ class UdfColSet : public BasicColSet {
     void combine(const grouping_info& grp_info,
                  int64_t init_start_row = 0) override;
 
-    void eval(const grouping_info& grp_info) override;
+    void eval(const grouping_info& grp_info,
+              bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+              std::shared_ptr<::arrow::MemoryManager> mm =
+                  bodo::default_buffer_memory_manager()) override;
+
     virtual void setUpdateCols(
         std::vector<std::shared_ptr<array_info>> update_cols_) override {
         throw std::runtime_error(
@@ -1092,7 +1118,10 @@ class TransformColSet : public BasicColSet {
                     bodo::default_buffer_memory_manager()) override;
 
     // Fill the output column by copying values from the transform_op_col column
-    void eval(const grouping_info& grp_info) override;
+    void eval(const grouping_info& grp_info,
+              bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+              std::shared_ptr<::arrow::MemoryManager> mm =
+                  bodo::default_buffer_memory_manager()) override;
 
     virtual void setUpdateCols(
         std::vector<std::shared_ptr<array_info>> update_cols_) override {
