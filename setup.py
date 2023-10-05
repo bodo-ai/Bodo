@@ -536,9 +536,9 @@ setup(
         "Operating System :: Microsoft :: Windows",
         "Operating System :: MacOS :: MacOS X",
         "Programming Language :: Python",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "Topic :: Software Development :: Compilers",
         "Topic :: System :: Distributed Computing",
     ],
@@ -550,6 +550,12 @@ setup(
         "bodo.tests": [
             "caching_tests/*",
             "data/**",
+            "data/**/*",
+            "data/**/**/*",
+            "data/**/**/**/*",
+            "data/**/**/**/**/*",
+            "data/**/**/**/**/**/*",
+            "data/**/**/**/**/**/**/*",
             "bodosql_array_kernel_tests/*",
         ],
         # on Windows and MacOS we copy libssl and libcrypto DLLs to

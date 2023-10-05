@@ -382,7 +382,6 @@ def init_integer_array(typingctx, data, null_bitmap=None):
 
 @lower_constant(IntegerArrayType)
 def lower_constant_int_arr(context, builder, typ, pyval):
-
     n = len(pyval)
     data_arr = np.empty(n, pyval.dtype.type)
     nulls_arr = np.empty((n + 7) >> 3, np.uint8)
@@ -485,7 +484,8 @@ ArrayAnalysis._analyze_op_call_bodo_libs_int_arr_ext_alloc_int_array = (
 )
 
 
-@numba.extending.register_jitable
+# NOTE: also used in regular Python in lower_constant_str_arr
+@numba.njit
 def set_bit_to_arr(bits, i, bit_is_set):  # pragma: no cover
     bits[i // 8] ^= np.uint8(-np.uint8(bit_is_set) ^ bits[i // 8]) & kBitmask[i % 8]
 
@@ -558,7 +558,6 @@ def int_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
-
         if is_scalar:
 
             def impl_scalar(A, idx, val):  # pragma: no cover

@@ -1,14 +1,14 @@
 CONDA_BUILD_SYSROOT:
   - /opt/MacOSX10.15.sdk        # [osx]
 
-# we build python 3.8/3.9/3.10 for releases
+# we build python 3.9/3.10/3.11 for releases
 python:
-  - 3.8
   - 3.9
   - 3.10
+  - 3.11
 
 numpy:
-  - 1.21
+  - 1.23
 
 c_compiler_version:    # [osx]
   - 12.0.1             # [osx]

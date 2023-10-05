@@ -11,7 +11,7 @@ dependencies:
   # Data Science 
   - scipy
   - scikit-learn=1.1.*
-  - matplotlib<=3.5.1
+  - matplotlib<=3.6.1
   
   # IO
   - boto3

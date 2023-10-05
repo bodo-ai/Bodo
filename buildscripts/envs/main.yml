@@ -8,7 +8,7 @@ platforms:
   - linux-64
 
 dependencies:
-  - python=3.10.*
+  - python=3.11.*
   - pip
   - libcurl <=8.3
 
@@ -26,7 +26,8 @@ dependencies:
   - h5py
 
   # MPI
-  - mpich >=3.3,<4.0.0a0=h*
+  # Using h* to avoid the "external_0.conda" kind
+  - mpich *=h*
   - mpi4py
 
   # Java

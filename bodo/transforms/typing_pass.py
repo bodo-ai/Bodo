@@ -5,7 +5,6 @@ according to Bodo requirements (using partial typing).
 import copy
 import itertools
 import operator
-import types as pytypes
 import warnings
 from collections import defaultdict
 from typing import Any, Dict, List, Set, Tuple, Union
@@ -4367,7 +4366,7 @@ class TypingTransforms:
             f_ind: code.co_argcount + i for i, f_ind in enumerate(freevar_inds)
         }
         new_code = _replace_load_deref_code(
-            code.co_code, freevar_arg_map, code.co_argcount
+            code.co_code, freevar_arg_map, code.co_argcount, code.co_nlocals
         )
 
         # we can now change the IR/code since all checks are done (including
@@ -4385,23 +4384,12 @@ class TypingTransforms:
             + code.co_varnames[code.co_argcount :]
         )
         new_co_freevars = tuple(set(code.co_freevars) - set(freevar_names))
-        rhs.code = pytypes.CodeType(
-            code.co_argcount + len(freevar_names),
-            code.co_posonlyargcount,
-            code.co_kwonlyargcount,
-            code.co_nlocals + len(freevar_names),
-            code.co_stacksize,
-            code.co_flags,
-            new_code,
-            code.co_consts,
-            code.co_names,
-            new_co_varnames,
-            code.co_filename,
-            code.co_name,
-            code.co_firstlineno,
-            code.co_lnotab,
-            new_co_freevars,
-            code.co_cellvars,
+        rhs.code = code.replace(
+            co_argcount=code.co_argcount + len(freevar_names),
+            co_nlocals=code.co_nlocals + len(freevar_names),
+            co_code=new_code,
+            co_varnames=new_co_varnames,
+            co_freevars=new_co_freevars,
         )
 
         # pass free variables as arguments
@@ -7013,7 +7001,7 @@ def _set_updated_container(varname, update_func, updated_containers, equiv_vars)
         updated_containers[w] = update_func
 
 
-def _replace_load_deref_code(code, freevar_arg_map, prev_argcount):
+def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals):
     """replace load of free variables in byte code with load of new arguments and
     adjust local variable indices due to new arguments in co_varnames.
     # https://docs.python.org/3/library/dis.html#opcode-LOAD_FAST
@@ -7050,6 +7038,13 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount):
         # adjust local variable access since index includes arguments
         if op in local_varname_ops and arg >= prev_argcount:
             arg += n_new_args
+
+        # Python 3.11 copies free vars into local variables in the beginning of the
+        # function. We need to update LOAD_DEREF indices accordingly. See:
+        # https://docs.python.org/3.11/library/dis.html#opcode-COPY_FREE_VARS
+        # https://github.com/python/cpython/blob/cce6ba91b3a0111110d7e1db828bd6311d58a0a7/Python/ceval.c#L3206
+        if op == dis.opname.index("COPY_FREE_VARS"):
+            freevar_arg_map = {k + prev_n_locals: v for k, v in freevar_arg_map.items()}
 
         # replace free variable load
         if op == dis.opname.index("LOAD_DEREF") and arg in freevar_arg_map:

@@ -5,10 +5,10 @@ MACOSX_DEPLOYMENT_TARGET:
   - 11.0
 
 python:
-  - 3.10
+  - 3.11
 
 numpy:
-  - 1.21
+  - 1.23
 
 target_platform:
   - osx-arm64
