@@ -21,8 +21,10 @@ import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.core.SetOp;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.TableCreate;
+import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeImpl;
@@ -32,6 +34,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexPermuteInputsShuttle;
 import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.rex.RexVisitor;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql2rel.RelFieldTrimmer;
 import org.apache.calcite.tools.RelBuilder;
@@ -111,7 +114,30 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
 
   public TrimResult trimFields(
       TableCreate node, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
+
     return trimFieldsNoUsedColumns(node, fieldsUsed, extraFields);
+  }
+
+  @Override
+  public TrimResult trimFields(
+      SetOp setOp, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
+
+    if (!(setOp.kind == SqlKind.UNION && setOp.all)) {
+      final RelDataType rowType = setOp.getRowType();
+      final int fieldCount = rowType.getFieldCount();
+      // BODO CHANGE, the default implementation completely stops when it encounters a set op
+      // that is not a UNION ALL. Our change is that we
+      // still trim the individual inputs to the union call
+      List<RelNode> newInputs = new ArrayList<>();
+      for (RelNode input : setOp.getInputs()) {
+        newInputs.add(this.trim(input));
+      }
+      SetOp newSetOp = setOp.copy(setOp.getTraitSet(), newInputs);
+
+      return result(newSetOp, Mappings.createIdentity(fieldCount));
+    } else {
+      return super.trimFields(setOp, fieldsUsed, extraFields);
+    }
   }
 
   public TrimResult trimFields(
@@ -323,6 +349,19 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     }
     relBuilder.hints(join.getHints());
     return result(relBuilder.build(), mapping);
+  }
+
+  public TrimResult trimFields(
+      TableModify tableModify, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
+
+    // Ignore passed in fieldsUsed and extraFields
+    // and just recursively call trim on the input
+    RelNode trimmedInput = this.trim(tableModify.getInput());
+    List<RelNode> tempList = new ArrayList<>();
+    tempList.add(trimmedInput);
+    final RelNode newTableModify = tableModify.copy(tableModify.getTraitSet(), tempList);
+    return result(
+        newTableModify, Mappings.createIdentity(tableModify.getRowType().getFieldCount()));
   }
 
   /**
