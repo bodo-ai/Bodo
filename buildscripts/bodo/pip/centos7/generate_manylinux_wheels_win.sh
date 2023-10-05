@@ -50,7 +50,7 @@ fi
 
 # build Bodo wheels
 export BUILD_PIP=1
-for PYTHON_VER in "3.8" "3.9" "3.10"
+for PYTHON_VER in "3.9" "3.10" "3.11"
 do
     conda create -n BUILDPIP python=$PYTHON_VER msmpi boost-cpp -c conda-forge -y
     conda activate BUILDPIP

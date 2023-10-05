@@ -2,10 +2,10 @@ CONDA_BUILD_SYSROOT:
   - /opt/MacOSX10.15.sdk        # [osx]
 
 python:
-  - 3.8
   - 3.9
   - 3.10
+  - 3.11
 
 
 numpy:
-  - 1.21
+  - 1.23

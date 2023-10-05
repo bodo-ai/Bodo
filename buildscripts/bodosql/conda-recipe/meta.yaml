@@ -10,7 +10,7 @@ build:
 
 requirements:
     host:
-        - python >=3.8,<3.11
+        - python >=3.8,<3.12
         # setuptools>=65 removes the msvc compilers that
         # distutils/extension uses.
         # TODO[BE-3467]: remove distutils
@@ -23,7 +23,7 @@ requirements:
         - openjdk >=9.0, <12
         - bodo {{ BODO_VERSION }}
         - py4j ==0.10.9.7
-        - python >=3.8,<3.11
+        - python >=3.8,<3.12
 
 
 test:

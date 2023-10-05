@@ -12,9 +12,6 @@ import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
-
-# See call_finalize for why this is commented out
-# from pyarrow.fs import finalize_s3
 from llvmlite import ir as lir
 from mpi4py import MPI
 from numba.core import cgutils, ir_utils, types
@@ -23,6 +20,7 @@ from numba.core.typing.builtins import IndexValueType
 from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import intrinsic, overload, register_jitable
 from numba.parfors.array_analysis import ArrayAnalysis
+from pyarrow.fs import finalize_s3
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
@@ -3792,12 +3790,6 @@ def disconnect_hdfs_njit():  # pragma: no cover
 @numba.njit
 def call_finalize():  # pragma: no cover
     finalize()
-    # The S3 Finalizer packaged with PyArrow 9 is causing segfaults on MacOS
-    # x86 and sometimes on Linux (esp when using MinIO).
-    # It does not seem to actually do much except for some memory cleanup,
-    # which doesn't matter too much since we're calling it at the end of
-    # the program. Thus, lets skip it for now.
-    # finalize_s3()
     finalize_fsspec()
     _check_for_cpp_errors()
     disconnect_hdfs()
@@ -3811,6 +3803,10 @@ def flush_stdout():
 
 
 atexit.register(call_finalize)
+# TODO[BSE-1046]: upgrade to Arrow 13 and remove this line since already done by
+# Arrow (also safety is improved in newer versions):
+# https://github.com/apache/arrow/blob/b7d2f7ffca66c868bd2fce5b3749c6caa002a7f0/python/pyarrow/fs.py#L63
+atexit.register(finalize_s3)
 # flush output before finalize
 atexit.register(flush_stdout)
 

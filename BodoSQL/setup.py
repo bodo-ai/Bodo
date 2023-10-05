@@ -134,9 +134,9 @@ setup(
         "Operating System :: POSIX :: Linux",
         "Operating System :: MacOS :: MacOS X",
         "Programming Language :: Python",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "Topic :: Software Development :: Compilers",
         "Topic :: System :: Distributed Computing",
     ],
@@ -155,7 +155,7 @@ setup(
     install_requires=[]
     if development_mode
     else [f"bodo=={versioneer.get_version()}", "py4j==0.10.9.7"],
-    python_requires=">=3.8,<3.11",
+    python_requires=">=3.9,<3.12",
     # Update the build and develop commands
     cmdclass=cmdclass,
 )

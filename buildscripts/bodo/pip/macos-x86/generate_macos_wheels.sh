@@ -40,7 +40,7 @@ cd ..
 mkdir -p wheelhouse
 
 # build Bodo wheels
-for PYTHON_VER in "3.8" "3.9" "3.10"
+for PYTHON_VER in "3.9" "3.10" "3.11"
 do
     conda create -n BUILDPIP python=$PYTHON_VER boost-cpp=1.82 -c conda-forge -y
     source activate BUILDPIP
