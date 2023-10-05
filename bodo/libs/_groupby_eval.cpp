@@ -40,11 +40,17 @@ void copy_nullable_values_transform(std::shared_ptr<array_info> update_col,
  * @param update_col[out]: column that has the final result for all rows
  * @param tmp_col[in]: column that has the result per group
  * @param grouping_info[in]: structures used to get rows for each group
+ * @param pool Memory pool to use for allocations during the execution of
+ * this function.
+ * @param mm Memory manager associated with the pool.
  *
  * */
-void copy_string_values_transform(std::shared_ptr<array_info> update_col,
-                                  std::shared_ptr<array_info> tmp_col,
-                                  const grouping_info& grp_info) {
+void copy_string_values_transform(
+    std::shared_ptr<array_info> update_col, std::shared_ptr<array_info> tmp_col,
+    const grouping_info& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     int64_t num_groups = grp_info.num_groups;
     std::shared_ptr<array_info> out_arr = NULL;
     // first we have to deal with offsets first so we
@@ -56,7 +62,7 @@ void copy_string_values_transform(std::shared_ptr<array_info> update_col,
     int64_t n_chars = 0;
     int64_t nRowOut = update_col->length;
     // Store size of data per row
-    bodo::vector<offset_t> ListSizes(nRowOut);
+    bodo::vector<offset_t> ListSizes(nRowOut, pool);
     offset_t* in_offsets = (offset_t*)tmp_col->data2();
     char* in_data1 = tmp_col->data1();
     // 1. Determine needed length (total number of characters)
@@ -76,7 +82,8 @@ void copy_string_values_transform(std::shared_ptr<array_info> update_col,
             idx = grp_info.next_row_in_group[idx];
         }
     }
-    out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype);
+    out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, -1, 0, 0,
+                          false, false, false, pool, std::move(mm));
     offset_t* out_offsets = (offset_t*)out_arr->data2();
     char* out_data1 = out_arr->data1();
     // keep track of output array position
@@ -168,12 +175,19 @@ void copy_dict_string_values_transform(std::shared_ptr<array_info> update_col,
 
 void copy_values_transform(std::shared_ptr<array_info> update_col,
                            std::shared_ptr<array_info> tmp_col,
-                           const grouping_info& grp_info, bool is_parallel) {
+                           const grouping_info& grp_info, bool is_parallel,
+                           bodo::IBufferPool* const pool,
+                           std::shared_ptr<::arrow::MemoryManager> mm) {
     if (tmp_col->arr_type == bodo_array_type::DICT) {
+        // XXX Technically this calls make_dictionary_global_and_unique which
+        // may make allocations, so we should be passing the pool and mm,
+        // but it's not a high priority right now since this is not
+        // supported in the streaming case anyway.
         copy_dict_string_values_transform(update_col, tmp_col, grp_info,
                                           is_parallel);
     } else if (tmp_col->arr_type == bodo_array_type::STRING) {
-        copy_string_values_transform(update_col, tmp_col, grp_info);
+        copy_string_values_transform(update_col, tmp_col, grp_info, pool,
+                                     std::move(mm));
     } else {
         // macro to reduce code duplication
 #ifndef COPY_VALUES_CALL

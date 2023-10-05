@@ -169,10 +169,16 @@ int64_t get_groupby_labels_py_entry(table_info* table, int64_t* out_labels,
  * @param update_col[out]: column that has the final result for all rows
  * @param tmp_col[in]: column that has the result per group
  * @param grouping_info[in]: structures used to get rows for each group
+ * @param pool Memory pool to use for allocations during the execution of
+ * this function.
+ * @param mm Memory manager associated with the pool.
  *
  */
-void copy_values_transform(std::shared_ptr<array_info> update_col,
-                           std::shared_ptr<array_info> tmp_col,
-                           const grouping_info& grp_info, bool is_parallel);
+void copy_values_transform(
+    std::shared_ptr<array_info> update_col, std::shared_ptr<array_info> tmp_col,
+    const grouping_info& grp_info, bool is_parallel,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 #endif  // _GROUPBY_H_INCLUDED

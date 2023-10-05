@@ -186,8 +186,7 @@ std::shared_ptr<table_info> get_update_table(
             // alloc_update_columns) and we don't need to set the combine
             // columns before calling eval.
             grouping_info dummy_grp_info;
-            // XXX TODO Need to be able to pass pool/mm to this!
-            col_set->eval(dummy_grp_info);
+            col_set->eval(dummy_grp_info, pool, mm);
             const std::vector<std::shared_ptr<array_info>> out_cols =
                 col_set->getOutputColumns();
             for (auto& e_arr : out_cols) {
@@ -1459,7 +1458,8 @@ void GroupbyState::ResetShuffleState() {
     this->shuffle_hash_table->clear();
     if (this->shuffle_table_groupby_hashes.get_allocator().size() >
         MAX_SHUFFLE_TABLE_SIZE) {
-        // If the shuffle hashes vector is too large, reallocate it to the maximum size
+        // If the shuffle hashes vector is too large, reallocate it to the
+        // maximum size
         this->shuffle_table_groupby_hashes.resize(MAX_SHUFFLE_TABLE_SIZE /
                                                   sizeof(uint32_t));
         this->shuffle_table_groupby_hashes.shrink_to_fit();
