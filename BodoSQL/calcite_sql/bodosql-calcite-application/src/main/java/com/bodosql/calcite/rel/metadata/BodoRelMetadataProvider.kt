@@ -9,6 +9,11 @@ import org.apache.calcite.rel.metadata.RelMetadataProvider
 class BodoRelMetadataProvider(ranks: Int) : RelMetadataProvider by
 ChainedRelMetadataProvider.of(
     listOf(
+
+        ReflectiveRelMetadataProvider.reflectiveSource(
+            BodoRelMdPredicates(),
+            BuiltInMetadata.Predicates.Handler::class.java,
+        ),
         ReflectiveRelMetadataProvider.reflectiveSource(
             // TODO: Implement a handler specific to SnowflakeRels
             // https://bodo.atlassian.net/browse/BSE-878
