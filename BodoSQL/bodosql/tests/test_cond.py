@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 from bodosql.tests.string_ops_common import bodosql_string_fn_testing_df  # noqa
 from bodosql.tests.utils import check_query
+from numba.core.utils import PYVERSION
 
 import bodo
 
@@ -1031,29 +1032,43 @@ def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check)
 @pytest.mark.parametrize(
     "raw_query, expected_hashes",
     [
-        pytest.param("SELECT HASH(A) AS H FROM T", 14, id="one_col_A"),
+        pytest.param(
+            "SELECT HASH(A) AS H FROM T",
+            (10 if PYVERSION == (3, 11) else 14),
+            id="one_col_A",
+        ),
         pytest.param(
             "SELECT HASH(X) AS H FROM S", 5, id="one_col_B", marks=pytest.mark.slow
         ),
-        pytest.param("SELECT HASH(*) AS H FROM T", 21, id="star"),
-        pytest.param("SELECT HASH(S.*) AS H FROM S", 37, id="dot_star"),
         pytest.param(
-            "SELECT HASH(*) AS H FROM T INNER JOIN S ON T.A=S.A", 44, id="join_star"
+            "SELECT HASH(*) AS H FROM T",
+            (17 if PYVERSION == (3, 11) else 21),
+            id="star",
+        ),
+        pytest.param(
+            "SELECT HASH(S.*) AS H FROM S",
+            (25 if PYVERSION == (3, 11) else 37),
+            id="dot_star",
+        ),
+        pytest.param(
+            "SELECT HASH(*) AS H FROM T INNER JOIN S ON T.A=S.A",
+            (34 if PYVERSION == (3, 11) else 44),
+            id="join_star",
         ),
         pytest.param(
             "SELECT HASH(T.*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            19,
+            (15 if PYVERSION == (3, 11) else 19),
             id="join_dot_star_A",
         ),
         pytest.param(
             "SELECT HASH(S.*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            29,
+            (18 if PYVERSION == (3, 11) else 29),
             id="join_dot_star_B",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT HASH(T.*, 16, *, S.*) AS H FROM T INNER JOIN S ON T.A=S.A",
-            44,
+            (34 if PYVERSION == (3, 11) else 44),
             id="join_star_multiple",
             marks=pytest.mark.slow,
         ),

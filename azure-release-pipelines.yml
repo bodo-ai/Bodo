@@ -134,7 +134,7 @@ stages:
     parameters:
       name: BodoSQL_Conda_Build
       CONDA_ENV: build_bodo_sql
-      PYTHON_VERSION: 3.10
+      PYTHON_VERSION: 3.11
   - template: buildscripts/bodosql/azure/azure-build-pip.yml
     parameters:
       name: BodoSQL_Pip_Build
