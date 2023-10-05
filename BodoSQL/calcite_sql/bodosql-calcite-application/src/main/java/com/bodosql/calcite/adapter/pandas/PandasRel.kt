@@ -129,6 +129,12 @@ interface PandasRel : RelNode {
         fun rexTranslator(input: BodoEngineTable, localRefs: List<Expr>): RexToPandasTranslator
 
         /**
+         * Returns a PandasToRexTranslator that works in this build context and
+         * will wrap the final result of any scalars in arrays the same size as the input.
+         */
+        fun arrayRexTranslator(input: BodoEngineTable): ArrayRexToPandasTranslator
+
+        /**
          * Returns a PandasToRexTranslator that works in this a streaming context.
          */
         fun streamingRexTranslator(input: BodoEngineTable, localRefs: List<Expr>, stateVar: StateVariable): StreamingRexToPandasTranslator
