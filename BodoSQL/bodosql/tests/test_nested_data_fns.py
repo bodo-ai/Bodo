@@ -38,7 +38,7 @@ def test_to_array_scalars(basic_df, memory_leak_check):
             "int": pd.Series([pd.array([123])]),
             "float": pd.Series([pd.array([456.789])]),
             "null": pd.Series([None]),
-            "string": pd.Series([pd.array(["asdafa"])]),
+            "string": pd.Series([pd.array(["asdafa"], "string[pyarrow]")]),
             "bool": pd.Series([pd.array([True])]),
             "time": pd.Series([pd.array([bodo.Time(5, 34, 51)])]),
             "date": pd.Series([pd.array([datetime.date(2023, 5, 18)])]),
@@ -96,11 +96,11 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                 pd.Series(["ksef", "$@#%", None, "0.51", "1d$g"] * 4),
                 pd.Series(
                     [
-                        pd.array(["ksef"]),
-                        pd.array(["$@#%"]),
+                        pd.array(["ksef"], "string[pyarrow]"),
+                        pd.array(["$@#%"], "string[pyarrow]"),
                         None,
-                        pd.array(["0.51"]),
-                        pd.array(["1d$g"]),
+                        pd.array(["0.51"], "string[pyarrow]"),
+                        pd.array(["1d$g"], "string[pyarrow]"),
                     ]
                     * 4
                 ),

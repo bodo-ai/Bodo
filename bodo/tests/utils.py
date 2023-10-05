@@ -887,10 +887,16 @@ def _test_equal_guard(
 
 # We need to sort the index and values for effective comparison
 def sort_series_values_index(S):
+    if S.index.dtype == pd.StringDtype("pyarrow"):
+        S.index = S.index.astype("string")
     S1 = S.sort_index()
     # pandas fails if all null integer column is sorted
     if S1.isnull().all():
         return S1
+    # Replace PyArrow strings with regular strings since Arrow doesn't support sort for
+    # dict(large_string)
+    if S1.dtype == pd.StringDtype("pyarrow"):
+        S1 = S1.astype("string")
     return S1.sort_values(kind="mergesort")
 
 
@@ -1125,6 +1131,9 @@ def _test_equal(
     # issues
     elif py_out is pd.NA and np.isnan(bodo_out):
         pass
+    elif isinstance(py_out, pd.CategoricalDtype):
+        np.testing.assert_equal(bodo_out.categories.values, py_out.categories.values)
+        assert bodo_out.ordered == py_out.ordered
     else:
         np.testing.assert_equal(bodo_out, py_out)
 
@@ -1336,7 +1345,7 @@ class ParforTestPipeline(bodo.compiler.BodoCompiler):
             distributed=True, inline_calls_pass=False
         )
         pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, bodo.compiler.ParforPass)
+        pipeline.add_pass_after(PreserveIR, bodo.compiler.ParforPreLoweringPass)
         pipeline.finalize()
         return [pipeline]
 

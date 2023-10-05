@@ -653,7 +653,7 @@ def _get_pd_dtype_str(t):
         # Float32 or Float64
         return f'"{t.get_pandas_scalar_type_instance.name}"'
 
-    if t == boolean_array_type:
+    if t == boolean_array_type or t == types.Array(types.bool_, 1, "C"):
         return "np.bool_"
 
     if isinstance(t, ArrayItemArrayType) and isinstance(

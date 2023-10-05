@@ -528,6 +528,11 @@ c_scatterv = types.ExternalFunction(
 
 @intrinsic
 def value_to_ptr(typingctx, val_tp=None):
+    """convert value to a pointer on stack
+    WARNING: avoid using since pointers on stack cannot be passed around safely
+    TODO[BSE-1399]: refactor uses and remove
+    """
+
     def codegen(context, builder, sig, args):
         ptr = cgutils.alloca_once(builder, args[0].type)
         builder.store(args[0], ptr)

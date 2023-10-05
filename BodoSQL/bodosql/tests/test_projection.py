@@ -149,7 +149,7 @@ def test_select_all_datetime(bodosql_datetime_types, spark_info, memory_leak_che
 
 
 @pytest.mark.slow
-def test_select_all_interval(bodosql_interval_types, spark_info, memory_leak_check):
+def test_select_all_interval(bodosql_interval_types, memory_leak_check):
     """
     Simplest query possible on timedelta types.
     """
@@ -157,9 +157,9 @@ def test_select_all_interval(bodosql_interval_types, spark_info, memory_leak_che
     check_query(
         query,
         bodosql_interval_types,
-        spark_info,
+        None,
         check_dtype=False,
-        convert_columns_timedelta=["A", "B", "C"],
+        expected_output=bodosql_interval_types["table1"],
     )
 
 
@@ -217,7 +217,7 @@ def test_select_from_simple(join_dataframes, spark_info, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -274,7 +274,7 @@ def test_nested_select_from(join_dataframes, spark_info, memory_leak_check):
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(x, pd.core.arrays.integer.IntegerDtype)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -315,7 +315,7 @@ def test_heavily_nested_select_from(join_dataframes, spark_info, memory_leak_che
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(x, pd.core.arrays.integer.IntegerDtype)
             for x in join_dataframes["table1"].dtypes
         ]
     ):

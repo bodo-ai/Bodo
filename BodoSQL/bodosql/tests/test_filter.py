@@ -152,23 +152,24 @@ def test_filter_null_datetime(bodosql_datetime_types, spark_info, memory_leak_ch
     check_query(query2, bodosql_datetime_types, spark_info, check_dtype=False)
 
 
-def test_filter_null_interval(bodosql_interval_types, spark_info, memory_leak_check):
+def test_filter_null_interval(bodosql_interval_types, memory_leak_check):
     """test is null on Interval columns"""
     query1 = "select A,C from table1 where B is NULL"
     query2 = "select C from table1 where B is not null"
+    df = bodosql_interval_types["table1"]
     check_query(
         query1,
         bodosql_interval_types,
-        spark_info,
+        None,
         check_dtype=False,
-        convert_columns_timedelta=["A", "C"],
+        expected_output=df[df.B.isna()][["A", "C"]],
     )
     check_query(
         query2,
         bodosql_interval_types,
-        spark_info,
+        None,
         check_dtype=False,
-        convert_columns_timedelta=["C"],
+        expected_output=df[df.B.notna()][["C"]],
     )
 
 

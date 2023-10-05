@@ -2868,7 +2868,10 @@ def overload_sort(arr, ascending, inplace):
 
 
 def overload_array_max(A):
-    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array_type:
+    if (
+        isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
+        or A == boolean_array_type
+    ):
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).max()
@@ -2882,7 +2885,10 @@ overload(max, inline="always", no_unliteral=True)(overload_array_max)
 
 
 def overload_array_min(A):
-    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array_type:
+    if (
+        isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
+        or A == boolean_array_type
+    ):
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).min()
@@ -2896,7 +2902,10 @@ overload(min, inline="always", no_unliteral=True)(overload_array_min)
 
 
 def overload_array_sum(A):
-    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array_type:
+    if (
+        isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
+        or A == boolean_array_type
+    ):
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).sum()
@@ -2911,7 +2920,10 @@ overload(sum, inline="always", no_unliteral=True)(overload_array_sum)
 
 @overload(np.prod, inline="always", no_unliteral=True)
 def overload_array_prod(A):
-    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array_type:
+    if (
+        isinstance(A, (IntegerArrayType, FloatingArrayType, SeriesType))
+        or A == boolean_array_type
+    ):
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).prod()

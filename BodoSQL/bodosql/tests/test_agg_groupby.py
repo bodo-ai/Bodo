@@ -157,21 +157,31 @@ def test_count_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
     )
 
 
-def test_count_interval(bodosql_interval_types, spark_info, memory_leak_check):
+def test_count_interval(bodosql_interval_types, memory_leak_check):
     """test various count queries on Timedelta data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1 group by A",
         bodosql_interval_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        expected_output=bodosql_interval_types["table1"]
+        .groupby("A")["B"]
+        .nunique()
+        .to_frame()
+        .reset_index(drop=True),
     )
     check_query(
         "SELECT COUNT(*) FROM table1 group by A",
         bodosql_interval_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        expected_output=bodosql_interval_types["table1"]
+        .groupby("A")
+        .size()
+        .to_frame()
+        .reset_index(drop=True),
     )
 
 
@@ -272,14 +282,19 @@ def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_
 
 
 @pytest.mark.slow
-def test_having_repeat_interval(bodosql_interval_types, spark_info, memory_leak_check):
+def test_having_repeat_interval(bodosql_interval_types, memory_leak_check):
     """test having clause in datetime queries"""
+    expected_output = bodosql_interval_types["table1"].groupby("A")["B"].count()
+    expected_output = (
+        expected_output[expected_output > 2].to_frame().reset_index(drop=True)
+    )
     check_query(
         f"select count(B) from table1 group by a having count(b) > 2",
         bodosql_interval_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        expected_output=expected_output,
     )
 
 
@@ -370,7 +385,7 @@ def test_groupby_datetime_types(bodosql_datetime_types, spark_info, memory_leak_
     )
 
 
-def test_groupby_interval_types(bodosql_interval_types, spark_info, memory_leak_check):
+def test_groupby_interval_types(bodosql_interval_types, memory_leak_check):
     """
     Simple test to ensure that groupby and max are working on interval types
     """
@@ -385,8 +400,13 @@ def test_groupby_interval_types(bodosql_interval_types, spark_info, memory_leak_
     check_query(
         query,
         bodosql_interval_types,
-        spark_info,
-        convert_columns_timedelta=["output"],
+        None,
+        expected_output=bodosql_interval_types["table1"]
+        .groupby("A")["B"]
+        .max()
+        .to_frame()
+        .reset_index(drop=True)
+        .rename(columns={"B": "output"}),
     )
 
 

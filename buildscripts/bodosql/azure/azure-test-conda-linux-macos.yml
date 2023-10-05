@@ -69,7 +69,17 @@ jobs:
       ./buildscripts/bodosql/azure/artifactory_install.sh "false"
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
-    displayName: 'Install Bodo, BodoSQL, and Iceberg from Artifactory'
+    displayName: 'Install Bodo and BodoSQL from Artifactory'
+
+  - script: |
+      set -eo pipefail
+      source activate ${{ parameters.CONDA_ENV }}
+      set -x
+
+      cd $(System.DefaultWorkingDirectory)
+      cd iceberg
+      pip install -v .
+    displayName: "Build Iceberg Connector"
 
   - script: |
       set -exo pipefail

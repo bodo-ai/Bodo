@@ -115,7 +115,7 @@ setup(
     # When doing `python setup.py develop`, setuptools will try to install whatever is
     # in `install_requires` after building, so we set it to empty (we don't want to
     # install bodo in development mode, and it will also break CI
-    install_requires=[] if development_mode else ["py4j==0.10.9.5"],
+    install_requires=[] if development_mode else ["py4j==0.10.9.7"],
     python_requires=">=3.8,<3.11",
     cmdclass={"develop": CustomDevelopCommand, "build_py": CustomBuildCommand},
 )

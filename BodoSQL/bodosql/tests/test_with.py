@@ -26,7 +26,7 @@ def test_with_multiple_tables(join_dataframes, spark_info, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -66,7 +66,7 @@ def test_with_select_tables(join_dataframes, spark_info, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),
@@ -117,7 +117,7 @@ def test_nested_with(join_dataframes, spark_info, memory_leak_check):
             isinstance(
                 x,
                 (
-                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.integer.IntegerDtype,
                     pd.Float32Dtype,
                     pd.Float64Dtype,
                 ),

@@ -30,8 +30,6 @@ from numba.core import analysis, cgutils, errors, ir, ir_utils, types
 from numba.core.compiler import Compiler
 from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
 from numba.core.ir_utils import (
-    GuardException,
-    _create_function_from_code_obj,
     analysis,
     build_definitions,
     find_callname,
@@ -90,6 +88,58 @@ _check_numba_change = False
 numba.core.typing.templates._IntrinsicTemplate.prefer_literal = True
 
 
+# Avoid warning in Numba 0.57 until we remove generated_jit from our code base
+# TODO[BSE-1341]: replace all generated_jit use with overload
+def generated_jit(function=None, cache=False, pipeline_class=None, **options):
+    """
+    This decorator allows flexible type-based compilation
+    of a jitted function.  It works as `@jit`, except that the decorated
+    function is called at compile-time with the *types* of the arguments
+    and should return an implementation function for those types.
+    """
+    from numba.core.decorators import _jit
+
+    url_s = "https://numba.readthedocs.io/en/stable/reference/deprecation.html"
+    url_anchor = "#deprecation-of-generated-jit"
+    url = f"{url_s}{url_anchor}"
+    msg = (
+        "numba.generated_jit is deprecated. Please see the documentation "
+        f"at: {url} for more information and advice on a suitable "
+        "replacement."
+    )
+    # Bodo change: avoid warning
+    # warnings.warn(msg, NumbaDeprecationWarning)
+    dispatcher_args = {}
+    if pipeline_class is not None:
+        dispatcher_args["pipeline_class"] = pipeline_class
+    wrapper = _jit(
+        sigs=None,
+        locals={},
+        target="cpu",
+        cache=cache,
+        targetoptions=options,
+        impl_kind="generated",
+        **dispatcher_args,
+    )
+    if function is not None:
+        return wrapper(function)
+    else:
+        return wrapper
+
+
+if _check_numba_change:  # pragma: no cover
+    # make sure generated_jit hasn't changed before replacing it
+    lines = inspect.getsource(numba.core.decorators.generated_jit)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "d69b869146b984e1fe92cb6737fae9e4b0dd0de938207d5eddd73a0179b92c8c"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.decorators.generated_jit has changed")
+
+numba.core.decorators.generated_jit = generated_jit
+numba.generated_jit = generated_jit
+
+
 # `run_frontend` function of Numba is used in inline_closure_call to get the IR of the
 # function to be inlined.
 # The code below is copied from Numba and modified to handle 'raise' nodes by running
@@ -112,7 +162,7 @@ def run_frontend(func, inline_closures=False, emit_dels=False):
     bc = numba.core.bytecode.ByteCode(func_id=func_id)
     func_ir = interp.interpret(bc)
     # BODO Change: add 3.10 byte code changes if PYVERSION is 3.10
-    if PYVERSION == (3, 10):
+    if PYVERSION >= (3, 10):
         func_ir = peep_hole_fuse_dict_add_updates(func_ir)
         func_ir = peep_hole_fuse_tuple_adds(func_ir)
 
@@ -1890,85 +1940,6 @@ if _check_numba_change:  # pragma: no cover
 numba.core.caching.CacheImpl.__init__ = CacheImpl__init__
 
 
-# replacing _analyze_broadcast in array analysis to fix a bug. It's assuming that
-# get_shape throws GuardException which is wrong.
-# Numba 0.48 exposed this error with test_linear_regression since array analysis is
-# more restrictive and assumes more variables as redefined
-def _analyze_broadcast(self, scope, equiv_set, loc, args, fn):
-    """Infer shape equivalence of arguments based on Numpy broadcast rules
-    and return shape of output
-    https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
-    """
-    from numba.parfors.array_analysis import ArrayAnalysis
-
-    tups = list(filter(lambda a: self._istuple(a.name), args))
-    # Here we have a tuple concatenation.
-    if len(tups) == 2 and fn.__name__ == "add":
-        # If either of the tuples is empty then the resulting shape
-        # is just the other tuple.
-        tup0typ = self.typemap[tups[0].name]
-        tup1typ = self.typemap[tups[1].name]
-        if tup0typ.count == 0:
-            return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(tups[1]))
-        if tup1typ.count == 0:
-            return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(tups[0]))
-
-        try:
-            shapes = [equiv_set.get_shape(x) for x in tups]
-            if None in shapes:
-                return None
-            concat_shapes = sum(shapes, ())
-            return ArrayAnalysis.AnalyzeResult(shape=concat_shapes)
-        except GuardException:
-            return None
-
-    # else arrays
-    arrs = list(filter(lambda a: self._isarray(a.name), args))
-    require(len(arrs) > 0)
-    names = [x.name for x in arrs]
-    dims = [self.typemap[x.name].ndim for x in arrs]
-    max_dim = max(dims)
-    require(max_dim > 0)
-    # Bodo change:
-    # try:
-    #     shapes = [equiv_set.get_shape(x) for x in arrs]
-    # except GuardException:
-    #     return ArrayAnalysis.AnalyzeResult(
-    #         shape=arrs[0],
-    #         pre=self._call_assert_equiv(scope, loc, equiv_set, arrs)
-    #     )
-    # if None not in shapes:
-    #     return self._broadcast_assert_shapes(
-    #         scope, equiv_set, loc, shapes, names
-    #     )
-    # else:
-    #     return self._insert_runtime_broadcast_call(
-    #         scope, loc, arrs, max_dim
-    #     )
-
-    shapes = [equiv_set.get_shape(x) for x in arrs]
-    if any(a is None for a in shapes):
-        return ArrayAnalysis.AnalyzeResult(
-            shape=arrs[0], pre=self._call_assert_equiv(scope, loc, equiv_set, arrs)
-        )
-    return self._broadcast_assert_shapes(scope, equiv_set, loc, shapes, names)
-
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(
-        numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast
-    )
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "6c91fec038f56111338ea2b08f5f0e7f61ebdab1c81fb811fe26658cc354e40f"
-    ):  # pragma: no cover
-        warnings.warn(
-            "numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast has changed"
-        )
-
-numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast = _analyze_broadcast
-
-
 def slice_size(self, index, dsize, equiv_set, scope, stmts):
     return None, None
 
@@ -1980,6 +1951,48 @@ def slice_size(self, index, dsize, equiv_set, scope, stmts):
 # See https://bodo.atlassian.net/browse/BE-2230
 # TODO: fix slice analysis in Numba
 numba.parfors.array_analysis.ArrayAnalysis.slice_size = slice_size
+
+
+def _create_function_from_code_obj(fcode, func_env, func_arg, func_clo, glbls):
+    """
+    Creates a function from a code object. Args:
+    * fcode - the code object
+    * func_env - string for the freevar placeholders
+    * func_arg - string for the function args (e.g. "a, b, c, d=None")
+    * func_clo - string for the closure args
+    * glbls - the function globals
+    """
+    # Bodo change: fix Numba 0.57 bug that replaces e.g. b=1.1 with b=11 here
+    # TODO(ehsan): fix the Python 3.11 issue properly
+    # in py3.11, func_arg contains '.'
+    # func_arg = func_arg.replace('.', '_')
+    sanitized_co_name = fcode.co_name.replace("<", "_").replace(">", "_")
+    func_text = (
+        f"def closure():\n{func_env}\n"
+        f"\tdef {sanitized_co_name}({func_arg}):\n"
+        f"\t\treturn ({func_clo})\n"
+        f"\treturn {sanitized_co_name}"
+    )
+    loc = {}
+    exec(func_text, glbls, loc)
+
+    f = loc["closure"]()
+    # replace the code body
+    f.__code__ = fcode
+    f.__name__ = fcode.co_name
+    return f
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.ir_utils._create_function_from_code_obj)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "5e9d10597cfc64f8541d83a912ff07f16adfe8528ac1e3c92ca462cab817368e"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.ir_utils._create_function_from_code_obj has changed")
+
+
+numba.core.ir_utils._create_function_from_code_obj = _create_function_from_code_obj
 
 
 # support handling nested UDFs inside and outside the jit functions
@@ -2101,7 +2114,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.ir_utils.convert_code_obj_to_function)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "b840769812418d589460e924a15477e83e7919aac8a3dcb0188ff447344aa8ac"
+        != "3a9c0a6122db74a2c070da7edfa7850e3ef1b3d8cc0d5d16d3317210c27bbd3f"
     ):  # pragma: no cover
         warnings.warn("numba.core.ir_utils.convert_code_obj_to_function has changed")
 
@@ -2822,9 +2835,15 @@ def jitclass(cls_or_spec=None, spec=None, **options):
         else:
             from numba.experimental.jitclass.base import ClassBuilder
 
-            return register_class_type(
+            # Bodo change: use our own register_class_type and add **options
+            cls_jitted = register_class_type(
                 cls, spec, types.ClassType, ClassBuilder, **options
             )
+
+            # Preserve the module name of the original class
+            cls_jitted.__module__ = cls.__module__
+
+            return cls_jitted
 
     if cls_or_spec is None:
         return wrap
@@ -2836,7 +2855,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(jitclass_decorators.jitclass)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "265f1953ee5881d1a5d90238d3c932cd300732e41495657e65bf51e59f7f4af5"
+        != "8d0a1a4458d49f78ea536c055efec973070abda7657a95207a92db51ef9d6e83"
     ):  # pragma: no cover
         warnings.warn("jitclass_decorators.jitclass has changed")
 
@@ -3313,7 +3332,7 @@ numba.core.inline_closurecall._created_inlined_var_name = _created_inlined_var_n
 # Bodo Change, add support for calling a number constructor on strings, datetime, timedelta
 def resolve_number___call__(self, classty):
     """
-    Resolve a number class's constructor (e.g. calling int(...))
+    Resolve a NumPy number class's constructor (e.g. calling numpy.int32(...))
     """
     import numpy as np
     from numba.core.typing.templates import make_callable_template
@@ -3381,7 +3400,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "fdaf0c7d0820130481bb2bd922985257b9281b670f0bafffe10e51cabf0d5081"
+        != "2c0bba6d8d0ed5d256de98fb218ab43c3e2d8239339670d4eee3fb701eb371ab"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.typing.builtins.NumberClassAttribute.resolve___call__ has changed"
@@ -4491,6 +4510,65 @@ if _check_numba_change:  # pragma: no cover
 numba.core.base.BaseContext.make_constant_array = make_constant_array
 
 
+def nrt_adapt_ndarray_to_python(self, aryty, ary, dtypeptr):
+    assert self.context.enable_nrt, "NRT required"
+    from llvmlite import ir as lir
+
+    intty = lir.IntType(32)
+    # Embed the Python type of the array (maybe subclass) in the LLVM IR.
+    serial_aryty_pytype = self.unserialize(self.serialize_object(aryty.box_type))
+
+    fnty = lir.FunctionType(
+        self.pyobj, [self.voidptr, self.pyobj, intty, intty, self.pyobj]
+    )
+    fn = self._get_function(fnty, name="NRT_adapt_ndarray_to_python_acqref")
+    fn.args[0].add_attribute("nocapture")
+
+    ndim = self.context.get_constant(types.int32, aryty.ndim)
+    writable = self.context.get_constant(types.int32, int(aryty.mutable))
+
+    # Bodo change: set meminfo to null for constant arrays to make sure Numba boxing
+    # code doesn't update the refcount (which would cause seg faults on Linux)
+    arr_struct = self.context.make_array(aryty)(self.context, self.builder, ary)
+    refcnt = self.builder.load(
+        self.builder.bitcast(arr_struct.meminfo, lir.IntType(64).as_pointer())
+    )
+    # Check for refcount == -1 as we set in make_constant_array
+    is_minus_one = self.builder.icmp_signed("==", refcnt, lir.Constant(refcnt.type, -1))
+    with cgutils.if_unlikely(self.builder, is_minus_one):
+        arr_struct.meminfo = self.context.get_constant_null(types.voidptr)
+    ary = arr_struct._getvalue()
+
+    aryptr = cgutils.alloca_once_value(self.builder, ary)
+
+    return self.builder.call(
+        fn,
+        [
+            self.builder.bitcast(aryptr, self.voidptr),
+            serial_aryty_pytype,
+            ndim,
+            writable,
+            dtypeptr,
+        ],
+    )
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(
+        numba.core.pythonapi.PythonAPI.nrt_adapt_ndarray_to_python
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "4291dd023268946ffe1d2a1c9f2c054164e92aaf3476ff6d08532d903f6779b4"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.pythonapi.PythonAPI.nrt_adapt_ndarray_to_python has changed"
+        )
+
+
+numba.core.pythonapi.PythonAPI.nrt_adapt_ndarray_to_python = nrt_adapt_ndarray_to_python
+
+
 def get_preferred_array_alignment(context, ty):
     """
     Get preferred array alignment for Numba type *ty*.
@@ -4552,7 +4630,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "a8dd2cf74a589f3073175fc9058dafbdec4cfc3ec4c498258ff3e3bc7df0eea3"
+        != "a5b0669f838e3c08093e48206dbb3fdaa6f177cd85aa8aeadb74f1eaaff7b80e"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.runtime.context.NRTContext.meminfo_alloc_aligned_unchecked has changed"
@@ -4615,7 +4693,7 @@ if _check_numba_change:  # pragma: no cover
 numba.core.runtime.nrtdynmod._define_atomic_inc_dec = _define_atomic_inc_dec
 
 
-def NativeLowering_run_pass(self, state):
+def BaseNativeLowering_run_pass(self, state):
     from llvmlite import binding as llvm
     from numba.core import funcdesc, lowering
     from numba.core.typed_passes import fallback_context
@@ -4654,6 +4732,7 @@ def NativeLowering_run_pass(self, state):
         # Bodo change: save constant global arrays to be used below
         targetctx.global_arrays = []
         with targetctx.push_code_library(library):
+            # Bodo change: no need for ParforLower custom lowerer
             lower = lowering.Lower(
                 targetctx, library, fndesc, interp, metadata=metadata
             )
@@ -4703,15 +4782,15 @@ def NativeLowering_run_pass(self, state):
 
 
 if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.typed_passes.NativeLowering.run_pass)
+    lines = inspect.getsource(numba.core.typed_passes.BaseNativeLowering.run_pass)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "a777ce6ce1bb2b1cbaa3ac6c2c0e2adab69a9c23888dff5f1cbb67bfb176b5de"
+        != "d783ca2977135107fb4f095f21854c6e63930673f90d933e3ac37421537d4550"
     ):  # pragma: no cover
-        warnings.warn("numba.core.typed_passes.NativeLowering.run_pass has changed")
+        warnings.warn("numba.core.typed_passes.BaseNativeLowering.run_pass has changed")
 
 
-numba.core.typed_passes.NativeLowering.run_pass = NativeLowering_run_pass
+numba.core.typed_passes.BaseNativeLowering.run_pass = BaseNativeLowering_run_pass
 
 
 #########  End changes to keep references to large const global arrays  #########
@@ -5161,7 +5240,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "5f6f183b94dc57838538c668a54c2476576c85d8553843f3219f5162c61e7816"
+        != "929336bd6b190dbfc97f187078c3712f8e3ebba0eb400ec709b73fa41b15cef3"
     ):
         warnings.warn("unbox_dicttype has changed")
 numba.core.pythonapi._unboxers.functions[types.DictType] = unbox_dicttype
@@ -5382,6 +5461,7 @@ def define_untyped_pipeline(state, name="untyped"):
         LiteralUnroll,
         MakeFunctionToJitFunction,
         ReconstructSSA,
+        RewriteDynamicRaises,
         RewriteSemanticConstants,
         TranslateByteCode,
         WithLifting,
@@ -5392,7 +5472,7 @@ def define_untyped_pipeline(state, name="untyped"):
     if state.func_ir is None:
         pm.add_pass(TranslateByteCode, "analyzing bytecode")
         # Bodo Change: Insert Python 3.10 Bytecode peepholes
-        if PYVERSION == (3, 10):
+        if PYVERSION >= (3, 10):
             pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
         pm.add_pass(FixupArgs, "fix up args")
     pm.add_pass(IRProcessing, "processing IR")
@@ -5407,6 +5487,8 @@ def define_untyped_pipeline(state, name="untyped"):
         pm.add_pass(RewriteSemanticConstants, "rewrite semantic constants")
         pm.add_pass(DeadBranchPrune, "dead branch pruning")
         pm.add_pass(GenericRewrites, "nopython rewrites")
+
+    pm.add_pass(RewriteDynamicRaises, "rewrite dynamic raises")
 
     # convert any remaining closures into functions
     pm.add_pass(MakeFunctionToJitFunction, "convert make_function into JIT functions")
@@ -5436,7 +5518,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "fc5a0665658cc30588a78aca984ac2d323d5d3a45dce538cc62688530c772896"
+        != "9b9aac90e0a51780d921aecec19a5acc63f608b3a8af4d3c16d86fd8344d94e1"
     ):
         warnings.warn(
             "numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline has changed"
@@ -5814,6 +5896,8 @@ def has_cross_iter_dep(
         if array_accessed in non_indexed_arrays:
             return True
 
+        indexed_arrays.add(array_accessed)
+
         npsize = len(new_position)
         # See if we have not seen a npsize dimensioned array accessed before.
         if npsize not in index_positions:
@@ -6028,7 +6112,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.parfors.parfor.has_cross_iter_dep)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "6b095ffde7c8b4c3cf80e6c323c5f9e990a2ce9f3a62476fff7a289460fbd44a"
+        != "9520ac5bf76a3285a9f1014d9a607b53cbe8568579a12dc0f017cf2f60fa33fe"
     ):
         warnings.warn("numba.parfors.parfor.has_cross_iter_dep has changed")
 
@@ -6094,462 +6178,3 @@ if _check_numba_change:  # pragma: no cover
 numba.parfors.parfor._update_parfor_get_setitems = _update_parfor_get_setitems
 
 #### END PATCH OF GETITEM OPTIMIZATIONS TO SUPPORT scalar_optional_getitem ####
-
-from numba.cpython.unicode import _get_code_point, generate_finder
-
-#### START PATCH TO COPY BOYER-MOORE STRING SEARCH ALGORITHM FROM NUMBA ####
-# TODO: Remove once we upgrade to include https://github.com/numba/numba/pull/8626
-from numba.extending import register_jitable
-
-# https://github.com/python/cpython/blob/1960eb005e04b7ad8a91018088cfdb0646bc1ca0/Objects/stringlib/fastsearch.h#L31    # noqa: E501
-_BLOOM_WIDTH = types.intp.bitwidth
-
-# FAST SEARCH algorithm implementation from cpython
-
-
-@register_jitable
-def _bloom_add(mask, ch):
-    mask |= 1 << (ch & (_BLOOM_WIDTH - 1))
-    return mask
-
-
-@register_jitable
-def _bloom_check(mask, ch):
-    return mask & (1 << (ch & (_BLOOM_WIDTH - 1)))
-
-
-# https://github.com/python/cpython/blob/1960eb005e04b7ad8a91018088cfdb0646bc1ca0/Objects/stringlib/fastsearch.h#L550    # noqa: E501
-@register_jitable
-def _default_find(data, substr, start, end):
-    """Left finder."""
-    m = len(substr)
-    if m == 0:
-        return start
-
-    gap = mlast = m - 1
-    last = _get_code_point(substr, mlast)
-
-    zero = types.intp(0)
-    mask = _bloom_add(zero, last)
-    for i in range(mlast):
-        ch = _get_code_point(substr, i)
-        mask = _bloom_add(mask, ch)
-        if ch == last:
-            gap = mlast - i - 1
-    i = start
-    while i <= end - m:
-        ch = _get_code_point(data, mlast + i)
-        if ch == last:
-            j = 0
-            while j < mlast:
-                haystack_ch = _get_code_point(data, i + j)
-                needle_ch = _get_code_point(substr, j)
-                if haystack_ch != needle_ch:
-                    break
-                j += 1
-            if j == mlast:
-                # got a match
-                return i
-
-            ch = _get_code_point(data, mlast + i + 1)
-            if _bloom_check(mask, ch) == 0:
-                i += m
-            else:
-                i += gap
-        else:
-            ch = _get_code_point(data, mlast + i + 1)
-            if _bloom_check(mask, ch) == 0:
-                i += m
-        i += 1
-
-    return -1
-
-
-@register_jitable
-def _default_rfind(data, substr, start, end):
-    """Right finder."""
-    m = len(substr)
-    if m == 0:
-        return end
-
-    skip = mlast = m - 1
-    mfirst = _get_code_point(substr, 0)
-    mask = _bloom_add(0, mfirst)
-    i = mlast
-    while i > 0:
-        ch = _get_code_point(substr, i)
-        mask = _bloom_add(mask, ch)
-        if ch == mfirst:
-            skip = i - 1
-        i -= 1
-
-    i = end - m
-    while i >= start:
-        ch = _get_code_point(data, i)
-        if ch == mfirst:
-            j = mlast
-            while j > 0:
-                haystack_ch = _get_code_point(data, i + j)
-                needle_ch = _get_code_point(substr, j)
-                if haystack_ch != needle_ch:
-                    break
-                j -= 1
-
-            if j == 0:
-                # got a match
-                return i
-
-            ch = _get_code_point(data, i - 1)
-            if i > start and _bloom_check(mask, ch) == 0:
-                i -= m
-            else:
-                i -= skip
-
-        else:
-            ch = _get_code_point(data, i - 1)
-            if i > start and _bloom_check(mask, ch) == 0:
-                i -= m
-        i -= 1
-
-    return -1
-
-
-_find = register_jitable(generate_finder(_default_find))
-_rfind = register_jitable(generate_finder(_default_rfind))
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.cpython.unicode._finder)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "d63f662f6f9179f84f6668f1d7566a506c0a6ff3c87ebba06c6af0d29201a9f6"
-    ):
-        warnings.warn("numba.cpython.unicode._finder has changed")
-    lines = inspect.getsource(numba.cpython.unicode._rfinder)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "419c326e6c4af8977cba5cf96b7a92905708e328d69ae59ebb53ddba714e47b9"
-    ):
-        warnings.warn("numba.cpython.unicode._rfinder has changed")
-
-numba.cpython.unicode._find = _find
-numba.cpython.unicode._rfind = _rfind
-#### END PATCH TO COPY BOYER-MOORE STRING SEARCH ALGORITHM FROM NUMBA ####
-
-
-#### BEGIN PATCH TO SUPPORT CHECKING REDUCTIONS FOR PARFOR FUSION ####
-# Apply Todd's fix from https://github.com/numba/numba/pull/8338.
-# TODO: Remove when we upgrade to Numba 0.57.
-
-
-def parfor_pass_run(self):
-    """run parfor conversion pass: replace Numpy calls
-    with Parfors when possible and optimize the IR."""
-    self._pre_run()
-    # run stencil translation to parfor
-    if self.options.stencil:
-        stencil_pass = numba.parfors.parfor.StencilPass(
-            self.func_ir,
-            self.typemap,
-            self.calltypes,
-            self.array_analysis,
-            self.typingctx,
-            self.targetctx,
-            self.flags,
-        )
-        stencil_pass.run()
-    if self.options.setitem:
-        numba.parfors.parfor.ConvertSetItemPass(self).run(self.func_ir.blocks)
-    if self.options.numpy:
-        numba.parfors.parfor.ConvertNumpyPass(self).run(self.func_ir.blocks)
-    if self.options.reduction:
-        numba.parfors.parfor.ConvertReducePass(self).run(self.func_ir.blocks)
-    if self.options.prange:
-        numba.parfors.parfor.ConvertLoopPass(self).run(self.func_ir.blocks)
-    if self.options.inplace_binop:
-        numba.parfors.parfor.ConvertInplaceBinop(self).run(self.func_ir.blocks)
-
-    # setup diagnostics now parfors are found
-    self.diagnostics.setup(self.func_ir, self.options.fusion)
-
-    numba.parfors.parfor.dprint_func_ir(self.func_ir, "after parfor pass")
-
-    # simplify CFG of parfor body loops since nested parfors with extra
-    # jumps can be created with prange conversion
-    n_parfors = simplify_parfor_body_CFG(self.func_ir.blocks)
-    # simplify before fusion
-    numba.parfors.parfor.simplify(
-        self.func_ir, self.typemap, self.calltypes, self.metadata["parfors"]
-    )
-    # need two rounds of copy propagation to enable fusion of long sequences
-    # of parfors like test_fuse_argmin (some PYTHONHASHSEED values since
-    # apply_copies_parfor depends on set order for creating dummy assigns)
-    numba.parfors.parfor.simplify(
-        self.func_ir, self.typemap, self.calltypes, self.metadata["parfors"]
-    )
-
-    if self.options.fusion and n_parfors >= 2:
-        self.func_ir._definitions = build_definitions(self.func_ir.blocks)
-        self.array_analysis.equiv_sets = dict()
-        self.array_analysis.run(self.func_ir.blocks)
-
-        # BODO CHANGE: Apply https://github.com/numba/numba/pull/8338
-        # Get parfor params to calculate reductions below.
-        _, parfors = numba.parfors.parfor.get_parfor_params(
-            self.func_ir.blocks, self.options.fusion, self.nested_fusion_info
-        )
-
-        # Find reductions so that fusion can be disallowed if a
-        # subsequent parfor read a reduction variable.
-        for p in parfors:
-            p.redvars, p.reddict = numba.parfors.parfor.get_parfor_reductions(
-                self.func_ir, p, p.params, self.calltypes
-            )
-
-        # reorder statements to maximize fusion
-        # push non-parfors down
-        numba.parfors.parfor.maximize_fusion(
-            self.func_ir, self.func_ir.blocks, self.typemap, up_direction=False
-        )
-        numba.parfors.parfor.dprint_func_ir(self.func_ir, "after maximize fusion down")
-        self.fuse_parfors(
-            self.array_analysis, self.func_ir.blocks, self.func_ir, self.typemap
-        )
-        numba.parfors.parfor.dprint_func_ir(self.func_ir, "after first fuse")
-        # push non-parfors up
-        numba.parfors.parfor.maximize_fusion(
-            self.func_ir, self.func_ir.blocks, self.typemap
-        )
-        numba.parfors.parfor.dprint_func_ir(self.func_ir, "after maximize fusion up")
-        # try fuse again after maximize
-        self.fuse_parfors(
-            self.array_analysis, self.func_ir.blocks, self.func_ir, self.typemap
-        )
-        numba.parfors.parfor.dprint_func_ir(self.func_ir, "after fusion")
-        # remove dead code after fusion to remove extra arrays and variables
-        numba.parfors.parfor.simplify(
-            self.func_ir, self.typemap, self.calltypes, self.metadata["parfors"]
-        )
-
-    # push function call variables inside parfors so gufunc function
-    # wouldn't need function variables as argument
-    numba.parfors.parfor.push_call_vars(self.func_ir.blocks, {}, {}, self.typemap)
-    numba.parfors.parfor.dprint_func_ir(self.func_ir, "after push call vars")
-    # simplify again
-    numba.parfors.parfor.simplify(
-        self.func_ir, self.typemap, self.calltypes, self.metadata["parfors"]
-    )
-    numba.parfors.parfor.dprint_func_ir(self.func_ir, "after optimization")
-    if numba.parfors.parfor.config.DEBUG_ARRAY_OPT >= 1:
-        print("variable types: ", sorted(self.typemap.items()))
-        print("call types: ", self.calltypes)
-
-    if numba.parfors.parfor.config.DEBUG_ARRAY_OPT >= 3:
-        for block_label, block in self.func_ir.blocks.items():
-            new_block = []
-            scope = block.scope
-            for stmt in block.body:
-                new_block.append(stmt)
-                if isinstance(stmt, ir.Assign):
-                    loc = stmt.loc
-                    lhs = stmt.target
-                    rhs = stmt.value
-                    lhs_typ = self.typemap[lhs.name]
-                    print(
-                        "Adding print for assignment to ",
-                        lhs.name,
-                        lhs_typ,
-                        type(lhs_typ),
-                    )
-                    if lhs_typ in types.number_domain or isinstance(
-                        lhs_typ, types.Literal
-                    ):
-                        str_var = ir.Var(scope, mk_unique_var("str_var"), loc)
-                        self.typemap[str_var.name] = types.StringLiteral(lhs.name)
-                        lhs_const = ir.Const(lhs.name, loc)
-                        str_assign = ir.Assign(lhs_const, str_var, loc)
-                        new_block.append(str_assign)
-                        str_print = ir.Print([str_var], None, loc)
-                        self.calltypes[str_print] = signature(
-                            types.none, self.typemap[str_var.name]
-                        )
-                        new_block.append(str_print)
-                        ir_print = ir.Print([lhs], None, loc)
-                        self.calltypes[ir_print] = signature(types.none, lhs_typ)
-                        new_block.append(ir_print)
-            block.body = new_block
-
-    if self.func_ir.is_generator:
-        numba.parfors.parfor.fix_generator_types(
-            self.func_ir.generator_info, self.return_type, self.typemap
-        )
-    if numba.parfors.parfor.sequential_parfor_lowering:
-        numba.parfors.parfor.lower_parfor_sequential(
-            self.typingctx, self.func_ir, self.typemap, self.calltypes, self.metadata
-        )
-    else:
-        # prepare for parallel lowering
-        # add parfor params to parfors here since lowering is destructive
-        # changing the IR after this is not allowed
-        parfor_ids, parfors = get_parfor_params(
-            self.func_ir.blocks, self.options.fusion, self.nested_fusion_info
-        )
-
-        # Validate reduction in parfors.
-        for p in parfors:
-            p.redvars, p.reddict = numba.parfors.parfor.get_parfor_reductions(
-                self.func_ir, p, p.params, self.calltypes
-            )
-
-        # Validate parameters:
-        for p in parfors:
-            p.validate_params(self.typemap)
-
-        if numba.parfors.parfor.config.DEBUG_ARRAY_OPT_STATS:
-            name = self.func_ir.func_id.func_qualname
-            n_parfors = len(parfor_ids)
-            if n_parfors > 0:
-                after_fusion = (
-                    "After fusion" if self.options.fusion else "With fusion disabled"
-                )
-                print(
-                    ("{}, function {} has " "{} parallel for-loop(s) #{}.").format(
-                        after_fusion, name, n_parfors, parfor_ids
-                    )
-                )
-            else:
-                print("Function {} has no Parfor.".format(name))
-
-    return
-
-
-def try_fuse(equiv_set, parfor1, parfor2, metadata, func_ir, typemap):
-    """try to fuse parfors and return a fused parfor, otherwise return None"""
-    numba.parfors.parfor.dprint("try_fuse: trying to fuse \n", parfor1, "\n", parfor2)
-
-    # default report is None
-    report = None
-
-    # fusion of parfors with different dimensions not supported yet
-    if len(parfor1.loop_nests) != len(parfor2.loop_nests):
-        numba.parfors.parfor.dprint("try_fuse: parfors number of dimensions mismatch")
-        msg = "- fusion failed: number of loops mismatched, %s, %s."
-        fmt = "parallel loop #%s has a nest of %s loops"
-        l1 = fmt % (parfor1.id, len(parfor1.loop_nests))
-        l2 = fmt % (parfor2.id, len(parfor2.loop_nests))
-        report = numba.parfors.parfor.FusionReport(
-            parfor1.id, parfor2.id, msg % (l1, l2)
-        )
-        return None, report
-
-    ndims = len(parfor1.loop_nests)
-    # all loops should be equal length
-
-    def is_equiv(x, y):
-        return x == y or equiv_set.is_equiv(x, y)
-
-    def get_user_varname(v):
-        """get original variable name by user if possible"""
-        if not isinstance(v, ir.Var):
-            return v
-        v = v.name
-        if "var_rename_map" in metadata and v in metadata["var_rename_map"]:
-            user_varname = metadata["var_rename_map"][v]
-            return user_varname
-        return v
-
-    for i in range(ndims):
-        nest1 = parfor1.loop_nests[i]
-        nest2 = parfor2.loop_nests[i]
-        if not (
-            is_equiv(nest1.start, nest2.start)
-            and is_equiv(nest1.stop, nest2.stop)
-            and is_equiv(nest1.step, nest2.step)
-        ):
-            numba.parfors.parfor.dprint(
-                "try_fuse: parfor dimension correlation mismatch", i
-            )
-            msg = "- fusion failed: loop dimension mismatched in axis %s. "
-            msg += "slice(%s, %s, %s) != " % (
-                get_user_varname(nest1.start),
-                get_user_varname(nest1.stop),
-                get_user_varname(nest1.step),
-            )
-            msg += "slice(%s, %s, %s)" % (
-                get_user_varname(nest2.start),
-                get_user_varname(nest2.stop),
-                get_user_varname(nest2.step),
-            )
-            report = numba.parfors.parfor.FusionReport(parfor1.id, parfor2.id, msg % i)
-            return None, report
-
-    func_ir._definitions = build_definitions(func_ir.blocks)
-    p1_cross_dep, p1_ip, p1_ia, p1_non_ia = has_cross_iter_dep(
-        parfor1, func_ir, typemap
-    )
-    if not p1_cross_dep:
-        p2_cross_dep = has_cross_iter_dep(
-            parfor2, func_ir, typemap, p1_ip, p1_ia, p1_non_ia
-        )[0]
-    else:
-        p2_cross_dep = True
-
-    if p1_cross_dep or p2_cross_dep:
-        numba.parfors.parfor.dprint("try_fuse: parfor cross iteration dependency found")
-        msg = (
-            "- fusion failed: cross iteration dependency found "
-            "between loops #%s and #%s"
-        )
-        report = numba.parfors.parfor.FusionReport(
-            parfor1.id, parfor2.id, msg % (parfor1.id, parfor2.id)
-        )
-        return None, report
-
-    # find parfor1's defs, only body is considered since init_block will run
-    # first after fusion as well
-    p1_body_usedefs = numba.parfors.parfor.compute_use_defs(parfor1.loop_body)
-    p1_body_defs = set()
-    for defs in p1_body_usedefs.defmap.values():
-        p1_body_defs |= defs
-
-    # BODO CHANGE: Apply https://github.com/numba/numba/pull/8338
-    # Add reduction variables from parfor1 to the set of body defs
-    # so that if parfor2 reads the reduction variable it won't fuse.
-    p1_body_defs |= set(parfor1.redvars)
-
-    p2_usedefs = numba.parfors.parfor.compute_use_defs(parfor2.loop_body)
-    p2_uses = numba.parfors.parfor.compute_use_defs({0: parfor2.init_block}).usemap[0]
-    for uses in p2_usedefs.usemap.values():
-        p2_uses |= uses
-
-    if not p1_body_defs.isdisjoint(p2_uses):
-        numba.parfors.parfor.dprint("try_fuse: parfor2 depends on parfor1 body")
-        msg = (
-            "- fusion failed: parallel loop %s has a dependency on the "
-            "body of parallel loop %s. "
-        )
-        report = numba.parfors.parfor.FusionReport(
-            parfor1.id, parfor2.id, msg % (parfor1.id, parfor2.id)
-        )
-        return None, report
-
-    return numba.parfors.parfor.fuse_parfors_inner(parfor1, parfor2)
-
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.parfors.parfor.ParforPass.run)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "d1aaf42e6e0cd7f96efc06d2a0c51eb49d8da9f79e26c1e301a0c8026e063b81"
-    ):
-        warnings.warn("numba.parfors.parfor.ParforPass.run has changed")
-    lines = inspect.getsource(numba.parfors.parfor.try_fuse)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "3ec26e40da4e483594bba811d8a9051f4a18c274516392343a7d69efa7d15511"
-    ):
-        warnings.warn("numba.parfors.parfor.try_fuse has changed")
-
-numba.parfors.parfor.ParforPass.run = parfor_pass_run
-numba.parfors.parfor.try_fuse = try_fuse
-
-#### END PATCH TO SUPPORT CHECKING REDUCTIONS FOR PARFOR FUSION ####

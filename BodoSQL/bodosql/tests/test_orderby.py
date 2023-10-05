@@ -228,7 +228,7 @@ def test_orderby_datetime(bodosql_datetime_types, spark_info, memory_leak_check)
     check_query(query2, bodosql_datetime_types, spark_info, sort_output=False)
 
 
-def test_orderby_interval(bodosql_interval_types, spark_info, memory_leak_check):
+def test_orderby_interval(bodosql_interval_types, memory_leak_check):
     """
     Tests orderby works in the simple case for timedelta types
     """
@@ -251,14 +251,18 @@ def test_orderby_interval(bodosql_interval_types, spark_info, memory_leak_check)
     check_query(
         query1,
         bodosql_interval_types,
-        spark_info,
-        convert_columns_timedelta=["A", "B", "C"],
+        None,
+        expected_output=bodosql_interval_types["table1"]
+        .drop_duplicates()
+        .sort_values(by="A", na_position="last"),
     )
     check_query(
         query2,
         bodosql_interval_types,
-        spark_info,
-        convert_columns_timedelta=["A", "B", "C"],
+        None,
+        expected_output=bodosql_interval_types["table1"]
+        .drop_duplicates()
+        .sort_values(by="A", ascending=False, na_position="last"),
     )
 
 

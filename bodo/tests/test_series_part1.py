@@ -11,7 +11,6 @@ import pytest
 from numba.core.ir_utils import find_callname, guard
 
 import bodo
-from bodo.pandas_compat import pandas_version
 from bodo.tests.series_common import (  # noqa
     SeriesReplace,
     numeric_series_val,
@@ -595,7 +594,7 @@ def test_dataframe_concat(series_val):
     """
     # Pandas converts Integer arrays to int object arrays when adding an all NaN
     # chunk, which we cannot handle in our parallel testing.
-    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(series_val.dtype, pd.core.arrays.integer.IntegerDtype):
         return
 
     def f(df1, df2):
@@ -1078,7 +1077,7 @@ def test_series_copy(series_val, memory_leak_check):
     check_func(test_deep, (series_val.values,))
 
 
-def test_series_to_list(series_val, memory_leak_check):
+def test_series_to_list(series_val):
     """Test Series.to_list(): non-float NAs throw a runtime error since can't be
     represented in lists.
     """
@@ -1089,6 +1088,7 @@ def test_series_to_list(series_val, memory_leak_check):
 
     if series_val.hasnans and not isinstance(series_val.iat[0], np.floating):
         message = "Not supported for NA values"
+        # NOTE: exceptions cause memory leak in Numba currently
         with pytest.raises(ValueError, match=message):
             bodo.jit(impl)(series_val)
     # Bodo uses nan for nullable float arrays due to type stability
@@ -2208,7 +2208,7 @@ def test_series_explicit_binary_op(numeric_series_val, op, fill, memory_leak_che
     # nullable integer
     # TODO: Support FloatingArray
     if op in ("truediv", "floordiv") and isinstance(
-        numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype
+        numeric_series_val.dtype, pd.core.arrays.integer.IntegerDtype
     ):
         check_dtype = False
     else:
@@ -2891,6 +2891,7 @@ def test_series_map(S, memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "arg1",
     [
@@ -2911,49 +2912,16 @@ def test_series_map(S, memory_leak_check):
 def test_series_and_or_int(arg1, arg2, memory_leak_check):
     """Tests support for pd.Series &/|, with integer data"""
 
-    # https://github.com/pandas-dev/pandas/issues/34463
-    # Pandas doesn't currently support and/or between
-    # two Nullable Integer Arrays, or nullable integer Arrays and
-    # scalars but it most likely will in the future.
-    assert pandas_version in (
-        (1, 3),
-        (1, 4),
-    ), "Check support for pd.IntegerArray's and/or"
-
-    # Lambda functions used for setting expected output:
-    or_scalar = lambda v, x: v if pd.isna(v) else v | x
-    and_scalar = lambda v, x: v if pd.isna(v) else v & x
-
-    # Workaround for the aformentioned issue with and/or with Nullable Integer Arrays
-    arg1_null_series = isinstance(arg1, pd.Series) and arg1.dtype.name == "Int64"
-    arg2_null_series = isinstance(arg2, pd.Series) and arg2.dtype.name == "Int64"
-    if arg1_null_series and arg2_null_series:
-        pyOutputOr = arg1.fillna(1).astype(np.int64) | arg2.fillna(1).astype(np.int64)
-        pyOutputOr[arg1.isna() | arg2.isna()] = None
-        pyOutputOr = pyOutputOr.astype(arg1.dtype)
-        pyOutputAnd = arg1.fillna(1).astype(np.int64) & arg2.fillna(1).astype(np.int64)
-        pyOutputAnd[arg1.isna() | arg2.isna()] = None
-        pyOutputAnd = pyOutputAnd.astype(arg1.dtype)
-    elif arg1_null_series and isinstance(arg2, int):
-        pyOutputOr = arg1.apply(or_scalar, x=arg2)
-        pyOutputAnd = arg1.apply(and_scalar, x=arg2)
-    elif arg2_null_series and isinstance(arg2, int):
-        pyOutputOr = arg2.apply(or_scalar, x=arg1)
-        pyOutputAnd = arg2.apply(and_scalar, x=arg1)
-    else:
-        pyOutputOr = None
-        pyOutputAnd = None
-
     def impl_and(lhs, rhs):
         return lhs & rhs
 
     def impl_or(lhs, rhs):
         return lhs | rhs
 
-    check_func(impl_and, (arg1, arg2), py_output=pyOutputAnd)
-    check_func(impl_and, (arg2, arg1), py_output=pyOutputAnd)
-    check_func(impl_or, (arg1, arg2), py_output=pyOutputOr)
-    check_func(impl_or, (arg2, arg1), py_output=pyOutputOr)
+    check_func(impl_and, (arg1, arg2))
+    check_func(impl_and, (arg2, arg1))
+    check_func(impl_or, (arg1, arg2))
+    check_func(impl_or, (arg2, arg1))
 
 
 def test_series_init_dict_int():

@@ -135,6 +135,7 @@ def test_cmp_binary_op(cmp_op, memory_leak_check):
 
 def test_f_strings():
     """test f-string support, which requires bytecode handling"""
+
     # requires formatting (FORMAT_VALUE) and concatenation (BUILD_STRINGS)
     def impl1(a):
         return f"AA_{a+3}_B"
@@ -388,7 +389,7 @@ def test_re_findall():
     check_func(test_impl2, (in_str,), only_seq=True)
 
 
-def test_pat_findall(memory_leak_check):
+def test_pat_findall():
     """make sure Pattern.findall returns proper output (list of strings)"""
 
     def test_impl(pat, in_str):
@@ -847,7 +848,7 @@ def test_format_args_kwargs(memory_leak_check):
         lambda x: np.float64(x),
     ],
 )
-def test_invalid_runtime_conversion(impl, memory_leak_check):
+def test_invalid_runtime_conversion(impl):
     str_val = "a"
     error_msg = "invalid string to .* conversion"
     with pytest.raises(RuntimeError, match=error_msg):

@@ -1663,7 +1663,8 @@ def avoid_udf_inline(py_func, arg_types, kw_types):
 
     for block in f_ir.blocks.values():
         # assertions
-        if isinstance(block.body[-1], (ir.Raise, ir.StaticRaise)):
+        # TODO(ehsan): add TryRaise/StaticTryRaise/DynamicTryRaise?
+        if isinstance(block.body[-1], (ir.Raise, ir.StaticRaise, ir.DynamicRaise)):
             return True
         # has context manager
         for stmt in block.body:

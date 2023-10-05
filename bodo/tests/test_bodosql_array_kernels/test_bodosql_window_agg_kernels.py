@@ -658,7 +658,7 @@ def window_kernel_numeric_data():
             ],
             dtype=pd.Int32Dtype(),
         ),
-        "float64_nonan": pd.Series(np.arange(500).astype(np.float)),
+        "float64_nonan": pd.Series(np.arange(500, dtype=np.float64)),
         "float64_nan": nullable_float_arr_maker(
             [i for i in range(100)],
             [i**2 for i in range(10)],

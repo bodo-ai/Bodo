@@ -1520,7 +1520,7 @@ def overload_array_type_from_dtype(dtype):
     return lambda dtype: arr_type  # pragma: no cover
 
 
-@numba.jit
+@numba.njit
 def flatten_array(A):  # pragma: no cover
     flat_list = []
     n = len(A)

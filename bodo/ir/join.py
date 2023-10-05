@@ -144,7 +144,7 @@ def add_join_gen_cond_cfunc_sym(typingctx, func, sym):
     return types.none(func, sym), codegen
 
 
-@numba.jit
+@numba.njit
 def get_join_cond_addr(name):
     """Resolve address of cfunc given by its symbol name"""
     with numba.objmode(addr="int64"):

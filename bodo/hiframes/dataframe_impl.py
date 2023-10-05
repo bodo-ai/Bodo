@@ -6305,7 +6305,7 @@ def _parse_query_expr(
             # check the case where df.column.str where column is not in df
             try:
                 value_str = str(self.visit(value))
-            except pandas.core.computation.ops.UndefinedVariableError as e:
+            except pandas.errors.UndefinedVariableError as e:
                 col_name = e.args[0].split("'")[1]
                 raise BodoError(
                     "df.query(): column {} is not found in dataframe columns {}".format(
@@ -6434,7 +6434,7 @@ def _parse_query_expr(
         pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: None  # type: ignore
         parsed_expr = pandas.core.computation.expr.Expr(expr, env=env)
         parsed_expr_str = str(parsed_expr)
-    except pandas.core.computation.ops.UndefinedVariableError as e:
+    except pandas.errors.UndefinedVariableError as e:
         # catch undefined variable error
 
         if (

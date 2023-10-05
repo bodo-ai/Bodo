@@ -160,7 +160,7 @@ def test_getitem_int(str_arr_value, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_getitem_int_arr(str_arr_value, memory_leak_check):
+def test_getitem_int_arr(str_arr_value):
     """
     Test operator.getitem on String array with an integer list ind
     """

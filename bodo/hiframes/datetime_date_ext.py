@@ -461,15 +461,13 @@ def str_2d(a):  # pragma: no cover
     return res
 
 
-@overload(str)
+@overload_method(DatetimeDateType, "__str__")
 def overload_date_str(val):
-    if val == datetime_date_type:
+    def impl(val):  # pragma: no cover
+        year, month, day = val._ymd
+        return str(year) + "-" + str_2d(month) + "-" + str_2d(day)
 
-        def impl(val):  # pragma: no cover
-            year, month, day = val._ymd
-            return str(year) + "-" + str_2d(month) + "-" + str_2d(day)
-
-        return impl
+    return impl
 
 
 @overload_method(DatetimeDateType, "replace")

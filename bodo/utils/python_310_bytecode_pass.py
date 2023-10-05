@@ -1,8 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-transforms the IR to handle bytecode issues in Python 3.10. This
-should be removed once https://github.com/numba/numba/pull/7866
-is included in Numba 0.56
+transforms the IR to handle bytecode issues in Python 3.10.
 """
 import operator
 

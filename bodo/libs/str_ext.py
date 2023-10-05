@@ -22,6 +22,7 @@ from numba.extending import (
     models,
     overload,
     overload_attribute,
+    overload_method,
     register_jitable,
     register_model,
 )
@@ -612,54 +613,38 @@ def float_to_str_overload(s, v):
     return lambda s, v: str_from_float64(s._data, v)  # pragma: no cover
 
 
-@overload(str)
+@overload_method(types.Float, "__str__")
 def float_str_overload(v):
     """support str(float) by preallocating the output string and calling snprintf() in C"""
     # TODO(ehsan): handle in Numba similar to str(int)
-    if isinstance(v, types.Float):
-        kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
+    kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
 
-        def impl(v):  # pragma: no cover
-            # Shortcut for 0
-            if v == 0:
-                return "0.0"
-            # same formula as str(int) in Numba, plus 1 char for decimal and 6 precision
-            # chars (default precision in C)
-            # https://github.com/numba/numba/blob/0db8a2bcd0f53c0d0ad8a798432fb3f37f14af27/numba/cpython/unicode.py#L2391
-            flag = 0
-            inner_v = v
-            if inner_v < 0:
-                flag = 1
-                inner_v = -inner_v
-            if inner_v < 1:
-                # Less than 1 produces a negative np.log value, so skip computation
-                digits_len = 1
-            else:
-                digits_len = 1 + int(np.floor(np.log10(inner_v)))
-            # possible values: - sign, digits before decimal place, decimal point,
-            # 6 digits after decimal
-            # NOTE: null character is added automatically by _malloc_string()
-            length = flag + digits_len + 1 + 6
-            s = numba.cpython.unicode._malloc_string(kind, 1, length, True)
-            float_to_str(s, v)
-            return s
+    def impl(v):  # pragma: no cover
+        # Shortcut for 0
+        if v == 0:
+            return "0.0"
+        # same formula as str(int) in Numba, plus 1 char for decimal and 6 precision
+        # chars (default precision in C)
+        # https://github.com/numba/numba/blob/0db8a2bcd0f53c0d0ad8a798432fb3f37f14af27/numba/cpython/unicode.py#L2391
+        flag = 0
+        inner_v = v
+        if inner_v < 0:
+            flag = 1
+            inner_v = -inner_v
+        if inner_v < 1:
+            # Less than 1 produces a negative np.log value, so skip computation
+            digits_len = 1
+        else:
+            digits_len = 1 + int(np.floor(np.log10(inner_v)))
+        # possible values: - sign, digits before decimal place, decimal point,
+        # 6 digits after decimal
+        # NOTE: null character is added automatically by _malloc_string()
+        length = flag + digits_len + 1 + 6
+        s = numba.cpython.unicode._malloc_string(kind, 1, length, True)
+        float_to_str(s, v)
+        return s
 
-        return impl
-
-
-@overload(str)
-def str_bool(v):
-    """support str(boolean)"""
-    # TODO: Move to Numba
-    if v == types.boolean:
-
-        def impl(v):  # pragma: no cover
-            if v:
-                return "True"
-            else:
-                return "False"
-
-        return impl
+    return impl
 
 
 @overload(format, no_unliteral=True)

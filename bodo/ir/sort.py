@@ -489,6 +489,8 @@ def sort_distributed_run(
     parallel = False
     in_vars = sort_node.get_live_in_vars()
     out_vars = sort_node.get_live_out_vars()
+    assert len(out_vars) > 0, "Invalid empty Sort node in distributed pass"
+
     if array_dists is not None:
         parallel = True
         for v in in_vars + out_vars:
@@ -536,7 +538,7 @@ def sort_distributed_run(
     bounds_var = bounds
     if bounds is None:
         loc = sort_node.loc
-        bounds_var = ir.Var(ir.Scope(None, loc), mk_unique_var("$bounds_none"), loc)
+        bounds_var = ir.Var(out_vars[0].scope, mk_unique_var("$bounds_none"), loc)
         typemap[bounds_var.name] = types.none
         nodes.append(ir.Assign(ir.Const(None, loc), bounds_var, loc))
 

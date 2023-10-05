@@ -293,7 +293,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
     bodo.barrier()
 
 
-def test_snowflake_write_create_table_handle_exists(memory_leak_check):
+def test_snowflake_write_create_table_handle_exists():
     """
     Test Snowflake write table creation, both with and without a pre-existing table
     """
@@ -1225,19 +1225,22 @@ def test_snowflake_to_sql_bodo_datatypes_part3(memory_leak_check):
     df = pd.DataFrame(
         {
             # list list
-            "list_list_col": [
-                [1, 2],
-                [3],
-                [4, 5, 6, 7],
-                [4, 5],
-                [32, 45],
-                [1, 4, 7, 8],
+            "list_list_col": np.array(
                 [
-                    3,
-                    4,
-                    6,
+                    [1, 2],
+                    [3],
+                    [4, 5, 6, 7],
+                    [4, 5],
+                    [32, 45],
+                    [1, 4, 7, 8],
+                    [
+                        3,
+                        4,
+                        6,
+                    ],
                 ],
-            ],
+                object,
+            ),
             # struct
             "struct_col": np.array(
                 [
@@ -1248,7 +1251,8 @@ def test_snowflake_to_sql_bodo_datatypes_part3(memory_leak_check):
                     [{"A": 30, "B": 40}],
                     [{"A": 50, "B": 60}, {"A": 500, "B": 600}, {"A": 5000, "B": 6000}],
                     [{"A": 30, "B": 40}],
-                ]
+                ],
+                object,
             ),
         }
     )
