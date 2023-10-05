@@ -178,10 +178,27 @@ std::shared_ptr<table_info> get_update_table(
         col_set->setInCol(input_cols);
         std::vector<std::shared_ptr<array_info>> list_arr;
         col_set->alloc_update_columns(update_col_len, list_arr, pool, mm);
-        for (auto& e_arr : list_arr) {
-            update_table->columns.push_back(e_arr);
-        }
         col_set->update(grp_infos, pool, mm);
+        if (is_acc_case) {
+            // Call eval in the ACC case
+            // In the acc case, the ColSets are created with "do_combine=false",
+            // so it will use the update columns (happens as part of
+            // alloc_update_columns) and we don't need to set the combine
+            // columns before calling eval.
+            grouping_info dummy_grp_info;
+            // XXX TODO Need to be able to pass pool/mm to this!
+            col_set->eval(dummy_grp_info);
+            const std::vector<std::shared_ptr<array_info>> out_cols =
+                col_set->getOutputColumns();
+            for (auto& e_arr : out_cols) {
+                update_table->columns.push_back(e_arr);
+            }
+        } else {
+            // In the AGG case, just use the running values
+            for (auto& e_arr : list_arr) {
+                update_table->columns.push_back(e_arr);
+            }
+        }
         col_set->clear();
     }
 
