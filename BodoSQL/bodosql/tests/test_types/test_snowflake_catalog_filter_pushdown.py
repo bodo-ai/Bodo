@@ -461,6 +461,7 @@ def test_snowflake_like_pushdown_equality(test_db_snowflake_catalog, memory_leak
                 reset_index=True,
                 sort_output=True,
             )
+
             # Filter pushdown is handled by the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
@@ -1104,7 +1105,7 @@ def test_snowflake_ilike_regex_pushdown(test_db_snowflake_catalog, memory_leak_c
 """
 
 
-def test_snowflake_like_non_constant_pushdown_without_escape(
+def test_snowflake_like_non_constant_pushdown_no_escape(
     test_db_snowflake_catalog, memory_leak_check
 ):
     """
@@ -1989,8 +1990,8 @@ def test_snowflake_not_like_regex_pushdown(
 )
 def test_snowflake_length_filter_pushdown(test_db_snowflake_catalog, memory_leak_check):
     """
-    Tests that queries with all aliases of LENGTH work with
-    filter pushdown.
+    Tests that the aliases of LENGTH which are valid in snowflake are pushed
+    directly into the snowflake query filter pushdown, or pushed via the compiler
     """
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     db = test_db_snowflake_catalog.database
@@ -2007,8 +2008,9 @@ def test_snowflake_length_filter_pushdown(test_db_snowflake_catalog, memory_leak
         conn_str = get_snowflake_connection_string(db, schema)
         py_output = pd.read_sql(f"select * from {table_name}", conn_str)
         expected_output = py_output[py_output.a.str.len() == 4]
-        # equality test
-        for func_name in ("CHAR_LENGTH", "LENGTH", "LEN", "CHARACTER_LENGTH"):
+
+        # Test for the aliases of LENGTH which are valid in snowflake
+        for func_name in ("LENGTH", "LEN"):
             query = f"Select a from {table_name} where {func_name}(A) = 4"
             stream = io.StringIO()
             logger = create_string_io_logger(stream)
@@ -2020,10 +2022,27 @@ def test_snowflake_length_filter_pushdown(test_db_snowflake_catalog, memory_leak
                     reset_index=True,
                     sort_output=True,
                 )
+
                 check_logger_msg(
                     stream,
-                    "Filter pushdown successfully performed. Moving filter step:",
+                    f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE {func_name}("A") = 4',
                 )
+                check_logger_msg(stream, "Columns loaded ['a']")
+
+        # Test for the aliases of LENGTH which are invalid in snowflake
+        for func_name in ("CHAR_LENGTH", "CHARACTER_LENGTH"):
+            query = f"Select a from {table_name} where {func_name}(A) = 4"
+            stream = io.StringIO()
+            logger = create_string_io_logger(stream)
+            with set_logging_stream(logger, 1):
+                check_func(
+                    impl,
+                    (bc, query),
+                    py_output=expected_output,
+                    reset_index=True,
+                    sort_output=True,
+                )
+                check_logger_msg(stream, "Filter pushdown successfully performed.")
                 check_logger_msg(stream, "Columns loaded ['a']")
 
 
@@ -2083,7 +2102,11 @@ def test_snowflake_reverse_filter_pushdown(
                 # Pandas output is non-nullable
                 check_dtype=False,
             )
-            check_logger_msg(stream, "Filter pushdown successfully performed.")
+            check_logger_msg(
+                stream,
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE REVERSE("L_SHIPMODE") = $$PIHS$$',
+            )
+
             check_logger_msg(stream, "Columns loaded ['l_orderkey']")
 
 
@@ -2146,10 +2169,9 @@ def test_no_arg_numeric_functions(
         )
 
         check_logger_msg(stream, f"Columns loaded ['{num_col}']")
-        check_logger_msg(stream, "Filter pushdown successfully performed")
         check_logger_msg(
             stream,
-            rf"WHERE  ( ( {sql_func.upper()}(\"{num_col.upper()}\") = {{f1}} ) )",
+            f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE {sql_func.upper()}("{num_col.upper()}") = {test_val}""",
         )
 
 
@@ -2203,10 +2225,9 @@ def test_optional_arg_numeric_functions(
         )
 
         check_logger_msg(stream, f"Columns loaded ['{num_col}']")
-        check_logger_msg(stream, "Filter pushdown successfully performed")
         check_logger_msg(
             stream,
-            rf"WHERE  ( ( {sql_func.upper()}(\"{num_col.upper()}\", {{f0}}) = {{f1}} ) )",
+            f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE {sql_func.upper()}("{num_col.upper()}") = {test_val}""",
         )
 
 
@@ -2294,10 +2315,9 @@ def test_no_arg_datetime_functions(
             )
 
             check_logger_msg(stream, f"Columns loaded ['{test_col}']")
-            check_logger_msg(stream, "Filter pushdown successfully performed")
             check_logger_msg(
                 stream,
-                rf"WHERE  ( ( {pushdown_sql_func.upper()}(\"{test_col.upper()}\") = {{f1}} ) )",
+                f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE {sql_func.upper()}("{test_col.upper()}") = {test_val}""",
             )
 
 
@@ -2329,46 +2349,22 @@ string_transform_func = {
     [
         pytest.param(("TRIM(A)", "TRIM", "hi"), id="trim"),
         pytest.param(("TRIM(A, 'h')", "TRIM", "i"), id="trim-opt-char"),
-        pytest.param(("LTRIM(A)", "LTRIM", "hi"), id="ltrim"),
-        pytest.param(("LTRIM(A, 'h')", "LTRIM", "i"), id="ltrim-opt-char"),
-        pytest.param(("RTRIM(A)", "RTRIM", "hi"), id="rtrim"),
-        pytest.param(("RTRIM(A, 'h')", "RTRIM", "i"), id="rtrim-opt-char"),
-        pytest.param(("INITCAP(A)", "INITCAP", "Hello"), id="initcap"),
-        pytest.param(
-            ("INITCAP(A, ',')", "INITCAP", "Hi,Hello"),
-            id="initcap-opt-char",
-        ),
-        pytest.param(("LPAD(A, 4, '0')", "LPAD", "00hi"), id="lpad-opt-char"),
-        pytest.param(("RPAD(A, 7, 'r')", "RPAD", "hellorr"), id="rpad-opt-char"),
-        pytest.param(("REPEAT(A, 3)", "REPEAT", "hihihi"), id="repeat"),
-        pytest.param(("STRTOK(A)", "STRTOK", "hello"), id="strtok"),
-        pytest.param(("STRTOK(A, 'h')", "STRTOK", "h"), id="strtok-opt-delimiter"),
-        pytest.param(
-            ("STRTOK(A, 'h', 2)", "STRTOK", "ello"), id="strtok-opt-delimiter-partNr"
-        ),
-        pytest.param(
-            ("TRANSLATE(A, 'abcdefgh', 'ABCDEFGH')", "TRANSLATE", "Hello"),
-            id="translate",
-        ),
-        pytest.param(
-            ("CONCAT(A, 'bodo')", "CONCAT", "hibodo"),
-            id="concat",
-            marks=pytest.mark.skip("Number of args in the IR for concat_ws is wrong"),
-        ),
-        pytest.param(
-            ("A || 'bodo'", "CONCAT", "hibodo"),
-            id="concat-binop",
-            marks=pytest.mark.skip("Number of args in the IR for concat_ws is wrong"),
-        ),
     ],
 )
 @pytest.mark.skipif(
     "AGENT_NAME" not in os.environ,
     reason="requires Azure Pipelines",
 )
-def test_with_arg_string_transform_functions(
+def test_with_arg_string_transform_functions_compiler_handled(
     test_db_snowflake_catalog, test_cases, request, memory_leak_check
 ):
+    """
+    There are several functions that we don't handle within the planner,
+    due to issues with differing syntax between Calcite and Snowflake.
+    We do handle these within the Bodo compiler. This test checks that
+    filter pushdown works for those functions that we handle within
+    the compiler.
+    """
     filter_predicate, sql_func, answer = test_cases
     sql_filter = f"{filter_predicate} = '{answer}'"
 
@@ -2412,6 +2408,95 @@ def test_with_arg_string_transform_functions(
         check_logger_msg(stream, sql_func)
 
 
+@pytest.mark.parametrize(
+    "test_cases",
+    [
+        pytest.param(("LTRIM(A)", "LTRIM", "hi"), id="ltrim"),
+        pytest.param(("LTRIM(A, 'h')", "LTRIM", "i"), id="ltrim-opt-char"),
+        pytest.param(("RTRIM(A)", "RTRIM", "hi"), id="rtrim"),
+        pytest.param(("RTRIM(A, 'h')", "RTRIM", "i"), id="rtrim-opt-char"),
+        pytest.param(("INITCAP(A)", "INITCAP", "Hello"), id="initcap"),
+        pytest.param(
+            ("INITCAP(A, ',')", "INITCAP", "Hi,Hello"),
+            id="initcap-opt-char",
+        ),
+        pytest.param(("LPAD(A, 4, '0')", "LPAD", "00hi"), id="lpad-opt-char"),
+        pytest.param(("RPAD(A, 7, 'r')", "RPAD", "hellorr"), id="rpad-opt-char"),
+        pytest.param(("REPEAT(A, 3)", "REPEAT", "hihihi"), id="repeat"),
+        pytest.param(("STRTOK(A)", "STRTOK", "hello"), id="strtok"),
+        pytest.param(("STRTOK(A, 'h')", "STRTOK", "h"), id="strtok-opt-delimiter"),
+        pytest.param(
+            ("STRTOK(A, 'h', 2)", "STRTOK", "ello"), id="strtok-opt-delimiter-partNr"
+        ),
+        pytest.param(
+            ("TRANSLATE(A, 'abcdefgh', 'ABCDEFGH')", "TRANSLATE", "Hello"),
+            id="translate",
+        ),
+        pytest.param(
+            ("CONCAT(A, 'bodo')", "CONCAT", "hibodo"),
+            id="concat",
+            marks=pytest.mark.skip("Number of args in the IR for concat_ws is wrong"),
+        ),
+        pytest.param(
+            ("A || 'bodo'", "CONCAT", "hibodo"),
+            id="concat-binop",
+            marks=pytest.mark.skip("Number of args in the IR for concat_ws is wrong"),
+        ),
+    ],
+)
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_with_arg_string_transform_functions_planner_handled(
+    test_db_snowflake_catalog, test_cases, request, memory_leak_check
+):
+    """Checks that filter pushdown works for the functions that we handle within the planner"""
+    filter_predicate, sql_func, answer = test_cases
+    sql_filter = f"{filter_predicate} = '{answer}'"
+
+    table_name = "STRING_DATA"
+    conn_str = get_snowflake_connection_string(
+        test_db_snowflake_catalog.database,
+        test_db_snowflake_catalog.connection_params["schema"],
+    )
+    df = pd.read_sql(f"select a from {table_name}", conn_str)
+
+    test_case = request.node.callspec.id[request.node.callspec.id.find("-") + 1 :]
+    pd_func = string_transform_func[test_case]
+
+    expected_output = df[df["a"].apply(pd_func) == answer].dropna()
+    expected_output.columns = [x.lower() for x in expected_output.columns]
+
+    query = f"select a from {table_name} where {sql_filter}"
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # make sure filter pushdown worked
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=expected_output,
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+        )
+
+        check_logger_msg(stream, f"Columns loaded ['a']")
+        # Each function may have different number of args,
+        # so we will just check that the SQL function got logged.
+        check_logger_msg(
+            stream,
+            f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE {sql_func.upper()}(""",
+        )
+
+
 # Dictionary mapping test case to lambda function
 # used to generate expected output for
 # test_nonregex_string_match_functions
@@ -2451,10 +2536,10 @@ nonregex_string_match_func = {
         pytest.param(("SUBSTR(A, 4, 4)", "SUBSTRING", "bodo"), id="substr"),
         pytest.param(("SUBSTRING(A, 1, 2)", "SUBSTRING", "hi"), id="substring"),
         pytest.param(
-            ("CHARINDEX(A, 'snowflake hi, hello')", "POSITION", 11), id="charindex"
+            ("CHARINDEX(A, 'snowflake hi, hello')", "CHARINDEX", 11), id="charindex"
         ),
         pytest.param(
-            ("CHARINDEX(A, 'snowflake hi, hello', 11)", "POSITION", 11),
+            ("CHARINDEX(A, 'snowflake hi, hello', 11)", "CHARINDEX", 11),
             id="charindex-start-pos",
         ),
         pytest.param(
@@ -2515,45 +2600,67 @@ def test_nonregex_string_match_functions(
         )
 
         check_logger_msg(stream, f"Columns loaded ['a']")
-        check_logger_msg(stream, "Filter pushdown successfully performed")
-        check_logger_msg(stream, sql_func)
+
+        if sql_func == "SUBSTRING":
+            # Substring is handled only through the compiler due to syntax differences
+            check_logger_msg(stream, "Filter pushdown successfully performed.")
+        else:
+            check_logger_msg(
+                stream,
+                f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE {sql_func.upper()}(""",
+            )
 
 
 @pytest.mark.parametrize(
     "test_cases",
     [
         pytest.param(
-            ("REGEXP_LIKE(A, '.*\w+-\w+.*')", ".*\w+-\w+.*", True), id="regexp_like"
+            ("REGEXP_LIKE(A, '.*\w+-\w+.*')", ".*\w+-\w+.*", True, "REGEXP_LIKE"),
+            id="regexp_like",
         ),
         pytest.param(
-            ("REGEXP_LIKE(A, '.*\w+-\w+.*', 'c')", ".*\w+-\w+.*", True),
+            ("REGEXP_LIKE(A, '.*\w+-\w+.*', 'c')", ".*\w+-\w+.*", True, "REGEXP_LIKE"),
             id="regexp_like_opt_arg",
         ),
         pytest.param(
-            ("RLIKE(A, 'bodo[sS].*')", "bodo[sS].*", True), id="regexp_like_alias_1"
+            ("RLIKE(A, 'bodo[sS].*')", "bodo[sS].*", True, "RLIKE"),
+            id="regexp_like_alias_1",
         ),
         pytest.param(
-            ("RLIKE(A, 'bodo[sS].*', 'c')", "bodo[sS].*", True),
+            ("RLIKE(A, 'bodo[sS].*', 'c')", "bodo[sS].*", True, "RLIKE"),
             id="regexp_like_alias_1_opt_args",
         ),
         pytest.param(
-            ("A REGEXP 'hi* [bB].*'", "hi* [bB].*", True), id="regexp_like_alias_2"
+            ("A REGEXP 'hi* [bB].*'", "hi* [bB].*", True, "RLIKE"),
+            id="regexp_like_alias_2",
         ),
-        pytest.param(("REGEXP_INSTR(A, '\\W+') = 3", "\\W+", 3), id="regexp_instr"),
         pytest.param(
-            ("REGEXP_INSTR(A, '\\W+', 1, 1, 0, 'i', 0) = 3", "\\W+", 3),
+            ("REGEXP_INSTR(A, '\\W+') = 3", "\\W+", 3, "REGEXP_INSTR"),
+            id="regexp_instr",
+        ),
+        pytest.param(
+            ("REGEXP_INSTR(A, '\\W+', 1, 1, 0, 'i', 0) = 3", "\\W+", 3, "REGEXP_INSTR"),
             id="regexp_instr_opt_args",
         ),
         pytest.param(
-            ("REGEXP_SUBSTR(A, 'h\\w+') = 'hi'", "h\\w+", "hi"), id="regexp_substr"
+            ("REGEXP_SUBSTR(A, 'h\\w+') = 'hi'", "h\\w+", "hi", "REGEXP_SUBSTR"),
+            id="regexp_substr",
         ),
         pytest.param(
-            ("REGEXP_SUBSTR(A, 'h\\w+', 1, 1, 'c', 0) = 'hi'", "h\\w+", "hi"),
+            (
+                "REGEXP_SUBSTR(A, 'h\\w+', 1, 1, 'c', 0) = 'hi'",
+                "h\\w+",
+                "hi",
+                "REGEXP_SUBSTR",
+            ),
             id="regexp_substr_opt_args",
         ),
-        pytest.param(("REGEXP_COUNT(A, '\\w+') = 3", "\\w+", 3), id="regexp_count"),
         pytest.param(
-            ("REGEXP_COUNT(A, '\\w+', 1, 'c') = 3", "\\w+", 3),
+            ("REGEXP_COUNT(A, '\\w+') = 3", "\\w+", 3, "REGEXP_COUNT"),
+            id="regexp_count",
+        ),
+        pytest.param(
+            ("REGEXP_COUNT(A, '\\w+', 1, 'c') = 3", "\\w+", 3, "REGEXP_COUNT"),
             id="regexp_count_opt_args",
         ),
         pytest.param(
@@ -2561,6 +2668,7 @@ def test_nonregex_string_match_functions(
                 "REGEXP_REPLACE(A, '\\w+', 'snowflake') = 'snowflake'",
                 "\\w+",
                 "snowflake",
+                "REGEXP_REPLACE",
             ),
             id="regexp_replace",
         ),
@@ -2569,6 +2677,7 @@ def test_nonregex_string_match_functions(
                 "REGEXP_REPLACE(A, '\\w+', 'snowflake', 1, 0, 'c') = 'snowflake'",
                 "\\w+",
                 "snowflake",
+                "REGEXP_REPLACE",
             ),
             id="regexp_replace_opt_args",
         ),
@@ -2581,7 +2690,7 @@ def test_nonregex_string_match_functions(
 def test_regex_string_match_functions(
     test_db_snowflake_catalog, test_cases, request, memory_leak_check
 ):
-    sql_filter, pat, answer = test_cases
+    sql_filter, pat, answer, sql_function = test_cases
 
     table_name = "STRING_DATA"
     conn_str = get_snowflake_connection_string(
@@ -2635,7 +2744,17 @@ def test_regex_string_match_functions(
         )
 
         check_logger_msg(stream, f"Columns loaded ['a']")
-        check_logger_msg(stream, "Filter pushdown successfully performed")
+        if sql_function == "RLIKE":
+            # RLIKE has a different syntax then the others, so we use a different check
+            check_logger_msg(
+                stream,
+                "RLIKE",
+            )
+        else:
+            check_logger_msg(
+                stream,
+                f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE {sql_function}(""",
+            )
 
 
 def test_snowflake_coalesce_constant_date_string_filter_pushdown(
@@ -2677,7 +2796,8 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
         )
         expected_output.columns = [x.lower() for x in expected_output.columns]
 
-        query = f"select l_quantity from {table_name} where coalesce(L_COMMITDATE, '2023-06-20') >= '2023-01-20'"
+        # Explicit type specification is needed on the constant, otherwise casting ends up blocking filter pushdown
+        query = f"select l_quantity from {table_name} where coalesce(L_COMMITDATE, TIMESTAMP '2023-06-20') >= TIMESTAMP '2023-01-20'"
 
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
@@ -2695,7 +2815,7 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                'WHERE  ( ( COALESCE(\\"L_COMMITDATE\\",',
+                f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE COALESCE(""",
             )
 
 
