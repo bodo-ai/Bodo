@@ -22,7 +22,7 @@ class PandasValues(
     }
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): PandasValues {
-        return PandasValues(cluster, getRowType(), tuples, traitSet)
+        return PandasValues(cluster, getRowType(), tuples, traitSet.replace(PandasRel.CONVENTION))
     }
 
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {

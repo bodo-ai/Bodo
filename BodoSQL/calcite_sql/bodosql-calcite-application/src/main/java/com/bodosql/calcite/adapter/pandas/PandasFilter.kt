@@ -22,11 +22,7 @@ class PandasFilter(
     traitSet: RelTraitSet,
     child: RelNode,
     condition: RexNode,
-) : FilterBase(cluster, traitSet, child, condition), PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
+) : FilterBase(cluster, traitSet.replace(PandasRel.CONVENTION), child, condition), PandasRel {
 
     override fun copy(traitSet: RelTraitSet, input: RelNode, condition: RexNode): PandasFilter {
         return PandasFilter(cluster, traitSet, input, condition)
@@ -140,10 +136,9 @@ class PandasFilter(
     companion object {
         fun create(cluster: RelOptCluster, input: RelNode, condition: RexNode): PandasFilter {
             val mq = cluster.metadataQuery
-            val traitSet = cluster.traitSet().replace(PandasRel.CONVENTION)
-                .replaceIfs(RelCollationTraitDef.INSTANCE) {
-                    RelMdCollation.filter(mq, input)
-                }
+            val traitSet = cluster.traitSet().replaceIfs(RelCollationTraitDef.INSTANCE) {
+                RelMdCollation.filter(mq, input)
+            }
             return PandasFilter(cluster, traitSet, input, condition)
         }
     }

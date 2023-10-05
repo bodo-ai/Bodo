@@ -20,11 +20,7 @@ class PandasTableScan(
     cluster: RelOptCluster,
     traitSet: RelTraitSet,
     table: RelOptTable,
-) : TableScan(cluster, traitSet, ImmutableList.of(), table), PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
+) : TableScan(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), table), PandasRel {
 
     override fun copy(traitSet: RelTraitSet, inputs: MutableList<RelNode>?): RelNode {
         return PandasTableScan(cluster, traitSet, table)
@@ -127,8 +123,7 @@ class PandasTableScan(
     companion object {
         @JvmStatic
         fun create(cluster: RelOptCluster, table: RelOptTable): PandasTableScan {
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION)
-            return PandasTableScan(cluster, traitSet, table)
+            return PandasTableScan(cluster, cluster.traitSet(), table)
         }
     }
 }

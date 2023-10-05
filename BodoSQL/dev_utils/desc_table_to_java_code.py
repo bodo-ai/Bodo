@@ -1,4 +1,4 @@
-# Helper function when copyin the schema from Snowflake to BodoSQL Java CI
+# Helper function when copying the schema from Snowflake to BodoSQL Java CI
 # basically, run describe table in the web ui, download the output, and then run this script
 # on that CSV. It will print out the Java code to copy and paste into the BodoSQL Java CI.
 

@@ -2322,7 +2322,9 @@ public class RelBuilder {
           newProjects.add(project.getProjects().get(i));
           builder.add(project.getRowType().getFieldList().get(i));
         }
-        r = project.copy(cluster.traitSet(), project.getInput(), newProjects,
+        // Bodo Change: Replace cluster.traitSet() with project.getTraitSet()
+        // to get trait information from the prior projection.
+        r = project.copy(project.getTraitSet(), project.getInput(), newProjects,
             builder.build());
       }
     }

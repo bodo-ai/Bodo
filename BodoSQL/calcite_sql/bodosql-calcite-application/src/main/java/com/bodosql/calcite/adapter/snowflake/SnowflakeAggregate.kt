@@ -21,7 +21,7 @@ class SnowflakeAggregate private constructor(
     aggCalls: List<AggregateCall>,
     private val catalogTable: CatalogTableImpl,
 ) :
-    Aggregate(cluster, traitSet, listOf(), input, groupSet, groupSets, aggCalls),
+    Aggregate(cluster, traitSet.replace(SnowflakeRel.CONVENTION), listOf(), input, groupSet, groupSets, aggCalls),
     SnowflakeRel {
 
     override fun copy(
@@ -52,8 +52,7 @@ class SnowflakeAggregate private constructor(
             aggCalls: List<AggregateCall>,
             catalogTable: CatalogTableImpl,
         ): SnowflakeAggregate {
-            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION)
-            return SnowflakeAggregate(cluster, newTraitSet, input, groupSet, groupSets, aggCalls, catalogTable)
+            return SnowflakeAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls, catalogTable)
         }
     }
 }

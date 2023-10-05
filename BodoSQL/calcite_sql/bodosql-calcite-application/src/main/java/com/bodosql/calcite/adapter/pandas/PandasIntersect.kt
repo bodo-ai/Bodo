@@ -12,11 +12,7 @@ class PandasIntersect(
     traitSet: RelTraitSet,
     inputs: List<RelNode>,
     all: Boolean,
-) : Intersect(cluster, traitSet, inputs, all), PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
+) : Intersect(cluster, traitSet.replace(PandasRel.CONVENTION), inputs, all), PandasRel {
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>, all: Boolean): PandasIntersect {
         return PandasIntersect(cluster, traitSet, inputs, all)

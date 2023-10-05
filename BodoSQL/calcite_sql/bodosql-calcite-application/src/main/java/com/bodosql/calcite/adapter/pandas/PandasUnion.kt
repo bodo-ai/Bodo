@@ -14,11 +14,7 @@ class PandasUnion(
     traitSet: RelTraitSet,
     inputs: List<RelNode>,
     all: Boolean,
-) : UnionBase(cluster, traitSet, inputs, all), PandasRel {
-
-    init {
-        assert(convention == PandasRel.CONVENTION)
-    }
+) : UnionBase(cluster, traitSet.replace(PandasRel.CONVENTION), inputs, all), PandasRel {
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>, all: Boolean): PandasUnion {
         return PandasUnion(cluster, traitSet, inputs, all)
@@ -46,8 +42,7 @@ class PandasUnion(
             inputs: List<RelNode>,
             all: Boolean,
         ): PandasUnion {
-            val traitSet = cluster.traitSet().replace(PandasRel.CONVENTION)
-            return PandasUnion(cluster, traitSet, inputs, all)
+            return PandasUnion(cluster, cluster.traitSet(), inputs, all)
         }
     }
 }
