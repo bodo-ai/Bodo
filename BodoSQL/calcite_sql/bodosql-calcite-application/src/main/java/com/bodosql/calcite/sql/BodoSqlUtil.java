@@ -1,24 +1,24 @@
 package com.bodosql.calcite.sql;
 
+import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
+
+import java.math.BigDecimal;
 import org.apache.calcite.sql.SqlNumericLiteral;
 import org.apache.calcite.sql.SqlSampleSpec;
 import org.apache.calcite.sql.SqlUtil;
 import org.apache.calcite.sql.parser.SqlParserPos;
-
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-import java.math.BigDecimal;
-
-import static org.apache.calcite.util.Static.RESOURCE;
-
 public class BodoSqlUtil {
-  /**
-   * Creates a table sample spec from the parser information.
-   */
-  public static @Nullable SqlSampleSpec createTableSample(@NonNull SqlParserPos pos,
-      boolean isBernoulli, @NonNull SqlNumericLiteral sampleRate, boolean sampleByRows,
-      boolean isRepeatable, int repeatableSeed) {
+  /** Creates a table sample spec from the parser information. */
+  public static @Nullable SqlSampleSpec createTableSample(
+      @NonNull SqlParserPos pos,
+      boolean isBernoulli,
+      @NonNull SqlNumericLiteral sampleRate,
+      boolean sampleByRows,
+      boolean isRepeatable,
+      int repeatableSeed) {
     BigDecimal rate = sampleRate.bigDecimalValue();
     if (rate == null) {
       return null;
@@ -28,20 +28,18 @@ public class BodoSqlUtil {
       final BigDecimal maxRows = BigDecimal.valueOf(1000000L);
       if (rate.compareTo(BigDecimal.ZERO) < 0 || rate.compareTo(maxRows) > 0) {
         throw SqlUtil.newContextException(
-            pos, RESOURCE.invalidSampleSize(BigDecimal.ZERO, maxRows));
+            pos, BODO_SQL_RESOURCE.invalidSampleSize(BigDecimal.ZERO, maxRows));
       }
 
       return isRepeatable
-          ? SqlTableSampleRowLimitSpec.createTableSample(
-          isBernoulli, rate, repeatableSeed)
+          ? SqlTableSampleRowLimitSpec.createTableSample(isBernoulli, rate, repeatableSeed)
           : SqlTableSampleRowLimitSpec.createTableSample(isBernoulli, rate);
     }
 
     final BigDecimal oneHundred = BigDecimal.valueOf(100L);
-    if (rate.compareTo(BigDecimal.ZERO) < 0
-        || rate.compareTo(oneHundred) > 0) {
+    if (rate.compareTo(BigDecimal.ZERO) < 0 || rate.compareTo(oneHundred) > 0) {
       throw SqlUtil.newContextException(
-          pos, RESOURCE.invalidSampleSize(BigDecimal.ZERO, oneHundred));
+          pos, BODO_SQL_RESOURCE.invalidSampleSize(BigDecimal.ZERO, oneHundred));
     }
 
     // Treat TABLESAMPLE(0) and TABLESAMPLE(100) as no table
@@ -55,8 +53,7 @@ public class BodoSqlUtil {
       return null;
     }
     return isRepeatable
-        ? SqlSampleSpec.createTableSample(
-        isBernoulli, fRate, repeatableSeed)
+        ? SqlSampleSpec.createTableSample(isBernoulli, fRate, repeatableSeed)
         : SqlSampleSpec.createTableSample(isBernoulli, fRate);
   }
 }
