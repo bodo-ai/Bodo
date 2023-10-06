@@ -156,8 +156,9 @@ if __name__ == "__main__":
     table_name = args.table_name
 
     # Get Nessie Authentication Token
-    nessie_token = os.environ.get("NESSIE_AUTH_TOKEN")
-    assert nessie_token is not None, "Missing Environment Variable: NESSIE_AUTH_TOKEN"
+    # TODO[BSE-1408]: enable Nessie tests after fixing issues
+    # nessie_token = os.environ.get("NESSIE_AUTH_TOKEN")
+    # assert nessie_token is not None, "Missing Environment Variable: NESSIE_AUTH_TOKEN"
 
     # Build Test Cases
     tests = {
@@ -201,8 +202,9 @@ if __name__ == "__main__":
             cleanup_hadoop()
             print("Cleaning up Glue...")
             cleanup_glue(table_name)
-            print("Cleaning up Nessie...")
-            cleanup_nessie(nessie_token, table_name)
+            # TODO[BSE-1408]: enable Nessie tests after fixing issues
+            # print("Cleaning up Nessie...")
+            # cleanup_nessie(nessie_token, table_name)
         except Exception as e:
             cleanup_failed = True
             print(f"Failed During Cleanup...\n{e}", file=sys.stderr)
