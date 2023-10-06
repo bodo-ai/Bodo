@@ -1,6 +1,8 @@
 package org.apache.calcite.rel.rel2sql;
 
+import com.bodosql.calcite.adapter.pandas.window.Result;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
+import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
 import com.google.common.collect.ImmutableList;
 import org.apache.calcite.adapter.jdbc.JdbcTable;
 import org.apache.calcite.plan.RelOptTable;
@@ -33,6 +35,10 @@ import static java.util.Objects.requireNonNull;
 public class BodoRelToSqlConverter extends RelToSqlConverter {
     public BodoRelToSqlConverter(SqlDialect dialect) {
         super(dialect);
+    }
+
+    public Result visit(SnowflakeToPandasConverter e){
+        return dispatch(e.getInput());
     }
 
     public Result visit(RelSubset e) {

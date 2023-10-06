@@ -2,11 +2,15 @@ package com.bodosql.calcite.adapter.snowflake
 
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeSystem
+import org.apache.calcite.sql.SqlCall
 import org.apache.calcite.sql.SqlIntervalLiteral
 import org.apache.calcite.sql.SqlIntervalLiteral.IntervalValue
+import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.dialect.SnowflakeSqlDialect
+import org.apache.calcite.sql.`fun`.SqlTrimFunction
 import org.apache.calcite.sql.type.AbstractSqlType
 import org.apache.calcite.sql.type.BodoSqlTypeUtil
 import org.apache.calcite.sql.type.SqlTypeName
@@ -106,6 +110,87 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
             return BodoSqlTypeUtil.convertTypeToSpec(type, charSet, maxPrecision, maxScale)
         }
         return BodoSqlTypeUtil.convertTypeToSpec(type)
+    }
+
+    /**
+     * UnParses a function that has the typical syntax, IE:
+     * FN_NAME(ARG0, ARG1, ARG2..)
+     *
+     * copied heavily from
+     * org.apache.calcite.sql.SqlUtil.unparseFunctionSyntax
+     */
+    private fun genericFunctionUnParse(writer: SqlWriter, fnName: String, operandList: List<SqlNode>) {
+        writer.print(fnName)
+        val frame: SqlWriter.Frame = writer.startList(SqlWriter.FrameTypeEnum.FUN_CALL, "(", ")")
+
+        for (operand in operandList) {
+            writer.sep(",")
+            operand.unparse(writer, 0, 0)
+        }
+
+        writer.endList(frame)
+    }
+
+    private fun unParseTrim(
+        writer: SqlWriter,
+        call: SqlCall,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
+        assert(call.operandCount() == 3) { "Trim has incorrect number of operands" }
+        assert(call.operandList.get(0) is SqlLiteral && (call.operandList.get(0) as SqlLiteral).value is SqlTrimFunction.Flag) { "Trim operand 0 is not a flag" }
+        val flag: SqlTrimFunction.Flag = (call.operandList.get(0) as SqlLiteral).value as SqlTrimFunction.Flag
+
+        // Snowflake syntax is: "TRIM(baseExpr, charsToTrim)"
+        // Calcite syntax is: "TRIM(BOTH charsToTrim FROM baseExpr)"
+        val argsList = listOf(call.operandList.get(2), call.operandList.get(1))
+        when (flag) {
+            SqlTrimFunction.Flag.BOTH -> genericFunctionUnParse(writer, "TRIM", argsList)
+            SqlTrimFunction.Flag.LEADING -> genericFunctionUnParse(writer, "LTRIM", argsList)
+            SqlTrimFunction.Flag.TRAILING -> genericFunctionUnParse(writer, "RTRIM", argsList)
+        }
+    }
+
+    private fun unParseSubstring(
+        writer: SqlWriter,
+        call: SqlCall,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
+        // Calcite syntax is SUBSTRING(`STRING_COLUMN` FROM 2 FOR 10)
+        // Snowflake syntax is SUBSTRING(`STRING_COLUMN`, 2, 10)
+
+        genericFunctionUnParse(writer, "SUBSTRING", call.operandList)
+    }
+
+    private fun unParseLenAlias(
+        writer: SqlWriter,
+        call: SqlCall,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
+        genericFunctionUnParse(writer, "LENGTH", call.operandList)
+    }
+
+    override fun unparseCall(
+        writer: SqlWriter,
+        call: SqlCall,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
+        when (call.kind) {
+            SqlKind.TRIM -> unParseTrim(writer, call, leftPrec, rightPrec)
+            SqlKind.OTHER_FUNCTION -> {
+                when (call.operator.name) {
+                    "SUBSTR" -> unParseSubstring(writer, call, leftPrec, rightPrec)
+                    "SUBSTRING" -> unParseSubstring(writer, call, leftPrec, rightPrec)
+                    "CHAR_LENGTH" -> unParseLenAlias(writer, call, leftPrec, rightPrec)
+                    "CHARACTER_LENGTH" -> unParseLenAlias(writer, call, leftPrec, rightPrec)
+                    else -> super.unparseCall(writer, call, leftPrec, rightPrec)
+                }
+            }
+            else -> super.unparseCall(writer, call, leftPrec, rightPrec)
+        }
     }
 
     companion object {
