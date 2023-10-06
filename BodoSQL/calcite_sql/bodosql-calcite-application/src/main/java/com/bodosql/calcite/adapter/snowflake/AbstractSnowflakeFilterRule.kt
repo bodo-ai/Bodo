@@ -118,8 +118,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             SqlKind.REVERSE,
             SqlKind.LTRIM,
             SqlKind.RTRIM,
-            // Calcite syntax differs from snowflake syntax, so we do not currently include this function
-//            SqlKind.TRIM,
+            SqlKind.TRIM,
             SqlKind.CONTAINS,
             SqlKind.COALESCE,
             SqlKind.POSITION,
@@ -165,7 +164,6 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             StringOperatorTable.STRTOK.name,
             StringOperatorTable.LENGTH.name,
             StringOperatorTable.LEN.name,
-
             ThreeOperatorStringTable.LPAD.name,
             ThreeOperatorStringTable.RPAD.name,
             SqlStdOperatorTable.TRUNCATE.name,
@@ -174,6 +172,10 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             StringOperatorTable.REVERSE.name,
             StringOperatorTable.CONTAINS.name,
             CastingOperatorTable.TO_CHAR.name,
+            SqlStdOperatorTable.SUBSTRING.name,
+            StringOperatorTable.SUBSTR.name,
+            SqlStdOperatorTable.CHARACTER_LENGTH.name,
+            SqlStdOperatorTable.CHAR_LENGTH.name,
 
             // This handles ||
             SqlStdOperatorTable.CONCAT.name,
