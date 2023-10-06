@@ -136,6 +136,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 import static org.apache.calcite.util.Static.RESOURCE;
 
 /**
@@ -710,7 +711,7 @@ SqlNode OrderByLimitOpt(SqlNode e) :
         [ OffsetClause(s, offsetFetch) ]
         {
             if (hasLimit) {
-                throw SqlUtil.newContextException(startPos, RESOURCE.duplicateLimit("LIMIT"));
+                throw SqlUtil.newContextException(startPos, BODO_SQL_RESOURCE.duplicateLimit("LIMIT"));
             }
         }
     |
@@ -724,7 +725,7 @@ SqlNode OrderByLimitOpt(SqlNode e) :
             }
             {
                 if (hasLimit) {
-                    throw SqlUtil.newContextException(startPos, RESOURCE.duplicateLimit("LIMIT"));
+                    throw SqlUtil.newContextException(startPos, BODO_SQL_RESOURCE.duplicateLimit("LIMIT"));
                 }
             }
         |
@@ -732,14 +733,14 @@ SqlNode OrderByLimitOpt(SqlNode e) :
         ]
         {
             if (hasLimit) {
-                throw SqlUtil.newContextException(startPos, RESOURCE.duplicateLimit("LIMIT"));
+                throw SqlUtil.newContextException(startPos, BODO_SQL_RESOURCE.duplicateLimit("LIMIT"));
             }
         }
     |
         FetchClause(offsetFetch)
         {
             if (hasLimit) {
-                throw SqlUtil.newContextException(startPos, RESOURCE.duplicateLimit("LIMIT"));
+                throw SqlUtil.newContextException(startPos, BODO_SQL_RESOURCE.duplicateLimit("LIMIT"));
             }
         }
     ]
@@ -2484,7 +2485,7 @@ SqlNode Tablesample(SqlNode tableRef) :
             if (rate.compareTo(BigDecimal.ZERO) < 0
                 || rate.compareTo(ONE_HUNDRED) > 0)
             {
-                throw SqlUtil.newContextException(getPos(), RESOURCE.invalidSampleSize(BigDecimal.ZERO, ONE_HUNDRED));
+                throw SqlUtil.newContextException(getPos(), BODO_SQL_RESOURCE.invalidSampleSize(BigDecimal.ZERO, ONE_HUNDRED));
             }
 
             // Treat TABLESAMPLE(0) and TABLESAMPLE(100) as no table
@@ -6574,7 +6575,7 @@ SqlNode BuiltinFunctionCall() :
                     // We require a preceding expression and no BOTH/TRAILING/LEADING flag
                     if (e == null || flag != null) {
                         throw SqlUtil.newContextException(s.end(this),
-                                                RESOURCE.genericTrimError());
+                                                BODO_SQL_RESOURCE.genericTrimError());
                     }
                     trimChars = Expression(ExprContext.ACCEPT_SUB_QUERY);
                 }
@@ -6583,7 +6584,7 @@ SqlNode BuiltinFunctionCall() :
             // Check for empty TRIM()
             if (e == null) {
                 throw SqlUtil.newContextException(s.end(this),
-                                                  RESOURCE.genericTrimError());
+                                                  BODO_SQL_RESOURCE.genericTrimError());
             }
             if (flag == null) {
                 flag = SqlTrimFunction.Flag.BOTH.symbol(SqlParserPos.ZERO);

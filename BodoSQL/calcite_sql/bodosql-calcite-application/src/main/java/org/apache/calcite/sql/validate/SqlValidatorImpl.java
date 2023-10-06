@@ -16,7 +16,6 @@
  */
 package org.apache.calcite.sql.validate;
 
-import net.snowflake.client.jdbc.internal.google.api.gax.rpc.UnimplementedException;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.linq4j.function.Functions;
 import org.apache.calcite.plan.RelOptTable;
@@ -163,7 +162,9 @@ import static org.apache.calcite.sql.type.NonNullableAccessors.getCharset;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCollation;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getCondition;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getTable;
+import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 import static org.apache.calcite.util.Static.RESOURCE;
+
 
 import static java.util.Objects.requireNonNull;
 
@@ -3124,7 +3125,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       registerNamespace(usingScope, null, createTableNs, forceNullable);
 
     } else {
-      throw newValidationError(createTable, RESOURCE.createTableRequiresAsQuery());
+      throw newValidationError(createTable, BODO_SQL_RESOURCE.createTableRequiresAsQuery());
     }
     // Store the scope of the create table node itself.
     // This will be used later during validation to resolve table aliases and/or
@@ -5104,7 +5105,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
 
     // Finally, check that the expression actually contains a windowed aggregation.
     if (!qualifyScope.checkWindowedAggregateExpr(qualify, true)) {
-      throw newValidationError(qualify, RESOURCE.qualifyRequiresWindowFn());
+      throw newValidationError(qualify, BODO_SQL_RESOURCE.qualifyRequiresWindowFn());
     }
 
     // qualify must be a boolean expression.
@@ -5116,7 +5117,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
 
     final RelDataType type = deriveType(qualifyScope, qualify);
     if (!SqlTypeUtil.inBooleanFamily(type)) {
-      throw newValidationError(qualify, RESOURCE.qualifyMustBeBoolean());
+      throw newValidationError(qualify, BODO_SQL_RESOURCE.qualifyMustBeBoolean());
 
     }
   }
@@ -5778,13 +5779,13 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     // https://bodo.atlassian.net/browse/BE-4429
 
     if (createTable.ifNotExists && createTable.getReplace()) {
-      throw newValidationError(createTable, RESOURCE.createTableInvalidSyntax());
+      throw newValidationError(createTable, BODO_SQL_RESOURCE.createTableInvalidSyntax());
     }
 
 
     final SqlNode queryNode = createTable.getQuery();
     if (queryNode == null) {
-      throw newValidationError(createTable, RESOURCE.createTableRequiresAsQuery());
+      throw newValidationError(createTable, BODO_SQL_RESOURCE.createTableRequiresAsQuery());
     }
 
     // Note, this can either a row expression or a query expression with an optional ORDER BY
@@ -5896,7 +5897,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       SqlNode matchCallAfterValidate = call.getMatchedCallList().get(i);
       if (seenUnconditionalCondition) {
         throw newValidationError(call.getMatchedCallList(),
-            RESOURCE.mergeClauseUnconditionalPrecedesConditional());
+            BODO_SQL_RESOURCE.mergeClauseUnconditionalPrecedesConditional());
       }
 
       SqlNode cond;
@@ -5921,7 +5922,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       SqlInsert insertCallAfterValidate = (SqlInsert) call.getNotMatchedCallList().get(i);
       if (seenUnconditionalCondition) {
         throw newValidationError(call.getNotMatchedCallList(),
-            RESOURCE.mergeClauseUnconditionalPrecedesConditional());
+                BODO_SQL_RESOURCE.mergeClauseUnconditionalPrecedesConditional());
       }
       validateInsert(insertCallAfterValidate);
 

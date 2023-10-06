@@ -18,7 +18,7 @@ package com.bodosql.calcite.sql.func;
 
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getOperandLiteralValueOrThrow;
-import static org.apache.calcite.util.Static.RESOURCE;
+import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 
 import java.util.Locale;
 import org.apache.calcite.avatica.util.TimeUnit;
@@ -78,7 +78,8 @@ public class BodoSqlTimestampAddFunction extends SqlFunction {
               throw opBindingWithCast
                   .getValidator()
                   .newValidationError(
-                      opBindingWithCast.getCall(), RESOURCE.wrongTimeUnit("TIMESTAMPADD", errMsg));
+                      opBindingWithCast.getCall(),
+                      BODO_SQL_RESOURCE.wrongTimeUnit("TIMESTAMPADD", errMsg));
             }
             break;
 
@@ -99,7 +100,8 @@ public class BodoSqlTimestampAddFunction extends SqlFunction {
           throw opBindingWithCast
               .getValidator()
               .newValidationError(
-                  opBindingWithCast.getCall(), RESOURCE.wrongTimeUnit("TIMESTAMPADD", errMsg));
+                  opBindingWithCast.getCall(),
+                  BODO_SQL_RESOURCE.wrongTimeUnit("TIMESTAMPADD", errMsg));
         }
         return ret;
       };
