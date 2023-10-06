@@ -370,14 +370,11 @@
                                         <exclude>org/apache/calcite/sql/validate/DelegatingScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/EmptyScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/GroupByScope.class</exclude>
-                                        <exclude>org/apache/calcite/sql/validate/IdentifierNamespace$1.class</exclude>
-                                        <exclude>org/apache/calcite/sql/validate/IdentifierNamespace.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ImmutableSqlValidator$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ImmutableSqlValidator$Config$Builder.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ImmutableSqlValidator$Config$InitShim.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ImmutableSqlValidator$Config.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ImmutableSqlValidator.class</exclude>
-                                        <exclude>org/apache/calcite/sql/validate/ListScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/OrderByScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ParameterScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/QualifyScope.class</exclude>
