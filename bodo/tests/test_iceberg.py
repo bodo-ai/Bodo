@@ -273,6 +273,7 @@ def test_simple_numeric_table_read(
     )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "table_name", ["simple_list_table", "simple_decimals_list_table"]
