@@ -1,6 +1,6 @@
 package com.bodosql.calcite.sql.func;
 
-import static org.apache.calcite.util.Static.RESOURCE;
+import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 
 import com.google.common.collect.ImmutableList;
 import java.util.List;
@@ -34,20 +34,21 @@ public class SqlNamedParameterOperator extends SqlSpecialOperator {
     // Named Param is always in the default schema with the encoded table name.
     String tableName = validator.config().namedParamTableName();
     if (tableName.isEmpty()) {
-      throw validator.newValidationError(call, RESOURCE.namedParamTableNotRegistered());
+      throw validator.newValidationError(call, BODO_SQL_RESOURCE.namedParamTableNotRegistered());
     }
     // TODO: Set caseSensitive?
     CalciteSchema.TableEntry entry =
         SqlValidatorUtil.getTableEntry(validator.getCatalogReader(), ImmutableList.of(tableName));
     if (entry == null) {
-      throw validator.newValidationError(call, RESOURCE.namedParamTableNotFound(tableName));
+      throw validator.newValidationError(
+          call, BODO_SQL_RESOURCE.namedParamTableNotFound(tableName));
     }
     Table table = entry.getTable();
     RelDataType rowStruct = table.getRowType(validator.getTypeFactory());
     // TODO: Set caseSensitive?
     RelDataTypeField typeField = rowStruct.getField(name, false, false);
     if (typeField == null) {
-      throw validator.newValidationError(call, RESOURCE.namedParamParameterNotFound(name));
+      throw validator.newValidationError(call, BODO_SQL_RESOURCE.namedParamParameterNotFound(name));
     }
     return typeField.getType();
   }

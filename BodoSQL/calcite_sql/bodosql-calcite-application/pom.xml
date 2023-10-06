@@ -305,8 +305,6 @@
                                         <exclude>org/apache/calcite/rex/RexSimplify.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable$EquivConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable.class</exclude>
-                                        <exclude>org/apache/calcite/runtime/CalciteResource.class</exclude>
-                                        <exclude>org/apache/calcite/runtime/CalciteResource.properties</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCall.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDataTypeSpec.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDelete.class</exclude>

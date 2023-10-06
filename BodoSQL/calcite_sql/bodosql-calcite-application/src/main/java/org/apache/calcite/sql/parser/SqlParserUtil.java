@@ -66,6 +66,7 @@ import java.util.Objects;
 import java.util.StringTokenizer;
 import java.util.function.Predicate;
 
+import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 import static org.apache.calcite.util.Static.RESOURCE;
 
 import static java.util.Objects.requireNonNull;
@@ -223,7 +224,7 @@ public final class SqlParserUtil {
       // TODO: Support multiple commas. We currently can't represent the
       // Interval properly.
       throw SqlUtil.newContextException(pos,
-          RESOURCE.unsupportedSnowflakeIntervalLiteral(s, pos.toString()));
+              BODO_SQL_RESOURCE.unsupportedSnowflakeIntervalLiteral(s, pos.toString()));
     }
     for (String intervalInfo: splitStrings) {
       String trimmedStr = intervalInfo.trim();
