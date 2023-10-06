@@ -15,6 +15,7 @@ import org.apache.calcite.rel.core.JoinRelType
 import org.apache.calcite.rel.hint.RelHint
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexNode
+import org.apache.calcite.util.Util
 
 abstract class JoinBase(
     cluster: RelOptCluster,
@@ -58,5 +59,9 @@ abstract class JoinBase(
         // Final cost is these three combined.
         val totalCost = conditionCost.plus(buildCost).plus(probeCost).plus(outputCost)
         return planner.makeCost(rows = rows, from = totalCost)
+    }
+
+    override fun estimateRowCount(mq: RelMetadataQuery): Double {
+        return Util.first(mq.getRowCount(this), 1.0)
     }
 }
