@@ -96,7 +96,7 @@ jobs:
 
             echo "bodoSQLCondaChannel=bodo.ai/label/dev" >> $GITHUB_OUTPUT 
             echo "bodoIcebergCondaChannel=bodo.ai/label/dev" >> $GITHUB_OUTPUT
-            echo "pythonVersion=3.10" >> $GITHUB_OUTPUT
+            echo "pythonVersion=3.11" >> $GITHUB_OUTPUT
             echo "addToBodoVersionsTable=true" >> $GITHUB_OUTPUT
 
             echo "buildName=dev${BODO_VERSION}.b${{ github.run_number }}" >> $GITHUB_OUTPUT
