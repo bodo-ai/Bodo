@@ -214,6 +214,14 @@ public interface SqlValidatorScope {
   void resolveTable(List<String> names, SqlNameMatcher nameMatcher, Path path,
       Resolved resolved, List<RelDataTypeField> extensionCols);
 
+  /**
+   * Default implementation for resolveTable with an empty extensionCols list.
+   */
+  default void resolveTable(List<String> names, SqlNameMatcher nameMatcher, Path path,
+                       Resolved resolved) {
+    resolveTable(names, nameMatcher, path, resolved, ImmutableList.of());
+  }
+
 
   /**
    * Helper function used for DDL statements. Returns the schema
