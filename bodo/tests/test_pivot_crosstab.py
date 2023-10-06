@@ -1525,7 +1525,7 @@ def test_pivot_table_multiple_index(pivot_dataframes, memory_leak_check):
         ),
     ],
 )
-
+@pytest.mark.skip("[BSE-1548] Disabling since slow and seg faults sometimes")
 # https://dev.azure.com/bodo-inc/Bodo/_test/analytics?definitionId=5&contextType=build
 # test_pivot_index_none[df0] on average takes 13.27 min, or 796.2 seconds
 @pytest.mark.slow
