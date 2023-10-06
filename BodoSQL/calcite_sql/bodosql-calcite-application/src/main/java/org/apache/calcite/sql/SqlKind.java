@@ -138,6 +138,20 @@ public enum SqlKind {
    */
   OTHER_FUNCTION,
 
+  /**
+   * Input tables have either row semantics or set semantics.
+   * <ul>
+   * <li>Row semantics means that the the result of the table function is
+   * decided on a row-by-row basis.
+   * <li>Set semantics means that the outcome of the function depends on how
+   * the data is partitioned.
+   * When the table function is called from a query, the table parameter can
+   * optionally be extended with either a PARTITION BY clause or
+   * an ORDER BY clause or both.
+   * </ul>
+   */
+  SET_SEMANTICS_TABLE,
+
   /** POSITION function. */
   POSITION,
 
@@ -167,6 +181,9 @@ public enum SqlKind {
 
   /** A named parameter used by Bodo for runtime variables. */
   NAMED_PARAM,
+
+  /** The DISTINCT keyword of the GROUP BY clause. */
+  GROUP_BY_DISTINCT,
 
   /**
    * ORDER BY clause.
@@ -695,6 +712,9 @@ public enum SqlKind {
 
   /** {@code JSON_OBJECTAGG} aggregate function. */
   JSON_OBJECTAGG,
+
+  /** {@code JSON} type function. */
+  JSON_TYPE,
 
   /** {@code UNNEST} operator. */
   UNNEST,
