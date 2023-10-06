@@ -89,7 +89,7 @@ SqlNode ColumnWithType() :
     (
         ( <NOT> <NULL> { nullable = false; } )
     |   ( <DEFAULT_> defaultExpr = Expression(ExprContext.ACCEPT_SUB_QUERY) )
-    |   ( 
+    |   (
           ( <AUTOINCREMENT> | <IDENTITY> )
           ( ( <LPAREN> incrementStart = NumericLiteral() <COMMA> incrementStep = NumericLiteral() <RPAREN> )
           | ( <START> incrementStart = NumericLiteral() <INCREMENT> incrementStep = NumericLiteral() )
@@ -99,7 +99,7 @@ SqlNode ColumnWithType() :
     )*
     {
         return new SqlSnowflakeColumnDeclaration(
-            s.add(id).end(this), 
+            s.add(id).end(this),
             id,
             type.withNullable(nullable),
             defaultExpr,
@@ -112,12 +112,15 @@ SqlNode ColumnWithType() :
 /* Parse a CLUSTER BY clause for a CREATE TABLE statement */
 SqlNodeList ClusterBy() :
 {
-List<SqlNode> clusterExprsList;
+final List<SqlNode> clusterExprsList = new ArrayList<SqlNode>();
 }
 {
-    <CLUSTER> <BY> <LPAREN> clusterExprsList = SelectList() <RPAREN>
-    { 
-        return new SqlNodeList(clusterExprsList, getPos()); 
+    <CLUSTER> <BY> <LPAREN>
+    AddSelectItem(clusterExprsList)
+    ( <COMMA> AddSelectItem(clusterExprsList) )*
+    <RPAREN>
+    {
+        return new SqlNodeList(clusterExprsList, getPos());
     }
 }
 
@@ -162,7 +165,7 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
         (
             <CLONE> query = CompoundIdentifier()
             (
-              <COPY> <GRANTS> { copyGrants = true; } 
+              <COPY> <GRANTS> { copyGrants = true; }
             )*
             {
                 return new SqlSnowflakeCreateTableClone(s.end(this), replace, tableType,
@@ -174,14 +177,14 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
          * Following qualifiers optionally allowed in any order:
          * - CLUSTER BY
          * - COPY GRANTS (if the table is being replaced)
-         * 
+         *
          * CTAS syntax
          * Column list optional
          * Following qualifiers optionally allowed in any order (before the AS clause):
          * - CLUSTER BY
          * - COPY GRANTS (if the table is being replaced)
          */
-    |    ( 
+    |    (
             [ columnList = ExtendColumnList() ]
             (
               clusterExprs = ClusterBy()
@@ -467,10 +470,10 @@ SqlNode SqlCopyInto() :
                 <SELECT>
                 sourceCols = TransformationColumns()
                 <FROM>
-                ( <AT_PARAM_IDENTIFIER>  | <INTERNAL_OR_EXTERNAL_STAGE> ) 
+                ( <AT_PARAM_IDENTIFIER>  | <INTERNAL_OR_EXTERNAL_STAGE> )
                 { sourceSource = new SqlIdentifier(token.image, getPos()); }
-                [ 
-                    sourceAlias = SimpleIdentifier() 
+                [
+                    sourceAlias = SimpleIdentifier()
                     {
                         sourceSource = SqlStdOperatorTable.AS.createCall(getPos(), sourceSource, sourceAlias);
                     }
@@ -483,7 +486,7 @@ SqlNode SqlCopyInto() :
                         new SqlNodeList(sourceCols, Span.of(sourceCols).pos()),
                         sourceSource, null, null, null, null, null, null, null, null, null);
                 }
-            ) 
+            )
         |  (
                 <FROM>
                 (
@@ -495,10 +498,10 @@ SqlNode SqlCopyInto() :
                         <SELECT>
                         sourceCols = TransformationColumns()
                         <FROM>
-                        ( <AT_PARAM_IDENTIFIER>  | <INTERNAL_OR_EXTERNAL_STAGE> ) 
+                        ( <AT_PARAM_IDENTIFIER>  | <INTERNAL_OR_EXTERNAL_STAGE> )
                         { sourceSource = new SqlIdentifier(token.image, getPos()); }
-                        [ 
-                            sourceAlias = SimpleIdentifier() 
+                        [
+                            sourceAlias = SimpleIdentifier()
                             {
                                 sourceSource = SqlStdOperatorTable.AS.createCall(getPos(), sourceSource, sourceAlias);
                             }
@@ -514,9 +517,9 @@ SqlNode SqlCopyInto() :
                     )
                     // Version 3: COPY INTO [namespace.]table_name FROM {internalStage | externalStage | externalLocation}
                 |   ( ( <AT_PARAM_IDENTIFIER>  | <INTERNAL_OR_EXTERNAL_STAGE> )
-                    { source = new SqlIdentifier(token.image, getPos()); 
+                    { source = new SqlIdentifier(token.image, getPos());
                      tableSourceType = SqlCopyIntoTable.CopyIntoTableSource.STAGE; })
-                |   ( source = StringLiteral() 
+                |   ( source = StringLiteral()
                     { tableSourceType = SqlCopyIntoTable.CopyIntoTableSource.LOCATION; } )
                 )
             )
@@ -524,14 +527,14 @@ SqlNode SqlCopyInto() :
     // The following clauses are optionally allowed in any order
     (
         <PATTERN> <EQ> pattern = StringLiteral()
-    |   <FILE_FORMAT> <EQ> fileFormat = FileFormat() 
+    |   <FILE_FORMAT> <EQ> fileFormat = FileFormat()
     )*
     {  return new SqlCopyIntoTable(getPos(), target, targetCols, tableSourceType, source, pattern, fileFormat); }
-    ) 
+    )
 |   (
         // COPY INTO <location>
         (
-            ( target = StringLiteral() 
+            ( target = StringLiteral()
             { locationTargetType = SqlCopyIntoLocation.CopyIntoLocationTarget.LOCATION; } )
         |   ( ( <AT_PARAM_IDENTIFIER>  | <INTERNAL_OR_EXTERNAL_STAGE> )
             { target = new SqlIdentifier(token.image, getPos());
@@ -540,20 +543,20 @@ SqlNode SqlCopyInto() :
         <FROM>
         // The source is either a table or a query
         (
-            ( source = CompoundIdentifier() 
+            ( source = CompoundIdentifier()
             { locationSourceType = SqlCopyIntoLocation.CopyIntoLocationSource.TABLE; } )
-        |   ( <LPAREN> source = SqlSelect() <RPAREN> 
+        |   ( <LPAREN> source = SqlSelect() <RPAREN>
             { locationSourceType = SqlCopyIntoLocation.CopyIntoLocationSource.QUERY; } )
         )
         // The following clauses are optionally allowed in any order
         (
             <PARTITION> <BY> partition = Expression(ExprContext.ACCEPT_NON_QUERY)
-        |   <FILE_FORMAT> <EQ> fileFormat = FileFormat() 
+        |   <FILE_FORMAT> <EQ> fileFormat = FileFormat()
         )*
         {  return new SqlCopyIntoLocation(getPos(), locationTargetType, target, locationSourceType, source, partition, fileFormat); }
     )
 )
-    
+
 }
 
 SqlAlterTable SqlAlterTable() :
@@ -572,15 +575,15 @@ SqlAlterTable SqlAlterTable() :
     ifExists = IfExistsOpt()
     table = CompoundIdentifier()
     (
-        ( <RENAME> <TO> renameName = SimpleIdentifier() 
+        ( <RENAME> <TO> renameName = SimpleIdentifier()
         { return new SqlAlterTableRenameTable(getPos(), ifExists, table, renameName); })
-    |   ( <SWAP> <WITH> swapName = CompoundIdentifier() 
+    |   ( <SWAP> <WITH> swapName = CompoundIdentifier()
         { return new SqlAlterTableSwapTable(getPos(), ifExists, table, swapName); })
-    |   ( <ADD> [ <COLUMN> ] addCol = ColumnWithType() 
+    |   ( <ADD> [ <COLUMN> ] addCol = ColumnWithType()
         { return new SqlAlterTableAddCol(getPos(), ifExists, table, addCol); })
-    |   ( <RENAME> [ <COLUMN> ] renameColOriginal = SimpleIdentifier() <TO> renameColNew = SimpleIdentifier() 
+    |   ( <RENAME> [ <COLUMN> ] renameColOriginal = SimpleIdentifier() <TO> renameColNew = SimpleIdentifier()
         { return new SqlAlterTableRenameCol(getPos(), ifExists, table, renameColOriginal, renameColNew); })
-    |   ( <DROP> [ <COLUMN> ] { dropCols = new SqlNodeList(getPos()); } SimpleIdentifierCommaList(dropCols)
+    |   ( <DROP> [ <COLUMN> ] { dropCols = new SqlNodeList(getPos()); } AddSimpleIdentifiers(dropCols)
         { return new SqlAlterTableDropCol(getPos(), ifExists, table, dropCols); })
     )
 }
@@ -698,5 +701,5 @@ SqlDrop SqlDropView(Span s, boolean replace) :
 //         checkNonQueryExpression(exprContext);
 //         list.add(new SqlParserUtil.ToTreeListItem(SqlLibraryOperators.NULL_SAFE_EQUAL, getPos()));
 //     }
-//     Expression2b(ExprContext.ACCEPT_SUB_QUERY, list)
+//     AddExpression2b(ExprContext.ACCEPT_SUB_QUERY, list)
 // }

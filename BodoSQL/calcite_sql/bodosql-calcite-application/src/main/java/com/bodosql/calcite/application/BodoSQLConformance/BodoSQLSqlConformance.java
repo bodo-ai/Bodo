@@ -1,24 +1,12 @@
 package com.bodosql.calcite.application.BodoSQLConformance;
 
-import org.apache.calcite.sql.fun.SqlLibrary;
 import org.apache.calcite.sql.validate.SqlAbstractConformance;
-import org.apache.calcite.sql.validate.SqlConformanceEnum;
 
-/** SQL Conformance that applies the default except where explicitly overridden. */
+/**
+ * SQL Conformance that matches the SqlAbstractConformance default except where explicitly
+ * overridden.
+ */
 public class BodoSQLSqlConformance extends SqlAbstractConformance {
-
-  // Default value used if we haven't set the conformance.
-  private SqlConformanceEnum defaultConformance = SqlConformanceEnum.DEFAULT;
-
-  @Override
-  public boolean isLiberal() {
-    return defaultConformance.isLiberal();
-  }
-
-  @Override
-  public boolean allowCharLiteralAlias() {
-    return defaultConformance.allowCharLiteralAlias();
-  }
 
   /**
    * Allow using an alias in groupby
@@ -70,26 +58,6 @@ public class BodoSQLSqlConformance extends SqlAbstractConformance {
     return true;
   }
 
-  @Override
-  public boolean isSortByAliasObscures() {
-    return defaultConformance.isSortByAliasObscures();
-  }
-
-  @Override
-  public boolean isFromRequired() {
-    return defaultConformance.isFromRequired();
-  }
-
-  @Override
-  public boolean splitQuotedTableName() {
-    return defaultConformance.splitQuotedTableName();
-  }
-
-  @Override
-  public boolean allowHyphenInUnquotedTableName() {
-    return defaultConformance.allowHyphenInUnquotedTableName();
-  }
-
   /**
    * Allow !=
    *
@@ -110,51 +78,6 @@ public class BodoSQLSqlConformance extends SqlAbstractConformance {
     return true;
   }
 
-  @Override
-  public boolean isMinusAllowed() {
-    return defaultConformance.isMinusAllowed();
-  }
-
-  @Override
-  public boolean isApplyAllowed() {
-    return defaultConformance.isApplyAllowed();
-  }
-
-  @Override
-  public boolean isInsertSubsetColumnsAllowed() {
-    return defaultConformance.isInsertSubsetColumnsAllowed();
-  }
-
-  @Override
-  public boolean allowAliasUnnestItems() {
-    return defaultConformance.allowAliasUnnestItems();
-  }
-
-  @Override
-  public boolean allowNiladicParentheses() {
-    return defaultConformance.allowNiladicParentheses();
-  }
-
-  @Override
-  public boolean allowExplicitRowValueConstructor() {
-    return defaultConformance.allowExplicitRowValueConstructor();
-  }
-
-  @Override
-  public boolean allowExtend() {
-    return defaultConformance.allowExtend();
-  }
-
-  @Override
-  public boolean isLimitStartCountAllowed() {
-    return defaultConformance.isLimitStartCountAllowed();
-  }
-
-  @Override
-  public boolean allowGeometry() {
-    return defaultConformance.allowGeometry();
-  }
-
   /**
    * Convert multiple chars to Varying
    *
@@ -165,11 +88,6 @@ public class BodoSQLSqlConformance extends SqlAbstractConformance {
     return true;
   }
 
-  @Override
-  public boolean allowExtendedTrim() {
-    return defaultConformance.allowExtendedTrim();
-  }
-
   /**
    * Allow time usnits ending in s
    *
@@ -178,15 +96,5 @@ public class BodoSQLSqlConformance extends SqlAbstractConformance {
   @Override
   public boolean allowPluralTimeUnits() {
     return true;
-  }
-
-  @Override
-  public boolean allowQualifyingCommonColumn() {
-    return defaultConformance.allowQualifyingCommonColumn();
-  }
-
-  @Override
-  public SqlLibrary semantics() {
-    return defaultConformance.semantics();
   }
 }

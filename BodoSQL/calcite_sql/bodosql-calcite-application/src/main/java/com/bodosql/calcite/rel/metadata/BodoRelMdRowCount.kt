@@ -3,7 +3,6 @@ package com.bodosql.calcite.rel.metadata
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.core.Aggregate
 import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
 import org.apache.calcite.rel.core.Sort
@@ -42,27 +41,6 @@ class BodoRelMdRowCount : RelMdRowCount() {
             // Otherwise, just use the default
             super.getRowCount(rel, mq)
         }
-    }
-
-    /**
-     * Note this is the aggregate implementation on version 1.35 of Calcite.
-     * TODO: Upgrade and remove.
-     */
-    override fun getRowCount(rel: Aggregate, mq: RelMetadataQuery): Double? {
-        val groupKey = rel.groupSet
-        if (groupKey.isEmpty) {
-            // Aggregate with no GROUP BY always returns 1 row (even on empty table).
-            return 1.0
-        }
-        // rowCount is the cardinality of the group by columns
-        var distinctRowCount = mq.getDistinctRowCount(rel.input, groupKey, null)
-        if (distinctRowCount == null) {
-            distinctRowCount = mq.getRowCount(rel.input) / 10
-        }
-
-        // Grouping sets multiply
-        distinctRowCount *= rel.getGroupSets().size.toDouble()
-        return distinctRowCount
     }
 
     fun getRowCount(rel: SnowflakeFilter, mq: RelMetadataQuery?): Double? {
