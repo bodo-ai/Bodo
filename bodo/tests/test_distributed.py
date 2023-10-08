@@ -2323,6 +2323,26 @@ def get_random_int64index(n):
             ),
             marks=pytest.mark.slow,
         ),
+        pytest.param(
+            np.array(
+                [
+                    ["AB", "ABC"],
+                    ["a1", "a2"],
+                    None,
+                    ["a", "bb", None, "ccc"],
+                    [],
+                    ["d1", "d12"],
+                    [None],
+                    ["E"],
+                    ["f"],
+                    ["12", "3"],
+                    None,
+                ]
+                * 2,
+                dtype=object,
+            ),
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_scatterv_gatherv_allgatherv_python(data, memory_leak_check):
