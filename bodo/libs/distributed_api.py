@@ -733,17 +733,29 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
         return gatherv_impl
 
-    if is_str_arr_type(data):
+    if data == bodo.string_array_type:
 
         def gatherv_str_arr_impl(
             data, allgather=False, warn_if_rep=True, root=MPI_ROOT
         ):  # pragma: no cover
-            data = decode_if_dict_array(data)
             # call gatherv() on underlying array(item) array
             all_data = bodo.gatherv(data._data, allgather, warn_if_rep, root)
             return bodo.libs.str_arr_ext.init_str_arr(all_data)
 
         return gatherv_str_arr_impl
+
+    if data == bodo.dict_str_arr_type:
+
+        def gatherv_dict_arr_impl(
+            data, allgather=False, warn_if_rep=True, root=MPI_ROOT
+        ):  # pragma: no cover
+            # gather data as string for simplicity (but return dict to have proper type)
+            # TODO[BSE-1567]: use the C++ implementation which keeps data as dict
+            str_data = decode_if_dict_array(data)
+            all_data = bodo.gatherv(str_data, allgather, warn_if_rep, root)
+            return bodo.libs.str_arr_ext.str_arr_to_dict_str_arr(all_data)
+
+        return gatherv_dict_arr_impl
 
     if data == binary_array_type:
 
@@ -1103,54 +1115,18 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             "set_table_len": bodo.hiframes.table.set_table_len,
             "alloc_list_like": bodo.hiframes.table.alloc_list_like,
             "init_table": bodo.hiframes.table.init_table,
-            "decode_if_dict_ary": bodo.hiframes.table.init_table,
         }
         func_text = f"def impl_table(data, allgather=False, warn_if_rep=True, root={MPI_ROOT}):\n"
         func_text += "  T = data\n"
-        # Gatherv will decode dictionary encoded string arrays. Therefore, the output table of gatherv
-        # will need to decode dict encoded string arrays
-        func_text += "  T2 = init_table(T, True)\n"
-        # Because of this, in the output table type may have different types/blocks then the input table type
-        out_table_type = bodo.hiframes.table.get_init_table_output_type(data, True)
+        func_text += "  T2 = init_table(T, False)\n"
 
-        input_table_has_str_and_dict_encoded_str = (
-            bodo.string_array_type in data.type_to_blk
-            and bodo.dict_str_arr_type in data.type_to_blk
-        )
-
-        if input_table_has_str_and_dict_encoded_str:
-            func_text += (
-                bodo.hiframes.table.gen_str_and_dict_enc_cols_to_one_block_fn_txt(
-                    data, out_table_type, glbls, True
-                )
-            )
         for typ, input_blk in data.type_to_blk.items():
-            # Output block may be different from input block in certain cases.
-            # Specifically, if the input table has a string and dict encoded string block,
-            # which will be fused in the output table block.
-
-            if input_table_has_str_and_dict_encoded_str and typ in (
-                bodo.string_array_type,
-                bodo.dict_str_arr_type,
-            ):
-                # Skip these, since we handle them above in this case
-                continue
-            elif typ == bodo.dict_str_arr_type:
-                assert (
-                    bodo.string_array_type in out_table_type.type_to_blk
-                ), "Error in gatherv: If encoded string type is present in the input, then non-encoded string type should be present in the output"
-                output_blk = out_table_type.type_to_blk[bodo.string_array_type]
-            else:
-                assert (
-                    typ in out_table_type.type_to_blk
-                ), "Error in gatherv: All non-encoded string types present in the input should be present in the output"
-                output_blk = out_table_type.type_to_blk[typ]
-
+            output_blk = data.type_to_blk[typ]
             glbls[f"arr_inds_{input_blk}"] = np.array(
                 data.block_to_arr_ind[input_blk], dtype=np.int64
             )
             func_text += f"  arr_list_{input_blk} = get_table_block(T, {input_blk})\n"
-            func_text += f"  out_arr_list_{input_blk} = alloc_list_like(arr_list_{input_blk}, len(arr_list_{input_blk}), True)\n"
+            func_text += f"  out_arr_list_{input_blk} = alloc_list_like(arr_list_{input_blk}, len(arr_list_{input_blk}), False)\n"
             func_text += f"  for i in range(len(arr_list_{input_blk})):\n"
             func_text += f"    arr_ind_{input_blk} = arr_inds_{input_blk}[i]\n"
             func_text += f"    ensure_column_unboxed(T, arr_list_{input_blk}, i, arr_ind_{input_blk})\n"
