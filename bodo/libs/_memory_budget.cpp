@@ -25,10 +25,9 @@ void OperatorComptroller::SetMemoryBudget(int64_t pipeline_id, size_t budget) {
     pipeline_remaining_budget[pipeline_id] = budget;
 }
 
-void OperatorComptroller::RegisterOperator(int64_t operator_id,
-                                           int64_t min_pipeline_id,
-                                           int64_t max_pipeline_id,
-                                           size_t estimate) {
+void OperatorComptroller::RegisterOperator(
+    int64_t operator_id, [[maybe_unused]] OperatorType operator_type,
+    int64_t min_pipeline_id, int64_t max_pipeline_id, size_t estimate) {
     if (num_operators < (operator_id + 1)) {
         // We have to do this resize here, because we are currently writing to
         // the requests_per_operator map.
@@ -201,14 +200,15 @@ void init_operator_comptroller() {
     OperatorComptroller::Default()->Initialize();
 }
 
-void register_operator(int64_t operator_id, int64_t min_pipeline_id,
-                       int64_t max_pipeline_id, int64_t estimate) {
+void register_operator(int64_t operator_id, int64_t operator_type,
+                       int64_t min_pipeline_id, int64_t max_pipeline_id,
+                       int64_t estimate) {
     if (estimate < 0) {
         estimate = bodo::BufferPool::Default()->get_memory_size_bytes();
     }
     OperatorComptroller::Default()->RegisterOperator(
-        operator_id, min_pipeline_id, max_pipeline_id,
-        static_cast<size_t>(estimate));
+        operator_id, static_cast<OperatorType>(operator_type), min_pipeline_id,
+        max_pipeline_id, static_cast<size_t>(estimate));
 }
 
 void increment_pipeline_id() {
