@@ -130,6 +130,16 @@ class GroupbyPartition {
     // Note that in the accumulation case, the "running values" is instead the
     // entire input table.
     std::unique_ptr<TableBuildBuffer> build_table_buffer;
+    /// @brief This is the number of rows that have been "safely"
+    /// appended to the build_table_buffer. This is only relevant in the AGG
+    /// case and only when the partition is active. This is used in
+    /// SplitPartition to only split the first build_safely_appended_groups rows
+    /// of the build_table_buffer. This is required since there might
+    /// be a memory error during "UpdateGroupsAndCombine" which might happen
+    /// _after_ we've appended to the build_table_buffer. In those
+    /// cases, the append will be retried, so we need to ensure that
+    /// previous incomplete append is invalidated.
+    size_t build_safely_appended_groups = 0;
 
     // Chunked append-only buffer, only used if a partition is inactive and
     // not yet finalized
@@ -251,15 +261,6 @@ class GroupbyPartition {
         size_t num_levels = 1);
 
     /**
-     * @brief Activate this partition as part of the FinalizeBuild process.
-     * If the partition is inactive, this simply moves the data from
-     * build_table_buffer_chunked to build_table_buffer. We then mark the
-     * partition as active
-     *
-     */
-    void ActivatePartition();
-
-    /**
      * @brief Finalize this partition and return its output.
      * This will also clear the build state (i.e. all memory
      * associated with the logical hash table).
@@ -294,6 +295,33 @@ class GroupbyPartition {
     bodo::OperatorBufferPool* const op_pool;
     /// @brief Memory manager instance for op_pool.
     const std::shared_ptr<::arrow::MemoryManager> op_mm;
+
+    /**
+     * @brief Add rows from build_table_buffer into the hash table. This
+     * computes hashes for all rows in the build_table_buffer that don't already
+     * have hashes and then adds rows starting from 'next_group', up to the
+     * size of the build_table_buffer to the hash table.
+     * This function is idempotent.
+     * This is only used in the AGG case and is only called from
+     * UpdateGroupsAndCombine.
+     *
+     */
+    inline void RebuildHashTableFromBuildBuffer();
+
+    /**
+     * @brief Activate this partition as part of the FinalizeBuild process.
+     * In the ACC case, if the partition is inactive, this simply moves the data
+     * from build_table_buffer_chunked to build_table_buffer. We then mark the
+     * partition as active.
+     * In the AGG case, if the partition is inactive, this will call
+     * UpdateGroupsAndCombine on the chunks in build_table_buffer_chunked. The
+     * chunks in build_table_buffer_chunked are only freed and the partition is
+     * only marked as active if UpdateGroupsAndCombine was successful on all
+     * chunks. This ensures that in case of a OperatorPoolThresholdError, we can
+     * simply re-partition and retry.
+     *
+     */
+    void ActivatePartition();
 
     /**
      * @brief Clear the "build" state. This releases
@@ -463,6 +491,11 @@ class GroupbyState {
      * NOTE: Only used in the aggregating code path (i.e.
      * accumulate_before_update = false)
      *
+     * In case of a threshold enforcement error, this process is retried after
+     * splitting the 0th partition (which is only one that the enforcement error
+     * could've come from). This is done until we successfully append the batch
+     * or we go over max partition depth while splitting the 0th partition.
+     *
      * @param in_table Input batch to update and combine using.
      * @param partitioning_hashes Partitioning hashes for the records.
      * @param batch_hashes_groupby Groupby hashes for the input batch records.
@@ -594,14 +627,13 @@ class GroupbyState {
      */
     void DisablePartitioning();
 
-    // Temporarily public for testing.
-    /**
-     * @brief Split the partition at index 'idx' into two partitions.
-     * This must only be called in the event of a threshold enforcement error.
-     *
-     * @param idx Index of the partition (in this->partitions) to split.
-     */
-    void SplitPartition(size_t idx);
+    /// @brief Get the number of bytes allocated through this Groupby operator's
+    /// OperatorBufferPool that are currently pinned.
+    uint64_t op_pool_bytes_pinned() const;
+
+    /// @brief Get the number of bytes that are currently allocated through this
+    /// Groupby operator's OperatorBufferPool.
+    uint64_t op_pool_bytes_allocated() const;
 
     /// @brief Get the number of bytes allocated through this Groupby operator's
     /// OperatorBufferPool that are currently pinned.
@@ -625,8 +657,16 @@ class GroupbyState {
         std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
         std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes, int ftype);
 
+    /**
+     * @brief Split the partition at index 'idx' into two partitions.
+     * This must only be called in the event of a threshold enforcement error.
+     *
+     * @param idx Index of the partition (in this->partitions) to split.
+     */
+    void SplitPartition(size_t idx);
+
     /// @brief Helpers for AppendBuildBatch with most of the core logic
-    /// for appending a build side batch to the Join state. These are the
+    /// for appending a build batch to the Groupby state. These are the
     /// functions that are retried in AppendBuildBatch in case the 0th partition
     /// needs to be split to fit within the memory threshold assigned to this
     /// partition.
@@ -638,6 +678,22 @@ class GroupbyState {
     void AppendBuildBatchHelper(
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes);
+
+    /// @brief Helpers for UpdateGroupsAndCombine with most of the core logic
+    /// for appending a build batch to the Groupby state. These are the
+    /// functions that are retried in UpdateGroupsAndCombine in case the 0th
+    /// partition needs to be split to fit within the memory threshold assigned
+    /// to this partition.
+    void UpdateGroupsAndCombineHelper(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+        const std::shared_ptr<uint32_t[]>& batch_hashes_groupby);
+
+    void UpdateGroupsAndCombineHelper(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+        const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
+        const std::vector<bool>& append_rows);
 
     /**
      * @brief Clear the "shuffle" state. This releases

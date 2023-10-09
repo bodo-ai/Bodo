@@ -360,7 +360,8 @@ GroupbyPartition::GroupbyPartition(
       build_table_dict_builders(build_table_dict_builders_),
       build_hash_table(std::make_unique<hash_table_t>(
           0, HashGroupbyTable<true>(this, nullptr),
-          KeyEqualGroupbyTable<true>(this, nullptr, n_keys_))),
+          KeyEqualGroupbyTable<true>(this, nullptr, n_keys_), op_pool_)),
+      build_table_groupby_hashes(op_pool_),
       col_sets(col_sets_),
       f_in_offsets(f_in_offsets_),
       f_in_cols(f_in_cols_),
@@ -400,16 +401,53 @@ inline bool GroupbyPartition::is_in_partition(const uint32_t& hash) const {
     }
 }
 
+inline void GroupbyPartition::RebuildHashTableFromBuildBuffer() {
+    // First compute the join hashes:
+    size_t build_table_nrows = this->build_table_buffer->data_table->nrows();
+    size_t hashes_cur_len = this->build_table_groupby_hashes.size();
+    size_t n_unhashed_rows = build_table_nrows - hashes_cur_len;
+    if (n_unhashed_rows > 0) {
+        // Compute hashes for the un-hashed rows.
+        // TODO: Do this processing in batches of 4K/batch_size rows (for
+        // handling inactive partition case where we will do this for the entire
+        // table)!
+        std::unique_ptr<uint32_t[]> hashes = hash_keys_table(
+            this->build_table_buffer->data_table, this->n_keys,
+            SEED_HASH_GROUPBY_SHUFFLE,
+            /*is_parallel*/ false,
+            /*global_dict_needed*/ false, /*dict_hashes*/ nullptr,
+            /*start_row_offset*/ hashes_cur_len);
+        // Append the hashes:
+        this->build_table_groupby_hashes.insert(
+            this->build_table_groupby_hashes.end(), hashes.get(),
+            hashes.get() + n_unhashed_rows);
+    }
+
+    // Add entries to the hash table. All rows in the build_table_buffer
+    // are guaranteed to be unique groups, so we can just map group -> group.
+    while (this->next_group < static_cast<int64_t>(build_table_nrows)) {
+        (*(this->build_hash_table))[this->next_group] = this->next_group;
+        this->next_group++;
+    }
+}
+
 template <bool is_active>
 void GroupbyPartition::UpdateGroupsAndCombine(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& batch_hashes_groupby) {
     if (is_active) {
+        /// Start "transaction":
+
+        // Idempotent. This will be a NOP unless we're re-trying this step
+        // after a partition split.
+        this->RebuildHashTableFromBuildBuffer();
+
         // set state batch input
         this->in_table = in_table;
         this->in_table_hashes = batch_hashes_groupby;
 
-        // Reserve space in buffers for potential new groups.
+        // Reserve space in buffers for potential new groups. This will be a NOP
+        // if we already have sufficient space.
         // Note that if any of the keys/running values are strings, they always
         // go through the accumulate path.
         // TODO[BSE-616]: support variable size output like strings
@@ -424,11 +462,12 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         grp_info.row_to_group.resize(in_table->nrows(), -1);
         // Get current size of the buffers to know starting offset of new
         // keys which need output data column initialization.
-        // update_groups_helper will update this->shuffle_next_group in place,
+        // update_groups_helper will update this->next_group in place,
         // so we need to cache it beforehand.
         int64_t init_start_row = this->next_group;
 
-        // Add new groups and get group mappings for input batch
+        // Add new groups and get group mappings for input batch. This will
+        // make allocations that could invoke the threshold enforcement error.
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             update_groups_helper</*is_local*/ true>(
                 *(this->build_table_buffer), this->build_table_groupby_hashes,
@@ -436,10 +475,19 @@ void GroupbyPartition::UpdateGroupsAndCombine(
                 grp_info, in_table, batch_hashes_groupby, i_row);
         }
 
-        // Combine existing (and new) keys using the input batch
+        // Combine existing (and new) keys using the input batch.
+        // Since we're not passing in anything that can access the op-pool,
+        // this shouldn't make any additional allocations that go through the
+        // Operator Pool and hence cannot invoke the threshold enforcement
+        // error.
         combine_input_table_helper(
             in_table, grp_info, this->build_table_buffer->data_table,
             this->f_running_value_offsets, this->col_sets, init_start_row);
+
+        /// Commit "transaction". Only update this after all the groups
+        /// have been updated and combined and after the hash table,
+        /// the build buffer and hashes are all up to date.
+        this->build_safely_appended_groups = this->next_group;
 
         // Reset temporary references
         this->in_table.reset();
@@ -456,11 +504,18 @@ void GroupbyPartition::UpdateGroupsAndCombine(
     const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
     const std::vector<bool>& append_rows) {
     if (is_active) {
+        /// Start "transaction":
+
+        // Idempotent. This will be a NOP unless we're re-trying this step
+        // after a partition split.
+        this->RebuildHashTableFromBuildBuffer();
+
         // set state batch input
         this->in_table = in_table;
         this->in_table_hashes = batch_hashes_groupby;
 
-        // Reserve space in buffers for potential new groups.
+        // Reserve space in buffers for potential new groups. This will be a NOP
+        // if we already have sufficient space.
         // Note that if any of the keys/running values are strings, they always
         // go through the accumulate path.
         // TODO[BSE-616]: support variable size output like strings
@@ -475,11 +530,12 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         grp_info.row_to_group.resize(in_table->nrows(), -1);
         // Get current size of the buffers to know starting offset of new
         // keys which need output data column initialization.
-        // update_groups_helper will update this->shuffle_next_group in place,
+        // update_groups_helper will update this->next_group in place,
         // so we need to cache it beforehand.
         int64_t init_start_row = this->next_group;
 
-        // Add new groups and get group mappings for input batch
+        // Add new groups and get group mappings for input batch. This will
+        // make allocations that could invoke the threshold enforcement error.
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             if (append_rows[i_row]) {
                 update_groups_helper</*is_local*/ true>(
@@ -490,10 +546,19 @@ void GroupbyPartition::UpdateGroupsAndCombine(
             }
         }
 
-        // Combine existing (and new) keys using the input batch
+        // Combine existing (and new) keys using the input batch.
+        // Since we're not passing in anything that can access the op-pool,
+        // this shouldn't make any additional allocations that go through the
+        // Operator Pool and hence cannot invoke the threshold enforcement
+        // error.
         combine_input_table_helper(
             in_table, grp_info, this->build_table_buffer->data_table,
             this->f_running_value_offsets, this->col_sets, init_start_row);
+
+        /// Commit "transaction". Only update this after all the groups
+        /// have been updated and combined and after the hash table,
+        /// the build buffer and hashes are all up to date.
+        this->build_safely_appended_groups = this->next_group;
 
         // Reset temporary references
         this->in_table.reset();
@@ -540,12 +605,6 @@ void GroupbyPartition::AppendBuildBatch(
 template <bool is_active>
 std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
     size_t num_levels) {
-    if (!this->accumulate_before_update) {
-        throw std::runtime_error(
-            "GroupbyPartition::SplitPartition: Splitting partitions is not yet "
-            "supported in the Agg case.");
-    }
-
     if (num_levels != 1) {
         throw std::runtime_error(
             "GroupbyPartition::SplitPartition: We currently only support "
@@ -557,7 +616,7 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             "Cannot split the partition further. Out of hash bits.");
     }
 
-    // Release hash-table memory (technically not required in the acc case)
+    // Release hash-table memory.
     this->build_hash_table.reset();
 
     // Get dictionary hashes from the dict-builders of build table.
@@ -606,8 +665,17 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
         append_partition1.resize(this->build_table_buffer->data_table->nrows(),
                                  false);
 
-        for (size_t i_row = 0;
-             i_row < this->build_table_buffer->data_table->nrows(); i_row++) {
+        // In the agg case, we will only append the entries until
+        // build_safely_appended_groups. If there are more entries in the
+        // build_table_buffer, this means we triggered this partition split in
+        // the middle of an UpdateGroupsAndCombine step. That means that those
+        // entries weren't added safely and will be retried. Therefore, we will
+        // skip those entries here (and leave their default to false).
+        size_t rows_to_insert =
+            this->accumulate_before_update
+                ? this->build_table_buffer->data_table->nrows()
+                : this->build_safely_appended_groups;
+        for (size_t i_row = 0; i_row < rows_to_insert; i_row++) {
             append_partition1[i_row] = new_part1->is_in_partition(
                 build_table_partitioning_hashes[i_row]);
         }
@@ -616,7 +684,34 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
         uint64_t append_partition1_sum = std::accumulate(
             append_partition1.begin(), append_partition1.end(), (uint64_t)0);
 
-        // Reserve space for append
+        if (!this->accumulate_before_update) {
+            // In the AGG case, we also need to populate the hashes.
+
+            // Reserve space in hashes vector. This doesn't inhibit
+            // exponential growth since we're only doing it at the start.
+            // Future appends will still allow for regular exponential growth.
+            new_part1->build_table_groupby_hashes.reserve(
+                append_partition1_sum);
+
+            // Copy the hash values to the new active partition. We might
+            // not have hashes for every row, so copy over whatever we can.
+            // Subsequent RebuildHashTableFromBuildBuffer steps will compute
+            // the rest. We drop the hashes that would go to the new
+            // inactive partition for now and we will re-compute them later
+            // when needed.
+            size_t n_hashes_to_copy_over =
+                std::min(this->build_safely_appended_groups,
+                         this->build_table_groupby_hashes.size());
+            for (size_t i_row = 0; i_row < n_hashes_to_copy_over; i_row++) {
+                if (append_partition1[i_row]) {
+                    new_part1->build_table_groupby_hashes.push_back(
+                        this->build_table_groupby_hashes[i_row]);
+                }
+            }
+        }
+
+        // Reserve space for append (append_partition1 already accounts for
+        // build_safely_appended_groups)
         new_part1->build_table_buffer->ReserveTable(
             this->build_table_buffer->data_table, append_partition1,
             append_partition1_sum);
@@ -624,11 +719,40 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->build_table_buffer->data_table, append_partition1,
             append_partition1_sum);
 
+        if (!this->accumulate_before_update) {
+            // Update safely appended group count for the new active partition
+            // in the AGG case.
+            new_part1->build_safely_appended_groups = append_partition1_sum;
+            // XXX Technically, we could store similar information even in the
+            // new inactive partition. That would let us add some number of
+            // rows to the build-table directly upfront during
+            // ActivatePartition. e.g. In this case, we could tell the inactive
+            // partition that the first (build_safely_appended_groups -
+            // append_partition1_sum) many rows are guaranteed to be unique. The
+            // information could even be propagated in the case we're splitting
+            // an inactive partition (keep track of how many of the first
+            // build_safely_appended_groups rows are going to the new
+            // partitions).
+        }
+
         append_partition1.flip();
         std::vector<bool>& append_partition2 = append_partition1;
 
+        if (!this->accumulate_before_update) {
+            // The rows between this->build_safely_appended_groups
+            // and this->build_table_buffer.data_table->nrows() shouldn't
+            // be copied over to either partition:
+            for (size_t i = this->build_safely_appended_groups;
+                 i < append_partition2.size(); i++) {
+                append_partition2[i] = false;
+            }
+        }
+
         new_part2->build_table_buffer_chunked->AppendBatch(
             this->build_table_buffer->data_table, append_partition2);
+
+        // We do not rebuild the hash table here (for new_part1 which is the new
+        // active partition). That needs to be handled by the caller.
     } else {
         // In the inactive case, partition build_table_buffer_chunked chunk by
         // chunk
@@ -636,6 +760,8 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
         // Just in case we started the activation and some columns
         // reserved memory during ActivatePartition.
         this->build_table_buffer.reset();
+        this->build_table_groupby_hashes.resize(0);
+        this->build_table_groupby_hashes.shrink_to_fit();
 
         while (!this->build_table_buffer_chunked->chunks.empty()) {
             auto [build_table_chunk, build_table_nrows_chunk] =
@@ -679,8 +805,6 @@ void GroupbyPartition::ActivatePartition() {
         return;
     }
 
-    /// Concatenate all build chunks into contiguous build buffer
-
     // Finalize the chunked table builder:
     this->build_table_buffer_chunked->Finalize();
 
@@ -689,16 +813,45 @@ void GroupbyPartition::ActivatePartition() {
         this->build_arr_c_types, this->build_arr_array_types,
         this->build_table_dict_builders, this->op_pool, this->op_mm);
 
-    // Do a single ReserveTable call to allocate all required space in a
-    // single call:
-    this->build_table_buffer->ReserveTable(*(this->build_table_buffer_chunked));
+    if (this->accumulate_before_update) {
+        /// Concatenate all build chunks into contiguous build buffer
 
-    // This will work without error because we've already allocated
-    // all the required space:
-    while (!this->build_table_buffer_chunked->chunks.empty()) {
-        auto [build_table_chunk, build_table_nrows_chunk] =
-            this->build_table_buffer_chunked->PopChunk();
-        this->build_table_buffer->UnsafeAppendBatch(build_table_chunk);
+        // Do a single ReserveTable call to allocate all required space in a
+        // single call:
+        this->build_table_buffer->ReserveTable(
+            *(this->build_table_buffer_chunked));
+
+        // This will work without error because we've already allocated
+        // all the required space:
+        while (!this->build_table_buffer_chunked->chunks.empty()) {
+            auto [build_table_chunk, build_table_nrows_chunk] =
+                this->build_table_buffer_chunked->PopChunk();
+            this->build_table_buffer->UnsafeAppendBatch(build_table_chunk);
+        }
+    } else {
+        // Just call UpdateGroupsAndCombine on each chunk. Note that
+        // we cannot pop the chunks since we need to keep them around
+        // in case we need to re-partition and retry.
+        for (const auto& chunk : *(this->build_table_buffer_chunked)) {
+            // By definition, this is a small chunk, so we don't need to track
+            // this allocation and can consider this scratch memory usage.
+            // TODO XXX Cache the allocation for these hashes by making
+            // an allocation for the chunk size (active_chunk_capacity)
+            // and reusing that buffer for all chunks.
+            std::shared_ptr<uint32_t[]> chunk_hashes_groupby = hash_keys_table(
+                chunk, this->n_keys, SEED_HASH_GROUPBY_SHUFFLE, false, false);
+            // Treat the partition as active temporarily.
+            // This step can fail. If it does, we can repartition and retry
+            // safely since the CTB still has all the original data.
+            this->UpdateGroupsAndCombine</*is_active*/ true>(
+                chunk, chunk_hashes_groupby);
+        }
+
+        // If we were able to insert all chunks, we have successfully activated
+        // the partition and can now reset the CTB (which will free all the
+        // chunks):
+        this->build_table_buffer_chunked->Reset();
+        this->build_table_buffer_chunked.reset();
     }
 
     // Mark this partition as activated once we've moved the data
@@ -718,7 +871,27 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
             this->f_in_offsets, this->f_in_cols, this->req_extended_group_info,
             this->op_pool, this->op_mm);
     } else {
-        // call eval() on running values to get final output
+        // Note that we don't need to call RebuildHashTableFromBuildBuffer here.
+        // If the partition was inactive, ActivatePartition could've failed.
+        // However, the partition would've remained inactive, so it will be
+        // retried until it succeeds. When it eventually does, we're guaranteed
+        // that the hash-table is up to date.
+        // If the partition was already active, "ActivatePartition" would've
+        // been a NOP and couldn't have failed anyway. The hash-table is
+        // guaranteed to be up to date since UpdateGroupsAndCombine always
+        // brings it up to date. The only place where the hash table is not up
+        // to date is after splitting an active partition. However, that can
+        // never happen during Finalize. Even if we somehow end up in a
+        // situation where the hash-table is not up to date, that's fine since
+        // eval_groupby_funcs_helper doesn't need the hash table at all
+        // (assuming the rows in build-table-buffer are all unique, which they
+        // should be since this is an active partition).
+
+        // Call eval() on running values to get final output.
+        // Since we're not passing in anything that can access the op-pool,
+        // this shouldn't make any additional allocations that go through the
+        // Operator Pool and hence cannot invoke the threshold enforcement
+        // error.
         std::shared_ptr<table_info> combine_data =
             this->build_table_buffer->data_table;
         out_table = eval_groupby_funcs_helper(this->f_running_value_offsets,
@@ -1085,7 +1258,7 @@ void GroupbyState::SplitPartition(size_t idx) {
     // aggregation for this partition).
 }
 
-void GroupbyState::UpdateGroupsAndCombine(
+void GroupbyState::UpdateGroupsAndCombineHelper(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes,
     const std::shared_ptr<uint32_t[]>& batch_hashes_groupby) {
@@ -1129,6 +1302,37 @@ void GroupbyState::UpdateGroupsAndCombine(
 }
 
 void GroupbyState::UpdateGroupsAndCombine(
+    const std::shared_ptr<table_info>& in_table,
+    const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+    const std::shared_ptr<uint32_t[]>& batch_hashes_groupby) {
+    while (true) {
+        try {
+            this->UpdateGroupsAndCombineHelper(in_table, partitioning_hashes,
+                                               batch_hashes_groupby);
+            break;
+        } catch (
+            bodo::OperatorBufferPool::OperatorPoolThresholdExceededError&) {
+            // Split the 0th partition into 2 in case of an
+            // OperatorPoolThresholdExceededError. This will always succeed
+            // since it creates one active and another inactive partition.
+            // The new active partition can only be as large as the original
+            // partition, and since threshold enforcement is disabled, it
+            // should fit in memory.
+            if (this->debug_partitioning) {
+                std::cerr << "[DEBUG] GroupbyState::UpdateGroupsAndCombine[3]: "
+                             "Encountered OperatorPoolThresholdExceededError."
+                          << std::endl;
+            }
+
+            // Note that we don't need to call ClearColSetsState here since
+            // the ColSets are only used in the combine step which shouldn't
+            // raise a threshold enforcement error.
+            this->SplitPartition(0);
+        }
+    }
+}
+
+void GroupbyState::UpdateGroupsAndCombineHelper(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes,
     const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
@@ -1176,6 +1380,39 @@ void GroupbyState::UpdateGroupsAndCombine(
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
         this->partitions[i_part]->UpdateGroupsAndCombine<false>(
             in_table, batch_hashes_groupby, append_rows_by_partition[i_part]);
+    }
+}
+
+void GroupbyState::UpdateGroupsAndCombine(
+    const std::shared_ptr<table_info>& in_table,
+    const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+    const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
+    const std::vector<bool>& append_rows) {
+    while (true) {
+        try {
+            this->UpdateGroupsAndCombineHelper(in_table, partitioning_hashes,
+                                               batch_hashes_groupby,
+                                               append_rows);
+            break;
+        } catch (
+            bodo::OperatorBufferPool::OperatorPoolThresholdExceededError&) {
+            // Split the 0th partition into 2 in case of an
+            // OperatorPoolThresholdExceededError. This will always succeed
+            // since it creates one active and another inactive partition.
+            // The new active partition can only be as large as the original
+            // partition, and since threshold enforcement is disabled, it
+            // should fit in memory.
+            if (this->debug_partitioning) {
+                std::cerr << "[DEBUG] GroupbyState::UpdateGroupsAndCombine[4]: "
+                             "Encountered OperatorPoolThresholdExceededError."
+                          << std::endl;
+            }
+
+            // Note that we don't need to call ClearColSetsState here since
+            // the ColSets are only used in the combine step which shouldn't
+            // raise a threshold enforcement error.
+            this->SplitPartition(0);
+        }
     }
 }
 
@@ -1525,14 +1762,13 @@ void GroupbyState::FinalizeBuild() {
                 exception_caught = false;
             } catch (
                 bodo::OperatorBufferPool::OperatorPoolThresholdExceededError&) {
-                // Split the partition into 2. This will always succeed. If
-                // the partition is inactive, we create 2 new inactive
-                // partitions that take up no memory from the
-                // OperatorBufferPool. If the partition is active, it
-                // creates one active and another inactive partition. The
-                // new active partition can only be as large as the original
-                // partition, and since threshold enforcement is disabled,
-                // it should fit in memory just fine.
+                // Split the partition into 2. This will always succeed. If the
+                // partition is inactive, we create 2 new inactive partitions
+                // that take up no memory from the OperatorBufferPool. If the
+                // partition is active, it creates one active and another
+                // inactive partition. The new active partition can only be as
+                // large as the original partition, and since threshold
+                // enforcement is disabled, it should fit in memory just fine.
                 if (this->debug_partitioning) {
                     std::cerr
                         << "[DEBUG] GroupbyState::FinalizeBuild: "
@@ -1648,6 +1884,8 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     // Unify dictionaries keys to allow consistent hashing and fast key
     // comparison using indices
     in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table, true);
+    // We don't pass the op-pool here since this is operation on a small batch
+    // and we consider this "scratch" usage essentially.
     in_table = get_update_table</*is_acc_case*/ false>(
         in_table, groupby_state->n_keys, groupby_state->col_sets,
         groupby_state->f_in_offsets, groupby_state->f_in_cols,
