@@ -79,7 +79,6 @@ bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t iRowA,
  * aggregation functions.
  * @param req_extended_group_info Whether we need to collect extended group
  * information.
- * @param parallel Only used for tracing purposes.
  * @param pool Memory pool to use for allocations during the execution of this
  * function. In the accumulate code path case, this is the operator buffer pool.
  * In the agg case, this is the default BufferPool. This is because in the
@@ -100,7 +99,6 @@ std::shared_ptr<table_info> get_update_table(
     const std::vector<std::shared_ptr<BasicColSet>>& col_sets,
     const std::vector<int32_t>& f_in_offsets,
     const std::vector<int32_t>& f_in_cols, const bool req_extended_group_info,
-    const bool parallel,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
@@ -129,8 +127,8 @@ std::shared_ptr<table_info> get_update_table(
         // it's better to get an actual estimate using HLL.
         // The HLL only uses ~1MiB of memory, so we don't really need it to
         // go through the pool.
-        nunique_hashes = get_nunique_hashes(batch_hashes_groupby,
-                                            in_table->nrows(), parallel);
+        nunique_hashes = get_nunique_hashes(
+            batch_hashes_groupby, in_table->nrows(), /*is_parallel*/ false);
     } else {
         // In the case of streaming groupby, we don't need to estimate the
         // number of unique hashes. We can just use the number of rows in the
@@ -147,11 +145,12 @@ std::shared_ptr<table_info> get_update_table(
         // need the list of NA row indexes.
         get_group_info_iterate(tables, batch_hashes_groupby, nunique_hashes,
                                grp_infos, n_keys, /*consider_missing*/ false,
-                               /*key_dropna*/ false, parallel, pool);
+                               /*key_dropna*/ false, /*is_parallel*/ false,
+                               pool);
     } else {
         get_group_info(tables, batch_hashes_groupby, nunique_hashes, grp_infos,
                        n_keys, /*check_for_null_keys*/ true,
-                       /*key_dropna*/ false, parallel, pool);
+                       /*key_dropna*/ false, /*is_parallel*/ false, pool);
     }
 
     // get_group_info_iterate / get_group_info always reset the pointer,
@@ -190,6 +189,12 @@ std::shared_ptr<table_info> get_update_table(
             const std::vector<std::shared_ptr<array_info>> out_cols =
                 col_set->getOutputColumns();
             for (auto& e_arr : out_cols) {
+                // XXX TODO Ideally these should go directly to the output
+                // buffer (in the accumulate case), even if it is column wise.
+                // Otherwise, later ColSets have lesser memory than earlier
+                // ColSet for no good reason. The issue is that we'll end up
+                // with different chunk boundaries in different chunks, which
+                // has implications downstream.
                 update_table->columns.push_back(e_arr);
             }
         } else {
@@ -348,8 +353,7 @@ GroupbyPartition::GroupbyPartition(
     const std::vector<int32_t>& f_in_cols_,
     const std::vector<int32_t>& f_running_value_offsets_,
     const uint64_t batch_size_, bool is_active_, bool accumulate_before_update_,
-    bool req_extended_group_info_, bool parallel_,
-    bodo::OperatorBufferPool* op_pool_,
+    bool req_extended_group_info_, bodo::OperatorBufferPool* op_pool_,
     const std::shared_ptr<::arrow::MemoryManager> op_mm_)
     : build_arr_c_types(build_arr_c_types_),
       build_arr_array_types(build_arr_array_types_),
@@ -367,7 +371,6 @@ GroupbyPartition::GroupbyPartition(
       accumulate_before_update(accumulate_before_update_),
       req_extended_group_info(req_extended_group_info_),
       is_active(is_active_),
-      parallel(parallel_),
       batch_size(batch_size_),
       op_pool(op_pool_),
       op_mm(op_mm_) {
@@ -579,8 +582,7 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
             this->f_in_cols, this->f_running_value_offsets, this->batch_size,
             is_active, this->accumulate_before_update,
-            this->req_extended_group_info, this->parallel, this->op_pool,
-            this->op_mm);
+            this->req_extended_group_info, this->op_pool, this->op_mm);
 
     std::shared_ptr<GroupbyPartition> new_part2 =
         std::make_shared<GroupbyPartition>(
@@ -589,8 +591,7 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
             this->f_in_cols, this->f_running_value_offsets, this->batch_size,
             false, this->accumulate_before_update,
-            this->req_extended_group_info, this->parallel, this->op_pool,
-            this->op_mm);
+            this->req_extended_group_info, this->op_pool, this->op_mm);
 
     std::vector<bool> append_partition1;
     if (is_active) {
@@ -715,7 +716,7 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
         out_table = get_update_table</*is_acc_case*/ true>(
             this->build_table_buffer->data_table, this->n_keys, this->col_sets,
             this->f_in_offsets, this->f_in_cols, this->req_extended_group_info,
-            this->parallel, this->op_pool, this->op_mm);
+            this->op_pool, this->op_mm);
     } else {
         // call eval() on running values to get final output
         std::shared_ptr<table_info> combine_data =
@@ -770,11 +771,13 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
       // size if sync_iter == -1 (user hasn't specified number of syncs)
       adaptive_sync_counter(sync_iter == -1 ? 0 : -1),
       groupby_event("Groupby") {
-    // Disable partitioning for now until the rest
-    // of the infrastructure is in place.
-    // TODO In the future, do this based on an env var. We will also disable
-    // it if the table is replicated (similar to Join).
-    this->DisablePartitioning();
+    // Disable partitioning if env var is set:
+    char* disable_partitioning_env_ =
+        std::getenv("BODO_STREAM_GROUPBY_DISABLE_PARTITIONING");
+    if (disable_partitioning_env_ &&
+        (std::strcmp(disable_partitioning_env_, "1") == 0)) {
+        this->DisablePartitioning();
+    }
 
     if (char* debug_partitioning_env_ =
             std::getenv("BODO_DEBUG_STREAM_GROUPBY_PARTITIONING")) {
@@ -896,8 +899,11 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
 
         std::shared_ptr<BasicColSet> col_set = makeColSet(
             local_input_cols, index_col, ftypes[i], do_combine, skip_na_data, 0,
-            {0}, 0, parallel, window_ascending_vect, window_na_position_vect,
-            {nullptr}, 0, nullptr, nullptr, 0, nullptr, use_sql_rules);
+            // In the streaming multi-partition scenario, it's safer to mark
+            // things as *not* parallel to avoid any synchronization and hangs.
+            {0}, 0, /*is_parallel*/ false, window_ascending_vect,
+            window_na_position_vect, {nullptr}, 0, nullptr, nullptr, 0, nullptr,
+            use_sql_rules);
 
         if (!this->accumulate_before_update) {
             // get update/combine type info to initialize build state
@@ -974,8 +980,14 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
         this->f_in_cols, this->f_running_value_offsets,
         /*batch_size*/ this->output_batch_size,
         /*is_active*/ true, this->accumulate_before_update,
-        this->req_extended_group_info, this->parallel, this->op_pool.get(),
-        this->op_mm));
+        this->req_extended_group_info, this->op_pool.get(), this->op_mm));
+    this->partition_state.emplace_back(std::make_pair<size_t, uint32_t>(0, 0));
+
+    if (!this->accumulate_before_update) {
+        // Partitioning is only supported in the
+        // accumulate case at the moment.
+        this->DisablePartitioning();
+    }
 
     // Reserve space upfront. The output-batch-size is typically the same
     // as the input batch size.
@@ -997,7 +1009,7 @@ GroupbyState::getRunningValueColumnTypes(
                    0,                 // period
                    {0},               // transform_funcs
                    0,                 // n_udf
-                   true,              // parallel
+                   false,             // parallel
                    {true},            // window_ascending
                    {true},            // window_na_position
                    {nullptr},         // window_args
@@ -1033,15 +1045,6 @@ void GroupbyState::SplitPartition(size_t idx) {
             std::to_string(max_partition_depth));
     }
 
-    // Threshold enforcement should already be disabled in the
-    // replicated build case, so SplitPartition should never get called.
-    // We're adding this check to protect against edge cases.
-    if (!this->parallel) {
-        throw std::runtime_error(
-            "GroupbyState::SplitPartition: We cannot split a partition "
-            "when the build table is replicated!");
-    }
-
     if (this->debug_partitioning) {
         std::cerr << "[DEBUG] Splitting partition " << idx << "." << std::endl;
     }
@@ -1059,9 +1062,18 @@ void GroupbyState::SplitPartition(size_t idx) {
     }
     // Remove the current partition (this should release its memory)
     this->partitions.erase(this->partitions.begin() + idx);
+    this->partition_state.erase(this->partition_state.begin() + idx);
     // Insert the new partitions in its place
     this->partitions.insert(this->partitions.begin() + idx,
                             new_partitions.begin(), new_partitions.end());
+    std::vector<std::pair<size_t, uint32_t>> new_partitions_state;
+    for (auto& partition : new_partitions) {
+        new_partitions_state.emplace_back(std::make_pair<size_t, uint32_t>(
+            partition->get_num_top_bits(), partition->get_top_bitmask()));
+    }
+    this->partition_state.insert(this->partition_state.begin() + idx,
+                                 new_partitions_state.begin(),
+                                 new_partitions_state.end());
 
     // Re-enable threshold enforcement now that we have split the
     // partition successfully.
@@ -1476,6 +1488,12 @@ void GroupbyState::ClearShuffleState() {
     this->shuffle_table_buffer.reset();
 }
 
+void GroupbyState::ClearColSetsStates() {
+    for (const std::shared_ptr<BasicColSet>& col_set : this->col_sets) {
+        col_set->clear();
+    }
+}
+
 void GroupbyState::ClearBuildState() {
     this->col_sets.clear();
     // this->out_dict_builders retains references
@@ -1523,6 +1541,9 @@ void GroupbyState::FinalizeBuild() {
                         << i_part << "." << std::endl;
                 }
 
+                // In case the error happened during a ColSet operation, we want
+                // to clear their states before retrying.
+                this->ClearColSetsStates();
                 this->SplitPartition(i_part);
             }
 
@@ -1538,6 +1559,7 @@ void GroupbyState::FinalizeBuild() {
                 // columns early.
                 output_table = this->UnifyOutputDictionaryArrays(output_table);
                 this->output_buffer->AppendBatch(output_table);
+                output_table.reset();
                 break;
             }
         }
@@ -1553,6 +1575,14 @@ void GroupbyState::FinalizeBuild() {
     // Release the ColSets, etc.
     this->ClearBuildState();
     this->build_input_finalized = true;
+}
+
+uint64_t GroupbyState::op_pool_bytes_pinned() const {
+    return this->op_pool->bytes_pinned();
+}
+
+uint64_t GroupbyState::op_pool_bytes_allocated() const {
+    return this->op_pool->bytes_allocated();
 }
 
 #pragma endregion  // GroupbyState
@@ -1621,7 +1651,7 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     in_table = get_update_table</*is_acc_case*/ false>(
         in_table, groupby_state->n_keys, groupby_state->col_sets,
         groupby_state->f_in_offsets, groupby_state->f_in_cols,
-        groupby_state->req_extended_group_info, groupby_state->parallel);
+        groupby_state->req_extended_group_info);
 
     // Dictionary hashes for the key columns which will be used for
     // the partitioning hashes:
@@ -1943,15 +1973,23 @@ table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
  * @param n_build_arrs number of build table columns
  * @param n_keys number of groupby keys
  * @param output_batch_size Batch size for reading output.
+ * @param op_pool_size_bytes Size of the operator buffer pool for this join
+ * operator. If it's set to -1, we will get the budget from the operator
+ * comptroller.
  * @return GroupbyState* groupby state to return to Python
  */
 GroupbyState* groupby_state_init_py_entry(
     int64_t operator_id, int8_t* build_arr_c_types,
     int8_t* build_arr_array_types, int n_build_arrs, int32_t* ftypes,
     int32_t* f_in_offsets, int32_t* f_in_cols, int n_funcs, uint64_t n_keys,
-    int64_t output_batch_size, bool parallel, int64_t sync_iter) {
-    int64_t op_pool_size_bytes =
-        OperatorComptroller::Default()->GetOperatorBudget(operator_id);
+    int64_t output_batch_size, bool parallel, int64_t sync_iter,
+    int64_t op_pool_size_bytes) {
+    // If the memory budget has not been explicitly set, then ask the
+    // OperatorComptroller for the budget.
+    if (op_pool_size_bytes == -1) {
+        op_pool_size_bytes =
+            OperatorComptroller::Default()->GetOperatorBudget(operator_id);
+    }
     return new GroupbyState(
         std::vector<int8_t>(build_arr_c_types,
                             build_arr_c_types + n_build_arrs),
@@ -1961,7 +1999,6 @@ GroupbyState* groupby_state_init_py_entry(
         std::vector<int32_t>(ftypes, ftypes + n_funcs),
         std::vector<int32_t>(f_in_offsets, f_in_offsets + n_funcs + 1),
         std::vector<int32_t>(f_in_cols, f_in_cols + f_in_offsets[n_funcs]),
-
         n_keys, output_batch_size, parallel, sync_iter, op_pool_size_bytes);
 }
 
@@ -1972,6 +2009,54 @@ GroupbyState* groupby_state_init_py_entry(
  * @param groupby_state groupby state pointer to delete
  */
 void delete_groupby_state(GroupbyState* groupby_state) { delete groupby_state; }
+
+uint64_t get_op_pool_bytes_pinned(GroupbyState* groupby_state) {
+    return groupby_state->op_pool_bytes_pinned();
+}
+
+uint64_t get_op_pool_bytes_allocated(GroupbyState* groupby_state) {
+    return groupby_state->op_pool_bytes_allocated();
+}
+
+uint32_t get_num_partitions(GroupbyState* groupby_state) {
+    return groupby_state->partition_state.size();
+}
+
+uint32_t get_partition_num_top_bits_by_idx(GroupbyState* groupby_state,
+                                           int64_t idx) {
+    try {
+        std::vector<std::pair<size_t, uint32_t>>& partition_state =
+            groupby_state->partition_state;
+        if (static_cast<size_t>(idx) >= partition_state.size()) {
+            throw std::runtime_error(
+                "get_partition_num_top_bits_by_idx: partition index " +
+                std::to_string(idx) + " out of bound: " + std::to_string(idx) +
+                " >= " + std::to_string(partition_state.size()));
+        }
+        return partition_state[idx].first;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return 0;
+    }
+}
+
+uint32_t get_partition_top_bitmask_by_idx(GroupbyState* groupby_state,
+                                          int64_t idx) {
+    try {
+        std::vector<std::pair<size_t, uint32_t>>& partition_state =
+            groupby_state->partition_state;
+        if (static_cast<size_t>(idx) >= partition_state.size()) {
+            throw std::runtime_error(
+                "get_partition_top_bitmask_by_idx: partition index " +
+                std::to_string(idx) + " out of bound: " + std::to_string(idx) +
+                " >= " + std::to_string(partition_state.size()));
+        }
+        return partition_state[idx].second;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return 0;
+    }
+}
 
 PyMODINIT_FUNC PyInit_stream_groupby_cpp(void) {
     PyObject* m;
@@ -1985,6 +2070,11 @@ PyMODINIT_FUNC PyInit_stream_groupby_cpp(void) {
     SetAttrStringFromVoidPtr(m, groupby_build_consume_batch_py_entry);
     SetAttrStringFromVoidPtr(m, groupby_produce_output_batch_py_entry);
     SetAttrStringFromVoidPtr(m, delete_groupby_state);
+    SetAttrStringFromVoidPtr(m, get_op_pool_bytes_pinned);
+    SetAttrStringFromVoidPtr(m, get_op_pool_bytes_allocated);
+    SetAttrStringFromVoidPtr(m, get_num_partitions);
+    SetAttrStringFromVoidPtr(m, get_partition_num_top_bits_by_idx);
+    SetAttrStringFromVoidPtr(m, get_partition_top_bitmask_by_idx);
     return m;
 }
 

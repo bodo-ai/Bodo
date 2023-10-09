@@ -4972,7 +4972,7 @@ class TypingTransforms:
                 "init_groupby_state",
                 rhs.args,
                 dict(rhs.kws),
-                5,
+                6,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5015,7 +5015,7 @@ class TypingTransforms:
                 "init_groupby_state",
                 groupby_def.args,
                 dict(groupby_def.kws),
-                5,
+                6,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5039,15 +5039,44 @@ class TypingTransforms:
                     input_table_type,
                 )
 
+                params = [
+                    "operator_id",
+                    "key_inds",
+                    "ftypes",
+                    "f_in_offsets",
+                    "f_in_cols",
+                ]
+
                 args = groupby_def.args[:5]
+
+                # Fetch the op_pool_size_bytes argument
+                op_pool_size_bytes_var = get_call_expr_arg(
+                    "init_groupby_state",
+                    groupby_def.args,
+                    dict(groupby_def.kws),
+                    5,
+                    "op_pool_size_bytes",
+                    default=None,
+                    use_default=True,
+                )
+                # If there is a op_pool_size_bytes we need to include it in
+                # the function.
+                if op_pool_size_bytes_var is not None:
+                    params.append("op_pool_size_bytes")
+                    args.append(op_pool_size_bytes_var)
+                    op_pool_size_bytes_val = "op_pool_size_bytes"
+                else:
+                    op_pool_size_bytes_val = "-1"
+
                 # Compile a new function.
-                func_text = f"""def impl(operator_id, key_inds, ftypes, f_in_offsets, f_in_cols):
+                func_text = f"""def impl({", ".join(params)}):
                     return bodo.libs.stream_groupby.init_groupby_state(
                         operator_id,
                         key_inds,
                         ftypes,
                         f_in_offsets,
                         f_in_cols,
+                        op_pool_size_bytes={op_pool_size_bytes_val},
                         expected_state_type=_expected_state_type,
                     )
                 """

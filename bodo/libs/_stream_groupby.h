@@ -109,7 +109,7 @@ class GroupbyPartition {
         const std::vector<int32_t>& f_running_value_offsets_,
         const uint64_t batch_size_, bool is_active_,
         bool accumulate_before_update_, bool req_extended_group_info_,
-        bool parallel_, bodo::OperatorBufferPool* op_pool_,
+        bodo::OperatorBufferPool* op_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_mm_);
 
     // The types of the columns in the build table.
@@ -286,7 +286,6 @@ class GroupbyPartition {
     /// 'build_table_buffer_chunked'. When true, this means that the data has
     /// been moved to the 'build_table_buffer'.
     bool is_active = false;
-    const bool parallel;
     const uint64_t batch_size;
 
     /// @brief OperatorBufferPool of the Groupby operator that this is a
@@ -321,6 +320,10 @@ class GroupbyState {
 
     // Partitioning information.
     std::vector<std::shared_ptr<GroupbyPartition>> partitions;
+    // Partition state: Tuples of the form (num_top_bits, top_bitmask).
+    // We maintain this for testing purposes since this information is
+    // otherwise lost during FinalizeBuild which frees the partitions.
+    std::vector<std::pair<size_t, uint32_t>> partition_state;
 
     // TODO Decide this dynamically using a heuristic based
     // on total available memory, total disk space, etc.
@@ -600,6 +603,14 @@ class GroupbyState {
      */
     void SplitPartition(size_t idx);
 
+    /// @brief Get the number of bytes allocated through this Groupby operator's
+    /// OperatorBufferPool that are currently pinned.
+    uint64_t op_pool_bytes_pinned() const;
+
+    /// @brief Get the number of bytes that are currently allocated through this
+    /// Groupby operator's OperatorBufferPool.
+    uint64_t op_pool_bytes_allocated() const;
+
    private:
     /**
      * Helper function that gets the running column types for a given function.
@@ -649,4 +660,13 @@ class GroupbyState {
      *
      */
     void ClearBuildState();
+
+    /**
+     * @brief Clear the state of all the ColSets
+     * by calling '.clear()' on them. This is
+     * used in FinalizeBuild when we encounter a
+     * threshold enforcement error from the op-pool.
+     *
+     */
+    void ClearColSetsStates();
 };

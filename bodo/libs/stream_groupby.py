@@ -44,6 +44,27 @@ ll.add_symbol(
 )
 ll.add_symbol("delete_groupby_state", stream_groupby_cpp.delete_groupby_state)
 
+# The following are used for debugging and testing purposes only:
+ll.add_symbol(
+    "groupby_get_op_pool_bytes_pinned", stream_groupby_cpp.get_op_pool_bytes_pinned
+)
+ll.add_symbol(
+    "groupby_get_op_pool_bytes_allocated",
+    stream_groupby_cpp.get_op_pool_bytes_allocated,
+)
+ll.add_symbol(
+    "groupby_get_num_partitions",
+    stream_groupby_cpp.get_num_partitions,
+)
+ll.add_symbol(
+    "groupby_get_partition_num_top_bits_by_idx",
+    stream_groupby_cpp.get_partition_num_top_bits_by_idx,
+)
+ll.add_symbol(
+    "groupby_get_partition_top_bitmask_by_idx",
+    stream_groupby_cpp.get_partition_top_bitmask_by_idx,
+)
+
 
 class GroupbyStateType(types.Type):
     """Type for C++ GroupbyState pointer"""
@@ -313,6 +334,7 @@ def _init_groupby_state(
     f_in_offsets_t,
     f_in_cols_t,
     n_funcs_t,
+    op_pool_size_bytes_t,
     output_state_type,
     parallel_t,
 ):
@@ -325,6 +347,9 @@ def _init_groupby_state(
         build_arr_array_types (int8*): pointer to array of ints representing array types
                                     (as provided by numba_to_c_array_type)
         n_build_arrs (int32): number of build columns
+        op_pool_size_bytes_t (int64): Number of pinned bytes that this operator is allowed
+             to use. Set this to -1 to let the operator use a pre-determined portion of
+             the total available memory.
         output_state_type (TypeRef[GroupbyStateType]): The output type for the state
                                                     that should be generated.
     """
@@ -340,6 +365,7 @@ def _init_groupby_state(
             f_in_offsets,
             f_in_cols,
             n_funcs,
+            op_pool_size_bytes,
             _,  # output_state_type
             parallel,
         ) = args
@@ -363,6 +389,7 @@ def _init_groupby_state(
                 lir.IntType(64),
                 lir.IntType(1),
                 lir.IntType(64),
+                lir.IntType(64),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -381,6 +408,7 @@ def _init_groupby_state(
             output_batch_size,
             parallel,
             sync_iter,
+            op_pool_size_bytes,
         )
         ret = builder.call(fn_tp, input_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -395,6 +423,7 @@ def _init_groupby_state(
         types.CPointer(types.int32),
         types.CPointer(types.int32),
         types.int32,
+        types.int64,
         output_state_type,
         parallel_t,
     )
@@ -408,6 +437,7 @@ def init_groupby_state(
     fnames,  # fnames matches function names in supported_agg_funcs
     f_in_offsets,
     f_in_cols,
+    op_pool_size_bytes=-1,
     expected_state_type=None,
     parallel=False,
 ):
@@ -442,6 +472,7 @@ def init_groupby_state(
         fnames,
         f_in_offsets,
         f_in_cols,
+        op_pool_size_bytes=-1,
         expected_state_type=None,
         parallel=False,
     ):  # pragma: no cover
@@ -454,6 +485,7 @@ def init_groupby_state(
             f_in_offsets_arr.ctypes,
             f_in_cols_arr.ctypes,
             n_funcs,
+            op_pool_size_bytes,
             output_type,
             parallel,
         )
@@ -600,3 +632,158 @@ def delete_groupby_state(
 
     sig = types.void(groupby_state)
     return sig, codegen
+
+
+@intrinsic
+def get_op_pool_bytes_pinned(
+    typingctx,
+    groupby_state,
+):
+    """
+    Get the number of bytes currently pinned by the
+    OperatorBufferPool of this groupby operator.
+    This is only used for testing and debugging purposes.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(64),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="groupby_get_op_pool_bytes_pinned"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.uint64(groupby_state)
+    return sig, codegen
+
+
+@intrinsic
+def get_op_pool_bytes_allocated(
+    typingctx,
+    groupby_state,
+):
+    """
+    Get the number of bytes currently allocated by the
+    OperatorBufferPool of this groupby operator.
+    This is only used for testing and debugging purposes.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(64),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="groupby_get_op_pool_bytes_allocated"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.uint64(groupby_state)
+    return sig, codegen
+
+
+@intrinsic
+def get_num_partitions(
+    typingctx,
+    groupby_state,
+):
+    """
+    Get the number of partitions of this groupby operator.
+    This is only used for testing and debugging purposes.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(32),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="groupby_get_num_partitions"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.uint32(groupby_state)
+    return sig, codegen
+
+
+@intrinsic
+def get_partition_num_top_bits_by_idx(typingctx, groupby_state, idx):
+    """
+    Get the number of bits in the 'top_bitmask' of a partition of this groupby
+    operator by the partition index.
+    This is only used for testing and debugging purposes.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(32),
+            [lir.IntType(8).as_pointer(), lir.IntType(64)],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="groupby_get_partition_num_top_bits_by_idx"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.uint32(groupby_state, idx)
+    return sig, codegen
+
+
+@intrinsic
+def get_partition_top_bitmask_by_idx(typingctx, groupby_state, idx):
+    """
+    Get the 'top_bitmask' of a partition of this groupby operator by the partition index.
+    This is only used for testing and debugging purposes.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(32),
+            [lir.IntType(8).as_pointer(), lir.IntType(64)],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="groupby_get_partition_top_bitmask_by_idx"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.uint32(groupby_state, idx)
+    return sig, codegen
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_partition_state(groupby_state):
+    """
+    Get the partition state (the number of bits in the 'top_bitmask' and 'top_bitmask')
+    of all partitions of this groupby operator.
+    This is only used for testing and debugging purposes.
+    """
+
+    def impl(groupby_state):  # pragma: no cover
+        partition_state = []
+        for idx in range(get_num_partitions(groupby_state)):
+            partition_state.append(
+                (
+                    get_partition_num_top_bits_by_idx(groupby_state, idx),
+                    get_partition_top_bitmask_by_idx(groupby_state, idx),
+                )
+            )
+        return partition_state
+
+    return impl

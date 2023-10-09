@@ -1072,7 +1072,7 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
         this->DisablePartitioning();
     }
 
-    // Disable partitioning if
+    // Disable partitioning if env var set:
     char* disable_partitioning_env_ =
         std::getenv("BODO_STREAM_HASH_JOIN_DISABLE_PARTITIONING");
     if (disable_partitioning_env_ &&
