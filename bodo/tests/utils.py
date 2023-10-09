@@ -603,6 +603,9 @@ def check_func_seq(
     if set_columns_name_to_none:
         bodo_out.columns.name = None
     if reorder_columns:
+        # Avoid PyArrow failure in sorting dict-encoded string arrays
+        if bodo_out.columns.dtype == pd.StringDtype("pyarrow"):
+            bodo_out.columns = bodo_out.columns.astype(object)
         bodo_out.sort_index(axis=1, inplace=True)
     passed = _test_equal_guard(
         bodo_out,
