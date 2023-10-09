@@ -4,6 +4,7 @@ import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
+import com.bodosql.calcite.ir.OperatorType
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.traits.BatchingProperty
@@ -60,6 +61,7 @@ class PandasTableScan(
                 readerVar,
                 bodoSQLTable.generateReadCode(true, ctx.streamingOptions()),
             ),
+            OperatorType.SNOWFLAKE_READ,
         )
 
         return readerVar

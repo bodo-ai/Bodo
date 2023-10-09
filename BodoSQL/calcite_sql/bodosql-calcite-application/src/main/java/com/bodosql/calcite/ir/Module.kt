@@ -200,17 +200,6 @@ class Module(private val frame: Frame) {
         }
 
         /**
-         * Helper function for registering a single batch operator as
-         * only existing for the current pipeline
-         */
-        fun registerSingleBatchOperatorScope(opID: Int) {
-            if (isStreamingFrame()) {
-                scope.startOperator(opID, parentFrames.size)
-                scope.endOperator(opID, parentFrames.size)
-            }
-        }
-
-        /**
          * Helper function that force registers the current
          * pipeline as the end pipeline of an operator.
          * This is currently only used for CombineStreamExchange

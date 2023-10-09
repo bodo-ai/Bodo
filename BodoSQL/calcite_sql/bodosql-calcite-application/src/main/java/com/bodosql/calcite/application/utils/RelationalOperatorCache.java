@@ -5,6 +5,7 @@ import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.OperatorType;
 import com.bodosql.calcite.ir.StreamingPipelineFrame;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.traits.BatchingProperty;
@@ -88,7 +89,8 @@ public class RelationalOperatorCache {
             new Expr.Call(
                 "bodo.libs.table_builder.init_table_builder_state",
                 List.of(new Expr.IntegerLiteral(operatorID)),
-                List.of(new Pair<>("use_chunked_builder", Expr.True.INSTANCE)))));
+                List.of(new Pair<>("use_chunked_builder", Expr.True.INSTANCE)))),
+        OperatorType.ACCUMULATE_TABLE);
 
     frame.add(
         new Op.Stmt(

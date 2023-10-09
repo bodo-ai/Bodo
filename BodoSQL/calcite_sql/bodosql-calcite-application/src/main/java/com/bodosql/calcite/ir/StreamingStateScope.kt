@@ -12,27 +12,27 @@ class StreamingStateScope {
         var memEstimate: Int = -1
     }
 
-    private var operators: HashMap<Int, OperatorPipelineRange> = HashMap()
+    private var operators: HashMap<Int, Pair<OperatorPipelineRange, OperatorType>> = HashMap()
 
     fun hasOperators(): Boolean {
         return operators.isNotEmpty()
     }
 
-    fun startOperator(opID: Int, startPipelineID: Int) {
+    fun startOperator(opID: Int, startPipelineID: Int, type: OperatorType) {
         if (operators.containsKey(opID)) {
             throw Exception("StreamingStateScope: Repeated Operator ID Found")
         }
-        operators[opID] = OperatorPipelineRange(opID, startPipelineID)
+        operators[opID] = Pair(OperatorPipelineRange(opID, startPipelineID), type)
     }
 
     fun endOperator(opID: Int, endPipelineID: Int) {
         if (!operators.containsKey(opID)) {
             throw Exception("StreamingStateScope: Ending Pipeline Range of Unknown Operator")
         }
-        if (operators[opID]?.endPipelineID != null) {
+        if (operators[opID]?.first?.endPipelineID != null) {
             throw Exception("StreamingStateScope: Repeated Operator End Found")
         }
-        operators[opID]!!.endPipelineID = endPipelineID
+        operators[opID]!!.first.endPipelineID = endPipelineID
     }
 
     fun genOpComptrollerInit(): List<Op> {
@@ -41,14 +41,17 @@ class StreamingStateScope {
         )
 
         for ((_, op) in operators) {
+            val range = op.first
+            val type = op.second
             inits.add(
                 Op.Stmt(
                     Expr.Call(
                         "bodo.libs.memory_budget.register_operator",
-                        Expr.IntegerLiteral(op.opID),
-                        Expr.IntegerLiteral(op.startPipelineID),
-                        Expr.IntegerLiteral(op.endPipelineID ?: throw Exception("StreamingStateScope: An Operator's End Pipeline Not Set Before Generating Code")),
-                        Expr.IntegerLiteral(op.memEstimate),
+                        Expr.IntegerLiteral(range.opID),
+                        Expr.Attribute(Expr.Raw("bodo.libs.memory_budget.OperatorType"), type.toString()),
+                        Expr.IntegerLiteral(range.startPipelineID),
+                        Expr.IntegerLiteral(range.endPipelineID ?: throw Exception("StreamingStateScope: An Operator's End Pipeline Not Set Before Generating Code")),
+                        Expr.IntegerLiteral(range.memEstimate),
                     ),
                 ),
             )

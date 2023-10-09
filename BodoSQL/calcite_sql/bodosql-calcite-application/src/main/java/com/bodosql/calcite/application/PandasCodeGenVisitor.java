@@ -54,6 +54,7 @@ import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.OperatorType;
 import com.bodosql.calcite.ir.StateVariable;
 import com.bodosql.calcite.ir.StreamingPipelineFrame;
 import com.bodosql.calcite.ir.Variable;
@@ -469,7 +470,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             batchAccumulatorVariable,
             new Expr.Call(
                 "bodo.libs.table_builder.init_table_builder_state",
-                new Expr.IntegerLiteral(operatorID))));
+                new Expr.IntegerLiteral(operatorID))),
+        OperatorType.ACCUMULATE_TABLE);
 
     // Append to the list at the end of the loop.
     List<Expr> args = new ArrayList<>();
@@ -626,7 +628,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
     // Add Initialization Code
     timerInfo.insertStateStartTimer();
-    inputPipeline.initializeStreamingState(operatorID, unionInit);
+    inputPipeline.initializeStreamingState(operatorID, unionInit, OperatorType.UNION);
     timerInfo.insertStateEndTimer();
 
     // All but the last union call just requires the union_consume_batch call
@@ -658,6 +660,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     StreamingPipelineFrame pipeline = generatedCode.getCurrentStreamingPipeline();
     Variable batchExitCond = pipeline.getExitCond();
+
     Variable newExitCond = genGenericTempVar();
 
     BodoEngineTable inputTable = tableGenStack.pop();
@@ -967,7 +970,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
         outputSchemaAsCatalog.generateStreamingWriteInitCode(
             new Expr.IntegerLiteral(operatorID), node.getTableName(), ifExists, createTableType);
     Variable writerVar = this.genWriterVar();
-    currentPipeline.initializeStreamingState(operatorID, new Op.Assign(writerVar, writeInitCode));
+    currentPipeline.initializeStreamingState(
+        operatorID, new Op.Assign(writerVar, writeInitCode), OperatorType.SNOWFLAKE_WRITE);
     timerInfo.insertStateEndTimer();
 
     // Second, append the Table to the writer
@@ -1247,7 +1251,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Expr writeInitCode =
         bodoSqlTable.generateStreamingWriteInitCode(new Expr.IntegerLiteral(operatorID));
     Variable writerVar = this.genWriterVar();
-    currentPipeline.initializeStreamingState(operatorID, new Op.Assign(writerVar, writeInitCode));
+    currentPipeline.initializeStreamingState(
+        operatorID, new Op.Assign(writerVar, writeInitCode), OperatorType.SNOWFLAKE_WRITE);
     timerInfo.insertStateEndTimer();
 
     // Second, append the Table to the writer
@@ -1624,7 +1629,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Fetch the streaming pipeline
     StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
     timerInfo.insertStateStartTimer();
-    inputPipeline.initializeStreamingState(operatorID, groupbyInit);
+    inputPipeline.initializeStreamingState(operatorID, groupbyInit, OperatorType.GROUPBY);
     timerInfo.insertStateEndTimer();
     Variable batchExitCond = inputPipeline.getExitCond();
     Variable newExitCond = genGenericTempVar();
@@ -2011,7 +2016,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 isLeftOuter),
             namedArgs);
     Op.Assign joinInit = new Op.Assign(joinStateVar, stateCall);
-    batchPipeline.initializeStreamingState(operatorID, joinInit);
+    batchPipeline.initializeStreamingState(operatorID, joinInit, OperatorType.JOIN);
     timerInfo.insertStateEndTimer();
     return joinStateVar;
   }
@@ -2214,7 +2219,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     public BodoEngineTable build(
         @NotNull final Function1<? super PandasRel.BuildContext, BodoEngineTable> fn) {
       int operatorID = generatedCode.newOperatorID();
-      generatedCode.registerSingleBatchOperatorScope(operatorID);
       return singleBatchTimer(node, () -> fn.invoke(new PandasCodeGenVisitor.BuildContext(node)));
     }
 
