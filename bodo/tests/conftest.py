@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import datetime
-import functools
 import gc
 import glob
 import hashlib
@@ -113,6 +112,21 @@ def item_module_name(item):
         return item.module.__name__
 
 
+def unique_test_name(test):
+    """Return a unique string for every pytest function"""
+    return item_module_name(test) + str(test)
+
+
+def get_last_byte_of_test_hash(test):
+    """
+    Gets the last byte of hashing the test name. The hash function doesn't
+    matter as long as it distributes tests reasonably well across all the
+    buckets.
+    """
+    name = unique_test_name(test).encode("utf-8")
+    return hashlib.sha1(name).digest()[-1]
+
+
 def pytest_collection_modifyitems(items):
     """
     called after collection has been performed.
@@ -174,10 +188,6 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodo_30of30,
     ]
 
-    # Sort the collected items. This is needed due to a niche issue with azure CI:
-    # https://bodo.atlassian.net/browse/BE-4190
-    items.sort(key=functools.cmp_to_key(fn_compare))
-
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
     # "single_mod" mark to the tests belonging to that module. This envvar is
@@ -189,10 +199,15 @@ def pytest_collection_modifyitems(items):
             if module_to_run == item_file_name(item):
                 item.add_marker(pytest.mark.single_mod)
 
-    for i, item in enumerate(items):
+    # If this assert fails, we need to get more than just the last byte from the
+    # hash below, and then the limit can be updated to 2**(8 * num_bytes).
+    assert len(azure_1p_markers) < 128, "Need more bytes from hash to distribute tests"
+    assert len(azure_2p_markers) < 128, "Need more bytes from hash to distribute tests"
+    for item in items:
+        hash_ = get_last_byte_of_test_hash(item)
         # Divide the tests evenly so long tests don't end up in 1 group
-        azure_1p_marker = azure_1p_markers[i % len(azure_1p_markers)]
-        azure_2p_marker = azure_2p_markers[i % len(azure_2p_markers)]
+        azure_1p_marker = azure_1p_markers[hash_ % len(azure_1p_markers)]
+        azure_2p_marker = azure_2p_markers[hash_ % len(azure_2p_markers)]
         # All of the test_s3.py tests must be on the same rank because they
         # haven't been refactored to remove cross-test dependencies.
         testfile = item_file_name(item)
@@ -218,14 +233,6 @@ def pytest_collection_modifyitems(items):
             item.add_marker(getattr(pytest.mark, group_marker))
 
 
-def fn_compare(fn1, fn2):
-    # Note, could do some hashing for slightly faster comparisons, but we could end up with
-    # dupe hashes which are sorted differently on different ranks, which would lead to some REALLY
-    # nasty to debug errors, so we're just taking the performance hit, and doing string comparison,
-    # since this doesn't need to be performant
-    return item_module_name(fn1) + str(fn1) < item_module_name(fn2) + str(fn2)
-
-
 def group_from_hash(testname, num_groups):
     """
     Hash function to randomly distribute tests not found in the log.
@@ -237,9 +244,8 @@ def group_from_hash(testname, num_groups):
     # Python's builtin hash fails on mpiexec -n 2 because
     # it has randomness. Instead we use a cryptographic hash,
     # but we don't need that level of support.
-    hash_val = hashlib.sha1(testname.encode("utf-8")).hexdigest()
-    # Hash val is a hex-string
-    int_hash = int(hash_val, base=16) % num_groups
+    hash_val = hashlib.sha1(testname.encode("utf-8")).digest()
+    int_hash = int.from_bytes(hash_val) % num_groups
     return str(int_hash)
 
 
