@@ -181,287 +181,299 @@ def _test_helper(
 
 
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
-def test_split_during_append_table(capfd, memory_leak_check):
+def test_split_during_append_table_acc_funcs(capfd, memory_leak_check):
     """
     Test that re-partitioning works correctly when it happens
     during AppendBuildBatch on an input batch.
     We trigger this by using specific key column values, array
     sizes and the size of the operator pool.
+    In particular, we use functions that always go through Accumulate
+    path regardless of the dtypes of the running values.
     """
 
-    # Test functions that always go through Accumulate path regardless of dtypes
-    def test1():
-        df = pd.DataFrame(
-            {
-                "A": pd.array([1, 2, 3, 4, 5, 6, 5, 4] * 4000, dtype="Int64"),
-                "B": np.array(
-                    [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
-                    dtype=np.float32,
-                ),
-                "C": pd.array(
-                    [
-                        "tapas",
-                        "bravas",
-                        "pizza",
-                        "omelette",
-                        "salad",
-                        "spinach",
-                        "celery",
-                    ]
-                    * 4000
-                    + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
-                ),
-            }
-        )
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 4, 5, 6, 5, 4] * 4000, dtype="Int64"),
+            "B": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
+                dtype=np.float32,
+            ),
+            "C": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+        }
+    )
 
-        func_names = ["median", "sum", "nunique"]
-        f_in_offsets = [0, 1, 2, 3]
-        f_in_cols = [
-            1,
-            1,
-            2,
-        ]
-        expected_out = df.groupby("A", as_index=False).agg(
-            {"B": ["median", "sum"], "C": ["nunique"]}
-        )
-        expected_out.reset_index(inplace=True, drop=True)
-        expected_out.columns = ["key"] + [f"out_{i}" for i in range(3)]
-        expected_output_size = 6
+    func_names = ["median", "sum", "nunique"]
+    f_in_offsets = [0, 1, 2, 3]
+    f_in_cols = [
+        1,
+        1,
+        2,
+    ]
+    expected_out = df.groupby("A", as_index=False).agg(
+        {"B": ["median", "sum"], "C": ["nunique"]}
+    )
+    expected_out.reset_index(inplace=True, drop=True)
+    expected_out.columns = ["key"] + [f"out_{i}" for i in range(3)]
+    expected_output_size = 6
 
-        # This will cause partition split during the "AppendBuildBatch[3]"
-        op_pool_size_bytes = 2 * 1024 * 1024
-        expected_partition_state = [(2, 0), (2, 1), (1, 1)]
+    # This will cause partition split during the "AppendBuildBatch[3]"
+    op_pool_size_bytes = 2 * 1024 * 1024
+    expected_partition_state = [(2, 0), (2, 1), (1, 1)]
 
-        # Verify that we split a partition during AppendBuildBatch.
-        expected_log_msg = "[DEBUG] GroupbyState::AppendBuildBatch[3]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0."
+    # Verify that we split a partition during AppendBuildBatch.
+    expected_log_msg = "[DEBUG] GroupbyState::AppendBuildBatch[3]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0."
 
-        _test_helper(
-            df,
-            expected_out,
-            expected_partition_state,
-            expected_output_size,
-            func_names,
-            f_in_offsets,
-            f_in_cols,
-            op_pool_size_bytes,
-            expected_log_msg,
-            capfd,
-            False,
-        )
-
-    # Test functions that usually go through the Aggregation path, but won't because
-    # one or more running values are STRING/DICT
-    def test2():
-        df = pd.DataFrame(
-            {
-                "A": pd.array([1, 2, 3, 4, 5, 6, 5, 4] * 4000, dtype="Int64"),
-                "B": pd.array(
-                    [
-                        "tapas",
-                        "bravas",
-                        "pizza",
-                        "omelette",
-                        "salad",
-                        "spinach",
-                        "celery",
-                    ]
-                    * 4000
-                    + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
-                ),
-                "C": np.array(
-                    [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
-                    dtype=np.float32,
-                ),
-                "D": np.arange(32000, dtype=np.int32),
-            }
-        )
-        func_names = [
-            "max",
-            "min",
-            "sum",
-            "count",
-            "mean",
-            "var",
-            "std",
-            "kurtosis",
-            "skew",
-        ]
-        f_in_cols = [1, 1, 2, 2, 2, 2, 2, 3, 3]
-        f_in_offsets = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-        expected_out = df.groupby("A", as_index=False).agg(
-            {
-                "B": ["max", "min"],
-                "C": ["sum", "count", "mean", "var", "std"],
-                "D": [pd.Series.kurt, "skew"],
-            }
-        )
-        expected_out.reset_index(inplace=True, drop=True)
-        expected_out.columns = ["key"] + [f"out_{i}" for i in range(9)]
-        expected_output_size = 6
-
-        # This will cause partition split during the "AppendBuildBatch[3]"
-        op_pool_size_bytes = 2 * 1024 * 1024
-        expected_partition_state = [(2, 0), (2, 1), (1, 1)]
-
-        # Verify that we split a partition during AppendBuildBatch.
-        expected_log_msg = "[DEBUG] GroupbyState::AppendBuildBatch[3]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0."
-        _test_helper(
-            df,
-            expected_out,
-            expected_partition_state,
-            expected_output_size,
-            func_names,
-            f_in_offsets,
-            f_in_cols,
-            op_pool_size_bytes,
-            expected_log_msg,
-            capfd,
-            False,
-        )
-
-    test1()
-    test2()
+    _test_helper(
+        df,
+        expected_out,
+        expected_partition_state,
+        expected_output_size,
+        func_names,
+        f_in_offsets,
+        f_in_cols,
+        op_pool_size_bytes,
+        expected_log_msg,
+        capfd,
+        False,
+    )
 
 
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
-def test_split_during_finalize_build(capfd, memory_leak_check):
+def test_split_during_append_table_str_running_vals(capfd, memory_leak_check):
+    """
+    Test that re-partitioning works correctly when it happens
+    during AppendBuildBatch on an input batch.
+    We trigger this by using specific key column values, array
+    sizes and the size of the operator pool.
+    In particular, we use functions that usually go through the
+    Aggregation path, but won't because one or more running values
+    are STRING/DICT
+    """
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 4, 5, 6, 5, 4] * 4000, dtype="Int64"),
+            "B": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+            "C": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
+                dtype=np.float32,
+            ),
+            "D": np.arange(32000, dtype=np.int32),
+        }
+    )
+    func_names = [
+        "max",
+        "min",
+        "sum",
+        "count",
+        "mean",
+        "var",
+        "std",
+        "kurtosis",
+        "skew",
+    ]
+    f_in_cols = [1, 1, 2, 2, 2, 2, 2, 3, 3]
+    f_in_offsets = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    expected_out = df.groupby("A", as_index=False).agg(
+        {
+            "B": ["max", "min"],
+            "C": ["sum", "count", "mean", "var", "std"],
+            "D": [pd.Series.kurt, "skew"],
+        }
+    )
+    expected_out.reset_index(inplace=True, drop=True)
+    expected_out.columns = ["key"] + [f"out_{i}" for i in range(9)]
+    expected_output_size = 6
+
+    # This will cause partition split during the "AppendBuildBatch[3]"
+    op_pool_size_bytes = 2 * 1024 * 1024
+    expected_partition_state = [(2, 0), (2, 1), (1, 1)]
+
+    # Verify that we split a partition during AppendBuildBatch.
+    expected_log_msg = "[DEBUG] GroupbyState::AppendBuildBatch[3]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0."
+    _test_helper(
+        df,
+        expected_out,
+        expected_partition_state,
+        expected_output_size,
+        func_names,
+        f_in_offsets,
+        f_in_cols,
+        op_pool_size_bytes,
+        expected_log_msg,
+        capfd,
+        False,
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+def test_split_during_finalize_build_acc_funcs(capfd, memory_leak_check):
     """
     Test that re-partitioning works correctly when it happens
     during FinalizeBuild.
+    In particular, we use functions that always go through Accumulate
+    path regardless of the dtypes of the running values.
     """
 
-    # Test functions that always go through Accumulate path regardless of dtypes
-    def test1():
-        df = pd.DataFrame(
-            {
-                "A": pd.array(list(np.arange(1000)) * 32, dtype="Int64"),
-                "B": np.array(
-                    [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
-                    dtype=np.float32,
-                ),
-                "C": pd.array(
-                    [
-                        "tapas",
-                        "bravas",
-                        "pizza",
-                        "omelette",
-                        "salad",
-                        "spinach",
-                        "celery",
-                    ]
-                    * 4000
-                    + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
-                ),
-            }
-        )
-        func_names = ["median", "sum", "nunique"]
-        f_in_offsets = [0, 1, 2, 3]
-        f_in_cols = [
-            1,
-            1,
-            2,
-        ]
-        expected_out = df.groupby("A", as_index=False).agg(
-            {"B": ["median", "sum"], "C": ["nunique"]}
-        )
-        expected_out.reset_index(inplace=True, drop=True)
-        expected_out.columns = ["key"] + [f"out_{i}" for i in range(3)]
-        expected_output_size = 1000
+    df = pd.DataFrame(
+        {
+            "A": pd.array(list(np.arange(1000)) * 32, dtype="Int64"),
+            "B": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
+                dtype=np.float32,
+            ),
+            "C": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+        }
+    )
+    func_names = ["median", "sum", "nunique"]
+    f_in_offsets = [0, 1, 2, 3]
+    f_in_cols = [
+        1,
+        1,
+        2,
+    ]
+    expected_out = df.groupby("A", as_index=False).agg(
+        {"B": ["median", "sum"], "C": ["nunique"]}
+    )
+    expected_out.reset_index(inplace=True, drop=True)
+    expected_out.columns = ["key"] + [f"out_{i}" for i in range(3)]
+    expected_output_size = 1000
 
-        # This will cause partition split during the "FinalizeBuild"
-        op_pool_size_bytes = 3 * 1024 * 1024
-        expected_partition_state = [(1, 0), (1, 1)]
-        # Verify that we split a partition during FinalizeBuild.
-        expected_log_msg = "[DEBUG] GroupbyState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 0."
+    # This will cause partition split during the "FinalizeBuild"
+    op_pool_size_bytes = 3 * 1024 * 1024
+    expected_partition_state = [(1, 0), (1, 1)]
+    # Verify that we split a partition during FinalizeBuild.
+    expected_log_msg = "[DEBUG] GroupbyState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 0."
 
-        _test_helper(
-            df,
-            expected_out,
-            expected_partition_state,
-            expected_output_size,
-            func_names,
-            f_in_offsets,
-            f_in_cols,
-            op_pool_size_bytes,
-            expected_log_msg,
-            capfd,
-            False,
-        )
+    _test_helper(
+        df,
+        expected_out,
+        expected_partition_state,
+        expected_output_size,
+        func_names,
+        f_in_offsets,
+        f_in_cols,
+        op_pool_size_bytes,
+        expected_log_msg,
+        capfd,
+        False,
+    )
 
-    # Test functions that usually go through the Aggregation path, but won't because
-    # one or more running values are STRING/DICT
-    def test2():
-        df = pd.DataFrame(
-            {
-                "A": pd.array(list(np.arange(1000)) * 32, dtype="Int64"),
-                "B": pd.array(
-                    [
-                        "tapas",
-                        "bravas",
-                        "pizza",
-                        "omelette",
-                        "salad",
-                        "spinach",
-                        "celery",
-                    ]
-                    * 4000
-                    + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
-                ),
-                "C": np.array(
-                    [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
-                    dtype=np.float32,
-                ),
-                "D": np.arange(32000, dtype=np.int32),
-            }
-        )
-        func_names = [
-            "max",
-            "min",
-            "sum",
-            "count",
-            "mean",
-            "var",
-            "std",
-            "kurtosis",
-            "skew",
-        ]
-        f_in_cols = [1, 1, 2, 2, 2, 2, 2, 3, 3]
-        f_in_offsets = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-        expected_out = df.groupby("A", as_index=False).agg(
-            {
-                "B": ["max", "min"],
-                "C": ["sum", "count", "mean", "var", "std"],
-                "D": [pd.Series.kurt, "skew"],
-            }
-        )
-        expected_out.reset_index(inplace=True, drop=True)
-        expected_out.columns = ["key"] + [f"out_{i}" for i in range(9)]
-        expected_output_size = 1000
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+def test_split_during_finalize_build_str_running_vals(capfd, memory_leak_check):
+    """
+    Test that re-partitioning works correctly when it happens
+    during FinalizeBuild.
+    In particular, we use functions that usually go through the
+    Aggregation path, but won't because one or more running values
+    are STRING/DICT
+    """
 
-        # This will cause partition split during the "FinalizeBuild"
-        op_pool_size_bytes = 3 * 1024 * 1024
-        expected_partition_state = [(1, 0), (1, 1)]
+    df = pd.DataFrame(
+        {
+            "A": pd.array(list(np.arange(1000)) * 32, dtype="Int64"),
+            "B": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+            "C": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
+                dtype=np.float32,
+            ),
+            "D": np.arange(32000, dtype=np.int32),
+        }
+    )
+    func_names = [
+        "max",
+        "min",
+        "sum",
+        "count",
+        "mean",
+        "var",
+        "std",
+        "kurtosis",
+        "skew",
+    ]
+    f_in_cols = [1, 1, 2, 2, 2, 2, 2, 3, 3]
+    f_in_offsets = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-        # Verify that we split a partition during FinalizeBuild.
-        expected_log_msg = "[DEBUG] GroupbyState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 0."
+    expected_out = df.groupby("A", as_index=False).agg(
+        {
+            "B": ["max", "min"],
+            "C": ["sum", "count", "mean", "var", "std"],
+            "D": [pd.Series.kurt, "skew"],
+        }
+    )
+    expected_out.reset_index(inplace=True, drop=True)
+    expected_out.columns = ["key"] + [f"out_{i}" for i in range(9)]
+    expected_output_size = 1000
 
-        _test_helper(
-            df,
-            expected_out,
-            expected_partition_state,
-            expected_output_size,
-            func_names,
-            f_in_offsets,
-            f_in_cols,
-            op_pool_size_bytes,
-            expected_log_msg,
-            capfd,
-            False,
-        )
+    # This will cause partition split during the "FinalizeBuild"
+    op_pool_size_bytes = 3 * 1024 * 1024
+    expected_partition_state = [(1, 0), (1, 1)]
 
-    test1()
-    test2()
+    # Verify that we split a partition during FinalizeBuild.
+    expected_log_msg = "[DEBUG] GroupbyState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 0."
+
+    _test_helper(
+        df,
+        expected_out,
+        expected_partition_state,
+        expected_output_size,
+        func_names,
+        f_in_offsets,
+        f_in_cols,
+        op_pool_size_bytes,
+        expected_log_msg,
+        capfd,
+        False,
+    )
 
 
 @pytest.mark.skipif(bodo.get_size() != 2, reason="Only calibrated for two cores case")
