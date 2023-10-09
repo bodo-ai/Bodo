@@ -1,6 +1,8 @@
 # Copyright (C) 2023 Bodo Inc. All rights reserved.
 """Interface to C++ memory_budget utilities"""
 
+from enum import Enum
+
 import llvmlite.binding as ll
 from llvmlite import ir as lir
 from numba.core import cgutils, types
@@ -20,6 +22,19 @@ ll.add_symbol(
 ll.add_symbol("increment_pipeline_id", memory_budget_cpp.increment_pipeline_id)
 
 
+class OperatorType(Enum):
+    """All supported streaming operator types. The order here must match the order in _memory_budget.h::OperatorType"""
+
+    UNKNOWN = 0
+    SNOWFLAKE_WRITE = 1
+    SNOWFLAKE_READ = 2
+    JOIN = 3
+    GROUPBY = 4
+    UNION = 5
+    ACCUMULATE_TABLE = 6
+    ENCODE_DICT = 7
+
+
 @intrinsic
 def init_operator_comptroller(typingctx):
     def codegen(context, builder, sig, args):
@@ -37,12 +52,18 @@ def init_operator_comptroller(typingctx):
 
 @intrinsic
 def register_operator(
-    typingctx, operator_id, min_pipeline_id, max_pipeline_id, estimate
+    typingctx, operator_id, operator_type, min_pipeline_id, max_pipeline_id, estimate
 ):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.VoidType(),
-            [lir.IntType(64), lir.IntType(64), lir.IntType(64), lir.IntType(64)],
+            [
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+            ],
         )
         fn_typ = cgutils.get_or_insert_function(
             builder.module, fnty, name="register_operator"
@@ -51,7 +72,9 @@ def register_operator(
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return
 
-    sig = types.none(operator_id, min_pipeline_id, max_pipeline_id, estimate)
+    sig = types.none(
+        operator_id, operator_type, min_pipeline_id, max_pipeline_id, estimate
+    )
     return sig, codegen
 
 

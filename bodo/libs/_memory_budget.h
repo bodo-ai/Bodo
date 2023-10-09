@@ -6,6 +6,19 @@
 #include <unordered_map>
 #include <vector>
 
+/// All supported streaming operator types. The order here must match the order
+/// in _memory_budget.py's OperatorType.
+enum class OperatorType {
+    UNKNOWN = 0,
+    SNOWFLAKE_WRITE,
+    SNOWFLAKE_READ,
+    JOIN,
+    GROUPBY,
+    UNION,
+    ACCUMULATE_TABLE,
+    ENCODE_DICT,
+};
+
 /**
  * @brief Class that manages operator memory budget
  * This class will be availible as a singleton through the Default() method.
@@ -37,8 +50,9 @@ class OperatorComptroller {
      * @brief Register an operator and associate it with all pipelines where it
      * will be present with the corresponding estimate.
      */
-    void RegisterOperator(int64_t operator_id, int64_t min_pipeline_id,
-                          int64_t max_pipeline_id, size_t estimate);
+    void RegisterOperator(int64_t operator_id, OperatorType operator_type,
+                          int64_t min_pipeline_id, int64_t max_pipeline_id,
+                          size_t estimate);
 
     /**
      * @brief Increment the id of the current pipeline. This represents the

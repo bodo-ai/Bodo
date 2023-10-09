@@ -6,6 +6,7 @@ import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Expr.StringLiteral
 import com.bodosql.calcite.ir.Op
+import com.bodosql.calcite.ir.OperatorType
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.traits.BatchingProperty
@@ -62,7 +63,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
         val readerVar = builder.symbolTable.genStateVar()
-        currentPipeline.initializeStreamingState(ctx.operatorID(), Op.Assign(readerVar, generateReadExpr(ctx)))
+        currentPipeline.initializeStreamingState(ctx.operatorID(), Op.Assign(readerVar, generateReadExpr(ctx)), OperatorType.SNOWFLAKE_READ)
         return readerVar
     }
 
