@@ -635,14 +635,6 @@ class GroupbyState {
     /// Groupby operator's OperatorBufferPool.
     uint64_t op_pool_bytes_allocated() const;
 
-    /// @brief Get the number of bytes allocated through this Groupby operator's
-    /// OperatorBufferPool that are currently pinned.
-    uint64_t op_pool_bytes_pinned() const;
-
-    /// @brief Get the number of bytes that are currently allocated through this
-    /// Groupby operator's OperatorBufferPool.
-    uint64_t op_pool_bytes_allocated() const;
-
    private:
     /**
      * Helper function that gets the running column types for a given function.
