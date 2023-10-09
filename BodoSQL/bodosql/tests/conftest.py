@@ -1,5 +1,4 @@
 import datetime
-import functools
 import hashlib
 import os
 import string
@@ -1733,11 +1732,6 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodosql_21of22,
         pytest.mark.bodosql_22of22,
     ]
-    # Sort the items. This is needed due to a niche issue with azure CI:
-    # https://bodo.atlassian.net/browse/BE-4190
-    items.sort(key=functools.cmp_to_key(bodo.tests.conftest.fn_compare))
-
-    # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
     # "single_mod" mark to the tests belonging to that module. This envvar is
     # set in runtests.py, which also adds the "-m single_mod" to the pytest
@@ -1747,11 +1741,17 @@ def pytest_collection_modifyitems(items):
         for item in items:
             if module_to_run == item.module.__name__.split(".")[-1] + ".py":
                 item.add_marker(pytest.mark.single_mod)
-    for i, item in enumerate(items):
+
+    # Gets the last byte of hashing the test name. The hash function doesn't
+    # matter as long as it distributes tests reasonably well across all the
+    # buckets.
+    get_last_byte_of_hash = lambda x: hashlib.sha1(x.encode("utf-8")).digest()[-1]
+    for item in items:
+        hash_ = bodo.tests.conftest.get_last_byte_of_test_hash(item)
         # Divide the tests evenly so larger tests like TPCH
         # don't end up entirely in 1 group
-        azure_1p_marker = azure_1p_markers[i % len(azure_1p_markers)]
-        azure_2p_marker = azure_2p_markers[i % len(azure_2p_markers)]
+        azure_1p_marker = azure_1p_markers[hash_ % len(azure_1p_markers)]
+        azure_2p_marker = azure_2p_markers[hash_ % len(azure_2p_markers)]
         item.add_marker(azure_1p_marker)
         item.add_marker(azure_2p_marker)
 
