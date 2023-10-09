@@ -237,6 +237,7 @@ def init_union_state(
                 f_in_offsets.ctypes,
                 f_in_cols.ctypes,
                 0,
+                -1,  # op_pool_size_bytes
                 output_type,
                 parallel,
             )

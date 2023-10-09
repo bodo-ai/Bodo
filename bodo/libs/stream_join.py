@@ -53,20 +53,21 @@ ll.add_symbol(
 ll.add_symbol("delete_join_state", stream_join_cpp.delete_join_state)
 
 # The following are used for debugging and testing purposes only:
-ll.add_symbol("get_op_pool_bytes_pinned", stream_join_cpp.get_op_pool_bytes_pinned)
+ll.add_symbol("join_get_op_pool_bytes_pinned", stream_join_cpp.get_op_pool_bytes_pinned)
 ll.add_symbol(
-    "get_op_pool_bytes_allocated", stream_join_cpp.get_op_pool_bytes_allocated
+    "join_get_op_pool_bytes_allocated", stream_join_cpp.get_op_pool_bytes_allocated
 )
 ll.add_symbol(
-    "get_num_partitions",
+    "join_get_num_partitions",
     stream_join_cpp.get_num_partitions,
 )
 ll.add_symbol(
-    "get_partition_num_top_bits_by_idx",
+    "join_get_partition_num_top_bits_by_idx",
     stream_join_cpp.get_partition_num_top_bits_by_idx,
 )
 ll.add_symbol(
-    "get_partition_top_bitmask_by_idx", stream_join_cpp.get_partition_top_bitmask_by_idx
+    "join_get_partition_top_bitmask_by_idx",
+    stream_join_cpp.get_partition_top_bitmask_by_idx,
 )
 
 
@@ -1308,7 +1309,7 @@ def get_op_pool_bytes_pinned(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="get_op_pool_bytes_pinned"
+            builder.module, fnty, name="join_get_op_pool_bytes_pinned"
         )
         ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -1337,7 +1338,7 @@ def get_op_pool_bytes_allocated(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="get_op_pool_bytes_allocated"
+            builder.module, fnty, name="join_get_op_pool_bytes_allocated"
         )
         ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -1365,7 +1366,7 @@ def get_num_partitions(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="get_num_partitions"
+            builder.module, fnty, name="join_get_num_partitions"
         )
         ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -1389,7 +1390,7 @@ def get_partition_num_top_bits_by_idx(typingctx, join_state, idx):
             [lir.IntType(8).as_pointer(), lir.IntType(64)],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="get_partition_num_top_bits_by_idx"
+            builder.module, fnty, name="join_get_partition_num_top_bits_by_idx"
         )
         ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -1412,7 +1413,7 @@ def get_partition_top_bitmask_by_idx(typingctx, join_state, idx):
             [lir.IntType(8).as_pointer(), lir.IntType(64)],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="get_partition_top_bitmask_by_idx"
+            builder.module, fnty, name="join_get_partition_top_bitmask_by_idx"
         )
         ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)

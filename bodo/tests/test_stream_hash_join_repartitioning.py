@@ -338,17 +338,24 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
     output_size = comm.allreduce(output.shape[0], op=MPI.SUM)
     assert (
         output_size == expected_output_size
-    ), f"Final output size ({output.shape[0]}) is not as expected ({expected_output_size})"
+    ), f"Final output size ({output_size}) is not as expected ({expected_output_size})"
 
     # By the time we're done with the probe step, all memory should've been
     # released:
+    assert_success = final_bytes_pinned == 0
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
     assert (
-        final_bytes_pinned == 0
+        assert_success
     ), f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
+
+    assert_success = final_bytes_allocated == 0
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
     assert (
-        final_bytes_allocated == 0
+        assert_success
     ), f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
 
+    assert_success = final_partition_state == expected_partition_state
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
     assert (
-        final_partition_state == expected_partition_state
+        assert_success
     ), f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
