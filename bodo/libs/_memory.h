@@ -712,6 +712,10 @@ class BufferPool final : public IBufferPool {
     /// this allocator.
     virtual int64_t bytes_allocated() const override;
 
+    virtual int64_t total_bytes_allocated() const override { return 0; }
+
+    virtual int64_t num_allocations() const override { return 0; }
+
     /// @brief The number of bytes currently pinned.
     /// TODO: Get inline to work correctly
     uint64_t bytes_pinned() const override;

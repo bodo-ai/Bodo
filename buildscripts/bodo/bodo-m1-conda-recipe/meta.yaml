@@ -24,12 +24,12 @@ requirements:
   build:
     - {{ compiler('c') }}
     - {{ compiler('cxx') }}
-    - python                                 # [build_platform != target_platform]
-    - cross-python_{{ target_platform }}     # [build_platform != target_platform]
+    - python                                # [build_platform != target_platform]
+    - cross-python_{{ target_platform }}    # [build_platform != target_platform]
     - cython <3.0                           # [build_platform != target_platform]
-    - numpy >=1.23                    # [build_platform != target_platform]
-    - arrow-cpp =11.0.0                      # [build_platform != target_platform]
-    - pyarrow =11.0.0                        # [build_platform != target_platform]
+    - numpy >=1.23                          # [build_platform != target_platform]
+    - arrow-cpp =13.0.0                     # [build_platform != target_platform]
+    - pyarrow =13.0.0                       # [build_platform != target_platform]
     - numba 0.57.1
 
   host:
@@ -44,8 +44,8 @@ requirements:
     - cython <3.0
     - pandas >=1.5.1,<2.0
     - fsspec >=2021.09
-    - arrow-cpp =11.0.0
-    - pyarrow =11.0.0
+    - arrow-cpp =13.0.0
+    - pyarrow =13.0.0
     - boost-cpp =1.82
     - libcurl <=8.3
     # We support both 1.10 and 1.12. Since
@@ -64,7 +64,7 @@ requirements:
     - {{ pin_compatible('numpy') }}
     - pandas >=1.5.1,<2.0
     - fsspec >=2021.09
-    - pyarrow =11.0.0
+    - pyarrow =13.0.0
     - libcurl <=8.3
     - numba =0.57.1
     - mpich *=h* # [not win]

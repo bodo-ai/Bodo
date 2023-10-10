@@ -1002,7 +1002,6 @@ def iceberg_merge_cow_py(
     old_fnames,
     is_parallel=False,
 ):
-
     if not is_parallel:
         raise BodoError(
             "Merge Into with Iceberg Tables are only supported on distributed DataFrames"
@@ -1171,10 +1170,9 @@ import llvmlite.binding as ll
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 
-if bodo.utils.utils.has_pyarrow():
-    from bodo.io import arrow_cpp
+from bodo.io import arrow_cpp
 
-    ll.add_symbol("iceberg_pq_write_py_entry", arrow_cpp.iceberg_pq_write_py_entry)
+ll.add_symbol("iceberg_pq_write_py_entry", arrow_cpp.iceberg_pq_write_py_entry)
 
 
 @intrinsic

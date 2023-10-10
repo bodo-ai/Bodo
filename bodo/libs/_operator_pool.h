@@ -96,6 +96,10 @@ class OperatorBufferPool final : public IBufferPool {
     /// @brief The number of bytes currently pinned.
     uint64_t bytes_pinned() const override;
 
+    virtual int64_t total_bytes_allocated() const override { return 0; }
+
+    virtual int64_t num_allocations() const override { return 0; }
+
     /// @brief Get peak memory allocation in this memory pool
     virtual int64_t max_memory() const override;
 

@@ -1394,17 +1394,6 @@ def check_h5py():
         raise BodoError("install 'h5py' package to enable hdf5 support")
 
 
-def has_pyarrow():
-    """returns True if pyarrow is installed"""
-    try:
-        import pyarrow  # noqa
-    except ImportError:
-        _has_pyarrow = False
-    else:
-        _has_pyarrow = True
-    return _has_pyarrow
-
-
 def has_scipy():
     """returns True if scipy is installed"""
     try:

@@ -18,7 +18,7 @@ dependencies:
   - pandas>=1.5.1,<2.0
 
   # IO
-  - pyarrow =11.0.0=*_cpu
+  - pyarrow =13.0.0=*_cpu
   - fsspec >=2021.09
 
   # HDFS
