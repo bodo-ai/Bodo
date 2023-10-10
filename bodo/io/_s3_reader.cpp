@@ -86,21 +86,26 @@ arrow::fs::S3ProxyOptions get_s3_proxy_options_from_env_vars() {
 // a global singleton instance of S3FileSystem that is
 // initialized the first time it is needed and reused afterwards
 static std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
-bool is_fs_initialized = false;
 bool is_fs_anonymous_mode = false;  // only valid when is_fs_initialized is true
 
 std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region,
                                                    bool anonymous) {
     bool reinit_s3fs_instance;
-    if (!is_fs_initialized) {
-        arrow::Status status;
+    bool is_initialized = arrow::fs::IsS3Initialized();
+
+    if (is_initialized && s3_fs == nullptr) {
+        // always init in this case
+        reinit_s3fs_instance = true;
+
+    } else if (!is_initialized) {
         // initialize S3 APIs
         arrow::fs::S3GlobalOptions g_options;
         g_options.log_level = arrow::fs::S3LogLevel::Off;
-        status = arrow::fs::InitializeS3(g_options);
+        arrow::Status status = arrow::fs::InitializeS3(g_options);
         CHECK_ARROW(status, "InitializeS3", std::string(""));
         // always init in this case
         reinit_s3fs_instance = true;
+
     } else {
         // If already initialized but region for this bucket is different
         // than the current region, then re-initialize with the right region.
@@ -140,12 +145,11 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region,
         // Set proxy options if the appropriate environment variables are set
         options.proxy_options = get_s3_proxy_options_from_env_vars();
 
-        arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> result;
-        result = arrow::fs::S3FileSystem::Make(
-            options, bodo::default_buffer_io_context());
+        arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> result =
+            arrow::fs::S3FileSystem::Make(options,
+                                          bodo::default_buffer_io_context());
         CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::Make", s3_fs,
                                std::string(""))
-        is_fs_initialized = true;
     }
     return s3_fs;
 }

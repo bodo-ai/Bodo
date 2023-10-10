@@ -20,7 +20,6 @@ from numba.core.typing.builtins import IndexValueType
 from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import intrinsic, overload, register_jitable
 from numba.parfors.array_analysis import ArrayAnalysis
-from pyarrow.fs import finalize_s3
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
@@ -3779,11 +3778,7 @@ def flush_stdout():
 
 
 atexit.register(call_finalize)
-# TODO[BSE-1046]: upgrade to Arrow 13 and remove this line since already done by
-# Arrow (also safety is improved in newer versions):
-# https://github.com/apache/arrow/blob/b7d2f7ffca66c868bd2fce5b3749c6caa002a7f0/python/pyarrow/fs.py#L63
-atexit.register(finalize_s3)
-# flush output before finalize
+# Flush output before finalize
 atexit.register(flush_stdout)
 
 

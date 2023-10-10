@@ -26,12 +26,14 @@
 #include <string>
 #include <vector>
 
+#include <arrow/filesystem/api.h>
+#include <arrow/filesystem/localfs.h>
+#include <arrow/io/compressed.h>
+#include <arrow/util/compression.h>
+
 #include "../libs/_distributed.h"
 #include "_bodo_file_reader.h"
 #include "_fs_io.h"
-#include "arrow/filesystem/localfs.h"
-#include "arrow/io/compressed.h"
-#include "arrow/util/compression.h"
 #include "structmember.h"
 
 // lines argument of read_json(lines = json_lines)
@@ -150,8 +152,9 @@ class PathInfo {
         // obtain path info on rank 0, broadcast to other ranks.
         // this sets PathInfo attributes on all ranks
         obtain_is_directory();
-        if (!is_valid)
+        if (!is_valid) {
             return;
+        }
         obtain_file_names_and_sizes();
         obtain_compression_scheme(compression_pyarg);
     }
@@ -270,11 +273,11 @@ class PathInfo {
                                  runtime_err_msg);
             if (!raise_runtime_err) {
                 arrow::fs::FileInfo file_stat = file_stat_result.ValueOrDie();
-                if (file_stat.IsDirectory())
+                if (file_stat.IsDirectory()) {
                     c_is_dir = 1;
-                else if (file_stat.IsFile())
+                } else if (file_stat.IsFile()) {
                     c_is_dir = 0;
-                else {
+                } else {
                     c_is_dir = -1;
                     raise_runtime_err = true;
                     runtime_err_msg =
