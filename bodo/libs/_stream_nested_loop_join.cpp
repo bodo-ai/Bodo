@@ -19,7 +19,7 @@ void NestedLoopJoinState::FinalizeBuild() {
             // (e.g. the offset buffers for strings) in memory to be able to
             // calculate the memory size.
             // https://bodo.atlassian.net/browse/BSE-874 will resolve this.
-            table_size += table_local_memory_size(table);
+            table_size += table_local_memory_size(table, false);
         }
         MPI_Allreduce(MPI_IN_PLACE, &table_size, 1, MPI_INT64_T, MPI_SUM,
                       MPI_COMM_WORLD);

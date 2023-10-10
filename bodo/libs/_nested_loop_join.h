@@ -62,9 +62,9 @@ void nested_loop_join_table_local(
     }
 
     int64_t n_left_blocks = (int64_t)std::ceil(
-        table_local_memory_size(left_table) / (double)block_size_bytes);
+        table_local_memory_size(left_table, false) / (double)block_size_bytes);
     int64_t n_right_blocks = (int64_t)std::ceil(
-        table_local_memory_size(right_table) / (double)block_size_bytes);
+        table_local_memory_size(right_table, false) / (double)block_size_bytes);
 
     int64_t left_block_n_rows =
         (int64_t)std::ceil(n_rows_left / (double)n_left_blocks);
