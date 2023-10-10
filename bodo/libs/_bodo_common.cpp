@@ -725,19 +725,21 @@ int64_t arrow_array_memory_size(std::shared_ptr<arrow::Array> arr) {
     }
 }
 
-int64_t array_memory_size(std::shared_ptr<array_info> earr) {
+int64_t array_memory_size(std::shared_ptr<array_info> earr,
+                          bool include_dict_size) {
     if (earr->arr_type == bodo_array_type::NUMPY ||
         earr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
         return siztype * earr->length;
-    } else if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
-               earr->arr_type == bodo_array_type::DICT) {
-        if (earr->arr_type == bodo_array_type::DICT) {
-            // TODO also contribute dictionary size, but note that when
-            // table_global_memory_size() calls this function, it's not supposed
-            // to add the size of dictionaries of all ranks
-            earr = earr->child_arrays[1];
-        }
+    } else if (earr->arr_type == bodo_array_type::DICT) {
+        // Not all functions want to consider the size of the dictionary.
+        int64_t dict_size =
+            include_dict_size
+                ? array_memory_size(earr->child_arrays[0], include_dict_size)
+                : 0;
+        return dict_size +
+               array_memory_size(earr->child_arrays[1], include_dict_size);
+    } else if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
         if (earr->dtype == Bodo_CTypes::_BOOL) {
             // Nullable boolean arrays store 1 bit per boolean.
@@ -759,30 +761,32 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr) {
     } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
         return n_bytes + sizeof(offset_t) * (earr->length + 1) +
-               array_memory_size(earr->child_arrays.front());
+               array_memory_size(earr->child_arrays.front(), include_dict_size);
     } else if (earr->arr_type == bodo_array_type::STRUCT) {
         int64_t n_bytes = ((earr->length + 7) >> 3), child_array_size = 0;
         for (const std::shared_ptr<array_info>& child_array :
              earr->child_arrays) {
-            child_array_size += array_memory_size(child_array);
+            child_array_size +=
+                array_memory_size(child_array, include_dict_size);
         }
         return n_bytes + child_array_size;
     }
-    Bodo_PyErr_SetString(PyExc_RuntimeError,
-                         "Type not covered in array_memory_size");
-    return 0;
+    throw std::runtime_error(
+        "Array Type: " + GetArrType_as_string(earr->arr_type) +
+        " not covered in array_memory_size()");
 }
 
-int64_t table_local_memory_size(std::shared_ptr<table_info> table) {
+int64_t table_local_memory_size(std::shared_ptr<table_info> table,
+                                bool include_dict_size) {
     int64_t local_size = 0;
     for (auto& arr : table->columns) {
-        local_size += array_memory_size(arr);
+        local_size += array_memory_size(arr, include_dict_size);
     }
     return local_size;
 }
 
 int64_t table_global_memory_size(std::shared_ptr<table_info> table) {
-    int64_t local_size = table_local_memory_size(table);
+    int64_t local_size = table_local_memory_size(table, false);
     int64_t global_size;
     MPI_Allreduce(&local_size, &global_size, 1, MPI_LONG_LONG_INT, MPI_SUM,
                   MPI_COMM_WORLD);

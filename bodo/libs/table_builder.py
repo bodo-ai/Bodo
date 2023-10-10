@@ -8,7 +8,7 @@ import numba
 import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
-from numba.extending import intrinsic, models, register_model
+from numba.extending import intrinsic, models, overload, register_model
 
 import bodo
 from bodo.ext import table_builder_cpp
@@ -46,6 +46,9 @@ ll.add_symbol(
 ll.add_symbol(
     "table_builder_reset",
     table_builder_cpp.table_builder_reset,
+)
+ll.add_symbol(
+    "table_builder_nbytes_py_entry", table_builder_cpp.table_builder_nbytes_py_entry
 )
 ll.add_symbol(
     "delete_table_builder_state",
@@ -241,7 +244,10 @@ def _init_chunked_table_builder_state(
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def init_table_builder_state(
-    operator_id, expected_state_type=None, use_chunked_builder=False, input_dicts_unified=False
+    operator_id,
+    expected_state_type=None,
+    use_chunked_builder=False,
+    input_dicts_unified=False,
 ):
     """Initialize the C++ TableBuilderState pointer"""
     expected_state_type = unwrap_typeref(expected_state_type)
@@ -342,6 +348,29 @@ def _table_builder_append(
     return sig, codegen
 
 
+@intrinsic
+def _table_builder_nbytes(
+    typingctx,
+    builder_state,
+):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(64),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="table_builder_nbytes_py_entry"
+        )
+        res = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return res
+
+    sig = types.int64(builder_state)
+    return sig, codegen
+
+
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def table_builder_append(builder_state, table):
     """Append a table to the builder"""
@@ -359,6 +388,23 @@ def table_builder_append(builder_state, table):
         def impl(builder_state, table):  # pragma: no cover
             cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
             _table_builder_append(builder_state, cpp_table)
+
+    return impl
+
+
+def table_builder_nbytes(builder_state):
+    pass
+
+
+@overload(table_builder_nbytes)
+def overload_table_builder_nbytes(builder_state):
+    """Determine the number of current bytes inside the table
+    of the given table builder. Currently only supported for
+    the regular table builder
+    (TODO: Support chunked table builder with spilling)"""
+
+    def impl(builder_state):
+        return _table_builder_nbytes(builder_state)
 
     return impl
 

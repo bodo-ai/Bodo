@@ -3465,7 +3465,7 @@ int64_t init_sync_iters(const std::shared_ptr<table_info>& in_table,
                         int64_t sync_iter, int n_pes) {
     if (adaptive_sync_counter != -1 && is_parallel && n_pes > 1) {
         // Get max batch size of ranks
-        int64_t in_data_size = table_local_memory_size(in_table);
+        int64_t in_data_size = table_local_memory_size(in_table, false);
         int64_t max_in_data_size;
         MPI_Allreduce(&in_data_size, &max_in_data_size, 1, MPI_INT64_T, MPI_MAX,
                       MPI_COMM_WORLD);
@@ -3502,7 +3502,7 @@ std::tuple<bool, uint64_t, int64_t> shuffle_this_iter(
         // shuffle now if shuffle buffer size of any rank is larger than
         // SHUFFLE_THRESHOLD
         int64_t local_shuffle_buffer_size =
-            table_local_memory_size(shuffle_table);
+            table_local_memory_size(shuffle_table, false);
         int64_t reduced_shuffle_buffer_size;
         MPI_Allreduce(&local_shuffle_buffer_size, &reduced_shuffle_buffer_size,
                       1, MPI_INT64_T, MPI_MAX, MPI_COMM_WORLD);
