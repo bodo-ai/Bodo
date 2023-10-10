@@ -1252,6 +1252,16 @@ void table_builder_append_py_entry(TableBuilderState* state,
     }
 }
 
+int64_t table_builder_nbytes_py_entry(TableBuilderState* state) {
+    int64_t nbytes = 0;
+    try {
+        nbytes = table_local_memory_size(state->builder.data_table, true);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+    return nbytes;
+}
+
 table_info* table_builder_finalize(TableBuilderState* state) {
     auto* rettable = new table_info(*state->builder.data_table);
     delete state;
@@ -1368,6 +1378,7 @@ PyMODINIT_FUNC PyInit_table_builder_cpp(void) {
     SetAttrStringFromVoidPtr(m, table_builder_finalize);
     SetAttrStringFromVoidPtr(m, table_builder_get_data);
     SetAttrStringFromVoidPtr(m, table_builder_reset);
+    SetAttrStringFromVoidPtr(m, table_builder_nbytes_py_entry);
     SetAttrStringFromVoidPtr(m, delete_table_builder_state);
 
     SetAttrStringFromVoidPtr(m, chunked_table_builder_state_init_py_entry);

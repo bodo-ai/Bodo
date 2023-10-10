@@ -126,8 +126,6 @@ snowflake_writer_payload_members = (
     ("old_sas_token", types.unicode_type),
     # Batches collected to write
     ("batches", TableBuilderStateType()),
-    # Uncompressed memory usage of batches
-    ("curr_mem_size", types.int64),
 )
 snowflake_writer_payload_members_dict = dict(snowflake_writer_payload_members)
 
@@ -411,7 +409,6 @@ def snowflake_writer_init(
         "    writer['file_count_global_prev'] = 0\n"
         "    writer['upload_threads_exists'] = False\n"
         "    writer['batches'] = bodo.libs.table_builder.init_table_builder_state(operator_id, table_builder_state_type, input_dicts_unified=input_dicts_unified)\n"
-        "    writer['curr_mem_size'] = 0\n"
         # Connect to Snowflake on rank 0 and get internal stage credentials
         # Note: Identical to the initialization code in df.to_sql()
         "    with bodo.objmode(\n"
@@ -524,17 +521,11 @@ def snowflake_writer_append_table(
         ev_append_batch = tracing.Event(f"append_batch", is_parallel=True)
         table_builder_state = writer["batches"]
         bodo.libs.table_builder.table_builder_append(table_builder_state, table)
-        nbytes_arr = np.empty(n_cols, np.int64)
-        bodo.utils.table_utils.generate_table_nbytes(table, nbytes_arr, 0)
-        nbytes = np.sum(nbytes_arr)
-        writer["curr_mem_size"] += nbytes
-        ev_append_batch.add_attribute("nbytes", nbytes)
+        table_bytes = bodo.libs.table_builder.table_builder_nbytes(table_builder_state)
+        ev_append_batch.add_attribute("table_bytes", table_bytes)
         ev_append_batch.finalize()
         # ===== Part 2: Write Parquet file if file size threshold is exceeded
-        if (
-            is_last
-            or writer["curr_mem_size"] >= bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE
-        ):
+        if is_last or table_bytes >= bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE:
             # Note: Our write batches are at least as large as our read batches. It may
             # be advantageous in the future to split up large incoming batches into
             # multiple Parquet files to write.
@@ -617,7 +608,6 @@ def snowflake_writer_append_table(
                 writer["file_count_local"] += 1
                 ev_upload_table.finalize()
             bodo.libs.table_builder.table_builder_reset(table_builder_state)
-            writer["curr_mem_size"] = 0
         # Count number of newly written files. This is also an implicit barrier
         # To reduce synchronization, we do this infrequently
         # Note: This requires append() to be called the same number of times on all ranks

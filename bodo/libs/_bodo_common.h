@@ -1477,9 +1477,11 @@ void clear_all_cols_if_last_table_ref(std::shared_ptr<table_info> const& table);
 /* Compute the total memory of local chunk of the table on current rank
  *
  * @param table : The input table
+ * @param include_dict_size : Should the size of dictionaries be included?
  * @return the total size of the local chunk of the table
  */
-int64_t table_local_memory_size(std::shared_ptr<table_info> table);
+int64_t table_local_memory_size(std::shared_ptr<table_info> table,
+                                bool include_dict_size);
 
 /* Compute the total memory of the table across all processors.
  *
