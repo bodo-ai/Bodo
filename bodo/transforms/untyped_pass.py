@@ -2430,10 +2430,6 @@ class UntypedPass:
         chunksize: Optional[int] = None,
         use_index: bool = True,
     ):
-        # make sure pyarrow is available
-        if not bodo.utils.utils.has_pyarrow():
-            raise RuntimeError("pyarrow is required for Parquet support")
-
         (
             columns,
             data_arrs,

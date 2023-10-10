@@ -6,6 +6,7 @@ import hashlib
 import json
 import operator
 import os
+import shutil
 import subprocess
 from typing import Protocol
 
@@ -252,8 +253,19 @@ def group_from_hash(testname, num_groups):
 @pytest.fixture(scope="session")
 def minio_server():
     """
-    spins up minio server
+    Spins up minio server
     """
+    cwd = os.getcwd()
+
+    # Kill an existing Minio server (orphan process from segfault)
+    # TODO: Add psutil to conda-lock.yml after Arrow 13 PR
+    # import psutil
+    # for proc in psutil.process_iter():
+    #     if proc.name() == "minio":
+    #         proc.kill()
+    #         shutil.rmtree(cwd + "/Data")
+    #         time.sleep(1)
+
     # Session level environment variables used for S3 Testing.
     os.environ["AWS_ACCESS_KEY_ID"] = "bodotest1"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "bodosecret1"
@@ -270,7 +282,6 @@ def minio_server():
     os.environ["MINIO_SECRET_KEY"] = secret_key
     os.environ["AWS_S3_ENDPOINT"] = "http://{}/".format(address)
 
-    cwd = os.getcwd()
     args = [
         "minio",
         "--compat",
@@ -293,8 +304,6 @@ def minio_server():
         if bodo.get_rank() == 0:
             if proc is not None:
                 proc.kill()
-            import shutil
-
             shutil.rmtree(cwd + "/Data")
 
 

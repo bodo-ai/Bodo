@@ -31,7 +31,7 @@ requirements:
     # Earliest version of Pandas on Python 3.11 is 1.5.1 for M1 Macs
     - pandas >=1.5.1,<2.0
     - fsspec >=2021.09
-    - pyarrow =11.0.0
+    - pyarrow =13.0.0
     - boost-cpp =1.82
     - libcurl <=8.3
     # We suport both 1.10 and 1.12. Since
@@ -50,7 +50,7 @@ requirements:
     - {{ pin_compatible('numpy') }}
     - pandas >=1.5.1,<2.0
     - fsspec >=2021.09
-    - pyarrow =11.0.0
+    - pyarrow =13.0.0
     - libcurl <=8.3
     - numba 0.57.1
     - mpich *=h* # [not win]

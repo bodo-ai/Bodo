@@ -1341,13 +1341,10 @@ def _get_partition_cat_dtype(dictionary):
 from llvmlite import ir as lir
 from numba.core import cgutils
 
-if bodo.utils.utils.has_pyarrow():
-    from bodo.io import arrow_cpp
+from bodo.io import arrow_cpp
 
-    ll.add_symbol("pq_write_py_entry", arrow_cpp.pq_write_py_entry)
-    ll.add_symbol(
-        "pq_write_partitioned_py_entry", arrow_cpp.pq_write_partitioned_py_entry
-    )
+ll.add_symbol("pq_write_py_entry", arrow_cpp.pq_write_py_entry)
+ll.add_symbol("pq_write_partitioned_py_entry", arrow_cpp.pq_write_partitioned_py_entry)
 
 
 @intrinsic
