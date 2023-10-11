@@ -135,6 +135,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+
 
 import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 import static org.apache.calcite.util.Static.RESOURCE;
@@ -2152,6 +2154,37 @@ SqlNode SelectExpression() :
     }
 }
 
+JAVACODE boolean joinNeedsDefaultCondition(SqlLiteral joinType, SqlLiteral natural) {
+    JoinType actualJoinType = joinType.getValueAs(JoinType.class);
+    return !natural.booleanValue() && Set.of(JoinType.INNER, JoinType.LEFT, JoinType.RIGHT, JoinType.FULL).contains(actualJoinType);
+}
+
+/**
+ * Define the default condition when not provided for
+ * a given join type and natural value.
+ */
+JAVACODE SqlNode DefaultCondition(SqlLiteral joinType, SqlLiteral natural) {
+    // We return True if not natural and the join is INNER, LEFT, RIGHT, or FULL.
+    if (joinNeedsDefaultCondition(joinType, natural)) {
+        return SqlLiteral.createBoolean(true, joinType.getParserPosition());
+    } else {
+        return null;
+    }
+}
+
+/**
+ * Define the default condition type when not provided for
+ * a given join type and natural value.
+ */
+JAVACODE SqlLiteral DefaultConditionType(SqlLiteral joinType, SqlLiteral natural) {
+    // We return True if not natural and the join is INNER, LEFT, RIGHT, or FULL.
+    if (joinNeedsDefaultCondition(joinType, natural)) {
+        return JoinConditionType.ON.symbol(joinType.getParserPosition());
+    } else {
+        return JoinConditionType.NONE.symbol(joinType.getParserPosition());
+    }
+}
+
 SqlLiteral Natural() :
 {
 }
@@ -2288,13 +2321,18 @@ SqlNode JoinTable(SqlNode e) :
         }
     |
         {
+            // Bodo Change: Snowflake has a default condition of TRUE
+            // for inner join, left join, right join, and full outer join
+            // if one is not provided and natural = False
+            condition = DefaultCondition(joinType, natural);
+            final SqlLiteral conditionType = DefaultConditionType(joinType, natural);
             return new SqlJoin(joinType.getParserPosition(),
                 e,
                 natural,
                 joinType,
                 e2,
-                JoinConditionType.NONE.symbol(joinType.getParserPosition()),
-                null);
+                conditionType,
+                condition);
         }
     )
 |
