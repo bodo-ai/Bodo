@@ -184,6 +184,9 @@ std::shared_ptr<table_info> get_update_table(
             // so it will use the update columns (happens as part of
             // alloc_update_columns) and we don't need to set the combine
             // columns before calling eval.
+            // We don't need to call setOutputColumn() either since it
+            // allocates the output column through the pool automatically if
+            // needed.
             grouping_info dummy_grp_info;
             col_set->eval(dummy_grp_info, pool, mm);
             const std::vector<std::shared_ptr<array_info>> out_cols =
@@ -302,17 +305,21 @@ void combine_input_table_helper(
  * @param build_table Build table with running values. This may be updated in
  * place.
  * @param n_keys Number of key columns.
+ * @param separate_out_cols Output columns for colsets that require separate
+ * output columns
  */
 std::shared_ptr<table_info> eval_groupby_funcs_helper(
     const std::vector<int32_t>& f_running_value_offsets,
     const std::vector<std::shared_ptr<BasicColSet>>& col_sets,
-    std::shared_ptr<table_info> build_table, const uint64_t n_keys) {
+    std::shared_ptr<table_info> build_table, const uint64_t n_keys,
+    std::shared_ptr<table_info> separate_out_cols) {
     // TODO(njriasan): Move eval computation directly into the output
     // buffer.
     std::shared_ptr<table_info> out_table = std::make_shared<table_info>();
     out_table->columns.assign(build_table->columns.begin(),
                               build_table->columns.begin() + n_keys);
 
+    size_t sep_col_idx = 0;
     for (size_t i_colset = 0; i_colset < col_sets.size(); i_colset++) {
         const std::shared_ptr<BasicColSet>& col_set = col_sets[i_colset];
         std::vector<std::shared_ptr<array_info>> out_combine_cols;
@@ -326,6 +333,11 @@ std::shared_ptr<table_info> eval_groupby_funcs_helper(
         // calling eval() doesn't require grouping info.
         // TODO(ehsan): refactor eval not take grouping info input.
         grouping_info dummy_grp_info;
+
+        if (col_set->getSeparateOutputColumnType().size() != 0) {
+            col_set->setOutputColumn(separate_out_cols->columns[sep_col_idx]);
+            sep_col_idx++;
+        }
         col_set->eval(dummy_grp_info);
         const std::vector<std::shared_ptr<array_info>> out_cols =
             col_set->getOutputColumns();
@@ -345,7 +357,10 @@ std::shared_ptr<table_info> eval_groupby_funcs_helper(
 GroupbyPartition::GroupbyPartition(
     size_t num_top_bits_, uint32_t top_bitmask_,
     const std::vector<int8_t>& build_arr_c_types_,
-    const std::vector<int8_t>& build_arr_array_types_, const uint64_t n_keys_,
+    const std::vector<int8_t>& build_arr_array_types_,
+    const std::vector<int8_t>& separate_out_col_c_types_,
+    const std::vector<int8_t>& separate_out_col_array_types_,
+    const uint64_t n_keys_,
     const std::vector<std::shared_ptr<DictionaryBuilder>>&
         build_table_dict_builders_,
     const std::vector<std::shared_ptr<BasicColSet>>& col_sets_,
@@ -362,6 +377,8 @@ GroupbyPartition::GroupbyPartition(
           0, HashGroupbyTable<true>(this, nullptr),
           KeyEqualGroupbyTable<true>(this, nullptr, n_keys_), op_pool_)),
       build_table_groupby_hashes(op_pool_),
+      separate_out_cols_c_types(separate_out_col_c_types_),
+      separate_out_cols_array_types(separate_out_col_array_types_),
       col_sets(col_sets_),
       f_in_offsets(f_in_offsets_),
       f_in_cols(f_in_cols_),
@@ -379,6 +396,13 @@ GroupbyPartition::GroupbyPartition(
         this->build_table_buffer = std::make_unique<TableBuildBuffer>(
             this->build_arr_c_types, this->build_arr_array_types,
             this->build_table_dict_builders, this->op_pool, this->op_mm);
+
+        this->separate_out_cols = std::make_unique<TableBuildBuffer>(
+            this->separate_out_cols_c_types,
+            this->separate_out_cols_array_types,
+            std::vector<std::shared_ptr<DictionaryBuilder>>(
+                this->separate_out_cols_array_types.size(), nullptr),
+            this->op_pool, this->op_mm);
     } else {
         this->build_table_buffer_chunked =
             std::make_unique<ChunkedTableBuilder>(
@@ -409,8 +433,8 @@ inline void GroupbyPartition::RebuildHashTableFromBuildBuffer() {
     if (n_unhashed_rows > 0) {
         // Compute hashes for the un-hashed rows.
         // TODO: Do this processing in batches of 4K/batch_size rows (for
-        // handling inactive partition case where we will do this for the entire
-        // table)!
+        // handling inactive partition case where we will do this for the
+        // entire table)!
         std::unique_ptr<uint32_t[]> hashes = hash_keys_table(
             this->build_table_buffer->data_table, this->n_keys,
             SEED_HASH_GROUPBY_SHUFFLE,
@@ -424,7 +448,8 @@ inline void GroupbyPartition::RebuildHashTableFromBuildBuffer() {
     }
 
     // Add entries to the hash table. All rows in the build_table_buffer
-    // are guaranteed to be unique groups, so we can just map group -> group.
+    // are guaranteed to be unique groups, so we can just map group ->
+    // group.
     while (this->next_group < static_cast<int64_t>(build_table_nrows)) {
         (*(this->build_hash_table))[this->next_group] = this->next_group;
         this->next_group++;
@@ -446,12 +471,13 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         this->in_table = in_table;
         this->in_table_hashes = batch_hashes_groupby;
 
-        // Reserve space in buffers for potential new groups. This will be a NOP
-        // if we already have sufficient space.
-        // Note that if any of the keys/running values are strings, they always
-        // go through the accumulate path.
+        // Reserve space in buffers for potential new groups. This will be a
+        // NOP if we already have sufficient space. Note that if any of the
+        // keys/running values are strings, they always go through the
+        // accumulate path.
         // TODO[BSE-616]: support variable size output like strings
         this->build_table_buffer->ReserveTable(in_table);
+        this->separate_out_cols->ReserveTableSize(in_table->nrows());
 
         // Fill row group numbers in grouping_info to reuse existing
         // infrastructure.
@@ -467,7 +493,8 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         int64_t init_start_row = this->next_group;
 
         // Add new groups and get group mappings for input batch. This will
-        // make allocations that could invoke the threshold enforcement error.
+        // make allocations that could invoke the threshold enforcement
+        // error.
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             update_groups_helper</*is_local*/ true>(
                 *(this->build_table_buffer), this->build_table_groupby_hashes,
@@ -475,11 +502,17 @@ void GroupbyPartition::UpdateGroupsAndCombine(
                 grp_info, in_table, batch_hashes_groupby, i_row);
         }
 
+        // Increment separate_out_cols size so aggfunc_out_initialize correctly
+        // initializes the columns
+        this->separate_out_cols->IncrementSize(std::max<uint64_t>(
+            this->next_group - this->separate_out_cols->data_table->nrows(),
+            (uint64_t)0));
+
         // Combine existing (and new) keys using the input batch.
         // Since we're not passing in anything that can access the op-pool,
-        // this shouldn't make any additional allocations that go through the
-        // Operator Pool and hence cannot invoke the threshold enforcement
-        // error.
+        // this shouldn't make any additional allocations that go through
+        // the Operator Pool and hence cannot invoke the threshold
+        // enforcement error.
         combine_input_table_helper(
             in_table, grp_info, this->build_table_buffer->data_table,
             this->f_running_value_offsets, this->col_sets, init_start_row);
@@ -514,13 +547,13 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         this->in_table = in_table;
         this->in_table_hashes = batch_hashes_groupby;
 
-        // Reserve space in buffers for potential new groups. This will be a NOP
-        // if we already have sufficient space.
-        // Note that if any of the keys/running values are strings, they always
-        // go through the accumulate path.
+        // Reserve space in buffers for potential new groups. This will be a
+        // NOP if we already have sufficient space. Note that if any of the
+        // keys/running values are strings, they always go through the
+        // accumulate path.
         // TODO[BSE-616]: support variable size output like strings
         this->build_table_buffer->ReserveTable(in_table);
-
+        this->separate_out_cols->ReserveTableSize(in_table->nrows());
         // Fill row group numbers in grouping_info to reuse existing
         // infrastructure.
         // We set group=-1 for rows that don't belong to the current buffer
@@ -535,7 +568,8 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         int64_t init_start_row = this->next_group;
 
         // Add new groups and get group mappings for input batch. This will
-        // make allocations that could invoke the threshold enforcement error.
+        // make allocations that could invoke the threshold enforcement
+        // error.
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             if (append_rows[i_row]) {
                 update_groups_helper</*is_local*/ true>(
@@ -546,11 +580,17 @@ void GroupbyPartition::UpdateGroupsAndCombine(
             }
         }
 
+        // Increment separate_out_cols size so aggfunc_out_initialize correctly
+        // initializes the columns
+        this->separate_out_cols->IncrementSize(std::max<uint64_t>(
+            this->next_group - this->separate_out_cols->data_table->nrows(),
+            (uint64_t)0));
+
         // Combine existing (and new) keys using the input batch.
         // Since we're not passing in anything that can access the op-pool,
-        // this shouldn't make any additional allocations that go through the
-        // Operator Pool and hence cannot invoke the threshold enforcement
-        // error.
+        // this shouldn't make any additional allocations that go through
+        // the Operator Pool and hence cannot invoke the threshold
+        // enforcement error.
         combine_input_table_helper(
             in_table, grp_info, this->build_table_buffer->data_table,
             this->f_running_value_offsets, this->col_sets, init_start_row);
@@ -576,7 +616,8 @@ void GroupbyPartition::AppendBuildBatch(
         // Reserve space. This will be a NOP if we already
         // have sufficient space.
         this->build_table_buffer->ReserveTable(in_table);
-        // Now append the rows. This will always succeed since we've
+        // Now append the rows. This will always
+        // succeed since we've
         // reserved space upfront.
         this->build_table_buffer->UnsafeAppendBatch(in_table);
     } else {
@@ -593,7 +634,9 @@ void GroupbyPartition::AppendBuildBatch(
         // Reserve space. This will be a NOP if we already
         // have sufficient space.
         this->build_table_buffer->ReserveTable(in_table);
-        // Now append the rows. This will always succeed since we've
+        this->separate_out_cols->ReserveTableSize(in_table->nrows());
+        // Now append the rows. This will always
+        // succeed since we've
         // reserved space upfront.
         this->build_table_buffer->UnsafeAppendBatch(in_table, append_rows);
     } else {
@@ -637,7 +680,9 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
     std::shared_ptr<GroupbyPartition> new_part1 =
         std::make_shared<GroupbyPartition>(
             this->num_top_bits + 1, (this->top_bitmask << 1),
-            this->build_arr_c_types, this->build_arr_array_types, this->n_keys,
+            this->build_arr_c_types, this->build_arr_array_types,
+            this->separate_out_cols_c_types,
+            this->separate_out_cols_array_types, this->n_keys,
             this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
             this->f_in_cols, this->f_running_value_offsets, this->batch_size,
             is_active, this->accumulate_before_update,
@@ -646,7 +691,9 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
     std::shared_ptr<GroupbyPartition> new_part2 =
         std::make_shared<GroupbyPartition>(
             this->num_top_bits + 1, (this->top_bitmask << 1) + 1,
-            this->build_arr_c_types, this->build_arr_array_types, this->n_keys,
+            this->build_arr_c_types, this->build_arr_array_types,
+            this->separate_out_cols_c_types,
+            this->separate_out_cols_array_types, this->n_keys,
             this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
             this->f_in_cols, this->f_running_value_offsets, this->batch_size,
             false, this->accumulate_before_update,
@@ -667,10 +714,11 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
 
         // In the agg case, we will only append the entries until
         // build_safely_appended_groups. If there are more entries in the
-        // build_table_buffer, this means we triggered this partition split in
-        // the middle of an UpdateGroupsAndCombine step. That means that those
-        // entries weren't added safely and will be retried. Therefore, we will
-        // skip those entries here (and leave their default to false).
+        // build_table_buffer, this means we triggered this partition split
+        // in the middle of an UpdateGroupsAndCombine step. That means that
+        // those entries weren't added safely and will be retried.
+        // Therefore, we will skip those entries here (and leave their
+        // default to false).
         size_t rows_to_insert =
             this->accumulate_before_update
                 ? this->build_table_buffer->data_table->nrows()
@@ -689,7 +737,8 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
 
             // Reserve space in hashes vector. This doesn't inhibit
             // exponential growth since we're only doing it at the start.
-            // Future appends will still allow for regular exponential growth.
+            // Future appends will still allow for regular exponential
+            // growth.
             new_part1->build_table_groupby_hashes.reserve(
                 append_partition1_sum);
 
@@ -719,18 +768,24 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->build_table_buffer->data_table, append_partition1,
             append_partition1_sum);
 
+        // Reserve space for output columns
+        new_part1->separate_out_cols->ReserveTable(
+            this->separate_out_cols->data_table);
+        new_part1->separate_out_cols->IncrementSize(
+            this->separate_out_cols->data_table->nrows());
         if (!this->accumulate_before_update) {
-            // Update safely appended group count for the new active partition
-            // in the AGG case.
+            // Update safely appended group count for the new active
+            // partition in the AGG case.
             new_part1->build_safely_appended_groups = append_partition1_sum;
-            // XXX Technically, we could store similar information even in the
-            // new inactive partition. That would let us add some number of
-            // rows to the build-table directly upfront during
-            // ActivatePartition. e.g. In this case, we could tell the inactive
-            // partition that the first (build_safely_appended_groups -
-            // append_partition1_sum) many rows are guaranteed to be unique. The
-            // information could even be propagated in the case we're splitting
-            // an inactive partition (keep track of how many of the first
+            // XXX Technically, we could store similar information even in
+            // the new inactive partition. That would let us add some number
+            // of rows to the build-table directly upfront during
+            // ActivatePartition. e.g. In this case, we could tell the
+            // inactive partition that the first
+            // (build_safely_appended_groups - append_partition1_sum) many
+            // rows are guaranteed to be unique. The information could even
+            // be propagated in the case we're splitting an inactive
+            // partition (keep track of how many of the first
             // build_safely_appended_groups rows are going to the new
             // partitions).
         }
@@ -751,11 +806,11 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
         new_part2->build_table_buffer_chunked->AppendBatch(
             this->build_table_buffer->data_table, append_partition2);
 
-        // We do not rebuild the hash table here (for new_part1 which is the new
-        // active partition). That needs to be handled by the caller.
+        // We do not rebuild the hash table here (for new_part1 which is the
+        // new active partition). That needs to be handled by the caller.
     } else {
-        // In the inactive case, partition build_table_buffer_chunked chunk by
-        // chunk
+        // In the inactive case, partition build_table_buffer_chunked chunk
+        // by chunk
         this->build_table_buffer_chunked->Finalize();
         // Just in case we started the activation and some columns
         // reserved memory during ActivatePartition.
@@ -813,6 +868,14 @@ void GroupbyPartition::ActivatePartition() {
         this->build_arr_c_types, this->build_arr_array_types,
         this->build_table_dict_builders, this->op_pool, this->op_mm);
 
+    // Initialize separate output columns
+    // separate_out_cols cannot be STRING or DICT arrays
+    this->separate_out_cols = std::make_unique<TableBuildBuffer>(
+        this->separate_out_cols_c_types, this->separate_out_cols_array_types,
+        std::vector<std::shared_ptr<DictionaryBuilder>>(
+            this->separate_out_cols_array_types.size(), nullptr),
+        this->op_pool, this->op_mm);
+
     if (this->accumulate_before_update) {
         /// Concatenate all build chunks into contiguous build buffer
 
@@ -833,8 +896,9 @@ void GroupbyPartition::ActivatePartition() {
         // we cannot pop the chunks since we need to keep them around
         // in case we need to re-partition and retry.
         for (const auto& chunk : *(this->build_table_buffer_chunked)) {
-            // By definition, this is a small chunk, so we don't need to track
-            // this allocation and can consider this scratch memory usage.
+            // By definition, this is a small chunk, so we don't need to
+            // track this allocation and can consider this scratch memory
+            // usage.
             // TODO XXX Cache the allocation for these hashes by making
             // an allocation for the chunk size (active_chunk_capacity)
             // and reusing that buffer for all chunks.
@@ -847,9 +911,9 @@ void GroupbyPartition::ActivatePartition() {
                 chunk, chunk_hashes_groupby);
         }
 
-        // If we were able to insert all chunks, we have successfully activated
-        // the partition and can now reset the CTB (which will free all the
-        // chunks):
+        // If we were able to insert all chunks, we have successfully
+        // activated the partition and can now reset the CTB (which will
+        // free all the chunks):
         this->build_table_buffer_chunked->Reset();
         this->build_table_buffer_chunked.reset();
     }
@@ -871,32 +935,32 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
             this->f_in_offsets, this->f_in_cols, this->req_extended_group_info,
             this->op_pool, this->op_mm);
     } else {
-        // Note that we don't need to call RebuildHashTableFromBuildBuffer here.
-        // If the partition was inactive, ActivatePartition could've failed.
-        // However, the partition would've remained inactive, so it will be
-        // retried until it succeeds. When it eventually does, we're guaranteed
-        // that the hash-table is up to date.
-        // If the partition was already active, "ActivatePartition" would've
-        // been a NOP and couldn't have failed anyway. The hash-table is
-        // guaranteed to be up to date since UpdateGroupsAndCombine always
-        // brings it up to date. The only place where the hash table is not up
-        // to date is after splitting an active partition. However, that can
-        // never happen during Finalize. Even if we somehow end up in a
-        // situation where the hash-table is not up to date, that's fine since
+        // Note that we don't need to call RebuildHashTableFromBuildBuffer
+        // here. If the partition was inactive, ActivatePartition could've
+        // failed. However, the partition would've remained inactive, so it
+        // will be retried until it succeeds. When it eventually does, we're
+        // guaranteed that the hash-table is up to date. If the partition
+        // was already active, "ActivatePartition" would've been a NOP and
+        // couldn't have failed anyway. The hash-table is guaranteed to be
+        // up to date since UpdateGroupsAndCombine always brings it up to
+        // date. The only place where the hash table is not up to date is
+        // after splitting an active partition. However, that can never
+        // happen during Finalize. Even if we somehow end up in a situation
+        // where the hash-table is not up to date, that's fine since
         // eval_groupby_funcs_helper doesn't need the hash table at all
-        // (assuming the rows in build-table-buffer are all unique, which they
-        // should be since this is an active partition).
+        // (assuming the rows in build-table-buffer are all unique, which
+        // they should be since this is an active partition).
 
         // Call eval() on running values to get final output.
         // Since we're not passing in anything that can access the op-pool,
-        // this shouldn't make any additional allocations that go through the
-        // Operator Pool and hence cannot invoke the threshold enforcement
-        // error.
+        // this shouldn't make any additional allocations that go through
+        // the Operator Pool and hence cannot invoke the threshold
+        // enforcement error.
         std::shared_ptr<table_info> combine_data =
             this->build_table_buffer->data_table;
-        out_table = eval_groupby_funcs_helper(this->f_running_value_offsets,
-                                              this->col_sets, combine_data,
-                                              this->n_keys);
+        out_table = eval_groupby_funcs_helper(
+            this->f_running_value_offsets, this->col_sets, combine_data,
+            this->n_keys, this->separate_out_cols->data_table);
     }
 
     // Since we have generated the output, we don't need the build state
@@ -965,6 +1029,9 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
         build_arr_array_types.push_back(in_arr_array_types[i]);
         build_arr_c_types.push_back(in_arr_c_types[i]);
     }
+    std::vector<int8_t> separate_out_col_array_types;
+    std::vector<int8_t> separate_out_col_c_types;
+
     // Get offsets of update and combine columns for each function since
     // some functions have multiple update/combine columns
     f_running_value_offsets.push_back(n_keys);
@@ -1037,8 +1104,8 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
         }
     }
 
-    // Next, perform a check on the running value types.
-    // If any of the running values are of type string,
+    // Next, perform a check on the running value and output types.
+    // If any of them are of type string,
     // set accumulate_before_update to true.
     for (size_t i = 0; i < ftypes.size(); i++) {
         std::vector<std::shared_ptr<array_info>>& local_input_cols =
@@ -1052,10 +1119,23 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
             running_value_arr_types = this->getRunningValueColumnTypes(
                 local_input_cols, in_arr_types, in_dtypes, ftypes[i]);
 
+        auto seperate_out_cols =
+            this->getSeparateOutputColumns(local_input_cols, ftypes[i]);
+
         for (auto t : std::get<0>(running_value_arr_types)) {
             if (t == bodo_array_type::STRING || t == bodo_array_type::DICT) {
                 this->accumulate_before_update = true;
                 break;
+            }
+        }
+
+        if (seperate_out_cols.size() != 0) {
+            for (auto t : seperate_out_cols) {
+                if (std::get<0>(t) == bodo_array_type::STRING ||
+                    std::get<0>(t) == bodo_array_type::DICT) {
+                    this->accumulate_before_update = true;
+                    break;
+                }
             }
         }
     }
@@ -1072,8 +1152,9 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
 
         std::shared_ptr<BasicColSet> col_set = makeColSet(
             local_input_cols, index_col, ftypes[i], do_combine, skip_na_data, 0,
-            // In the streaming multi-partition scenario, it's safer to mark
-            // things as *not* parallel to avoid any synchronization and hangs.
+            // In the streaming multi-partition scenario, it's
+            // safer to mark things as *not* parallel to avoid
+            // any synchronization and hangs.
             {0}, 0, /*is_parallel*/ false, window_ascending_vect,
             window_na_position_vect, {nullptr}, 0, nullptr, nullptr, 0, nullptr,
             use_sql_rules);
@@ -1091,16 +1172,30 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
             for (auto t : std::get<1>(running_values_arr_types)) {
                 build_arr_c_types.push_back(t);
             }
-
             curr_running_value_offset +=
                 std::get<0>(running_values_arr_types).size();
             f_running_value_offsets.push_back(curr_running_value_offset);
+
+            // Determine what separate output columns are necessary
+            auto separate_out_col_type = col_set->getSeparateOutputColumnType();
+            if (separate_out_col_type.size() != 0) {
+                if (separate_out_col_type.size() != 1) {
+                    throw std::runtime_error(
+                        "GroupbyState::GroupbyState Colsets with multiple "
+                        "separate output columns not supported");
+                }
+                separate_out_col_array_types.push_back(
+                    std::get<0>(separate_out_col_type[0]));
+                separate_out_col_c_types.push_back(
+                    std::get<1>(separate_out_col_type[0]));
+            }
         }
 
         this->col_sets.push_back(col_set);
     }
 
     // build buffer types are same as input if just accumulating batches
+
     if (this->accumulate_before_update) {
         build_arr_array_types = in_arr_array_types;
         build_arr_c_types = in_arr_c_types;
@@ -1148,7 +1243,8 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
         this->build_table_dict_builders);
 
     this->partitions.emplace_back(std::make_shared<GroupbyPartition>(
-        0, 0, build_arr_c_types, build_arr_array_types, this->n_keys,
+        0, 0, build_arr_c_types, build_arr_array_types,
+        separate_out_col_c_types, separate_out_col_array_types, this->n_keys,
         this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
         this->f_in_cols, this->f_running_value_offsets,
         /*batch_size*/ this->output_batch_size,
@@ -1202,6 +1298,34 @@ GroupbyState::getRunningValueColumnTypes(
     return running_value_arr_types;
 }
 
+std::vector<std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
+GroupbyState::getSeparateOutputColumns(
+    std::vector<std::shared_ptr<array_info>> local_input_cols, int ftype) {
+    std::shared_ptr<BasicColSet> col_set =
+        makeColSet(local_input_cols,  // in_cols
+                   nullptr,           // index_col
+                   ftype,             // ftype
+                   true,              // do_combine
+                   true,              // skip_na_data
+                   0,                 // period
+                   {0},               // transform_funcs
+                   0,                 // n_udf
+                   true,              // parallel
+                   {true},            // window_ascending
+                   {true},            // window_na_position
+                   {nullptr},         // window_args
+                   0,                 // n_input_cols
+                   nullptr,           // udf_n_redvars
+                   nullptr,           // udf_table
+                   0,                 // udf_table_idx
+                   nullptr,           // nunique_table
+                   true               // use_sql_rules
+        );
+
+    auto seperate_out_cols = col_set->getSeparateOutputColumnType();
+    return seperate_out_cols;
+}
+
 void GroupbyState::DisablePartitioning() {
     this->op_pool->DisableThresholdEnforcement();
 }
@@ -1213,7 +1337,8 @@ void GroupbyState::SplitPartition(size_t idx) {
         // to nested loop join for this partition.
         // (https://bodo.atlassian.net/browse/BSE-535).
         throw std::runtime_error(
-            "GroupbyState::SplitPartition: Cannot split partition beyond max "
+            "GroupbyState::SplitPartition: Cannot split partition beyond "
+            "max "
             "partition depth of: " +
             std::to_string(max_partition_depth));
     }
@@ -1441,9 +1566,9 @@ void GroupbyState::UpdateShuffleGroupsAndCombine(
     shuffle_grp_info.row_to_group.resize(in_table->nrows(), -1);
 
     // Get current size of the buffers to know starting offset of new
-    // keys which need output data column initialization. update_groups_helper
-    // will update this->shuffle_next_group in place, so we need to cache
-    // it beforehand.
+    // keys which need output data column initialization.
+    // update_groups_helper will update this->shuffle_next_group in place,
+    // so we need to cache it beforehand.
     int64_t shuffle_init_start_row = this->shuffle_next_group;
 
     // Add new groups and get group mappings for input batch
@@ -1612,7 +1737,8 @@ void GroupbyState::InitOutputBuffer(
     const std::shared_ptr<table_info>& dummy_table) {
     auto [arr_c_types, arr_array_types] =
         get_dtypes_arr_types_from_table(dummy_table);
-    // This is not initialized until this point. Resize it to the required size.
+    // This is not initialized until this point. Resize it to the required
+    // size.
     this->out_dict_builders.resize(dummy_table->columns.size(), nullptr);
 
     // Keys are always the first columns in groupby output and match input
@@ -1664,8 +1790,8 @@ std::shared_ptr<table_info> GroupbyState::UnifyOutputDictionaryArrays(
     for (size_t i = 0; i < out_table->ncols(); i++) {
         std::shared_ptr<array_info>& in_arr = out_table->columns[i];
         std::shared_ptr<array_info> out_arr;
-        // Output key columns have the same dictionary as inputs and don't need
-        // unification
+        // Output key columns have the same dictionary as inputs and don't
+        // need unification
         if (in_arr->arr_type != bodo_array_type::DICT || (i < this->n_keys)) {
             out_arr = in_arr;
         } else {
@@ -1756,19 +1882,20 @@ void GroupbyState::FinalizeBuild() {
             std::shared_ptr<table_info> output_table;
             try {
                 // Finalize the partition and get output from it.
-                // TODO: Write output directly into the GroupybyState's output
-                // buffer instead of returning the output.
+                // TODO: Write output directly into the GroupybyState's
+                // output buffer instead of returning the output.
                 output_table = this->partitions[i_part]->Finalize();
                 exception_caught = false;
             } catch (
                 bodo::OperatorBufferPool::OperatorPoolThresholdExceededError&) {
-                // Split the partition into 2. This will always succeed. If the
-                // partition is inactive, we create 2 new inactive partitions
-                // that take up no memory from the OperatorBufferPool. If the
-                // partition is active, it creates one active and another
-                // inactive partition. The new active partition can only be as
-                // large as the original partition, and since threshold
-                // enforcement is disabled, it should fit in memory just fine.
+                // Split the partition into 2. This will always succeed. If
+                // the partition is inactive, we create 2 new inactive
+                // partitions that take up no memory from the
+                // OperatorBufferPool. If the partition is active, it
+                // creates one active and another inactive partition. The
+                // new active partition can only be as large as the original
+                // partition, and since threshold enforcement is disabled,
+                // it should fit in memory just fine.
                 if (this->debug_partitioning) {
                     std::cerr
                         << "[DEBUG] GroupbyState::FinalizeBuild: "
@@ -1777,8 +1904,8 @@ void GroupbyState::FinalizeBuild() {
                         << i_part << "." << std::endl;
                 }
 
-                // In case the error happened during a ColSet operation, we want
-                // to clear their states before retrying.
+                // In case the error happened during a ColSet operation, we
+                // want to clear their states before retrying.
                 this->ClearColSetsStates();
                 this->SplitPartition(i_part);
             }
@@ -1790,9 +1917,9 @@ void GroupbyState::FinalizeBuild() {
                 if (i_part == 0) {
                     this->InitOutputBuffer(output_table);
                 }
-                // XXX TODO UnifyOutputDictionaryArrays needs a version that can
-                // take the shared_ptr without reference and free individual
-                // columns early.
+                // XXX TODO UnifyOutputDictionaryArrays needs a version that
+                // can take the shared_ptr without reference and free
+                // individual columns early.
                 output_table = this->UnifyOutputDictionaryArrays(output_table);
                 this->output_buffer->AppendBatch(output_table);
                 output_table.reset();
@@ -1822,7 +1949,8 @@ uint64_t GroupbyState::op_pool_bytes_allocated() const {
 }
 
 #pragma endregion  // GroupbyState
-/* ------------------------------------------------------------------------ */
+/* ------------------------------------------------------------------------
+ */
 
 /**
  * @brief consume build table batch in streaming groupby (insert into hash
@@ -1837,8 +1965,8 @@ uint64_t GroupbyState::op_pool_bytes_allocated() const {
 bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
                                      std::shared_ptr<table_info> in_table,
                                      bool is_last) {
-    // High level workflow (reusing as much of existing groupby infrastructure
-    // as possible):
+    // High level workflow (reusing as much of existing groupby
+    // infrastructure as possible):
     // 1. Get update values from input. Example with sum function:
     //      A   B
     //      1   3
@@ -1856,7 +1984,8 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     if (groupby_state->build_input_finalized) {
         if (in_table->nrows() != 0) {
             throw std::runtime_error(
-                "groupby_agg_build_consume_batch: Received non-empty in_table "
+                "groupby_agg_build_consume_batch: Received non-empty "
+                "in_table "
                 "after the build was already finalized!");
         }
         // Nothing left to do for build
@@ -1884,8 +2013,8 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     // Unify dictionaries keys to allow consistent hashing and fast key
     // comparison using indices
     in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table, true);
-    // We don't pass the op-pool here since this is operation on a small batch
-    // and we consider this "scratch" usage essentially.
+    // We don't pass the op-pool here since this is operation on a small
+    // batch and we consider this "scratch" usage essentially.
     in_table = get_update_table</*is_acc_case*/ false>(
         in_table, groupby_state->n_keys, groupby_state->col_sets,
         groupby_state->f_in_offsets, groupby_state->f_in_cols,
@@ -1912,10 +2041,11 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
              (hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank)));
     }
 
-    // Fill row group numbers in grouping_info to reuse existing infrastructure.
-    // We set group=-1 for rows that don't belong to the current buffer (e.g.
-    // row belongs to shuffle buffer but we are processing local buffer) for
-    // them to be ignored in combine step later.
+    // Fill row group numbers in grouping_info to reuse existing
+    // infrastructure. We set group=-1 for rows that don't belong to the
+    // current buffer (e.g. row belongs to shuffle buffer but we are
+    // processing local buffer) for them to be ignored in combine step
+    // later.
     groupby_state->UpdateGroupsAndCombine(in_table, batch_hashes_partition,
                                           batch_hashes_groupby,
                                           append_row_to_build_table);
@@ -1971,9 +2101,10 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
         batch_hashes_groupby = hash_keys_table(
             new_data, groupby_state->n_keys, SEED_HASH_GROUPBY_SHUFFLE,
             groupby_state->parallel, /*global_dict_needed*/ false);
-        batch_hashes_partition = hash_keys_table(
-            new_data, groupby_state->n_keys, SEED_HASH_PARTITION,
-            groupby_state->parallel, /*global_dict_needed*/ false, dict_hashes);
+        batch_hashes_partition =
+            hash_keys_table(new_data, groupby_state->n_keys,
+                            SEED_HASH_PARTITION, groupby_state->parallel,
+                            /*global_dict_needed*/ false, dict_hashes);
 
         groupby_state->UpdateGroupsAndCombine(new_data, batch_hashes_partition,
                                               batch_hashes_groupby);
@@ -1988,9 +2119,9 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
 }
 
 /**
- * @brief consume build table batch in streaming groupby by just accumulating
- * rows (used in cases where at least one groupby function requires all group
- * data upfront)
+ * @brief consume build table batch in streaming groupby by just
+ * accumulating rows (used in cases where at least one groupby function
+ * requires all group data upfront)
  *
  * @param groupby_state groupby state pointer
  * @param in_table build table batch
@@ -2003,7 +2134,8 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     if (groupby_state->build_input_finalized) {
         if (in_table->nrows() != 0) {
             throw std::runtime_error(
-                "groupby_acc_build_consume_batch: Received non-empty in_table "
+                "groupby_acc_build_consume_batch: Received non-empty "
+                "in_table "
                 "after the build was already finalized!");
         }
         // Nothing left to do for build
@@ -2130,8 +2262,8 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
  *
  * @param groupby_state groupby state pointer
  * @param produce_output flag to indicate if output should be produced
- * @return std::tuple<std::shared_ptr<table_info>, bool> output data batch and
- * flag for last batch
+ * @return std::tuple<std::shared_ptr<table_info>, bool> output data batch
+ * and flag for last batch
  */
 std::tuple<std::shared_ptr<table_info>, bool> groupby_produce_output_batch(
     GroupbyState* groupby_state, bool produce_output) {
@@ -2201,8 +2333,8 @@ table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
 }
 
 /**
- * @brief Initialize a new streaming groubpy state for specified array types and
- * number of keys (called from Python)
+ * @brief Initialize a new streaming groubpy state for specified array types
+ * and number of keys (called from Python)
  *
  * @param build_arr_c_types array types of build table columns (Bodo_CTypes
  * ints)

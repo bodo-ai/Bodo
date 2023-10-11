@@ -26,6 +26,7 @@ demo/__pycache__
 iceberg/**/__pycache__
 BodoSql/**/__pycache__
 e2e-tests/**/__pycache__
+.cache
 
 # Python egg metadata, regenerated from source files by setuptools.
 **/*.egg-info
@@ -48,6 +49,7 @@ dev_docs/gh-pages/
 .vscode
 iceberg/**/.idea
 typings
+compile_commands.json
 
 # Jupyter checkpoints
 *.ipynb_checkpoints/
