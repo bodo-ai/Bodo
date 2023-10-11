@@ -58,7 +58,18 @@ object BodoPrograms {
         TrimFieldsProgram(false),
         SnowflakeTraitAdder(),
         SnowflakeColumnPruning(),
-        // Simplification & filter pushdown step.
+        // CSE step. Several sections of the parsing calcite integration support may
+        // involve directly copying compute when aliases need to be inserted. Depending
+        // on the context different sections could be simplified differently, so we want to
+        // run our CSE changes up front until we can develop more robust CSE support. After
+        // simplification new similarities may be uncovered, so we also include those rules
+        // in the simplification step.
+        if (optimize) {
+            HepOptimizerProgram(BodoRules.CSE_RULES)
+        } else {
+            NoopProgram
+        },
+        // Simplification & filter push down step.
         if (optimize) {
             HepOptimizerProgram(Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES, BodoRules.CSE_RULES))
         } else {
