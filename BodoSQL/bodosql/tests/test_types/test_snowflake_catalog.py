@@ -2384,8 +2384,8 @@ def test_snowflake_json_field_pushdown(
         clauses: any additional clauses provided after the FROM clause (e.g. GROUP BY, WHERE, ORDER BY).
         answer: the expected output for the query.
     """
-    # Only test on rank zero
-    if bodo.get_rank() != 0:
+    # Only test with one rank
+    if bodo.get_size() != 1:
         return
     query = f"SELECT {', '.join(fields)} FROM BODOSQL_JSON_READ_TEST"
     for clause in clauses:
