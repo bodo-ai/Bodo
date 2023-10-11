@@ -1024,22 +1024,157 @@ void kurt_combine(const std::shared_ptr<array_info>& count_col_in,
 
 // ARRAY_AGG
 
-template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+/**
+ * @brief performs the step of the ARRAY_AGG computation where the offsets
+ * of the inner arrays are calculated based on the number of non-null entries
+ * in each sorted group, and the non-null entries in the sorted groups are
+ * copied over into a new inner array.
+ *
+ * This implementation is used for a nullable or numpy array without any nulls,
+ * in which case the inner array can just be the same array as the sorted data.
+ * Not allowed when using DISTINCT.
+ *
+ * @param[in] sorted_data the data from the column that is to be aggregated,
+ * sorted first by group and then by the orderby columns.
+ * @param[in] sorted_groups the sorted indices of groups, indicating where each
+ *            array will begin/end.
+ * @param[in,out] offset_buffer the buffer that we must write to in order to
+ * specify the begining/ending cutoffs of each array in the inner array.
+ * @param[in] num_group the number of distinct groups.
+ * @returns the new inner array, e.g. a copy of sorted_data with nulls dropped.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+    requires(nullable_array<ArrType> || numpy_array<ArrType>)
+std::shared_ptr<array_info> array_agg_calculate_inner_arr_and_offsets_no_nulls(
+    const std::shared_ptr<array_info>& sorted_data,
+    const std::shared_ptr<array_info>& sorted_groups, offset_t* offset_buffer,
+    size_t num_group) {
+    size_t n_total = sorted_data->length;
+    offset_buffer[0] = 0;
+    offset_buffer[num_group] = n_total;
+    int64_t cur_idx = 1;
+    for (size_t i = 1; i < n_total; i++) {
+        if (getv<int64_t>(sorted_groups, i) !=
+            getv<int64_t>(sorted_groups, i - 1)) {
+            offset_buffer[cur_idx] = i;
+            cur_idx++;
+        }
+    }
+    return sorted_data;
+}
+
+/**
+ * @brief Determines whether a specific row from the sorted data should
+ * be kept when copying over rows into the new inner array.
+ *
+ * This implementation is used for non-DISTINCT, so the only condition
+ * is that the rows are non-null.
+ *
+ * @param[in] sorted_data the column of data sorted first by group and then
+ * by orderby columns.
+ * @param[in] sorted_groups the column of sorted group ids, ensuring that we
+ * know that sorted_groups[i] is the group that sorted_data[i] belongs to.
+ * @param[in] idx the index we are determining if we want to keep.
+ * returns whether idx should be kept when copying over.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType, bool is_distinct>
+    requires(!is_distinct)
+inline bool should_keep_row(const std::shared_ptr<array_info>& sorted_data,
+                            const std::shared_ptr<array_info>& sorted_groups,
+                            size_t idx) {
+    return non_null_at<ArrType, T, DType>(*sorted_data, idx);
+}
+
+/**
+ * @brief Determines whether a specific row from the sorted data should
+ * be kept when copying over rows into the new inner array.
+ *
+ * This implementation is used for DISTINCT, so the conditions are that the
+ * row must be non-null, and must be distinct from the previous row unless
+ * this is the first row in the current group.
+ *
+ * @param[in] sorted_data the column of data sorted first by group and then
+ * by orderby columns.
+ * @param[in] sorted_groups the column of sorted group ids, ensuring that we
+ * know that sorted_groups[i] is the group that sorted_data[i] belongs to.
+ * @param[in] idx the index we are determining if we want to keep.
+ * returns whether idx should be kept when copying over.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType, bool is_distinct>
+    requires(is_distinct)
+inline bool should_keep_row(const std::shared_ptr<array_info>& sorted_data,
+                            const std::shared_ptr<array_info>& sorted_groups,
+                            size_t idx) {
+    if (is_null_at<ArrType, T, DType>(*sorted_data, idx)) {
+        return false;
+    }
+    // If this is the first row, or the previous row belongs to a different
+    // group, then we don't need to check to see if it is distinct from the
+    // previous row.
+    if (idx == 0 || (getv<int64_t>(sorted_groups, idx) !=
+                     getv<int64_t>(sorted_groups, idx - 1))) {
+        return true;
+    }
+    return !TestEqualColumn(sorted_data, idx, sorted_data, idx - 1, true);
+}
+
+/**
+ * @brief Performs the step of the ARRAY_AGG computation where the new inner
+ * array is calculated. This is a special case where the input is a string
+ * array but the only rows being dropped are nulls, so the entire char buffer
+ * can be copied.
+ *
+ * @param[in] sorted_data the data from the column that is to be aggregated,
+ * sorted first by group and then by the orderby columns.
+ * @returns aa copy of sorted_data with nulls dropped.
+ */
+std::shared_ptr<array_info> array_agg_drop_string_nulls(
+    const std::shared_ptr<array_info>& sorted_data, size_t non_null_count) {
+    // Allocate a new offset buffer with the number of rows minus the nulls.
+    size_t n_total = sorted_data->length;
+    offset_t* in_offsets = (offset_t*)sorted_data->data2();
+    int64_t n_chars = in_offsets[n_total];
+    std::shared_ptr<array_info> data_without_nulls =
+        alloc_string_array(Bodo_CTypes::STRING, non_null_count, n_chars);
+    offset_t* out_offsets = (offset_t*)data_without_nulls->data2();
+    out_offsets[non_null_count] = n_chars;
+
+    // Move the non null offsets from the data column to the new array.
+    size_t write_idx = 0;
+    for (size_t i = 0; i < n_total; i++) {
+        // If the current element is non null, write it to the next empty
+        // position in data_without_nulls
+        if (sorted_data->get_null_bit(i)) {
+            out_offsets[write_idx] = in_offsets[i];
+            write_idx++;
+        }
+    }
+    out_offsets[write_idx] = in_offsets[n_total];
+    char* in_data = sorted_data->data1();
+    char* out_data = data_without_nulls->data1();
+    memcpy(out_data, in_data, n_chars);
+    return data_without_nulls;
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
+          bool is_distinct>
 void array_agg_operation(
     const std::shared_ptr<array_info>& in_arr,
     std::shared_ptr<array_info> out_arr,
     const std::vector<std::shared_ptr<array_info>>& orderby_cols,
     const std::vector<bool>& ascending, const std::vector<bool>& na_position,
-    const grouping_info& grp_info, bool is_parallel,
+    const grouping_info& grp_info, const bool is_parallel,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
     using T = typename dtype_to_type<DType>::type;
 
     size_t num_group = grp_info.group_to_first_row.size();
-    size_t n_total = in_arr->length;
 
-    // Step 1: Sort the table first by group (so each group has its elements
+    // Sort the table first by group (so each group has its elements
     // contiguous) and then by the orderby columns (so each group's elements
     // are internally sorted in the desired manner)
     std::shared_ptr<table_info> sorted_table =
@@ -1047,88 +1182,44 @@ void array_agg_operation(
                      1, is_parallel, pool, mm);
     int64_t n_sort_cols = orderby_cols.size() + 1;
 
-    // At this stage, the implementations diverge depending on the input
-    // data's array type
-    if constexpr (ArrType == bodo_array_type::NUMPY) {
-        // Numpy arrays do not have any nulls to remove, so the last column
-        // of the sorted table can be used directly as the inner data.
-
-        // Step 2: Make the last column from the sorted table the new inner
-        // array, since it has all of the data from each group stored
-        // contiguously and in the correct order.
-        std::shared_ptr<array_info> inner_arr = out_arr->child_arrays[0];
-        *inner_arr = *(sorted_table->columns[n_sort_cols]);
-
-        // Step 3: Update the offsets to match the cutoffs where each contiguous
-        // group in the sorted table begins/ends
-        offset_t* offset_buffer =
-            (offset_t*)(out_arr->buffers[0]->mutable_data() + out_arr->offset);
-        offset_buffer[0] = 0;
-        offset_buffer[num_group] = n_total;
-        std::shared_ptr<array_info> sorted_groups = sorted_table->columns[0];
-        int64_t cur_idx = 1;
-        for (size_t i = 1; i < n_total; i++) {
-            if (getv<int64_t>(sorted_groups, i) !=
-                getv<int64_t>(sorted_groups, i - 1)) {
-                offset_buffer[cur_idx] = i;
-                cur_idx++;
-            }
+    // Populate the offset buffer and calculate the indices that are to be
+    // copied over.
+    std::shared_ptr<array_info> sorted_data =
+        sorted_table->columns[n_sort_cols];
+    std::shared_ptr<array_info> sorted_groups = sorted_table->columns[0];
+    offset_t* offset_buffer = (offset_t*)(out_arr->buffers[0]->mutable_data());
+    std::vector<int64_t> rows_to_copy;
+    size_t group_idx = 1;
+    for (size_t i = 0; i < in_arr->length; i++) {
+        // If the current group has just ended, then i is the next offset value
+        if (i > 0 && getv<int64_t>(sorted_groups, i) !=
+                         getv<int64_t>(sorted_groups, i - 1)) {
+            offset_buffer[group_idx] = (rows_to_copy.size());
+            group_idx++;
         }
+        if (should_keep_row<ArrType, T, DType, is_distinct>(sorted_data,
+                                                            sorted_groups, i)) {
+            rows_to_copy.emplace_back(i);
+        }
+    }
+    size_t kept_rows = rows_to_copy.size();
+    offset_buffer[0] = 0;
+    offset_buffer[num_group] = kept_rows;
+
+    // Calculate the new inner array
+    std::shared_ptr<array_info> inner_arr = out_arr->child_arrays[0];
+    if (kept_rows == in_arr->length) {
+        // If nothing was dropped, then we can keep the original array as the
+        // new inner array
+        *inner_arr = *sorted_data;
+    } else if (ArrType == bodo_array_type::STRING && !is_distinct) {
+        // If the input was a string array and we are only dropping nulls, a
+        // special code path can be taken that can just copy the entire
+        // character buffer.
+        *inner_arr = *(array_agg_drop_string_nulls(sorted_data, kept_rows));
     } else {
-        // For nullable arrays, all the rows that contain a null in the
-        // data column must first be removed, but groups that have all of their
-        // rows removed must not have the group itself removed.
-
-        // Step 2: Calculate the number of non-null rows and create a new
-        // arrays for the data excluding nulls.
-        int64_t non_null_count = 0;
-        std::shared_ptr<array_info> sorted_data =
-            sorted_table->columns[n_sort_cols];
-        for (size_t i = 0; i < n_total; i++) {
-            if (non_null_at<ArrType, T, DType>(*sorted_data, i)) {
-                non_null_count++;
-            }
-        }
-        std::shared_ptr<array_info> data_without_nulls =
-            alloc_nullable_array_no_nulls(non_null_count, in_arr->dtype, 0,
-                                          pool, std::move(mm));
-
-        // If the input data is Decimal, ensure the output array has the same
-        // precision/scale.
-        if constexpr (DType == Bodo_CTypes::DECIMAL) {
-            data_without_nulls->precision = in_arr->precision;
-            data_without_nulls->scale = in_arr->scale;
-        }
-
-        // Step 3: Move the non null elements from the data column to the new
-        // array, and copy over the offsets each time we enter a new group.
-        offset_t* offset_buffer =
-            (offset_t*)(out_arr->buffers[0]->mutable_data() + out_arr->offset);
-        offset_buffer[0] = 0;
-        offset_buffer[num_group] = non_null_count;
-        std::shared_ptr<array_info> sorted_groups = sorted_table->columns[0];
-        int64_t group_idx = 1;
-        offset_t curr_offset = 0;
-        for (size_t i = 0; i < n_total; i++) {
-            // If the current group has just ended, the next offset will be the
-            // previous offset plus the number of non null elements since the
-            // current group started.
-            if (i > 0 && getv<int64_t>(sorted_groups, i) !=
-                             getv<int64_t>(sorted_groups, i - 1)) {
-                offset_buffer[group_idx] = curr_offset;
-                group_idx++;
-            }
-            // If the current element is non null, write it to the next empty
-            // position in data_without_nulls
-            if (non_null_at<ArrType, T, DType>(*sorted_data, i)) {
-                set_arr_item<ArrType, T, DType>(
-                    *data_without_nulls, curr_offset,
-                    get_arr_item<ArrType, T, DType>(*sorted_data, i));
-                curr_offset++;
-            }
-        }
-        std::shared_ptr<array_info> inner_arr = out_arr->child_arrays[0];
-        *inner_arr = *data_without_nulls;
+        // Otherwise, use the kept rows vector to select that subset of rows
+        *inner_arr = *(RetrieveArray_SingleColumn(sorted_data, rows_to_copy));
     }
 }
 
@@ -1138,16 +1229,23 @@ void array_agg_dtype_helper(
     std::shared_ptr<array_info> out_arr,
     const std::vector<std::shared_ptr<array_info>>& orderby_cols,
     const std::vector<bool>& ascending, const std::vector<bool>& na_position,
-    const grouping_info& grp_info, bool is_parallel,
+    const grouping_info& grp_info, const bool is_parallel,
+    const bool is_distinct,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
-#define ARRAY_AGG_DTYPE_CASE(dtype)                                            \
-    case dtype: {                                                              \
-        array_agg_operation<ArrType, dtype>(in_arr, out_arr, orderby_cols,     \
-                                            ascending, na_position, grp_info,  \
-                                            is_parallel, pool, std::move(mm)); \
-        break;                                                                 \
+#define ARRAY_AGG_DTYPE_CASE(dtype)                                    \
+    case dtype: {                                                      \
+        if (is_distinct) {                                             \
+            array_agg_operation<ArrType, dtype, true>(                 \
+                in_arr, out_arr, orderby_cols, ascending, na_position, \
+                grp_info, is_parallel, pool, std::move(mm));           \
+        } else {                                                       \
+            array_agg_operation<ArrType, dtype, false>(                \
+                in_arr, out_arr, orderby_cols, ascending, na_position, \
+                grp_info, is_parallel, pool, std::move(mm));           \
+        }                                                              \
+        break;                                                         \
     }
     switch (in_arr->dtype) {
         ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::UINT8)
@@ -1158,6 +1256,7 @@ void array_agg_dtype_helper(
         ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::INT16)
         ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::INT32)
         ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::INT64)
+        ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::INT128)
         ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::FLOAT32)
         ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::FLOAT64)
         ARRAY_AGG_DTYPE_CASE(Bodo_CTypes::DECIMAL)
@@ -1175,19 +1274,48 @@ void array_agg_computation(
     std::shared_ptr<array_info> out_arr,
     const std::vector<std::shared_ptr<array_info>>& orderby_cols,
     const std::vector<bool>& ascending, const std::vector<bool>& na_position,
-    const grouping_info& grp_info, bool is_parallel,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    const grouping_info& grp_info, const bool is_parallel,
+    const bool is_distinct, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     switch (in_arr->arr_type) {
         case bodo_array_type::NUMPY: {
             array_agg_dtype_helper<bodo_array_type::NUMPY>(
                 in_arr, out_arr, orderby_cols, ascending, na_position, grp_info,
-                is_parallel, pool, std::move(mm));
+                is_parallel, is_distinct, pool, std::move(mm));
             break;
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
             array_agg_dtype_helper<bodo_array_type::NULLABLE_INT_BOOL>(
                 in_arr, out_arr, orderby_cols, ascending, na_position, grp_info,
-                is_parallel, pool, std::move(mm));
+                is_parallel, is_distinct, pool, std::move(mm));
+            break;
+        }
+        case bodo_array_type::STRING: {
+            if (is_distinct) {
+                array_agg_operation<bodo_array_type::STRING,
+                                    Bodo_CTypes::STRING, true>(
+                    in_arr, out_arr, orderby_cols, ascending, na_position,
+                    grp_info, is_parallel, pool, std::move(mm));
+            } else {
+                array_agg_operation<bodo_array_type::STRING,
+                                    Bodo_CTypes::STRING, false>(
+                    in_arr, out_arr, orderby_cols, ascending, na_position,
+                    grp_info, is_parallel, pool, std::move(mm));
+            }
+            break;
+        }
+        case bodo_array_type::DICT: {
+            if (is_distinct) {
+                array_agg_operation<bodo_array_type::DICT, Bodo_CTypes::STRING,
+                                    true>(in_arr, out_arr, orderby_cols,
+                                          ascending, na_position, grp_info,
+                                          is_parallel, pool, std::move(mm));
+            } else {
+                array_agg_operation<bodo_array_type::DICT, Bodo_CTypes::STRING,
+                                    false>(in_arr, out_arr, orderby_cols,
+                                           ascending, na_position, grp_info,
+                                           is_parallel, pool, std::move(mm));
+            }
             break;
         }
         default: {

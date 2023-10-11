@@ -1523,23 +1523,29 @@ def test_mode(values, dtype, memory_leak_check):
         pytest.param(
             "ARRAY_AGG(D) WITHIN GROUP (ORDER BY O)",
             [[20, 15, 12, 7, 2, 0], [21, 18, 13, 8, 6, 3, 1], [24, 19, 14, 9]],
-            id="with_order",
+            id="int-with_order",
         ),
         pytest.param(
             "ARRAY_AGG(D)",
             [[0, 2, 7, 12, 15, 20], [1, 3, 6, 8, 13, 18, 21], [9, 14, 19, 24]],
-            id="no_order",
+            id="int-no_order",
+        ),
+        pytest.param(
+            "ARRAY_AGG(S) WITHIN GROUP (ORDER BY O)",
+            [
+                ["habet", "habet", "abet", "", "", "abet", "Alphabet"],
+                ["", "", "", "", "abet", "", "", "lphabet"],
+                ["abet", "lphabet", "habet", "habet"],
+            ],
+            id="string-with_order",
         ),
     ],
 )
 def test_array_agg(call, answer, memory_leak_check):
     """Tests ARRAY_AGG on integer data with and without a WITHIN GROUP clause containing
     a single ordering term, no DISTINCT, and accompanied by a GROUP BY.
-
-    An ORDER BY clause at the end of the query must be provided since
-    sort_output=True is not supported on nested array data.
     """
-    query = f"SELECT K, {call} FROM table1 GROUP BY K ORDER BY K"
+    query = f"SELECT K, {call} FROM table1 GROUP BY K"
     ctx = {
         "table1": pd.DataFrame(
             {
@@ -1547,6 +1553,12 @@ def test_array_agg(call, answer, memory_leak_check):
                 "O": list(range(25, 0, -1)),
                 "D": pd.Series(
                     [None if i % 6 > 3 else i for i in range(25)], dtype=pd.Int32Dtype()
+                ),
+                "S": pd.Series(
+                    [
+                        None if i % 7 > 4 else "Alphabet"[(i**2) % 13 :]
+                        for i in range(25)
+                    ]
                 ),
             }
         )
@@ -1566,5 +1578,79 @@ def test_array_agg(call, answer, memory_leak_check):
         expected_output=answer,
         check_names=False,
         check_dtype=False,
-        sort_output=False,  # Unsupported on nested array data
+        convert_columns_to_pandas=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "call, answer",
+    [
+        pytest.param(
+            "ARRAY_AGG(DISTINCT D) WITHIN GROUP (ORDER BY D DESC)",
+            [[2, 1, 0, -1, -2], [2, 0, -1, -2, -7], [7, 0, -2]],
+            id="int-with_order",
+        ),
+        pytest.param(
+            "ARRAY_AGG(DISTINCT D)",
+            [[-2, -1, 0, 1, 2], [-7, -2, -1, 0, 2], [-2, 0, 7]],
+            id="int-no_order",
+        ),
+        pytest.param(
+            "ARRAY_AGG(DISTINCT S) WITHIN GROUP (ORDER BY S)",
+            [
+                ["", "Alphabet", "abet", "habet"],
+                ["", "abet", "lphabet"],
+                ["abet", "habet", "lphabet"],
+            ],
+            id="string-with_order",
+        ),
+        pytest.param(
+            "ARRAY_AGG(DISTINCT S)",
+            [
+                ["", "Alphabet", "abet", "habet"],
+                ["", "abet", "lphabet"],
+                ["abet", "habet", "lphabet"],
+            ],
+            id="string-no_order",
+        ),
+    ],
+)
+def test_array_agg_distinct(call, answer, memory_leak_check):
+    """Tests ARRAY_AGG on integer data with and without a WITHIN GROUP clause containing
+    a single ordering term, with DISTINCT, and accompanied by a GROUP BY.
+    """
+    query = f"SELECT K, {call} FROM table1 GROUP BY K"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "K": pd.Series(list("EIEIO") * 5),
+                "D": pd.Series(
+                    [None if i % 6 > 3 else round(np.tan(i)) for i in range(25)],
+                    dtype=pd.Int32Dtype(),
+                ),
+                "S": pd.Series(
+                    [
+                        None if i % 7 > 4 else "Alphabet"[(i**2) % 13 :]
+                        for i in range(25)
+                    ]
+                ),
+            }
+        )
+    }
+
+    answer = pd.DataFrame(
+        {
+            0: list("EIO"),
+            1: answer,
+        }
+    )
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+        convert_columns_to_pandas=True,
     )

@@ -1311,8 +1311,8 @@ double percentile_dtype_helper(const std::unique_ptr<array_info> &arr,
                 arr, percentile, interpolate, parallel);
         }
         default: {
-            throw new std::runtime_error("Unsupported DType for percentile: " +
-                                         GetDtype_as_string(arr->dtype));
+            throw std::runtime_error("Unsupported DType for percentile: " +
+                                     GetDtype_as_string(arr->dtype));
         }
     }
 }
@@ -1333,9 +1333,8 @@ double percentile_py_entrypt(array_info *arr_raw, double percentile,
             break;
         }
         default: {
-            throw new std::runtime_error(
-                "Unsupported ArrayType for percentile: " +
-                GetArrType_as_string(arr->arr_type));
+            throw std::runtime_error("Unsupported ArrayType for percentile: " +
+                                     GetArrType_as_string(arr->arr_type));
         }
     }
     if (parallel) {

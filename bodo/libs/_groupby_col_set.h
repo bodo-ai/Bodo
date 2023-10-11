@@ -923,7 +923,7 @@ class ArrayAggColSet : public BasicColSet {
     ArrayAggColSet(std::shared_ptr<array_info> in_col,
                    std::vector<std::shared_ptr<array_info>> orderby_cols,
                    std::vector<bool> ascending, std::vector<bool> na_position,
-                   bool _is_parallel);
+                   int ftype, bool _is_parallel);
 
     ~ArrayAggColSet() override;
 
@@ -963,6 +963,7 @@ class ArrayAggColSet : public BasicColSet {
     const std::vector<std::shared_ptr<array_info>> orderby_cols;
     const std::vector<bool> ascending;
     const std::vector<bool> na_position;
+    const bool is_distinct;
     const bool is_parallel;
 };
 
