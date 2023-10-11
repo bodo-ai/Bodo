@@ -162,6 +162,10 @@ eca.append("-Wno-c99-designator")
 eca.append("-Wno-return-type-c-linkage")
 eca.append("-Wno-macro-redefined")
 
+# Force colored output, even when the the output is not a terminal
+if "BODO_FORCE_COLORED_BUILD" in os.environ:
+    eca.append("-fcolor-diagnostics")
+
 # Use a single C-extension for all of Bodo
 # Copying ind, lid, eca, and ela to avoid aliasing, as we continue to append
 ext_metadata: Dict[str, Any] = dict(
