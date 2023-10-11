@@ -1818,11 +1818,10 @@ bool join_build_consume_batch(HashJoinState* join_state,
 
                 // Step 2: Broadcast the table.
 
-                bool all_gather = true;
                 // Gather the partition data.
                 std::shared_ptr<table_info> gathered_table = gather_table(
                     join_state->partitions[0]->build_table_buffer.data_table,
-                    -1, all_gather, true);
+                    -1, /*all_gather*/ true, true);
 
                 gathered_table =
                     join_state->UnifyBuildTableDictionaryArrays(gathered_table);
