@@ -30,6 +30,7 @@ import org.apache.calcite.rel.externalize.RelWriterImpl
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.util.Pair
 import java.io.PrintWriter
+import java.lang.RuntimeException
 import java.text.DecimalFormat
 
 /**
@@ -87,8 +88,9 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
                     }
                 }
             }
+        } else if ((System.getenv("UPDATE_EXPECT")?.toIntOrNull() ?: 0) != 0) {
+            throw RuntimeException("One of UPDATE_EXPECT and BODOSQL_TESTING_FIND_NEEDED_METADATA must be disabled when running tests")
         }
-
         // If this relational node appears multiple times in the tree,
         // we will have assigned it a normalized id. If that normalized id
         // exists, output it.
