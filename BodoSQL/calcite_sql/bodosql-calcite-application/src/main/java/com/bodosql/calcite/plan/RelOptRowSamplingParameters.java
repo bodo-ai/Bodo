@@ -17,43 +17,38 @@
 package com.bodosql.calcite.plan;
 
 /**
- * RelOptRowSamplingParameters represents the parameters necessary to
- * produce a fixed-size row sample of a relation.
+ * RelOptRowSamplingParameters represents the parameters necessary to produce a fixed-size row
+ * sample of a relation.
  *
- * <p>Its parameters are derived from the SQL 2003 TABLESAMPLE clause, with
- * additional support for sampling a fixed number of rows.
+ * <p>Its parameters are derived from the SQL 2003 TABLESAMPLE clause, with additional support for
+ * sampling a fixed number of rows.
  */
 public class RelOptRowSamplingParameters {
-  //~ Instance fields --------------------------------------------------------
+  // ~ Instance fields --------------------------------------------------------
 
   private final boolean isBernoulli;
   private final int numberOfRows;
   private final boolean isRepeatable;
   private final int repeatableSeed;
 
-  //~ Constructors -----------------------------------------------------------
+  // ~ Constructors -----------------------------------------------------------
 
   public RelOptRowSamplingParameters(
-      boolean isBernoulli,
-      int numberOfRows,
-      boolean isRepeatable,
-      int repeatableSeed) {
+      boolean isBernoulli, int numberOfRows, boolean isRepeatable, int repeatableSeed) {
     this.isBernoulli = isBernoulli;
     this.numberOfRows = numberOfRows;
     this.isRepeatable = isRepeatable;
     this.repeatableSeed = repeatableSeed;
   }
 
-  //~ Methods ----------------------------------------------------------------
+  // ~ Methods ----------------------------------------------------------------
 
   /**
-   * Indicates whether Bernoulli or system sampling should be performed.
-   * Bernoulli sampling requires the decision whether to include each row in
-   * the the sample to be independent across rows. System sampling allows
-   * implementation-dependent behavior.
+   * Indicates whether Bernoulli or system sampling should be performed. Bernoulli sampling requires
+   * the decision whether to include each row in the sample to be independent across rows. System
+   * sampling allows implementation-dependent behavior.
    *
-   * @return true if Bernoulli sampling is configured, false for system
-   * sampling
+   * @return true if Bernoulli sampling is configured, false for system sampling
    */
   public boolean isBernoulli() {
     return isBernoulli;
@@ -69,11 +64,10 @@ public class RelOptRowSamplingParameters {
   }
 
   /**
-   * Indicates whether the sample results should be repeatable. Sample results
-   * are only required to repeat if no changes have been made to the
-   * relation's content or structure. If the sample is configured to be
-   * repeatable, then a user-specified seed value can be obtained via
-   * {@link #getRepeatableSeed()}.
+   * Indicates whether the sample results should be repeatable. Sample results are only required to
+   * repeat if no changes have been made to the relation's content or structure. If the sample is
+   * configured to be repeatable, then a user-specified seed value can be obtained via {@link
+   * #getRepeatableSeed()}.
    *
    * @return true if the sample results should be repeatable
    */
@@ -82,10 +76,9 @@ public class RelOptRowSamplingParameters {
   }
 
   /**
-   * If {@link #isRepeatable()} returns <code>true</code>, this method returns a
-   * user-specified seed value. Samples of the same, unmodified relation
-   * should be identical if the sampling mode, sampling percentage and
-   * repeatable seed are the same.
+   * If {@link #isRepeatable()} returns <code>true</code>, this method returns a user-specified seed
+   * value. Samples of the same, unmodified relation should be identical if the sampling mode,
+   * sampling percentage and repeatable seed are the same.
    *
    * @return seed value for repeatable samples
    */
