@@ -27,6 +27,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.type.BodoSqlTypeUtil;
 import org.apache.calcite.sql.type.SqlTypeCoercionRule;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -599,7 +600,9 @@ public class RexSimplify {
         // "1 != '1'" is unchanged because the types are not the same.
         if (o0.isA(SqlKind.LITERAL)
                 && o1.isA(SqlKind.LITERAL)
-                && SqlTypeUtil.equalSansNullability(rexBuilder.getTypeFactory(),
+                // Bodo Change: Handle if two character types are not equal as these
+                // should still be compared.
+                && BodoSqlTypeUtil.literalEqualSansNullability(rexBuilder.getTypeFactory(),
                 o0.getType(), o1.getType())) {
             final C v0 = ((RexLiteral) o0).getValueAs(clazz);
             final C v1 = ((RexLiteral) o1).getValueAs(clazz);
