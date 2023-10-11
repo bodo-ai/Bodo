@@ -100,6 +100,8 @@ class GroupbyPartition {
         size_t num_top_bits_, uint32_t top_bitmask_,
         const std::vector<int8_t>& build_arr_c_types_,
         const std::vector<int8_t>& build_arr_array_types_,
+        const std::vector<int8_t>& separate_out_cols_c_types_,
+        const std::vector<int8_t>& separate_out_cols_array_types,
         const uint64_t n_keys_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
             build_table_dict_builders_,
@@ -144,6 +146,12 @@ class GroupbyPartition {
     // Chunked append-only buffer, only used if a partition is inactive and
     // not yet finalized
     std::unique_ptr<ChunkedTableBuilder> build_table_buffer_chunked;
+
+    std::vector<int8_t> separate_out_cols_c_types;
+    std::vector<int8_t> separate_out_cols_array_types;
+    // Seperate output columns with one column for each colset
+    // that requires them
+    std::unique_ptr<TableBuildBuffer> separate_out_cols;
 
     // temporary batch data
     std::shared_ptr<table_info> in_table = nullptr;
@@ -650,10 +658,19 @@ class GroupbyState {
         std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes, int ftype);
 
     /**
-     * @brief Split the partition at index 'idx' into two partitions.
+     * Helper function that gets the output column types for a given function.
+     * This is used to initialize the build state. Implemented in a similar
+     * fashion to getRunningValueColumnTypes.
+     */
+    std::vector<
+        std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
+    getSeparateOutputColumns(
+        std::vector<std::shared_ptr<array_info>> local_input_cols, int ftype);
+
+    /*@brief Split the partition at index 'idx' into two partitions.
      * This must only be called in the event of a threshold enforcement error.
      *
-     * @param idx Index of the partition (in this->partitions) to split.
+     *@param idx Index of the partition(in this->partitions) to split.
      */
     void SplitPartition(size_t idx);
 

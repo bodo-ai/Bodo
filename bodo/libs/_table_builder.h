@@ -918,12 +918,12 @@ struct ArrayBuildBuffer {
     void ReserveSpaceForStringAppend(size_t new_char_count);
 
     /**
-     * @brief increment the size of the buffer by one to allow a new row to be
+     * @brief increment the size of the buffer to allow new rows to be
      * appended.
-     * NOTE: This does not resize data buffers of variable-sized
-     * elements like strings and nested arrays.
+     * NOTE: The array should have enough capactiy before making
+     * this call
      */
-    void IncrementSize();
+    void IncrementSize(size_t addln_size = 1);
 
     /**
      * @brief Clear the buffers, i.e. set size to 0.
@@ -1031,6 +1031,13 @@ struct TableBuildBuffer {
     void IncrementSizeDataColumns(uint64_t n_keys);
 
     /**
+     * @brief increment size of all columns by addln_size.
+     * NOTE: The table should have enough capacity already
+     * reserved before this call.
+     */
+    void IncrementSize(size_t new_size);
+
+    /**
      * @brief Reserve enough space to potentially append rows from
      * in_table (based on reserve_rows bitmap).
      * NOTE: This requires reserving space for
@@ -1063,13 +1070,18 @@ struct TableBuildBuffer {
     void ReserveTable(const std::shared_ptr<table_info>& in_table);
 
     /**
+     * @brief Reserve enough space to hold size + new_data_len elements
+     */
+    void ReserveTableSize(const size_t new_data_len);
+
+    /**
      * @brief Reserve enough space to be able to append all the
      * finalized chunks of a ChunkedTableBuilder.
      * NOTE: This requires reserving space for
      * variable-sized elements like strings and nested arrays.
      *
-     * @param chunked_tb ChunkedTableBuilder whose chunks we want to append to
-     * this TableBuildBuffer.
+     * @param chunked_tb ChunkedTableBuilder whose chunks we want to append
+     * to this TableBuildBuffer.
      */
     void ReserveTable(const ChunkedTableBuilder& chunked_tb);
 

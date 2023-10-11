@@ -251,6 +251,26 @@ class BasicColSet {
         this->in_col.reset();
     }
 
+    /**
+     * @brief Returns a vector of array types needed for separate output columns
+     * or an empty vector if none are needed
+     */
+    virtual std::vector<
+        std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
+    getSeparateOutputColumnType() {
+        return {};
+    }
+
+    /**
+     * @brief Set output column for this column set if this
+     * colset uses output columns (used in streaming groupby)
+     */
+    virtual void setOutputColumn(std::shared_ptr<array_info> out_col_) {
+        throw std::runtime_error(
+            "setOutputColumn() this colset does not use separate output "
+            "columns");
+    }
+
    protected:
     std::shared_ptr<array_info>
         in_col;  // the input column (from groupby input table) to which
@@ -549,6 +569,29 @@ class VarStdColSet : public BasicColSet {
         this->out_col.reset();
     }
 
+    virtual std::vector<
+        std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
+    getSeparateOutputColumnType() override {
+        return {{bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64}};
+    }
+
+    virtual void setOutputColumn(
+        std::shared_ptr<array_info> out_col_) override {
+        if (out_col_ == nullptr) {
+            throw std::runtime_error("out_col_ is null");
+        }
+        if (out_col_->dtype != Bodo_CTypes::FLOAT64) {
+            throw std::runtime_error("out_col_ is not FLOAT64");
+        }
+        if (out_col_->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
+            throw std::runtime_error("out_col_ is not NULLABLE_INT_BOOL");
+        }
+        this->out_col = out_col_;
+        // Initialize as ftype to match nullable behavior
+        aggfunc_output_initialize(this->out_col, this->ftype,
+                                  use_sql_rules);  // zero initialize
+    }
+
    private:
     std::shared_ptr<array_info> out_col = nullptr;
 };
@@ -606,6 +649,29 @@ class SkewColSet : public BasicColSet {
     virtual void clear() override {
         BasicColSet::clear();
         this->out_col.reset();
+    }
+
+    virtual std::vector<
+        std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
+    getSeparateOutputColumnType() override {
+        return {std::make_pair(bodo_array_type::NULLABLE_INT_BOOL,
+                               Bodo_CTypes::FLOAT64)};
+    }
+    virtual void setOutputColumn(
+        std::shared_ptr<array_info> out_col_) override {
+        if (out_col_ == nullptr) {
+            throw std::runtime_error("out_col_ is null");
+        }
+        if (out_col_->dtype != Bodo_CTypes::FLOAT64) {
+            throw std::runtime_error("out_col_ is not FLOAT64");
+        }
+        if (out_col_->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
+            throw std::runtime_error("out_col_ is not NULLABLE_INT_BOOL");
+        }
+        this->out_col = out_col_;
+        // Initialize as ftype to match nullable behavior
+        aggfunc_output_initialize(this->out_col, this->ftype,
+                                  use_sql_rules);  // zero initialize
     }
 
    private:
@@ -717,6 +783,28 @@ class KurtColSet : public BasicColSet {
     virtual void clear() override {
         BasicColSet::clear();
         this->out_col.reset();
+    }
+
+    virtual std::vector<
+        std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
+    getSeparateOutputColumnType() override {
+        return {{bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64}};
+    }
+    virtual void setOutputColumn(
+        std::shared_ptr<array_info> out_col_) override {
+        if (out_col_ == nullptr) {
+            throw std::runtime_error("out_col_ is null");
+        }
+        if (out_col_->dtype != Bodo_CTypes::FLOAT64) {
+            throw std::runtime_error("out_col_ is not FLOAT64");
+        }
+        if (out_col_->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
+            throw std::runtime_error("out_col_ is not NULLABLE_INT_BOOL");
+        }
+        this->out_col = out_col_;
+        // Initialize as ftype to match nullable behavior
+        aggfunc_output_initialize(this->out_col, this->ftype,
+                                  use_sql_rules);  // zero initialize
     }
 
    private:
@@ -1118,7 +1206,8 @@ class TransformColSet : public BasicColSet {
                 std::shared_ptr<::arrow::MemoryManager> mm =
                     bodo::default_buffer_memory_manager()) override;
 
-    // Fill the output column by copying values from the transform_op_col column
+    // Fill the output column by copying values from the transform_op_col
+    // column
     void eval(const grouping_info& grp_info,
               bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
               std::shared_ptr<::arrow::MemoryManager> mm =
@@ -1203,11 +1292,10 @@ class NgroupColSet : public BasicColSet {
     /**
      * Allocate column for update step.
      * @param num_groups: number of groups found in the input table
-     * @param[in,out] out_cols: vector of columns of update table. This method
-     * adds columns to this vector.
-     * NOTE: the added column is an integer array with same length as
-     * input column regardless of input column types (i.e num_groups is not used
-     * in this case)
+     * @param[in,out] out_cols: vector of columns of update table. This
+     * method adds columns to this vector. NOTE: the added column is an
+     * integer array with same length as input column regardless of input
+     * column types (i.e num_groups is not used in this case)
      */
     void alloc_running_value_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1235,23 +1323,24 @@ class NgroupColSet : public BasicColSet {
  * @param ftype function type associated with this column set.
  * @param do_combine whether GroupbyPipeline will perform combine operation
  *        or not.
- * @param skip_na_data option used for nunique, cumsum, cumprod, cummin, cummax
+ * @param skip_na_data option used for nunique, cumsum, cumprod, cummin,
+ * cummax
  * @param periods option used for shift
  * @param transform_func option used for identifying transform function
  *        (currently groupby operation that are already supported)
  * @param is_parallel is the groupby implementation distributed?
- * @param window_ascending For the window ftype is each orderby column in the
- * window ascending?
- * @param window_na_position For the window ftype does each orderby column have
- * NA values last?
- * @param[in] udf_n_redvars For groupby udf functions these are the reduction
- * variables. For other operations this will be a nullptr.
+ * @param window_ascending For the window ftype is each orderby column in
+ * the window ascending?
+ * @param window_na_position For the window ftype does each orderby column
+ * have NA values last?
+ * @param[in] udf_n_redvars For groupby udf functions these are the
+ * reduction variables. For other operations this will be a nullptr.
  * @param[in] udf_table For groupby udf functions this is the table of used
  * columns.
- * @param udf_table_idx For groupby udf functions this is the column number to
- * select from udf_table for this operation.
- * @param[in] nunique_table For nunique this is a special table used for special
- * handling
+ * @param udf_table_idx For groupby udf functions this is the column number
+ * to select from udf_table for this operation.
+ * @param[in] nunique_table For nunique this is a special table used for
+ * special handling
  * @param use_sql_rules Should we use SQL rules for NULL handling/initial
  * values.
  * @return A pointer to the created col set.
