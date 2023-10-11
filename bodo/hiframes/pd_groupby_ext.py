@@ -428,17 +428,19 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             None,
             f"For listagg, only string columns are allowed",
         )
-    elif func_name == "array_agg":
+    elif func_name in {"array_agg", "array_agg_distinct"}:
         # For array_agg, output is a nested array where the internal arrays' dtypes
         # are the same as the original input. Only numerical data currently supported.
-        if not isinstance(
-            in_dtype, (types.Integer, types.Float, types.Boolean)
-        ) and not isinstance(
-            arr_type, bodo.DecimalArrayType
+        if (
+            not isinstance(
+                in_dtype, (types.Integer, types.Float, types.Boolean, types.Bytes)
+            )
+            and not isinstance(arr_type, bodo.DecimalArrayType)
+            and in_dtype != string_type
         ):  # pragma: no cover
             return (
                 None,
-                f"Unsupported dtype for array_agg: {in_dtype}",
+                f"Unsupported array type for {func_name}: {arr_type}",
             )
         return ArrayItemArrayType(arr_type), "ok"
 
@@ -988,9 +990,9 @@ def handle_extended_named_agg_input_cols(
             get_literal_value(args[1]) == "listagg"
         ), "Internal error in resolve_listagg_func_inputs: Called on not listagg function."
         return resolve_listagg_func_inputs(data_col_name, additional_args_made_literal)
-    if f_name == "array_agg":
+    if f_name in {"array_agg", "array_agg_distinct"}:
         assert (
-            get_literal_value(args[1]) == "array_agg"
+            get_literal_value(args[1]) == f_name
         ), "Internal error in resolve_array_agg_func_inputs: Called on not array_agg function."
         return resolve_array_agg_func_inputs(
             data_col_name, additional_args_made_literal

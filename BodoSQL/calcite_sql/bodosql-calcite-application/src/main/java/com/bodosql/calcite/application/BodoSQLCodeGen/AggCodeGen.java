@@ -484,6 +484,10 @@ public class AggCodeGen {
           additionalArgs = new Expr.Tuple(new Expr.StringLiteral(aggCol));
           aggCol = percentileCol.emit();
         }
+        // ARRAY_AGG(DISTINCT xxx) has its own ftype
+        if (aggFunc.equals("\"array_agg\"") && a.isDistinct()) {
+          aggFunc = "\"array_agg_distinct\"";
+        }
         aggString
             .append(tempName)
             .append("=bodo.utils.utils.ExtendedNamedAgg(column=")
@@ -542,6 +546,26 @@ public class AggCodeGen {
           List<Expr.StringLiteral> orderbyList = new ArrayList<>();
           List<Expr.BooleanLiteral> ascendingList = new ArrayList<>();
           List<Expr.StringLiteral> nullDirList = new ArrayList<>();
+
+          // If DISTINCT is provided, then only a single ordering column can be provided,
+          // and it must be the same as the data column.
+          if (agg.isDistinct()) {
+            // If there is no ordering, insert one that is the same as the input column.
+            if (agg.collation.getFieldCollations().size() == 0) {
+              orderbyList.add(
+                  new Expr.StringLiteral(inputColumnNames.get(agg.getArgList().get(0))));
+              ascendingList.add(getAscendingExpr(RelFieldCollation.Direction.ASCENDING));
+              nullDirList.add(getNAPositionStringLiteral(RelFieldCollation.NullDirection.LAST));
+            }
+            // Otherwise, verify that it matches the input column.
+            else if ((agg.collation.getFieldCollations().size() > 1)
+                || (agg.collation.getFieldCollations().get(0).getFieldIndex()
+                    != agg.getArgList().get(0))) {
+              throw new BodoSQLCodegenException(
+                  "ARRAY_AGG with DISTINCT keyword requires the WITHIN GROUP clause (if provided)"
+                      + " to be the same as the aggregated data.");
+            }
+          }
 
           for (int i = 0; i < agg.collation.getFieldCollations().size(); i++) {
             curCollation = agg.collation.getFieldCollations().get(i);

@@ -160,6 +160,7 @@ class GroupbyPipeline {
                        ftype == Bodo_FTypes::window ||
                        ftype == Bodo_FTypes::listagg ||
                        ftype == Bodo_FTypes::array_agg ||
+                       ftype == Bodo_FTypes::array_agg_distinct ||
                        ftype == Bodo_FTypes::percentile_cont ||
                        ftype == Bodo_FTypes::percentile_disc) {
                 // these operations first require shuffling the data to
@@ -873,7 +874,7 @@ class GroupbyPipeline {
                                 in_table->columns.begin() + num_keys);
             int8_t num_input_cols_used = ncols_per_func[i];
             if (num_input_cols_used != 1) {
-                throw new std::runtime_error(
+                throw std::runtime_error(
                     "nunique can only be used with a "
                     "single column as input");
             }

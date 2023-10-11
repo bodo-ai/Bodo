@@ -90,6 +90,7 @@ def check_query(
     check_typing_issues: bool = True,
     atol: float = 1e-08,
     rtol: float = 1e-05,
+    convert_columns_to_pandas: bool = False,
 ):
     """
     Evaluates the correctness of a BodoSQL query by comparing SparkSQL
@@ -232,6 +233,10 @@ def check_query(
         atol: absolute tolerance used for approximately-equal calculations
 
         rtol: relative tolerance used for approximately-equal calculations
+
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
     """
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
@@ -410,6 +415,7 @@ def check_query(
             expected_output,
             optimize_calcite_plan,
             convert_nullable_bodosql,
+            convert_columns_to_pandas,
             atol=atol,
             rtol=rtol,
         )
@@ -431,6 +437,7 @@ def check_query(
         use_dict_encoded_strings,
         is_out_distributed=is_out_distributed,
         check_typing_issues=check_typing_issues,
+        convert_columns_to_pandas=convert_columns_to_pandas,
         atol=atol,
         rtol=rtol,
     )
@@ -475,6 +482,7 @@ def check_query_jit(
     use_dict_encoded_strings,
     is_out_distributed,
     check_typing_issues,
+    convert_columns_to_pandas,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
@@ -523,6 +531,10 @@ def check_query_jit(
 
         check_typing_issues: raise an error if there is a typing issue for input args.
         Runs bodo typing on arguments and converts warnings to errors.
+
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
     """
 
     saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
@@ -550,6 +562,7 @@ def check_query_jit(
                 optimize_calcite_plan,
                 convert_nullable_bodosql,
                 check_typing_issues,
+                convert_columns_to_pandas,
                 atol,
                 rtol,
             )
@@ -566,6 +579,7 @@ def check_query_jit(
                 convert_nullable_bodosql,
                 is_out_distributed,
                 check_typing_issues,
+                convert_columns_to_pandas,
                 atol,
                 rtol,
             )
@@ -582,6 +596,7 @@ def check_query_jit(
                 convert_nullable_bodosql,
                 is_out_distributed,
                 check_typing_issues,
+                convert_columns_to_pandas,
                 atol,
                 rtol,
             )
@@ -608,6 +623,7 @@ def check_query_jit(
             use_dict_encoded_strings=use_dict_encoded_strings,
             is_out_distributed=is_out_distributed,
             check_typing_issues=check_typing_issues,
+            convert_columns_to_pandas=convert_columns_to_pandas,
             atol=atol,
             rtol=rtol,
         )
@@ -636,6 +652,7 @@ def check_query_jit(
             use_dict_encoded_strings=True,
             is_out_distributed=is_out_distributed,
             check_typing_issues=check_typing_issues,
+            convert_columns_to_pandas=convert_columns_to_pandas,
             atol=atol,
             rtol=rtol,
         )
@@ -651,6 +668,7 @@ def check_query_python(
     expected_output,
     optimize_calcite_plan,
     convert_nullable_bodosql,
+    convert_columns_to_pandas,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
@@ -682,6 +700,10 @@ def check_query_python(
         atol: absolute tolerance used for approximately-equal calculations
 
         rtol: relative tolerance used for approximately-equal calculations
+
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
     """
     bc = bodosql.BodoSQLContext(dataframe_dict)
     if optimize_calcite_plan:
@@ -698,6 +720,7 @@ def check_query_python(
         False,
         "Sequential Python Test Failed",
         convert_nullable_bodosql,
+        convert_columns_to_pandas,
         atol=atol,
         rtol=rtol,
     )
@@ -714,6 +737,7 @@ def check_query_jit_seq(
     optimize_calcite_plan,
     convert_nullable_bodosql,
     check_typing_issues,
+    convert_columns_to_pandas,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
@@ -746,6 +770,10 @@ def check_query_jit_seq(
         check_typing_issues: raise an error if there is a typing issue for input args.
         Runs bodo typing on arguments and converts warnings to errors.
 
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
         atol: absolute tolerance used for approximately-equal calculations
 
         rtol: relative tolerance used for approximately-equal calculations
@@ -768,6 +796,7 @@ def check_query_jit_seq(
         False,
         "Sequential JIT Test Failed",
         convert_nullable_bodosql,
+        convert_columns_to_pandas,
         atol=atol,
         rtol=rtol,
     )
@@ -785,6 +814,7 @@ def check_query_jit_1D(
     convert_nullable_bodosql,
     is_out_distributed,
     check_typing_issues,
+    convert_columns_to_pandas,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
@@ -817,6 +847,10 @@ def check_query_jit_1D(
         check_typing_issues: raise an error if there is a typing issue for input args.
         Runs bodo typing on arguments and converts warnings to errors.
 
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
         atol: absolute tolerance used for approximately-equal calculations
 
         rtol: relative tolerance used for approximately-equal calculations
@@ -841,6 +875,7 @@ def check_query_jit_1D(
         is_out_distributed,
         "1D Parallel JIT Test Failed",
         convert_nullable_bodosql,
+        convert_columns_to_pandas,
         atol=atol,
         rtol=rtol,
     )
@@ -858,6 +893,7 @@ def check_query_jit_1DVar(
     convert_nullable_bodosql,
     is_out_distributed,
     check_typing_issues,
+    convert_columns_to_pandas,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
@@ -890,6 +926,10 @@ def check_query_jit_1DVar(
         check_typing_issues: raise an error if there is a typing issue for input args.
         Runs bodo typing on arguments and converts warnings to errors.
 
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
         atol: absolute tolerance used for approximately-equal calculations
 
         rtol: relative tolerance used for approximately-equal calculations
@@ -914,6 +954,7 @@ def check_query_jit_1DVar(
         is_out_distributed,
         "1DVar Parallel JIT Test Failed",
         convert_nullable_bodosql,
+        convert_columns_to_pandas,
         atol=atol,
         rtol=rtol,
     )
@@ -1025,6 +1066,7 @@ def _check_query_equal(
     is_out_distributed,
     failure_message,
     convert_nullable_bodosql,
+    convert_columns_to_pandas,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
@@ -1050,6 +1092,10 @@ def _check_query_equal(
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
 
+        convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+        list of strings or in general arrow data type. It typically fails at sorting. In that case
+        using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+
         atol: absolute tolerance used for approximately-equal calculations
 
         rtol: relative tolerance used for approximately-equal calculations
@@ -1067,6 +1113,9 @@ def _check_query_equal(
             else:
                 bodosql_output.iloc[:, i] = arr.to_numpy()
 
+    if convert_columns_to_pandas:
+        bodosql_output = bodo.tests.utils.convert_non_pandas_columns(bodosql_output)
+        expected_output = bodo.tests.utils.convert_non_pandas_columns(expected_output)
     if sort_output:
         bodosql_output = bodosql_output.sort_values(
             bodosql_output.columns.tolist()

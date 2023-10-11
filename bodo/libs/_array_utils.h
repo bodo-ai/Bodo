@@ -1410,23 +1410,4 @@ template <bodo_array_type::arr_type_enum ArrType, typename T,
 inline void set_arr_item(array_info& arr, size_t idx, T val) {
     SetBitTo((uint8_t*)arr.data1(), idx, val);
 }
-
-/**
- * Creates a new array by copying an arbitrary subset of rows
- * from the input array in a desired order with duplicates allowed.
- *
- * @param[in] arr the array to copy the rows from.
- * @param[in] rows_to_select - the vector of row indices to copy
- * return An array with the elements of arr copied from the rows
- * in rows_to_select.
- * @param pool Memory pool to use for allocations during the execution of this
- * function.
- * @param mm Memory manager associated with the pool.
- */
-std::shared_ptr<array_info> select_subset_of_rows(
-    std::shared_ptr<array_info> arr, std::vector<size_t> rows_to_select,
-    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
-    std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
-
 #endif  // _ARRAY_UTILS_H_INCLUDED

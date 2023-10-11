@@ -1575,8 +1575,7 @@ void apply_to_column_array_item(
     out_offset_buffer[0] = 0;
     offset_t curr_offset = 0;
     // Build a vector of which rows to copy to build the new inner array.
-    // XXX This should probably be a bodo::vector.
-    std::vector<size_t> rows_to_copy;
+    std::vector<int64_t> rows_to_copy;
     size_t n_groups = grp_info.num_groups;
     for (size_t i_grp = 0; i_grp < n_groups; i_grp++) {
         size_t i = grp_info.group_to_first_row[i_grp];
@@ -1598,8 +1597,7 @@ void apply_to_column_array_item(
     std::shared_ptr<array_info> in_inner_arr = in_col->child_arrays[0];
     std::shared_ptr<array_info> out_inner_arr = out_col->child_arrays[0];
     // Copy over the desired subset of the inner array
-    *out_inner_arr = *(
-        select_subset_of_rows(in_inner_arr, rows_to_copy, pool, std::move(mm)));
+    *out_inner_arr = *(RetrieveArray_SingleColumn(in_inner_arr, rows_to_copy));
 }
 
 /**
