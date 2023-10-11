@@ -6,8 +6,7 @@ import platform
 from typing import Any, Dict
 from setuptools import Extension, find_packages, setup
 from Cython.Build import cythonize
-
-import numpy.distutils.misc_util as np_misc
+import numpy as np
 import pyarrow
 
 import versioneer
@@ -380,7 +379,14 @@ if is_testing:
 
 # Inject required options for extensions compiled against the Numpy
 # C API (include dirs, library dirs etc.)
-np_compile_args = np_misc.get_info("npymath")
+# TODO(ehsan): avoid top-level np include if fails for pip
+# See: https://github.com/numba/numba/blob/04e81073b2c1e3ff4afa1da8513738e5e136775b/setup.py#L138
+np_compile_args = {
+    "include_dirs": [np.get_include()],
+    "library_dirs": [os.path.join(np.get_include(), "..", "lib")],
+    "define_macros": [],
+    "libraries": ["npymath"],
+}
 ext_metadata["libraries"] += np_compile_args["libraries"]
 # Include all Numpy headers as system includes (prevents warnings from being
 # emitted)
