@@ -1,6 +1,7 @@
 package org.apache.calcite.sql.type;
 
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.apache.calcite.sql.SqlDataTypeSpec;
@@ -28,5 +29,20 @@ public class BodoSqlTypeUtil {
       return new SqlDataTypeSpec(typeNameSpec, SqlParserPos.ZERO);
     }
     return SqlTypeUtil.convertTypeToSpec(type, charSetName, maxPrecision, maxScale);
+  }
+
+  /**
+   * Bodo extension to SqlTypeUtil.equalSansNullability with special behavior
+   * when comparing two literals.
+   */
+  public static boolean literalEqualSansNullability(
+          RelDataTypeFactory factory,
+          RelDataType type1,
+          RelDataType type2) {
+    if (SqlTypeFamily.CHARACTER.contains(type1) && SqlTypeFamily.CHARACTER.contains(type2)) {
+      return true;
+    } else {
+      return SqlTypeUtil.equalSansNullability(factory, type1, type2);
+    }
   }
 }

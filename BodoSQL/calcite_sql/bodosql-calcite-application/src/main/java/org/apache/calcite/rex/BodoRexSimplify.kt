@@ -123,14 +123,24 @@ class BodoRexSimplify(
      * Simplify to_date for supported literals.
      */
     private fun simplifyDateCast(call: RexCall): RexNode {
-        return if (call.operands.size == 1 && call.operands[0] is RexLiteral) {
-            val literal = call.operands[0] as RexLiteral
-            when (literal.typeName) {
-                SqlTypeName.NULL -> rexBuilder.makeNullLiteral(call.getType())
-                SqlTypeName.DATE -> literal
-                SqlTypeName.VARCHAR -> stringLiteralToDate(call, literal)
-                SqlTypeName.CHAR -> stringLiteralToDate(call, literal)
-                else -> call
+        return if (call.operands.size == 1 && (call.operands[0] is RexLiteral || call.operands[0] is RexCall)) {
+            if (call.operands[0] is RexLiteral) {
+                // Resolve constant casts for literals
+                val literal = call.operands[0] as RexLiteral
+                when (literal.typeName) {
+                    SqlTypeName.NULL -> rexBuilder.makeNullLiteral(call.getType())
+                    SqlTypeName.DATE -> literal
+                    SqlTypeName.VARCHAR, SqlTypeName.CHAR -> stringLiteralToDate(call, literal)
+                    else -> call
+                }
+            } else {
+                val innerCall = call.operands[0] as RexCall
+                if (innerCall.operator.name == DatetimeOperatorTable.GETDATE.name) {
+                    // Replace GETDATE::DATE with CURRENT_DATE
+                    rexBuilder.makeCall(SqlStdOperatorTable.CURRENT_DATE)
+                } else {
+                    call
+                }
             }
         } else {
             call
@@ -227,13 +237,29 @@ class BodoRexSimplify(
     }
 
     /**
+     * Simplify Varchar casts that are equivalent in our type system. These
+     * are scalar casts to varchar or varchar casts that only change precision.
+     */
+    private fun simplifyVarcharCast(call: RexCall, unknownAs: RexUnknownAs): RexNode {
+        // Bodo Change: Ignore precision for Varchar casts. Calcite requires the
+        // Varchar cast precision be >= to the input, but we don't care and often use
+        // -1.
+        return if (call.operands.size == 1 && call.operands[0].type.sqlTypeName == SqlTypeName.VARCHAR) {
+            simplify(call.operands[0], unknownAs)
+        } else {
+            call
+        }
+    }
+
+    /**
      * Simplify Bodo call expressions that don't depend on handling unknown
      * values in custom way.
      */
-    private fun simplifyBodoCast(call: RexCall): RexNode {
+    private fun simplifyBodoCast(call: RexCall, unknownAs: RexUnknownAs): RexNode {
         return when (call.getType().sqlTypeName) {
             SqlTypeName.DATE -> simplifyDateCast(call)
             SqlTypeName.TIMESTAMP -> simplifyTimestampCast(call)
+            SqlTypeName.VARCHAR -> simplifyVarcharCast(call, unknownAs)
             else -> call
         }
     }
@@ -439,6 +465,18 @@ class BodoRexSimplify(
     }
 
     /**
+     * Returns if a RexNode is a call to LENGTH or an
+     * equivalent function.
+     */
+    private fun isLength(e: RexNode): Boolean {
+        val lengthFunctions = setOf(
+            StringOperatorTable.LENGTH.name,
+            StringOperatorTable.LEN.name
+        )
+        return e is RexCall && (lengthFunctions.contains(e.operator.name))
+    }
+
+    /**
      * Returns a simplification in the formats below:
      * LEAST(A, B, C) <= D  --> A <= D OR B <= D OR C <= D
      * LEAST(A, B, C) >= D  --> A >= D AND B >= D AND C >= D
@@ -486,6 +524,20 @@ class BodoRexSimplify(
         val secondArg = e.operands[1]
         val comparison = (e.operator as SqlBinaryOperator).reverse()!!
         return rexBuilder.makeCall(comparison, listOf(secondArg, firstArg))
+    }
+
+    /**
+     * Simplify a length function call on a literal to
+     * a constant evaluation.
+     */
+    private fun simplifyLength(e: RexCall): RexNode {
+        return if (e.operands[0] is RexLiteral && SqlTypeFamily.CHARACTER.contains(e.operands[0].type)) {
+            val literal = e.operands[0] as RexLiteral
+            val literalValue = literal.getValueAs(String::class.java)
+            return literalValue?.let { rexBuilder.makeBigintLiteral(BigDecimal(literalValue.length)) } ?: e
+        } else {
+            e
+        }
     }
 
     /**
@@ -707,7 +759,7 @@ class BodoRexSimplify(
      */
     override fun simplify(e: RexNode, unknownAs: RexUnknownAs): RexNode {
         val simplifiedNode = when (e.kind) {
-            SqlKind.CAST -> simplifyBodoCast(e as RexCall)
+            SqlKind.CAST -> simplifyBodoCast(e as RexCall, unknownAs)
             SqlKind.PLUS -> simplifyBodoPlusMinus(e as RexCall, true)
             SqlKind.MINUS -> simplifyBodoPlusMinus(e as RexCall, false)
             SqlKind.TIMES -> simplifyBodoTimes(e as RexCall)
@@ -717,6 +769,7 @@ class BodoRexSimplify(
                 isSnowflakeDateaddOp(e) -> simplifySnowflakeDateaddOp(e as RexCall)
                 isCompareLeastGreatest(e, 0) -> simplifyCompareLeastGreatest(e as RexCall)
                 isCompareLeastGreatest(e, 1) -> simplifyCompareLeastGreatest(reverseComparison(e as RexCall) as RexCall)
+                isLength(e) -> simplifyLength(e as RexCall)
                 else -> e
             }
         }
