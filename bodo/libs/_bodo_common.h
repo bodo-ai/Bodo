@@ -1128,7 +1128,7 @@ std::unique_ptr<array_info> alloc_array(
  * alloc_table_like function. Currently only used by alloc_table_like function.
  *
  * @param in_arr Reference array
- * @return pointer to the allocated array
+ * @return std::unique_ptr<array_info> Pointer to the allocated array
  */
 std::unique_ptr<array_info> alloc_array_like(std::shared_ptr<array_info> in_arr,
                                              bool reuse_dictionaries = true);

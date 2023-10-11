@@ -41,8 +41,8 @@ void NestedLoopJoinState::FinalizeBuild() {
                         ->max_resize_count_for_variable_size_dtypes);
             for (int64_t i_chunk = 0; i_chunk < n_chunks; i_chunk++) {
                 std::shared_ptr<table_info> gathered_chunk = gather_table(
-                    std::get<0>(this->build_table_buffer->PopChunk()), -1, true,
-                    true);
+                    std::get<0>(this->build_table_buffer->PopChunk()), -1,
+                    /*all_gather*/ true, true);
                 new_build_table_buffer->AppendBatch(
                     this->UnifyBuildTableDictionaryArrays(gathered_chunk));
             }
