@@ -13,9 +13,9 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
 
 @pytest.fixture(
     params=[
-        pytest.param(np.arange(16, dtype=np.uint8), id="numpy_uint8"),
+        pytest.param(np.arange(16, dtype=np.uint8) % 5, id="numpy_uint8"),
         pytest.param(
-            pd.Series(range(-20, 21), dtype=pd.Int32Dtype()),
+            pd.Series(range(-20, 21), dtype=pd.Int32Dtype()) % 5,
             id="nullable_int32-no_nulls",
             marks=pytest.mark.slow,
         ),
@@ -77,7 +77,7 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
             ),
             id="date",
             marks=pytest.mark.skip(
-                reason="[BSE-1042] Support ARRAY_AGG on other dtypes"
+                reason="[BSE-1174] Support ARRAY_AGG on other dtypes"
             ),
         ),
         pytest.param(
@@ -86,7 +86,7 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
             ),
             id="time",
             marks=pytest.mark.skip(
-                reason="[BSE-1042] Support ARRAY_AGG on other dtypes"
+                reason="[BSE-1174] Support ARRAY_AGG on other dtypes"
             ),
         ),
         pytest.param(
@@ -100,7 +100,7 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
             ),
             id="timestamp-naive",
             marks=pytest.mark.skip(
-                reason="[BSE-1042] Support ARRAY_AGG on other dtypes"
+                reason="[BSE-1174] Support ARRAY_AGG on other dtypes"
             ),
         ),
         pytest.param(
@@ -115,7 +115,7 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
             ),
             id="timestamp-tz",
             marks=pytest.mark.skip(
-                reason="[BSE-1042] Support ARRAY_AGG on other dtypes"
+                reason="[BSE-1174] Support ARRAY_AGG on other dtypes"
             ),
         ),
         pytest.param(
@@ -127,10 +127,21 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
                     for i in range(26)
                 ]
             ),
-            id="string",
-            marks=pytest.mark.skip(
-                reason="[BSE-1042] Support ARRAY_AGG on other dtypes"
+            id="string-ascii-with_nulls",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "".join(
+                        [
+                            "AIU46♬🐍💚㗨⅛€∞"[(i + j) % 12]
+                            for j in range(np.int64(np.abs(2.5 + np.tan(i))))
+                        ]
+                    )
+                    for i in range(100)
+                ]
             ),
+            id="string-non_ascii-no_nulls",
         ),
         pytest.param(
             pd.Series(
@@ -143,7 +154,29 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
             ),
             id="binary",
             marks=pytest.mark.skip(
-                reason="[BSE-1042] Support ARRAY_AGG on other dtypes"
+                reason="[BSE-1174] Support ARRAY_AGG on other dtypes"
+            ),
+        ),
+        pytest.param(
+            pd.Series([list(range(i % 6)) for i in range(15)]),
+            id="nested-integer",
+            marks=pytest.mark.skip(
+                reason="[BSE-1174] Support ARRAY_AGG on other dtypes"
+            ),
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [
+                        ("AABAABCBAABCDCBA" * 2)[i + j : i + j + 5]
+                        for j in range(i % 5 + 1)
+                    ]
+                    for i in range(30)
+                ]
+            ),
+            id="nested-string",
+            marks=pytest.mark.skip(
+                reason="[BSE-1174] Support ARRAY_AGG on other dtypes"
             ),
         ),
     ]
@@ -178,7 +211,7 @@ def array_agg_func(group):
     return col.values
 
 
-def test_array_agg_single_order(array_agg_data, memory_leak_check):
+def test_array_agg_regular(array_agg_data, memory_leak_check):
     """
     Tests ARRAY_AGG with a single ordering clause (no DISTINCT keyword).
 
@@ -188,16 +221,12 @@ def test_array_agg_single_order(array_agg_data, memory_leak_check):
     """
 
     def impl(df):
-        return (
-            df.groupby(["key"], as_index=False, dropna=False)
-            .agg(
-                res=bodo.utils.utils.ExtendedNamedAgg(
-                    column="data",
-                    aggfunc="array_agg",
-                    additional_args=(("order",), (True,), ("last",)),
-                )
+        return df.groupby(["key"], as_index=False, dropna=False).agg(
+            res=bodo.utils.utils.ExtendedNamedAgg(
+                column="data",
+                aggfunc="array_agg",
+                additional_args=(("order",), (True,), ("last",)),
             )
-            .sort_values(by=["key"])
         )
 
     keys = array_agg_data["key"].drop_duplicates()
@@ -213,6 +242,50 @@ def test_array_agg_single_order(array_agg_data, memory_leak_check):
         py_output=answer,
         reset_index=True,
         check_dtype=False,
+        sort_output=True,
+        convert_columns_to_pandas=True,
+    )
+
+
+def array_agg_distinct_func(group):
+    col = group.sort_values(by=("data"), ascending=(True,), na_position="last")["data"]
+    col = col.dropna().drop_duplicates()
+    return col.values
+
+
+def test_array_agg_distinct(array_agg_data, memory_leak_check):
+    """
+    Tests ARRAY_AGG with the DISTINCT keyword.
+
+    .sort_values() must be used to ensure correct ordering even when there are
+    multiple ranks since check_func with sort_output=True is not supported
+    on array data.
+    """
+
+    def impl(df):
+        return df.groupby(["key"], as_index=False, dropna=False).agg(
+            res=bodo.utils.utils.ExtendedNamedAgg(
+                column="data",
+                aggfunc="array_agg_distinct",
+                additional_args=(("data",), (True,), ("last",)),
+            )
+        )
+
+    keys = array_agg_data["key"].drop_duplicates()
+    answers = []
+    for key in keys:
+        group = array_agg_data[array_agg_data["key"] == key]
+        group_answer = array_agg_distinct_func(group)
+        answers.append(group_answer)
+    answer = pd.DataFrame({"key": keys, "res": answers})
+    check_func(
+        impl,
+        (array_agg_data,),
+        py_output=answer,
+        reset_index=True,
+        check_dtype=False,
+        sort_output=True,
+        convert_columns_to_pandas=True,
     )
 
 

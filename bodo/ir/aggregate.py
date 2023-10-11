@@ -282,6 +282,7 @@ supported_agg_funcs = [
     "count_if",
     "listagg",
     "array_agg",
+    "array_agg_distinct",
     "mode",
     "percentile_cont",
     "percentile_disc",
@@ -306,6 +307,7 @@ supported_agg_funcs = [
 # should also be included in supported_agg_funcs
 supported_extended_agg_funcs = [
     "array_agg",
+    "array_agg_distinct",
     "listagg",
     "percentile_cont",
     "percentile_disc",
@@ -415,7 +417,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
             func.na_position_b,
         ) = handle_listagg_additional_args(func_ir, rhs)
         return func
-    elif func_name == "array_agg":
+    elif func_name in {"array_agg", "array_agg_distinct"}:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.fname = func_name
@@ -2120,6 +2122,7 @@ def gen_top_level_agg_func(
             "ngroup",
             "listagg",
             "array_agg",
+            "array_agg_distinct",
             "mode",
             "percentile_cont",
             "percentile_disc",
@@ -2153,7 +2156,7 @@ def gen_top_level_agg_func(
             # Therefore, we add two extra columns to account for the listagg_sep column, and the data argument
             ascending = [False, False] + func.ascending
             na_position = [False, False] + func.na_position_b
-        if func.ftype == "array_agg":
+        if func.ftype in {"array_agg", "array_agg_distinct"}:
             do_combine = False  # See median/nunique note ^
             # length of ascending/na_position should be the same as the number of input columns passed to groupby_and_aggregate
             # Therefore, we add an extra columns to account for the the data argument

@@ -1056,7 +1056,7 @@ void ListAggColSet::update(const std::vector<grouping_info>& grp_infos,
             "shuffle before update");
     } else {
         if (grp_infos.size() != 1) {
-            throw new std::runtime_error(
+            throw std::runtime_error(
                 "Internal error in ListAggColSet::update: grp_infos length "
                 "does not equal 1. Each ListAggColSet should handle only one "
                 "group");
@@ -1094,12 +1094,13 @@ std::shared_ptr<array_info> ListAggColSet::getOutputColumn() {
 ArrayAggColSet::ArrayAggColSet(
     std::shared_ptr<array_info> in_col,
     std::vector<std::shared_ptr<array_info>> _orderby_cols,
-    std::vector<bool> _ascending, std::vector<bool> _na_position,
+    std::vector<bool> _ascending, std::vector<bool> _na_position, int ftype,
     bool _is_parallel)
-    : BasicColSet(in_col, Bodo_FTypes::array_agg, false, true),
+    : BasicColSet(in_col, ftype, false, true),
       orderby_cols(_orderby_cols),
       ascending(_ascending),
       na_position(_na_position),
+      is_distinct(ftype == Bodo_FTypes::array_agg_distinct),
       is_parallel(_is_parallel) {}
 
 ArrayAggColSet::~ArrayAggColSet() {}
@@ -1127,22 +1128,24 @@ void ArrayAggColSet::update(const std::vector<grouping_info>& grp_infos,
             "shuffle before update");
     } else {
         if (grp_infos.size() != 1) {
-            throw new std::runtime_error(
+            throw std::runtime_error(
                 "Internal error in ArrayAggColSet::update: grp_infos length "
                 "does not equal 1. Each ArrayAggColSet should handle only one "
                 "group");
         }
         if (in_col->arr_type != bodo_array_type::arr_type_enum::NUMPY &&
             in_col->arr_type !=
-                bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL) {
-            throw new std::runtime_error(
+                bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL &&
+            in_col->arr_type != bodo_array_type::arr_type_enum::STRING &&
+            in_col->arr_type != bodo_array_type::arr_type_enum::DICT) {
+            throw std::runtime_error(
                 "Internal error in ArrayAggColSet::update: unsupported array "
                 "type " +
                 (GetArrType_as_string(in_col->arr_type)));
         }
         array_agg_computation(in_col, update_cols[0], orderby_cols, ascending,
-                              na_position, grp_infos[0], is_parallel, pool,
-                              std::move(mm));
+                              na_position, grp_infos[0], is_parallel,
+                              is_distinct, pool, std::move(mm));
     }
 }
 
@@ -1850,6 +1853,7 @@ std::unique_ptr<BasicColSet> makeColSet(
 
     if ((ftype != Bodo_FTypes::window && ftype != Bodo_FTypes::listagg &&
          ftype != Bodo_FTypes::array_agg &&
+         ftype != Bodo_FTypes::array_agg_distinct &&
          ftype != Bodo_FTypes::percentile_cont &&
          ftype != Bodo_FTypes::percentile_disc) &&
         in_cols.size() != 1) {
@@ -1951,14 +1955,14 @@ std::unique_ptr<BasicColSet> makeColSet(
                 window_ascending, window_na_position);
             break;
         case Bodo_FTypes::array_agg:
-
+        case Bodo_FTypes::array_agg_distinct:
             colset = new ArrayAggColSet(
                 // data column
                 in_cols[0],
                 // Remaining columns are the columns to order by
                 std::vector<std::shared_ptr<array_info>>(in_cols.begin() + 1,
                                                          in_cols.end()),
-                window_ascending, window_na_position, is_parallel);
+                window_ascending, window_na_position, ftype, is_parallel);
             break;
         case Bodo_FTypes::first:
             colset = new FirstColSet(in_cols[0], do_combine, use_sql_rules);

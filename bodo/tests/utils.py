@@ -1518,6 +1518,8 @@ def string_list_ent(x):
     if isinstance(x, str):
         return x
     if isinstance(x, Decimal):
+        if x == Decimal("0"):
+            return "0"
         e_s = str(x)
         if e_s.find(".") != -1:
             f_s = e_s.strip("0").strip(".")
@@ -1586,7 +1588,7 @@ def convert_non_pandas_columns(df):
                         nb_list_string += 1
                     if isinstance(
                         e_ent[0],
-                        (int, float, np.int32, np.int64, np.float32, np.float64),
+                        (int, float, np.integer, np.floating),
                     ):
                         nb_array_item += 1
                     for e_val in e_ent:
@@ -1595,12 +1597,15 @@ def convert_non_pandas_columns(df):
                             (
                                 list,
                                 dict,
+                                Decimal,
                                 np.ndarray,
                                 pd.arrays.IntegerArray,
                                 pd.arrays.FloatingArray,
                             ),
                         ):
                             nb_arrow_array_item += 1
+                else:
+                    nb_array_item += 1
             if isinstance(e_ent, dict):
                 nb_arrow_array_item += 1
             if isinstance(e_ent, Decimal):
