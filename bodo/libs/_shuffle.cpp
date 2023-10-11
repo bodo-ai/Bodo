@@ -2960,336 +2960,381 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
 }
 
 /**
- * @param is_parallel: Used to indicate whether tracing should be parallel
- * or not
+ * @brief Gather an array. Parameters have the same meaning as gather_table.
+ *
+ * @return the gathered array
  */
-std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
-                                         int64_t n_cols_i, bool all_gather,
-                                         bool is_parallel = true) {
-    tracing::Event ev("gather_table", is_parallel);
-    int n_pes, myrank;
-    int mpi_root = 0;
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    std::vector<std::shared_ptr<array_info>> out_arrs;
-    size_t n_cols;
-    if (n_cols_i == -1) {
-        n_cols = in_table->ncols();
-    } else {
-        n_cols = n_cols_i;
+std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
+                                         bool all_gather, bool is_parallel,
+                                         int mpi_root, int n_pes, int myrank) {
+    bool is_dict_array = false;
+    std::shared_ptr<array_info> dict_array;
+    if (in_arr->arr_type == bodo_array_type::DICT) {
+        // Note: We need to revisit if gather_table should be a no-op if
+        // is_parallel=False
+        make_dictionary_global_and_unique(in_arr, true);
+        is_dict_array = true;
+        // Make a copy of in_arr
+        dict_array = in_arr;
+        in_arr = in_arr->child_arrays[1];
     }
-    for (size_t i_col = 0; i_col < n_cols; i_col++) {
-        int64_t arr_gath_s[3];
-        std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
-        if (in_arr->arr_type == bodo_array_type::DICT) {
-            // Note: We need to revisit if gather_table should be
-            // a no-op if is_parallel=False
-            make_dictionary_global_and_unique(in_arr, true);
-            in_arr = in_arr->child_arrays[1];
-        }
-        int64_t n_rows = in_arr->length;
-        int64_t n_sub_elems = in_arr->n_sub_elems();
-        int64_t n_sub_sub_elems = in_arr->n_sub_sub_elems();
-        arr_gath_s[0] = n_rows;
-        arr_gath_s[1] = n_sub_elems;
-        arr_gath_s[2] = n_sub_sub_elems;
-        bodo::vector<int64_t> arr_gath_r(3 * n_pes, 0);
-        MPI_Gengather(arr_gath_s, 3, MPI_LONG_LONG_INT, arr_gath_r.data(), 3,
-                      MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD, all_gather);
-        Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
-        bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
-        int64_t num_categories = in_arr->num_categories;
-        //
-        std::vector<int> rows_disps(n_pes), rows_counts(n_pes);
-        int rows_pos = 0;
+    int64_t n_rows = in_arr->length;
+    int64_t n_sub_elems = in_arr->n_sub_elems();
+    int64_t n_sub_sub_elems = in_arr->n_sub_sub_elems();
+    int64_t arr_gath_s[3] = {n_rows, n_sub_elems, n_sub_sub_elems};
+    bodo::vector<int64_t> arr_gath_r(3 * n_pes);
+    MPI_Gengather(arr_gath_s, 3, MPI_LONG_LONG_INT, arr_gath_r.data(), 3,
+                  MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD, all_gather);
+
+    Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    int64_t num_categories = in_arr->num_categories;
+
+    std::vector<int> rows_disps(n_pes), rows_counts(n_pes);
+    int rows_pos = 0;
+    for (int i_p = 0; i_p < n_pes; i_p++) {
+        int siz = arr_gath_r[3 * i_p];
+        rows_counts[i_p] = siz;
+        rows_disps[i_p] = rows_pos;
+        rows_pos += siz;
+    }
+
+    std::shared_ptr<array_info> out_arr;
+    if (arr_type == bodo_array_type::NUMPY ||
+        arr_type == bodo_array_type::CATEGORICAL ||
+        arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        // Computing the total number of rows.
+        // On mpi_root, all rows, on others just 1 row for consistency.
+        int64_t n_rows_tot = 0;
         for (int i_p = 0; i_p < n_pes; i_p++) {
-            int siz = arr_gath_r[3 * i_p];
-            rows_counts[i_p] = siz;
-            rows_disps[i_p] = rows_pos;
-            rows_pos += siz;
+            n_rows_tot += rows_counts[i_p];
         }
-        //
-        std::shared_ptr<array_info> out_arr = nullptr;
-        if (arr_type == bodo_array_type::STRUCT ||
-            arr_type == bodo_array_type::ARRAY_ITEM) {
-            std::shared_ptr<arrow::Array> array = to_arrow(in_arr);
-            std::shared_ptr<arrow::Array> out_array =
-                gather_arrow_array(array, all_gather);
-            out_arr = arrow_array_to_bodo(out_array);
-        }
-        if (arr_type == bodo_array_type::NUMPY ||
-            arr_type == bodo_array_type::CATEGORICAL ||
-            arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            // Computing the total number of rows.
-            // On mpi_root, all rows, on others just 1 row for consistency.
-            int64_t n_rows_tot = 0;
+        if (arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+            dtype == Bodo_CTypes::_BOOL) {
+            // Nullable boolean arrays store 1 bit per boolean. As
+            // a result we need a separate code path to handle
+            // fusing the bits
+            char* data_arr_i = in_arr->data1();
+            std::vector<int> recv_count_bytes(n_pes), recv_disp_bytes(n_pes);
             for (int i_p = 0; i_p < n_pes; i_p++) {
-                n_rows_tot += rows_counts[i_p];
+                recv_count_bytes[i_p] = (rows_counts[i_p] + 7) >> 3;
             }
-            if (arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
-                dtype == Bodo_CTypes::_BOOL) {
-                // Nullable boolean arrays store 1 bit per boolean. As
-                // a result we need a separate code path to handle
-                // fusing the bits
-                char* data_arr_i = in_arr->data1();
-                std::vector<int> recv_count_bytes(n_pes),
-                    recv_disp_bytes(n_pes);
-                for (int i_p = 0; i_p < n_pes; i_p++) {
-                    recv_count_bytes[i_p] = (rows_counts[i_p] + 7) >> 3;
-                }
-                calc_disp(recv_disp_bytes, recv_count_bytes);
-                size_t n_data_bytes =
-                    std::accumulate(recv_count_bytes.begin(),
-                                    recv_count_bytes.end(), size_t(0));
-                bodo::vector<uint8_t> tmp_data_bytes(n_data_bytes, 0);
-                // Boolean arrays always store data as UINT8
-                MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-                int n_bytes = (n_rows + 7) >> 3;
-                MPI_Gengatherv(data_arr_i, n_bytes, mpi_typ,
-                               tmp_data_bytes.data(), recv_count_bytes.data(),
-                               recv_disp_bytes.data(), mpi_typ, mpi_root,
-                               MPI_COMM_WORLD, all_gather);
-                if (myrank == mpi_root || all_gather) {
-                    out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype,
-                                          -1, 0, num_categories);
-                    uint8_t* data_arr_o = (uint8_t*)out_arr->data1();
-                    copy_gathered_null_bytes(data_arr_o, tmp_data_bytes,
-                                             recv_count_bytes, rows_counts);
-                }
-            } else {
-                MPI_Datatype mpi_typ = get_MPI_typ(dtype);
-                char* data1_ptr = nullptr;
-                if (myrank == mpi_root || all_gather) {
-                    out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype,
-                                          -1, 0, num_categories);
-                    data1_ptr = out_arr->data1();
-                }
-                MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
-                               rows_counts.data(), rows_disps.data(), mpi_typ,
-                               mpi_root, MPI_COMM_WORLD, all_gather);
+            calc_disp(recv_disp_bytes, recv_count_bytes);
+            size_t n_data_bytes = std::accumulate(
+                recv_count_bytes.begin(), recv_count_bytes.end(), size_t(0));
+            bodo::vector<uint8_t> tmp_data_bytes(n_data_bytes, 0);
+            // Boolean arrays always store data as UINT8
+            MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+            int n_bytes = (n_rows + 7) >> 3;
+            MPI_Gengatherv(data_arr_i, n_bytes, mpi_typ, tmp_data_bytes.data(),
+                           recv_count_bytes.data(), recv_disp_bytes.data(),
+                           mpi_typ, mpi_root, MPI_COMM_WORLD, all_gather);
+            if (myrank == mpi_root || all_gather) {
+                out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, -1,
+                                      0, num_categories);
+                uint8_t* data_arr_o = (uint8_t*)out_arr->data1();
+                copy_gathered_null_bytes(data_arr_o, tmp_data_bytes,
+                                         recv_count_bytes, rows_counts);
             }
-        }
-        if (arr_type == bodo_array_type::INTERVAL) {
+        } else {
             MPI_Datatype mpi_typ = get_MPI_typ(dtype);
-            // Computing the total number of rows.
-            // On mpi_root, all rows, on others just 1 row for consistency.
-            int64_t n_rows_tot = 0;
-            for (int i_p = 0; i_p < n_pes; i_p++)
-                n_rows_tot += arr_gath_r[3 * i_p];
             char* data1_ptr = nullptr;
-            char* data2_ptr = nullptr;
             if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, -1,
                                       0, num_categories);
                 data1_ptr = out_arr->data1();
-                data2_ptr = out_arr->data2();
             }
             MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
                            rows_counts.data(), rows_disps.data(), mpi_typ,
                            mpi_root, MPI_COMM_WORLD, all_gather);
-            MPI_Gengatherv(in_arr->data2(), n_rows, mpi_typ, data2_ptr,
-                           rows_counts.data(), rows_disps.data(), mpi_typ,
-                           mpi_root, MPI_COMM_WORLD, all_gather);
         }
-        if (arr_type == bodo_array_type::STRING) {
-            MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
-            MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
-            // Computing indexing data in characters and rows.
+    } else if (arr_type == bodo_array_type::INTERVAL) {
+        MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+        // Computing the total number of rows.
+        // On mpi_root, all rows, on others just 1 row for consistency.
+        int64_t n_rows_tot = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++)
+            n_rows_tot += arr_gath_r[3 * i_p];
+        char* data1_ptr = nullptr;
+        char* data2_ptr = nullptr;
+        if (myrank == mpi_root || all_gather) {
+            out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, -1, 0,
+                                  num_categories);
+            data1_ptr = out_arr->data1();
+            data2_ptr = out_arr->data2();
+        }
+        MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
+                       rows_counts.data(), rows_disps.data(), mpi_typ, mpi_root,
+                       MPI_COMM_WORLD, all_gather);
+        MPI_Gengatherv(in_arr->data2(), n_rows, mpi_typ, data2_ptr,
+                       rows_counts.data(), rows_disps.data(), mpi_typ, mpi_root,
+                       MPI_COMM_WORLD, all_gather);
+    } else if (arr_type == bodo_array_type::STRING) {
+        MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
+        MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
+        // Computing indexing data in characters and rows.
+        int64_t n_rows_tot = 0;
+        int64_t n_chars_tot = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            n_rows_tot += arr_gath_r[3 * i_p];
+            n_chars_tot += arr_gath_r[3 * i_p + 1];
+        }
+        // Doing the characters
+        char* data1_ptr = nullptr;
+        if (myrank == mpi_root || all_gather) {
+            out_arr = alloc_array(n_rows_tot, n_chars_tot, -1, arr_type, dtype,
+                                  -1, 0, num_categories);
+            data1_ptr = out_arr->data1();
+        }
+        std::vector<int> char_disps(n_pes), char_counts(n_pes);
+        int pos = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            int siz = arr_gath_r[3 * i_p + 1];
+            char_disps[i_p] = pos;
+            char_counts[i_p] = siz;
+            pos += siz;
+        }
+        MPI_Gengatherv(in_arr->data1(), n_sub_elems, mpi_typ8, data1_ptr,
+                       char_counts.data(), char_disps.data(), mpi_typ8,
+                       mpi_root, MPI_COMM_WORLD, all_gather);
+        // Collecting the offsets data
+        bodo::vector<uint32_t> list_count_loc(n_rows);
+        offset_t* offsets_i = (offset_t*)in_arr->data2();
+        offset_t curr_offset = 0;
+        for (int64_t pos = 0; pos < n_rows; pos++) {
+            offset_t new_offset = offsets_i[pos + 1];
+            list_count_loc[pos] = new_offset - curr_offset;
+            curr_offset = new_offset;
+        }
+        bodo::vector<uint32_t> list_count_tot(n_rows_tot);
+        MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ32,
+                       list_count_tot.data(), rows_counts.data(),
+                       rows_disps.data(), mpi_typ32, mpi_root, MPI_COMM_WORLD,
+                       all_gather);
+        if (myrank == mpi_root || all_gather) {
+            offset_t* offsets_o = (offset_t*)out_arr->data2();
+            offsets_o[0] = 0;
+            for (int64_t pos = 0; pos < n_rows_tot; pos++) {
+                offsets_o[pos + 1] = offsets_o[pos] + list_count_tot[pos];
+            }
+        }
+    } else if (arr_type == bodo_array_type::LIST_STRING) {
+        MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
+        MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
+        // Computing indexing data in characters and rows.
+        int64_t n_rows_tot = 0;
+        int64_t n_sub_elems_tot = 0;
+        int64_t n_sub_sub_elems_tot = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            n_rows_tot += arr_gath_r[3 * i_p];
+            n_sub_elems_tot += arr_gath_r[3 * i_p + 1];
+            n_sub_sub_elems_tot += arr_gath_r[3 * i_p + 2];
+        }
+        std::vector<int> n_sub_bytes_count, n_sub_bytes_disp, string_count;
+        if (myrank == mpi_root || all_gather) {
+            n_sub_bytes_count.resize(n_pes);
+            n_sub_bytes_disp.resize(n_pes);
+            string_count.resize(n_pes);
+            for (int i_p = 0; i_p < n_pes; i_p++) {
+                string_count[i_p] = arr_gath_r[3 * i_p + 1];
+                n_sub_bytes_count[i_p] = (string_count[i_p] + 7) >> 3;
+            }
+            calc_disp(n_sub_bytes_disp, n_sub_bytes_count);
+        }
+        int64_t n_sub_bytes_tot = std::accumulate(
+            n_sub_bytes_count.begin(), n_sub_bytes_count.end(), int64_t(0));
+        bodo::vector<uint8_t> V(n_sub_bytes_tot, 0);
+        uint8_t* sub_null_bitmask_i = (uint8_t*)in_arr->sub_null_bitmask();
+        int n_bytes = (n_sub_elems + 7) >> 3;
+        MPI_Gengatherv(sub_null_bitmask_i, n_bytes, mpi_typ8, V.data(),
+                       n_sub_bytes_count.data(), n_sub_bytes_disp.data(),
+                       mpi_typ8, mpi_root, MPI_COMM_WORLD, all_gather);
+        char* data1_ptr = nullptr;
+        if (myrank == mpi_root || all_gather) {
+            out_arr =
+                alloc_array(n_rows_tot, n_sub_elems_tot, n_sub_sub_elems_tot,
+                            arr_type, dtype, -1, 0, num_categories);
+            data1_ptr = out_arr->data1();
+            uint8_t* sub_null_bitmask_o = (uint8_t*)out_arr->sub_null_bitmask();
+            copy_gathered_null_bytes(sub_null_bitmask_o, V, n_sub_bytes_count,
+                                     string_count);
+        }
+        std::vector<int> char_disps(n_pes), char_counts(n_pes);
+        int pos = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            int siz = arr_gath_r[3 * i_p + 2];
+            char_disps[i_p] = pos;
+            char_counts[i_p] = siz;
+            pos += siz;
+        }
+        MPI_Gengatherv(in_arr->data1(), n_sub_sub_elems, mpi_typ8, data1_ptr,
+                       char_counts.data(), char_disps.data(), mpi_typ8,
+                       mpi_root, MPI_COMM_WORLD, all_gather);
+        // Sending of the data_offsets
+        std::vector<int> data_offsets_disps(n_pes), data_offsets_counts(n_pes);
+        int pos_data = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            int siz = arr_gath_r[3 * i_p + 1];
+            data_offsets_disps[i_p] = pos_data;
+            data_offsets_counts[i_p] = siz;
+            pos_data += siz;
+        }
+        bodo::vector<uint32_t> len_strings_loc(n_sub_elems);
+        offset_t* data_offsets_i = (offset_t*)in_arr->data2();
+        offset_t curr_data_offset = 0;
+        for (int64_t pos = 0; pos < n_sub_elems; pos++) {
+            offset_t new_data_offset = data_offsets_i[pos + 1];
+            uint32_t len_str = new_data_offset - curr_data_offset;
+            len_strings_loc[pos] = len_str;
+            curr_data_offset = new_data_offset;
+        }
+        bodo::vector<uint32_t> len_strings_tot(n_sub_elems_tot);
+        MPI_Gengatherv(len_strings_loc.data(), n_sub_elems, mpi_typ32,
+                       len_strings_tot.data(), data_offsets_counts.data(),
+                       data_offsets_disps.data(), mpi_typ32, mpi_root,
+                       MPI_COMM_WORLD, all_gather);
+        if (myrank == mpi_root || all_gather) {
+            offset_t* data_offsets_o = (offset_t*)out_arr->data2();
+            data_offsets_o[0] = 0;
+            for (int64_t pos = 0; pos < n_sub_elems_tot; pos++) {
+                data_offsets_o[pos + 1] =
+                    data_offsets_o[pos] + len_strings_tot[pos];
+            }
+        }
+        // index_offsets
+        std::vector<int> index_offsets_disps(n_pes),
+            index_offsets_counts(n_pes);
+        int pos_index = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            int siz = arr_gath_r[3 * i_p];
+            index_offsets_disps[i_p] = pos_index;
+            index_offsets_counts[i_p] = siz;
+            pos_index += siz;
+        }
+        bodo::vector<uint32_t> n_strings_loc(n_rows);
+        offset_t* index_offsets_i = (offset_t*)in_arr->data3();
+        offset_t curr_index_offset = 0;
+        for (int64_t pos = 0; pos < n_rows; pos++) {
+            offset_t new_index_offset = index_offsets_i[pos + 1];
+            uint32_t n_str = new_index_offset - curr_index_offset;
+            n_strings_loc[pos] = n_str;
+            curr_index_offset = new_index_offset;
+        }
+        bodo::vector<uint32_t> n_strings_tot(n_rows_tot, 405);
+        MPI_Gengatherv(n_strings_loc.data(), n_rows, mpi_typ32,
+                       n_strings_tot.data(), index_offsets_counts.data(),
+                       index_offsets_disps.data(), mpi_typ32, mpi_root,
+                       MPI_COMM_WORLD, all_gather);
+        if (myrank == mpi_root || all_gather) {
+            offset_t* index_offsets_o = (offset_t*)out_arr->data3();
+            index_offsets_o[0] = 0;
+            for (int64_t pos = 0; pos < n_rows_tot; pos++) {
+                index_offsets_o[pos + 1] =
+                    index_offsets_o[pos] + n_strings_tot[pos];
+            }
+        }
+    } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
+        int64_t n_rows_tot = 0;
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            n_rows_tot += arr_gath_r[3 * i_p];
+        }
+        // Collecting the offsets data
+        std::vector<offset_t> list_count_loc;
+        list_count_loc.reserve(n_rows);
+        offset_t* offsets_i = (offset_t*)in_arr->data2();
+        for (int64_t pos = 0; pos < n_rows; pos++) {
+            list_count_loc.push_back(offsets_i[pos + 1] - offsets_i[pos]);
+        }
+        std::vector<offset_t> list_count_tot(n_rows_tot);
+        MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
+        MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ32,
+                       list_count_tot.data(), rows_counts.data(),
+                       rows_disps.data(), mpi_typ32, mpi_root, MPI_COMM_WORLD,
+                       all_gather);
+        // Gathering inner array
+        if (myrank == mpi_root || all_gather) {
+            out_arr = alloc_array_item(
+                n_rows_tot,
+                gather_array(in_arr->child_arrays.front(), all_gather,
+                             is_parallel, mpi_root, n_pes, myrank));
+            offset_t* offsets_o = (offset_t*)out_arr->data2();
+            offsets_o[0] = 0;
+            for (int64_t pos = 0; pos < n_rows_tot; pos++) {
+                offsets_o[pos + 1] = offsets_o[pos] + list_count_tot[pos];
+            }
+        } else {
+            gather_array(in_arr->child_arrays.front(), all_gather, is_parallel,
+                         mpi_root, n_pes, myrank);
+        }
+    } else if (arr_type == bodo_array_type::STRUCT) {
+        if (myrank == mpi_root || all_gather) {
             int64_t n_rows_tot = 0;
-            int64_t n_chars_tot = 0;
             for (int i_p = 0; i_p < n_pes; i_p++) {
                 n_rows_tot += arr_gath_r[3 * i_p];
-                n_chars_tot += arr_gath_r[3 * i_p + 1];
             }
-            // Doing the characters
-            char* data1_ptr = nullptr;
-            if (myrank == mpi_root || all_gather) {
-                out_arr = alloc_array(n_rows_tot, n_chars_tot, -1, arr_type,
-                                      dtype, -1, 0, num_categories);
-                data1_ptr = out_arr->data1();
+            std::vector<std::shared_ptr<array_info>> child_arrays;
+            child_arrays.reserve(in_arr->child_arrays.size());
+            for (size_t i = 0; i < in_arr->child_arrays.size(); ++i) {
+                child_arrays.push_back(gather_array(in_arr->child_arrays[i],
+                                                    all_gather, is_parallel,
+                                                    mpi_root, n_pes, myrank));
             }
-            std::vector<int> char_disps(n_pes), char_counts(n_pes);
-            int pos = 0;
-            for (int i_p = 0; i_p < n_pes; i_p++) {
-                int siz = arr_gath_r[3 * i_p + 1];
-                char_disps[i_p] = pos;
-                char_counts[i_p] = siz;
-                pos += siz;
-            }
-            MPI_Gengatherv(in_arr->data1(), n_sub_elems, mpi_typ8, data1_ptr,
-                           char_counts.data(), char_disps.data(), mpi_typ8,
-                           mpi_root, MPI_COMM_WORLD, all_gather);
-            // Collecting the offsets data
-            bodo::vector<uint32_t> list_count_loc(n_rows);
-            offset_t* offsets_i = (offset_t*)in_arr->data2();
-            offset_t curr_offset = 0;
-            for (int64_t pos = 0; pos < n_rows; pos++) {
-                offset_t new_offset = offsets_i[pos + 1];
-                list_count_loc[pos] = new_offset - curr_offset;
-                curr_offset = new_offset;
-            }
-            bodo::vector<uint32_t> list_count_tot(n_rows_tot);
-            MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ32,
-                           list_count_tot.data(), rows_counts.data(),
-                           rows_disps.data(), mpi_typ32, mpi_root,
-                           MPI_COMM_WORLD, all_gather);
-            if (myrank == mpi_root || all_gather) {
-                offset_t* offsets_o = (offset_t*)out_arr->data2();
-                offsets_o[0] = 0;
-                for (int64_t pos = 0; pos < n_rows_tot; pos++)
-                    offsets_o[pos + 1] = offsets_o[pos] + list_count_tot[pos];
+            out_arr = alloc_struct(n_rows_tot, std::move(child_arrays));
+        } else {
+            for (size_t i = 0; i < in_arr->child_arrays.size(); ++i) {
+                gather_array(in_arr->child_arrays[i], all_gather, is_parallel,
+                             mpi_root, n_pes, myrank);
             }
         }
-        if (arr_type == bodo_array_type::LIST_STRING) {
-            MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
-            MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
-            // Computing indexing data in characters and rows.
-            int64_t n_rows_tot = 0;
-            int64_t n_sub_elems_tot = 0;
-            int64_t n_sub_sub_elems_tot = 0;
-            for (int i_p = 0; i_p < n_pes; i_p++) {
-                n_rows_tot += arr_gath_r[3 * i_p];
-                n_sub_elems_tot += arr_gath_r[3 * i_p + 1];
-                n_sub_sub_elems_tot += arr_gath_r[3 * i_p + 2];
-            }
-            std::vector<int> n_sub_bytes_count, n_sub_bytes_disp, string_count;
-            if (myrank == mpi_root || all_gather) {
-                n_sub_bytes_count.resize(n_pes);
-                n_sub_bytes_disp.resize(n_pes);
-                string_count.resize(n_pes);
-                for (int i_p = 0; i_p < n_pes; i_p++) {
-                    string_count[i_p] = arr_gath_r[3 * i_p + 1];
-                    n_sub_bytes_count[i_p] = (string_count[i_p] + 7) >> 3;
-                }
-                calc_disp(n_sub_bytes_disp, n_sub_bytes_count);
-            }
-            int64_t n_sub_bytes_tot = std::accumulate(
-                n_sub_bytes_count.begin(), n_sub_bytes_count.end(), int64_t(0));
-            bodo::vector<uint8_t> V(n_sub_bytes_tot, 0);
-            uint8_t* sub_null_bitmask_i = (uint8_t*)in_arr->sub_null_bitmask();
-            int n_bytes = (n_sub_elems + 7) >> 3;
-            MPI_Gengatherv(sub_null_bitmask_i, n_bytes, mpi_typ8, V.data(),
-                           n_sub_bytes_count.data(), n_sub_bytes_disp.data(),
-                           mpi_typ8, mpi_root, MPI_COMM_WORLD, all_gather);
-            char* data1_ptr = nullptr;
-            if (myrank == mpi_root || all_gather) {
-                out_arr = alloc_array(n_rows_tot, n_sub_elems_tot,
-                                      n_sub_sub_elems_tot, arr_type, dtype, -1,
-                                      0, num_categories);
-                data1_ptr = out_arr->data1();
-                uint8_t* sub_null_bitmask_o =
-                    (uint8_t*)out_arr->sub_null_bitmask();
-                copy_gathered_null_bytes(sub_null_bitmask_o, V,
-                                         n_sub_bytes_count, string_count);
-            }
-            std::vector<int> char_disps(n_pes), char_counts(n_pes);
-            int pos = 0;
-            for (int i_p = 0; i_p < n_pes; i_p++) {
-                int siz = arr_gath_r[3 * i_p + 2];
-                char_disps[i_p] = pos;
-                char_counts[i_p] = siz;
-                pos += siz;
-            }
-            MPI_Gengatherv(in_arr->data1(), n_sub_sub_elems, mpi_typ8,
-                           data1_ptr, char_counts.data(), char_disps.data(),
-                           mpi_typ8, mpi_root, MPI_COMM_WORLD, all_gather);
-            // Sending of the data_offsets
-            std::vector<int> data_offsets_disps(n_pes),
-                data_offsets_counts(n_pes);
-            int pos_data = 0;
-            for (int i_p = 0; i_p < n_pes; i_p++) {
-                int siz = arr_gath_r[3 * i_p + 1];
-                data_offsets_disps[i_p] = pos_data;
-                data_offsets_counts[i_p] = siz;
-                pos_data += siz;
-            }
-            bodo::vector<uint32_t> len_strings_loc(n_sub_elems);
-            offset_t* data_offsets_i = (offset_t*)in_arr->data2();
-            offset_t curr_data_offset = 0;
-            for (int64_t pos = 0; pos < n_sub_elems; pos++) {
-                offset_t new_data_offset = data_offsets_i[pos + 1];
-                uint32_t len_str = new_data_offset - curr_data_offset;
-                len_strings_loc[pos] = len_str;
-                curr_data_offset = new_data_offset;
-            }
-            bodo::vector<uint32_t> len_strings_tot(n_sub_elems_tot);
-            MPI_Gengatherv(len_strings_loc.data(), n_sub_elems, mpi_typ32,
-                           len_strings_tot.data(), data_offsets_counts.data(),
-                           data_offsets_disps.data(), mpi_typ32, mpi_root,
-                           MPI_COMM_WORLD, all_gather);
-            if (myrank == mpi_root || all_gather) {
-                offset_t* data_offsets_o = (offset_t*)out_arr->data2();
-                data_offsets_o[0] = 0;
-                for (int64_t pos = 0; pos < n_sub_elems_tot; pos++)
-                    data_offsets_o[pos + 1] =
-                        data_offsets_o[pos] + len_strings_tot[pos];
-            }
-            // index_offsets
-            std::vector<int> index_offsets_disps(n_pes),
-                index_offsets_counts(n_pes);
-            int pos_index = 0;
-            for (int i_p = 0; i_p < n_pes; i_p++) {
-                int siz = arr_gath_r[3 * i_p];
-                index_offsets_disps[i_p] = pos_index;
-                index_offsets_counts[i_p] = siz;
-                pos_index += siz;
-            }
-            bodo::vector<uint32_t> n_strings_loc(n_rows);
-            offset_t* index_offsets_i = (offset_t*)in_arr->data3();
-            offset_t curr_index_offset = 0;
-            for (int64_t pos = 0; pos < n_rows; pos++) {
-                offset_t new_index_offset = index_offsets_i[pos + 1];
-                uint32_t n_str = new_index_offset - curr_index_offset;
-                n_strings_loc[pos] = n_str;
-                curr_index_offset = new_index_offset;
-            }
-            bodo::vector<uint32_t> n_strings_tot(n_rows_tot, 405);
-            MPI_Gengatherv(n_strings_loc.data(), n_rows, mpi_typ32,
-                           n_strings_tot.data(), index_offsets_counts.data(),
-                           index_offsets_disps.data(), mpi_typ32, mpi_root,
-                           MPI_COMM_WORLD, all_gather);
-            if (myrank == mpi_root || all_gather) {
-                offset_t* index_offsets_o = (offset_t*)out_arr->data3();
-                index_offsets_o[0] = 0;
-                for (int64_t pos = 0; pos < n_rows_tot; pos++)
-                    index_offsets_o[pos + 1] =
-                        index_offsets_o[pos] + n_strings_tot[pos];
-            }
+    }
+    if (arr_type == bodo_array_type::STRING ||
+        arr_type == bodo_array_type::LIST_STRING ||
+        arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+        arr_type == bodo_array_type::ARRAY_ITEM ||
+        arr_type == bodo_array_type::STRUCT) {
+        char* null_bitmask_i = in_arr->null_bitmask();
+        std::vector<int> recv_count_null(n_pes), recv_disp_null(n_pes);
+        for (int i_p = 0; i_p < n_pes; i_p++) {
+            recv_count_null[i_p] = (rows_counts[i_p] + 7) >> 3;
         }
-        if (arr_type == bodo_array_type::STRING ||
-            arr_type == bodo_array_type::LIST_STRING ||
-            arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            char* null_bitmask_i = in_arr->null_bitmask();
-            std::vector<int> recv_count_null(n_pes), recv_disp_null(n_pes);
-            for (int i_p = 0; i_p < n_pes; i_p++) {
-                recv_count_null[i_p] = (rows_counts[i_p] + 7) >> 3;
-            }
-            calc_disp(recv_disp_null, recv_count_null);
-            size_t n_null_bytes = std::accumulate(
-                recv_count_null.begin(), recv_count_null.end(), size_t(0));
-            bodo::vector<uint8_t> tmp_null_bytes(n_null_bytes, 0);
-            MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-            int n_bytes = (n_rows + 7) >> 3;
-            MPI_Gengatherv(null_bitmask_i, n_bytes, mpi_typ,
-                           tmp_null_bytes.data(), recv_count_null.data(),
-                           recv_disp_null.data(), mpi_typ, mpi_root,
-                           MPI_COMM_WORLD, all_gather);
-            if (myrank == mpi_root || all_gather) {
-                char* null_bitmask_o = out_arr->null_bitmask();
-                copy_gathered_null_bytes((uint8_t*)null_bitmask_o,
-                                         tmp_null_bytes, recv_count_null,
-                                         rows_counts);
-            }
+        calc_disp(recv_disp_null, recv_count_null);
+        size_t n_null_bytes = std::accumulate(recv_count_null.begin(),
+                                              recv_count_null.end(), size_t(0));
+        bodo::vector<uint8_t> tmp_null_bytes(n_null_bytes, 0);
+        MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+        int n_bytes = (n_rows + 7) >> 3;
+        MPI_Gengatherv(null_bitmask_i, n_bytes, mpi_typ, tmp_null_bytes.data(),
+                       recv_count_null.data(), recv_disp_null.data(), mpi_typ,
+                       mpi_root, MPI_COMM_WORLD, all_gather);
+        if (myrank == mpi_root || all_gather) {
+            char* null_bitmask_o = out_arr->null_bitmask();
+            copy_gathered_null_bytes((uint8_t*)null_bitmask_o, tmp_null_bytes,
+                                     recv_count_null, rows_counts);
         }
-        if (in_table->columns[i_col]->arr_type == bodo_array_type::DICT) {
-            in_arr = in_table->columns[i_col];
-            if (all_gather || myrank == mpi_root) {
-                out_arr =
-                    create_dict_string_array(in_arr->child_arrays[0], out_arr);
-            }  // else out_arr is already nullptr, so doesn't need to be handled
-        }
-        in_arr.reset();
-        out_arrs.push_back(out_arr);
+    }
+    if (is_dict_array && (all_gather || myrank == mpi_root)) {
+        out_arr =
+            create_dict_string_array(dict_array->child_arrays[0], out_arr);
+    }
+
+    return out_arr;
+}
+
+std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
+                                         int64_t n_cols, bool all_gather,
+                                         bool is_parallel, int mpi_root) {
+    tracing::Event ev("gather_table", is_parallel);
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    if (n_cols == -1) {
+        n_cols = in_table->ncols();
+    }
+    out_arrs.reserve(n_cols);
+    for (int64_t i_col = 0; i_col < n_cols; i_col++) {
+        out_arrs.push_back(gather_array(in_table->columns[i_col], all_gather,
+                                        is_parallel, mpi_root, n_pes, myrank));
     }
     return std::make_shared<table_info>(out_arrs);
 }

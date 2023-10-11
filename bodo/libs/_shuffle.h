@@ -201,21 +201,21 @@ std::shared_ptr<table_info> broadcast_table(
     std::shared_ptr<table_info> ref_table, std::shared_ptr<table_info> in_table,
     size_t n_cols, bool is_parallel, int mpi_root);
 
-/** Gather a table.
+/**
+ * @brief Gather a table
  *
- * @param in_table     : the input table.
- * @param n_cols       : the number of columns of the keys.
- *     If -1 then all columns are used. Otherwise, the first n_cols_i columns
- * are gather.
- * @param all_gather   : Whether to do all_gather or not.
- * @param is_parallel: Used to indicate whether tracing should be parallel or
- * not
- * @return the table obtained by concatenating the tables
- *         on the node 0.
+ * @param in_table : the input table. Passing a nullptr will cause a segfault.
+ * error.
+ * @param n_cols : the number of columns of the keys. If -1 then all columns are
+ * used. Otherwise, the first n_cols columns are gather.
+ * @param all_gather : whether to do all_gather
+ * @param is_parallel : whether tracing should be parallel
+ * @param mpi_root : root rank for gathering (where data is gathered to)
+ * @return the table obtained by concatenating the tables on the node mpi_root
  */
 std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
-                                         int64_t n_cols_i, bool all_gather,
-                                         bool is_parallel);
+                                         int64_t n_cols, bool all_gather,
+                                         bool is_parallel, int mpi_root = 0);
 
 /** Compute whether we need to do a reshuffling or not for performance reasons.
     The dilemma is following:
