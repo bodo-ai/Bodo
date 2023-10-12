@@ -1290,6 +1290,53 @@ def test_snowflake_to_sql_bodo_datatypes_part3(memory_leak_check):
     assert n_passed == n_pes, "test_snowflake_to_sql_bodo_datatypes_part3 failed"
 
 
+# TODO: slow
+def test_snowflake_to_sql_nullarray(memory_leak_check):
+    """Tests that df.to_sql works with NullArrayType."""
+
+    bodo_tablename = "BODO_DT_P4"
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+
+    @bodo.jit(distributed=["df"])
+    def test_write(name, conn, schema):
+        df = pd.DataFrame({"null_arr": bodo.libs.null_arr_ext.init_null_array(10)})
+        df.to_sql(name, conn, if_exists="replace", index=False, schema=schema)
+
+    def sf_read(conn, tablename):
+        ans = pd.read_sql(f"select * from {tablename}", conn)
+        return ans
+
+    with ensure_clean_snowflake_table(conn, bodo_tablename) as b_tablename:
+        test_write(b_tablename, conn, schema)
+        bodo_result = bodo.jit(sf_read)(conn, b_tablename)
+        if bodo.get_rank() == 0:
+            py_output = sf_read(conn, b_tablename)
+
+    bodo_result = bodo.gatherv(bodo_result)
+
+    passed = 1
+    if bodo.get_rank() == 0:
+        try:
+            # avoid checking dtype
+            # Attribute "dtype" are different
+            # [left]:  string[pyarrow]
+            # [right]: object
+            pd.testing.assert_frame_equal(
+                bodo_result,
+                py_output,
+                check_dtype=False,
+            )
+        except Exception as e:
+            print("".join(traceback.format_exception(None, e, e.__traceback__)))
+            passed = 0
+
+    n_passed = reduce_sum(passed)
+    n_pes = bodo.get_size()
+    assert n_passed == n_pes, "test_snowflake_to_sql_nullarray failed"
+
+
 def test_to_sql_snowflake_user2(memory_leak_check):
     """
     Tests that df.to_sql works when the Snowflake account password has special
