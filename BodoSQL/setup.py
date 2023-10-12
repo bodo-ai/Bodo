@@ -1,10 +1,10 @@
 import os
 import sys
-from distutils.errors import DistutilsExecError
 
 from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
+from setuptools.errors import ExecError
 
 import versioneer
 
@@ -82,7 +82,7 @@ def build_libs(obj):
         os.rename(
             executable_jar_path, os.path.join(to_jar_path, "bodosql-executable.jar")
         )
-    except DistutilsExecError as e:
+    except ExecError as e:
         obj.error("maven build failed with error:", e)
 
 
