@@ -1,11 +1,11 @@
 import os
 import shutil
 import sys
-from distutils.errors import DistutilsExecError
 
 from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
+from setuptools.errors import ExecError
 
 cwd = os.getcwd()
 setup_py_dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -66,7 +66,7 @@ def build_libs(obj, dev_mode=False):
         jar_lib_dst = os.path.join(to_jar_path, "libs/")
         shutil.rmtree(jar_lib_dst, ignore_errors=True)
         os.rename(os.path.join(executable_jar_dir, "libs/"), jar_lib_dst)
-    except DistutilsExecError as e:
+    except ExecError as e:
         obj.error("Maven Build Failed with Error:", e)
 
 
