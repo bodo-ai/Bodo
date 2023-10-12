@@ -209,7 +209,8 @@ void IdxMinMaxColSet::alloc_running_value_columns(
 
 void IdxMinMaxColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    const bool alloc_out_if_no_combine, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     this->alloc_running_value_columns(num_groups, out_cols, pool, mm);
     this->update_cols = out_cols;
 
@@ -347,7 +348,7 @@ std::tuple<std::vector<bodo_array_type::arr_type_enum>,
            std::vector<Bodo_CTypes::CTypeEnum>>
 BoolXorColSet::getRunningValueColumnTypes(
     const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) {
+    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const {
     return std::tuple(
         std::vector<bodo_array_type::arr_type_enum>{
             bodo_array_type::NULLABLE_INT_BOOL,
@@ -390,7 +391,8 @@ void VarStdColSet::alloc_running_value_columns(
 
 void VarStdColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    const bool alloc_out_if_no_combine, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     // Starting index for the loop where we copy the running value column into
     // update_cols. 1 if we are not doing a combine and therefore allocating
     // out_col, 0 otherwise.
@@ -398,7 +400,7 @@ void VarStdColSet::alloc_update_columns(
 
     // If I am not doing a combine, allocate the ouput as well
     // This is needed due to some technical debt with transform/UDF colsets
-    if (!this->combine_step) {
+    if (!this->combine_step && alloc_out_if_no_combine) {
         // need to create output column now
         std::shared_ptr<array_info> col =
             alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
@@ -485,7 +487,7 @@ void VarStdColSet::eval(const grouping_info& grp_info,
     // alloc_combine_columns)
     if (this->out_col == nullptr) {
         this->out_col = alloc_array(
-            combine_cols[0]->length, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+            mycols->at(0)->length, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
             Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool, mm);
         // Initialize as ftype to match nullable behavior
         aggfunc_output_initialize(this->out_col, this->ftype,
@@ -520,7 +522,7 @@ std::tuple<std::vector<bodo_array_type::arr_type_enum>,
            std::vector<Bodo_CTypes::CTypeEnum>>
 VarStdColSet::getRunningValueColumnTypes(
     const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) {
+    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const {
     // var/std's update columns are always uint64 for count and float64 for
     // mean and m2 data. See VarStdColSet::alloc_running_value_columns()
     return std::tuple(
@@ -572,7 +574,8 @@ void SkewColSet::alloc_running_value_columns(
 
 void SkewColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    const bool alloc_out_if_no_combine, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     // Starting index for the loop where we copy the running value column into
     // update_cols. 1 if we are not doing a combine and therefore allocating
     // out_col, 0 otherwise.
@@ -580,7 +583,7 @@ void SkewColSet::alloc_update_columns(
 
     // If I am not doing a combine, allocate the ouput as well
     // This is needed due to some technical debt with transform/UDF colsets
-    if (!this->combine_step) {
+    if (!this->combine_step && alloc_out_if_no_combine) {
         // need to create output column now
         std::shared_ptr<array_info> col =
             alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
@@ -686,7 +689,7 @@ std::tuple<std::vector<bodo_array_type::arr_type_enum>,
            std::vector<Bodo_CTypes::CTypeEnum>>
 SkewColSet::getRunningValueColumnTypes(
     const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) {
+    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const {
     // Skew's update columns are always uint64 for count and float64 for
     // m1/m2/m3 data. See SkewColSet::alloc_running_value_columns()
     return std::tuple(
@@ -1165,7 +1168,8 @@ KurtColSet::~KurtColSet() {}
 
 void KurtColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    const bool alloc_out_if_no_combine, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     // Starting index for the loop where we copy the running value column into
     // update_cols. 1 if we are not doing a combine and therefore allocating
     // out_col, 0 otherwise.
@@ -1173,7 +1177,7 @@ void KurtColSet::alloc_update_columns(
 
     // If I am not doing a combine, allocate the ouput as well
     // This is needed due to some technical debt with transform/UDF colsets
-    if (!this->combine_step) {
+    if (!this->combine_step && alloc_out_if_no_combine) {
         // need to create output column now
         std::shared_ptr<array_info> col =
             alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
@@ -1321,7 +1325,7 @@ std::tuple<std::vector<bodo_array_type::arr_type_enum>,
            std::vector<Bodo_CTypes::CTypeEnum>>
 KurtColSet::getRunningValueColumnTypes(
     const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) {
+    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const {
     // Kurt's update columns are always uint64 for count and float64 for
     // m1/m2/m3/m4 data. See KurtColSet::alloc_running_value_columns()
     return std::tuple(
@@ -1358,7 +1362,8 @@ void UdfColSet::alloc_running_value_columns(
 
 void UdfColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    const bool alloc_out_if_no_combine, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     int offset = 0;
 
     if (this->combine_step) {
@@ -1643,11 +1648,13 @@ void TransformColSet::alloc_running_value_columns(
 
 void TransformColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    const bool alloc_out_if_no_combine, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     // Allocate child column that does the actual computation
     std::vector<std::shared_ptr<array_info>> list_arr;
 
-    transform_op_col->alloc_update_columns(num_groups, list_arr, pool, mm);
+    transform_op_col->alloc_update_columns(num_groups, list_arr,
+                                           alloc_out_if_no_combine, pool, mm);
 
     this->alloc_running_value_columns(num_groups, out_cols, pool,
                                       std::move(mm));
