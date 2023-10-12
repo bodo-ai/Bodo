@@ -413,6 +413,8 @@ def _numba_to_pyarrow_type(numba_type: types.ArrayCompatible, is_iceberg: bool =
             dtype = pa.time64("us")
         elif numba_type.precision == 9:
             dtype = pa.time64("ns")
+    elif numba_type == bodo.null_array_type:
+        dtype = pa.null()
     else:
         raise BodoError(
             f"Conversion from Bodo array type {numba_type} to PyArrow type not supported yet"
