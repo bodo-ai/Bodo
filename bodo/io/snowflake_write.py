@@ -354,7 +354,7 @@ def begin_write_transaction(cursor, location, sf_schema, if_exists, table_type):
             )
         except Exception as e:
             err = RuntimeError(str(e))
-            if os.environ.get("BODO_SF_WRITE_DEBUG") is not None:
+            if int(os.environ.get("BODO_SF_DEBUG_LEVEL", "0")) >= 1:
                 print("".join(traceback.format_exception(None, e, e.__traceback__)))
 
     err = comm.bcast(err)
