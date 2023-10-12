@@ -176,39 +176,22 @@ std::shared_ptr<table_info> get_update_table(
         }
         col_set->setInCol(input_cols);
         std::vector<std::shared_ptr<array_info>> list_arr;
-        col_set->alloc_update_columns(update_col_len, list_arr, pool, mm);
-        col_set->update(grp_infos, pool, mm);
-        if (is_acc_case) {
-            // Call eval in the ACC case
-            // In the acc case, the ColSets are created with "do_combine=false",
-            // so it will use the update columns (happens as part of
-            // alloc_update_columns) and we don't need to set the combine
-            // columns before calling eval.
-            // We don't need to call setOutputColumn() either since it
-            // allocates the output column through the pool automatically if
-            // needed.
-            grouping_info dummy_grp_info;
-            col_set->eval(dummy_grp_info, pool, mm);
-            const std::vector<std::shared_ptr<array_info>> out_cols =
-                col_set->getOutputColumns();
-            for (auto& e_arr : out_cols) {
-                // XXX TODO Ideally these should go directly to the output
-                // buffer (in the accumulate case), even if it is column wise.
-                // Otherwise, later ColSets have lesser memory than earlier
-                // ColSet for no good reason. The issue is that we'll end up
-                // with different chunk boundaries in different chunks, which
-                // has implications downstream.
-                update_table->columns.push_back(e_arr);
-            }
-        } else {
-            // In the AGG case, just use the running values
-            for (auto& e_arr : list_arr) {
-                update_table->columns.push_back(e_arr);
-            }
+        // Regarding alloc_out_if_no_combine:
+        //   - If this is the ACC case, i.e. there's no combine step,
+        //     we don't need to allocate the output column yet.
+        //     This is important to be able to use f_running_value_offsets
+        //     as is.
+        //   - If this is the AGG case, i.e. there's a combine step,
+        //     this parameter doesn't matter.
+        col_set->alloc_update_columns(update_col_len, list_arr,
+                                      /*alloc_out_if_no_combine*/ false, pool,
+                                      mm);
+        for (auto& e_arr : list_arr) {
+            update_table->columns.push_back(e_arr);
         }
+        col_set->update(grp_infos, pool, mm);
         col_set->clear();
     }
-
     return update_table;
 }
 
@@ -300,6 +283,10 @@ void combine_input_table_helper(
  * @brief Calls groupby eval() functions of groupby operations on running values
  * to compute final output.
  *
+ * @tparam is_acc_case Is the function being called in the
+ * accumulating code path. This decides whether we set the update columns
+ * or the combine columns in the ColSets. This also decides whether we set the
+ * output columns from separate_out_cols.
  * @param f_running_value_offsets Contains the offsets into f_in_cols.
  * @param col_sets ColSets to use for the combine.
  * @param build_table Build table with running values. This may be updated in
@@ -307,38 +294,73 @@ void combine_input_table_helper(
  * @param n_keys Number of key columns.
  * @param separate_out_cols Output columns for colsets that require separate
  * output columns
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function. In the accumulate code path case, this is the operator buffer pool.
+ * In the agg case, this is the default BufferPool. This is because in the
+ * accumulate case, we call this function on the entire partition, so we need to
+ * track and enforce memory usage to be able to re-partition and retry in case
+ * of failure. In the agg case, this function is called on an input batch (~4K
+ * rows). We can treat the execution on this small batch as basically scratch
+ * usage, for which the BufferPool is sufficient and using the
+ * Operator-Buffer-Pool (which would enforce thresholds) could be problematic
+ * (it would re-partition the partition which has no bearing on this input
+ * batch).
+ * @param mm Memory manager associated with the pool.
  */
+template <bool is_acc_case>
 std::shared_ptr<table_info> eval_groupby_funcs_helper(
     const std::vector<int32_t>& f_running_value_offsets,
     const std::vector<std::shared_ptr<BasicColSet>>& col_sets,
     std::shared_ptr<table_info> build_table, const uint64_t n_keys,
-    std::shared_ptr<table_info> separate_out_cols) {
+    std::shared_ptr<table_info> separate_out_cols,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     // TODO(njriasan): Move eval computation directly into the output
     // buffer.
     std::shared_ptr<table_info> out_table = std::make_shared<table_info>();
+    // Add the key columns to the output table:
     out_table->columns.assign(build_table->columns.begin(),
                               build_table->columns.begin() + n_keys);
 
     size_t sep_col_idx = 0;
     for (size_t i_colset = 0; i_colset < col_sets.size(); i_colset++) {
         const std::shared_ptr<BasicColSet>& col_set = col_sets[i_colset];
-        std::vector<std::shared_ptr<array_info>> out_combine_cols;
-
-        for (size_t col_ind = (size_t)f_running_value_offsets[i_colset];
-             col_ind < (size_t)f_running_value_offsets[i_colset + 1];
-             col_ind++) {
-            out_combine_cols.push_back(build_table->columns[col_ind]);
+        if (is_acc_case) {
+            // In the ACC case, the ColSets are created with "do_combine=false",
+            // so we need to set the update columns and not the combine columns.
+            // We don't need to call setOutputColumn() either since it
+            // allocates the output column through the pool automatically if
+            // needed.
+            std::vector<std::shared_ptr<array_info>> out_update_cols;
+            for (size_t col_ind = (size_t)f_running_value_offsets[i_colset];
+                 col_ind < (size_t)f_running_value_offsets[i_colset + 1];
+                 col_ind++) {
+                out_update_cols.push_back(build_table->columns[col_ind]);
+            }
+            col_set->setUpdateCols(out_update_cols);
+        } else {
+            // In the AGG case, we call eval on running values that have been
+            // incrementally combined over several input batches:
+            std::vector<std::shared_ptr<array_info>> out_combine_cols;
+            for (size_t col_ind = (size_t)f_running_value_offsets[i_colset];
+                 col_ind < (size_t)f_running_value_offsets[i_colset + 1];
+                 col_ind++) {
+                out_combine_cols.push_back(build_table->columns[col_ind]);
+            }
+            col_set->setCombineCols(out_combine_cols);
+            // Set the separate out col if this col-set needs it:
+            if (col_set->getSeparateOutputColumnType().size() != 0) {
+                col_set->setOutputColumn(
+                    separate_out_cols->columns[sep_col_idx]);
+                sep_col_idx++;
+            }
         }
-        col_set->setCombineCols(out_combine_cols);
+
         // calling eval() doesn't require grouping info.
         // TODO(ehsan): refactor eval not take grouping info input.
         grouping_info dummy_grp_info;
-
-        if (col_set->getSeparateOutputColumnType().size() != 0) {
-            col_set->setOutputColumn(separate_out_cols->columns[sep_col_idx]);
-            sep_col_idx++;
-        }
-        col_set->eval(dummy_grp_info);
+        col_set->eval(dummy_grp_info, pool, mm);
         const std::vector<std::shared_ptr<array_info>> out_cols =
             col_set->getOutputColumns();
         out_table->columns.insert(out_table->columns.end(), out_cols.begin(),
@@ -396,7 +418,6 @@ GroupbyPartition::GroupbyPartition(
         this->build_table_buffer = std::make_unique<TableBuildBuffer>(
             this->build_arr_c_types, this->build_arr_array_types,
             this->build_table_dict_builders, this->op_pool, this->op_mm);
-
         this->separate_out_cols = std::make_unique<TableBuildBuffer>(
             this->separate_out_cols_c_types,
             this->separate_out_cols_array_types,
@@ -634,7 +655,6 @@ void GroupbyPartition::AppendBuildBatch(
         // Reserve space. This will be a NOP if we already
         // have sufficient space.
         this->build_table_buffer->ReserveTable(in_table);
-        this->separate_out_cols->ReserveTableSize(in_table->nrows());
         // Now append the rows. This will always
         // succeed since we've
         // reserved space upfront.
@@ -661,6 +681,8 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
 
     // Release hash-table memory.
     this->build_hash_table.reset();
+    // Release separate out cols buffer.
+    this->separate_out_cols.reset();
 
     // Get dictionary hashes from the dict-builders of build table.
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
@@ -768,9 +790,11 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->build_table_buffer->data_table, append_partition1,
             append_partition1_sum);
 
-        // Reserve space for output columns
+        // Reserve space for output columns (NOP in the ACC case since there are
+        // no separate out columns)
         new_part1->separate_out_cols->ReserveTableSize(append_partition1_sum);
         new_part1->separate_out_cols->IncrementSize(append_partition1_sum);
+
         if (!this->accumulate_before_update) {
             // Update safely appended group count for the new active
             // partition in the AGG case.
@@ -819,7 +843,9 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
         while (!this->build_table_buffer_chunked->chunks.empty()) {
             auto [build_table_chunk, build_table_nrows_chunk] =
                 this->build_table_buffer_chunked->PopChunk();
-            // Compute partitioning hashes
+            // Compute partitioning hashes.
+            // TODO XXX Allocate the hashes buffer once (set size to CTB's
+            // chunk-size) and reuse it across all chunks.
             std::shared_ptr<uint32_t[]> build_table_partitioning_hashes_chunk =
                 hash_keys_table(build_table_chunk, this->n_keys,
                                 SEED_HASH_PARTITION, false, false, dict_hashes);
@@ -849,6 +875,7 @@ void GroupbyPartition::ClearBuildState() {
     this->build_table_groupby_hashes.resize(0);
     this->build_table_groupby_hashes.shrink_to_fit();
     this->build_table_buffer.reset();
+    this->separate_out_cols.reset();
     this->in_table.reset();
     this->in_table_hashes.reset();
 }
@@ -867,7 +894,7 @@ void GroupbyPartition::ActivatePartition() {
         this->build_table_dict_builders, this->op_pool, this->op_mm);
 
     // Initialize separate output columns
-    // separate_out_cols cannot be STRING or DICT arrays
+    // NOTE: separate_out_cols cannot be STRING or DICT arrays.
     this->separate_out_cols = std::make_unique<TableBuildBuffer>(
         this->separate_out_cols_c_types, this->separate_out_cols_array_types,
         std::vector<std::shared_ptr<DictionaryBuilder>>(
@@ -889,6 +916,9 @@ void GroupbyPartition::ActivatePartition() {
                 this->build_table_buffer_chunked->PopChunk();
             this->build_table_buffer->UnsafeAppendBatch(build_table_chunk);
         }
+
+        // Free the chunked buffer state entirely since it's not needed anymore.
+        this->build_table_buffer_chunked.reset();
     } else {
         // Just call UpdateGroupsAndCombine on each chunk. Note that
         // we cannot pop the chunks since we need to keep them around
@@ -928,10 +958,17 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
 
     std::shared_ptr<table_info> out_table;
     if (accumulate_before_update) {
-        out_table = get_update_table</*is_acc_case*/ true>(
-            this->build_table_buffer->data_table, this->n_keys, this->col_sets,
-            this->f_in_offsets, this->f_in_cols, this->req_extended_group_info,
-            this->op_pool, this->op_mm);
+        // Get update table with the running values:
+        std::shared_ptr<table_info> update_table =
+            get_update_table</*is_acc_case*/ true>(
+                this->build_table_buffer->data_table, this->n_keys,
+                this->col_sets, this->f_in_offsets, this->f_in_cols,
+                this->req_extended_group_info, this->op_pool, this->op_mm);
+        // Call eval on these running values to get the final output.
+        out_table = eval_groupby_funcs_helper</*is_acc_case*/ true>(
+            this->f_running_value_offsets, this->col_sets, update_table,
+            this->n_keys, this->separate_out_cols->data_table, this->op_pool,
+            this->op_mm);
     } else {
         // Note that we don't need to call RebuildHashTableFromBuildBuffer
         // here. If the partition was inactive, ActivatePartition could've
@@ -956,7 +993,7 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
         // enforcement error.
         std::shared_ptr<table_info> combine_data =
             this->build_table_buffer->data_table;
-        out_table = eval_groupby_funcs_helper(
+        out_table = eval_groupby_funcs_helper</*is_acc_case*/ false>(
             this->f_running_value_offsets, this->col_sets, combine_data,
             this->n_keys, this->separate_out_cols->data_table);
     }
@@ -1032,7 +1069,7 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
 
     // Get offsets of update and combine columns for each function since
     // some functions have multiple update/combine columns
-    f_running_value_offsets.push_back(n_keys);
+    this->f_running_value_offsets.push_back(n_keys);
     int32_t curr_running_value_offset = n_keys;
 
     for (size_t i = 0; i < ftypes.size(); i++) {
@@ -1157,24 +1194,22 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
             window_na_position_vect, {nullptr}, 0, nullptr, nullptr, 0, nullptr,
             use_sql_rules);
 
-        if (!this->accumulate_before_update) {
-            // get update/combine type info to initialize build state
-            std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-                       std::vector<Bodo_CTypes::CTypeEnum>>
-                running_values_arr_types = col_set->getRunningValueColumnTypes(
-                    in_arr_types, in_dtypes);
+        // get update/combine type info to initialize build state
+        std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+                   std::vector<Bodo_CTypes::CTypeEnum>>
+            running_values_arr_types =
+                col_set->getRunningValueColumnTypes(in_arr_types, in_dtypes);
 
+        if (!this->accumulate_before_update) {
             for (auto t : std::get<0>(running_values_arr_types)) {
                 build_arr_array_types.push_back(t);
             }
             for (auto t : std::get<1>(running_values_arr_types)) {
                 build_arr_c_types.push_back(t);
             }
-            curr_running_value_offset +=
-                std::get<0>(running_values_arr_types).size();
-            f_running_value_offsets.push_back(curr_running_value_offset);
 
-            // Determine what separate output columns are necessary
+            // Determine what separate output columns are necessary.
+            // This is only required in the AGG case.
             auto separate_out_col_type = col_set->getSeparateOutputColumnType();
             if (separate_out_col_type.size() != 0) {
                 if (separate_out_col_type.size() != 1) {
@@ -1189,11 +1224,14 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
             }
         }
 
+        curr_running_value_offset +=
+            std::get<0>(running_values_arr_types).size();
+        this->f_running_value_offsets.push_back(curr_running_value_offset);
+
         this->col_sets.push_back(col_set);
     }
 
     // build buffer types are same as input if just accumulating batches
-
     if (this->accumulate_before_update) {
         build_arr_array_types = in_arr_array_types;
         build_arr_c_types = in_arr_c_types;
@@ -1308,7 +1346,7 @@ GroupbyState::getSeparateOutputColumns(
                    0,                 // period
                    {0},               // transform_funcs
                    0,                 // n_udf
-                   true,              // parallel
+                   false,             // parallel
                    {true},            // window_ascending
                    {true},            // window_na_position
                    {nullptr},         // window_args
@@ -1336,8 +1374,7 @@ void GroupbyState::SplitPartition(size_t idx) {
         // (https://bodo.atlassian.net/browse/BSE-535).
         throw std::runtime_error(
             "GroupbyState::SplitPartition: Cannot split partition beyond "
-            "max "
-            "partition depth of: " +
+            "max partition depth of: " +
             std::to_string(max_partition_depth));
     }
 
