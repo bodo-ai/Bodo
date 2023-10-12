@@ -387,25 +387,26 @@ void ArrayBuildBuffer::UnsafeAppendBatch(
 }
 
 void ArrayBuildBuffer::IncrementSize(size_t addln_size) {
+    size_t new_size = this->size + addln_size;
     switch (this->data_array->arr_type) {
         case bodo_array_type::NULLABLE_INT_BOOL: {
             if (this->data_array->dtype == Bodo_CTypes::_BOOL) {
                 CHECK_ARROW_MEM(
                     data_array->buffers[0]->SetSize(
-                        arrow::bit_util::BytesForBits(size)),
+                        arrow::bit_util::BytesForBits(new_size)),
                     "ArrayBuildBuffer::IncrementSize: SetSize failed!");
                 CHECK_ARROW_MEM(
                     data_array->buffers[1]->SetSize(
-                        arrow::bit_util::BytesForBits(size)),
+                        arrow::bit_util::BytesForBits(new_size)),
                     "ArrayBuildBuffer::IncrementSize: SetSize failed!");
             } else {
                 uint64_t size_type = numpy_item_size[this->data_array->dtype];
                 CHECK_ARROW_MEM(
-                    data_array->buffers[0]->SetSize(size * size_type),
+                    data_array->buffers[0]->SetSize(new_size * size_type),
                     "ArrayBuildBuffer::IncrementSize: SetSize failed!");
                 CHECK_ARROW_MEM(
                     data_array->buffers[1]->SetSize(
-                        arrow::bit_util::BytesForBits(size)),
+                        arrow::bit_util::BytesForBits(new_size)),
                     "ArrayBuildBuffer::IncrementSize: SetSize failed!");
             }
 
@@ -419,8 +420,9 @@ void ArrayBuildBuffer::IncrementSize(size_t addln_size) {
         } break;
         case bodo_array_type::NUMPY: {
             uint64_t size_type = numpy_item_size[this->data_array->dtype];
-            CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(size * size_type),
-                            "ArrayBuildBuffer::IncrementSize: SetSize failed!");
+            CHECK_ARROW_MEM(
+                data_array->buffers[0]->SetSize(new_size * size_type),
+                "ArrayBuildBuffer::IncrementSize: SetSize failed!");
         } break;
         default:
             throw std::runtime_error(
