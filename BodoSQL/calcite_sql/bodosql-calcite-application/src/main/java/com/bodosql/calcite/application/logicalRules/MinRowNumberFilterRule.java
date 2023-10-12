@@ -5,6 +5,7 @@ import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter;
 import com.bodosql.calcite.rel.logical.BodoLogicalProject;
 import java.util.*;
+import java.util.stream.Collectors;
 import org.apache.calcite.plan.*;
 import org.apache.calcite.rel.*;
 import org.apache.calcite.rel.core.*;
@@ -15,6 +16,7 @@ import org.apache.calcite.sql.type.*;
 import org.apache.calcite.tools.*;
 import org.apache.calcite.util.*;
 import org.immutables.value.*;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * Planner rule that recognizes a {@link BodoLogicalFilter} on top of a {@link BodoLogicalProject}
@@ -33,17 +35,6 @@ public class MinRowNumberFilterRule extends RelRule<MinRowNumberFilterRule.Confi
 
   protected MinRowNumberFilterRule(MinRowNumberFilterRule.Config config) {
     super(config);
-  }
-
-  /**
-   * Determines if the given Filter is just an inputRef.
-   *
-   * @param filter The filter to check.
-   * @return Is the filter's condition an InputRef.
-   */
-  public static boolean inputRefFilter(Filter filter) {
-    RexNode cond = filter.getCondition();
-    return cond instanceof RexInputRef;
   }
 
   /**
@@ -74,70 +65,101 @@ public class MinRowNumberFilterRule extends RelRule<MinRowNumberFilterRule.Confi
   }
 
   /**
-   * Determines if the filter could match this optimization. Currently, we only support EXPR = 1, 1
-   * = EXPR, and InputRef. These will be checked for exact support after the match.
+   * Determines if the filter could match this optimization. Currently, we match if any filter
+   * contains (EXPR = 1, 1 = EXPR, or InputRef). These will be checked for exact support after the
+   * match.
    *
-   * @param filter THe filter to check.
+   * @param filter The filter to check.
    * @return Should this rule consider this filter?
    */
   public static boolean candidateRowNumberFilter(Filter filter) {
-    Pair<Boolean, RexNode> filterInfo = equalsOneFilter(filter.getCondition(), true);
-    return filterInfo.getKey() || inputRefFilter(filter);
+    // "Flatten" the conditions to remove any AND conditions.
+    // We don't consider OR because we cannot guarantee pruning the ROW_NUMBER(),
+    // so we may actually do more work.
+    List<RexNode> conditions = RelOptUtil.conjunctions(filter.getCondition());
+    for (RexNode condition : conditions) {
+      Pair<Boolean, RexNode> filterInfo = equalsOneFilter(condition, true);
+      if (filterInfo.getKey() || condition instanceof RexInputRef) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  public static int getWindowColNum(final Filter filter, final boolean equalsInProjection) {
-    final RexInputRef inputCol;
-    if (equalsInProjection) {
-      inputCol = (RexInputRef) filter.getCondition();
-    } else {
-      RexCall condCall = (RexCall) filter.getCondition();
-      List<RexNode> equalsOperands = condCall.getOperands();
-      if (equalsOperands.get(0) instanceof RexInputRef) {
-        inputCol = ((RexInputRef) equalsOperands.get(0));
+  /**
+   * Determine the indices of the input refs that are candidates for replacement.
+   *
+   * @param filterNodes List of RexNodes to check for the inputRefs.
+   * @return A set of information about columns (column number, format, original location in the
+   *     Filter's condition) that may satisfy our window function requirement.
+   */
+  public static Set<WindowColumnInfo> getWindowCandidateColumnIndices(
+      final List<RexNode> filterNodes) {
+    Set<WindowColumnInfo> windowColumnInfo = new HashSet<>();
+    for (RexNode filterNode : filterNodes) {
+      if (filterNode instanceof RexInputRef) {
+        windowColumnInfo.add(
+            new WindowColumnInfo(((RexInputRef) filterNode).getIndex(), true, filterNode));
       } else {
-        inputCol = ((RexInputRef) equalsOperands.get(1));
+        Pair<Boolean, RexNode> filterInfo = equalsOneFilter(filterNode, true);
+        // Verify this is a filter that could match.
+        if (filterInfo.getKey()) {
+          RexCall condCall = (RexCall) filterNode;
+          List<RexNode> equalsOperands = condCall.getOperands();
+          final RexInputRef inputCol;
+          if (equalsOperands.get(0) instanceof RexInputRef) {
+            inputCol = ((RexInputRef) equalsOperands.get(0));
+          } else {
+            inputCol = ((RexInputRef) equalsOperands.get(1));
+          }
+          windowColumnInfo.add(new WindowColumnInfo(inputCol.getIndex(), false, filterNode));
+        }
       }
     }
-    return inputCol.getIndex();
+    return windowColumnInfo;
   }
 
-  public static boolean isColumnValidRowNumber(
-      final Project project, final int windowColNum, final boolean equalsInProjection) {
+  public static Set<WindowColumnInfo> findValidRowNumberIndices(
+      final Project project, Set<WindowColumnInfo> candidateColumns) {
+    Set<WindowColumnInfo> keptColumns = new HashSet<>();
     List<RexNode> colProjects = project.getProjects();
-    RexNode rowNumberCandidate = colProjects.get(windowColNum);
-    if (equalsInProjection) {
-      // If the projection was just an input ref we need to do the filter check
-      // and update our candidate.
-      Pair<Boolean, RexNode> filterInfo = equalsOneFilter(rowNumberCandidate, false);
-      if (!filterInfo.getKey()) {
-        return false;
+    for (WindowColumnInfo windowColumnInfo : candidateColumns) {
+
+      RexNode rowNumberCandidate = colProjects.get(windowColumnInfo.index);
+      if (windowColumnInfo.expectsEquality) {
+        // If the projection was just an input ref we need to do the filter check
+        // and update our candidate.
+        Pair<Boolean, RexNode> filterInfo = equalsOneFilter(rowNumberCandidate, false);
+        if (!filterInfo.getKey()) {
+          continue;
+        }
+        rowNumberCandidate = filterInfo.getValue();
       }
-      rowNumberCandidate = filterInfo.getValue();
+      if (!(rowNumberCandidate instanceof RexOver)) {
+        // If we don't have a RexOver skip to the next candidate.
+        continue;
+      }
+      RexOver overFunction = (RexOver) rowNumberCandidate;
+      if (!overFunction.getOperator().getKind().equals(SqlKind.ROW_NUMBER)) {
+        // If we don't have ROW_NUMBER, then go to the next candidate.
+        continue;
+      }
+      RexWindow window = overFunction.getWindow();
+      // Verify the Window can be processed. We currently require
+      // at one partition by column.
+      if (window.partitionKeys.size() != 0) {
+        keptColumns.add(windowColumnInfo);
+      }
     }
-    if (!(rowNumberCandidate instanceof RexOver)) {
-      // If we don't have a RexOver we cannot proceed.
-      return false;
-    }
-    RexOver overFunction = (RexOver) rowNumberCandidate;
-    if (!overFunction.getOperator().getKind().equals(SqlKind.ROW_NUMBER)) {
-      // If we don't have ROW_NUMBER then we can't proceed.
-      return false;
-    }
-    RexWindow window = overFunction.getWindow();
-    // Verify the Window can be processed. We currently require
-    // at one partition by column.
-    if (window.partitionKeys.size() == 0) {
-      // We cannot handle this structure.
-      return false;
-    }
-    return true;
+    return keptColumns;
   }
 
-  public static boolean projectContainsOtherWindows(final Project project, final int windowColNum) {
+  public static boolean projectContainsOtherWindows(
+      final Project project, final WindowColumnInfo windowColumn) {
     List<RexNode> colProjects = project.getProjects();
     for (int i = 0; i < colProjects.size(); i++) {
       // Check the all other columns do not contain any window functions
-      if (i != windowColNum) {
+      if (i != windowColumn.index) {
         try {
           colProjects
               .get(i)
@@ -162,78 +184,86 @@ public class MinRowNumberFilterRule extends RelRule<MinRowNumberFilterRule.Confi
 
   public void buildNewFilter(
       RelBuilder builder,
+      Filter origFilter,
       final Project origProject,
-      final int windowColNum,
-      final boolean equalsInProjection) {
-    // Fetch the original Window column
-    List<RexNode> colProjects = origProject.getProjects();
-    RexNode column = colProjects.get(windowColNum);
-    RexOver overNode;
-    if (equalsInProjection) {
-      // This must be row_number() = 1 or 1 = row_number()
-      RexCall equalsNode = (RexCall) column;
-      List<RexNode> operands = equalsNode.getOperands();
-      if (operands.get(0) instanceof RexOver) {
-        overNode = (RexOver) operands.get(0);
+      final WindowColumnInfo windowColumn) {
+    // Find the parts of the original condition to replace
+    List<RexNode> oldConditions = RelOptUtil.conjunctions(origFilter.getCondition());
+    // Collect all parts of the condition
+    List<RexNode> newConditions = new ArrayList<>();
+    for (RexNode cond : oldConditions) {
+      final RexNode newNode;
+      if (cond.equals(windowColumn.sourceRexNode)) {
+        // Fetch the original Window column
+        List<RexNode> colProjects = origProject.getProjects();
+        RexNode column = colProjects.get(windowColumn.index);
+        RexOver overNode;
+        if (windowColumn.expectsEquality) {
+          // This must be row_number() = 1 or 1 = row_number()
+          RexCall equalsNode = (RexCall) column;
+          List<RexNode> operands = equalsNode.getOperands();
+          if (operands.get(0) instanceof RexOver) {
+            overNode = (RexOver) operands.get(0);
+          } else {
+            overNode = (RexOver) operands.get(1);
+          }
+        } else {
+          overNode = (RexOver) column;
+        }
+        RexWindow window = overNode.getWindow();
+        // Create a new window but update the window function.
+        // Note the API won't just let us pass the window keys
+        // so we need to copy them directly
+        List<RexNode> newOrderKeys = new ArrayList<>();
+        for (RexFieldCollation childCollation : window.orderKeys) {
+          RexNode child = childCollation.getKey();
+          Set<SqlKind> kinds = childCollation.getValue();
+          if (kinds.contains(SqlKind.NULLS_FIRST)) {
+            child = builder.nullsFirst(child);
+          }
+          if (kinds.contains(SqlKind.NULLS_LAST)) {
+            child = builder.nullsLast(child);
+          }
+          if (kinds.contains(SqlKind.DESCENDING)) {
+            child = builder.desc(child);
+          }
+          newOrderKeys.add(child);
+        }
+        // Create the new window function. Here we replace the function call
+        // with the min_row_number_filter internal function.
+        RelBuilder.OverCall baseCall =
+            builder
+                .aggregateCall(CondOperatorTable.MIN_ROW_NUMBER_FILTER, overNode.getOperands())
+                .distinct(overNode.isDistinct())
+                .ignoreNulls(overNode.ignoreNulls())
+                .over()
+                .partitionBy(window.partitionKeys)
+                .orderBy(newOrderKeys);
+        if (window.isRows()) {
+          newNode = baseCall.rowsBetween(window.getLowerBound(), window.getUpperBound()).toRex();
+        } else {
+          newNode = baseCall.rangeBetween(window.getLowerBound(), window.getUpperBound()).toRex();
+        }
       } else {
-        overNode = (RexOver) operands.get(1);
+        newNode = cond;
       }
-    } else {
-      overNode = (RexOver) column;
+      newConditions.add(newNode);
     }
-    RexWindow window = overNode.getWindow();
-    // Create a new window but update the window function.
-    // Note the API won't just let us pass the window keys
-    // so we need to copy them directly
-    List<RexNode> newOrderKeys = new ArrayList<>();
-    for (RexFieldCollation childCollation : window.orderKeys) {
-      RexNode child = childCollation.getKey();
-      Set<SqlKind> kinds = childCollation.getValue();
-      if (kinds.contains(SqlKind.NULLS_FIRST)) {
-        child = builder.nullsFirst(child);
-      }
-      if (kinds.contains(SqlKind.NULLS_LAST)) {
-        child = builder.nullsLast(child);
-      }
-      if (kinds.contains(SqlKind.DESCENDING)) {
-        child = builder.desc(child);
-      }
-      newOrderKeys.add(child);
-    }
-    // Create the new window function. Here we replace the function call
-    // with the min_row_number_filter internal function.
-    RelBuilder.OverCall baseCall =
-        builder
-            .aggregateCall(CondOperatorTable.MIN_ROW_NUMBER_FILTER, overNode.getOperands())
-            .distinct(overNode.isDistinct())
-            .ignoreNulls(overNode.ignoreNulls())
-            .over()
-            .partitionBy(window.partitionKeys)
-            .orderBy(newOrderKeys);
-    RexNode newNode;
-    if (window.isRows()) {
-      newNode = baseCall.rowsBetween(window.getLowerBound(), window.getUpperBound()).toRex();
-    } else {
-      newNode = baseCall.rangeBetween(window.getLowerBound(), window.getUpperBound()).toRex();
-    }
-    builder.filter(newNode);
+    builder.filter(newConditions);
   }
 
   public void buildNewProject(
-      RelBuilder builder,
-      final Project origProject,
-      final int windowColNum,
-      final boolean equalsInProjection) {
+      RelBuilder builder, final Project origProject, final WindowColumnInfo windowColumn) {
     List<RexNode> oldProjects = origProject.getProjects();
     List<RexNode> newProjects = new ArrayList<>(oldProjects.size());
     List<String> oldFieldNames = origProject.getRowType().getFieldNames();
     List<String> newFieldNames = new ArrayList<>(oldProjects.size());
     for (int i = 0; i < oldProjects.size(); i++) {
-      if (i == windowColNum) {
+      if (i == windowColumn.index) {
         // Replace the OverNode with a RexLiteral 1 or True, the output
         // of the filter. We need to do a cast to ensure the types match.
         RexNode literalValue;
-        if (equalsInProjection) {
+        if (windowColumn.expectsEquality) {
           literalValue = builder.literal(true);
         } else {
           literalValue = builder.cast(builder.literal(1), SqlTypeName.BIGINT);
@@ -260,22 +290,32 @@ public class MinRowNumberFilterRule extends RelRule<MinRowNumberFilterRule.Confi
     // there was another window function we cannot push the filter in front.
     final Filter origFilter = call.rel(0);
     final Project origProject = call.rel(1);
-    boolean equalsInProjection = inputRefFilter(origFilter);
-    // Get the column to check
-    final int windowColNum = getWindowColNum(origFilter, equalsInProjection);
-    // Verify that we have a matching row number
-    if (!isColumnValidRowNumber(origProject, windowColNum, equalsInProjection)) {
+    // Get the nodes in the condition.
+    List<RexNode> filterNodes = RelOptUtil.conjunctions(origFilter.getCondition());
+    // Get the column(s) to check
+    final Set<WindowColumnInfo> windowColumnIndicesInfo =
+        getWindowCandidateColumnIndices(filterNodes);
+    // Find the columns that actually match
+    final Set<WindowColumnInfo> matchingWindowInfo =
+        findValidRowNumberIndices(origProject, windowColumnIndicesInfo);
+    // We need at least 1 match to proceed. Since there may be gaps with multiple ROW_NUMBER_FILTER
+    // calls in
+    // the same filter we require exactly 1 match for now.
+    if (matchingWindowInfo.size() != 1) {
       return;
     }
+    WindowColumnInfo windowInfo = matchingWindowInfo.stream().collect(Collectors.toList()).get(0);
+
     // Verify that no other projection node contains a window function
-    if (projectContainsOtherWindows(origProject, windowColNum)) {
+    if (projectContainsOtherWindows(origProject, windowInfo)) {
       return;
     }
+
     // Now perform the actual update.
     RelBuilder builder = call.builder();
     builder.push(origProject.getInput());
-    buildNewFilter(builder, origProject, windowColNum, equalsInProjection);
-    buildNewProject(builder, origProject, windowColNum, equalsInProjection);
+    buildNewFilter(builder, origFilter, origProject, windowInfo);
+    buildNewProject(builder, origProject, windowInfo);
     // Grab the output and transform the call.
     RelNode output = builder.build();
     call.transformTo(output);
@@ -308,6 +348,44 @@ public class MinRowNumberFilterRule extends RelRule<MinRowNumberFilterRule.Confi
                       .predicate(MinRowNumberFilterRule::candidateRowNumberFilter)
                       .oneInput(b1 -> b1.operand(projectClass).anyInputs()))
           .as(MinRowNumberFilterRule.Config.class);
+    }
+  }
+
+  /**
+   * Class to represent the information needed to check if a column in a projection matches our
+   * required format for ROW_NUMBER()
+   */
+  private static class WindowColumnInfo {
+    // What is the column number in the prior projection.
+    final int index;
+    // Should the prior column be an equality (TRUE) or
+    // an inputRef (FALSE).
+    final boolean expectsEquality;
+    // The source RexNode in the filter. This is used to simplify
+    // updating the filter and enforcing exactly 1 match.
+    final @NotNull RexNode sourceRexNode;
+
+    WindowColumnInfo(int index, boolean expectsEquality, @NotNull RexNode sourceRexNode) {
+      this.index = index;
+      this.expectsEquality = expectsEquality;
+      this.sourceRexNode = sourceRexNode;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (obj instanceof WindowColumnInfo) {
+        WindowColumnInfo info = (WindowColumnInfo) obj;
+        return index == info.index
+            && expectsEquality == info.expectsEquality
+            && sourceRexNode.equals(info.sourceRexNode);
+      }
+      return false;
+    }
+
+    @Override
+    public int hashCode() {
+      // Based on the Pair implementation
+      return Integer.hashCode(index) ^ Boolean.hashCode(expectsEquality) ^ sourceRexNode.hashCode();
     }
   }
 }

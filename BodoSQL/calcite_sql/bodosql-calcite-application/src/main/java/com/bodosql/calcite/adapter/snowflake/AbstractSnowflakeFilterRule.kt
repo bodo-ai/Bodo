@@ -330,6 +330,10 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
 
         @JvmStatic
         fun isPartiallyPushableFilter(filter: Filter): Boolean {
+            // You cannot split a filter that contains an over.
+            if (filter.containsOver()) {
+                return false
+            }
             val (first, second) = extractPushableConditions(filter.condition, filter.cluster.rexBuilder)
             return first != null
         }

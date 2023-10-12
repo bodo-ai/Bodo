@@ -471,7 +471,7 @@ class BodoRexSimplify(
     private fun isLength(e: RexNode): Boolean {
         val lengthFunctions = setOf(
             StringOperatorTable.LENGTH.name,
-            StringOperatorTable.LEN.name
+            StringOperatorTable.LEN.name,
         )
         return e is RexCall && (lengthFunctions.contains(e.operator.name))
     }
