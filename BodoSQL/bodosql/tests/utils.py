@@ -720,7 +720,7 @@ def check_query_python(
         False,
         "Sequential Python Test Failed",
         convert_nullable_bodosql,
-        convert_columns_to_pandas,
+        convert_columns_to_pandas=convert_columns_to_pandas,
         atol=atol,
         rtol=rtol,
     )
@@ -796,7 +796,7 @@ def check_query_jit_seq(
         False,
         "Sequential JIT Test Failed",
         convert_nullable_bodosql,
-        convert_columns_to_pandas,
+        convert_columns_to_pandas=convert_columns_to_pandas,
         atol=atol,
         rtol=rtol,
     )
@@ -875,7 +875,7 @@ def check_query_jit_1D(
         is_out_distributed,
         "1D Parallel JIT Test Failed",
         convert_nullable_bodosql,
-        convert_columns_to_pandas,
+        convert_columns_to_pandas=convert_columns_to_pandas,
         atol=atol,
         rtol=rtol,
     )
@@ -954,7 +954,7 @@ def check_query_jit_1DVar(
         is_out_distributed,
         "1DVar Parallel JIT Test Failed",
         convert_nullable_bodosql,
-        convert_columns_to_pandas,
+        convert_columns_to_pandas=convert_columns_to_pandas,
         atol=atol,
         rtol=rtol,
     )
@@ -1066,7 +1066,7 @@ def _check_query_equal(
     is_out_distributed,
     failure_message,
     convert_nullable_bodosql,
-    convert_columns_to_pandas,
+    convert_columns_to_pandas: bool = False,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
