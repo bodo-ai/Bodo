@@ -769,10 +769,8 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             append_partition1_sum);
 
         // Reserve space for output columns
-        new_part1->separate_out_cols->ReserveTable(
-            this->separate_out_cols->data_table);
-        new_part1->separate_out_cols->IncrementSize(
-            this->separate_out_cols->data_table->nrows());
+        new_part1->separate_out_cols->ReserveTableSize(append_partition1_sum);
+        new_part1->separate_out_cols->IncrementSize(append_partition1_sum);
         if (!this->accumulate_before_update) {
             // Update safely appended group count for the new active
             // partition in the AGG case.
