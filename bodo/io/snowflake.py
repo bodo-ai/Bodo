@@ -250,6 +250,9 @@ def gen_snowflake_schema(column_names, column_datatypes):  # pragma: no cover
         elif isinstance(col_type, (ArrayItemArrayType, StructArrayType)):
             # based on testing with infer_schema
             sf_schema[col_name] = "VARIANT"
+        # See https://bodo.atlassian.net/browse/BSE-1525
+        elif col_type == bodo.null_array_type:
+            sf_schema[col_name] = "VARCHAR"
         else:
             raise BodoError(
                 f"Conversion from Bodo array type {col_type} to snowflake type for {col_name} not supported yet."
