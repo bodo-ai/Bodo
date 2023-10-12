@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import sys
@@ -152,6 +153,25 @@ INT_BITSIZE_TO_ARROW_DATATYPE = {
     16: pa.decimal128(38, 0),
 }
 STRING_TYPE_CODE = 2
+
+
+def _import_snowflake_connector_logging() -> None:  # pragma: no cover
+    """
+    Helper function to set logging after
+    importing snowflake.connector.
+    """
+    if int(os.environ.get("BODO_SF_DEBUG_LEVEL", "0")) >= 2:
+        for logger_name in ("snowflake.connector",):
+            logger = logging.getLogger(logger_name)
+            logger.setLevel(logging.DEBUG)
+            ch = logging.StreamHandler()
+            ch.setLevel(logging.DEBUG)
+            ch.setFormatter(
+                logging.Formatter(
+                    "%(asctime)s - %(threadName)s %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s"
+                )
+            )
+            logger.addHandler(ch)
 
 
 def gen_snowflake_schema(column_names, column_datatypes):  # pragma: no cover
@@ -1549,7 +1569,7 @@ def execute_copy_into(
         ev.add_attribute("copy_into_nchunks", nchunks)
         ev.add_attribute("copy_into_nrows", nrows)
 
-        if os.environ.get("BODO_SF_WRITE_DEBUG") is not None:
+        if int(os.environ.get("BODO_SF_DEBUG_LEVEL", "0")) >= 1:
             print(f"[Snowflake Write] COPY INTO results:\n{repr(copy_results)}")
             print(f"[Snowflake Write] Total rows: {nrows}")
             print(f"[Snowflake Write] Total files processed: {nchunks}.")
@@ -1682,6 +1702,9 @@ try:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         import snowflake.connector
+
+        # Update logging information.
+        _import_snowflake_connector_logging()
 
     snowflake_connector_cursor_python_type = snowflake.connector.cursor.SnowflakeCursor
 except (ImportError, AttributeError):
@@ -1937,7 +1960,7 @@ def connect_and_get_upload_info(conn_str: str):  # pragma: no cover
 
         except Exception as e:
             err = RuntimeError(str(e))
-            if os.environ.get("BODO_SF_WRITE_DEBUG") is not None:
+            if int(os.environ.get("BODO_SF_DEBUG_LEVEL", "0")) >= 1:
                 print("".join(traceback.format_exception(None, e, e.__traceback__)))
 
     err = comm.bcast(err)
@@ -2115,7 +2138,7 @@ def create_table_copy_into(
 
         except Exception as e:
             err = RuntimeError(str(e))
-            if os.environ.get("BODO_SF_WRITE_DEBUG") is not None:
+            if int(os.environ.get("BODO_SF_DEBUG_LEVEL", "0")) >= 1:
                 print("".join(traceback.format_exception(None, e, e.__traceback__)))
 
     err = comm.bcast(err)
