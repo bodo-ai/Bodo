@@ -101,7 +101,7 @@ class GroupbyPartition {
         const std::vector<int8_t>& build_arr_c_types_,
         const std::vector<int8_t>& build_arr_array_types_,
         const std::vector<int8_t>& separate_out_cols_c_types_,
-        const std::vector<int8_t>& separate_out_cols_array_types,
+        const std::vector<int8_t>& separate_out_cols_array_types_,
         const uint64_t n_keys_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
             build_table_dict_builders_,
@@ -147,10 +147,11 @@ class GroupbyPartition {
     // not yet finalized
     std::unique_ptr<ChunkedTableBuilder> build_table_buffer_chunked;
 
+    // The types of the columns in the separate_out_cols table.
     std::vector<int8_t> separate_out_cols_c_types;
     std::vector<int8_t> separate_out_cols_array_types;
-    // Seperate output columns with one column for each colset
-    // that requires them
+    // Separate output columns with one column for each colset
+    // that requires them. Only used in the AGG case.
     std::unique_ptr<TableBuildBuffer> separate_out_cols;
 
     // temporary batch data
@@ -394,7 +395,11 @@ class GroupbyState {
     const std::vector<int32_t> f_in_offsets;
     const std::vector<int32_t> f_in_cols;
 
-    // indices of update and combine columns for each function
+    // Indices of update and combine columns for each function.
+    // Applicable to both the ACC and AGG cases. In the AGG case,
+    // these are the offsets in the build_table_buffer directly.
+    // In the ACC case, these are the offsets into the update
+    // table returned by 'get_update_table</*is_acc_case*/ true>'.
     std::vector<int32_t> f_running_value_offsets;
 
     // The number of iterations between syncs

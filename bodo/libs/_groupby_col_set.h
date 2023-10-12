@@ -84,12 +84,18 @@ class BasicColSet {
      * @param num_groups number of groups found in the input table
      * @param[in,out] out_cols vector of columns for the update step.
      * This method adds columns to this vector.
+     * @param alloc_out_if_no_combine If we won't be doing a combine,
+     * allocate the output column as well. This is required for some ColSets
+     * such as VarStd, Skew, etc. This is true by default. In streaming groupby,
+     * even in the ACC (accumulate_before_update) path, we don't want to
+     * allocate the output column since we do that separately.
      * @param pool Memory pool to use for allocations during the execution of
      * this function.
      * @param mm Memory manager associated with the pool.
      */
     virtual void alloc_update_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        const bool alloc_out_if_no_combine = true,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager()) {
@@ -208,7 +214,7 @@ class BasicColSet {
                        std::vector<Bodo_CTypes::CTypeEnum>>
     getRunningValueColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) {
+        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const {
         // TODO[BSE-578]: implement getRunningValueColumnTypes() for other
         // colsets that can have more update columns
         std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
@@ -330,7 +336,7 @@ class MeanColSet : public BasicColSet {
                std::vector<Bodo_CTypes::CTypeEnum>>
     getRunningValueColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override {
+        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const override {
         // Mean's update columns are always float64 for sum data and uint64 for
         // count data. See MeanColSet::alloc_update_columns()
         return std::tuple(
@@ -457,6 +463,7 @@ class IdxMinMaxColSet : public BasicColSet {
 
     virtual void alloc_update_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        const bool alloc_out_if_no_combine = true,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager());
@@ -511,7 +518,7 @@ class BoolXorColSet : public BasicColSet {
                std::vector<Bodo_CTypes::CTypeEnum>>
     getRunningValueColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override;
+        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const override;
 };
 
 /**
@@ -527,6 +534,7 @@ class VarStdColSet : public BasicColSet {
 
     void alloc_update_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        const bool alloc_out_if_no_combine = true,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager()) override;
@@ -562,7 +570,7 @@ class VarStdColSet : public BasicColSet {
                std::vector<Bodo_CTypes::CTypeEnum>>
     getRunningValueColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override;
+        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const override;
 
     virtual void clear() override {
         BasicColSet::clear();
@@ -609,6 +617,7 @@ class SkewColSet : public BasicColSet {
 
     void alloc_update_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        const bool alloc_out_if_no_combine = true,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager()) override;
@@ -644,7 +653,7 @@ class SkewColSet : public BasicColSet {
                std::vector<Bodo_CTypes::CTypeEnum>>
     getRunningValueColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override;
+        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const override;
 
     virtual void clear() override {
         BasicColSet::clear();
@@ -743,6 +752,7 @@ class KurtColSet : public BasicColSet {
 
     void alloc_update_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        const bool alloc_out_if_no_combine = true,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager()) override;
@@ -778,7 +788,7 @@ class KurtColSet : public BasicColSet {
                std::vector<Bodo_CTypes::CTypeEnum>>
     getRunningValueColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
-        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override;
+        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const override;
 
     virtual void clear() override {
         BasicColSet::clear();
@@ -831,6 +841,7 @@ class UdfColSet : public BasicColSet {
 
     void alloc_update_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        const bool alloc_out_if_no_combine = true,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager()) override;
@@ -1195,6 +1206,7 @@ class TransformColSet : public BasicColSet {
 
     void alloc_update_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        const bool alloc_out_if_no_combine = true,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager()) override;
