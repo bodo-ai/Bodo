@@ -35,8 +35,9 @@ void OperatorComptroller::RegisterOperator(
         requests_per_operator.resize(operator_id + 1);
         num_operators = operator_id + 1;
     }
-    requests_per_operator[operator_id] =
-        OperatorRequest{min_pipeline_id, max_pipeline_id, estimate};
+
+    requests_per_operator[operator_id] = OperatorRequest{
+        operator_type, min_pipeline_id, max_pipeline_id, estimate};
     this->num_pipelines = std::max(this->num_pipelines, max_pipeline_id + 1);
 }
 
@@ -58,10 +59,15 @@ int64_t OperatorComptroller::GetOperatorBudget(int64_t operator_id) {
 
 void OperatorComptroller::ReduceOperatorBudget(int64_t operator_id,
                                                size_t budget) {
+    if (!OperatorComptroller::memoryBudgetsEnabled()) {
+        return;
+    }
+
     if (operator_allocated_budget[operator_id] <=
         static_cast<int64_t>(budget)) {
-        throw std::runtime_error(
-            "New budget is not strictly less than old budget");
+        std::cerr << "New budget for operator " << operator_id
+                  << " is not strictly less than old budget" << std::endl;
+        return;
     }
     auto old_budget = operator_allocated_budget[operator_id];
     auto delta = old_budget - budget;
@@ -101,7 +107,11 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
     // Tests might have set their own max budgets
     if (this->pipeline_remaining_budget.size() !=
         static_cast<size_t>(this->num_pipelines)) {
-        size_t total_mem = bodo::BufferPool::Default()->get_memory_size_bytes();
+        // If the budgets for each pipeline have not been initialized yet,
+        // initialize it with the total memory availible (with some factor
+        // applied to the total size to allow for non-budgeted memory usage.
+        size_t total_mem = BODO_MEMORY_BUDGET_USAGE_FRACTION *
+                           bodo::BufferPool::Default()->get_memory_size_bytes();
         for (int64_t i = 0; i < this->num_pipelines; i++) {
             SetMemoryBudget(i, total_mem);
         }
@@ -116,8 +126,7 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
         }
     }
 
-    char* use_mem_budget = std::getenv("BODO_USE_MEMORY_BUDGETS");
-    if (!use_mem_budget || strcmp(use_mem_budget, "1") != 0) {
+    if (!OperatorComptroller::memoryBudgetsEnabled()) {
         // Until more work is done to refine the memory estimates, disable
         // memory budgeting by default so that performance doesn't degrade.
         for (int64_t op_id = 0;
@@ -211,8 +220,13 @@ void register_operator(int64_t operator_id, int64_t operator_type,
         max_pipeline_id, static_cast<size_t>(estimate));
 }
 
-void increment_pipeline_id() {
-    OperatorComptroller::Default()->IncrementPipelineID();
+void reduce_operator_budget(int64_t operator_id, size_t new_estimate) {
+    OperatorComptroller::Default()->ReduceOperatorBudget(operator_id,
+                                                         new_estimate);
+}
+
+void increase_operator_budget(int64_t operator_id) {
+    OperatorComptroller::Default()->IncreaseOperatorBudget(operator_id);
 }
 
 void compute_satisfiable_budgets() {
@@ -232,7 +246,8 @@ PyMODINIT_FUNC PyInit_memory_budget_cpp(void) {
 
     SetAttrStringFromVoidPtr(m, init_operator_comptroller);
     SetAttrStringFromVoidPtr(m, register_operator);
-    SetAttrStringFromVoidPtr(m, increment_pipeline_id);
+    SetAttrStringFromVoidPtr(m, reduce_operator_budget);
+    SetAttrStringFromVoidPtr(m, increase_operator_budget);
     SetAttrStringFromVoidPtr(m, compute_satisfiable_budgets);
     SetAttrStringFromVoidPtr(m, delete_operator_comptroller);
     return m;
