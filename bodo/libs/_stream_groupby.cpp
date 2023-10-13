@@ -1288,12 +1288,6 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
         this->req_extended_group_info, this->op_pool.get(), this->op_mm));
     this->partition_state.emplace_back(std::make_pair<size_t, uint32_t>(0, 0));
 
-    if (!this->accumulate_before_update) {
-        // Partitioning is only supported in the
-        // accumulate case at the moment.
-        this->DisablePartitioning();
-    }
-
     // Reserve space upfront. The output-batch-size is typically the same
     // as the input batch size.
     this->append_row_to_build_table.reserve(output_batch_size_);
@@ -2020,8 +2014,7 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
         if (in_table->nrows() != 0) {
             throw std::runtime_error(
                 "groupby_agg_build_consume_batch: Received non-empty "
-                "in_table "
-                "after the build was already finalized!");
+                "in_table after the build was already finalized!");
         }
         // Nothing left to do for build
         // When build is finalized global is_last has been seen so no need
@@ -2170,8 +2163,7 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
         if (in_table->nrows() != 0) {
             throw std::runtime_error(
                 "groupby_acc_build_consume_batch: Received non-empty "
-                "in_table "
-                "after the build was already finalized!");
+                "in_table after the build was already finalized!");
         }
         // Nothing left to do for build
         // When build is finalized global is_last has been seen so no need

@@ -17,12 +17,20 @@ from bodo.libs.stream_groupby import (
 )
 from bodo.tests.utils import _get_dist_arg, temp_env_override
 
-# NOTE: Once we're no longer actively working on Groupby Spill Support, all these tests can be marked as "slow".
+# NOTE: Once we're no longer actively working on Groupby Spill Support, most of these tests can be marked as "slow".
+
+##################### COMMON HELPERS #####################
 
 
-def groupby_common_impl(df, func_names, f_in_offsets, f_in_cols, op_pool_size_bytes):
-    keys_inds = bodo.utils.typing.MetaType((0,))
-    out_col_meta_l = ["key"] + [f"out_{i}" for i in range(len(func_names))]
+def groupby_common_impl(
+    df, key_inds_list, func_names, f_in_offsets, f_in_cols, op_pool_size_bytes
+):
+    keys_inds = bodo.utils.typing.MetaType(tuple(key_inds_list))
+    out_col_meta_l = (
+        ["key"]
+        if (len(key_inds_list) == 1)
+        else [f"key_{i}" for i in range(len(key_inds_list))]
+    ) + [f"out_{i}" for i in range(len(func_names))]
     out_col_meta = bodo.utils.typing.ColNamesMetaType(tuple(out_col_meta_l))
     len_kept_cols = len(df.columns)
     kept_cols = bodo.utils.typing.MetaType(tuple(range(len_kept_cols)))
@@ -96,11 +104,12 @@ def _test_helper(
     expected_out,
     expected_partition_state,
     expected_output_size,
+    key_inds_list,
     func_names,
     f_in_offsets,
     f_in_cols,
     op_pool_size_bytes,
-    expected_log_message,
+    expected_log_messages,
     capfd,
     multi_rank,
 ):
@@ -123,6 +132,7 @@ def _test_helper(
                 final_bytes_allocated,
             ) = groupby_common_impl(
                 _get_dist_arg(df) if multi_rank else df,
+                key_inds_list,
                 func_names,
                 f_in_offsets,
                 f_in_cols,
@@ -141,12 +151,24 @@ def _test_helper(
 
     out, err = capfd.readouterr()
 
-    # Verify that the expected log message is present.
-    assert_success = True
-    if expected_log_message is not None:
-        assert_success = expected_log_message in err
-    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert assert_success
+    ### Uncomment for debugging purposes ###
+    # with capfd.disabled():
+    #     for i in range(bodo.get_size()):
+    #         if bodo.get_rank() == i:
+    #             print(f"output:\n{output}")
+    #             print(f"expected_out:\n{expected_out}")
+    #             print(f"stdout:\n{out}")
+    #             print(f"stderr:\n{err}")
+    #         bodo.barrier()
+    ###
+
+    # Verify that the expected log messages are present.
+    for expected_log_message in expected_log_messages:
+        assert_success = True
+        if expected_log_message is not None:
+            assert_success = expected_log_message in err
+        assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+        assert assert_success
 
     assert (
         global_output.shape[0] == expected_output_size
@@ -172,12 +194,25 @@ def _test_helper(
     ), f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
 
     pd.testing.assert_frame_equal(
-        global_output.sort_values("key").reset_index(drop=True),
-        expected_out.sort_values("key").reset_index(drop=True),
+        global_output.sort_values(
+            "key"
+            if (len(key_inds_list) == 1)
+            else [f"key_{i}" for i in range(len(key_inds_list))]
+        ).reset_index(drop=True),
+        expected_out.sort_values(
+            "key"
+            if (len(key_inds_list) == 1)
+            else [f"key_{i}" for i in range(len(key_inds_list))]
+        ).reset_index(drop=True),
         check_dtype=False,
         check_index_type=False,
         atol=0.1,
     )
+
+
+##########################################################
+
+########### TESTS FOR ACCUMULATE INPUT STRATEGY ##########
 
 
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
@@ -240,11 +275,12 @@ def test_split_during_append_table_acc_funcs(capfd, memory_leak_check):
         expected_out,
         expected_partition_state,
         expected_output_size,
+        [0],
         func_names,
         f_in_offsets,
         f_in_cols,
         op_pool_size_bytes,
-        expected_log_msg,
+        [expected_log_msg],
         capfd,
         False,
     )
@@ -320,18 +356,19 @@ def test_split_during_append_table_str_running_vals(capfd, memory_leak_check):
         expected_out,
         expected_partition_state,
         expected_output_size,
+        [0],
         func_names,
         f_in_offsets,
         f_in_cols,
         op_pool_size_bytes,
-        expected_log_msg,
+        [expected_log_msg],
         capfd,
         False,
     )
 
 
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
-def test_split_during_finalize_build_acc_funcs(capfd, memory_leak_check):
+def test_split_during_acc_finalize_build_acc_funcs(capfd, memory_leak_check):
     """
     Test that re-partitioning works correctly when it happens
     during FinalizeBuild.
@@ -386,18 +423,19 @@ def test_split_during_finalize_build_acc_funcs(capfd, memory_leak_check):
         expected_out,
         expected_partition_state,
         expected_output_size,
+        [0],
         func_names,
         f_in_offsets,
         f_in_cols,
         op_pool_size_bytes,
-        expected_log_msg,
+        [expected_log_msg],
         capfd,
         False,
     )
 
 
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
-def test_split_during_finalize_build_str_running_vals(capfd, memory_leak_check):
+def test_split_during_acc_finalize_build_str_running_vals(capfd, memory_leak_check):
     """
     Test that re-partitioning works correctly when it happens
     during FinalizeBuild.
@@ -466,11 +504,12 @@ def test_split_during_finalize_build_str_running_vals(capfd, memory_leak_check):
         expected_out,
         expected_partition_state,
         expected_output_size,
+        [0],
         func_names,
         f_in_offsets,
         f_in_cols,
         op_pool_size_bytes,
-        expected_log_msg,
+        [expected_log_msg],
         capfd,
         False,
     )
@@ -543,11 +582,488 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
         expected_out,
         expected_partition_state,
         expected_output_size,
+        [0],
         func_names,
         f_in_offsets,
         f_in_cols,
         op_pool_size_bytes,
-        expected_log_msg,
+        [expected_log_msg],
         capfd,
         True,
     )
+
+
+##########################################################
+
+####### TESTS FOR INCREMENTAL AGGREGATION STRATEGY #######
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+def test_split_during_update_combine(capfd, memory_leak_check):
+    """
+    Test that re-partitioning works correctly when it happens
+    during UpdateGroupsAndCombine (AGG path) on an input batch.
+    We trigger this by using specific key column values, array
+    sizes and the size of the operator pool.
+    """
+    df = pd.DataFrame(
+        {
+            "A": np.array(list(np.arange(8000, dtype=np.int32)) * 4, dtype=np.int32),
+            "B": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
+                dtype=np.float32,
+            ),
+            "C": pd.array([1, 2, 3, 4, 5, 6, 5, 4] * 4000, dtype="Int64"),
+            "D": np.arange(32000, 64000, dtype=np.float64),
+            "E": ([True] * 5) + ([False] * (32000 - 5)),
+            "F": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+        }
+    )
+
+    func_names = [
+        "sum",
+        "mean",
+        "min",
+        "max",
+        "skew",
+        "kurtosis",
+        "count",
+        "var",
+        "std",
+        "boolxor_agg",
+        "count",
+    ]
+    f_in_cols = [1, 1, 2, 2, 2, 2, 2, 3, 3, 4, 5]
+    f_in_offsets = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    expected_out = df.groupby("A", as_index=False).agg(
+        {
+            "B": ["sum", "mean"],
+            "C": ["min", "max", "skew", pd.Series.kurt, "count"],
+            "D": ["var", "std"],
+            "E": [(lambda x: sum(x) == 1)],
+            "F": ["count"],
+        }
+    )
+    expected_out.reset_index(inplace=True, drop=True)
+    expected_out.columns = ["key"] + [f"out_{i}" for i in range(11)]
+    expected_output_size = 8000
+
+    # This will cause partition split during the "UpdateGroupsAndCombine[4]"
+    op_pool_size_bytes = 4 * 1024 * 1024
+    expected_partition_state = [(1, 0), (1, 1)]
+
+    # Verify that we split a partition during UpdateGroupsAndCombine.
+    expected_log_msg = "[DEBUG] GroupbyState::UpdateGroupsAndCombine[4]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0."
+    _test_helper(
+        df,
+        expected_out,
+        expected_partition_state,
+        expected_output_size,
+        [0],
+        func_names,
+        f_in_offsets,
+        f_in_cols,
+        op_pool_size_bytes,
+        [expected_log_msg],
+        capfd,
+        False,
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+def test_drop_duplicates_split_during_update_combine(capfd, memory_leak_check):
+    """
+    Test that re-partitioning works correctly for drop_duplicates
+    when it happens during UpdateGroupsAndCombine (AGG path) on
+    an input batch. We trigger this by using specific key column
+    values, array sizes and the size of the operator pool.
+    """
+    df = pd.DataFrame(
+        {
+            "A": np.array(list(np.arange(8000, dtype=np.int32)) * 4, dtype=np.int32),
+            "B": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+        }
+    )
+    key_inds_list = [0, 1]
+    func_names = []
+    f_in_cols = []
+    f_in_offsets = [0]
+
+    expected_out = df.drop_duplicates()
+    expected_out.reset_index(inplace=True, drop=True)
+    expected_out.columns = ["key_0", "key_1"]
+    expected_output_size = 32000
+
+    # This will cause partition split during the "UpdateGroupsAndCombine[4]"
+    op_pool_size_bytes = 2 * 1024 * 1024
+    expected_partition_state = [(2, 0), (2, 1), (1, 1)]
+
+    # Verify that we split a partition during UpdateGroupsAndCombine.
+    expected_log_msg = "[DEBUG] GroupbyState::UpdateGroupsAndCombine[4]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0."
+
+    _test_helper(
+        df,
+        expected_out,
+        expected_partition_state,
+        expected_output_size,
+        key_inds_list,
+        func_names,
+        f_in_offsets,
+        f_in_cols,
+        op_pool_size_bytes,
+        [expected_log_msg],
+        capfd,
+        False,
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+def test_split_during_agg_finalize(capfd, memory_leak_check):
+    """
+    Test that re-partitioning works correctly when it happens
+    during FinalizeBuild in the AGG case. Specifically, this
+    will occur while activating inactive partitions.
+    """
+    df = pd.DataFrame(
+        {
+            "A": np.array(list(np.arange(8000, dtype=np.int32)) * 4, dtype=np.int32),
+            "B": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
+                dtype=np.float32,
+            ),
+            "C": pd.array([1, 2, 3, 4, 5, 6, 5, 4] * 4000, dtype="Int64"),
+            "D": np.arange(32000, 64000, dtype=np.float64),
+            "E": ([True] * 5) + ([False] * (32000 - 5)),
+            "F": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+        }
+    )
+
+    func_names = [
+        "sum",
+        "mean",
+        "min",
+        "max",
+        "skew",
+        "kurtosis",
+        "count",
+        "var",
+        "std",
+        "boolxor_agg",
+        "count",
+    ]
+    f_in_cols = [1, 1, 2, 2, 2, 2, 2, 3, 3, 4, 5]
+    f_in_offsets = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    expected_out = df.groupby("A", as_index=False).agg(
+        {
+            "B": ["sum", "mean"],
+            "C": ["min", "max", "skew", pd.Series.kurt, "count"],
+            "D": ["var", "std"],
+            "E": [(lambda x: sum(x) == 1)],
+            "F": ["count"],
+        }
+    )
+    expected_out.reset_index(inplace=True, drop=True)
+    expected_out.columns = ["key"] + [f"out_{i}" for i in range(11)]
+    expected_output_size = 8000
+
+    # This will cause partition split during the "FinalizeBuild"
+    op_pool_size_bytes = 3 * 1024 * 1024
+    expected_partition_state = [(2, 0), (3, 2), (3, 3), (3, 4), (3, 5), (3, 6), (3, 7)]
+
+    # Verify that we split (inactive) partitions during FinalizeBuild (during ActivatePartition).
+    expected_log_msgs = [
+        "[DEBUG] GroupbyState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 1.",
+        "[DEBUG] Splitting partition 1.",
+        "[DEBUG] GroupbyState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 3.",
+        "[DEBUG] Splitting partition 3.",
+        "[DEBUG] GroupbyState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 5.",
+        "[DEBUG] Splitting partition 5.",
+    ]
+    _test_helper(
+        df,
+        expected_out,
+        expected_partition_state,
+        expected_output_size,
+        [0],
+        func_names,
+        f_in_offsets,
+        f_in_cols,
+        op_pool_size_bytes,
+        expected_log_msgs,
+        capfd,
+        False,
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+def test_drop_duplicates_split_during_agg_finalize(capfd, memory_leak_check):
+    """
+    Test that re-partitioning works correctly for drop_duplicates
+    when it happens during FinalizeBuild in the AGG case.
+    Specifically, this will occur while activating inactive
+    partitions.
+    """
+    df = pd.DataFrame(
+        {
+            "A": np.array(list(np.arange(8000, dtype=np.int32)) * 4, dtype=np.int32),
+            "B": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+        }
+    )
+    key_inds_list = [0, 1]
+    func_names = []
+    f_in_cols = []
+    f_in_offsets = [0]
+
+    expected_out = df.drop_duplicates()
+    expected_out.reset_index(inplace=True, drop=True)
+    expected_out.columns = ["key_0", "key_1"]
+    expected_output_size = 32000
+
+    # This will cause partition split during the "FinalizeBuild"
+    op_pool_size_bytes = 1 * 1024 * 1024
+    expected_partition_state = [(3, 0), (3, 1), (2, 1), (2, 2), (2, 3)]
+
+    # Verify that we split (inactive) partitions during FinalizeBuild (during ActivatePartition).
+    expected_log_msgs = [
+        "[DEBUG] GroupbyState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 3.",
+        "[DEBUG] Splitting partition 3.",
+    ]
+
+    _test_helper(
+        df,
+        expected_out,
+        expected_partition_state,
+        expected_output_size,
+        key_inds_list,
+        func_names,
+        f_in_offsets,
+        f_in_cols,
+        op_pool_size_bytes,
+        expected_log_msgs,
+        capfd,
+        False,
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() != 2, reason="Only calibrated for two cores case")
+def test_spilt_during_shuffle_out_update_combine_and_diff_part_state(
+    capfd, memory_leak_check
+):
+    """
+    Test that re-partitioning works correctly when it happens
+    during UpdateGroupsAndCombine on the output of a shuffle operation.
+    This test also tests that the overall algorithm works correctly
+    and without hangs when the partitioning state is different on
+    different ranks. In particular, in this case, rank 0 will end up
+    with a single partition, but rank 1 will end up with 3 partitions.
+    We trigger this by using specific key column values, array
+    sizes and the size of the operator pool.
+    """
+    df = pd.DataFrame(
+        {
+            "A": np.array(list(np.arange(8000, dtype=np.int32)) * 4, dtype=np.int32),
+            "B": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
+                dtype=np.float32,
+            ),
+            "C": pd.array([1, 2, 3, 4, 5, 6, 5, 4] * 4000, dtype="Int64"),
+            "D": np.arange(32000, 64000, dtype=np.float64),
+            "E": ([True] * 5) + ([False] * (32000 - 5)),
+            "F": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+        }
+    )
+
+    func_names = [
+        "sum",
+        "mean",
+        "min",
+        "max",
+        "skew",
+        "kurtosis",
+        "count",
+        "var",
+        "std",
+        "boolxor_agg",
+        "count",
+    ]
+    f_in_cols = [1, 1, 2, 2, 2, 2, 2, 3, 3, 4, 5]
+    f_in_offsets = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    expected_out = df.groupby("A", as_index=False).agg(
+        {
+            "B": ["sum", "mean"],
+            "C": ["min", "max", "skew", pd.Series.kurt, "count"],
+            "D": ["var", "std"],
+            "E": [(lambda x: sum(x) == 1)],
+            "F": ["count"],
+        }
+    )
+    expected_out.reset_index(inplace=True, drop=True)
+    expected_out.columns = ["key"] + [f"out_{i}" for i in range(11)]
+    expected_output_size = 8000
+
+    # This will cause partition split during the "UpdateGroupsAndCombine[3]"
+    op_pool_size_bytes = 4 * 1024 * 1024
+    expected_partition_state = (
+        [(0, 0)] if (bodo.get_rank() == 0) else [(2, 0), (2, 1), (1, 1)]
+    )
+
+    # Verify that we split a partition during UpdateGroupsAndCombine on the shuffle output.
+    expected_log_msg = (
+        "[DEBUG] GroupbyState::UpdateGroupsAndCombine[3]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0."
+        if bodo.get_rank() == 1
+        else None
+    )
+    _test_helper(
+        df,
+        expected_out,
+        expected_partition_state,
+        expected_output_size,
+        [0],
+        func_names,
+        f_in_offsets,
+        f_in_cols,
+        op_pool_size_bytes,
+        [expected_log_msg],
+        capfd,
+        True,
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() != 2, reason="Only calibrated for two cores case")
+def test_drop_duplicates_spilt_during_shuffle_out_update_combine_and_diff_part_state(
+    capfd, memory_leak_check
+):
+    """
+    Test that re-partitioning works correctly for drop_duplicates when it happens
+    during UpdateGroupsAndCombine on the output of a shuffle operation.
+    This test also tests that the overall algorithm works correctly
+    and without hangs when the partitioning state is different on
+    different ranks. In particular, in this case, rank 0 will end up
+    with 2 partitions, but rank 1 will end up with 5 partitions.
+    We trigger this by using specific key column values, array
+    sizes and the size of the operator pool (diff on diff ranks).
+    """
+    df = pd.DataFrame(
+        {
+            "A": np.array(list(np.arange(8000, dtype=np.int32)) * 4, dtype=np.int32),
+            "B": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza" * 100,
+                    "omelette",
+                    "salad",
+                    "spinach" * 100,
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+        }
+    )
+    key_inds_list = [0, 1]
+    func_names = []
+    f_in_cols = []
+    f_in_offsets = [0]
+
+    expected_out = df.drop_duplicates()
+    expected_out.reset_index(inplace=True, drop=True)
+    expected_out.columns = ["key_0", "key_1"]
+    expected_output_size = 32000
+
+    # This will cause partition split during the "UpdateGroupsAndCombine[3]" on rank-1.
+    # We need to set different pool sizes on the different ranks because otherwise
+    # it's hard to invoke partition split on one rank and not the other.
+    op_pool_size_bytes = 4 * 1024 * 1024 if bodo.get_rank() == 1 else 8 * 1024 * 1024
+    expected_partition_state = (
+        [(3, 0), (3, 1), (2, 1), (2, 2), (2, 3)]
+        if bodo.get_rank() == 1
+        else [(1, 0), (1, 1)]
+    )
+
+    # Verify that we split a partition during UpdateGroupsAndCombine on the
+    # shuffle output on rank 1.
+    # On rank 0, we split during UpdateGroupsAndCombine on an input batch.
+    expected_log_msg = (
+        "[DEBUG] GroupbyState::UpdateGroupsAndCombine[3]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0."
+        if bodo.get_rank() == 1
+        else "[DEBUG] GroupbyState::UpdateGroupsAndCombine[4]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0."
+    )
+
+    _test_helper(
+        df,
+        expected_out,
+        expected_partition_state,
+        expected_output_size,
+        key_inds_list,
+        func_names,
+        f_in_offsets,
+        f_in_cols,
+        op_pool_size_bytes,
+        [expected_log_msg],
+        capfd,
+        True,
+    )
+
+
+##########################################################
