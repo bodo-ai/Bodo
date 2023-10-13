@@ -10,7 +10,7 @@ package com.bodosql.calcite.ir
 class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar: Variable, val scope: StreamingStateScope, val pipelineID: Int) : Frame {
 
     /** Values to initialize before the loop generation. **/
-    private var initializations: MutableList<Op.Assign> = mutableListOf()
+    private var initializations: MutableList<Op> = mutableListOf()
 
     /** Statements to execute after the loop termination. **/
     private var terminations: MutableList<Op> = mutableListOf()
@@ -104,7 +104,7 @@ class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar
      * Adds a new assignment to be initialized before the loop.
      * @param assign Assignment to add.
      */
-    fun addInitialization(assign: Op.Assign) {
+    fun addInitialization(assign: Op) {
         initializations.add(assign)
     }
 

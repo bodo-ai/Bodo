@@ -117,13 +117,8 @@ bodo::tests::suite memory_budget_tests([] {
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
 
         // Check that increasing the budget via ReduceOperatorBudget is illegal
-        bool passed = false;
-        try {
-            comptroller->ReduceOperatorBudget(0, 75);
-        } catch (std::runtime_error e) {
-            passed = true;
-        }
-        bodo::tests::check(passed);
+        comptroller->ReduceOperatorBudget(0, 75);
+        bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
 
         comptroller->Reset();
     });
