@@ -41,7 +41,12 @@ import org.apache.calcite.rel.logical.LogicalProject
 import org.apache.calcite.rel.logical.LogicalSort
 import org.apache.calcite.rel.logical.LogicalUnion
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
+import org.apache.calcite.rex.RexBuilder
+import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexExecutorImpl
+import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexShuttle
+import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql2rel.RelDecorrelator
 import org.apache.calcite.tools.Program
 import org.apache.calcite.tools.Programs
@@ -189,6 +194,7 @@ object BodoPrograms {
     private class PreprocessorProgram : Program by Programs.sequence(
         // Remove subqueries and correlation nodes from the query.
         SubQueryRemoveProgram(),
+        FlattenCaseExpressionsProgram,
         // Convert calcite logical nodes to bodo logical nodes
         // when necessary.
         LogicalConverterProgram,
@@ -302,6 +308,101 @@ object BodoPrograms {
                     sort.offset,
                     sort.fetch,
                 )
+        }
+    }
+
+    object FlattenCaseExpressionsProgram : Program by ShuttleProgram(Visitor) {
+        private object Visitor : RelShuttleImpl() {
+            override fun visit(filter: LogicalFilter): RelNode {
+                val inputRel = filter.input.accept(this)
+                val rexBuilder = filter.cluster.rexBuilder
+                val visitor = CaseExpressionUnwrapper(rexBuilder)
+                val condition = filter.condition.accept(visitor)
+                return filter.copy(filter.traitSet, inputRel, condition)
+            }
+
+            override fun visit(project: LogicalProject): RelNode {
+                val inputRel = project.input.accept(this)
+                val rexBuilder = project.cluster.rexBuilder
+                val projects = ArrayList<RexNode>()
+                val visitor = CaseExpressionUnwrapper(rexBuilder)
+                for (rexNode in project.projects) {
+                    projects.add(rexNode.accept(visitor))
+                }
+                return project.copy(project.traitSet, inputRel, projects, project.getRowType())
+            }
+
+            override fun visit(join: LogicalJoin): RelNode {
+                val left = join.left.accept(this)
+                val right = join.right.accept(this)
+                val rexBuilder = join.cluster.rexBuilder
+                val visitor = CaseExpressionUnwrapper(rexBuilder)
+                val condition = join.condition.accept(visitor)
+                return join.copy(
+                    join.traitSet,
+                    condition,
+                    left,
+                    right,
+                    join.joinType,
+                    join.isSemiJoinDone,
+                )
+            }
+
+            class CaseExpressionUnwrapper(private val rexBuilder: RexBuilder) : RexShuttle() {
+                override fun visitCall(call: RexCall): RexNode {
+                    var foundNestedCase = false
+                    if (call.operator === SqlStdOperatorTable.CASE) {
+                        /*
+                         * Flatten the children to see if we have nested case expressions
+                         * Case operands are always 2n + 1, and they are like:
+                         * (RexNode -> When expression
+                         * RexNode -> Then expression) repeats n times
+                         * RexNode -> Else expression
+                         */
+                        val operands: MutableList<RexNode> = ArrayList(call.getOperands())
+
+                        /*
+                         * Flatten all ELSE expressions. Anything nested under ELSE expression can be
+                         * pulled up to the parent case. e.g.
+                         *
+                         * CASE WHEN col1 = 'abc' THEN 0
+                         *      WHEN col1 = 'def' THEN 1
+                         *      ELSE (CASE WHEN col2 = 'ghi' THEN -1
+                         *                 ELSE (CASE WHEN col3 = 'jkl' THEN -2
+                         *                            ELSE -3))
+                         *
+                         * can be rewritten as:
+                         * CASE WHEN col1 = 'abc' THEN 0
+                         *      WHEN col1 = 'def' THEN 1
+                         *      WHEN col2 = 'ghi' THEN -1
+                         *      WHEN col3 = 'jkl' THEN -2
+                         *      ELSE -3
+                         */
+                        var unwrapped = true
+                        while (unwrapped) { // Recursively unwrap the ELSE expression
+                            val elseOperators: MutableList<RexNode> = ArrayList()
+                            val elseExpr = operands[operands.size - 1]
+                            if (elseExpr is RexCall) {
+                                val elseCall = elseExpr
+                                if (elseCall.operator === SqlStdOperatorTable.CASE) {
+                                    foundNestedCase = true
+                                    elseOperators.addAll(elseCall.getOperands())
+                                }
+                            }
+                            if (elseOperators.isEmpty()) {
+                                unwrapped = false
+                            } else {
+                                operands.removeAt(operands.size - 1) // Remove the ELSE expression and replace with the unwrapped one
+                                operands.addAll(elseOperators)
+                            }
+                        }
+                        if (foundNestedCase) {
+                            return rexBuilder.makeCall(SqlStdOperatorTable.CASE, operands)
+                        }
+                    }
+                    return super.visitCall(call)
+                }
+            }
         }
     }
 
