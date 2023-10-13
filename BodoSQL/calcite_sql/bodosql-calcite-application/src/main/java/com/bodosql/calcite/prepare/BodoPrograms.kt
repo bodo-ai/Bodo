@@ -81,6 +81,13 @@ object BodoPrograms {
         } else {
             NoopProgram
         },
+        // Rewrite step. The Filter Case changes risk keeping a filter from passing through a join by inserting
+        // a projection, so we run it after filter pushdown.
+        if (optimize) {
+            HepOptimizerProgram(BodoRules.REWRITE_RULES)
+        } else {
+            NoopProgram
+        },
         // Multi Join building step.
         if (optimize) {
             Programs.of(
