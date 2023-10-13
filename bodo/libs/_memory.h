@@ -652,8 +652,8 @@ class BufferPool final : public IBufferPool {
      * @param[in, out] out Pointer to pointer which should store the address of
      * the allocated memory.
      */
-    virtual ::arrow::Status Allocate(int64_t size, int64_t alignment,
-                                     uint8_t** out) override;
+    ::arrow::Status Allocate(int64_t size, int64_t alignment,
+                             uint8_t** out) override;
 
     /**
      * @brief Resize an already allocated memory section.
@@ -666,9 +666,8 @@ class BufferPool final : public IBufferPool {
      * previously allocated memory and should be modified to now store
      * the address of the new allocated memory region.
      */
-    virtual ::arrow::Status Reallocate(int64_t old_size, int64_t new_size,
-                                       int64_t alignment,
-                                       uint8_t** ptr) override;
+    ::arrow::Status Reallocate(int64_t old_size, int64_t new_size,
+                               int64_t alignment, uint8_t** ptr) override;
 
     /**
      * @brief Free an allocated region.
@@ -680,8 +679,7 @@ class BufferPool final : public IBufferPool {
      * updated.
      * @param alignment The alignment of the allocation. Defaults to 64 bytes.
      */
-    virtual void Free(uint8_t* buffer, int64_t size,
-                      int64_t alignment) override;
+    void Free(uint8_t* buffer, int64_t size, int64_t alignment) override;
 
     /**
      * @brief Pin an allocation/block to memory.
@@ -710,22 +708,22 @@ class BufferPool final : public IBufferPool {
 
     /// @brief The number of bytes currently allocated through
     /// this allocator.
-    virtual int64_t bytes_allocated() const override;
+    int64_t bytes_allocated() const override;
 
-    virtual int64_t total_bytes_allocated() const override { return 0; }
+    int64_t total_bytes_allocated() const override { return 0; }
 
-    virtual int64_t num_allocations() const override { return 0; }
+    int64_t num_allocations() const override { return 0; }
 
     /// @brief The number of bytes currently pinned.
     /// TODO: Get inline to work correctly
     uint64_t bytes_pinned() const override;
 
     /// @brief Get peak memory allocation in this memory pool
-    virtual int64_t max_memory() const override;
+    int64_t max_memory() const override;
 
     /// @brief The name of the backend used by this memory pool.
     /// Always returns 'bodo'.
-    virtual std::string backend_name() const override;
+    std::string backend_name() const override;
 
     /// @brief If spilling is enabled for this memory pool.
     bool is_spilling_enabled() const;
