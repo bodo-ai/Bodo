@@ -49,6 +49,7 @@ class SnowflakeReader : public ArrowReader {
 
         auto [arr_c_types, arr_array_types] =
             get_dtypes_arr_types_from_table(get_empty_out_table());
+
         this->out_batches = std::make_shared<ChunkedTableBuilder>(
             arr_c_types, arr_array_types, dict_builders, (size_t)batch_size);
     }
@@ -157,6 +158,7 @@ class SnowflakeReader : public ArrowReader {
         if (arrow_table_py == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
+
         auto table = arrow::py::unwrap_table(arrow_table_py).ValueOrDie();
         auto end = steady_clock::now();
         to_arrow_time = duration_cast<microseconds>((end - start)).count();

@@ -177,6 +177,7 @@ void before_each(TestFunc func) {
 /// location.
 void check(bool x, const std::source_location location =
                        std::source_location::current());
+
 /// @brief Same as check(x, location) but customize the error message
 /// @param x The condition to check
 /// @param message The message to use instead of the default
@@ -185,5 +186,11 @@ void check(bool x, const std::source_location location =
 void check(
     bool x, const char *message,
     const std::source_location location = std::source_location::current());
+
+/// @brief Helper function to check if an exception was thrown by input callable
+/// @param f Callable function to check if exception was raised in
+/// @param expected_msg_start The expected start of the exception message
+void check_exception(std::function<void()> f, const char *expected_msg_start);
+
 }  // namespace tests
 }  // namespace bodo

@@ -11,6 +11,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import numba
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -33,10 +34,11 @@ from bodo.tests.utils import (
     pytest_snowflake,
     run_rank0,
 )
-from bodo.utils.typing import BodoWarning
+from bodo.utils.typing import BodoError, BodoWarning
 
 if TYPE_CHECKING:  # pragma: no cover
     from pytest_mock import MockerFixture
+    from snowflake.connector import SnowflakeConnection
 
 
 pytestmark = pytest_snowflake
@@ -150,21 +152,40 @@ def test_snowflake_performance_warning(memory_leak_check):
             os.environ["BODO_PLATFORM_WORKSPACE_REGION"] = old_region_info
 
 
+@pytest.fixture(scope="session")
+def snowflake_conn():
+    """
+    Temporary Snowflake Connection for Basic Testing
+    """
+    from bodo.io.snowflake import snowflake_connect
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn_str = get_snowflake_connection_string(db, schema)
+    conn: "SnowflakeConnection" = snowflake_connect(conn_str)
+    yield conn
+    conn.close()
+
+
+@pytest.fixture
+def cursor(snowflake_conn: "SnowflakeConnection"):
+    """
+    Temporary Snowflake Connection for Basic Testing
+    """
+    cursor = snowflake_conn.cursor()
+    yield cursor
+    cursor.close()
+
+
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
-def test_decimal_metadata_handling():
+def test_decimal_metadata_handling(cursor):
     """
     Test that Bodo's Snowflake schema inference can
     determine the correct output size of various
     """
-    from bodo.io.snowflake import snowflake_connect
-
-    db = "SNOWFLAKE_SAMPLE_DATA"
-    schema = "TPCH_SF1"
-    conn = get_snowflake_connection_string(db, schema)
-    cursor = snowflake_connect(conn).cursor()
 
     # Test an int, double, maybe decimal, and decimal col for typing
-    pa_fields, _, _, _, _, _ = bodo.io.snowflake.get_schema_from_metadata(
+    pa_fields = bodo.io.snowflake.get_schema_from_metadata(
         cursor,
         "SELECT 10, 10.11, 1.1010101::decimal(30, 8), 12345678901234567890.0987654321",
         None,
@@ -172,7 +193,7 @@ def test_decimal_metadata_handling():
         True,
         False,
         False,
-    )
+    )[0]
 
     assert len(pa_fields) == 4
     int_col, double_col, maybe_dec_col, dec_col = pa_fields
@@ -183,6 +204,86 @@ def test_decimal_metadata_handling():
         pa.types.is_decimal128(dec_col.type)
         and dec_col.type.precision == 30
         and dec_col.type.scale == 10
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_array_metadata_handling(cursor):
+    """
+    Test that Array Columns are Properly Typed
+    """
+
+    pa_fields = bodo.io.snowflake.get_schema_from_metadata(
+        cursor,
+        """
+        select null as A
+        union all
+        select ARRAY_CONSTRUCT(CURRENT_DATE(), '1980-01-05'::date, null) as A
+        """,
+        None,
+        None,
+        True,
+        False,
+        False,
+    )[0]
+
+    assert len(pa_fields) == 1
+    assert pa_fields[0].equals(pa.field("A", pa.large_list(pa.date32()), nullable=True))
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_array_metadata_handling_err(cursor):
+    """
+    Test that an error is raised when a variant or semi-structured column
+    has multiple types that are incompatible
+    """
+
+    with pytest.raises(BodoError, match="has multiple value types {'VARCHAR', 'DATE'}"):
+        bodo.io.snowflake.get_schema_from_metadata(
+            cursor,
+            """
+            select null as A
+            union all
+            select ARRAY_CONSTRUCT(CURRENT_DATE(), '1980-01-05', null) as A
+            """,
+            None,
+            None,
+            True,
+            False,
+            False,
+        )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_float_array_metadata_handling(cursor):
+    """
+    Test that Numeric Array Columns, that may contain Integers, Floats, and Decimals
+    are properly typed to float64 arrays
+    """
+
+    pa_fields = bodo.io.snowflake.get_schema_from_metadata(
+        cursor,
+        """
+        select null as A
+        union all
+        select ARRAY_CONSTRUCT(10, 10.0, null) as A
+        union all
+        select ARRAY_CONSTRUCT(null, 12.4, -0.57) as A
+        union all
+        select ARRAY_CONSTRUCT(12345678901234567890) as A
+        union all
+        select ARRAY_CONSTRUCT(-1235, 0.01234567890123456789) as A
+        """,
+        None,
+        None,
+        True,
+        False,
+        False,
+    )[0]
+
+    assert len(pa_fields) == 1
+    assert pa_fields[0].equals(
+        pa.field("A", pa.large_list(pa.float64()), nullable=True)
     )
 
 
@@ -545,6 +646,99 @@ def test_snowflake_runtime_downcasting_decimal(mocker: "MockerFixture"):
     )
 
 
+def test_read_string_array_col(memory_leak_check):
+    """
+    Basic test of reading an array of strings column from Snowflake
+    Pandas / PyArrow can't seem to compare output with pd.NA or np.nan
+    so this test currently doesn't include nulls inside of arrays
+
+    TODO: Try nulls in array post PyArrow or Python upgrade
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
+    query = rf"""
+    SELECT * FROM (
+        select null as A
+        union all
+        select ARRAY_CONSTRUCT('why', 'does', 'snowflake', 'use') as A
+        union all
+        
+        select ARRAY_CONSTRUCT($$
+        test multiline \t  
+        string with junk
+        $$) as A
+
+        union all
+        select ARRAY_CONSTRUCT('\041', '\x21', '\u26c4', '\z', '\b', '\f', '/') as A
+        union all
+        select ARRAY_CONSTRUCT('test \0 zero') as A
+        union all
+        select ARRAY_CONSTRUCT('\'', '"', '\"', '\t\n', '\\') as A
+        union all
+        select ARRAY_CONSTRUCT('true', '10', '2023-10-20', 'hello') as A
+    )
+    ORDER BY A
+    """
+    py_output = pd.DataFrame(
+        {
+            "a": [
+                ["\n        test multiline \\t  \n        string with junk\n        "],
+                ["\041", "\x21", "\u26c4", "z", "\b", "\f", "/"],
+                ["'", '"', '"', "\t\n", "\\"],
+                ["test \0 zero"],
+                ["true", "10", "2023-10-20", "hello"],
+                ["why", "does", "snowflake", "use"],
+                np.nan,
+            ]
+        }
+    )
+
+    check_func(impl, (query, conn), py_output=py_output)
+
+
+def test_read_numeric_array_col(memory_leak_check):
+    """
+    Basic test of reading an array of floats column from Snowflake
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
+    query = """
+    SELECT * FROM (
+        select null as A
+        union all
+        select ARRAY_CONSTRUCT(10, 10.0, null) as A
+        union all
+        select ARRAY_CONSTRUCT(null, 12.4, -0.57, '-inf'::float, 'inf'::float, 'nan'::float) as A
+        union all
+        select ARRAY_CONSTRUCT(12345678901234567890) as A
+        union all
+        select ARRAY_CONSTRUCT(-1235, 0.01234567890123456789) as A
+    )
+    ORDER BY A
+    """
+    py_output = pd.DataFrame(
+        {
+            "a": [
+                [np.nan, 12.4, -0.57, -np.inf, np.inf, np.nan],
+                [-1235.0, 0.01234567890123456789],
+                [10.0, 10.0, np.nan],
+                [12345678901234567890.0],
+                np.nan,
+            ]
+        }
+    )
+
+    check_func(impl, (query, conn), py_output=py_output)
+
+
 def test_snowflake_bodo_read_as_dict_no_table(memory_leak_check):
     """
     Test reading string columns as dictionary-encoded from Snowflake
@@ -751,7 +945,7 @@ def test_snowflake_bodo_read_as_dict_no_table(memory_leak_check):
 
 
 @pytest.mark.parametrize("enable_dict_encoding", [True, False])
-def test_snowflake_dict_encoding_enabled(memory_leak_check, enable_dict_encoding):
+def test_snowflake_dict_encoding_enabled(enable_dict_encoding, memory_leak_check):
     """
     Test that SF_READ_AUTO_DICT_ENCODE_ENABLED works as expected.
     """
