@@ -10,7 +10,9 @@
 #include "../libs/_datetime_ext.h"
 #include "../libs/_datetime_utils.h"
 #include "../libs/_distributed.h"
+
 #include "arrow_reader.h"
+#include "json_col_parser.h"
 
 using arrow::Type;
 
@@ -845,7 +847,7 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
  */
 class ArrowBuilder : public TableBuilder::BuilderColumn {
    public:
-    ArrowBuilder() {}
+    ArrowBuilder(std::shared_ptr<arrow::DataType> _dtype) : dtype(_dtype) {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // XXX hopefully keeping the arrays around doesn't prevent other
@@ -859,6 +861,15 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
         if (out_array != nullptr) {
             return out_array;
         }
+
+        if (arrays.empty()) {
+            auto out_arrow_array =
+                arrow::MakeEmptyArray(dtype, bodo::BufferPool::DefaultPtr())
+                    .ValueOrDie();
+            out_array = arrow_array_to_bodo(out_arrow_array);
+            return out_array;
+        }
+
         std::shared_ptr<::arrow::Array> out_arrow_array;
         // TODO make this more efficient:
         // This copies to new buffers managed by Arrow, and then we copy
@@ -875,6 +886,7 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
 
    private:
     arrow::ArrayVector arrays;
+    std::shared_ptr<arrow::DataType> dtype;
 };
 
 /// Column builder for Arrow arrays with all null values
@@ -911,6 +923,7 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
         // is a single field)
         auto field = schema->field(i);
         auto type = field->type()->id();
+
         bool is_categorical = arrow::is_dictionary(type);
         if (arrow::is_primitive(type) || arrow::is_decimal(type) ||
             is_categorical) {
@@ -946,16 +959,100 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                 dtype = Bodo_CTypes::BINARY;
             }
             columns.push_back(std::make_unique<StringBuilder>(dtype));
-        } else if (type == arrow::Type::LIST &&
-                   arrow::is_binary_like(
-                       field->type()->field(0)->type()->id())) {
-            columns.push_back(
-                std::make_unique<ListStringBuilder>());  // list of string
         } else if (type == arrow::Type::NA) {
             columns.push_back(std::make_unique<AllNullsBuilder>(num_rows));
         } else {
-            columns.push_back(std::make_unique<ArrowBuilder>());
+            columns.push_back(std::make_unique<ArrowBuilder>(field->type()));
         }
+    }
+}
+
+/**
+ * @brief Convert Bodo Array Type to Arrow Data Type
+ * TODO: Move this function to _bodo_to_arrow.cpp and extract similar code
+ * from bodo_array_to_arrow
+ *
+ * @param arr Array to determine type of
+ * @return Output Arrow DataType
+ */
+std::shared_ptr<arrow::DataType> bodo_arr_type_to_arrow_dtype(
+    const std::shared_ptr<array_info>& arr) {
+    if (arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        return arrow::large_list(
+            bodo_arr_type_to_arrow_dtype(arr->child_arrays[0]));
+    } else if (arr->arr_type == bodo_array_type::STRUCT) {
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        for (size_t i = 0; i < arr->child_arrays.size(); i++) {
+            auto field_name =
+                arr->field_names.empty() ? "" : arr->field_names[i];
+            fields.push_back(arrow::field(
+                field_name,
+                bodo_arr_type_to_arrow_dtype(arr->child_arrays[i])));
+        }
+        return arrow::struct_(fields);
+    } else if (arr->arr_type == bodo_array_type::DICT) {
+        return arrow::dictionary(arrow::int32(), arrow::large_utf8());
+    } else if (arr->arr_type == bodo_array_type::STRING) {
+        return arr->dtype == Bodo_CTypes::STRING ? arrow::large_utf8()
+                                                 : arrow::large_binary();
+    } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
+        return arrow::large_list(arrow::large_utf8());
+    } else if (arr->arr_type == bodo_array_type::NUMPY ||
+               arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        switch (arr->dtype) {
+            case Bodo_CTypes::INT8:
+                return arrow::int8();
+            case Bodo_CTypes::INT16:
+                return arrow::int16();
+            case Bodo_CTypes::INT32:
+                return arrow::int32();
+            case Bodo_CTypes::INT64:
+                return arrow::int64();
+            case Bodo_CTypes::UINT8:
+                return arrow::uint8();
+            case Bodo_CTypes::UINT16:
+                return arrow::uint16();
+            case Bodo_CTypes::UINT32:
+                return arrow::uint32();
+            case Bodo_CTypes::UINT64:
+                return arrow::uint64();
+            case Bodo_CTypes::FLOAT32:
+                return arrow::float32();
+            case Bodo_CTypes::FLOAT64:
+                return arrow::float64();
+            case Bodo_CTypes::_BOOL:
+                return arrow::boolean();
+            case Bodo_CTypes::DATE:
+                return arrow::date32();
+            case Bodo_CTypes::DATETIME:
+                return arrow::timestamp(arrow::TimeUnit::NANO);
+            case Bodo_CTypes::DECIMAL:
+                return arrow::decimal128(arr->precision, arr->scale);
+            case Bodo_CTypes::TIME:
+                switch (arr->precision) {
+                    case 0:
+                        return arrow::time32(arrow::TimeUnit::SECOND);
+                    case 3:
+                        return arrow::time32(arrow::TimeUnit::MILLI);
+                    case 6:
+                        return arrow::time64(arrow::TimeUnit::MICRO);
+                    case 9:
+                        return arrow::time64(arrow::TimeUnit::NANO);
+                    default:
+                        throw std::runtime_error(
+                            "Unrecognized precision passed to "
+                            "bodo_array_to_arrow: " +
+                            std::to_string(arr->precision));
+                }
+            default:
+                throw std::runtime_error(
+                    "bodo_arr_type_to_arrow_dtype: unsupported dtype (" +
+                    GetDtype_as_string(arr->dtype) + ")");
+        }
+    } else {
+        throw std::runtime_error("bodo_arr_type_to_arrow_dtype: array type (" +
+                                 GetArrType_as_string(arr->arr_type) +
+                                 ") not supported");
     }
 }
 
@@ -983,7 +1080,8 @@ TableBuilder::TableBuilder(std::shared_ptr<table_info> table,
             columns.push_back(std::make_unique<ListStringBuilder>());
         } else if (arr->arr_type == bodo_array_type::STRUCT ||
                    arr->arr_type == bodo_array_type::ARRAY_ITEM) {
-            columns.push_back(std::make_unique<ArrowBuilder>());
+            columns.push_back(std::make_unique<ArrowBuilder>(
+                bodo_arr_type_to_arrow_dtype(arr)));
         } else {
             throw std::runtime_error("TableBuilder: array type (" +
                                      GetArrType_as_string(arr->arr_type) +
@@ -1192,108 +1290,124 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
 
 std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
     std::shared_ptr<arrow::Table> table, bool downcast_decimal_to_double) {
-    if (!table->schema()->Equals(this->schema)) {
-        arrow::ChunkedArrayVector new_cols;
-        for (int i = 0; i < table->num_columns(); i++) {
-            // We should do a quick check to ensure that we only perform
-            // upcasting and no nullability changes
-            auto col = table->column(i);
-
-            auto exp_type = this->schema->field(i)->type();
-            auto exp_nullable = this->schema->field(i)->nullable();
-            auto act_type = col->type();
-            auto act_nullable = table->schema()->field(i)->nullable();
-
-            // TODO: Simplify and update for nullable float and timestamps
-            // Either
-            // 1) Expected nullable and actually nullable
-            // 2) Expected not nullable and actually not nullable
-            // 3) Expected nullable and actually not nullable
-            auto nullable_eq = exp_nullable == act_nullable || !act_nullable;
-            // TableBuilder currently will allow for nullable floating-point or
-            // timestamp arrays to be appended to non-nullable variants (by
-            // converting NA to NaN or NaT) Thus, we shouldn't bother checking
-            // for nullability in these cases
-            if (exp_type->id() == Type::FLOAT ||
-                exp_type->id() == Type::DOUBLE ||
-                exp_type->id() == Type::TIMESTAMP) {
-                nullable_eq = true;
-            } else if (exp_type->id() == Type::INT8 ||
-                       exp_type->id() == Type::INT16 ||
-                       exp_type->id() == Type::INT32 ||
-                       exp_type->id() == Type::INT64) {
-                // Integer types are sometimes misreported as being
-                // nullable when they are not. In particular, COUNT(*)
-                // is not nullable but the snowflake connector says it is.
-                // If we've been told that the expected is not nullable
-                // and the actual is nullable, confirm whether the actual
-                // is compatible.
-                if (!exp_nullable && act_nullable && col->null_count() == 0) {
-                    // There are no nulls so just mark this conversion as ok.
-                    nullable_eq = true;
-                }
-            }
-
-            if (act_type->Equals(exp_type) && nullable_eq) {
-                new_cols.push_back(col);
-            }
-
-            // Float -> Double
-            // Int -> Wider Int
-            // Int -> Wider Decimal
-            // Float / Double -> Wider Decimal
-            else if ((act_type->bit_width() < exp_type->bit_width()) &&
-                     nullable_eq) {
-                // Check if upcast is possible in this case
-                // Dont bother checking if types are compatible, should
-                // be done at compile-time. Only sizes can change.
-
-                // bit-width is well-defined for all types with a fixed width.
-                // For other types, such as strings it's always set to -1, and
-                // hence should be safe to compare.
-                // (https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4NK5arrow8DataType9bit_widthEv)
-
-                auto res = arrow::compute::Cast(
-                    col, exp_type, arrow::compute::CastOptions::Safe(),
-                    bodo::default_buffer_exec_context());
-                // TODO: Use fmt::format or std::format on C++23
-                CHECK_ARROW(res.status(),
-                            "Failed to safely cast from " +
-                                col->type()->ToString() + " to " +
-                                exp_type->ToString() +
-                                " before appending to TableBuilder");
-                auto casted_datum = res.ValueOrDie();
-                new_cols.push_back(casted_datum.chunked_array());
-
-            } else if (downcast_decimal_to_double &&
-                       act_type->id() == Type::DECIMAL128 &&
-                       exp_type->id() == Type::DOUBLE && nullable_eq) {
-                // Bodo has limited support for decimal columns right now
-                // We can attempt to get around it by unsafely downcasting to
-                // double
-                auto opt = arrow::compute::CastOptions::Safe();
-                opt.allow_decimal_truncate = true;
-
-                auto res = arrow::compute::Cast(
-                    col, exp_type, opt, bodo::default_buffer_exec_context());
-                CHECK_ARROW(res.status(), "Failed to downcast from " +
-                                              col->type()->ToString() + " to " +
-                                              exp_type->ToString());
-
-                auto casted_datum = res.ValueOrDie();
-                new_cols.push_back(casted_datum.chunked_array());
-
-            } else {
-                // TODO: Use fmt::format or std::format on C++23
-                throw std::runtime_error("Invalid Downcast from " +
-                                         col->type()->ToString() + " to " +
-                                         exp_type->ToString());
-            }
-        }
-        table = arrow::Table::Make(this->schema, new_cols, table->num_rows());
+    if (table->schema()->Equals(this->schema)) {
+        return table;
     }
 
-    return table;
+    arrow::ChunkedArrayVector new_cols;
+    for (int i = 0; i < table->num_columns(); i++) {
+        // We should do a quick check to ensure that we only perform
+        // upcasting and no nullability changes
+        auto col = table->column(i);
+
+        auto exp_type = this->schema->field(i)->type();
+        auto exp_nullable = this->schema->field(i)->nullable();
+        auto act_type = col->type();
+        auto act_nullable = table->schema()->field(i)->nullable();
+
+        // TODO: Simplify and update for nullable float and timestamps
+        // Either
+        // 1) Expected nullable and actually nullable
+        // 2) Expected not nullable and actually not nullable
+        // 3) Expected nullable and actually not nullable
+        auto nullable_eq = exp_nullable == act_nullable || !act_nullable;
+        // TableBuilder currently will allow for nullable floating-point or
+        // timestamp arrays to be appended to non-nullable variants (by
+        // converting NA to NaN or NaT) Thus, we shouldn't bother checking
+        // for nullability in these cases
+        if (exp_type->id() == Type::FLOAT || exp_type->id() == Type::DOUBLE ||
+            exp_type->id() == Type::TIMESTAMP) {
+            nullable_eq = true;
+        } else if (exp_type->id() == Type::INT8 ||
+                   exp_type->id() == Type::INT16 ||
+                   exp_type->id() == Type::INT32 ||
+                   exp_type->id() == Type::INT64) {
+            // Integer types are sometimes misreported as being
+            // nullable when they are not. In particular, COUNT(*)
+            // is not nullable but the snowflake connector says it is.
+            // If we've been told that the expected is not nullable
+            // and the actual is nullable, confirm whether the actual
+            // is compatible.
+            if (!exp_nullable && act_nullable && col->null_count() == 0) {
+                // There are no nulls so just mark this conversion as ok.
+                nullable_eq = true;
+            }
+        }
+
+        if (act_type->Equals(exp_type) && nullable_eq) {
+            new_cols.push_back(col);
+        }
+
+        // Parse Array of JSON Strings into Map Array
+        else if ((act_type->id() == Type::STRING ||
+                  act_type->id() == Type::LARGE_STRING) &&
+                 (exp_type->id() == Type::LIST ||
+                  exp_type->id() == Type::LARGE_LIST)) {
+            std::vector<std::shared_ptr<arrow::Array>> chunks;
+            std::transform(
+                col->chunks().begin(), col->chunks().end(),
+                std::back_inserter(chunks),
+                [exp_type](std::shared_ptr<arrow::Array> chunk) {
+                    return string_to_list_arr(
+                        std::dynamic_pointer_cast<arrow::StringArray>(chunk),
+                        exp_type);
+                });
+            new_cols.push_back(std::make_shared<arrow::ChunkedArray>(chunks));
+        }
+
+        // Float -> Double
+        // Int -> Wider Int
+        // Int -> Wider Decimal
+        // Float / Double -> Wider Decimal
+        else if ((act_type->bit_width() < exp_type->bit_width()) &&
+                 nullable_eq) {
+            // Check if upcast is possible in this case
+            // Dont bother checking if types are compatible, should
+            // be done at compile-time. Only sizes can change.
+
+            // bit-width is well-defined for all types with a fixed width.
+            // For other types, such as strings it's always set to -1, and
+            // hence should be safe to compare.
+            // (https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4NK5arrow8DataType9bit_widthEv)
+
+            auto res = arrow::compute::Cast(
+                col, exp_type, arrow::compute::CastOptions::Safe(),
+                bodo::default_buffer_exec_context());
+            // TODO: Use fmt::format or std::format on C++23
+            CHECK_ARROW(res.status(), "Failed to safely cast from " +
+                                          col->type()->ToString() + " to " +
+                                          exp_type->ToString() +
+                                          " before appending to TableBuilder");
+            auto casted_datum = res.ValueOrDie();
+            new_cols.push_back(casted_datum.chunked_array());
+
+        } else if (downcast_decimal_to_double &&
+                   act_type->id() == Type::DECIMAL128 &&
+                   exp_type->id() == Type::DOUBLE && nullable_eq) {
+            // Bodo has limited support for decimal columns right now
+            // We can attempt to get around it by unsafely downcasting to
+            // double
+            auto opt = arrow::compute::CastOptions::Safe();
+            opt.allow_decimal_truncate = true;
+
+            auto res = arrow::compute::Cast(
+                col, exp_type, opt, bodo::default_buffer_exec_context());
+            CHECK_ARROW(res.status(), "Failed to downcast from " +
+                                          col->type()->ToString() + " to " +
+                                          exp_type->ToString());
+
+            auto casted_datum = res.ValueOrDie();
+            new_cols.push_back(casted_datum.chunked_array());
+
+        } else {
+            // TODO: Use fmt::format or std::format on C++23
+            throw std::runtime_error("Invalid Downcast from " +
+                                     col->type()->ToString() + " to " +
+                                     exp_type->ToString());
+        }
+    }
+
+    return arrow::Table::Make(this->schema, new_cols, table->num_rows());
 }
 
 /**
