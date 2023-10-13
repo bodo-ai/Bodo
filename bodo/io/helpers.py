@@ -198,7 +198,7 @@ def _get_numba_typ_from_pa_typ(
     removed the column.
     """
 
-    if isinstance(pa_typ.type, pa.ListType):
+    if pa.types.is_list(pa_typ.type) or pa.types.is_large_list(pa_typ.type):
         # nullable_from_metadata is only used for non-nested Int arrays
         arr_typ, supported = _get_numba_typ_from_pa_typ(
             pa_typ.type.value_field, is_index, nullable_from_metadata, category_info

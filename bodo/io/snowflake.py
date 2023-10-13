@@ -5,16 +5,18 @@ import sys
 import time
 import traceback
 import warnings
+from enum import Enum
 from tempfile import TemporaryDirectory
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Dict,
     List,
     Literal,
     Optional,
+    Set,
     Tuple,
+    Union,
 )
 from urllib.parse import parse_qsl, urlparse
 from uuid import uuid4
@@ -98,53 +100,19 @@ SF_SMALL_TABLE_THRESHOLD = 100_000
 # https://bodo.atlassian.net/wiki/spaces/B/pages/1134985217/Support+reading+dictionary+encoded+string+columns+from+Snowflake#Prediction-query-and-heuristic
 SF_READ_DICT_ENCODING_PROBE_ROW_LIMIT = 100_000_000
 
-# Mapping of the Snowflake field types to the pyarrow types taken
-# from the snowflake connector. These are not fully accurate and don't match
-# the arrow types. However, they can be used when the returned data is empty.
-# https://github.com/snowflakedb/snowflake-connector-python/blob/dcf10e8c7ce13a5288104b28329d3c9e8ffffc5a/src/snowflake/connector/constants.py#L35
-# https://docs.snowflake.com/en/user-guide/python-connector-api.html#label-python-connector-type-codes
+
+class UnknownSnowflakeType(Enum):
+    VARIANT = "variant"
+    OBJECT = "object"
+    LIST = "list"
+
+
 SCALE_TO_UNIT_PRECISION: Dict[int, Literal["s", "ms", "us", "ns"]] = {
     0: "s",
     3: "ms",
     6: "us",
     9: "ns",
 }
-TYPE_CODE_TO_ARROW_TYPE: List[Callable[["ResultMetadata", str, bool], pa.DataType]] = [
-    # Number / Int - Always Signed
-    lambda m, _, is_select_q: (
-        pa.decimal128(m.precision, m.scale) if is_select_q else pa.int64()
-    ),
-    # Float / Double
-    lambda _, __, ___: pa.float64(),
-    # String
-    lambda _, __, ___: pa.string(),
-    # Dates - Snowflake stores in days (aka 32-bit)
-    lambda _, __, ___: pa.date32(),
-    # Timestamp - Seems to be unused?
-    lambda _, __, ___: pa.time64("ns"),
-    # Variant / Union Type
-    lambda _, __, ___: pa.string(),
-    # Timestamp stored in UTC - TIMESTAMP_LTZ
-    lambda m, tz, _: pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale], tz=tz),
-    # Timestamp with a timezone offset per item - TIMESTAMP_TZ
-    lambda m, tz, _: pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale], tz=tz),
-    # Timestamp without a timezone - TIMESTAMP_NTZ
-    lambda m, _, __: pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale]),
-    # Object / Struct - Connector doesn't support pa.struct
-    lambda _, __, ___: pa.string(),
-    # Array - Connector doesn't support pa.list
-    lambda _, __, ___: pa.string(),
-    # Binary
-    lambda _, __, ___: pa.binary(),
-    # Time
-    lambda m, _, __: (
-        {0: pa.time32("s"), 3: pa.time32("ms"), 6: pa.time64("us"), 9: pa.time64("ns")}
-    )[m.scale],
-    # Boolean
-    lambda _, __, ___: pa.bool_(),
-    # Geographic - No Core Arrow Equivalent
-    lambda _, __, ___: pa.string(),
-]
 INT_BITSIZE_TO_ARROW_DATATYPE = {
     1: pa.int8(),
     2: pa.int16(),
@@ -152,7 +120,81 @@ INT_BITSIZE_TO_ARROW_DATATYPE = {
     8: pa.int64(),
     16: pa.decimal128(38, 0),
 }
-STRING_TYPE_CODE = 2
+
+
+def type_code_to_arrow_type(
+    code: int, m: "ResultMetadata", tz: str, is_select_q: bool
+) -> Union[pa.DataType, UnknownSnowflakeType]:
+    """
+    Mapping of the Snowflake field types. Most are taken from the Snowflake Connector
+    except for the following:
+        - 0:  Number / Int: Bodo starts with Decimal and does further type inference
+        - 6, 7, 8: Timestamps: Uses scale from metadata for typing
+        - 9:  Object: Snowflake types output as string, Bodo derives fixed Struct or Map (NOT IMPLEMENTED YET)
+        - 10: Array: Snowflake types output as string, Bodo derives fixed Array typing
+        - 12: Time: Similar to Timestamp
+
+    https://github.com/snowflakedb/snowflake-connector-python/blob/dcf10e8c7ce13a5288104b28329d3c9e8ffffc5a/src/snowflake/connector/constants.py#L35
+    https://docs.snowflake.com/en/user-guide/python-connector-api.html#label-python-connector-type-codes
+    """
+
+    # Number / Int - Always Signed
+    if code == 0:
+        assert m.precision is not None
+        assert m.scale is not None
+        return pa.decimal128(m.precision, m.scale) if is_select_q else pa.int64()
+    # Floating-Point - Always 64 bits / Double
+    elif code == 1:
+        return pa.float64()
+    # String
+    elif code == 2:
+        return pa.string()
+    # Dates - Snowflake stores in days (aka 32-bit)
+    elif code == 3:
+        return pa.date32()
+    # Timestamp - Seems to be unused?
+    elif code == 4:
+        return pa.time64("ns")
+    # Variant / Union Type
+    elif code == 5:
+        return pa.string()
+    # Timestamp stored in UTC - TIMESTAMP_LTZ
+    # Timestamp with a timezone offset per item - TIMESTAMP_TZ
+    elif code in (6, 7):
+        assert m.scale is not None
+        return pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale], tz=tz)
+    # Timestamp without a timezone - TIMESTAMP_NTZ
+    elif code == 8:
+        assert m.scale is not None
+        return pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale])
+    # Object -> Map / Struct - Connector doesn't support pa.struct
+    elif code == 9:
+        return pa.string()
+    # List - Connector doesn't support pa.list
+    elif code == 10:
+        return UnknownSnowflakeType.LIST
+    # Binary
+    elif code == 11:
+        return pa.binary()
+    # Time
+    elif code == 12:
+        assert m.scale is not None
+        return (
+            {
+                0: pa.time32("s"),
+                3: pa.time32("ms"),
+                6: pa.time64("us"),
+                9: pa.time64("ns"),
+            }
+        )[m.scale]
+    # Boolean
+    elif code == 13:
+        return pa.bool_()
+    # Geographic - No Core Arrow Equivalent
+    elif code == 14:
+        return pa.string()
+    else:
+        raise BodoError(f"Unknown Snowflake Type Code: {code}")
 
 
 def _import_snowflake_connector_logging() -> None:  # pragma: no cover
@@ -548,6 +590,188 @@ def snowflake_connect(
     return conn
 
 
+def get_number_types_from_metadata(
+    cursor: "SnowflakeCursor",
+    sql_query: str,
+    orig_table: Optional[str],
+    orig_table_indices: Optional[Tuple[int, ...]],
+    downcast_decimal_to_double: bool,
+    cols_to_check: List[Tuple[int, str, Union[pa.Decimal128Type, pa.Decimal256Type]]],
+):
+    """
+    Determine the smallest possible integer size for all NUMBER columns
+    in the output of a Snowflake read. This uses SYSTEM$TYPEOF for Snowflake
+    internal sizing.
+
+    Args:
+        cursor: Snowflake cursor to submit metadata queries to
+        sql_query: Source table or query to get output typing for
+        orig_table: Original table name, to be used if sql_query is not
+            a table name. If provided, must guarantee that the sql_query only performs
+            a selection of a subset of the table's columns, and does not rename
+            any of the columns from the input table. Defaults to None.
+        orig_table_indices: The indices for each column
+            in the original table. This is to handle renaming and replace name based reads with
+            index based reads.
+        downcast_decimal_to_double: Force that any remaining decimal columns are typed to float64
+        cols_to_check: List of (int, str, DecimalType) representing the idx, name, and type of every
+            NUMBER column
+
+    Returns:
+        - List of (int, str, DataType) representing column idx, name, and final type
+            If metadata probing times out, just reuses the input cols_to_check
+        - Columns that we couldn't get metadata for due to timeout. None if no columns
+    """
+
+    col_idxs_to_check = [c[0] for c in cols_to_check]
+    col_names_to_check = [c[1] for c in cols_to_check]
+
+    schema_probe_query = (
+        "SELECT "
+        + ", ".join(f"SYSTEM$TYPEOF({escape_col_name(x)})" for x in col_names_to_check)
+        + f" FROM ({sql_query}) LIMIT 1"
+    )
+
+    probe_res = execute_query(
+        cursor,
+        schema_probe_query,
+        timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
+    )
+
+    typing_table: Optional[pa.Table] = None
+
+    # Retry if first query failed and original table context is known
+    if (
+        (probe_res is None or (typing_table := probe_res.fetch_arrow_all()) is None)
+        and orig_table is not None
+        and orig_table_indices is not None
+    ):
+        schema_probe_query = (
+            "SELECT "
+            + ", ".join(
+                # Note: Snowflake/SQL is 1 indexed
+                f"SYSTEM$TYPEOF(${orig_table_indices[i] + 1})"
+                for i in col_idxs_to_check
+            )
+            + f" FROM {orig_table} LIMIT 1"
+        )
+        probe_res = execute_query(
+            cursor, schema_probe_query, timeout=SF_READ_SCHEMA_PROBE_TIMEOUT
+        )
+
+    if probe_res is None or (typing_table := probe_res.fetch_arrow_all()) is None:
+        return (cols_to_check, col_names_to_check)
+
+    new_col_info: List[Tuple[int, str, pa.DataType]] = []
+
+    # Note, this assumes that the output metadata columns are in the
+    # same order as the columns we checked in the probe query
+    for i, (_, typing_info) in enumerate(typing_table.to_pylist()[0].items()):
+        idx, name, dtype = cols_to_check[i]
+
+        # Parse output NUMBER(__,_)[SBx] to get the byte width x
+        byte_size = int(
+            re.search(r"NUMBER\(\d+,\d+\)\[SB(\d+)\]", typing_info).group(1)
+        )
+
+        # Map Byte Width for Integer Only Columns
+        if dtype.scale == 0:
+            out_dtype = INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]
+        # Any non-16 byte decimal columns map to double
+        elif byte_size <= 8 or downcast_decimal_to_double:
+            out_dtype = pa.float64()
+        # Stick to existing decimal type in this case
+        else:
+            out_dtype = dtype
+
+        new_col_info.append((idx, name, out_dtype))
+
+    return new_col_info, None
+
+
+def get_list_type_from_metadata(
+    cursor: "SnowflakeCursor", sql_query: str, col_to_check: str, tz: str
+):
+    """
+    Determine a precise output type for List Columns from Snowflake
+    """
+
+    # TODO: Slice array for beginning content
+    probe_query = (
+        f"WITH in_table AS (SELECT * FROM ({sql_query}) SAMPLE (1000 ROWS)) "
+        f"SELECT DISTINCT TYPEOF(out.value) as VALUES_TYPE FROM in_table, LATERAL FLATTEN(input => {col_to_check}) out"
+    )
+
+    probe_res = execute_query(
+        cursor,
+        probe_query,
+        timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
+    )
+
+    if probe_res is None or len(types_df := probe_res.fetch_pandas_all()) == 0:
+        raise BodoError(
+            f"Snowflake Probe Query Failed or Timed out While Testing the Type of List Column {col_to_check} in the Source:\n{sql_query}"
+        )
+
+    value_types: Set[str] = set(types_df["VALUES_TYPE"].to_list())
+    value_types.discard("NULL_VALUE")
+
+    # DOUBLE is floating-point (including NaN, Inf, ...)
+    # DECIMAL is most non-integer numbers without explicit cast
+    # INTEGER is whole numbers without explicit cast
+    # For our case, we treat all decimal-point values as float64
+    if "DOUBLE" in value_types:
+        value_types.discard("DOUBLE")
+        value_types.add("DECIMAL")
+    # Snowflake auto-deletes zero value after decimal point, treating as integer
+    # So we upcast to Float / Decimal, even across Integer -> Float
+    if value_types == {"INTEGER", "DECIMAL"}:
+        value_types = {"DECIMAL"}
+    # Use TIMESTAMP_LTZ, even with TIMESTAMP_TZ
+    elif value_types == {"TIMESTAMP_LTZ", "TIMESTAMP_TZ"}:
+        value_types = {"TIMESTAMP_LTZ"}
+
+    if len(value_types) > 1:
+        raise BodoError(
+            f"Snowflake Probe determined that Array Column {col_to_check} in query or table:\n"
+            f"{sql_query}\n"
+            f"has multiple value types {value_types}. This indicated that {col_to_check} is either:\n"
+            "  - A variant / union column with multiple datatypes\n"
+            "  - A struct tuple column with a common schema across rows\n"
+            "Bodo currently does not support either column types"
+        )
+
+    value_type = value_types.pop()
+    if value_type == "DECIMAL":
+        value_datatype = pa.float64()
+    elif value_type == "INTEGER":
+        value_datatype = pa.int64()
+    elif value_type == "VARCHAR":
+        value_datatype = pa.large_string()
+    elif value_type == "BINARY":
+        value_datatype = pa.binary()
+    elif value_type == "BOOL":
+        value_datatype = pa.bool_()
+    elif value_type == "DATE":
+        value_datatype = pa.date32()
+    elif value_type == "TIMESTAMP_NTZ":
+        # TODO: Properly derive timestamp precision if necessary
+        value_datatype = pa.timestamp("ns")
+    elif value_type in ("TIMESTAMP_TZ", "TIMESTAMP_LTZ"):
+        # TODO: Properly derive timestamp precision if necessary
+        value_datatype = pa.timestamp("ns", tz=tz)
+
+    elif value_type in ("VARIANT", "OBJECT", "ARRAY"):
+        raise BodoError(
+            f"Bodo does not Support Reading Nested Semi-Structured Data. Found col `{col_to_check}` of type list[{value_type}]"
+        )
+
+    else:
+        raise BodoError(f"Unknown Snowflake Type String: {value_type}")
+
+    return pa.large_list(value_datatype)
+
+
 def get_schema_from_metadata(
     cursor: "SnowflakeCursor",
     sql_query: str,
@@ -568,16 +792,10 @@ def get_schema_from_metadata(
     Args:
         cursor: Snowflake Cursor to Perform Operations in
         sql_query: Base SQL Query Operation
-        orig_table: The original table name that is the source of the SQL query.
-            This may be generated by BodoSQL if it prunes columns or filters to
-            enable gathering metadata from the original table.
-        orig_table_indices: The 0-indexed indices of the columns in the original
-            table that are used in the query. his may be generated by BodoSQL if
-            it prunes columns or filters to enable gathering metadata from the
-            original table on the original columns.
+        orig_table: Passed to (and see) get_number_types_from_metadata
+        orig_table_indices: Passed to (and see) get_number_types_from_metadata
         is_select_query: sql_query is a SELECT query
-        downcast_decimal_to_double: Should we downcast decimal columns to
-            double by default?
+        downcast_decimal_to_double: Passed to (and see) get_number_types_from_metadata
 
     Returns:
         pa_fields: List of PyArrow Fields for Each Column
@@ -597,107 +815,47 @@ def get_schema_from_metadata(
     # Session Timezone, should be populated by the describe operation
     tz: str = cursor._timezone  # type: ignore
 
-    arrow_fields: List[pa.Field] = []  # Equivalent PyArrow Fields
-    col_names_to_check: List[str] = []  # Columns to get typeof metadata for
-    check_dict_encoding: List[
-        bool
-    ] = []  # Should we check dictionary encoding for this type.
-    col_idxs_to_check: List[int] = []  # Index of columns to get typeof metadata
-    for i, field_meta in enumerate(query_field_metadata):
-        dtype = TYPE_CODE_TO_ARROW_TYPE[field_meta.type_code](
-            field_meta, tz, is_select_query
-        )
-        arrow_fields.append(pa.field(field_meta.name, dtype, field_meta.is_nullable))
-        # Only check dictionary encoding for STRING columns, not other columns
-        # that we load as strings.
-        check_dict_encoding.append(field_meta.type_code == STRING_TYPE_CODE)
-        if pa.types.is_decimal(dtype):
-            col_names_to_check.append(field_meta.name)
-            col_idxs_to_check.append(i)
+    # Equivalent PyArrow Fields
+    arrow_dtypes: List[Tuple[str, pa.DataType, bool]] = []
 
-    schema_timeout_info: Optional[List[str]] = None
+    for i, field_meta in enumerate(query_field_metadata):
+        dtype = type_code_to_arrow_type(
+            field_meta.type_code, field_meta, tz, is_select_query
+        )
+
+        # For any LIST columns, fetch metadata to get internal
+        if dtype == UnknownSnowflakeType.LIST:
+            dtype = get_list_type_from_metadata(cursor, sql_query, field_meta.name, tz)
+
+        assert isinstance(
+            dtype, pa.DataType
+        ), "All Snowflake Columns Should Have a PyArrow DataType by Now"
+        arrow_dtypes.append((field_meta.name, dtype, field_meta.is_nullable))
 
     # For any NUMBER columns, fetch SYSTEM$TYPEOF metadata to determine
     # the smallest viable integer type (number of bytes)
-    if is_select_query and len(col_names_to_check) != 0:
-        schema_probe_query = (
-            "SELECT "
-            + ", ".join(
-                f"SYSTEM$TYPEOF({escape_col_name(x)})" for x in col_names_to_check
-            )
-            + f" FROM ({sql_query}) LIMIT 1"
+    schema_timeout_info = None
+    number_cols = [
+        (i, name, d)
+        for i, (name, d, _) in enumerate(arrow_dtypes)
+        if isinstance(d, pa.DataType) and pa.types.is_decimal(d)
+    ]
+    if is_select_query and len(number_cols) != 0:
+        out_number_cols, schema_timeout_info = get_number_types_from_metadata(
+            cursor,
+            sql_query,
+            orig_table,
+            orig_table_indices,
+            downcast_decimal_to_double,
+            number_cols,
         )
+        for i, name, d in out_number_cols:
+            arrow_dtypes[i] = (name, d, arrow_dtypes[i][2])
 
-        probe_res = execute_query(
-            cursor, schema_probe_query, timeout=SF_READ_SCHEMA_PROBE_TIMEOUT
-        )
-        if (
-            probe_res is not None
-            and (typing_table := probe_res.fetch_arrow_all()) is not None
-        ):
-            # Note, this assumes that the output metadata columns are in the
-            # same order as the columns we checked in the probe query
-            for i, (_, typing_info) in enumerate(typing_table.to_pylist()[0].items()):
-                idx = col_idxs_to_check[i]
-                # Parse output NUMBER(__,_)[SBx] to get the byte width x
-                byte_size = int(
-                    re.search("NUMBER\(\d+,\d+\)\[SB(\d+)\]", typing_info).group(1)
-                )
-
-                # Map Byte Width for Integer Only Columns
-                if query_field_metadata[idx].scale == 0:
-                    out_type = INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]
-                # Any non-16 byte decimal columns map to double
-                elif byte_size <= 8 or downcast_decimal_to_double:
-                    out_type = pa.float64()
-                # Stick to existing decimal type in this case
-                else:
-                    out_type = arrow_fields[idx].type
-                arrow_fields[idx] = arrow_fields[idx].with_type(out_type)
-        elif orig_table is not None and orig_table_indices is not None:
-            # Retry with the original table name.
-            # TODO: Reduce code duplication after the Faire fire is done.
-            schema_probe_query = (
-                "SELECT "
-                + ", ".join(
-                    # Note: Snowflake/SQL is 1 indexed
-                    f"SYSTEM$TYPEOF(${orig_table_indices[i] + 1})"
-                    for i in col_idxs_to_check
-                )
-                + f" FROM {orig_table} LIMIT 1"
-            )
-            probe_res = execute_query(
-                cursor, schema_probe_query, timeout=SF_READ_SCHEMA_PROBE_TIMEOUT
-            )
-            if (
-                probe_res is not None
-                and (typing_table := probe_res.fetch_arrow_all()) is not None
-            ):
-                # Note, this assumes that the output metadata columns are in the
-                # same order as the columns we checked in the probe query
-                for i, (_, typing_info) in enumerate(
-                    typing_table.to_pylist()[0].items()
-                ):
-                    idx = col_idxs_to_check[i]
-                    # Parse output NUMBER(__,_)[SBx] to get the byte width x
-                    byte_size = int(
-                        re.search("NUMBER\(\d+,\d+\)\[SB(\d+)\]", typing_info).group(1)
-                    )
-
-                    # Map Byte Width for Integer Only Columns
-                    if query_field_metadata[idx].scale == 0:
-                        out_type = INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]
-                    # Any non-16 byte decimal columns map to double
-                    elif byte_size <= 8 or downcast_decimal_to_double:
-                        out_type = pa.float64()
-                    # Stick to existing decimal type in this case
-                    else:
-                        out_type = arrow_fields[idx].type
-                    arrow_fields[idx] = arrow_fields[idx].with_type(out_type)
-            else:
-                schema_timeout_info = col_names_to_check
-        else:
-            schema_timeout_info = col_names_to_check
+    # By this point, we should have fixed data types for all columns
+    arrow_fields: List[pa.Field] = []
+    for name, d, nullable in arrow_dtypes:
+        arrow_fields.append(pa.field(name, d, nullable))
 
     # Convert Arrow Types to Bodo Types
     col_types = []
@@ -719,23 +877,23 @@ def get_schema_from_metadata(
     return (
         arrow_fields,
         col_types,
-        check_dict_encoding,
+        [pa.types.is_string(f.type) for f in arrow_fields],
         unsupported_columns,
         unsupported_arrow_types,
         schema_timeout_info,
     )
 
 
-def _get_table_row_count(cursor, table_name):
+def _get_table_row_count(cursor: "SnowflakeCursor", table_name: str) -> Optional[int]:
     """get total number of rows for a Snowflake table. Returns None if input is not a
     table or probe query failed.
 
     Args:
-        cursor (SnowflakeCursor): Snowflake connector connection cursor object
-        table_name (str): table name
+        cursor: Snowflake connector connection cursor object
+        table_name: table name
 
     Returns:
-        optional(int): number of rows or None if failed
+        number of rows or None if failed
     """
     count_res = execute_query(
         cursor,
@@ -920,15 +1078,9 @@ def get_schema(
         is_select_query (bool): TODO: document this
         is_table_input (bool): read query is a table name
         _bodo_read_as_dict (bool): Read all string columns as dict encoded strings.
-        downcast_decimal_to_double (bool): downcast decimal types to double
-        orig_table (str, optional): Original table name, to be used if sql_query is not
-            a table name. If provided, must guarantee that the sql_query only performs
-            a selection of a subset of the table's columns, and does not rename
-            any of the columns from the input table. Defaults to None.
-        orig_table_indices (Optional[Tuple[Int]]): The indices for each column
-            in the original table. This is to handle renaming and replace name based reads with
-            index based reads.
-
+        downcast_decimal_to_double: Passed to (and see) get_schema_from_metadata
+        orig_table: Passed to (and see) get_schema_from_metadata
+        orig_table_indices: Passed to (and see) get_schema_from_metadata
 
     Returns:
         A large tuple containing: (#TODO: document this)
@@ -1659,6 +1811,9 @@ def retrieve_async_copy_into(
     """
     ev = tracing.Event("retrieve_async_copy_into", is_parallel=False)
     err = None
+    nchunks = -1
+    nsuccess = -1
+    output = ""
 
     try:
         copy_results = retrieve_async_query(cursor, copy_into_prev_sfqid)

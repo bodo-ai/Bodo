@@ -258,6 +258,7 @@ ext_metadata["sources"] += [
     "bodo/io/parquet_reader.cpp",
     "bodo/io/parquet_write.cpp",
     "bodo/io/snowflake_reader.cpp",
+    "bodo/io/json_col_parser.cpp",
     "bodo/libs/_array.cpp",
     "bodo/libs/_array_hash.cpp",
     "bodo/libs/_array_operations.cpp",
@@ -314,6 +315,7 @@ ext_metadata["depends"] += [
     "bodo/io/arrow_reader.h",
     "bodo/io/parquet_reader.h",
     "bodo/io/parquet_write.h",
+    "bodo/io/json_col_parser.h",
     "bodo/libs/_array_hash.h",
     "bodo/libs/_array_operations.h",
     "bodo/libs/_array_utils.h",
@@ -375,6 +377,7 @@ if is_testing:
             "bodo/tests/test_table_builder.cpp",
             "bodo/tests/test_table_generator.cpp",
             "bodo/tests/test_test_framework.cpp",
+            "bodo/tests/test_json_col_reader.cpp",
             "bodo/tests/test_nested_array.cpp",
         ]
     )

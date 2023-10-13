@@ -8,6 +8,7 @@ import operator
 import os
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Protocol
 
 import pandas as pd
@@ -765,11 +766,11 @@ class CppTestFile(pytest.File):
     """
 
     @classmethod
-    def from_parent(kls, parent, **kwargs):
+    def from_parent(cls, parent, **kwargs):
         return super().from_parent(parent, **kwargs)
 
     def __init__(self, parent, **kwargs):
-        super().__init__(fspath=kwargs["fspath"], parent=parent)
+        super().__init__(path=kwargs["path"], parent=parent)
         self.tests = kwargs["tests"]
         self.filename = kwargs["filename"]
 
@@ -798,7 +799,7 @@ class CppTestItem(pytest.Item):
         return self.test.filename, self.test.lineno, self.test.name
 
 
-def pytest_collect_file(parent, path):
+def pytest_collect_file(parent, file_path: Path):
     """
     A hook into py.test to collect test_*.cpp test files.
 
@@ -817,9 +818,9 @@ def pytest_collect_file(parent, path):
         test_cpp = None
 
     if (
-        path.ext == ".cpp"
-        and path.basename.startswith("test_")
-        and path.basename != "test_framework.cpp"
+        file_path.suffix == ".cpp"
+        and file_path.name.startswith("test_")
+        and file_path.name != "test_framework.cpp"
     ):
         if test_cpp is None:
             import warnings
@@ -832,8 +833,8 @@ def pytest_collect_file(parent, path):
         tests = [
             test
             for test in test_cpp.tests
-            if path.basename == os.path.basename(test.filename)
+            if file_path.name == os.path.basename(test.filename)
         ]
         return CppTestFile.from_parent(
-            parent, fspath=path, filename=path.basename, tests=tests
+            parent, path=file_path, filename=file_path.name, tests=tests
         )

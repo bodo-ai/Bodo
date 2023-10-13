@@ -2257,25 +2257,77 @@ def test_snowflake_catalog_string_format(test_db_snowflake_catalog, memory_leak_
     assert out.iloc[0, 0] == 1, f"Expected one row in output, found {out.iloc[0,0]}"
 
 
-def test_snowflake_catalog_array_read(test_db_snowflake_catalog, memory_leak_check):
+def test_read_with_array(test_db_snowflake_catalog, memory_leak_check):
     """
-    Tests reading an array column from Snowflake.
+    Tests reading a table with a Snowflake column.
     The table BODOSQL_ARRAY_READ_TEST has 3 columns:
     - I: integers
     - V: strings
     - A: arrays of integers
     """
-    query = """
-        SELECT *
-        FROM BODOSQL_ARRAY_READ_TEST
-    """
-
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    out = bc.sql(query)
+    out: pd.DataFrame = bc.sql("SELECT * FROM BODOSQL_ARRAY_READ_TEST")
     assert len(out) == 100
     assert len(out.columns) == 3
-    # [BSE-1152] TODO: properly test that out[out.columns[2]] is a correct array type once we support
-    # proper array reads.
+    assert all(isinstance(i, pd.core.arrays.integer.IntegerArray) for i in out["a"])
+
+
+def test_float_array_read(test_db_snowflake_catalog, memory_leak_check):
+    """Test reading an array of floating-point column from Snowflake"""
+
+    def impl(bc):
+        return bc.sql("SELECT * FROM ARRAY_NUMBER_TEST")
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    py_output = pd.DataFrame(
+        {
+            "a": [
+                [pd.NA, 12.4, -0.57],
+                [np.nan, np.inf, -np.inf],
+                [-1235.0, 0.01234567890123456789],
+                [10.0, 10.0, pd.NA],
+                [12345678901234567890.0],
+                np.nan,
+            ],
+        }
+    )
+    check_func(
+        impl,
+        (bc,),
+        py_output=py_output,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_string_array_read(test_db_snowflake_catalog, memory_leak_check):
+    """Test reading an array of string column from Snowflake"""
+
+    def impl(bc):
+        return bc.sql("SELECT * FROM ARRAY_STRING_TEST")
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    py_output = pd.DataFrame(
+        {
+            "a": [
+                ["\n    test multiline \\t  \n    string with junk\n    "],
+                ["\041", "\x21", "\u26c4", "z", "\b", "\f", "/"],
+                ["'", '"', '"', "\t\n", "\\"],
+                ["test \0 zero"],
+                ["true", "10", "2023-10-20", "hello"],
+                ["why", "does", "snowflake", "use", pd.NA],
+                np.nan,
+            ],
+        }
+    )
+    check_func(
+        impl,
+        (bc,),
+        py_output=py_output,
+        sort_output=True,
+        reset_index=True,
+        only_seq=True,
+    )
 
 
 @pytest.mark.parametrize(

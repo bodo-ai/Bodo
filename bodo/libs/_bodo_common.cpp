@@ -984,13 +984,22 @@ void clear_all_cols_if_last_table_ref(
 
 std::tuple<std::vector<int8_t>, std::vector<int8_t>>
 get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table) {
-    size_t n_cols = table->columns.size();
-    std::vector<int8_t> arr_c_types(n_cols);
-    std::vector<int8_t> arr_array_types(n_cols);
-    for (size_t i = 0; i < n_cols; i++) {
-        arr_c_types[i] = table->columns[i]->dtype;
-        arr_array_types[i] = table->columns[i]->arr_type;
+    std::vector<int8_t> arr_c_types;
+    std::vector<int8_t> arr_array_types;
+
+    for (size_t i = 0; i < table->columns.size(); i++) {
+        auto curr_arr = table->columns[i];
+
+        arr_c_types.push_back(curr_arr->dtype);
+        arr_array_types.push_back(curr_arr->arr_type);
+
+        while (arr_array_types.back() == bodo_array_type::ARRAY_ITEM) {
+            curr_arr = table->columns[i]->child_arrays[0];
+            arr_c_types.push_back(curr_arr->dtype);
+            arr_array_types.push_back(curr_arr->arr_type);
+        }
     }
+
     return std::make_tuple(arr_c_types, arr_array_types);
 }
 

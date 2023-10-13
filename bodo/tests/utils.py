@@ -917,6 +917,14 @@ def sort_dataframe_values_index(df):
         raise RuntimeError(
             "Testing error in sort_dataframe_values_index: None in column names"
         )
+
+    # Sort only works on hashable datatypes
+    # Thus we convert (non-hashable) list-like types to (hashable) tuples
+    df = df.applymap(
+        lambda x: tuple(x)
+        if isinstance(x, (list, np.ndarray, pd.core.arrays.ExtensionArray))
+        else x
+    )
     return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
 
 
