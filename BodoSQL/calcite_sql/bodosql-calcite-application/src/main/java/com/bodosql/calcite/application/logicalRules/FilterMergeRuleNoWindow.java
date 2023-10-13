@@ -70,16 +70,12 @@ public class FilterMergeRuleNoWindow extends RelRule<FilterMergeRuleNoWindow.Con
 
     /** Defines an operand tree for the given classes. */
     default FilterMergeRuleNoWindow.Config withOperandFor(Class<? extends Filter> filterClass) {
-      // Bodo Change: Add predicates that neither filter contains an over
+      // Bodo Change: Add predicates that upper filter cannot contain an over
       return withOperandSupplier(
               b0 ->
                   b0.operand(filterClass)
                       .predicate(f -> !f.containsOver())
-                      .oneInput(
-                          b1 ->
-                              b1.operand(filterClass)
-                                  .predicate(f -> !f.containsOver())
-                                  .anyInputs()))
+                      .oneInput(b1 -> b1.operand(filterClass).anyInputs()))
           .as(FilterMergeRuleNoWindow.Config.class);
     }
   }

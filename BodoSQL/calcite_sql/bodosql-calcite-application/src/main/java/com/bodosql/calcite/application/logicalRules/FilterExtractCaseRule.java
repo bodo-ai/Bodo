@@ -3,6 +3,7 @@ package com.bodosql.calcite.application.logicalRules;
 import static com.bodosql.calcite.application.logicalRules.FilterRulesCommon.rexNodeContainsCase;
 
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.rel.core.FilterBase;
 import java.util.*;
 import org.apache.calcite.plan.*;
 import org.apache.calcite.rel.*;
@@ -209,7 +210,7 @@ public class FilterExtractCaseRule<C extends BodoSQLReduceExpressionsRule.Config
   @Value.Immutable
   public interface Config extends RelRule.Config {
     FilterExtractCaseRule.Config DEFAULT =
-        ImmutableFilterExtractCaseRule.Config.of().withOperandFor(Filter.class);
+        ImmutableFilterExtractCaseRule.Config.of().withOperandFor(FilterBase.class);
 
     @Override
     default FilterExtractCaseRule toRule() {

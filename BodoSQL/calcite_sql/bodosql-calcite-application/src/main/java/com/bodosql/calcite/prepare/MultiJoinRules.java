@@ -81,7 +81,11 @@ public class MultiJoinRules {
   /** Push projections into Multi-Joins to expand the scope of the multi join. */
   public static final RelOptRule FILTER_MULTI_JOIN_MERGE =
       FilterMultiJoinMergeRule.Config.DEFAULT
-          .withOperandFor(BodoLogicalFilter.class, MultiJoin.class)
+          .withOperandSupplier(
+              b0 ->
+                  b0.operand(BodoLogicalFilter.class)
+                      .predicate(f -> !f.containsOver())
+                      .oneInput(b1 -> b1.operand(MultiJoin.class).anyInputs()))
           .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
           .toRule();
 }
