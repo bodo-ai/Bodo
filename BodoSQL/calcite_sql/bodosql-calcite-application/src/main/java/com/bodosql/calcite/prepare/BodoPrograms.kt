@@ -14,6 +14,7 @@ import com.bodosql.calcite.rel.logical.BodoLogicalJoin
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import com.bodosql.calcite.rel.logical.BodoLogicalSort
 import com.bodosql.calcite.rel.logical.BodoLogicalUnion
+import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan
 import com.bodosql.calcite.rel.metadata.BodoRelMetadataProvider
 import com.bodosql.calcite.traits.BatchingPropertyPass
 import com.google.common.collect.Iterables
@@ -90,6 +91,7 @@ object BodoPrograms {
             NoopProgram
         },
         AnalysisSuite.multiJoinAnalyzer,
+        MetadataPreprocessProgram(),
         RuleSetProgram(
             Iterables.concat(
                 BodoRules.VOLCANO_MINIMAL_RULE_SET,
@@ -235,6 +237,19 @@ object BodoPrograms {
         ): RelNode {
             val relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.cluster, null)
             return RelDecorrelator.decorrelateQuery(rel, relBuilder)
+        }
+    }
+
+    private class MetadataPreprocessProgram() : Program {
+        override fun run(
+            planner: RelOptPlanner,
+            rel: RelNode,
+            requiredOutputTraits: RelTraitSet,
+            materializations: List<RelOptMaterialization>,
+            lattices: List<RelOptLattice>,
+        ): RelNode {
+            BodoMetadataRestrictionScan.scanForRequestableMetadata(rel)
+            return rel
         }
     }
 

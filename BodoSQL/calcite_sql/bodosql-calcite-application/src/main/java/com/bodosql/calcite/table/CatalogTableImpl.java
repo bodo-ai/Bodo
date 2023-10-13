@@ -9,6 +9,7 @@ import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
+import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.google.common.base.Suppliers;
@@ -288,6 +289,12 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     List<String> qualifiedName = List.of(getSchema().getName(), getName());
     String columnName = getColumnNames().get(column).toUpperCase(Locale.ROOT);
     SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
+    // Do not allow the metadata to be requested if this column of this table was
+    // not pre-cleared by the metadata scanning pass.
+    if (!BodoMetadataRestrictionScan.Companion.canRequestColumnDistinctiveness(
+        qualifiedName, columnName)) {
+      return null;
+    }
     // Avoid ever returning more than the row count. This can happen because
     // Snowflake returns an estimate.
     Double distinctCount = catalog.estimateColumnDistinctCount(qualifiedName, columnName);
