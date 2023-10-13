@@ -17,7 +17,8 @@ def test_memory_budget(memory_leak_check):
             0, bodo.libs.memory_budget.OperatorType.JOIN, 0, 1, 1
         )
         bodo.libs.memory_budget.compute_satisfiable_budgets()
-        bodo.libs.memory_budget.increment_pipeline_id()
+        bodo.libs.memory_budget.reduce_operator_budget(0, 0)
+        bodo.libs.memory_budget.increase_operator_budget(0)
         bodo.libs.memory_budget.delete_operator_comptroller()
 
     # This test doesn't assert anything, and just checks for compilation right

@@ -19,7 +19,21 @@ ll.add_symbol(
 ll.add_symbol(
     "delete_operator_comptroller", memory_budget_cpp.delete_operator_comptroller
 )
-ll.add_symbol("increment_pipeline_id", memory_budget_cpp.increment_pipeline_id)
+ll.add_symbol("reduce_operator_budget", memory_budget_cpp.reduce_operator_budget)
+ll.add_symbol("increase_operator_budget", memory_budget_cpp.increase_operator_budget)
+
+
+class OperatorType(Enum):
+    """All supported streaming operator types. The order here must match the order in _memory_budget.h::OperatorType"""
+
+    UNKNOWN = 0
+    SNOWFLAKE_WRITE = 1
+    SNOWFLAKE_READ = 2
+    JOIN = 3
+    GROUPBY = 4
+    UNION = 5
+    ACCUMULATE_TABLE = 6
+    ENCODE_DICT = 7
 
 
 class OperatorType(Enum):
@@ -37,6 +51,8 @@ class OperatorType(Enum):
 
 @intrinsic
 def init_operator_comptroller(typingctx):
+    """Wrapper for init_operator_comptroller in _memory_budget.cpp"""
+
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(lir.VoidType(), [])
         fn_typ = cgutils.get_or_insert_function(
@@ -54,6 +70,8 @@ def init_operator_comptroller(typingctx):
 def register_operator(
     typingctx, operator_id, operator_type, min_pipeline_id, max_pipeline_id, estimate
 ):
+    """Wrapper for register_operator in _memory_budget.cpp"""
+
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.VoidType(),
@@ -79,25 +97,49 @@ def register_operator(
 
 
 @intrinsic
-def increment_pipeline_id(typingctx):
+def reduce_operator_budget(typingctx, operator_id, new_estimate):
+    """Wrapper for reduce_operator_budget in _memory_budget.cpp"""
+
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.VoidType(),
-            [],
+            [
+                lir.IntType(64),
+                lir.IntType(64),
+            ],
         )
         fn_typ = cgutils.get_or_insert_function(
-            builder.module, fnty, name="increment_pipeline_id"
+            builder.module, fnty, name="reduce_operator_budget"
         )
         builder.call(fn_typ, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return
 
-    sig = types.none()
+    sig = types.none(operator_id, new_estimate)
+    return sig, codegen
+
+
+@intrinsic
+def increase_operator_budget(typingctx, operator_id):
+    """Wrapper for increase_operator_budget in _memory_budget.cpp"""
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(64)])
+        fn_typ = cgutils.get_or_insert_function(
+            builder.module, fnty, name="increase_operator_budget"
+        )
+        builder.call(fn_typ, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return
+
+    sig = types.none(operator_id)
     return sig, codegen
 
 
 @intrinsic
 def compute_satisfiable_budgets(typingctx):
+    """Wrapper for compute_satisfiable_budgets in _memory_budget.cpp"""
+
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.VoidType(),
@@ -116,6 +158,8 @@ def compute_satisfiable_budgets(typingctx):
 
 @intrinsic
 def delete_operator_comptroller(typingctx):
+    """Wrapper for delete_operator_comptroller in _memory_budget.cpp"""
+
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.VoidType(),

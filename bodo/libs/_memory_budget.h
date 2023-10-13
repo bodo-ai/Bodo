@@ -1,10 +1,16 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #pragma once
 
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <unordered_map>
 #include <vector>
+
+// TODO(aneesh) explore better values for this constant
+/// Fraction of the total availible memory that the memory budgeting system will
+/// use.
+#define BODO_MEMORY_BUDGET_USAGE_FRACTION 0.75
 
 /// All supported streaming operator types. The order here must match the order
 /// in _memory_budget.py's OperatorType.
@@ -32,6 +38,11 @@ class OperatorComptroller {
         static std::shared_ptr<OperatorComptroller> comptroller_(
             new OperatorComptroller());
         return comptroller_;
+    }
+
+    static bool memoryBudgetsEnabled() {
+        static bool enabled = memoryBudgetsEnabledHelper();
+        return enabled;
     }
 
     // TODO: To be called by init_operator_comptroller
@@ -99,6 +110,7 @@ class OperatorComptroller {
     std::vector<int64_t> operator_allocated_budget;
 
     struct OperatorRequest {
+        OperatorType operator_type;
         int64_t min_pipeline_id;
         int64_t max_pipeline_id;
         size_t estimate;
@@ -107,4 +119,9 @@ class OperatorComptroller {
 
     int64_t num_pipelines = 0;
     int64_t num_operators = 0;
+
+    static bool memoryBudgetsEnabledHelper() {
+        char* use_mem_budget = std::getenv("BODO_USE_MEMORY_BUDGETS");
+        return use_mem_budget && strcmp(use_mem_budget, "1") == 0;
+    }
 };
