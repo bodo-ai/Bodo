@@ -16,6 +16,7 @@ import com.bodosql.calcite.rel.logical.BodoLogicalSort
 import com.bodosql.calcite.rel.logical.BodoLogicalUnion
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan
 import com.bodosql.calcite.rel.metadata.BodoRelMetadataProvider
+import com.bodosql.calcite.sql2rel.BodoRelDecorrelator
 import com.bodosql.calcite.traits.BatchingPropertyPass
 import com.google.common.collect.Iterables
 import org.apache.calcite.plan.Context
@@ -47,7 +48,6 @@ import org.apache.calcite.rex.RexExecutorImpl
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexShuttle
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
-import org.apache.calcite.sql2rel.RelDecorrelator
 import org.apache.calcite.tools.Program
 import org.apache.calcite.tools.Programs
 
@@ -249,7 +249,9 @@ object BodoPrograms {
             lattices: List<RelOptLattice>?,
         ): RelNode {
             val relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.cluster, null)
-            return RelDecorrelator.decorrelateQuery(rel, relBuilder)
+            val result = BodoRelDecorrelator.decorrelateQuery(rel, relBuilder)
+            BodoRelDecorrelator.verifyNoCorrelationsRemaining(result)
+            return result
         }
     }
 
