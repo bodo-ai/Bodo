@@ -533,6 +533,7 @@ object BodoRules {
      * ideally through metadata.
      */
     val CSE_RULES: List<RelOptRule> = listOf(
+        TRIVIAL_PROJECT_FILTER_TRANSPOSE,
         PROJECT_FILTER_PROJECT_COLUMN_ELIMINATION_RULE,
         PROJECTION_SUBCOLUMN_ELIMINATION_RULE,
     )
@@ -616,10 +617,6 @@ object BodoRules {
         JOIN_CONDITION_TO_FILTER_RULE,
         // This rule should probably be replaced with the PruneEmptyRules
         INNER_JOIN_REMOVE_RULE,
-        // Should be handled by RelFieldTrimmer now. We will want to replace this
-        // with a version that allows pushing all RexNodes for semi-structured
-        // pushdown.
-        TRIVIAL_PROJECT_FILTER_TRANSPOSE,
         // Should be handled by RelFieldTrimmer now. Needs join fully supported.
         PROJECT_JOIN_TRANSPOSE_RULE,
 
@@ -664,7 +661,6 @@ object BodoRules {
         JOIN_COMMUTE_RULE,
         LOPT_OPTIMIZE_JOIN_RULE,
         AGGREGATE_CONSTANT_PULL_UP_RULE,
-        TRIVIAL_PROJECT_FILTER_TRANSPOSE,
         UNION_MERGE_RULE,
     )
 }
