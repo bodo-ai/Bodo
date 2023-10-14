@@ -22,6 +22,7 @@ import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
+import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.sql.type.VariantSqlType
 import org.immutables.value.Value
 
@@ -227,8 +228,9 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
 
         /**
          * Casts that we want to push into Snowflake.
-         * Currently, it's only a cast call to/from variant from/to any datatype.
-         * i.e. CAST(VARIANT):DataType or CAST(Datatype):Variant
+         * Currently, it's only a cast call to/from variant from/to any datatype
+         * and casts to date.
+         * i.e. VARIANT::DataType, Datatype::Variant, TIMESTAMP::DATE
          * @param call: Operator call
          * @return true/false based on whether it's a supported cast operation or not.
          */
@@ -236,6 +238,11 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             if (call.kind == SqlKind.CAST) {
                 // Cast to Variant or Cast input is a variant
                 if ((call.getType() is VariantSqlType) || (call.operands[0].type is VariantSqlType)) {
+                    return true
+                }
+                // Cast is to Date. In the future we may want to make this more restrictive
+                // if we ever allow casting a type to DATE that Snowflake doesn't.
+                if (call.getType().sqlTypeName == SqlTypeName.DATE) {
                     return true
                 }
             }
