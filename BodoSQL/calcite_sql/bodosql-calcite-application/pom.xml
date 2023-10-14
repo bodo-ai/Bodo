@@ -483,6 +483,18 @@
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$TrimConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTableConfig.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$DecorrelateRexShuttle.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveCorrelationRexShuttle.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveSingleAggregateRule.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveCorrelationForScalarProjectRule.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveCorrelationForScalarAggregateRule.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$AdjustProjectForCountAggregateRule.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorRef.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorDef.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorelMap.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorelMapBuilder.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$Frame.class</exclude>
                                         <exclude>org/apache/calcite/tools/ImmutableRelBuilder$1.class</exclude>
                                         <exclude>org/apache/calcite/tools/ImmutableRelBuilder$Config$Builder.class</exclude>
                                         <exclude>org/apache/calcite/tools/ImmutableRelBuilder$Config$InitShim.class</exclude>
