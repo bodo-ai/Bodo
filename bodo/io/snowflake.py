@@ -590,6 +590,34 @@ def snowflake_connect(
     return conn
 
 
+def _try_convert_decimal_type_to_integer_type(type: pa.Decimal128Type) -> pa.DataType:
+    """Try to convert a Decimal type to an integer representation
+    without any loss of precision based on its static precision
+    and scale information.
+
+    Args:
+        type (pa.DataType): The type to convert.
+
+    Returns:
+        pa.DataType: An equivalent integer type if conversion is possible
+        or the original type if its not possible.
+    """
+    # Note: We add a defensive isinstance check that shouldn't be necessary.
+    if isinstance(type, pa.Decimal128Type) and type.scale == 0 and type.precision < 19:
+        # The type fits in an integer
+        if type.precision < 3:
+            byte_size = 1
+        elif type.precision < 5:
+            byte_size = 2
+        elif type.precision < 10:
+            byte_size = 4
+        else:
+            byte_size = 8
+        return INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]
+    else:
+        return type
+
+
 def get_number_types_from_metadata(
     cursor: "SnowflakeCursor",
     sql_query: str,
@@ -850,7 +878,11 @@ def get_schema_from_metadata(
             number_cols,
         )
         for i, name, d in out_number_cols:
-            arrow_dtypes[i] = (name, d, arrow_dtypes[i][2])
+            arrow_dtypes[i] = (
+                name,
+                _try_convert_decimal_type_to_integer_type(d),
+                arrow_dtypes[i][2],
+            )
 
     # By this point, we should have fixed data types for all columns
     arrow_fields: List[pa.Field] = []
