@@ -284,7 +284,7 @@ public interface BodoSQLColumn {
                   BodoRelDataTypeFactory.createVariantSqlType(typeFactory), -1);
           break;
         case STRING:
-          temp = typeFactory.createSqlType(SqlTypeName.VARCHAR);
+          temp = typeFactory.createSqlType(SqlTypeName.VARCHAR, precision);
           break;
         case BINARY:
           temp = typeFactory.createSqlType(SqlTypeName.VARBINARY);

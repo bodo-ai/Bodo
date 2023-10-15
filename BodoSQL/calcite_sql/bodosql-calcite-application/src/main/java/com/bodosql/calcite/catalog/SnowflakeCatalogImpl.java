@@ -436,12 +436,19 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       }
     } else if (typeName.equals("BOOLEAN")) {
       columnDataType = BodoSQLColumnDataType.BOOL8;
-    } else if (typeName.startsWith("VARCHAR")
-        || typeName.startsWith("CHAR")
-        || typeName.equals("TEXT")
-        || typeName.equals("STRING")) {
-      // TODO: Load max string information
+    } else if (typeName.equals("TEXT") || typeName.equals("STRING")) {
       columnDataType = BodoSQLColumnDataType.STRING;
+      // TEXT/STRING using no defined limit.
+      precision = -1;
+    } else if (typeName.startsWith("VARCHAR") || typeName.startsWith("CHAR")) {
+      columnDataType = BodoSQLColumnDataType.STRING;
+      // Load max string information if it exists
+      precision = -1;
+      String[] typeFields = typeName.split("\\(|\\)");
+      if (typeFields.length > 1) {
+        // The precision is passed as VARCHAR(N)/CHAR(N)
+        precision = Integer.valueOf(typeFields[1].trim());
+      }
     } else if (typeName.equals("DATE")) {
       columnDataType = BodoSQLColumnDataType.DATE;
     } else if (typeName.startsWith("DATETIME") || typeName.startsWith("TIMESTAMP_NTZ")) {
