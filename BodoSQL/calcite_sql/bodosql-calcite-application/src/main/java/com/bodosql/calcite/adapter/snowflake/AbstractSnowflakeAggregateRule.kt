@@ -44,11 +44,15 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
         private val SUPPORTED_AGGREGATES = setOf(
             SqlKind.COUNT,
             SqlKind.COUNTIF,
-            SqlKind.SUM,
-            SqlKind.SUM0,
             SqlKind.MIN,
             SqlKind.MAX,
-            SqlKind.AVG,
+            // We want to add these function, but until we add proper
+            // decimal support this will be problematic for large table as
+            // we won't be able to properly sample/infer the TYPEOF for the
+            // output.
+            // SqlKind.SUM,
+            // SqlKind.SUM0,
+            // SqlKind.AVG,
         )
 
         /**
