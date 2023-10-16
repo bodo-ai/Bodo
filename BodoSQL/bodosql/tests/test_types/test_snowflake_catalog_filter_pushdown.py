@@ -162,7 +162,7 @@ def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
         # Pushdown happens in the planner. Check the timer message instead.
         check_logger_msg(
             stream,
-            f'FROM "TEST_DB"."PUBLIC"."BODOSQL_ALL_SUPPORTED" WHERE COALESCE("MYCOL2", CURRENT_DATE) > DATE \'2022-01-01\'',
+            f'FROM "TEST_DB"."PUBLIC"."BODOSQL_ALL_SUPPORTED" WHERE COALESCE("MYCOL2", CURRENT_DATE) > $$2022-01-01$$',
         )
 
 
