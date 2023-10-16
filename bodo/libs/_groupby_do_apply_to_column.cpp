@@ -1176,6 +1176,42 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             }
             break;
         }
+        case Bodo_FTypes::min: {
+            // Datetime64 and Timedelta64 represent NA values in the array.
+            // We need to handle these the same as the nullable case where
+            // the result is initalized to NA. As a result we require an
+            // explicit check. For code quality/completeness we include the
+            // regular implementation even though it matches the default.
+            if (DType == Bodo_CTypes::DATETIME ||
+                DType == Bodo_CTypes::TIMEDELTA) {
+                for (size_t i = 0; i < in_col->length; i++) {
+                    int64_t i_grp = get_group_for_row(grp_info, i);
+                    if (i_grp != -1) {
+                        T& output_val = getv<T>(out_col, i_grp);
+                        if (isnan_alltype<T, DType>(output_val)) {
+                            // If the output is current NA assign to the first
+                            // value we see. This is because NaT is represented
+                            // as the minimum integer.
+                            output_val = getv<T>(in_col, i);
+                        } else {
+                            // Once the output has been initialized we can
+                            // actually compute min.
+                            aggfunc<T, DType, Bodo_FTypes::min>::apply(
+                                getv<T>(out_col, i_grp), getv<T>(in_col, i));
+                        }
+                    }
+                }
+            } else {
+                for (size_t i = 0; i < in_col->length; i++) {
+                    int64_t i_grp = get_group_for_row(grp_info, i);
+                    if (i_grp != -1) {
+                        aggfunc<T, DType, Bodo_FTypes::min>::apply(
+                            getv<T>(out_col, i_grp), getv<T>(in_col, i));
+                    }
+                }
+            }
+            break;
+        }
         default: {
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
