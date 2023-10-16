@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -439,15 +440,20 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     } else if (typeName.equals("TEXT") || typeName.equals("STRING")) {
       columnDataType = BodoSQLColumnDataType.STRING;
       // TEXT/STRING using no defined limit.
-      precision = -1;
+      precision = RelDataType.PRECISION_NOT_SPECIFIED;
     } else if (typeName.startsWith("VARCHAR") || typeName.startsWith("CHAR")) {
       columnDataType = BodoSQLColumnDataType.STRING;
       // Load max string information if it exists
-      precision = -1;
+      precision = RelDataType.PRECISION_NOT_SPECIFIED;
       String[] typeFields = typeName.split("\\(|\\)");
       if (typeFields.length > 1) {
         // The precision is passed as VARCHAR(N)/CHAR(N)
         precision = Integer.valueOf(typeFields[1].trim());
+        // If precision is the Snowflake max, convert it back to -1 to avoid
+        // max character issues.
+        if (precision == 16777216) {
+          precision = RelDataType.PRECISION_NOT_SPECIFIED;
+        }
       }
     } else if (typeName.equals("DATE")) {
       columnDataType = BodoSQLColumnDataType.DATE;
