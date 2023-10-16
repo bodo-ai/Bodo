@@ -162,6 +162,11 @@ public class StringFnCodeGen {
    */
   public static Expr generateConcatWSCode(
       Expr separator, List<Expr> operandsInfo, List<Pair<String, Expr>> streamingNamedArgs) {
+    if (operandsInfo.size() == 1) {
+      // If we only have a single argument don't emit any additional codegen - just pass along the
+      // input arg.
+      return operandsInfo.get(0);
+    }
     Expr.Tuple tupleArg = new Tuple(operandsInfo);
     return new Expr.Call(
         "bodo.libs.bodosql_array_kernels.concat_ws",

@@ -38,7 +38,6 @@ public final class StringOperatorTable implements SqlOperatorTable {
   }
 
   // TODO: Extend the Library Operator and use the builtin Libraries
-
   public static final SqlFunction CONCAT =
       new SqlFunction(
           "CONCAT",
@@ -46,12 +45,14 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // Concat sums together all input precision.
+          // DYADIC_STRING_SUM always expects at least two arguments, which means that we need
+          // special logic to handle the single argument version of CONCAT.
           BodoReturnTypes.CONCAT_RETURN_TYPE,
           // What should be used to infer operand types. We don't use
-          // this so we set it to None.
+          // this, so we set it to None.
           null,
           // What Input Types does the function accept. This function accepts a collection
-          OperandTypes.repeat(SqlOperandCountRanges.from(2), OperandTypes.STRING),
+          OperandTypes.repeat(SqlOperandCountRanges.from(1), OperandTypes.STRING),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
@@ -63,6 +64,9 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // Concat sums together all input precision and
           // includes the separator where appropriate.
+          // Unlike CONCAT, CONCAT_WS always takes at least two arguments - the separator and the
+          // variadic list of expressions. This means it's safe to always call DYADIC_STRING_SUM
+          // which expects at least 2 args.
           BodoReturnTypes.CONCAT_WS_RETURN_TYPE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
