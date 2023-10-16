@@ -10,8 +10,8 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
+import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
-import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
@@ -43,8 +43,8 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.ARG0_NULLABLE,
+          // Output precision cannot be statically determined.
+          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
           // What should be used to infer operand types. We don't use
           // this, so we set it to NULL.
           null,
@@ -68,8 +68,8 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.ARG0_NULLABLE,
+          // Output precision cannot be statically determined.
+          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
           // What should be used to infer operand types. We don't use
           // this, so we set it to NULL.
           null,
@@ -94,8 +94,8 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.ARG0_NULLABLE_VARYING,
+          // Output precision cannot be statically determined.
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this, so we set it to None.
           null,

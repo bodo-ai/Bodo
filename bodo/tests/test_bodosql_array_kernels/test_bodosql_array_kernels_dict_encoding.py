@@ -1572,7 +1572,7 @@ def test_dict_insert(args):
     verify_dictionary_optimization(impl, args, "str_capitalize", output_encoded)
 
 
-def test_dict_dayname():
+def test_dict_dayname(memory_leak_check):
     def impl(
         arr,
     ):
@@ -1588,21 +1588,21 @@ def test_dict_dayname():
         [
             None,
             None,
-            "FRIDAY",
-            "SATURDAY",
-            "SUNDAY",
-            "MONDAY",
-            "TUESDAY",
+            "FRI",
+            "SAT",
+            "SUN",
+            "MON",
+            "TUE",
             None,
             None,
             None,
-            "SATURDAY",
-            "SUNDAY",
-            "MONDAY",
-            "TUESDAY",
-            "WEDNESDAY",
-            "THURSDAY",
-            "FRIDAY",
+            "SAT",
+            "SUN",
+            "MON",
+            "TUE",
+            "WED",
+            "THU",
+            "FRI",
         ]
     )
 
@@ -1617,7 +1617,7 @@ def test_dict_dayname():
     verify_dictionary_optimization(impl, (arr,), "str_upper", True)
 
 
-def test_dict_monthname():
+def test_dict_monthname(memory_leak_check):
     def impl(
         arr,
     ):
@@ -1631,46 +1631,46 @@ def test_dict_monthname():
     )
     answer = pd.Series(
         [
-            "JANUARY",
+            "JAN",
             None,
-            "MARCH",
-            "APRIL",
+            "MAR",
+            "APR",
             "MAY",
-            "JULY",
-            "AUGUST",
-            "SEPTEMBER",
+            "JUL",
+            "AUG",
+            "SEP",
             None,
-            "NOVEMBER",
-            "JANUARY",
-            "FEBRUARY",
-            "MARCH",
-            "APRIL",
-            "JUNE",
+            "NOV",
+            "JAN",
+            "FEB",
+            "MAR",
+            "APR",
+            "JUN",
             None,
-            "AUGUST",
-            "SEPTEMBER",
-            "OCTOBER",
-            "DECEMBER",
-            "JANUARY",
-            "FEBRUARY",
+            "AUG",
+            "SEP",
+            "OCT",
+            "DEC",
+            "JAN",
+            "FEB",
             None,
             "MAY",
-            "JUNE",
-            "JULY",
-            "AUGUST",
-            "SEPTEMBER",
-            "NOVEMBER",
+            "JUN",
+            "JUL",
+            "AUG",
+            "SEP",
+            "NOV",
             None,
-            "JANUARY",
-            "FEBRUARY",
-            "MARCH",
+            "JAN",
+            "FEB",
+            "MAR",
             "MAY",
-            "JUNE",
-            "JULY",
+            "JUN",
+            "JUL",
             None,
-            "OCTOBER",
-            "NOVEMBER",
-            "DECEMBER",
+            "OCT",
+            "NOV",
+            "DEC",
         ]
     )
 

@@ -13,6 +13,7 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
+import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlOperandCountRanges;
@@ -44,7 +45,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
+          // Concat sums together all input precision.
           ReturnTypes.DYADIC_STRING_SUM_PRECISION_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
@@ -60,7 +61,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
+          // Concat sums together all input precision.
           ReturnTypes.DYADIC_STRING_SUM_PRECISION_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
@@ -75,8 +76,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.ARG0_NULLABLE,
+          // Match input precision. The substring is at most the same string.
+          ReturnTypes.ARG0_NULLABLE_VARYING,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -91,8 +92,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.ARG0_NULLABLE,
+          // Match input precision. The substring is at most the same string.
+          ReturnTypes.ARG0_NULLABLE_VARYING,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -128,8 +129,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.ARG0_NULLABLE,
+          // Match input precision. The substring is at most the same string.
+          ReturnTypes.ARG0_NULLABLE_VARYING,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -144,8 +145,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.ARG0_NULLABLE,
+          // Match input precision. The substring is at most the same string.
+          ReturnTypes.ARG0_NULLABLE_VARYING,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -160,8 +161,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.ARG0_NULLABLE,
+          // Repeat has an unknown static output precision.
+          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNKNOWN_PRECISION,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -208,8 +209,9 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // Return type has an unknown precision, but it should only be
+          // null if there is a null input.
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -320,8 +322,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // Char outputs a single character
+          BodoReturnTypes.VARCHAR_1_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -336,8 +338,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // Char outputs a single character
+          BodoReturnTypes.VARCHAR_1_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -369,7 +371,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -400,7 +402,11 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "INSERT",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.ARG0_NULLABLE,
+          // Snowflake calculates the resulting precision
+          // as 2 * arg0 + arg3. This seems like an error,
+          // as the max possible precision should be arg0 + arg3,
+          // but we will match Snowflake.
+          BodoReturnTypes.INSERT_RETURN_TYPE,
           null,
           OperandTypes.family(
               SqlTypeFamily.STRING,
@@ -431,7 +437,9 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "SPLIT_PART",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // The precision is the same as in the worst
+          // case we keep the same string.
+          ReturnTypes.ARG0_NULLABLE_VARYING,
           null,
           OperandTypes.STRING_STRING_INTEGER,
           SqlFunctionCategory.STRING);
@@ -440,7 +448,9 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "STRTOK",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // The precision is the same as in the worst
+          // case we keep the same string.
+          ReturnTypes.ARG0_NULLABLE_VARYING,
           null,
           OperandTypes.or(
               OperandTypes.STRING, OperandTypes.STRING_STRING, OperandTypes.STRING_STRING_INTEGER),
@@ -450,7 +460,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "LTRIM",
           SqlKind.OTHER,
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // Precision matches in the input.
+          ReturnTypes.ARG0_NULLABLE_VARYING,
           null,
           argumentRange(1, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
           SqlFunctionCategory.STRING);
@@ -459,7 +470,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "RTRIM",
           SqlKind.OTHER,
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // Precision matches in the input.
+          ReturnTypes.ARG0_NULLABLE_VARYING,
           null,
           argumentRange(1, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
           SqlFunctionCategory.STRING);
@@ -470,8 +482,9 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.DYADIC_STRING_SUM_PRECISION_NULLABLE,
+          // In the worst case we return the whole string,
+          // so maintain the precision.
+          ReturnTypes.ARG0_NULLABLE_VARYING,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -522,7 +535,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "REGEXP_REPLACE",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // Return string has an unknown precision.
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           null,
           argumentRange(
               2,
@@ -538,7 +552,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "REGEXP_SUBSTR",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // Match precision because this is a substring
+          ReturnTypes.ARG0_NULLABLE_VARYING,
           null,
           argumentRange(
               2,
@@ -571,7 +586,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "INITCAP",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // This is a mappable function so the precision is the same.
+          ReturnTypes.ARG0_NULLABLE,
           null,
           OperandTypes.or(OperandTypes.STRING, OperandTypes.STRING_STRING),
           SqlFunctionCategory.STRING);
@@ -598,7 +614,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "SHA2",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.VARCHAR_2000,
+          // SHA2 outputs at most 128 characters.
+          BodoReturnTypes.VARCHAR_128_NULLABLE,
           null,
           OperandTypes.or(OperandTypes.STRING, OperandTypes.STRING_INTEGER),
           SqlFunctionCategory.STRING);
@@ -607,7 +624,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "SHA2_HEX",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.VARCHAR_2000,
+          // SHA2 outputs at most 128 characters.
+          BodoReturnTypes.VARCHAR_128_NULLABLE,
           null,
           OperandTypes.or(OperandTypes.STRING, OperandTypes.STRING_INTEGER),
           SqlFunctionCategory.STRING);
@@ -616,7 +634,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "MD5",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.VARCHAR_2000,
+          // MD5 outputs at most 32 characters.
+          BodoReturnTypes.VARCHAR_32_NULLABLE,
           null,
           OperandTypes.STRING,
           SqlFunctionCategory.STRING);
@@ -625,7 +644,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "MD5_HEX",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.VARCHAR_2000,
+          // MD5 outputs at most 32 characters.
+          BodoReturnTypes.VARCHAR_32_NULLABLE,
           null,
           OperandTypes.STRING,
           SqlFunctionCategory.STRING);

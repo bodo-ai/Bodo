@@ -16,6 +16,7 @@ import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlRankFunction;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
+import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
@@ -85,11 +86,9 @@ public class CondOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-
-          // Return type needs to match arg1
-          // TODO: this currently fails when inputs are timestamp/str, need
-          // better restriction on input operands, see BS-581
-          ReturnTypes.ARG1_NULLABLE,
+          // The return type consists of the least restrictive of arguments 1 and 2
+          // and if either is null.
+          BodoReturnTypes.leastRestrictiveSubsetNullable(1, 3),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -106,11 +105,9 @@ public class CondOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-
-          // Return type needs to match arg1
-          // TODO: this currently fails when inputs are timestamp/str, need
-          // better restriction on input operands, see BS-581
-          ReturnTypes.ARG1_NULLABLE,
+          // The return type consists of the least restrictive of arguments 1 and 2
+          // and if either is null.
+          BodoReturnTypes.leastRestrictiveSubsetNullable(1, 3),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -191,7 +188,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // The output type is the same as the input type, but nullable
-          ReturnTypes.ARG0_NULLABLE,
+          ReturnTypes.ARG0_FORCE_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -226,10 +223,9 @@ public class CondOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // LEAST_RESTRICTIVE will cast the return type to the least restrictive union of the
-          // Three input types, and LEAST_NULLABLE will cast that type to a nullable type
-          // If both of the three inputs are a nullable type.
-          ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.LEAST_NULLABLE),
+          // The return type consists of the least restrictive of arguments 1 and 2
+          // and if either is null.
+          BodoReturnTypes.leastRestrictiveSubsetNullable(1, 3),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,

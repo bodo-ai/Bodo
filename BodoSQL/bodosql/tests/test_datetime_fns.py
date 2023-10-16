@@ -8,10 +8,7 @@ import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import (
-    check_query,
-    create_pyspark_schema_from_dataframe,
-)
+from bodosql.tests.utils import check_query
 
 import bodo
 from bodo.libs.bodosql_datetime_array_kernels import (
@@ -967,17 +964,23 @@ def test_tz_aware_microsecond_case(tz_aware_df, memory_leak_check):
     )
 
 
-def test_dayname_cols(spark_info, dt_fn_dataframe, memory_leak_check):
+def test_dayname_cols(dt_fn_dataframe, memory_leak_check):
     """tests the dayname function on column inputs. Needed since the equivalent function has different syntax"""
-    query = "SELECT DAYNAME(timestamps) from table1"
-    spark_query = "SELECT DATE_FORMAT(timestamps, 'EEEE') from table1"
+    query = "SELECT DAYNAME(timestamps) as OUTPUT from table1"
+    py_output = pd.DataFrame(
+        {
+            "OUTPUT": dt_fn_dataframe["table1"]["timestamps"].map(
+                lambda x: None if pd.isna(x) else x.day_name()[:3]
+            ),
+        }
+    )
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        expected_output=py_output,
     )
 
 
@@ -989,29 +992,31 @@ def test_dayname_cols(spark_info, dt_fn_dataframe, memory_leak_check):
         ("'2021-03-03'", "'2021-03-13'", "'2021-03-01'"),
     ],
 )
-def test_dayname_scalars(basic_df, date_literal_strings, spark_info, memory_leak_check):
+def test_dayname_scalars(basic_df, date_literal_strings, memory_leak_check):
     """tests the dayname function on scalar inputs. Needed since the equivalent function has different syntax"""
 
     # since dayname is a fn we defined, don't need to worry about calcite performing optimizations
     # Use basic_df so the input is expanded and we don't have to worry about empty arrays
     scalar1, scalar2, scalar3 = date_literal_strings
-    query = f"SELECT A, DAYNAME({scalar1}), DAYNAME({scalar2}), DAYNAME({scalar3}) from table1"
-    spark_query = "SELECT A, DATE_FORMAT('2021-03-03', 'EEEE'), DATE_FORMAT('2021-03-13', 'EEEE'), DATE_FORMAT('2021-03-01', 'EEEE') from table1"
+    query = f"SELECT A, DAYNAME({scalar1}) as B, DAYNAME({scalar2}) as C, DAYNAME({scalar3}) as D from table1"
+    py_output = pd.DataFrame(
+        {"A": basic_df["table1"]["A"], "B": "Wed", "C": "Sat", "D": "Mon"}
+    )
 
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        expected_output=py_output,
     )
 
 
 def test_dayname_date_cols(date_df, memory_leak_check):
     """tests the dayname function on column inputs of date objects."""
     query = "SELECT DAYNAME(A) from table1"
-    outputs = pd.DataFrame({"output": date_df["table1"]["A"].map(day_name_func)})
+    py_output = pd.DataFrame({"output": date_df["table1"]["A"].map(day_name_func)})
 
     check_query(
         query,
@@ -1019,7 +1024,7 @@ def test_dayname_date_cols(date_df, memory_leak_check):
         None,
         check_names=False,
         check_dtype=False,
-        expected_output=outputs,
+        expected_output=py_output,
     )
 
 
@@ -1027,29 +1032,29 @@ def day_name_func(date):
     if date is None:
         return None
     dows = [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun",
     ]
     return dows[date.weekday()]
 
 
-def test_dayname_date_scalars(basic_df, spark_info, memory_leak_check):
+def test_dayname_date_scalars(basic_df, memory_leak_check):
     """tests the dayname function on scalar inputs of date objects."""
 
     # since dayname is a fn we defined, don't need to worry about calcite performing optimizations
     # Use basic_df so the input is expanded and we don't have to worry about empty arrays
     query = f"SELECT DAYNAME(TO_DATE('2021-03-03')), DAYNAME(TO_DATE('2021-05-13')), DAYNAME(TO_DATE('2021-07-03'))"
-    outputs = pd.DataFrame({"A": ["Wednesday"], "B": ["Thursday"], "C": ["Saturday"]})
+    outputs = pd.DataFrame({"A": ["Wed"], "B": ["Thu"], "C": ["Sat"]})
 
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=outputs,
@@ -1060,48 +1065,47 @@ def test_dayname_date_scalars(basic_df, spark_info, memory_leak_check):
     "fn_name", ["MONTHNAME", pytest.param("MONTH_NAME", marks=pytest.mark.slow)]
 )
 @pytest.mark.parametrize("wrap_case", [True, False])
-def test_monthname_cols(
-    fn_name, wrap_case, spark_info, dt_fn_dataframe, memory_leak_check
-):
-    """tests the monthname function on column inputs. Needed since the equivalent function has different syntax"""
+def test_monthname_cols(fn_name, wrap_case, dt_fn_dataframe, memory_leak_check):
+    """tests the monthname function on column inputs."""
 
     if wrap_case:
-        query = f"SELECT CASE WHEN timestamps IS NULL THEN {fn_name}(timestamps) else {fn_name}(timestamps) END FROM table1"
+        query = f"SELECT CASE WHEN timestamps IS NULL THEN {fn_name}(timestamps) else {fn_name}(timestamps) END as output FROM table1"
     else:
-        query = f"SELECT {fn_name}(timestamps) from table1"
+        query = f"SELECT {fn_name}(timestamps) as output from table1"
 
-    spark_query = "SELECT DATE_FORMAT(timestamps, 'MMMM') from table1"
-
-    pyspark_schemas = {}
-    for table_name, df in dt_fn_dataframe.items():
-        pyspark_schemas[table_name] = create_pyspark_schema_from_dataframe(df)
+    py_output = pd.DataFrame(
+        {
+            "output": dt_fn_dataframe["table1"]["timestamps"].map(
+                lambda x: None if pd.isna(x) else x.month_name()[:3]
+            )
+        }
+    )
 
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
-        pyspark_schemas=pyspark_schemas,
+        expected_output=py_output,
     )
 
 
 @pytest.mark.parametrize("fn_name", ["MONTHNAME", "MONTH_NAME"])
-def test_monthname_scalars(fn_name, basic_df, spark_info, memory_leak_check):
-    """tests the monthname function on scalar inputs. Needed since the equivalent function has different syntax"""
+def test_monthname_scalars(fn_name, basic_df, memory_leak_check):
+    """tests the monthname function on scalar inputs"""
 
     # since monthname is a fn we defined, don't need to worry about calcite performing optimizations
-    query = f"SELECT {fn_name}(TIMESTAMP '2021-03-03'), {fn_name}(TIMESTAMP '2021-03-13'), {fn_name}(TIMESTAMP '2021-03-01')"
-    spark_query = "SELECT DATE_FORMAT('2021-03-03', 'MMMM'), DATE_FORMAT('2021-03-13', 'MMMM'), DATE_FORMAT('2021-03-01', 'MMMM')"
+    query = f"SELECT {fn_name}(TIMESTAMP '2021-03-03') as A, {fn_name}(TIMESTAMP '2021-05-13') as B, {fn_name}(TIMESTAMP '2021-10-01') as C"
+    py_output = pd.DataFrame({"A": ["Mar"], "B": ["May"], "C": ["Oct"]})
 
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        expected_output=py_output,
     )
 
 
@@ -1133,18 +1137,18 @@ def month_name_func(date):
     if date is None:
         return None
     mons = [
-        "January",
-        "February",
-        "March",
-        "April",
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
         "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
     ]
     return mons[date.month - 1]
 
@@ -1154,7 +1158,7 @@ def test_monthname_date_scalars(fn_name, basic_df, memory_leak_check):
     """tests the monthname function on scalar inputs of date objects."""
 
     query = f"SELECT {fn_name}(DATE '2021-03-03'), {fn_name}(DATE '2021-05-13'), {fn_name}(DATE '2021-07-01')"
-    outputs = pd.DataFrame({"A": ["March"], "B": ["May"], "C": ["July"]})
+    outputs = pd.DataFrame({"A": ["Mar"], "B": ["May"], "C": ["Jul"]})
 
     check_query(
         query,
@@ -3580,9 +3584,13 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
             "a": large_tz_df.A,
             "w": large_tz_df.A.dt.isocalendar().week,
             "q": large_tz_df.A.dt.quarter,
-            "d": large_tz_df.A.dt.day_name(),
-            "m": large_tz_df.A.dt.month_name(),
-            "m2": large_tz_df.A.dt.month_name(),
+            "d": large_tz_df.A.map(lambda x: None if pd.isna(x) else x.day_name()[:3]),
+            "m": large_tz_df.A.map(
+                lambda x: None if pd.isna(x) else x.month_name()[:3]
+            ),
+            "m2": large_tz_df.A.map(
+                lambda x: None if pd.isna(x) else x.month_name()[:3]
+            ),
         }
     )
     if case:
@@ -3618,7 +3626,7 @@ def test_tz_aware_dayof_fns(large_tz_df, case, memory_leak_check):
     1. SELECT A, DAYOFWEEK(A), ... from table1
     2. SELECT A, CASE WHEN B THEN DAYOFWEEK(A) ELSE NULL END, ... from table1
 
-    Note, the two DOY functions have the following correspondance to day anmes:
+    Note, the two DOY functions have the following correspondance to day names:
       DAYNAME  DAYOFWEEK DAYOFWEKISO
        Monday          1           1
       Tuesday          2           2

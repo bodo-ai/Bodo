@@ -17,6 +17,7 @@ import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
+import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlOperandTypeChecker;
@@ -131,8 +132,9 @@ public class CastingOperatorTable implements SqlOperatorTable {
           "TO_CHAR",
           // What SqlKind should match?
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // TO_CHAR only converts nullable types to NULL
+          // and has unknown precision
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -155,8 +157,9 @@ public class CastingOperatorTable implements SqlOperatorTable {
           "TO_VARCHAR",
           // What SqlKind should match?
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // TO_VARCHAR only converts nullable types to NULL
+          // and has unknown precision
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,

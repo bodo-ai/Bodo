@@ -1494,10 +1494,10 @@ numeric types
 
     This function differs from `PERCENTILE_CONT` in that it always outputs a
     value from the original array. The value it chooses is the smallest value
-    in `A` such that the `CUME_DIST` of all values in the column `A` is greater 
+    in `A` such that the `CUME_DIST` of all values in the column `A` is greater
     than or equal to `q`. For example, consider the dataset `[2, 8, 8, 40]`.
     The `CUME_DIST` of each of these values is `[0.25, 0.75, 0.75, 1.0]`.
-    If we sought the percentile `q=0.6` we would output 8 since it has the 
+    If we sought the percentile `q=0.6` we would output 8 since it has the
     smallest `CUME_DIST` that is `>=0.6`.
 
 #### VARIANCE
@@ -1529,7 +1529,7 @@ numeric types
 
 #### BITOR_AGG
 -   `#!sql BITOR_AGG`
-    
+
     Compute the bitwise OR of every input
     in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries.
     Accepts floating point values, integer values, and strings. Strings are interpreted
@@ -1842,11 +1842,11 @@ BodoSQL currently supports the following Timestamp functions:
     start/ends are always aligned to the unix epoch `1970-01-1` (at midnight). The fourth argument
     specifies whether to return the begining or the end of the slice
     (`'START'` for begining, `'END'` for end), where the default is `'START'`.
-    
+
     For example, `#!sql TIME_SLICE(T, 3, 'YEAR')` would return the timestamp
     corresponding to the begining of the first 3-year window (aligned with
     1970) that contains timestamp `T`. So `T = 1995-7-4 12:30:00` would
-    output `1994-1-1` for `'START'` or `1997-1-1` for `'END'`. 
+    output `1994-1-1` for `'START'` or `1997-1-1` for `'END'`.
 
 
 #### NOW
@@ -2006,17 +2006,17 @@ BodoSQL currently supports the following Timestamp functions:
 #### DAYNAME
 -   `#!sql DAYNAME(timestamp_val)`
 
-    Computes the string name of the day of the timestamp value.
+    Computes the 3 letter abreviation for the day of the timestamp value.
 
 #### MONTHNAME
 -   `#!sql MONTHNAME(timestamp_val)`
 
-    Computes the string name of the month of the timestamp value.
+    Computes the 3 letter abreviation for the month of the timestamp value.
 
 #### MONTH_NAME
 -   `#!sql MONTH_NAME(timestamp_val)`
 
-    Computes the string name of the month of the timestamp value.
+    Computes the 3 letter abreviation for the month of the timestamp value.
 
 #### TO_DAYS
 -   `#!sql TO_DAYS(timestamp_val)`
@@ -2992,7 +2992,7 @@ Currently, BodoSQL supports the following Window functions:
 
 #### BITOR_AGG
 -   `#!sql BITOR_AGG`
-    
+
     Outputs the bitwise OR of every input
     in the window, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
     Accepts floating point values, integer values, and strings. Strings are interpreted
@@ -3465,8 +3465,8 @@ BodoSQL currently supports the following casting/conversion functions:
     the following:
 
     - `#!sql TO_TIMESTAMP(date_expr)` upcasts a `DATE` to a `TIMESTAMP`.
-    - `#!sql TO_TIMESTAMP(integer)` creates a timestamp using the integer as the number of 
-    seconds/milliseconds/microseconds/nanoseconds since `1970-01-1`. Which unit it is interpreted 
+    - `#!sql TO_TIMESTAMP(integer)` creates a timestamp using the integer as the number of
+    seconds/milliseconds/microseconds/nanoseconds since `1970-01-1`. Which unit it is interpreted
     as depends on the magnitude of the number, in accordance with [the semantics used by Snowflake](https://docs.snowflake.com/en/sql-reference/functions/to_date#usage-notes).
     - `#!sql TO_TIMESTAMP(integer, scale)` the same as the integer case except that the scale provided specifes which
     unit is used. THe scale can be an integer constant between 0 and 9, where 0 means seconds and 9 means nanoseconds.
