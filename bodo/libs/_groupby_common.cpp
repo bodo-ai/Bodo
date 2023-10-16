@@ -281,6 +281,21 @@ void aggfunc_output_initialize_kernel(
                     return;
                 case Bodo_CTypes::DATETIME:
                 case Bodo_CTypes::TIMEDELTA:
+                    int64_t default_value;
+                    if (out_col->arr_type ==
+                        bodo_array_type::NULLABLE_INT_BOOL) {
+                        // Default to max to simplify compute for the nullable
+                        // version. Nulls are already tracked in the null
+                        // bitmap.
+                        default_value = std::numeric_limits<int64_t>::max();
+                    } else {
+                        // We must initialize to NaT for the numpy version.
+                        default_value = std::numeric_limits<int64_t>::min();
+                    }
+                    std::fill((int64_t*)out_col->data1() + start_row,
+                              (int64_t*)out_col->data1() + out_col->length,
+                              default_value);
+                    return;
                 // TODO: [BE-4106] Split Time into Time32 and Time64
                 case Bodo_CTypes::TIME:
                     std::fill((int64_t*)out_col->data1() + start_row,
