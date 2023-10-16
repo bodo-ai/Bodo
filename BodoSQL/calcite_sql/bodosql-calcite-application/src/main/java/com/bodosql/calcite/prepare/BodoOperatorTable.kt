@@ -11,6 +11,7 @@ import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.operatorTables.ThreeOperatorStringTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.google.common.collect.ImmutableList
+import org.apache.calcite.sql.`fun`.SqlAggOperatorTable
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.util.ChainedSqlOperatorTable
 
@@ -26,6 +27,7 @@ object BodoOperatorTable : ChainedSqlOperatorTable(
         ThreeOperatorStringTable.instance(),
         CastingOperatorTable.instance(),
         ArrayOperatorTable.instance(),
+        SqlAggOperatorTable.instance(),
         // Note: we put SqlStdOperatorTable last so we can override
         // any functions it provides.
         SqlStdOperatorTable.instance(),

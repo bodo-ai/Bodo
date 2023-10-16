@@ -13,6 +13,7 @@ import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.schema.Schema
 import org.apache.calcite.sql.SqlAggFunction
+import org.apache.calcite.sql.`fun`.SqlAggOperatorTable
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.ArraySqlType
 import org.apache.calcite.sql.type.MapSqlType
@@ -156,7 +157,7 @@ class ExpectedBatchingProperty {
             SqlStdOperatorTable.PERCENTILE_CONT.name,
             SqlStdOperatorTable.PERCENTILE_DISC.name,
             SqlStdOperatorTable.MODE.name,
-            SqlStdOperatorTable.LISTAGG.name,
+            SqlAggOperatorTable.LISTAGG.name,
             ArrayOperatorTable.ARRAY_AGG.name,
         )
 
