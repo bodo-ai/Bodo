@@ -489,6 +489,7 @@ def test_snowflake_runtime_upcasting_timestamp(memory_leak_check):
     #    NTZ_MILLI TIMESTAMP_NTZ(3) timestamp
     #    NTZ_MICRO TIMESTAMP_NTZ(6) timestamp
     #    NTZ_NANO TIMESTAMP_NTZ(9)  timestamp
+    # Bodo doesn't support TIMESTAMP_TZ
     #    TZ_SEC TIMESTAMP_TZ(0)     timestamptz
     #    TZ_MILLI TIMESTAMP_TZ(3)   timestamptz
     #    TZ_MICRO TIMESTAMP_TZ(6)   timestamptz
@@ -501,7 +502,7 @@ def test_snowflake_runtime_upcasting_timestamp(memory_leak_check):
     db = "TEST_DB"
     schema = "PUBLIC"
     conn = get_snowflake_connection_string(db, schema)
-    query = "SELECT LTZ_SEC, LTZ_MILLI, LTZ_MICRO, LTZ_NANO, NTZ_SEC, NTZ_MILLI, NTZ_MICRO, NTZ_NANO, TZ_SEC, TZ_MILLI, TZ_MICRO, TZ_NANO FROM TIMESTAMP_UNIT_TEST ORDER BY TIME_SEC"
+    query = "SELECT LTZ_SEC, LTZ_MILLI, LTZ_MICRO, LTZ_NANO, NTZ_SEC, NTZ_MILLI, NTZ_MICRO, NTZ_NANO FROM TIMESTAMP_UNIT_TEST ORDER BY TIME_SEC"
     check_func(impl, (query, conn), check_dtype=False)
 
 
@@ -1369,7 +1370,7 @@ def test_ts_col_date_scalar_filter_pushdown(memory_leak_check):
     Columns:
         date_col DATE
         tz_naive_col TIMESTAMP_NTZ
-        tz_aware_col TIMESTAMP_TZ
+        tz_aware_col TIMESTAMP_LTZ
     """
     comm = MPI.COMM_WORLD
 
@@ -1447,7 +1448,7 @@ def test_tz_aware_filter_pushdown(memory_leak_check):
     Columns:
         date_col DATE
         tz_naive_col TIMESTAMP_NTZ
-        tz_aware_col TIMESTAMP_TZ
+        tz_aware_col TIMESTAMP_LTZ
     """
     comm = MPI.COMM_WORLD
 
@@ -1465,7 +1466,7 @@ def test_tz_aware_filter_pushdown(memory_leak_check):
     py_output = None
     if bodo.get_rank() == 0:
         py_output = pd.read_sql(
-            "select date_col from TIMESTAMP_FILTER_TEST where tz_aware_col > '2022-04-06 19:00:00'::TIMESTAMP_TZ",
+            "select date_col from TIMESTAMP_FILTER_TEST where tz_aware_col > '2022-04-06 19:00:00'::TIMESTAMP_LTZ",
             conn,
         )["date_col"]
     py_output = comm.bcast(py_output)
@@ -1497,7 +1498,7 @@ def test_date_col_ts_scalar_filter_pushdown(memory_leak_check):
     Columns:
         date_col DATE
         tz_naive_col TIMESTAMP_NTZ
-        tz_aware_col TIMESTAMP_TZ
+        tz_aware_col TIMESTAMP_LTZ
     """
     comm = MPI.COMM_WORLD
 
@@ -1515,7 +1516,7 @@ def test_date_col_ts_scalar_filter_pushdown(memory_leak_check):
     py_output = None
     if bodo.get_rank() == 0:
         py_output = pd.read_sql(
-            "select tz_naive_col from TIMESTAMP_FILTER_TEST where date_col > '2022-04-06 19:00:00'::TIMESTAMP_TZ",
+            "select tz_naive_col from TIMESTAMP_FILTER_TEST where date_col > '2022-04-06 19:00:00'::TIMESTAMP_LTZ",
             conn,
         )["tz_naive_col"]
     py_output = comm.bcast(py_output)

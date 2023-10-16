@@ -76,7 +76,7 @@ def make_date_time_mode_test_params(name, format_str, is_slow):
 
     Args:
         name [string]: The name of this argument parameterization.
-        (e.g. "date" or "timestamp_tz")
+        (e.g. "date" or "timestamp_ltz")
         format_str [str]: A string with a format injection site {}
         designed so that if an integer were to be injected and the
         string were evaluated, it would produce a value of the desired
@@ -259,7 +259,7 @@ def make_string_mode_test_params(name, alphabet, is_dict, is_slow):
             False,
         ),
         make_date_time_mode_test_params(
-            "timestamp_tz",
+            "timestamp_ltz",
             "pd.Timestamp('1999-12-31', tz='US/Pacific') + pd.Timedelta(hours={})",
             False,
         ),

@@ -1027,7 +1027,6 @@ def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
             "DATE_COL": pd.date_range("2001-01-01", periods=df_len).date,
             # timedelta
             "TIMEDELTA_COL": pd.Series(pd.timedelta_range(start="1 day", periods=7)),
-            # TODO: timezone-aware (need support on pq_write to be per column)
             # string
             "STRING_COL": list_string,
         }
@@ -1162,6 +1161,15 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
                 bodo.Time(9),
                 bodo.Time(11, 19, 34),
             ],
+            "timestamp_ltz_col": [
+                pd.Timestamp("1999-12-15 11:03:40", tz="Asia/Dubai"),
+                pd.Timestamp("2002-11-06 17:00:00", tz="Asia/Dubai"),
+                pd.Timestamp("1924-09-16 03:20:00", tz="Asia/Dubai"),
+                pd.Timestamp("1994-01-01 02:03:04", tz="Asia/Dubai"),
+                pd.Timestamp("2020-12-26 03:50:30", tz="Asia/Dubai"),
+                pd.Timestamp("2022-11-06 22:00:50", tz="Asia/Dubai"),
+                pd.Timestamp("2023-10-06 13:30:00", tz="Asia/Dubai"),
+            ],
         }
     )
 
@@ -1290,7 +1298,6 @@ def test_snowflake_to_sql_bodo_datatypes_part3(memory_leak_check):
     assert n_passed == n_pes, "test_snowflake_to_sql_bodo_datatypes_part3 failed"
 
 
-# TODO: slow
 def test_snowflake_to_sql_nullarray(memory_leak_check):
     """Tests that df.to_sql works with NullArrayType."""
 
