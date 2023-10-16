@@ -92,11 +92,18 @@ def test_concat_operator_scalars(bodosql_string_types, spark_info, memory_leak_c
 
 def test_concat_fn_cols(bodosql_string_types, spark_info, memory_leak_check):
     """Checks that the concat function is working for columns"""
-    # Technically, in MYSQL, it's valid to pass only one arg to Concat
-    # However, defining a function that takes at least 1 string arguement seems to
-    # cause validateQuery in the RelationalAlgebraGenerator to throw an index out of
-    # bounds error and I don't think calling Concat on one string is a common use case
     query = "select CONCAT(A, B, 'scalar', C) from table1"
+    check_query(
+        query,
+        bodosql_string_types,
+        spark_info,
+        check_names=False,
+    )
+
+
+def test_concat_fn_single_arg(bodosql_string_types, spark_info, memory_leak_check):
+    """Checks that the concat function is working for a single argument"""
+    query = "select CONCAT(A) from table1"
     check_query(
         query,
         bodosql_string_types,
@@ -114,6 +121,19 @@ def test_concat_fn_scalars(bodosql_string_types, spark_info, memory_leak_check):
         bodosql_string_types,
         spark_info,
         check_names=False,
+    )
+
+
+def test_concat_ws_single_arg(bodosql_string_types, spark_info, memory_leak_check):
+    """Checks that the concat_ws function is working for a single argument"""
+    query = "select CONCAT_WS('_', A) from table1"
+    spark_query = "select CONCAT(A) from table1"
+    check_query(
+        query,
+        bodosql_string_types,
+        spark_info,
+        check_names=False,
+        equivalent_spark_query=spark_query,
     )
 
 
