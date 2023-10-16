@@ -3241,15 +3241,15 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         // Collecting the offsets data
         std::vector<offset_t> list_count_loc;
         list_count_loc.reserve(n_rows);
-        offset_t* offsets_i = (offset_t*)in_arr->data2();
+        offset_t* offsets_i = (offset_t*)in_arr->data1();
         for (int64_t pos = 0; pos < n_rows; pos++) {
             list_count_loc.push_back(offsets_i[pos + 1] - offsets_i[pos]);
         }
         std::vector<offset_t> list_count_tot(n_rows_tot);
-        MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
-        MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ32,
+        MPI_Datatype mpi_typ64 = get_MPI_typ(Bodo_CTypes::UINT64);
+        MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ64,
                        list_count_tot.data(), rows_counts.data(),
-                       rows_disps.data(), mpi_typ32, mpi_root, MPI_COMM_WORLD,
+                       rows_disps.data(), mpi_typ64, mpi_root, MPI_COMM_WORLD,
                        all_gather);
         // Gathering inner array
         if (myrank == mpi_root || all_gather) {
@@ -3257,7 +3257,7 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                 n_rows_tot,
                 gather_array(in_arr->child_arrays.front(), all_gather,
                              is_parallel, mpi_root, n_pes, myrank));
-            offset_t* offsets_o = (offset_t*)out_arr->data2();
+            offset_t* offsets_o = (offset_t*)out_arr->data1();
             offsets_o[0] = 0;
             for (int64_t pos = 0; pos < n_rows_tot; pos++) {
                 offsets_o[pos + 1] = offsets_o[pos] + list_count_tot[pos];
@@ -3286,6 +3286,10 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                              mpi_root, n_pes, myrank);
             }
         }
+    } else {
+        throw std::runtime_error(
+            "Unexpected array type in gather_array(). Array type: " +
+            GetArrType_as_string(arr_type));
     }
     if (arr_type == bodo_array_type::STRING ||
         arr_type == bodo_array_type::LIST_STRING ||
