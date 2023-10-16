@@ -1583,12 +1583,11 @@ def test_basic_write_upcasting(
     passed = comm.bcast(passed)
     assert passed == 1
 
-    # Read using Spark and then check that it's what's expected
-    spark.sql("CLEAR CACHE;")
-    spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
-
     spark_passed = 1
     if bodo.get_rank() == 0:
+        # Read using Spark and then check that it's what's expected
+        spark.sql("CLEAR CACHE;")
+        spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
         spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
         spark_passed = _test_equal_guard(
             expected_df,
@@ -1766,12 +1765,11 @@ def test_basic_write_downcasting(
     passed = comm.bcast(passed)
     assert passed == 1
 
-    # Read using Spark and then check that it's what's expected
-    spark.sql("CLEAR CACHE;")
-    spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
-
     spark_passed = 1
     if bodo.get_rank() == 0:
+        # Read using Spark and then check that it's what's expected
+        spark.sql("CLEAR CACHE;")
+        spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
         spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
         spark_passed = _test_equal_guard(
             expected_df,
@@ -2280,15 +2278,15 @@ def test_write_partitioned(
     passed = comm.bcast(passed)
     assert passed == 1, "Bodo read output doesn't match expected output"
 
-    # Validate Spark read output:
-    # We need to invalidate spark cache, because it doesn't realize
-    # that the table has been modified.
-    spark = get_spark()
-    spark.sql("CLEAR CACHE;")
-    spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
-
     passed = None
     if bodo.get_rank() == 0:
+        spark = get_spark()
+        spark.sql("CLEAR CACHE;")
+        spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
+        # Validate Spark read output:
+        # We need to invalidate spark cache, because it doesn't realize
+        # that the table has been modified.
+
         spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema, spark)
         # Spark doesn't handle null timestamps consistently. It converts them to
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies the
@@ -2409,15 +2407,14 @@ def test_write_sorted(
     passed = comm.bcast(passed)
     assert passed == 1, "Bodo read output doesn't match expected output"
 
-    # Validate Spark read output:
-    # We need to invalidate spark cache, because it doesn't realize
-    # that the table has been modified.
-    spark = get_spark()
-    spark.sql("CLEAR CACHE;")
-    spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
-
     passed = None
     if bodo.get_rank() == 0:
+        # Validate Spark read output:
+        # We need to invalidate spark cache, because it doesn't realize
+        # that the table has been modified.
+        spark = get_spark()
+        spark.sql("CLEAR CACHE;")
+        spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
         spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema, spark)
         # Spark doesn't handle null timestamps consistently. It sometimes converts them to
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies expected
@@ -2504,16 +2501,16 @@ def test_write_part_sort(
     # contents are as expected
     expected_df = pd.concat([df, df]).reset_index(drop=True)
 
-    # Validate Spark read output:
-    # We need to invalidate spark cache, because it doesn't realize
-    # that the table has been modified.
-    spark = get_spark()
-    spark.sql("CLEAR CACHE;")
-    spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
-
     passed = None
     comm = MPI.COMM_WORLD
     if bodo.get_rank() == 0:
+        # Validate Spark read output:
+        # We need to invalidate spark cache, because it doesn't realize
+        # that the table has been modified.
+        spark = get_spark()
+        spark.sql("CLEAR CACHE;")
+        spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
+
         spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema, spark)
         passed = _test_equal_guard(
             expected_df,
