@@ -29,7 +29,7 @@ public class CondOpCodeGen {
     equivalentFnMap.put("HASH", "bodo.libs.bodosql_array_kernels.sql_hash");
     equivalentFnMap.put("COALESCE", "bodo.libs.bodosql_array_kernels.coalesce");
     equivalentFnMap.put("NVL", "bodo.libs.bodosql_array_kernels.coalesce");
-    equivalentFnMap.put("NVL2", "bodo.libs.bodosql_array_kernels.coalesce");
+    equivalentFnMap.put("NVL2", "bodo.libs.bodosql_array_kernels.nvl2");
     equivalentFnMap.put("IFNULL", "bodo.libs.bodosql_array_kernels.coalesce");
     equivalentFnMap.put("ZEROIFNULL", "bodo.libs.bodosql_array_kernels.coalesce");
   }
