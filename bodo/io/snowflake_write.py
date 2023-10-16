@@ -458,7 +458,7 @@ def snowflake_writer_init(
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def snowflake_writer_append_table(
-    writer, table, col_names_meta, is_last, iter
+    writer, table, col_names_meta, is_last, iter, str_col_precisions_meta
 ):  # pragma: no cover
     if not isinstance(writer, SnowflakeWriterType):  # pragma: no cover
         raise BodoError(
@@ -493,11 +493,26 @@ def snowflake_writer_append_table(
         )
 
     col_names_arr = pd.array(col_names_meta.meta)
-    sf_schema = bodo.io.snowflake.gen_snowflake_schema(
-        col_names_meta.meta, table.arr_types
-    )
     n_cols = len(col_names_meta)
     py_table_typ = table
+
+    if str_col_precisions_meta == bodo.none:
+        str_col_precisions_tup = None
+    else:
+        str_col_precisions_tup = unwrap_typeref(str_col_precisions_meta).meta
+        if (
+            not isinstance(str_col_precisions_tup, tuple)
+            or len(str_col_precisions_tup) != n_cols
+            or any(not isinstance(elem, int) for elem in str_col_precisions_tup)
+        ):  # pragma: no cover
+            raise BodoError(
+                f"snowflake_writer_append_table: Expected col_precisions_meta "
+                f"to contain a tuple of {n_cols} precision values as integers"
+            )
+
+    sf_schema = bodo.io.snowflake.gen_snowflake_schema(
+        col_names_meta.meta, table.arr_types, str_col_precisions_tup
+    )
 
     # Use default number of iterations for sync if not specified by user
     sync_iters = (
@@ -510,7 +525,9 @@ def snowflake_writer_append_table(
     # This is because we only execute COPY INTO commands from rank 0, so
     # all ranks must finish writing their respective files to Snowflake
     # internal stage and sync with rank 0 before it issues COPY INTO.
-    def impl(writer, table, col_names_meta, is_last, iter):  # pragma: no cover
+    def impl(
+        writer, table, col_names_meta, is_last, iter, str_col_precisions_meta
+    ):  # pragma: no cover
         if writer["finished"]:
             return True
         ev = tracing.Event(

@@ -84,6 +84,7 @@ import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
@@ -935,12 +936,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param outputSchemaAsCatalog Catalog of Output Table
    * @param ifExists Action if Table Already Exists
    * @param createTableType Type of Table to Create
+   * @param columnPrecisions Name of the metatype tuple storing the precision of each column.
    */
   public void genStreamingTableCreate(
       PandasTableCreate node,
       CatalogSchemaImpl outputSchemaAsCatalog,
       BodoSQLCatalog.ifExistsBehavior ifExists,
-      SqlCreateTable.CreateTableType createTableType) {
+      SqlCreateTable.CreateTableType createTableType,
+      Expr columnPrecisions) {
     // Generate Streaming Code in this case
     // Get or create current streaming pipeline
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
@@ -991,7 +994,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             inTable,
             colNamesGlobal,
             currentPipeline.getExitCond(),
-            currentPipeline.getIterVar());
+            currentPipeline.getIterVar(),
+            columnPrecisions);
     this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
     currentPipeline.endSection(globalIsLast);
     timerInfo.insertLoopOperationEndTimer();
@@ -1028,7 +1032,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // No streaming or single batch case
     if (node.isStreaming()) {
-      genStreamingTableCreate(node, outputSchemaAsCatalog, ifExists, createTableType);
+      List<RelDataTypeField> columnTypes = node.getRowType().getFieldList();
+      List<Expr> precisions = new ArrayList<Expr>();
+      for (RelDataTypeField typ : columnTypes) {
+        precisions.add(new Expr.IntegerLiteral(typ.getType().getPrecision()));
+      }
+      Variable columnPrecisions = lowerAsMetaType(new Expr.Tuple(precisions));
+      genStreamingTableCreate(
+          node, outputSchemaAsCatalog, ifExists, createTableType, columnPrecisions);
     } else {
       genSingleBatchTableCreate(node, outputSchemaAsCatalog, ifExists, createTableType);
     }
@@ -1268,7 +1279,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             inputTable,
             colNamesGlobal,
             currentPipeline.getExitCond(),
-            currentPipeline.getIterVar());
+            currentPipeline.getIterVar(),
+            Expr.None.INSTANCE);
     this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
     currentPipeline.endSection(globalIsLast);
     timerInfo.insertLoopOperationEndTimer();

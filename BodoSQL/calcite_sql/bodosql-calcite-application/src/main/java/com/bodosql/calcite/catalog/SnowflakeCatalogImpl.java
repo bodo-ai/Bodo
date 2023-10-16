@@ -796,10 +796,17 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       Variable tableVarName,
       Variable colNamesGlobal,
       Variable isLastVarName,
-      Variable iterVarName) {
+      Variable iterVarName,
+      Expr columnPrecisions) {
     return new Expr.Call(
         "bodo.io.snowflake_write.snowflake_writer_append_table",
-        List.of(stateVarName, tableVarName, colNamesGlobal, isLastVarName, iterVarName));
+        List.of(
+            stateVarName,
+            tableVarName,
+            colNamesGlobal,
+            isLastVarName,
+            iterVarName,
+            columnPrecisions));
   }
 
   /**
