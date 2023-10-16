@@ -277,6 +277,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     }
     return weekStart;
   }
+
   /**
    * Get the Snowflake WEEK_OF_YEAR_POLICY session parameter and update the cached value.
    *
@@ -412,7 +413,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     BodoSQLColumnDataType elemType = BodoSQLColumnDataType.EMPTY;
     int precision = 0;
     if (typeName.startsWith("NUMBER")) {
-      // If we encounter a number type we need to parse it to determine the actual type.
+      // If we encounter a number type we need to parse it to determine the actual
+      // type.
       // The type information is of the form NUMBER(PRECISION, SCALE)
       String internalFields = typeName.split("\\(|\\)")[1];
       String[] numericParts = internalFields.split(",");
@@ -498,7 +500,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       // Snowflake treats these all internally as suggestions so we must use INT64
       columnDataType = BodoSQLColumnDataType.INT64;
     } else {
-      // Unsupported types (e.g. GEOGRAPHY and GEOMETRY) may be in the table but unused,
+      // Unsupported types (e.g. GEOGRAPHY and GEOMETRY) may be in the table but
+      // unused,
       // so we don't fail here.
       columnDataType = BodoSQLColumnDataType.UNSUPPORTED;
     }
@@ -519,7 +522,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       // Fetch the timezone info.
       BodoTZInfo tzInfo = getSnowflakeTimezone(shouldRetry);
       // Table metadata needs to be derived from describe table because some types
-      // aren't available via the JDBC connector. In particular Snowflake doesn't communicate
+      // aren't available via the JDBC connector. In particular Snowflake doesn't
+      // communicate
       // information about Variant, Array, or Object.
       ResultSet tableInfo =
           executeSnowflakeQuery(
@@ -662,7 +666,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         // Output in column 1
         String schemaNames = schemaInfo.getString(1);
         if (schemaNames != null) {
-          // schemaNames() returns a string in the form of '["BD.Scheam1", "DB.Schema2"...]'
+          // schemaNames() returns a string in the form of '["BD.Scheam1",
+          // "DB.Schema2"...]'
           // Do some simple regex to extract the schema names.
           Pattern pattern = Pattern.compile("\"" + catalogName + ".([^\"]*)\"");
           Matcher matcher = pattern.matcher(schemaNames);

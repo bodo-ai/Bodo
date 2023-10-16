@@ -237,11 +237,13 @@ def gen_snowflake_schema(
     for col_idx, (col_name, col_type) in enumerate(zip(column_names, column_datatypes)):
         if col_name == "":
             raise BodoError("Column name cannot be empty when writing to Snowflake.")
-        # TODO: differentiate between timezone aware or not types.
         # [BE-3587] need specific tz for each column type.
-        if isinstance(col_type, bodo.DatetimeArrayType) or (
-            col_type == bodo.datetime_datetime_type
-        ):
+        if isinstance(col_type, bodo.DatetimeArrayType):
+            if col_type.tz is not None:
+                sf_schema[col_name] = "TIMESTAMP_LTZ"
+            else:
+                sf_schema[col_name] = "TIMESTAMP_NTZ"
+        elif col_type == bodo.datetime_datetime_type:
             sf_schema[col_name] = "TIMESTAMP_NTZ"
         elif col_type == bodo.datetime_date_array_type:
             sf_schema[col_name] = "DATE"
@@ -1747,6 +1749,7 @@ def execute_copy_into(
         stage_name_with_dir = f'@"{stage_name}"/{stage_dir}/'
 
     # Execute copy_into command with files from all ranks
+    # TODO: FILE_FROMAT: USE_LOGICAL_TYPE=True for timezone
     copy_into_sql = (
         f"COPY INTO {location} ({columns}) "
         f"FROM (SELECT {parquet_columns} FROM {stage_name_with_dir}) "
@@ -1975,6 +1978,15 @@ def connect_and_get_upload_info(conn_str: str):  # pragma: no cover
     is True, use the PUT implementation by connecting to Snowflake on all ranks.
     This function exists to be executed within objmode from `DataFrame.to_sql()`
 
+    Note that we set the session timezone to UTC. This is because of a gap in
+    Snowflake's handling of timestamp types during parquet ingestion
+    (https://github.com/snowflakedb/snowflake-connector-python/issues/1687).
+    See comment in the code for more details.
+    This is safe since this Snowflake Connection object / cursor is only used
+    in the Snowflake write case. In the future, if we want to use a single
+    Snowflake connection for all commands in a SQL query (e.g. transactions),
+    this could be unsafe and needs to be revisited.
+
     Args
         conn_str: Snowflake connection URL string
 
@@ -2032,6 +2044,17 @@ def connect_and_get_upload_info(conn_str: str):  # pragma: no cover
             # Connect to snowflake
             conn = snowflake_connect(conn_str)
             cursor = conn.cursor()
+            # Temporary solution until `use_logical_type` is used
+            # (https://github.com/snowflakedb/snowflake-connector-python/issues/1687).
+            # Parquet converts Timezone-aware data to UTC (default behavior Bodo already has).
+            # Set Snowflake TIMEZONE Session to UTC before COPY INTO
+            # to avoid Snowflake from doing another conversion to UTC.
+            # Note that our parquet files do set `isAdjustedToUTC` to true for timestamp
+            # columns. It's just that Snowflake is not able to use this logical
+            # type information yet.
+            # See comment in [BSE-1476]
+            change_timezone_session_sql = "ALTER SESSION SET TIMEZONE = 'UTC'"
+            cursor.execute(change_timezone_session_sql).fetchall()
             # Avoid creating a temp stage at all in case of SF_WRITE_UPLOAD_USING_PUT
             is_temporary = not SF_WRITE_UPLOAD_USING_PUT
             stage_name = create_internal_stage(cursor, is_temporary=is_temporary)
