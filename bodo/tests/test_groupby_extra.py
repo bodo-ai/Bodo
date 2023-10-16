@@ -138,3 +138,26 @@ def test_groupby_window_all_dead():
         }
     )
     check_func(impl, (df,), py_output=8)
+
+
+@pytest.mark.slow
+def test_groupby_min_null_datetime_timedelta(memory_leak_check):
+    """
+    Tests groupby.min() with null datetime and timedelta arrays
+    """
+
+    def impl(df):
+        return df.groupby(["A"]).min()
+
+    df = pd.DataFrame(
+        {
+            "A": [
+                1,
+            ]
+            * 7,
+            "B": [pd.Timestamp(None)] * 7,
+            "C": [pd.Timedelta(None)] * 7,
+            "D": [pd.Timestamp(None, tz="US/Pacific")] * 7,
+        }
+    )
+    check_func(impl, (df,))
