@@ -453,7 +453,7 @@ def init_groupby_state(
 
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
-    n_build_arrs = output_type.num_build_input_arrs
+    n_build_arrs = len(build_arr_array_types)
 
     # convert function name strings to integer
     ftypes = []
