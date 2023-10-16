@@ -73,7 +73,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
         }
     }
 
-    protected fun extractNodes(call: RelOptRuleCall): Pair<Filter, SnowflakeRel> {
+    private fun extractNodes(call: RelOptRuleCall): Pair<Filter, SnowflakeRel> {
         return when (call.rels.size) {
             // Inputs are:
             // Filter ->
