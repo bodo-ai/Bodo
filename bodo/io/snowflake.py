@@ -216,20 +216,25 @@ def _import_snowflake_connector_logging() -> None:  # pragma: no cover
             logger.addHandler(ch)
 
 
-def gen_snowflake_schema(column_names, column_datatypes):  # pragma: no cover
+def gen_snowflake_schema(
+    column_names, column_datatypes, str_column_precisions=None
+):  # pragma: no cover
     """Generate a dictionary where column is key and
     its corresponding bodo->snowflake datatypes is value
 
     Args:
         column_names (array-like): Array of DataFrame column names
         column_datatypes (array-like): Array of DataFrame column datatypes
+        str_column_precisions (array-like, optional): Array of precision values for each column.
+        The values are only meaningful for string columns. A value of -1 means that the
+        precision is unknown so the maximum should be used.
 
     Returns:
         sf_schema (dict): {col_name : snowflake_datatype}
     Raises BodoError for unsupported datatypes when writing to snowflake.
     """
     sf_schema = {}
-    for col_name, col_type in zip(column_names, column_datatypes):
+    for col_idx, (col_name, col_type) in enumerate(zip(column_names, column_datatypes)):
         if col_name == "":
             raise BodoError("Column name cannot be empty when writing to Snowflake.")
         # TODO: differentiate between timezone aware or not types.
@@ -277,7 +282,10 @@ def gen_snowflake_schema(column_names, column_datatypes):  # pragma: no cover
             elif numpy_type.startswith(("float")):
                 sf_schema[col_name] = "REAL"
         elif is_str_arr_type(col_type):
-            sf_schema[col_name] = "TEXT"
+            if str_column_precisions is None or str_column_precisions[col_idx] < 0:
+                sf_schema[col_name] = "TEXT"
+            else:
+                sf_schema[col_name] = f"VARCHAR({str_column_precisions[col_idx]})"
         elif col_type == bodo.binary_array_type:
             sf_schema[col_name] = "BINARY"
         elif col_type == bodo.boolean_array_type:

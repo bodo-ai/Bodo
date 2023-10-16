@@ -221,7 +221,9 @@ def test_streaming_write(
                     )
 
                 t_writer_append = time.time()
-                snowflake_writer_append_table(writer, table, col_meta, all_is_last)
+                snowflake_writer_append_table(
+                    writer, table, col_meta, all_is_last, None
+                )
                 t_writer_append = time.time() - t_writer_append
                 if verbose and t_writer_append >= 5e-4:
                     print(

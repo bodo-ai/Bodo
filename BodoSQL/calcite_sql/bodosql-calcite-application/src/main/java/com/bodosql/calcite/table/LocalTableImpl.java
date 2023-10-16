@@ -143,7 +143,8 @@ public class LocalTableImpl extends BodoSqlTable {
       Variable dfVarName,
       Variable colNamesGlobal,
       Variable isLastVarName,
-      Variable iterVarName) {
+      Variable iterVarName,
+      Expr columnPrecisions) {
     throw new RuntimeException("Internal error: Streaming not supported for non-snowflake tables");
   }
 

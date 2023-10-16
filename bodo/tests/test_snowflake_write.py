@@ -1735,7 +1735,7 @@ def test_batched_write_agg(
                 table, is_last = read_arrow_next(reader0, True)
                 total0 += get_table_data(table, 1).sum()
                 all_is_last = snowflake_writer_append_table(
-                    writer, table, col_meta, is_last, iter_val
+                    writer, table, col_meta, is_last, iter_val, None
                 )
                 iter_val += 1
 
@@ -1802,3 +1802,68 @@ def test_batched_write_agg(
             )
             cursor_w.execute(cleanup_table_sql, _is_internal=True).fetchall()
             cursor_w.close()
+
+
+def test_write_with_string_precision(memory_leak_check):
+    """
+    Tests streaming write using string column precisions to specify the maximum
+    number of bytes for each column.
+    """
+    global_1 = bodo.utils.typing.ColNamesMetaType(("A", "B", "C"))
+    global_2 = bodo.utils.typing.MetaType((0, 1, 2))
+    global_3 = bodo.utils.typing.MetaType((8, -1, 3))
+    # Column B is written without any precision info, so we default to the maximum
+    expected_types = [
+        "VARCHAR(8)",
+        "VARCHAR(16777216)",
+        "VARCHAR(3)",
+    ]
+    snowflake_user = 1
+    conn = bodo.tests.utils.get_snowflake_connection_string(
+        "TEST_DB", "PUBLIC", user=snowflake_user
+    )
+    bodo_tablename = "BODO_TEST_SNOWFLAKE_WRITE_VARCHAR_PRECISION"
+    old_use_put = bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT
+    try:
+        bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = False
+        with ensure_clean_snowflake_table(conn, bodo_tablename) as table_name:
+
+            def impl(conn):
+                A1 = bodo.utils.conversion.make_replicated_array("ALPHABET", 50)
+                A2 = bodo.utils.conversion.make_replicated_array(
+                    "We Attack At Dawn", 50
+                )
+                A3 = bodo.utils.conversion.make_replicated_array("xyz", 50)
+                df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                    (A1, A2, A3),
+                    bodo.hiframes.pd_index_ext.init_range_index(0, 50, 1, None),
+                    global_1,
+                )
+                T = bodo.hiframes.table.logical_table_to_table(
+                    bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df),
+                    (),
+                    global_2,
+                    3,
+                )
+                writer = snowflake_writer_init(
+                    -1,
+                    conn,
+                    table_name,
+                    "PUBLIC",
+                    "replace",
+                    "",
+                )
+                all_is_last = False
+                iter_val = 0
+                while not all_is_last:
+                    all_is_last = snowflake_writer_append_table(
+                        writer, T, global_1, True, iter_val, global_3
+                    )
+                    iter_val += 1
+
+            bodo.jit(cache=False)(impl)(conn)
+            table_info = pd.read_sql(f"DESCRIBE TABLE {table_name}", conn)
+            # Column B was written without any precision info, so we default to the maximum
+            assert table_info["type"].to_list() == expected_types
+    finally:
+        bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_use_put
