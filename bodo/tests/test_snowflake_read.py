@@ -238,7 +238,9 @@ def test_array_metadata_handling_err(cursor):
     has multiple types that are incompatible
     """
 
-    with pytest.raises(BodoError, match="has multiple value types {'VARCHAR', 'DATE'}"):
+    with pytest.raises(
+        BodoError, match=r"has multiple value types \['DATE', 'VARCHAR'\]"
+    ):
         bodo.io.snowflake.get_schema_from_metadata(
             cursor,
             """
