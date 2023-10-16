@@ -446,7 +446,8 @@ std::unique_ptr<array_info> create_string_array(
 std::unique_ptr<array_info> create_list_string_array(
     bodo::vector<uint8_t> const& null_bitmap,
     bodo::vector<bodo::vector<std::pair<std::string, bool>>> const&
-        list_list_pair) {
+        list_list_pair,
+    bool use_arr_item_type) {
     size_t len = list_list_pair.size();
     // Determining the number of characters in output.
     size_t nb_string = 0;
@@ -471,12 +472,31 @@ std::unique_ptr<array_info> create_list_string_array(
     // dummy allocation).
 
     std::unique_ptr<array_info> new_out_col =
-        alloc_list_string_array(len, nb_string, nb_char, 0);
-    offset_t* index_offsets_o = (offset_t*)new_out_col->data3();
-    offset_t* data_offsets_o = (offset_t*)new_out_col->data2();
-    uint8_t* sub_null_bitmask_o = (uint8_t*)new_out_col->sub_null_bitmask();
+        use_arr_item_type
+            ? alloc_array_item(
+                  len, alloc_string_array(Bodo_CTypes::CTypeEnum::STRING,
+                                          nb_string, nb_char))
+            : alloc_list_string_array(len, nb_string, nb_char, 0);
+
+    offset_t* index_offsets_o;
+    offset_t* data_offsets_o;
+    uint8_t* sub_null_bitmask_o;
+    char* data_o;
+
+    if (use_arr_item_type) {
+        sub_null_bitmask_o =
+            (uint8_t*)new_out_col->child_arrays[0]->null_bitmask();
+        data_o = new_out_col->child_arrays[0]->data1();
+        data_offsets_o = (offset_t*)new_out_col->child_arrays[0]->data2();
+        index_offsets_o = (offset_t*)new_out_col->data1();
+    } else {
+        index_offsets_o = (offset_t*)new_out_col->data3();
+        data_offsets_o = (offset_t*)new_out_col->data2();
+        sub_null_bitmask_o = (uint8_t*)new_out_col->sub_null_bitmask();
+        data_o = new_out_col->data1();
+    }
+
     // Writing the list_strings in output
-    char* data_o = new_out_col->data1();
     data_offsets_o[0] = 0;
     offset_t pos_index = 0;
     offset_t pos_data = 0;

@@ -771,7 +771,7 @@ def get_list_type_from_metadata(
         raise BodoError(
             f"Snowflake Probe determined that Array Column {col_to_check} in query or table:\n"
             f"{sql_query}\n"
-            f"has multiple value types {value_types}. This indicated that {col_to_check} is either:\n"
+            f"has multiple value types {sorted(value_types)}. This indicated that {col_to_check} is either:\n"
             "  - A variant / union column with multiple datatypes\n"
             "  - A struct tuple column with a common schema across rows\n"
             "Bodo currently does not support either column types"

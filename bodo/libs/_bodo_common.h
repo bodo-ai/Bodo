@@ -1271,13 +1271,16 @@ std::unique_ptr<array_info> create_string_array(
  * @param list_list_pair The vector of list of strings. The list of strings
  * is a pair of string and a boolean. The boolean is true if the list entry is
  * null.
+ * @param use_arr_item_type Flag to indicate the output array should be
+ * ARRAY_ITEM type
  * @return std::shared_ptr<array_info> A list of strings type array info
  * constructed from the vector.
  */
 std::unique_ptr<array_info> create_list_string_array(
     bodo::vector<uint8_t> const& null_bitmap,
     bodo::vector<bodo::vector<std::pair<std::string, bool>>> const&
-        list_list_pair);
+        list_list_pair,
+    bool use_arr_item_type = false);
 
 /**
  * @brief Create a dict string array object from the underlying data array and

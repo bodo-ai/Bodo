@@ -162,17 +162,20 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
  * through each group to calculate the cumulative sums, and the intermediate
  * result for each row is stored in a temporary vector null_bit_val_vec.
  *
- * @param[in] arr: input array, list of string array
+ * @param[in]  arr: input array, list of string array
  * @param[out] out_arr: output array, list of string array
- * @param[in] grp_info: groupby information
- * @param[in] ftype: for list of strings only cumsum is supported
- * @param[in] skipna: Whether to skip NA values.
+ * @param[in]  grp_info: groupby information
+ * @param[in]  ftype: for list of strings only cumsum is supported
+ * @param[in]  skipna: Whether to skip NA values.
+ * @param[in]  use_arr_item: Whether input and output should be ARRAY_ITEM or
+ * LIST_STRING
  */
 void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
                                         std::shared_ptr<array_info> out_arr,
                                         grouping_info const& grp_info,
                                         int32_t const& ftype,
-                                        bool const& skipna) {
+                                        bool const& skipna,
+                                        bool use_arr_item = false) {
     if (ftype != Bodo_FTypes::cumsum) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "So far only cumulative sums for list-strings");
@@ -181,10 +184,24 @@ void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
     using T = std::pair<bool, bodo::vector<std::pair<std::string, bool>>>;
     bodo::vector<T> null_bit_val_vec(n);
     uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask();
-    uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask();
-    char* data = arr->data1();
-    offset_t* data_offsets = (offset_t*)arr->data2();
-    offset_t* index_offsets = (offset_t*)arr->data3();
+
+    uint8_t* sub_null_bitmask;
+    char* data;
+    offset_t* data_offsets;
+    offset_t* index_offsets;
+
+    if (arr->arr_type == bodo_array_type::LIST_STRING) {
+        sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask();
+        data = arr->data1();
+        data_offsets = (offset_t*)arr->data2();
+        index_offsets = (offset_t*)arr->data3();
+    } else {
+        sub_null_bitmask = (uint8_t*)arr->child_arrays[0]->null_bitmask();
+        data = arr->child_arrays[0]->data1();
+        data_offsets = (offset_t*)arr->child_arrays[0]->data2();
+        index_offsets = (offset_t*)arr->data1();
+    }
+
     auto get_entry = [&](int64_t i) -> T {
         bool isna = !GetBit(null_bitmask, i);
         offset_t start_idx_offset = index_offsets[i];
@@ -237,7 +254,7 @@ void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
         ListListPair[i] = null_bit_val_vec[i].second;
     }
     std::shared_ptr<array_info> new_out_col =
-        create_list_string_array(Vmask, ListListPair);
+        create_list_string_array(Vmask, ListListPair, use_arr_item);
     *out_arr = std::move(*new_out_col);
 }
 
@@ -424,11 +441,15 @@ void cumulative_computation(std::shared_ptr<array_info> arr,
     } else if (arr->arr_type == bodo_array_type::DICT) {
         return cumulative_computation_dict_encoded_string(
             arr, out_arr, grp_info, ftype, skipna, pool, std::move(mm));
-    } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
+
+    } else if (arr->arr_type == bodo_array_type::LIST_STRING ||
+               (arr->arr_type == bodo_array_type::ARRAY_ITEM &&
+                arr->child_arrays[0]->arr_type == bodo_array_type::STRING)) {
         // We don't support LIST_STRING in streaming yet, so we don't
         // need to pass the Op-Pool here.
-        return cumulative_computation_list_string(arr, out_arr, grp_info, ftype,
-                                                  skipna);
+        return cumulative_computation_list_string(
+            arr, out_arr, grp_info, ftype, skipna,
+            !(arr->arr_type == bodo_array_type::LIST_STRING));
     } else {
         switch (dtype) {
             case Bodo_CTypes::INT8:
