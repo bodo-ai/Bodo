@@ -168,6 +168,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   protected final @Nullable Integer weekStart;
 
   protected final @Nullable Integer weekOfYearPolicy;
+  protected final @Nullable String currentDatabase;
 
   public RexToPandasTranslator(
       @NotNull PandasCodeGenVisitor visitor,
@@ -186,9 +187,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     if (this.typeSystem instanceof BodoSQLRelDataTypeSystem) {
       this.weekStart = ((BodoSQLRelDataTypeSystem) this.typeSystem).getWeekStart();
       this.weekOfYearPolicy = ((BodoSQLRelDataTypeSystem) this.typeSystem).getWeekOfYearPolicy();
+      this.currentDatabase = ((BodoSQLRelDataTypeSystem) this.typeSystem).getCatalogName();
     } else {
       this.weekStart = 0;
       this.weekOfYearPolicy = 0;
+      this.currentDatabase = null;
     }
   }
 
@@ -1234,6 +1237,13 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         systemCall =
             generateCurrentDateCode(BodoTZInfo.getDefaultTZInfo(this.typeSystem), makeConsistent);
         break;
+      case "CURRENT_DATABASE":
+        if (this.currentDatabase != null) {
+          systemCall = new Expr.StringLiteral(this.currentDatabase);
+        } else {
+          throw new BodoSQLCodegenException("No information about current database is found.");
+        }
+        break;
       default:
         throw new BodoSQLCodegenException(
             String.format(Locale.ROOT, "Unsupported System function: %s", fnName));
@@ -1590,6 +1600,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "UTC_TIMESTAMP":
           case "UTC_DATE":
           case "CURRENT_DATE":
+          case "CURRENT_DATABASE":
           case "CURDATE":
             assert operands.size() == 0;
             return visitGeneralContextFunction(fnOperation);

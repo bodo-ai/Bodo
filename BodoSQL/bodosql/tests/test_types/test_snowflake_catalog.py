@@ -2546,3 +2546,26 @@ def test_hidden_credentials(snowflake_sample_data_snowflake_catalog, memory_leak
     assert snowflake_sample_data_snowflake_catalog.username not in code
     assert snowflake_sample_data_snowflake_catalog.password not in code
     assert snowflake_sample_data_snowflake_catalog.account not in code
+
+
+def test_current_database(snowflake_sample_data_snowflake_catalog, memory_leak_check):
+    """Test current_database()"""
+
+    def impl(bc):
+        return bc.sql("select current_database()")
+
+    df1 = pd.DataFrame({"EXPR$0": ["SNOWFLAKE_SAMPLE_DATA"]})
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
+    check_func(impl, (bc,), py_output=df1)
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "TEST_DB",
+        connection_params={"schema": "PUBLIC"},
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    df2 = pd.DataFrame({"EXPR$0": ["TEST_DB"]})
+    check_func(impl, (bc,), py_output=df2)

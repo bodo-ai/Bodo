@@ -3,6 +3,7 @@ package com.bodosql.calcite.prepare
 import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
+import com.bodosql.calcite.application.operatorTables.ContextOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
@@ -27,6 +28,7 @@ object BodoOperatorTable : ChainedSqlOperatorTable(
         ThreeOperatorStringTable.instance(),
         CastingOperatorTable.instance(),
         ArrayOperatorTable.instance(),
+        ContextOperatorTable.instance(),
         SqlAggOperatorTable.instance(),
         // Note: we put SqlStdOperatorTable last so we can override
         // any functions it provides.
