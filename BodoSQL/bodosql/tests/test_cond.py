@@ -299,9 +299,9 @@ def test_coalesce_variable_type_scalars(
 
 
 def test_nvl2(spark_info, memory_leak_check):
-    """Tests NVL2 (coalesce/NVL but with 3 args)"""
+    """Tests NVL2 (equivalent to IF(A IS NOT NULL, B, C)"""
     query = "SELECT NVL2(A+B, B+C, C+A) from table1"
-    spark_query = "SELECT COALESCE(A+B, B+C, C+A) from table1"
+    spark_query = "SELECT IF((A+B) IS NOT NULL, B+C, C+A) from table1"
     ctx = {
         "table1": pd.DataFrame(
             {

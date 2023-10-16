@@ -100,6 +100,25 @@ def cond(arr, ifbranch, elsebranch):
 
 
 @numba.generated_jit(nopython=True)
+def nvl2(arr, not_null_branch, null_branch):
+    """Handles cases where NVL2 receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [arr, not_null_branch, null_branch]
+    for i in range(3):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.nvl2",
+                ["arr", "not_null_branch", "null_branch"],
+                i,
+            )
+
+    def impl(arr, not_null_branch, null_branch):  # pragma: no cover
+        return nvl2_util(arr, not_null_branch, null_branch)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def equal_null(A, B, dict_encoding_state=None, func_id=-1):
     """Handles cases where EQUAL_NULL receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -486,6 +505,76 @@ def cond_util(arr, ifbranch, elsebranch):
 
     # Get the common dtype from the two branches
     out_dtype = get_common_broadcasted_type([ifbranch, elsebranch], "IF")
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def nvl2_util(arr, not_null_branch, null_branch):
+    """A dedicated kernel for the SQL function NVL2 which is equivalent
+    cases on whether the first argument is null to return the second
+    argument (if not null) or the third argument (if null)
+
+
+    Args:
+        arr (boolean array/series/scalar): the value(s) having nulls checked
+        not_null_branch (any array/series/scalar): the value(s) to return when arr is not null
+        null_branch (any array/series/scalar): the value(s) to return when arr is null
+
+    Returns:
+        any series/scalar: the selected values from the branch arguments
+    """
+
+    arg_names = ["arr", "not_null_branch", "null_branch"]
+    arg_types = [arr, not_null_branch, null_branch]
+    propagate_null = [False] * 3
+
+    if bodo.utils.utils.is_array_typ(arr, True):
+        # Both branches cannot be scalar nulls if the output is an array
+        # (causes a typing ambiguity)
+        if (
+            bodo.utils.utils.is_array_typ(arr, True)
+            and not_null_branch == bodo.none
+            and null_branch == bodo.none
+        ):  # pragma: no cover
+            raise_bodo_error("Both branches of NVL2() cannot be scalar NULL")
+
+        scalar_text = "if not bodo.libs.array_kernels.isna(arr, i):\n"
+        if bodo.utils.utils.is_array_typ(not_null_branch, True):
+            scalar_text += "  if bodo.libs.array_kernels.isna(not_null_branch, i):\n"
+            scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "  else:\n"
+            scalar_text += "    res[i] = arg1\n"
+        elif not_null_branch == bodo.none:
+            scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
+        else:
+            scalar_text += "    res[i] = arg1\n"
+        scalar_text += "else:\n"
+        if bodo.utils.utils.is_array_typ(null_branch, True):
+            scalar_text += "  if bodo.libs.array_kernels.isna(null_branch, i):\n"
+            scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "  else:\n"
+            scalar_text += "    res[i] = arg2\n"
+        elif null_branch == bodo.none:
+            scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
+        else:
+            scalar_text += "    res[i] = arg2\n"
+    else:
+        # If the first argument is a scalar, either always return
+        # the second argument or always return the third argument.
+        if arr == bodo.none:
+            scalar_text = "res[i] = arg2"
+        else:
+            scalar_text = "res[i] = arg1"
+
+    # Get the common dtype from the two branches
+    out_dtype = get_common_broadcasted_type([not_null_branch, null_branch], "NVL2")
 
     return gen_vectorized(
         arg_names,

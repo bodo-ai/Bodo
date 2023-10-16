@@ -838,6 +838,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "BOOLAND":
       case "BOOLOR":
       case "BOOLXOR":
+      case "NVL2":
         result = getCondFuncCode(fnName, codeExprs);
         break;
       case "EQUAL_NULL":
@@ -847,7 +848,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "ZEROIFNULL":
       case "IFNULL":
       case "NVL":
-      case "NVL2":
       case "DECODE":
         result = visitVariadic(fnName, codeExprs, streamingNamedArgs);
         break;

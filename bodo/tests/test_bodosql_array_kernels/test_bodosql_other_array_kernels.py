@@ -316,6 +316,124 @@ def test_cond(args, memory_leak_check):
     [
         pytest.param(
             (
+                pd.Series([1, None, 3, None, 5, None, 7], dtype=pd.Int32Dtype()),
+                pd.Series([1, 2, 3, 4, None, None, None], dtype=pd.Int8Dtype()),
+                pd.Series([None, None, None, 50, 60, 70, 80], dtype=pd.UInt32Dtype()),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series([1, None, 3, None, 5, None, 7], dtype=pd.Int32Dtype()),
+                pd.Series(list("ABCDEFG")),
+                "",
+            ),
+            id="vector_vector_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([0.5, None, 1.0, None, 2.0, None, 3.0]),
+                False,
+                pd.Series(
+                    [True, False, None, True, False, None, True],
+                    dtype=pd.BooleanDtype(),
+                ),
+            ),
+            id="vector_scalar_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (pd.Series(["", None, "AB", None, "alphabet"]), 1.0, -1.0),
+            id="vector_scalar_scalar",
+        ),
+        pytest.param(
+            (
+                pd.Series([1, 2, 3, 4, None, None, None], dtype=pd.Int32Dtype()),
+                pd.Series([1, None, 3, None, 5, None, 7], dtype=pd.Int32Dtype()),
+                None,
+            ),
+            id="vector_vector_null",
+        ),
+        pytest.param(
+            (
+                pd.Series(["A", None, "B", None, "C", None, "D", None, "E"]),
+                None,
+                128,
+            ),
+            id="vector_null_scalar",
+        ),
+        pytest.param(
+            (0.5, "A", "B"),
+            id="all_scalar",
+        ),
+        pytest.param(
+            (10, None, 16),
+            id="scalar_null_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            ("foo", 13, None),
+            id="scalar_scalar_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (True, None, None),
+            id="scalar_null_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (None, 10, 20),
+            id="null_scalar_scalar",
+        ),
+        pytest.param(
+            (None, None, 0.5),
+            id="null_null_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (None, False, None),
+            id="null_scalar_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (None, None, None),
+            id="all_null",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_nvl2(args, memory_leak_check):
+    def impl(arr, not_null_branch, null_branch):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.nvl2(arr, not_null_branch, null_branch)
+        )
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda arr, not_null_branch, null_branch: bodo.libs.bodosql_array_kernels.nvl2(
+            arr, not_null_branch, null_branch
+        )
+
+    # Simulates NVL2 on a single row
+    def nvl2_scalar_fn(arr, not_null_branch, null_branch):
+        return not_null_branch if (not pd.isna(arr)) else null_branch
+
+    nvl2_answer = vectorized_sol(args, nvl2_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=nvl2_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
                 pd.Series([0, 42, None] * 3, dtype=pd.Int32Dtype()),
                 pd.Series(
                     [0, 0, 0, 42, 42, 42, None, None, None], dtype=pd.Int32Dtype()
