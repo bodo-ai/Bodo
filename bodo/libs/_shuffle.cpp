@@ -2450,27 +2450,24 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
             // in_arr <- indices array, to simplify code below
             in_arr = in_arr->child_arrays[1];
             arr_type = in_arr->arr_type;
-
-        } else {
-            if (arr_type == bodo_array_type::NUMPY ||
-                arr_type == bodo_array_type::CATEGORICAL ||
-                arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                out_arr = reverse_shuffle_data_array(in_arr, hashes, comm_info);
-            }
-            if (arr_type == bodo_array_type::STRING) {
-                out_arr =
-                    reverse_shuffle_string_array(in_arr, hashes, comm_info);
-            }
-            if (arr_type == bodo_array_type::LIST_STRING) {
-                out_arr = reverse_shuffle_list_string_array(in_arr, hashes,
-                                                            comm_info);
-            }
-            if (arr_type == bodo_array_type::STRING ||
-                arr_type == bodo_array_type::LIST_STRING ||
-                arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                reverse_shuffle_null_bitmap_array(in_arr, out_arr, hashes,
-                                                  comm_info);
-            }
+        }
+        if (arr_type == bodo_array_type::NUMPY ||
+            arr_type == bodo_array_type::CATEGORICAL ||
+            arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            out_arr = reverse_shuffle_data_array(in_arr, hashes, comm_info);
+        }
+        if (arr_type == bodo_array_type::STRING) {
+            out_arr = reverse_shuffle_string_array(in_arr, hashes, comm_info);
+        }
+        if (arr_type == bodo_array_type::LIST_STRING) {
+            out_arr =
+                reverse_shuffle_list_string_array(in_arr, hashes, comm_info);
+        }
+        if (arr_type == bodo_array_type::STRING ||
+            arr_type == bodo_array_type::LIST_STRING ||
+            arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            reverse_shuffle_null_bitmap_array(in_arr, out_arr, hashes,
+                                              comm_info);
         }
         if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i];
