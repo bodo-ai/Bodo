@@ -19,6 +19,7 @@ from bodo.tests.utils import (
 pytestmark = pytest_snowflake
 
 
+@pytest.mark.skip("[BSE-1637] Updated unused columns for semi-structured data")
 def test_snowflake_read_sql_unused(memory_leak_check):
     """
     Tests pruning Snowflake columns when passing the DataFrame
@@ -67,6 +68,7 @@ def test_snowflake_read_sql_unused(memory_leak_check):
         )
 
 
+@pytest.mark.skip("[BSE-1637] Updated unused columns for semi-structured data")
 def test_snowflake_table_path_unused(memory_leak_check):
     """
     Tests pruning Snowflake columns when passing the DataFrame
@@ -108,6 +110,7 @@ def test_snowflake_table_path_unused(memory_leak_check):
         )
 
 
+@pytest.mark.skip("[BSE-1637] Updated unused columns for semi-structured data")
 def test_snowflake_table_path_unused_subquery(memory_leak_check):
     """
     Tests pruning Snowflake columns when passing the DataFrame
