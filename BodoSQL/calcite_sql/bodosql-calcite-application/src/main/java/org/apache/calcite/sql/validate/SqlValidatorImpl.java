@@ -87,6 +87,7 @@ import org.apache.calcite.sql.SqlWith;
 import org.apache.calcite.sql.SqlWithItem;
 import org.apache.calcite.sql.TableCharacteristic;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
+import org.apache.calcite.sql.fun.SqlAggOperatorTable;
 import org.apache.calcite.sql.fun.SqlCase;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
@@ -1496,7 +1497,9 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
         opTab.lookupOperatorOverloads(function.getNameAsId(),
             function.getFunctionType(), SqlSyntax.FUNCTION, overloads,
             catalogReader.nameMatcher());
-        if (overloads.size() == 1) {
+        // Bodo Change: HardCode on LISTAGG to avoid copying the operator table.
+        // We don't seem to be able to overload this like regular functions.
+        if (overloads.size() == 1 || (overloads.size() == 2 && function.getName().toUpperCase(Locale.ROOT).equals(SqlAggOperatorTable.LISTAGG.getName()))) {
           ((SqlBasicCall) call).setOperator(overloads.get(0));
         }
       }

@@ -145,6 +145,7 @@ import org.apache.calcite.sql.SqlWindow;
 import org.apache.calcite.sql.SqlWith;
 import org.apache.calcite.sql.SqlWithItem;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
+import org.apache.calcite.sql.fun.SqlAggOperatorTable;
 import org.apache.calcite.sql.fun.SqlCase;
 import org.apache.calcite.sql.fun.SqlInOperator;
 import org.apache.calcite.sql.fun.SqlQuantifyOperator;
@@ -7031,7 +7032,7 @@ public class SqlToRelConverter {
           operands2 = operands;
         }
         call2 =
-            SqlStdOperatorTable.LISTAGG.createCall(
+            SqlAggOperatorTable.LISTAGG.createCall(
                 call.getFunctionQuantifier(), pos, operands2);
         translateAgg(call2, filter, distinctList, orderList, ignoreNulls,
             outerCall);
@@ -7062,7 +7063,7 @@ public class SqlToRelConverter {
         }
 
         call2 =
-            SqlStdOperatorTable.LISTAGG.createCall(
+            SqlAggOperatorTable.LISTAGG.createCall(
                 call.getFunctionQuantifier(), pos, operands2);
         translateAgg(call2, filter, distinctList, orderList, ignoreNulls,
             outerCall);
