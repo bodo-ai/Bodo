@@ -1159,7 +1159,7 @@ def datetime_dates_scalar_vector(request):
     """A fixture of either a single timestamp, or a series of timestamps from
     various year/month ranges with some nulls inserted. Uses pd.Series on
     concatenated lists instead of pd.concat since the date_range outputs
-    a DatetimeIndex with a potentially inconvenient dtype when combinined."""
+    a DatetimeIndex with a potentially inconvenient dtype when combined."""
     return request.param
 
 
@@ -1176,7 +1176,7 @@ def test_dayname(dates_scalar_vector, memory_leak_check):
         if pd.isna(elem):
             return None
         else:
-            return elem.day_name()
+            return elem.day_name()[:3]
 
     dayname_answer = vectorized_sol((dates_scalar_vector,), dayname_scalar_fn, None)
     check_func(
@@ -1206,13 +1206,13 @@ def test_dayname_date(datetime_dates_scalar_vector, memory_leak_check):
             return None
         else:
             dows = (
-                "Monday",
-                "Tuesday",
-                "Wednesday",
-                "Thursday",
-                "Friday",
-                "Saturday",
-                "Sunday",
+                "Mon",
+                "Tue",
+                "Wed",
+                "Thu",
+                "Fri",
+                "Sat",
+                "Sun",
             )
             return dows[elem.weekday()]
 
@@ -1746,7 +1746,7 @@ def test_monthname(dates_scalar_vector, memory_leak_check):
         if pd.isna(elem):
             return None
         else:
-            return elem.month_name()
+            return elem.month_name()[:3]
 
     monthname_answer = vectorized_sol((dates_scalar_vector,), monthname_scalar_fn, None)
     check_func(
@@ -1767,18 +1767,18 @@ def test_monthname_date(datetime_dates_scalar_vector, memory_leak_check):
         impl = lambda arr: bodo.libs.bodosql_array_kernels.monthname(arr)
 
     mons = [
-        "January",
-        "February",
-        "March",
-        "April",
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
         "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
     ]
 
     # Simulates MONTHNAME on a single row
@@ -2923,8 +2923,8 @@ def test_calendar_optional(memory_leak_check):
     for flag0 in [True, False]:
         for flag1 in [True, False]:
             for flag2 in [True, False]:
-                a1 = "Sunday" if flag0 else None
-                a2 = "April" if flag0 else None
+                a1 = "Sun" if flag0 else None
+                a2 = "Apr" if flag0 else None
                 a3 = 6 if flag0 else None
                 a4 = 2018 if flag0 else None
                 a5 = pd.Timestamp("2005-12-31") if flag1 and flag2 else None

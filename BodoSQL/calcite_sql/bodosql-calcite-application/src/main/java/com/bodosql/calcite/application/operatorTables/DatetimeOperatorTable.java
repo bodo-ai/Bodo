@@ -794,8 +794,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // This always returns a 3 letter value.
+          BodoReturnTypes.VARCHAR_3_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -813,8 +813,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // MONTHNAME always return a 3 character month abbreviation
+          BodoReturnTypes.VARCHAR_3_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -829,8 +829,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // MONTH_NAME always return a 3 character month abbreviation
+          BodoReturnTypes.VARCHAR_3_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -900,8 +900,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // Precision cannot be statically determined.
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
