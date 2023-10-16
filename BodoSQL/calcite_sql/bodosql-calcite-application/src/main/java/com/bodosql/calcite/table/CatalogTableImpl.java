@@ -153,10 +153,11 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
       Variable dfVarName,
       Variable colNamesGlobal,
       Variable isLastVarName,
-      Variable iterVarName) {
+      Variable iterVarName,
+      Expr columnPrecisions) {
     return this.getCatalogSchema()
         .generateStreamingWriteAppendCode(
-            stateVarName, dfVarName, colNamesGlobal, isLastVarName, iterVarName);
+            stateVarName, dfVarName, colNamesGlobal, isLastVarName, iterVarName, columnPrecisions);
   }
 
   /**
