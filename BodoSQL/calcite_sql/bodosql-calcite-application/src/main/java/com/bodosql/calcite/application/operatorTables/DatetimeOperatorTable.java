@@ -28,6 +28,7 @@ import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
@@ -1011,7 +1012,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
     RelDataTypeFactory typeFactory = binding.getTypeFactory();
     RelDataType inputType = binding.getOperandType(0);
 
-    if (inputType.getSqlTypeName().getFamily().equals(SqlTypeFamily.NUMERIC)) {
+    if (SqlTypeUtil.isNumeric(inputType)) {
       return typeFactory.createTypeWithNullability(inputType, inputType.isNullable());
     } else {
       return datetruncReturnType(binding);
@@ -1028,7 +1029,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           OperandTypes.or(
               OperandTypes.sequence(
                   "TRUNC(UNIT, DATETIME)", OperandTypes.ANY, OperandTypes.DATETIME),
-              OperandTypes.NUMERIC_INTEGER),
+              argumentRange(1, SqlTypeFamily.NUMERIC, SqlTypeFamily.INTEGER)),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction YEAROFWEEK =
