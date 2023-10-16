@@ -268,6 +268,7 @@ def test_snowflake_catalog_from_conn_str_read(
     check_func(impl, (bc,), py_output=py_output)
 
 
+@pytest.mark.skip("SUM pushdown is disabled until we have robust DECIMAL SUPPORT")
 def test_snowflake_catalog_aggregate_pushdown_sum(
     snowflake_sample_data_snowflake_catalog, memory_leak_check
 ):
