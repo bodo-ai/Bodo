@@ -227,7 +227,7 @@ pytestmark = pytest_slow_unless_codegen
             ),
             pd.Timestamp("2000-10-29 20:00:00.00", tz="Asia/Tokyo"),
             False,
-            id="timestamp_tz",
+            id="timestamp_ltz",
         ),
         pytest.param(
             pd.Series(

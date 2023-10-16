@@ -944,7 +944,7 @@ def _get_snowflake_sql_literal_scalar(filter_value):
             # we are using the default timezone. This should be fine since the
             # data matches.
             # https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#timestamp-ltz-timestamp-ntz-timestamp-tz
-            tz_str = "TIMESTAMP_TZ"
+            tz_str = "TIMESTAMP_LTZ"
 
         # Timestamp needs to be converted to a timestamp literal
         def impl(filter_value):  # pragma: no cover

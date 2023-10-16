@@ -127,7 +127,7 @@ def to_time_fn(request):
                     ]
                 ),
             ),
-            id="timestamp_tz",
+            id="timestamp_ltz",
         ),
     ],
 )
