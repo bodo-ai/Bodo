@@ -35,19 +35,23 @@ std::shared_ptr<array_info> get_sample_struct() {
                         std::vector<std::shared_ptr<array_info>>{child_array});
 }
 
-const std::vector<int8_t> sample_array_types{
-    bodo_array_type::NUMPY,
-    bodo_array_type::ARRAY_ITEM,
-    bodo_array_type::ARRAY_ITEM,
-    bodo_array_type::DICT,
-    bodo_array_type::ARRAY_ITEM,
-    bodo_array_type::STRING,
-    bodo_array_type::STRUCT,
-    2,
-    bodo_array_type::NULLABLE_INT_BOOL,
-    bodo_array_type::ARRAY_ITEM,
-    bodo_array_type::CATEGORICAL,
-    bodo_array_type::NULLABLE_INT_BOOL};
+const std::vector<int8_t> sample_array_types{bodo_array_type::NUMPY,
+                                             bodo_array_type::ARRAY_ITEM,
+                                             bodo_array_type::ARRAY_ITEM,
+                                             bodo_array_type::DICT,
+                                             bodo_array_type::ARRAY_ITEM,
+                                             bodo_array_type::STRING,
+                                             bodo_array_type::STRUCT,
+                                             2,
+                                             bodo_array_type::NULLABLE_INT_BOOL,
+                                             bodo_array_type::ARRAY_ITEM,
+                                             bodo_array_type::CATEGORICAL,
+                                             bodo_array_type::NULLABLE_INT_BOOL,
+                                             bodo_array_type::ARRAY_ITEM,
+                                             bodo_array_type::STRUCT,
+                                             2,
+                                             bodo_array_type::NULLABLE_INT_BOOL,
+                                             bodo_array_type::NUMPY};
 
 static bodo::tests::suite tests([] {
     bodo::tests::test("test_array_item_construction", [] {
@@ -100,11 +104,10 @@ static bodo::tests::suite tests([] {
     bodo::tests::test("test_get_col_idx_map", [] {
         std::vector<int8_t> arr_array_types(sample_array_types);
         bodo::tests::check(get_col_idx_map(arr_array_types) ==
-                           std::vector<size_t>{0, 1, 4, 6, 11});
+                           std::vector<size_t>{0, 1, 4, 6, 11, 12});
         bodo::tests::check(get_col_idx_map(arr_array_types, 8, 11) ==
                            std::vector<size_t>{8, 9});
-        arr_array_types.pop_back();
-        arr_array_types.pop_back();
+        arr_array_types.resize(13);
         bool exception_caught = false;
         try {
             get_col_idx_map(arr_array_types);
