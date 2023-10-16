@@ -57,7 +57,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = BodoSQLColumnDataType.EMPTY;
     this.nullable = nullable;
     this.tzInfo = null;
-    this.precision = -1;
+    this.precision = RelDataType.PRECISION_NOT_SPECIFIED;
   }
 
   /**
@@ -76,7 +76,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = BodoSQLColumnDataType.EMPTY;
     this.nullable = nullable;
     this.tzInfo = tzInfo;
-    this.precision = -1;
+    this.precision = RelDataType.PRECISION_NOT_SPECIFIED;
   }
 
   /**
@@ -115,7 +115,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = BodoSQLColumnDataType.EMPTY;
     this.nullable = nullable;
     this.tzInfo = null;
-    this.precision = -1;
+    this.precision = RelDataType.PRECISION_NOT_SPECIFIED;
   }
 
   /**
@@ -162,7 +162,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = elemType;
     this.nullable = nullable;
     this.tzInfo = null;
-    this.precision = -1;
+    this.precision = RelDataType.PRECISION_NOT_SPECIFIED;
   }
 
   /**
@@ -187,7 +187,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = elemType;
     this.nullable = nullable;
     this.tzInfo = tzInfo;
-    this.precision = -1;
+    this.precision = RelDataType.PRECISION_NOT_SPECIFIED;
   }
 
   /**
@@ -240,7 +240,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = elemType;
     this.nullable = nullable;
     this.tzInfo = null;
-    this.precision = -1;
+    this.precision = RelDataType.PRECISION_NOT_SPECIFIED;
   }
 
   /**
@@ -267,7 +267,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = elemType;
     this.nullable = nullable;
     this.tzInfo = tzInfo;
-    this.precision = -1;
+    this.precision = RelDataType.PRECISION_NOT_SPECIFIED;
   }
 
   /**

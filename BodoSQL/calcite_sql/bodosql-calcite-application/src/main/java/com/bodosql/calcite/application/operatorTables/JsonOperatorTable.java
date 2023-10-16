@@ -12,7 +12,6 @@ import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
-import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
@@ -50,7 +49,8 @@ public final class JsonOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "JSON_EXTRACT_PATH_TEXT",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // Cannot statically determine the precision
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           null,
           OperandTypes.STRING_STRING,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);

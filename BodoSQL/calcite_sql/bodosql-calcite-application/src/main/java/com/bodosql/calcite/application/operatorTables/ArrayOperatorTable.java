@@ -16,6 +16,7 @@ import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
 import org.apache.calcite.sql.type.ArraySqlType;
+import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -60,8 +61,8 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // Final precision cannot be statically determined.
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,

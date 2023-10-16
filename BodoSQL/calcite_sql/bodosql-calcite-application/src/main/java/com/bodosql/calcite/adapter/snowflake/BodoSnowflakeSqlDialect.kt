@@ -88,8 +88,8 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         // Note: This implementation is borrowed from Calcite just
         // replacing SqlTypeUtil.convertTypeToSpec with
         // BodoSqlTypeUtil.convertTypeToSpec.
-        var maxPrecision = -1
-        var maxScale = -1
+        var maxPrecision = RelDataType.PRECISION_NOT_SPECIFIED
+        var maxScale = RelDataType.SCALE_NOT_SPECIFIED
         if (type is AbstractSqlType) {
             when (type.getSqlTypeName()) {
                 SqlTypeName.NULL -> return null

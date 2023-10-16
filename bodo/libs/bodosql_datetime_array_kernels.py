@@ -1814,22 +1814,24 @@ def dayname_util(arr):
     arg_types = [arr]
     propagate_null = [True]
     if is_valid_date_arg(arr):
-        scalar_text = f"res[i] = day_of_week_dict_arr[arg0.weekday()]"
+        scalar_text = f"val = day_of_week_dict_arr[arg0.weekday()]\n"
     else:
-        scalar_text = f"res[i] = {box_str}(arg0).day_name()"
+        scalar_text = f"val = {box_str}(arg0).day_name()\n"
+    scalar_text += f"res[i] = val[:3]\n"
+
     out_dtype = bodo.string_array_type
 
     # If the input is an array, make the output dictionary encoded
     synthesize_dict_if_vector = ["V"]
     dows = pd.array(
         [
-            "Monday",
-            "Tuesday",
-            "Wednesday",
-            "Thursday",
-            "Friday",
-            "Saturday",
-            "Sunday",
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri",
+            "Sat",
+            "Sun",
         ],
     )
     extra_globals = {"day_of_week_dict_arr": dows}
@@ -1941,27 +1943,28 @@ def monthname_util(arr):
             "mons = ('January', 'February', 'March', 'April', 'May', 'June', "
             "'July', 'August', 'September', 'October', 'November', 'December')\n"
         )
-        scalar_text += f"res[i] = mons[arg0.month - 1]"
+        scalar_text += f"val = mons[arg0.month - 1]\n"
     else:
-        scalar_text = f"res[i] = {box_str}(arg0).month_name()"
+        scalar_text = f"val = {box_str}(arg0).month_name()\n"
+    scalar_text += f"res[i] = val[:3]\n"
     out_dtype = bodo.string_array_type
 
     # If the input is an array or date object, make the output dictionary encoded
     synthesize_dict_if_vector = ["V"]
     mons = pd.array(
         [
-            "January",
-            "February",
-            "March",
-            "April",
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
             "May",
-            "June",
-            "July",
-            "August",
-            "September",
-            "October",
-            "November",
-            "December",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
         ],
     )
     extra_globals = {"month_names_dict_arr": mons}
