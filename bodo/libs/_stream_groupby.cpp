@@ -1158,7 +1158,8 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
             this->getSeparateOutputColumns(local_input_cols, ftypes[i]);
 
         for (auto t : std::get<0>(running_value_arr_types)) {
-            if (t == bodo_array_type::STRING || t == bodo_array_type::DICT) {
+            if (t == bodo_array_type::STRING || t == bodo_array_type::DICT ||
+                t == bodo_array_type::ARRAY_ITEM) {
                 this->accumulate_before_update = true;
                 break;
             }
@@ -2205,7 +2206,6 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
             (!groupby_state->parallel ||
              hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank));
     }
-
     groupby_state->AppendBuildBatch(in_table, batch_hashes_partition,
                                     append_row_to_build_table);
 

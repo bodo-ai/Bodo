@@ -831,17 +831,12 @@ void apply_to_column_categorical(std::shared_ptr<array_info> in_col,
  * @param[in, out] out_col The output column.
  * @param[in, out] aux_cols Auxillary columns used to for certain operations
  * that require multiple columns (e.g. mean).
- * @param[in] grp_info The grouping information.
- * @param pool Memory pool to use for allocations during the execution of this
- * function.
- * @param mm Memory manager associated with the pool.
- */
+ * @param[in] grp_info The grouping information. */
 template <typename T, int ftype, Bodo_CTypes::CTypeEnum DType>
-void apply_to_column_numpy(
-    std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
-    std::vector<std::shared_ptr<array_info>>& aux_cols,
-    const grouping_info& grp_info,
-    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr()) {
+void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
+                           std::shared_ptr<array_info> out_col,
+                           std::vector<std::shared_ptr<array_info>>& aux_cols,
+                           const grouping_info& grp_info) {
     switch (ftype) {
         case Bodo_FTypes::mean: {
             std::shared_ptr<array_info> count_col = aux_cols[0];
@@ -985,15 +980,15 @@ void apply_to_column_numpy(
             break;
         }
         case Bodo_FTypes::first: {
-            int64_t n_bytes = ((out_col->length + 7) >> 3);
-            bodo::vector<uint8_t> bitmask_vec(n_bytes, 0, pool);
+            std::shared_ptr<array_info> bitmask = aux_cols[0];
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 T val = getv<T>(in_col, i);
-                if ((i_grp != -1) && !GetBit(bitmask_vec.data(), i_grp) &&
+                if ((i_grp != -1) &&
+                    !GetBit((uint8_t*)bitmask->data1(), i_grp) &&
                     !isnan_alltype<T, DType>(val)) {
                     getv<T>(out_col, i_grp) = val;
-                    SetBitTo(bitmask_vec.data(), i_grp, true);
+                    SetBitTo((uint8_t*)bitmask->data1(), i_grp, true);
                 }
             }
             break;
@@ -1232,8 +1227,8 @@ void apply_to_column_nullable(
 #endif
 
 // Find the valid group condition. The eval functions check if the sample
-// is large enough. First checks if we have already seen a value.
-// idx***_na_first check if we have already found NA.
+//  is large enough. First checks if we have already seen a value.
+//  idx***_na_first check if we have already found NA.
 #ifndef APPLY_TO_COLUMN_VALID_GROUP
 #define APPLY_TO_COLUMN_VALID_GROUP                                         \
     switch (ftype) {                                                        \
@@ -1632,8 +1627,8 @@ void apply_to_column(
             return apply_to_column_categorical<T, ftype, DType>(in_col, out_col,
                                                                 grp_info);
         case bodo_array_type::NUMPY: {
-            return apply_to_column_numpy<T, ftype, DType>(
-                in_col, out_col, aux_cols, grp_info, pool);
+            return apply_to_column_numpy<T, ftype, DType>(in_col, out_col,
+                                                          aux_cols, grp_info);
         }
         case bodo_array_type::DICT: {
             return apply_to_column_dict<ftype>(in_col, out_col, aux_cols,

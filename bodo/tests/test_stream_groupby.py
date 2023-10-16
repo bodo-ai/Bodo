@@ -575,3 +575,95 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
         sort_output=True,
         reset_index=True,
     )
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(
+            {
+                "A": [
+                    1,
+                    2,
+                    1,
+                    0,
+                    2,
+                    1,
+                    2,
+                    2,
+                ],
+                "B": np.array(
+                    [[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 2, object
+                ),
+                "C": np.array([[1, 2], [3], [4, 5, 6], [0]] * 2, object),
+                "D": pd.array([1, 2, 3, 4] * 2),
+                "E": ["xyz", "xyz", "wxy", "wxy"] * 2,
+            }
+        )
+    ],
+)
+def test_groupby_nested_array_data(memory_leak_check, df):
+    """
+    Tests support for streaming groupby with nested array data.
+    """
+
+    keys_inds = bodo.utils.typing.MetaType((0,))
+    col_meta = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D", "E"))
+    kept_cols = bodo.utils.typing.MetaType(
+        (
+            0,
+            1,
+            2,
+            3,
+            4,
+        )
+    )
+    batch_size = 3
+    fnames = bodo.utils.typing.MetaType(("first", "first", "sum", "first"))
+    f_in_offsets = bodo.utils.typing.MetaType((0, 1, 2, 3, 4))
+    f_in_cols = bodo.utils.typing.MetaType((1, 2, 3, 4))
+
+    def test_groupby(df):
+        groupby_state = init_groupby_state(
+            -1, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
+        is_last1 = False
+        _iter_1 = 0
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df), (), kept_cols, 5
+        )
+        _temp1 = bodo.hiframes.table.local_len(T1)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
+            )
+            is_last1 = (_iter_1 * batch_size) >= _temp1
+            T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
+            _iter_1 = _iter_1 + 1
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1)
+        out_dfs = []
+        is_last2 = False
+        while not is_last2:
+            out_table, is_last2 = groupby_produce_output_batch(groupby_state, True)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df_final = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            )
+            out_dfs.append(df_final)
+        delete_groupby_state(groupby_state)
+        return pd.concat(out_dfs)
+
+    expected_df = df.groupby("A", as_index=False).agg(
+        {"B": "first", "C": "first", "D": "sum", "E": "first"}
+    )
+    check_func(
+        test_groupby,
+        (df,),
+        py_output=expected_df,
+        reset_index=True,
+        convert_columns_to_pandas=True,
+        sort_output=True,
+        only_seq=True,
+    )

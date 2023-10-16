@@ -305,6 +305,32 @@ class FirstColSet : public BasicColSet {
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager()) override;
+
+    virtual std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+                       std::vector<Bodo_CTypes::CTypeEnum>>
+    getRunningValueColumnTypes(
+        const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
+        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) const override {
+        auto arr_types = in_arr_types;
+        auto dtypes = in_dtypes;
+        for (size_t i = 0; i < in_arr_types.size(); ++i) {
+            auto arr_type = in_arr_types[i];
+            if (arr_type == bodo_array_type::NUMPY) {
+                arr_types.push_back(bodo_array_type::NULLABLE_INT_BOOL);
+                dtypes.push_back(Bodo_CTypes::_BOOL);
+            }
+        }
+        return {arr_types, dtypes};
+    }
+
+    virtual void combine(const grouping_info& grp_info,
+                         int64_t init_start_row = 0) override;
+
+    virtual void update(
+        const std::vector<grouping_info>& grp_infos,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
 };
 
 /**
@@ -356,8 +382,8 @@ class WindowColSet : public BasicColSet {
    public:
     /**
      * Construct Window column set
-     * @param in_cols input columns of groupby associated with this column set.
-     * There are the columns that we will sort on.
+     * @param in_cols input columns of groupby associated with this column
+     * set. There are the columns that we will sort on.
      * @param _window_funcs: What function(s) are we computing.
      * @param _asc: Are the sort columns ascending on the input column.
      * @param _na_pos: Are NAs last in the sort columns
@@ -375,11 +401,10 @@ class WindowColSet : public BasicColSet {
     /**
      * Allocate column for update step.
      * @param num_groups: number of groups found in the input table
-     * @param[in,out] out_cols: vector of columns of update table. This method
-     * adds columns to this vector.
-     * NOTE: the added column is an integer array with same length as
-     * input column regardless of input column types (i.e num_groups is not used
-     * in this case)
+     * @param[in,out] out_cols: vector of columns of update table. This
+     * method adds columns to this vector. NOTE: the added column is an
+     * integer array with same length as input column regardless of input
+     * column types (i.e num_groups is not used in this case)
      */
     virtual void alloc_running_value_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -394,8 +419,8 @@ class WindowColSet : public BasicColSet {
      * be correct. If this is a serial operation then we need to execute
      * a local reverse shuffle.
      * @param grp_infos: grouping info calculated by GroupbyPipeline
-     * @param pool Memory pool to use for allocations during the execution of
-     * this function (not actually used)
+     * @param pool Memory pool to use for allocations during the execution
+     * of this function (not actually used)
      * @param mm Memory manager associated with the pool (not actually used)
      */
     virtual void update(
@@ -405,8 +430,8 @@ class WindowColSet : public BasicColSet {
             bodo::default_buffer_memory_manager()) override;
 
     /**
-     * Obtain the final output columns resulting from the groupby operation on
-     * this column set.
+     * Obtain the final output columns resulting from the groupby operation
+     * on this column set.
      * @return constant vector of output columns
      */
     virtual const std::vector<std::shared_ptr<array_info>> getOutputColumns()
@@ -459,26 +484,47 @@ class IdxMinMaxColSet : public BasicColSet {
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
-            bodo::default_buffer_memory_manager());
+            bodo::default_buffer_memory_manager()) override;
 
     virtual void alloc_update_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
         const bool alloc_out_if_no_combine = true,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
-            bodo::default_buffer_memory_manager());
+            bodo::default_buffer_memory_manager()) override;
 
     virtual void update(
         const std::vector<grouping_info>& grp_infos,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
-            bodo::default_buffer_memory_manager());
+            bodo::default_buffer_memory_manager()) override;
 
     virtual void alloc_combine_columns(
-        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+        size_t num_groups,
+        std::vector<std::shared_ptr<array_info>>& out_cols) override;
 
     virtual void combine(const grouping_info& grp_info,
-                         int64_t init_start_row = 0);
+                         int64_t init_start_row = 0) override;
+
+    virtual void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        throw std::runtime_error(
+            "IdxMinMaxColSet not implemented for streaming groupby");
+    }
+    virtual void setCombineCols(
+        std::vector<std::shared_ptr<array_info>> combine_cols_) override {
+        throw std::runtime_error(
+            "IdxMinMaxColSet not implemented for streaming groupby");
+    }
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        throw std::runtime_error(
+            "IdxMinMaxColSet not implemented for streaming groupby");
+    }
+    virtual void clear() override {
+        throw std::runtime_error(
+            "IdxMinMaxColSet not implemented for streaming groupby");
+    }
 
    private:
     const std::shared_ptr<array_info> index_col;
@@ -712,6 +758,7 @@ class ListAggColSet : public BasicColSet {
                     bodo::default_buffer_memory_manager()) override;
 
     std::shared_ptr<array_info> getOutputColumn();
+
     virtual void setUpdateCols(
         std::vector<std::shared_ptr<array_info>> update_cols_) override {
         throw std::runtime_error(

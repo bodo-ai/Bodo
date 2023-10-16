@@ -1014,7 +1014,7 @@ get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table) {
         arr_array_types.push_back(curr_arr->arr_type);
 
         while (arr_array_types.back() == bodo_array_type::ARRAY_ITEM) {
-            curr_arr = table->columns[i]->child_arrays[0];
+            curr_arr = curr_arr->child_arrays[0];
             arr_c_types.push_back(curr_arr->dtype);
             arr_array_types.push_back(curr_arr->arr_type);
         }
