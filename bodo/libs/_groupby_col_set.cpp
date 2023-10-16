@@ -2,6 +2,7 @@
 #include "_groupby_col_set.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
+#include "_bodo_common.h"
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
@@ -70,6 +71,7 @@ void BasicColSet::combine(const grouping_info& grp_info,
         aggfunc_output_initialize(col, combine_ftype, use_sql_rules,
                                   init_start_row);
     }
+
     do_apply_to_column(update_cols[0], combine_cols[0], aux_cols, grp_info,
                        combine_ftype);
 }
@@ -108,12 +110,46 @@ void FirstColSet::alloc_running_value_columns(
         std::shared_ptr<array_info> inner_arr =
             alloc_numpy(0, Bodo_CTypes::INT8, pool, mm);
         std::shared_ptr<array_info> out_col =
-            alloc_array_item(num_groups, inner_arr, pool, std::move(mm));
+            alloc_array_item(num_groups, inner_arr, pool, mm);
         out_cols.push_back(out_col);
     } else {
         BasicColSet::alloc_running_value_columns(num_groups, out_cols, pool,
-                                                 std::move(mm));
+                                                 mm);
     }
+    if (in_col->arr_type == bodo_array_type::NUMPY) {
+        std::shared_ptr<array_info> bitmask = alloc_nullable_array_no_nulls(
+            num_groups, Bodo_CTypes::_BOOL, 0, pool, std::move(mm));
+        memset(bitmask->data1<bodo_array_type::NUMPY>(), 0,
+               arrow::bit_util::BytesForBits(num_groups));
+        out_cols.push_back(bitmask);
+    }
+}
+
+void FirstColSet::update(const std::vector<grouping_info>& grp_infos,
+                         bodo::IBufferPool* const pool,
+                         std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::vector<std::shared_ptr<array_info>> aux_cols(update_cols.begin() + 1,
+                                                      update_cols.end());
+    aggfunc_output_initialize(update_cols[0], ftype, use_sql_rules);
+    do_apply_to_column(in_col, update_cols[0], aux_cols, grp_infos[0], ftype,
+                       pool, std::move(mm));
+}
+
+void FirstColSet::combine(const grouping_info& grp_info,
+                          int64_t init_start_row) {
+    int combine_ftype = get_combine_func(ftype);
+    std::vector<std::shared_ptr<array_info>> aux_cols(combine_cols.begin() + 1,
+                                                      combine_cols.end());
+    aggfunc_output_initialize(combine_cols[0], combine_ftype, use_sql_rules,
+                              init_start_row);
+    if (aux_cols.size() == 1) {
+        arrow::bit_util::ClearBitmap((uint8_t*)combine_cols[1]->data1(),
+                                     init_start_row, combine_cols[1]->length);
+        arrow::bit_util::SetBitmap((uint8_t*)combine_cols[1]->null_bitmask(),
+                                   init_start_row, combine_cols[1]->length);
+    }
+    do_apply_to_column(update_cols[0], combine_cols[0], aux_cols, grp_info,
+                       combine_ftype);
 }
 
 // ############################## Mean ##############################
@@ -402,10 +438,10 @@ void VarStdColSet::alloc_update_columns(
     // This is needed due to some technical debt with transform/UDF colsets
     if (!this->combine_step && alloc_out_if_no_combine) {
         // need to create output column now
-        std::shared_ptr<array_info> col =
-            alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false,
-                        pool, mm);  // for result
+        std::shared_ptr<array_info> col = alloc_array(
+            num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+            Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool,
+            mm);  // for result
         // Initialize as ftype to match nullable behavior
         aggfunc_output_initialize(col, this->ftype,
                                   use_sql_rules);  // zero initialize
@@ -585,10 +621,10 @@ void SkewColSet::alloc_update_columns(
     // This is needed due to some technical debt with transform/UDF colsets
     if (!this->combine_step && alloc_out_if_no_combine) {
         // need to create output column now
-        std::shared_ptr<array_info> col =
-            alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false,
-                        pool, mm);  // for result
+        std::shared_ptr<array_info> col = alloc_array(
+            num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+            Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool,
+            mm);  // for result
         // Initialize as ftype to match nullable behavior
         aggfunc_output_initialize(col, this->ftype,
                                   use_sql_rules);  // zero initialize
@@ -1179,10 +1215,10 @@ void KurtColSet::alloc_update_columns(
     // This is needed due to some technical debt with transform/UDF colsets
     if (!this->combine_step && alloc_out_if_no_combine) {
         // need to create output column now
-        std::shared_ptr<array_info> col =
-            alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false,
-                        pool, mm);  // for result
+        std::shared_ptr<array_info> col = alloc_array(
+            num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+            Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool,
+            mm);  // for result
         // Initialize as ftype to match nullable behavior
         aggfunc_output_initialize(col, this->ftype,
                                   use_sql_rules);  // zero initialize
