@@ -263,8 +263,9 @@ public class RelationalAlgebraGenerator {
     BodoTZInfo tzInfo = catalog.getDefaultTimezone();
     Integer weekStart = catalog.getWeekStart();
     Integer weekOfYearPolicy = catalog.getWeekOfYearPolicy();
+    String currentDatabase = catalog.getCatalogName();
     RelDataTypeSystem typeSystem =
-        new BodoSQLRelDataTypeSystem(tzInfo, weekStart, weekOfYearPolicy);
+        new BodoSQLRelDataTypeSystem(tzInfo, weekStart, weekOfYearPolicy, currentDatabase);
     this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
   }

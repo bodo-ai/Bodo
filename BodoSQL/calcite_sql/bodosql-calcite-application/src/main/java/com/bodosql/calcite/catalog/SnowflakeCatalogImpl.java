@@ -101,6 +101,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
 
   private @Nullable Integer weekStart;
   private @Nullable Integer weekOfYearPolicy;
+  private @Nullable String currentDatabase;
 
   /**
    * Create the catalog and store the relevant account information.
@@ -149,6 +150,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     this.weekStart = parseIntegerProperty(accountInfo, "WEEK_START", defaultWeekStart);
     this.weekOfYearPolicy =
         parseIntegerProperty(accountInfo, "WEEK_OF_YEAR_POLICY", defaultWeekOfYearPolicy);
+
+    this.currentDatabase = catalogName;
   }
 
   /**

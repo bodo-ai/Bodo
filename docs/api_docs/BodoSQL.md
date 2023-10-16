@@ -3524,6 +3524,13 @@ BodoSQL currently supports the following casting/conversion functions:
     Equivalent to `#!sql TRY_TO_TIMESTAMP` except that it uses the local time zone, or keeps
     the original timezone if the input is a timezone-aware timestamp.
 
+###   Context Functions (Session Object)
+
+#### CURRENT_DATABASE
+-   `#!sql CURRENT_DATABASE()`
+
+    Returns the name of the database in use for the current session.
+
 
 ## Supported DataFrame Data Types
 
