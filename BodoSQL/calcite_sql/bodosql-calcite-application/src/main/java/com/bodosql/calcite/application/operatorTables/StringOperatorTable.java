@@ -46,7 +46,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // Concat sums together all input precision.
-          ReturnTypes.DYADIC_STRING_SUM_PRECISION_NULLABLE,
+          BodoReturnTypes.CONCAT_RETURN_TYPE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -61,8 +61,9 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // Concat sums together all input precision.
-          ReturnTypes.DYADIC_STRING_SUM_PRECISION_NULLABLE,
+          // Concat sums together all input precision and
+          // includes the separator where appropriate.
+          BodoReturnTypes.CONCAT_WS_RETURN_TYPE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,

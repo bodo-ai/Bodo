@@ -188,92 +188,143 @@ public class BodoReturnTypes {
     }
 
     /**
+     * Helper function to compute the return type from summing together
+     * the precision of any two inputs. This is used as a helper function
+     * implement functions like INSERT, CONCAT, and CONCAT_WS that contain custom
+     * precision logic.
+     *
+     * opBinding is passed in for utilities like error reporting, but it should not be
+     * used to load operands.
+     */
+    private static RelDataType computeSumPrecisionType(final RelDataType argType0, final RelDataType argType1, final SqlOperatorBinding opBinding) {
+        final boolean containsAnyType =
+                (argType0.getSqlTypeName() == SqlTypeName.ANY)
+                        || (argType1.getSqlTypeName() == SqlTypeName.ANY);
+
+        final boolean containsNullType =
+                (argType0.getSqlTypeName() == SqlTypeName.NULL)
+                        || (argType1.getSqlTypeName() == SqlTypeName.NULL);
+
+        if (!containsAnyType
+                && !containsNullType
+                && !(SqlTypeUtil.inCharOrBinaryFamilies(argType0)
+                && SqlTypeUtil.inCharOrBinaryFamilies(argType1))) {
+            Preconditions.checkArgument(
+                    SqlTypeUtil.sameNamedType(argType0, argType1));
+        }
+
+        SqlCollation pickedCollation = null;
+        if (!containsAnyType
+                && !containsNullType
+                && SqlTypeUtil.inCharFamily(argType0)) {
+            if (!SqlTypeUtil.isCharTypeComparable(
+                    List.of(argType0, argType1))) {
+                throw opBinding.newError(
+                        RESOURCE.typeNotComparable(
+                                argType0.getFullTypeString(),
+                                argType1.getFullTypeString()));
+            }
+
+            pickedCollation = requireNonNull(
+                    SqlCollation.getCoercibilityDyadicOperator(
+                            getCollation(argType0), getCollation(argType1)),
+                    () -> "getCoercibilityDyadicOperator is null for " + argType0 + " and " + argType1);
+        }
+
+        // Determine whether result is variable-length
+        SqlTypeName typeName =
+                argType0.getSqlTypeName();
+        if (SqlTypeUtil.isBoundedVariableWidth(argType1)) {
+            typeName = argType1.getSqlTypeName();
+        }
+
+        RelDataType ret;
+        int typePrecision;
+        final long x = (long) argType0.getPrecision() + (long) argType1.getPrecision();
+        final RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
+        final RelDataTypeSystem typeSystem = typeFactory.getTypeSystem();
+        if (argType0.getPrecision() == RelDataType.PRECISION_NOT_SPECIFIED
+                || argType1.getPrecision() == RelDataType.PRECISION_NOT_SPECIFIED
+                || x > typeSystem.getMaxPrecision(typeName)) {
+            typePrecision = RelDataType.PRECISION_NOT_SPECIFIED;
+        } else {
+            typePrecision = (int) x;
+        }
+
+        ret = typeFactory.createSqlType(typeName, typePrecision);
+        if (null != pickedCollation) {
+            RelDataType pickedType;
+            if (getCollation(argType0).equals(pickedCollation)) {
+                pickedType = argType0;
+            } else if (getCollation(argType1).equals(pickedCollation)) {
+                pickedType = argType1;
+            } else {
+                throw new AssertionError("should never come here, "
+                        + "argType0=" + argType0 + ", argType1=" + argType1);
+            }
+            ret =
+                    typeFactory.createTypeWithCharsetAndCollation(ret,
+                            getCharset(pickedType), getCollation(pickedType));
+        }
+        if (ret.getSqlTypeName() == SqlTypeName.NULL) {
+            ret = typeFactory.createTypeWithNullability(
+                    typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
+        }
+        return ret;
+    }
+
+    /**
      * Type Inference strategy for calculating the precision of INSERT.
-     * This is largely influenced by ReturnTypes.DYADIC_STRING_SUM_PRECISION
-     * because unfortunately there is no good way with which to interface.
      */
     private static final SqlReturnTypeInference INSERT_RETURN_PRECISION =
-            opBinding -> {
-                final RelDataType argType0 = opBinding.getOperandType(0);
-                final RelDataType argType3 = opBinding.getOperandType(3);
-
-                final boolean containsAnyType =
-                        (argType0.getSqlTypeName() == SqlTypeName.ANY)
-                                || (argType3.getSqlTypeName() == SqlTypeName.ANY);
-
-                final boolean containsNullType =
-                        (argType0.getSqlTypeName() == SqlTypeName.NULL)
-                                || (argType3.getSqlTypeName() == SqlTypeName.NULL);
-                SqlCollation pickedCollation = null;
-                if (!containsAnyType
-                        && !containsNullType
-                        && SqlTypeUtil.inCharFamily(argType0)) {
-                    if (!SqlTypeUtil.isCharTypeComparable(
-                            List.of(argType0, argType3))) {
-                        throw opBinding.newError(
-                                RESOURCE.typeNotComparable(
-                                        argType0.getFullTypeString(),
-                                        argType3.getFullTypeString()));
-                    }
-
-                    pickedCollation = requireNonNull(
-                            SqlCollation.getCoercibilityDyadicOperator(
-                                    getCollation(argType0), getCollation(argType3)),
-                            () -> "getCoercibilityDyadicOperator is null for " + argType0 + " and " + argType3);
-                }
-
-                // Determine whether result is variable-length
-                SqlTypeName typeName =
-                        argType0.getSqlTypeName();
-                if (SqlTypeUtil.isBoundedVariableWidth(argType3)) {
-                    typeName = argType3.getSqlTypeName();
-                }
-
-                RelDataType ret;
-                int typePrecision;
-                // Note Snowflake has the precision as (2 * arg0) + arg3.
-                // Its unclear why this is done and may be a bug in Snowflake.
-                final long x =
-                        (2 * (long) argType0.getPrecision()) + (long) argType3.getPrecision();
-                final RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
-                final RelDataTypeSystem typeSystem = typeFactory.getTypeSystem();
-                if (argType0.getPrecision() == RelDataType.PRECISION_NOT_SPECIFIED
-                        || argType3.getPrecision() == RelDataType.PRECISION_NOT_SPECIFIED
-                        || x > typeSystem.getMaxPrecision(typeName)) {
-                    typePrecision = RelDataType.PRECISION_NOT_SPECIFIED;
-                } else {
-                    typePrecision = (int) x;
-                }
-
-                ret = typeFactory.createSqlType(typeName, typePrecision);
-                if (null != pickedCollation) {
-                    RelDataType pickedType;
-                    if (getCollation(argType0).equals(pickedCollation)) {
-                        pickedType = argType0;
-                    } else if (getCollation(argType3).equals(pickedCollation)) {
-                        pickedType = argType3;
-                    } else {
-                        throw new AssertionError("should never come here, "
-                                + "argType0=" + argType0 + ", argType3=" + argType3);
-                    }
-                    ret =
-                            typeFactory.createTypeWithCharsetAndCollation(ret,
-                                    getCharset(pickedType), getCollation(pickedType));
-                }
-                if (ret.getSqlTypeName() == SqlTypeName.NULL) {
-                    ret = typeFactory.createTypeWithNullability(
-                            typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
-                }
-                return ret;
-            };
+            // Note: Snowflake does 2 * arg0 + arg3, but its unclear why.
+            opBinding -> computeSumPrecisionType(opBinding.getOperandType(0), computeSumPrecisionType(opBinding.getOperandType(0), opBinding.getOperandType(3), opBinding), opBinding);
 
 
     /**
      * Type Inference strategy for calculating the return type of INSERT.
-     * This is largely copied from ReturnTypes.DYADIC_STRING_SUM_PRECISION
-     * because unfortunately there is no good way with which to interface.
      */
     public static final SqlReturnTypeInference INSERT_RETURN_TYPE = INSERT_RETURN_PRECISION.andThen(SqlTypeTransforms.TO_NULLABLE).andThen(SqlTypeTransforms.TO_VARYING);
+
+    /**
+     * Type Inference strategy for calculating the precision of for CONCAT.
+     */
+    private static final SqlReturnTypeInference CONCAT_RETURN_PRECISION =
+            opBinding -> {
+                RelDataType returnType = opBinding.getOperandType(0);
+                for (int i = 1; i < opBinding.getOperandCount(); i++) {
+                    returnType = computeSumPrecisionType(opBinding.getOperandType(i), returnType, opBinding);
+                }
+                return returnType;
+            };
+
+    /**
+     * Type Inference strategy for calculating the return type of CONCAT.
+     */
+    public static final SqlReturnTypeInference CONCAT_RETURN_TYPE = CONCAT_RETURN_PRECISION.andThen(SqlTypeTransforms.TO_NULLABLE);
+
+    /**
+     * Type Inference strategy for calculating the precision of for CONCAT.
+     */
+    private static final SqlReturnTypeInference CONCAT_WS_RETURN_PRECISION =
+            opBinding -> {
+                // Sum together the inputs being concatenated.
+                // Note: Arg 0 is the separator.
+                RelDataType returnType = opBinding.getOperandType(1);
+                for (int i = 2; i < opBinding.getOperandCount(); i++) {
+                    // Compute the result of adding the separator
+                    returnType = computeSumPrecisionType(opBinding.getOperandType(0), returnType, opBinding);
+                    // Add the second value.
+                    returnType = computeSumPrecisionType(opBinding.getOperandType(i), returnType, opBinding);
+                }
+                return returnType;
+            };
+
+    /**
+     * Type Inference strategy for calculating the return type of CONCAT.
+     */
+    public static final SqlReturnTypeInference CONCAT_WS_RETURN_TYPE = CONCAT_WS_RETURN_PRECISION.andThen(SqlTypeTransforms.TO_NULLABLE);
+
 
     /**
      * Transformation tha converts a SQL type to have an undefined precision. This is meant
