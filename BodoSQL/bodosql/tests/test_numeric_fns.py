@@ -1117,3 +1117,26 @@ def test_random(use_case, memory_leak_check):
         atol=0.1,
         is_out_distributed=False,
     )
+
+
+def test_trunc_truncate_single_arg(memory_leak_check):
+    """
+    Tests TRUNC and TRUNCATE on numeric values with a single argument
+    """
+    t0 = pd.DataFrame({"A": [100, 100.123, 100.5, -100.5, -100.123, -100]})
+    ctx = {"table0": t0}
+    query = "SELECT TRUNC(A) as trunc_out, TRUNCATE(A) as truncate_out from table0"
+    expected_output = pd.DataFrame(
+        {
+            "trunc_out": [100, 100, 100, -100, -100, -100],
+            "truncate_out": [100, 100, 100, -100, -100, -100],
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
