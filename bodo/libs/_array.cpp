@@ -48,6 +48,13 @@ array_info* struct_array_to_info(int64_t n_fields, array_info** inner_arrays,
 array_info* array_item_array_to_info(uint64_t n_items, array_info* inner_array,
                                      NRT_MemInfo* offsets,
                                      NRT_MemInfo* null_bitmap) {
+    bodo_array_type::arr_type_enum array_type = bodo_array_type::ARRAY_ITEM;
+    Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::LIST;
+    if (inner_array->arr_type == bodo_array_type::STRING &&
+        inner_array->dtype == Bodo_CTypes::STRING) {
+        array_type = bodo_array_type::LIST_STRING;
+        dtype = Bodo_CTypes::LIST_STRING;
+    }
     // wrap meminfo in BodoBuffer (increfs meminfo also)
     std::shared_ptr<BodoBuffer> offsets_buff = std::make_shared<BodoBuffer>(
         (uint8_t*)offsets->data, (n_items + 1) * sizeof(offset_t), offsets);
@@ -56,8 +63,8 @@ array_info* array_item_array_to_info(uint64_t n_items, array_info* inner_array,
         (uint8_t*)null_bitmap->data, n_bytes, null_bitmap);
 
     // Python is responsible for deleting pointer
-    return new array_info(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST,
-                          n_items, {offsets_buff, null_bitmap_buff},
+    return new array_info(array_type, dtype, n_items,
+                          {offsets_buff, null_bitmap_buff},
                           {std::shared_ptr<array_info>(inner_array)});
 }
 

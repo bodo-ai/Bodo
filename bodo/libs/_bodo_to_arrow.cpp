@@ -784,8 +784,16 @@ std::shared_ptr<array_info> arrow_list_array_to_bodo(
         arrow_list_arr->values(), -1,
         dicts_ref_arr == nullptr ? nullptr : dicts_ref_arr->child_arrays[0]);
 
+    bodo_array_type::arr_type_enum array_type = bodo_array_type::ARRAY_ITEM;
+    Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::LIST;
+    if (inner_arr->arr_type == bodo_array_type::STRING &&
+        inner_arr->dtype == Bodo_CTypes::STRING) {
+        array_type = bodo_array_type::LIST_STRING;
+        dtype = Bodo_CTypes::LIST_STRING;
+    }
+
     return std::make_shared<array_info>(
-        bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST, n,
+        array_type, dtype, n,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {offset_buffer, null_bitmap_buffer}),
         std::vector<std::shared_ptr<array_info>>({inner_arr}));
