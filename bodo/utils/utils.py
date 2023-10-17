@@ -250,6 +250,12 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
         ),
     ):
         return CArrayTypeEnum.NULLABLE_INT_BOOL.value
+    elif isinstance(arr_type, bodo.ArrayItemArrayType) and (
+        arr_type.dtype == bodo.string_array_type
+        or arr_type.dtype == bodo.binary_array_type
+    ):
+        # Special case for list of strings
+        return CArrayTypeEnum.LIST_STRING.value
     elif isinstance(
         arr_type, (bodo.StructArrayType, bodo.MapArrayType, bodo.TupleArrayType)
     ):

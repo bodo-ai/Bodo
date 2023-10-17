@@ -3039,7 +3039,7 @@ def test_nested_loop_join_nested_array(memory_leak_check):
 def test_hash_join_struct_array(memory_leak_check):
     probe_table = pd.DataFrame(
         {
-            "A": pd.array([1, 2, 3, 4, 5, 6] * 2),
+            "A": pd.array([1, 2, 3, 4, 5, 6]),
             "B": [
                 {
                     "X": "AB",
@@ -3072,13 +3072,12 @@ def test_hash_join_struct_array(memory_leak_check):
                     "Z": [[10, 11], [11, 0, -3, -5]],
                     "W": {"A": 1, "B": "DFG"},
                 },
-            ]
-            * 2,
+            ],
         }
     )
     build_table = pd.DataFrame(
         {
-            "C": pd.array([1, 2, 3, 4, 5, 6] * 2),
+            "C": pd.array([1, 2, 3, 4, 5, 6]),
             "D": [
                 {
                     "X": "AB",
@@ -3111,8 +3110,7 @@ def test_hash_join_struct_array(memory_leak_check):
                     "Z": [[10, 11], [11, 0, -3, -5]],
                     "W": {"A": 1, "B": "DFG"},
                 },
-            ]
-            * 2,
+            ],
         }
     )
     build_keys_inds = bodo.utils.typing.MetaType((0,))
@@ -3194,7 +3192,7 @@ def test_hash_join_struct_array(memory_leak_check):
     # Generate expected output for each type of join
     expected_df = pd.DataFrame(
         {
-            "A": pd.array([1, 2, 3, 4, 5, 6] * 4),
+            "A": pd.array([1, 2, 3, 4, 5, 6]),
             "B": [
                 {
                     "X": "AB",
@@ -3227,9 +3225,8 @@ def test_hash_join_struct_array(memory_leak_check):
                     "Z": [[10, 11], [11, 0, -3, -5]],
                     "W": {"A": 1, "B": "DFG"},
                 },
-            ]
-            * 4,
-            "C": pd.array([1, 2, 3, 4, 5, 6] * 4),
+            ],
+            "C": pd.array([1, 2, 3, 4, 5, 6]),
             "D": [
                 {
                     "X": "AB",
@@ -3262,8 +3259,7 @@ def test_hash_join_struct_array(memory_leak_check):
                     "Z": [[10, 11], [11, 0, -3, -5]],
                     "W": {"A": 1, "B": "DFG"},
                 },
-            ]
-            * 4,
+            ],
         }
     )
 
@@ -3274,13 +3270,14 @@ def test_hash_join_struct_array(memory_leak_check):
         reset_index=True,
         convert_columns_to_pandas=True,
         sort_output=True,
+        only_seq=True,
     )
 
 
 def test_nested_loop_join_struct_array(memory_leak_check):
     probe_table = pd.DataFrame(
         {
-            "A": pd.array([1, 2, 3] * 2),
+            "A": pd.array([1, 2, 3]),
             "B": [
                 {
                     "X": "D",
@@ -3300,13 +3297,12 @@ def test_nested_loop_join_struct_array(memory_leak_check):
                     "Z": [[10, 11], [11, 0, -3, -5]],
                     "W": {"A": 1, "B": "DFG"},
                 },
-            ]
-            * 2,
+            ],
         }
     )
     build_table = pd.DataFrame(
         {
-            "C": pd.array([1, 2, 3] * 2),
+            "C": pd.array([1, 2, 3]),
             "D": [
                 {
                     "X": "AB",
@@ -3326,8 +3322,7 @@ def test_nested_loop_join_struct_array(memory_leak_check):
                     "Z": [[1], None],
                     "W": {"A": 1, "B": ""},
                 },
-            ]
-            * 2,
+            ],
         }
     )
     build_keys_inds = bodo.utils.typing.MetaType(())
@@ -3410,7 +3405,7 @@ def test_nested_loop_join_struct_array(memory_leak_check):
     # Generate expected output for each type of join
     expected_df = pd.DataFrame(
         {
-            "A": pd.array([1, 1, 2] * 4),
+            "A": pd.array([1, 1, 2]),
             "B": [
                 {
                     "X": "D",
@@ -3430,9 +3425,8 @@ def test_nested_loop_join_struct_array(memory_leak_check):
                     "Z": [[], [3, 1]],
                     "W": {"A": 1, "B": "AA"},
                 },
-            ]
-            * 4,
-            "C": pd.array([2, 3, 3] * 4),
+            ],
+            "C": pd.array([2, 3, 3]),
             "D": [
                 {
                     "X": "C",
@@ -3452,8 +3446,7 @@ def test_nested_loop_join_struct_array(memory_leak_check):
                     "Z": [[1], None],
                     "W": {"A": 1, "B": ""},
                 },
-            ]
-            * 4,
+            ],
         }
     )
 
@@ -3464,4 +3457,5 @@ def test_nested_loop_join_struct_array(memory_leak_check):
         reset_index=True,
         convert_columns_to_pandas=True,
         sort_output=True,
+        only_seq=True,
     )

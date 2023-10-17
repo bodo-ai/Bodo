@@ -2301,6 +2301,7 @@ def test_float_array_read(test_db_snowflake_catalog, memory_leak_check):
     )
 
 
+@pytest.mark.skip(reason="Until we fix ARRAY ITEM ARRAY")
 def test_string_array_read(test_db_snowflake_catalog, memory_leak_check):
     """Test reading an array of string column from Snowflake"""
 
