@@ -149,7 +149,7 @@ Before that, Open the Cloud Configuration Form and note down the External ID.
         ![Create Role Manual Policy Editor](../create_role_screenshots/create_iam_role_manual_policy_editor.png#center)
 
     14. Bodo Cloud Platform requires a specific set of AWS permissions which
-        are documented in [Bodo-Platform Policy](../downloadables/bodo-platform.json){target="blank"}.
+        are documented in [Bodo-Platform Policy](https://api.bodo.ai/platformPolicyDefinition.json){target="blank"}.
         Paste the contents of the linked JSON file into the policy editor.
     
     15. **`$$BUCKET_NAME$$`** and **`$$DYNAMO_ARN$$`** placeholders needs to be updated in the Bodo Platform Policy 
