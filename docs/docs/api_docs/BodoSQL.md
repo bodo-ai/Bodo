@@ -1198,9 +1198,18 @@ BodoSQL Currently supports the following Numeric Functions:
     Rounds X to the specified number of decimal places
 
 #### TRUNCATE
--   `#!sql TRUNCATE(X, num_decimal_places)`
+-   `#!sql TRUNCATE(X[, num_decimal_places])`
 
-    Equivalent to `#!sql ROUND(X, num_decimal_places)`
+    Equivalent to `#!sql ROUND(X, num_decimal_places)`. If `num_decimal_places`
+    is not supplied, it defaults to 0.
+
+
+#### TRUNC
+-   `#!sql TRUNC(X[, num_decimal_places])`
+
+    Equivalent to `#!sql TRUNC(X[, num_decimal_places])` if `X` is numeric.
+    Note that `TRUNC` is overloaded and may invoke the timestamp function
+    `TRUNC` if `X` is a date or time expression.
 
 
 #### BITAND
@@ -1451,17 +1460,21 @@ numeric types
         This aggregation function is currently only supported with a `GROUP BY` clause.
 
 #### ARRAY_AGG
--   `#!sql ARRAY_AGG(A) [WITHIN GROUP(ORDER BY orderby_terms)]`
+-   `#!sql ARRAY_AGG([DISTINCT] A) [WITHIN GROUP(ORDER BY orderby_terms)]`
 
     Combines all the values in column `A` within each group into a single array.
 
     Optionally allows using a `WITHIN GROUP` clause to specify how the values should
     be ordered before being combined into an array. If no clause is specified, then the ordering
-    is unpredictable.
+    is unpredictable. Nulls will not be included in the arrays.
+
+    If the `DISTINCT` keyword is provided, then duplicate elements are removed from each of
+    the arrays. However, if this keyword is provied and a `WITHIN GROUP` clause is also provided,
+    then the `WITHIN GROUP` clause can only refer to the same column as the aggregation input.
 
     !!! note
         This aggregation function is currently only supported with a `GROUP BY` clause,
-        without a `DISTINCT` CLAUSE, and on numerical data (integers, floats, etc.).
+        and on numerical data (integers, floats, etc.) or string/binary data.
 
 #### APPROX_PERCENTILE
 -   `#!sql APPROX_PERCENTILE(A, q)`
@@ -1832,6 +1845,13 @@ BodoSQL currently supports the following Timestamp functions:
     -   "MICROSECOND"
     -   "NANOSECOND"
 
+#### TRUNC
+-   `#!sql TRUNC(timestamp_val, str_literal)`
+
+    Equivalent to `#!sql DATE_TRUNC(str_literal, timestamp_val)`. The
+    argument order is reversed when compared to `DATE_TRUNC`. Note that `TRUNC`
+    is overloaded, and may invoke the numeric function `TRUNCATE` if the
+    arguments are numeric.
 
 #### TIME_SLICE
 -   `#!sql TIME_SLICE(date_or_time_expr, slice_length, unit[, start_or_end])`
@@ -2134,14 +2154,14 @@ BodoSQL currently supports the following string functions:
 #### CONCAT
 -   `#!sql CONCAT(str_0, str_1, ...)`
 
-    Concatenates the strings together. Requires at least two
-    arguments.
+    Concatenates the strings together. Requires at least one
+    argument.
 
 #### CONCAT_WS
 -   `#!sql CONCAT_WS(str_separator, str_0, str_1, ...)`
 
     Concatenates the strings together, with the specified
-    separator. Requires at least three arguments
+    separator. Requires at least two arguments.
 
 #### SUBSTRING
 -   `#!sql SUBSTRING(str, start_index, len)`
@@ -2784,7 +2804,7 @@ BodoSQL currently supports the following JSON functions:
 #### NVL2
 -   `#!sql NVL2(Arg0, Arg1, Arg2)`
 
-    Equivalent to `#!sql NVL(NVL(Arg0, Arg1), Arg2)`
+    Equivalent to `#!sql IF(Arg0 IS NOT NULL, Arg1, Arg2)`
 
 
 #### NULLIF
@@ -3519,6 +3539,13 @@ BodoSQL currently supports the following casting/conversion functions:
 
     Equivalent to `#!sql TRY_TO_TIMESTAMP` except that it uses the local time zone, or keeps
     the original timezone if the input is a timezone-aware timestamp.
+
+###   Context Functions (Session Object)
+
+#### CURRENT_DATABASE
+-   `#!sql CURRENT_DATABASE()`
+
+    Returns the name of the database in use for the current session.
 
 
 ## Supported DataFrame Data Types
