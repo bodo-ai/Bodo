@@ -1198,9 +1198,18 @@ BodoSQL Currently supports the following Numeric Functions:
     Rounds X to the specified number of decimal places
 
 #### TRUNCATE
--   `#!sql TRUNCATE(X, num_decimal_places)`
+-   `#!sql TRUNCATE(X[, num_decimal_places])`
 
-    Equivalent to `#!sql ROUND(X, num_decimal_places)`
+    Equivalent to `#!sql ROUND(X, num_decimal_places)`. If `num_decimal_places`
+    is not supplied, it defaults to 0.
+
+
+#### TRUNC
+-   `#!sql TRUNC(X[, num_decimal_places])`
+
+    Equivalent to `#!sql TRUNC(X[, num_decimal_places])` if `X` is numeric.
+    Note that `TRUNC` is overloaded and may invoke the timestamp function
+    `TRUNC` if `X` is a date or time expression.
 
 
 #### BITAND
@@ -1836,6 +1845,13 @@ BodoSQL currently supports the following Timestamp functions:
     -   "MICROSECOND"
     -   "NANOSECOND"
 
+#### TRUNC
+-   `#!sql TRUNC(timestamp_val, str_literal)`
+
+    Equivalent to `#!sql DATE_TRUNC(str_literal, timestamp_val)`. The
+    argument order is reversed when compared to `DATE_TRUNC`. Note that `TRUNC`
+    is overloaded, and may invoke the numeric function `TRUNCATE` if the
+    arguments are numeric.
 
 #### TIME_SLICE
 -   `#!sql TIME_SLICE(date_or_time_expr, slice_length, unit[, start_or_end])`
@@ -2138,14 +2154,14 @@ BodoSQL currently supports the following string functions:
 #### CONCAT
 -   `#!sql CONCAT(str_0, str_1, ...)`
 
-    Concatenates the strings together. Requires at least two
-    arguments.
+    Concatenates the strings together. Requires at least one
+    argument.
 
 #### CONCAT_WS
 -   `#!sql CONCAT_WS(str_separator, str_0, str_1, ...)`
 
     Concatenates the strings together, with the specified
-    separator. Requires at least three arguments
+    separator. Requires at least two arguments.
 
 #### SUBSTRING
 -   `#!sql SUBSTRING(str, start_index, len)`
