@@ -205,8 +205,8 @@ class Module(private val frame: Frame) {
          * This is currently only used for CombineStreamExchange
          * as it doesn't call currentStreamingPipeline.deleteState
          */
-        fun forceEndOperatorAtCurPipeline(opID: Int) {
-            scope.endOperator(opID, parentFrames.size)
+        fun forceEndOperatorAtCurPipeline(opID: Int, pipeline: StreamingPipelineFrame) {
+            scope.endOperator(opID, pipeline.pipelineID)
         }
 
         /**

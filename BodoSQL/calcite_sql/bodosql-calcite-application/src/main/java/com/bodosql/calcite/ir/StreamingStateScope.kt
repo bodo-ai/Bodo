@@ -39,6 +39,9 @@ class StreamingStateScope {
         if (operators[opID]?.first?.endPipelineID != null) {
             throw Exception("StreamingStateScope: Repeated Operator End Found")
         }
+        if (endPipelineID < operators[opID]!!.first.startPipelineID) {
+            throw Exception("StreamingStateScope: endPipelineID cannot be less than startPipelineID")
+        }
         operators[opID]!!.first.endPipelineID = endPipelineID
     }
 
