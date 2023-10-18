@@ -593,8 +593,8 @@ def test_bodosql_context_generate_plan(memory_leak_check):
     # This test is just to confirm that we can generate the plan at all in python.
     plan1 = bc.generate_plan(query)
     plan2 = bc.generate_plan(query, show_cost=True)
-    assert "cost =" not in plan1
-    assert "cost =" in plan2
+    assert "cost:" not in plan1
+    assert "cost:" in plan2
 
 
 @pytest.mark.parametrize(
