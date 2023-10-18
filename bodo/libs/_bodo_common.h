@@ -1427,6 +1427,27 @@ std::tuple<std::vector<int8_t>, std::vector<int8_t>>
 get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table);
 
 /**
+ * @brief Get the dtypes and arr types from an existing array
+ *
+ * @param[in] array Reference array
+ * @param[in, out] arr_c_types Reference to a vector to append dtypes into
+ * @param[in, out] arr_array_types Reference to a vector to append arr types
+ * into
+ */
+void _get_dtypes_arr_types_from_array(const std::shared_ptr<array_info>& array,
+                                      std::vector<int8_t>& arr_c_types,
+                                      std::vector<int8_t>& arr_array_types);
+
+/**
+ * @brief Get the dtypes and arr types from an existing array
+ * @param array Reference array
+ * @return std::tuple<std::vector<int8_t>, std::vector<int8_t>> Vector of
+ * C types and vector of array types
+ */
+std::tuple<std::vector<int8_t>, std::vector<int8_t>>
+get_dtypes_arr_types_from_array(const std::shared_ptr<array_info>& array);
+
+/**
  * @brief Generate a map from column index to the actual index to the array type
  * and C type arrays
  *

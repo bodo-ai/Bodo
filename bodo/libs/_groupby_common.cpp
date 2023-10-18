@@ -18,6 +18,8 @@
  * min: max dtype value, or quiet_NaN if float (so that result is nan if all
  * input values are nan) max: min dtype value, or quiet_NaN if float (so that
  * result is nan if all input values are nan)
+ * Arrays of type STRING, LIST_STRING, STRUCT, and ARRAY_ITEM are always
+ * initalized to all NULL
  *
  * @param output column
  * @param function identifier
@@ -74,7 +76,9 @@ void aggfunc_output_initialize_kernel(
     }
 
     if (out_col->arr_type == bodo_array_type::STRING ||
-        out_col->arr_type == bodo_array_type::LIST_STRING) {
+        out_col->arr_type == bodo_array_type::LIST_STRING ||
+        out_col->arr_type == bodo_array_type::STRUCT ||
+        out_col->arr_type == bodo_array_type::ARRAY_ITEM) {
         InitializeBitMask((uint8_t*)out_col->null_bitmask(), out_col->length,
                           false, start_row);
     }

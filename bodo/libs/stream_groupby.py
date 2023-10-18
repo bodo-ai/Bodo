@@ -450,7 +450,6 @@ def init_groupby_state(
         output_type = GroupbyStateType(key_inds, fnames, f_in_offsets, f_in_cols)
     else:
         output_type = expected_state_type
-
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
     n_build_arrs = len(build_arr_array_types)
