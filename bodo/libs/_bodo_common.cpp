@@ -1008,19 +1008,40 @@ get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table) {
     std::vector<int8_t> arr_array_types;
 
     for (size_t i = 0; i < table->columns.size(); i++) {
-        auto curr_arr = table->columns[i];
-
-        arr_c_types.push_back(curr_arr->dtype);
-        arr_array_types.push_back(curr_arr->arr_type);
-
-        while (arr_array_types.back() == bodo_array_type::ARRAY_ITEM) {
-            curr_arr = curr_arr->child_arrays[0];
-            arr_c_types.push_back(curr_arr->dtype);
-            arr_array_types.push_back(curr_arr->arr_type);
-        }
+        _get_dtypes_arr_types_from_array(table->columns[i], arr_c_types,
+                                         arr_array_types);
     }
 
     return std::make_tuple(arr_c_types, arr_array_types);
+}
+
+void _get_dtypes_arr_types_from_array(const std::shared_ptr<array_info>& array,
+                                      std::vector<int8_t>& arr_c_types,
+                                      std::vector<int8_t>& arr_array_types) {
+    arr_c_types.push_back((int8_t)array->dtype);
+    arr_array_types.push_back((int8_t)array->arr_type);
+
+    if (array->arr_type == bodo_array_type::STRUCT) {
+        arr_c_types.push_back(array->child_arrays.size());
+        arr_array_types.push_back(array->child_arrays.size());
+        for (auto child : array->child_arrays) {
+            _get_dtypes_arr_types_from_array(child, arr_c_types,
+                                             arr_array_types);
+        }
+    }
+    auto curr_arr = array;
+    while (arr_array_types.back() == bodo_array_type::ARRAY_ITEM) {
+        curr_arr = curr_arr->child_arrays[0];
+        arr_c_types.push_back(curr_arr->dtype);
+        arr_array_types.push_back(curr_arr->arr_type);
+    }
+}
+
+std::tuple<std::vector<int8_t>, std::vector<int8_t>>
+get_dtypes_arr_types_from_array(const std::shared_ptr<array_info>& array) {
+    std::vector<int8_t> arr_c_types, arr_array_types;
+    _get_dtypes_arr_types_from_array(array, arr_c_types, arr_array_types);
+    return {arr_c_types, arr_array_types};
 }
 
 /**
