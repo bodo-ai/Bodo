@@ -741,7 +741,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          BodoReturnTypes.UTC_TIMESTAMP,
+          ReturnTypes.TIMESTAMP,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -773,7 +773,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          BodoReturnTypes.UTC_TIMESTAMP,
+          ReturnTypes.TIMESTAMP,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,

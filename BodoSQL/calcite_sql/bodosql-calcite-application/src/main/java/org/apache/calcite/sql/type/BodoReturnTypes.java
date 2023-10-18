@@ -138,15 +138,6 @@ public class BodoReturnTypes {
     public static final SqlReturnTypeInference TZAWARE_TIMESTAMP_NULLABLE =
             TZAWARE_TIMESTAMP.andThen(SqlTypeTransforms.TO_NULLABLE);
 
-    public static final SqlReturnTypeInference UTC_TIMESTAMP =
-            new SqlReturnTypeInference() {
-                @Override
-                public @Nullable RelDataType inferReturnType(final SqlOperatorBinding opBinding) {
-                    return BodoRelDataTypeFactory.createTZAwareSqlType(
-                            opBinding.getTypeFactory(), BodoTZInfo.UTC);
-                }
-            };
-
     public static final SqlReturnTypeInference VARIANT =
             new SqlReturnTypeInference() {
                 @Override
