@@ -1,6 +1,7 @@
 
 #include "_stream_groupby.h"
 #include "_array_hash.h"
+#include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
@@ -1232,6 +1233,15 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
         this->col_sets.push_back(col_set);
     }
 
+    // See if all ColSet functions are nunique, which enables optimization of
+    // dropping duplicate shuffle table rows before shuffle
+    this->nunique_only = true;
+    for (size_t i = 0; i < ftypes.size(); i++) {
+        if (ftypes[i] != Bodo_FTypes::nunique) {
+            this->nunique_only = false;
+        }
+    }
+
     // build buffer types are same as input if just accumulating batches
     if (this->accumulate_before_update) {
         build_arr_array_types = in_arr_array_types;
@@ -2238,6 +2248,42 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
         std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
             shuffle_table, groupby_state->n_keys, SEED_HASH_PARTITION,
             groupby_state->parallel, false, dict_hashes);
+
+        // drop shuffle table duplicate rows if there are a lot of duplicates
+        // only possible for nunique-only cases
+        if (groupby_state->nunique_only) {
+            int64_t shuffle_nrows = shuffle_table->nrows();
+
+            // estimate number of uniques using key/value hashes
+            std::shared_ptr<uint32_t[]> key_value_hashes =
+                std::make_unique<uint32_t[]>(shuffle_nrows);
+            // reusing shuffle_hashes for keys to make the initial check cheaper
+            // for code path without drop duplicates
+            std::memcpy(key_value_hashes.get(), shuffle_hashes.get(),
+                        sizeof(uint32_t) * shuffle_nrows);
+            for (size_t col = groupby_state->n_keys;
+                 col < shuffle_table->ncols(); col++) {
+                hash_array_combine(
+                    key_value_hashes, shuffle_table->columns[col],
+                    shuffle_nrows, SEED_HASH_PARTITION,
+                    /*global_dict_needed=*/false, groupby_state->parallel);
+            }
+            size_t nunique_keyval_hashes = get_nunique_hashes(
+                key_value_hashes, shuffle_nrows, groupby_state->parallel);
+
+            // drop duplicates if output will be less than half the size of
+            // input (rough heuristic, TODO: tune)
+            if ((2 * nunique_keyval_hashes) <
+                static_cast<size_t>(shuffle_nrows)) {
+                shuffle_table = drop_duplicates_table_inner(
+                    shuffle_table, shuffle_table->ncols(), 0, 1, false, false,
+                    /*drop_duplicates_dict=*/false, key_value_hashes);
+                shuffle_hashes = hash_keys_table(
+                    shuffle_table, groupby_state->n_keys, SEED_HASH_PARTITION,
+                    groupby_state->parallel, false, dict_hashes);
+            }
+        }
+
         // make dictionaries global for shuffle
         for (size_t i = 0; i < shuffle_table->ncols(); i++) {
             std::shared_ptr<array_info> arr = shuffle_table->columns[i];

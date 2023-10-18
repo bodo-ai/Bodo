@@ -422,6 +422,10 @@ class GroupbyState {
     bool accumulate_before_update = false;
     bool req_extended_group_info = false;
 
+    // True if all ColSet functions are nunique, which enables optimization of
+    // dropping duplicate shuffle table rows before shuffle
+    bool nunique_only = false;
+
     // This is used in groupby_agg_build_consume_batch and
     // groupby_acc_build_consume_batch. We're caching this allocation for
     // performance reasons.
