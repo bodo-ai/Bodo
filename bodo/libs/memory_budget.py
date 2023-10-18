@@ -28,25 +28,10 @@ class OperatorType(Enum):
 
     UNKNOWN = 0
     SNOWFLAKE_WRITE = 1
-    SNOWFLAKE_READ = 2
-    JOIN = 3
-    GROUPBY = 4
-    UNION = 5
-    ACCUMULATE_TABLE = 6
-    ENCODE_DICT = 7
-
-
-class OperatorType(Enum):
-    """All supported streaming operator types. The order here must match the order in _memory_budget.h::OperatorType"""
-
-    UNKNOWN = 0
-    SNOWFLAKE_WRITE = 1
-    SNOWFLAKE_READ = 2
-    JOIN = 3
-    GROUPBY = 4
-    UNION = 5
-    ACCUMULATE_TABLE = 6
-    ENCODE_DICT = 7
+    JOIN = 2
+    GROUPBY = 3
+    UNION = 4
+    ACCUMULATE_TABLE = 5
 
 
 @intrinsic
