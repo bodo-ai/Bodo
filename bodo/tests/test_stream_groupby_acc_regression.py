@@ -157,7 +157,7 @@ def impl(conn_str):  # Codegen change: add conn_str
     _produce_output_2 = True
     _temp21 = 0.0
     _temp22 = time.time()
-    state_3 = bodo.libs.stream_dict_encoding.init_dict_encoding_state(2)
+    state_3 = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
     _temp24 = time.time()
     _temp25 = _temp24 - _temp22
     _temp21 = _temp21 + _temp25

@@ -4,7 +4,6 @@ import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
-import com.bodosql.calcite.ir.OperatorType
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.traits.BatchingProperty
@@ -55,13 +54,11 @@ class PandasTableScan(
         val readerVar = builder.symbolTable.genStateVar()
 
         val bodoSQLTable = (table as RelOptTableImpl).table() as BodoSqlTable
-        currentPipeline.initializeStreamingState(
-            ctx.operatorID(),
+        currentPipeline.addInitialization(
             Op.Assign(
                 readerVar,
                 bodoSQLTable.generateReadCode(true, ctx.streamingOptions()),
             ),
-            OperatorType.SNOWFLAKE_READ,
         )
 
         return readerVar
@@ -70,7 +67,7 @@ class PandasTableScan(
     override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
         val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
         val deleteState = Op.Stmt(Expr.Call("bodo.io.arrow_reader.arrow_reader_del", listOf(stateVar)))
-        currentPipeline.deleteStreamingState(ctx.operatorID(), deleteState)
+        currentPipeline.addTermination(deleteState)
     }
 
     /**

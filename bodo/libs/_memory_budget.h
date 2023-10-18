@@ -17,12 +17,10 @@
 enum class OperatorType {
     UNKNOWN = 0,
     SNOWFLAKE_WRITE,
-    SNOWFLAKE_READ,
     JOIN,
     GROUPBY,
     UNION,
     ACCUMULATE_TABLE,
-    ENCODE_DICT,
 };
 
 /**

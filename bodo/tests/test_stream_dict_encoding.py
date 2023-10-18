@@ -60,9 +60,7 @@ def test_basic_caching(memory_leak_check):
 
     def impl(S):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state(
-            -1
-        )
+        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
         finished = False
         batch_num = 0
         arr_size = len(arr)
@@ -171,9 +169,7 @@ def test_multi_dictionary(memory_leak_check):
 
         arr1 = bodo.hiframes.pd_series_ext.get_series_data(S1)
         arr2 = bodo.hiframes.pd_series_ext.get_series_data(S2)
-        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state(
-            -1
-        )
+        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
         batches = []
         process_arr(dict_encoding_state, arr1, batches)
         process_arr(dict_encoding_state, arr2, batches)
@@ -213,9 +209,7 @@ def test_multi_function(memory_leak_check):
 
     def impl(S):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state(
-            -1
-        )
+        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
         finished = False
         batch_num = 0
         arr_size = len(arr)
@@ -316,9 +310,7 @@ def test_coalesce(memory_leak_check):
     def impl(S1, S2):
         arr1 = bodo.hiframes.pd_series_ext.get_series_data(S1)
         arr2 = bodo.hiframes.pd_series_ext.get_series_data(S2)
-        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state(
-            -1
-        )
+        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
         finished = False
         batch_num = 0
         arr_size = len(arr1)
@@ -382,7 +374,7 @@ def _build_1_arg_streaming_function(
         f"""
     def impl(S, {additional_args_str}):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state(-1)
+        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
         finished = False
         batch_num = 0
         arr_size = len(arr)
@@ -559,9 +551,7 @@ def test_multi_function_gen_vectorize(memory_leak_check):
 
     def impl(S):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state(
-            -1
-        )
+        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
         finished = False
         batch_num = 0
         arr_size = len(arr)
@@ -657,7 +647,7 @@ def _test_decode_only_recomputes_over_new_data(data, indices, new_data, new_indi
         data_arr, indices_arr, True, True, None
     )
 
-    dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state(-1)
+    dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
     batches = []
 
     # do the kernel
