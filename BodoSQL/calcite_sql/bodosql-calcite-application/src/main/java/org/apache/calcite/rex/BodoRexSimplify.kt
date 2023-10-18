@@ -1,8 +1,10 @@
 package org.apache.calcite.rex
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen
+import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
+import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import org.apache.calcite.avatica.util.TimeUnit
 import org.apache.calcite.plan.RelOptPredicateList
 import org.apache.calcite.sql.SqlBinaryOperator
@@ -120,7 +122,7 @@ class BodoRexSimplify(
     }
 
     /**
-     * Simplify to_date for supported literals.
+     * Simplify ::date and to_date functions for supported literals.
      */
     private fun simplifyDateCast(call: RexCall): RexNode {
         return if (call.operands.size == 1 && (call.operands[0] is RexLiteral || call.operands[0] is RexCall)) {
@@ -147,6 +149,14 @@ class BodoRexSimplify(
         }
     }
 
+    private fun isDateConversion(e: RexNode): Boolean {
+        return e is RexCall && (
+            e.operator.name == CastingOperatorTable.TO_DATE.name ||
+                e.operator.name == CastingOperatorTable.TRY_TO_DATE.name ||
+                e.operator.name == SqlBodoOperatorTable.DATE.name
+            )
+    }
+
     /**
      * Convert a SQL literal being cast to a timestamp with the default Snowflake
      * parsing to a timestamp literal. If the parsed date doesn't match our supported
@@ -162,9 +172,9 @@ class BodoRexSimplify(
         // formats then we return the original cast call.
         var literalString = literal.value2.toString()
 
-        var year = 0
-        var month = 0
-        var day = 0
+        val year: Int
+        val month: Int
+        val day: Int
         var hour = 0
         var minute = 0
         var second = 0
@@ -764,6 +774,7 @@ class BodoRexSimplify(
             SqlKind.MINUS -> simplifyBodoPlusMinus(e as RexCall, false)
             SqlKind.TIMES -> simplifyBodoTimes(e as RexCall)
             else -> when {
+                isDateConversion(e) -> simplifyDateCast(e as RexCall)
                 isConcat(e) -> simplifyConcat(e as RexCall)
                 isStringCapitalizationOp(e) -> simplifyStringCapitalizationOp(e as RexCall)
                 isSnowflakeDateaddOp(e) -> simplifySnowflakeDateaddOp(e as RexCall)
