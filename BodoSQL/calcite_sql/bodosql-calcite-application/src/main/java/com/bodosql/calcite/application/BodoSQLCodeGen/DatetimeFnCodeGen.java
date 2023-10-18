@@ -163,7 +163,7 @@ public class DatetimeFnCodeGen {
     } else {
       fnName = "pd.Timestamp.now";
     }
-    return new Expr.Call(fnName, new Expr.StringLiteral("UTC"));
+    return new Expr.Call(fnName);
   }
 
   /**
