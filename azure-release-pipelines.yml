@@ -175,44 +175,8 @@ stages:
           NP: 2
           PYTEST_MARKER: ""
 
+
   # BodoSQL tests
-- stage: Test_BodoSQL_Binary
-  displayName: 'Test BodoSQL Binary'
-  dependsOn: Build_BodoSQL_Binary
-  jobs:
-
-  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
-    parameters:
-      # Note: this name is not important, as we explicitly check uname to determine the os
-      # for the bodoSQL tests
-      name: BodoSQL_Regular_Tests
-      CONDA_ENV: run_bodo_sql
-      matrix:
-        ${{ each slice in split(variables.bodosql_1p_each, ',') }}:
-          ${{ format('BODOSQL_1P_{0}_OF_{1}', slice, variables.bodosql_1p_total) }}:
-            NP: 1
-            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_1p_total, parameters.PYTEST_MARKER) }}
-            BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        ${{ each slice in split(variables.bodosql_2p_each, ',') }}:
-          ${{ format('BODOSQL_2P_{0}_OF_{1}', slice, variables.bodosql_2p_total) }}:
-            NP: 2
-            PYTEST_MARKER: ${{ format('bodosql_{0}of{1} and ({2})', slice, variables.bodosql_2p_total, parameters.PYTEST_MARKER) }}
-            BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-
-  - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml
-    parameters:
-      # Note: this name is not important, as we explicitly pass CACHE_TEST and
-      # check uname to determine the os for the bodoSQL tests
-      name: BodoSQL_Caching_Tests
-      CONDA_ENV: build_bodo_sql
-      CACHE_TEST: true
-      matrix:
-        TEST_2P:
-          PYTEST_MARKER: ""
-          NP: 2
-
-
-  # BodoSQL tests with streaming enabled
 - stage: Test_BodoSQL_Binary_Streaming
   displayName: 'Test BodoSQL Binary Streaming'
   dependsOn: Build_BodoSQL_Binary
