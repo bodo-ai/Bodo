@@ -254,6 +254,9 @@ void ChunkedTableArrayBuilder::UnsafeAppendRows(
                 in_arr->child_arrays[j], row_idx);
         }
     }
+    if (this->data_array->field_names.size() == 0) {
+        this->data_array->field_names = in_arr->field_names;
+    }
 
     this->data_array->length += idx_length;
 }

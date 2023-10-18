@@ -112,6 +112,17 @@ void FirstColSet::alloc_running_value_columns(
         std::shared_ptr<array_info> out_col =
             alloc_array_item(num_groups, inner_arr, pool, mm);
         out_cols.push_back(out_col);
+    } else if (in_col->arr_type == bodo_array_type::STRUCT) {
+        // For STRUCT array, allocate dummy inner arrays for
+        // now since the true array cannot be computed until later for
+        // string/nested arrays
+        std::vector<std::shared_ptr<array_info>> child_arrays;
+        for (auto child : in_col->child_arrays) {
+            child_arrays.push_back(alloc_numpy(0, Bodo_CTypes::INT8, pool, mm));
+        }
+        std::shared_ptr<array_info> out_col =
+            alloc_struct(num_groups, child_arrays, pool, mm);
+        out_cols.push_back(out_col);
     } else {
         BasicColSet::alloc_running_value_columns(num_groups, out_cols, pool,
                                                  mm);

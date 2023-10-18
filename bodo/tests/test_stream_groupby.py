@@ -667,3 +667,130 @@ def test_groupby_nested_array_data(memory_leak_check, df):
         sort_output=True,
         only_seq=True,
     )
+
+
+def test_groupby_struct_array_data(memory_leak_check):
+    """
+    Tests support for streaming groupby with struct array data.
+    """
+
+    keys_inds = bodo.utils.typing.MetaType((0,))
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    kept_cols = bodo.utils.typing.MetaType(
+        (
+            0,
+            1,
+        )
+    )
+    batch_size = 3
+    fnames = bodo.utils.typing.MetaType(("first",))
+    f_in_offsets = bodo.utils.typing.MetaType(
+        (
+            0,
+            1,
+        )
+    )
+    f_in_cols = bodo.utils.typing.MetaType((1,))
+
+    def test_groupby(df):
+        groupby_state = init_groupby_state(
+            -1, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
+        is_last1 = False
+        _iter_1 = 0
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df), (), kept_cols, 2
+        )
+        _temp1 = bodo.hiframes.table.local_len(T1)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
+            )
+            is_last1 = (_iter_1 * batch_size) >= _temp1
+            T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
+            _iter_1 = _iter_1 + 1
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1)
+        out_dfs = []
+        is_last2 = False
+        while not is_last2:
+            out_table, is_last2 = groupby_produce_output_batch(groupby_state, True)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df_final = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            )
+            out_dfs.append(df_final)
+        delete_groupby_state(groupby_state)
+        return pd.concat(out_dfs)
+
+    df = pd.DataFrame(
+        {
+            "A": [
+                1,
+                2,
+                1,
+                0,
+                2,
+                1,
+                2,
+                2,
+            ],
+            "B": [
+                {
+                    "X": "AB",
+                    "Y": [1.1, 2.2],
+                    "Z": [[1], None, [3, None]],
+                    "W": {"A": 1, "B": "A"},
+                },
+                {
+                    "X": "C",
+                    "Y": [1.1],
+                    "Z": [[11], None],
+                    "W": {"A": 1, "B": "ABC"},
+                },
+                None,
+                {
+                    "X": "D",
+                    "Y": [4.0, 6.0],
+                    "Z": [[1], None],
+                    "W": {"A": 1, "B": ""},
+                },
+                {
+                    "X": "VFD",
+                    "Y": [1.2],
+                    "Z": [[], [3, 1]],
+                    "W": {"A": 1, "B": "AA"},
+                },
+                {
+                    "X": "LMMM",
+                    "Y": [9.0, 1.2, 3.1],
+                    "Z": [[10, 11], [11, 0, -3, -5]],
+                    "W": {"A": 1, "B": "DFG"},
+                },
+                {
+                    "X": "LMMM",
+                    "Y": [9.0, 1.2, 3.1],
+                    "Z": [[10, 11], [11, 0, -3, -5]],
+                    "W": {"A": 1, "B": "DFG"},
+                },
+                None,
+            ],
+        }
+    )
+
+    expected_df = df.groupby("A", as_index=False).agg("first")
+    check_func(
+        test_groupby,
+        (df,),
+        py_output=expected_df,
+        reset_index=True,
+        convert_columns_to_pandas=True,
+        sort_output=True,
+        only_seq=True,
+    )

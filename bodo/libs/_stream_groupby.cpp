@@ -1157,10 +1157,11 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
 
         auto seperate_out_cols =
             this->getSeparateOutputColumns(local_input_cols, ftypes[i]);
-
+        std::set<bodo_array_type::arr_type_enum> force_acc_types = {
+            bodo_array_type::STRING, bodo_array_type::DICT,
+            bodo_array_type::ARRAY_ITEM, bodo_array_type::STRUCT};
         for (auto t : std::get<0>(running_value_arr_types)) {
-            if (t == bodo_array_type::STRING || t == bodo_array_type::DICT ||
-                t == bodo_array_type::ARRAY_ITEM) {
+            if (force_acc_types.contains(t)) {
                 this->accumulate_before_update = true;
                 break;
             }
@@ -1168,8 +1169,7 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
 
         if (seperate_out_cols.size() != 0) {
             for (auto t : seperate_out_cols) {
-                if (std::get<0>(t) == bodo_array_type::STRING ||
-                    std::get<0>(t) == bodo_array_type::DICT) {
+                if (force_acc_types.contains(std::get<0>(t))) {
                     this->accumulate_before_update = true;
                     break;
                 }

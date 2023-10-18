@@ -357,6 +357,10 @@ struct ArrayBuildBuffer {
             this->child_array_builders[i].UnsafeAppendBatch(
                 in_arr->child_arrays[i], append_rows, append_rows_sum);
         }
+        // Copy field names if not set
+        if (this->data_array->field_names.size() == 0) {
+            this->data_array->field_names = in_arr->field_names;
+        }
     }
 
     void UnsafeAppendBatch(const std::shared_ptr<array_info>& in_arr,
@@ -667,6 +671,10 @@ struct ArrayBuildBuffer {
                 bool bit = GetBit(in_bitmask, i);
                 SetBitTo(out_bitmask, this->size + i, bit);
             }
+        }
+        // Copy field names if not set
+        if (this->data_array->field_names.size() == 0) {
+            this->data_array->field_names = in_arr->field_names;
         }
         this->data_array->length += in_arr->length;
     }
