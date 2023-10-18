@@ -50,6 +50,11 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
     private val normalizer: com.bodosql.calcite.application.utils.RexNormalizer =
         com.bodosql.calcite.application.utils.RexNormalizer(rel.cluster.rexBuilder)
 
+    private fun newSection(s: StringBuilder, sectionName: String) {
+        spacer.spaces(s)
+        s.append("# $sectionName: ")
+    }
+
     override fun explain_(rel: RelNode, values: List<Pair<String, Any?>>) {
         val inputs = rel.inputs
         val uncastedMq = rel.cluster.metadataQuery
@@ -59,15 +64,16 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
         val s = StringBuilder()
 
         // Display cost information.
-        spacer.spaces(s)
         val cost = mq.getNonCumulativeCost(rel) as Cost
-        s.append("# cost = ${cost.valueString} $cost")
+        newSection(s, "cost")
+        s.append("${cost.valueString} $cost\n")
 
         // Assign the physical trait information if that exists
         // for testing purposes
         val batchingProperty = rel.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)
         if (batchingProperty != null) {
-            s.append(", batchingProperty=[$batchingProperty]")
+            newSection(s, "batching property")
+            s.append("$batchingProperty\n")
         }
 
         // Check if we have distinctiveness information for any of the columns
@@ -79,18 +85,29 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
                 (0 until rel.rowType.fieldCount).any { i -> mq.getColumnDistinctCount(rel, i) != null }
             if (hasDistinctInfo) {
                 // If we do,
-                s.append(", Distinct estimates: ")
+                newSection(s, "distinct estimates")
                 for (columnIdx in 0 until rel.rowType.fieldCount) {
                     val distinctiveness = mq.getColumnDistinctCount(rel, columnIdx)
                     if (distinctiveness != null) {
                         val formattedDistinctiveness = DecimalFormat("##0.#E0").format(distinctiveness)
-                        s.append("$$columnIdx = $formattedDistinctiveness values, ")
+                        s.append("$$columnIdx = $formattedDistinctiveness values")
+                        if (columnIdx < rel.rowType.fieldCount - 1) {
+                            s.append(", ")
+                        }
                     }
                 }
+                s.append("\n")
             }
         } else if ((System.getenv("UPDATE_EXPECT")?.toIntOrNull() ?: 0) != 0) {
             throw RuntimeException("One of UPDATE_EXPECT and BODOSQL_TESTING_FIND_NEEDED_METADATA must be disabled when running tests")
         }
+
+        // Add the types of each output column
+        newSection(s, "types")
+        val types = rel.rowType.fieldList.map { it.type.toString() }
+        s.append(types.joinToString(", "))
+        s.append("\n")
+
         // If this relational node appears multiple times in the tree,
         // we will have assigned it a normalized id. If that normalized id
         // exists, output it.
@@ -98,9 +115,9 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
         // churn on the diffs when plans change. Ids are really only significant
         // when they are duplicates.
         normalizedIdMap[rel.id]?.also { id ->
-            s.append(", id = $id")
+            spacer.spaces(s)
+            s.append("# id: $id\n")
         }
-        s.append("\n")
 
         // Relational node name and attributes.
         spacer.spaces(s)
