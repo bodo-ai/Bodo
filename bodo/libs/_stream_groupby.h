@@ -18,6 +18,8 @@
 // Use all available memory by default
 #define GROUPBY_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL 1.0
 
+#define GROUPBY_MAX_PARTITION_DEPTH 15
+
 class GroupbyPartition;
 class GroupbyState;
 
@@ -364,7 +366,7 @@ class GroupbyState {
 
     // TODO Decide this dynamically using a heuristic based
     // on total available memory, total disk space, etc.
-    const size_t max_partition_depth = 6;
+    const size_t max_partition_depth;
 
     const uint64_t n_keys;
     bool parallel;
@@ -470,7 +472,8 @@ class GroupbyState {
                  std::vector<int32_t> f_in_offsets_,
                  std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
                  int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
-                 int64_t op_pool_size_bytes, size_t max_partition_depth_ = 5);
+                 int64_t op_pool_size_bytes,
+                 size_t max_partition_depth_ = GROUPBY_MAX_PARTITION_DEPTH);
 
     /**
      * @brief Unify dictionaries of input table with build table
