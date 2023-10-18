@@ -21,6 +21,8 @@ using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
 // Use all available memory by default
 #define JOIN_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL 1.0
 
+#define JOIN_MAX_PARTITION_DEPTH 15
+
 class JoinPartition;
 struct HashHashJoinTable {
     /**
@@ -574,7 +576,7 @@ class HashJoinState : public JoinState {
 
     // TODO Decide this dynamically using a heuristic based
     // on total available memory, total disk space, etc.
-    const size_t max_partition_depth = 6;
+    const size_t max_partition_depth;
 
     // Shuffle state
     std::unique_ptr<TableBuildBuffer> build_shuffle_buffer;
@@ -623,7 +625,7 @@ class HashJoinState : public JoinState {
                   // If -1, we'll use 100% of the total buffer
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,
-                  size_t max_partition_depth_ = 5);
+                  size_t max_partition_depth_ = JOIN_MAX_PARTITION_DEPTH);
 
     /**
      * @brief Create a global bloom filter for this Hash Join
