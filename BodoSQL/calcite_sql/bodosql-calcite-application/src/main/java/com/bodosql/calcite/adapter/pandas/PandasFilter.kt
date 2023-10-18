@@ -5,7 +5,6 @@ import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.BodoSQLKernel
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
-import com.bodosql.calcite.ir.OperatorType
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.core.FilterBase
@@ -83,7 +82,7 @@ class PandasFilter(
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
         val readerVar = builder.symbolTable.genStateVar()
-        currentPipeline.initializeStreamingState(ctx.operatorID(), Op.Assign(readerVar, Expr.Call("bodo.libs.stream_dict_encoding.init_dict_encoding_state", Expr.IntegerLiteral(ctx.operatorID()))), OperatorType.ENCODE_DICT)
+        currentPipeline.addInitialization(Op.Assign(readerVar, Expr.Call("bodo.libs.stream_dict_encoding.init_dict_encoding_state")))
         return readerVar
     }
 
@@ -94,7 +93,7 @@ class PandasFilter(
     override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
         val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
         val deleteState = Op.Stmt(Expr.Call("bodo.libs.stream_dict_encoding.delete_dict_encoding_state", listOf(stateVar)))
-        currentPipeline.deleteStreamingState(ctx.operatorID(), deleteState)
+        currentPipeline.addTermination(deleteState)
     }
 
     private fun emit(ctx: PandasRel.BuildContext, translator: RexToPandasTranslator, input: BodoEngineTable, condition: RexNode): BodoEngineTable {
