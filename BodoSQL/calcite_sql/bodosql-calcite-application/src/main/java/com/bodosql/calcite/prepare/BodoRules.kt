@@ -467,6 +467,9 @@ object BodoRules {
             )
         }.withDescription("BodoUnionMergeRule").toRule()
 
+    @JvmField
+    val CSE_IN_FILTERS_RULE: RelOptRule = InClauseCommonSubexpressionEliminationRule.Config.DEFAULT.withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER).toRule()
+
     // RULE GROUPINGS
 
     /**

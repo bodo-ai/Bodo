@@ -81,6 +81,12 @@ object BodoPrograms {
         } else {
             NoopProgram
         },
+        // We eliminate common subexpressions in filters only after all filters have been pushed down.
+        if (optimize) {
+            HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE))
+        } else {
+            NoopProgram
+        },
         // Rewrite step. The Filter Case changes risk keeping a filter from passing through a join by inserting
         // a projection, so we run it after filter pushdown.
         if (optimize) {
