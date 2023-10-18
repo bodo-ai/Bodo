@@ -385,10 +385,10 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     return getTableImpl(schema, tableName, isConnectionCached());
   }
 
-  private class SnowflakeTypeInfo {
-    BodoSQLColumnDataType columnDataType;
-    BodoSQLColumnDataType elemType;
-    int precision;
+  public static class SnowflakeTypeInfo {
+    public final BodoSQLColumnDataType columnDataType;
+    public final BodoSQLColumnDataType elemType;
+    public final int precision;
 
     SnowflakeTypeInfo(BodoSQLColumnDataType dtype, BodoSQLColumnDataType etype, int prec) {
       columnDataType = dtype;
@@ -406,7 +406,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    *     an ARRAY containing nested data and precision for the type in question. If the type is not
    *     Time then the precision value is garbage and its value is ignored.
    */
-  SnowflakeTypeInfo snowflakeTypeNameToTypeInfo(String typeName) {
+  public static SnowflakeTypeInfo snowflakeTypeNameToTypeInfo(String typeName) {
     // Convert the type to all caps to simplify checking.
     typeName = typeName.toUpperCase(Locale.ROOT);
     final BodoSQLColumnDataType columnDataType;
