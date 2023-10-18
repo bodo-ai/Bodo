@@ -7,27 +7,29 @@ bodo::tests::suite memory_budget_tests([] {
     bodo::tests::after_each([] { unsetenv("BODO_USE_MEMORY_BUDGETS"); });
 
     bodo::tests::test("test_exception_if_increment_called_before_init", [] {
-        bool passed = false;
         auto comptroller = OperatorComptroller::Default();
-        try {
-            comptroller->IncrementPipelineID();
-        } catch (std::runtime_error e) {
-            passed = true;
-        }
-        bodo::tests::check(passed);
+        bodo::tests::check_exception(
+            [&] { comptroller->IncrementPipelineID(); },
+            "Initialize() was not called");
     });
     bodo::tests::test("test_exception_if_increment_called_after_reset", [] {
-        bool passed = false;
         auto comptroller = OperatorComptroller::Default();
         comptroller->Initialize();
         comptroller->IncrementPipelineID();
         comptroller->Reset();
-        try {
-            comptroller->IncrementPipelineID();
-        } catch (std::runtime_error e) {
-            passed = true;
-        }
-        bodo::tests::check(passed);
+        bodo::tests::check_exception(
+            [&] { comptroller->IncrementPipelineID(); },
+            "Initialize() was not called");
+    });
+    bodo::tests::test("test_exception_if_invalid_start_end_pipeline_range", [] {
+        auto comptroller = OperatorComptroller::Default();
+        comptroller->Initialize();
+        bodo::tests::check_exception(
+            [&]() {
+                comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 1, 0,
+                                              100);
+            },
+            "max_pipeline_id cannot be less than min_pipeline_id");
     });
 
     bodo::tests::test("test_1_op_satisfiable_estimate", [] {
