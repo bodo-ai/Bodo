@@ -212,6 +212,13 @@ def numba_to_c_types(
             c_types.append(CTypeEnum.STRUCT.value)
             c_types.append(len(arr_type.data))
             c_types.extend(numba_to_c_types(arr_type.data))
+        elif isinstance(arr_type, bodo.MapArrayType):
+            c_types.append(CTypeEnum.LIST.value)
+            c_types.append(CTypeEnum.STRUCT.value)
+            c_types.append(2)
+            c_types.extend(
+                numba_to_c_types((arr_type.key_arr_type, arr_type.value_arr_type))
+            )
         else:
             while isinstance(arr_type, bodo.ArrayItemArrayType):
                 c_types.append(CTypeEnum.LIST.value)
@@ -291,6 +298,13 @@ def numba_to_c_array_types(
             c_arr_types.append(CArrayTypeEnum.STRUCT.value)
             c_arr_types.append(len(arr_type.data))
             c_arr_types.extend(numba_to_c_array_types(arr_type.data))
+        elif isinstance(arr_type, bodo.MapArrayType):
+            c_arr_types.append(CArrayTypeEnum.ARRAY_ITEM.value)
+            c_arr_types.append(CArrayTypeEnum.STRUCT.value)
+            c_arr_types.append(2)
+            c_arr_types.extend(
+                numba_to_c_array_types((arr_type.key_arr_type, arr_type.value_arr_type))
+            )
         else:
             while isinstance(arr_type, bodo.ArrayItemArrayType):
                 c_arr_types.append(CArrayTypeEnum.ARRAY_ITEM.value)

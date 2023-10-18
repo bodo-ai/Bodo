@@ -46,7 +46,6 @@ def map_arr_value(request):
 
 # there is a memory leak probably due to the decref issue in to_arr_obj_if_list_obj()
 # TODO: fix leak and enable test
-# def test_unbox(map_arr_value, memory_leak_check):
 @pytest.mark.slow
 def test_unbox(map_arr_value):
     # just unbox
@@ -134,11 +133,10 @@ def test_map_apply(memory_leak_check):
     check_func(impl, (df2, keys2))
 
 
-def test_map_bool_getitem(map_arr_value):
+def test_getitem_bool(map_arr_value):
     """
     Tests using a boolean getitem to select map array values.
     """
-    # TODO: Fix memory leak
 
     def impl(map_arr, idx):
         return map_arr[idx]
@@ -150,3 +148,11 @@ def test_map_bool_getitem(map_arr_value):
         (map_arr_value, idx),
         py_output=map_arr_value[idx.fillna(False).to_numpy(np.bool_)],
     )
+
+
+def test_getitem_slice(map_arr_value):
+    def test_impl(A, idx):
+        return A[idx]
+
+    idx = slice(1, 4)
+    check_func(test_impl, (map_arr_value, idx), dist_test=False)

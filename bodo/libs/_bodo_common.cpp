@@ -193,19 +193,20 @@ std::unique_ptr<array_info> alloc_array_item(
     const std::vector<int8_t>& arr_array_types,
     const std::vector<int8_t>& arr_c_types, bodo::IBufferPool* const pool,
     const std::shared_ptr<::arrow::MemoryManager> mm) {
-    if (start_idx + 1 == end_idx) {
-        // We have reached the bottom level of the nested array. Create the
-        // inner array and return.
+    if (arr_array_types[start_idx] == bodo_array_type::ARRAY_ITEM) {
+        std::unique_ptr<array_info> inner_array =
+            alloc_array_item(n_arrays, start_idx + 1, end_idx, arr_array_types,
+                             arr_c_types, pool, mm);
+        return alloc_array_item(n_arrays, std::move(inner_array), pool, mm);
+    } else if (arr_array_types[start_idx] == bodo_array_type::STRUCT) {
+        return alloc_struct(n_arrays, start_idx, end_idx, arr_array_types,
+                            arr_c_types, pool, mm);
+    } else {
         return alloc_array(
             n_arrays, 0, 0,
             (bodo_array_type::arr_type_enum)arr_array_types[start_idx],
             (Bodo_CTypes::CTypeEnum)arr_c_types[start_idx], -1, 0, 0, false,
             false, false, pool, mm);
-    } else {
-        std::unique_ptr<array_info> inner_array =
-            alloc_array_item(n_arrays, start_idx + 1, end_idx, arr_array_types,
-                             arr_c_types, pool, mm);
-        return alloc_array_item(n_arrays, std::move(inner_array), pool, mm);
     }
 }
 
@@ -632,6 +633,10 @@ void decref_numpy_payload(numpy_arr_payload arr) {
  * -- n_sub_elems is the number of keys in the dictionary
  * -- n_sub_sub_elems is the total number of characters for
  *    the keys in the dictionary
+ * In the case of ARRAY_ITEM or STRUCT:
+ * -- length is the number of rows (same as the number of indices)
+ * -- Dummy child arrays are returned. The caller is responsible for
+ * initializing the child arrays
  */
 std::unique_ptr<array_info> alloc_array(
     int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
@@ -669,14 +674,9 @@ std::unique_ptr<array_info> alloc_array(
             return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
                                            pool, std::move(mm));
         case bodo_array_type::ARRAY_ITEM:
-            throw std::runtime_error(
-                "alloc_array: ARRAY_ITEM array is not supported by "
-                "alloc_array. Use alloc_array_item or alloc_array_like "
-                "instead.");
+            return alloc_array_item(length, nullptr);
         case bodo_array_type::STRUCT:
-            throw std::runtime_error(
-                "alloc_array: STRUCT array is not supported by alloc_array. "
-                "Use alloc_struct or alloc_array_like instead.");
+            return alloc_struct(length, {});
         default:
             throw std::runtime_error("alloc_array: array type (" +
                                      GetArrType_as_string(arr_type) +
@@ -1085,7 +1085,8 @@ void get_next_col_arr_type(size_t& col_start_idx, size_t& col_end_idx,
                 "The last array type cannot be ARRAY_ITEM: inner array type "
                 "needs to be provided!");
         }
-        ++col_end_idx;
+        get_next_col_arr_type(col_end_idx, col_end_idx, arr_array_types,
+                              arr_end_idx);
     } else if (arr_array_types[col_end_idx] == bodo_array_type::STRUCT) {
         int8_t tot = arr_array_types[col_end_idx + 1];
         col_end_idx += 2;
