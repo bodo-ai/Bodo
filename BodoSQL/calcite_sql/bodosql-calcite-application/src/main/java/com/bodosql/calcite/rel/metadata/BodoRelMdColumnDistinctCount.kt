@@ -137,10 +137,11 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             } else if (rel.groupSets.size != 1 || column >= rel.groupSet.asList().size) {
                 return null
             } else {
+                // The number of distinct rows in any grouping key the same as the input
                 val inputColumn = rel.groupSet.asList()[column]
                 val distinctInput = (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, inputColumn)
-                val ratio = mq.getRowCount(rel) / mq.getRowCount(rel.input)
-                return distinctInput?.let { maxOf(distinctInput.times(ratio), 1.0) }
+                val outRows = mq.getRowCount(rel)
+                return distinctInput?.let { minOf(it, outRows) }
             }
         }
     }
