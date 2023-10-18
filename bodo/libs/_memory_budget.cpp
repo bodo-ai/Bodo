@@ -28,6 +28,13 @@ void OperatorComptroller::SetMemoryBudget(int64_t pipeline_id, size_t budget) {
 void OperatorComptroller::RegisterOperator(
     int64_t operator_id, [[maybe_unused]] OperatorType operator_type,
     int64_t min_pipeline_id, int64_t max_pipeline_id, size_t estimate) {
+    if (max_pipeline_id < min_pipeline_id) {
+        // this should never happen - if it does, something is wrong on the
+        // BodoSQL side.
+        throw std::runtime_error(
+            "max_pipeline_id cannot be less than min_pipeline_id");
+    }
+
     if (num_operators < (operator_id + 1)) {
         // We have to do this resize here, because we are currently writing to
         // the requests_per_operator map.

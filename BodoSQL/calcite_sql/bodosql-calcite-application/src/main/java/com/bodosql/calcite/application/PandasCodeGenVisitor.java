@@ -1004,7 +1004,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.terminateTimer();
     StreamingPipelineFrame finishedPipeline = this.generatedCode.endCurrentStreamingPipeline();
     this.generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
-    this.generatedCode.forceEndOperatorAtCurPipeline(operatorID);
+    this.generatedCode.forceEndOperatorAtCurPipeline(operatorID, finishedPipeline);
   }
 
   public void visitLogicalTableCreate(PandasTableCreate node) {
@@ -1289,7 +1289,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.terminateTimer();
     StreamingPipelineFrame finishedPipeline = this.generatedCode.endCurrentStreamingPipeline();
     this.generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
-    this.generatedCode.forceEndOperatorAtCurPipeline(operatorID);
+    this.generatedCode.forceEndOperatorAtCurPipeline(operatorID, finishedPipeline);
   }
 
   /**
