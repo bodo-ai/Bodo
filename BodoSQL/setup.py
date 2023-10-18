@@ -69,6 +69,8 @@ def build_libs(obj):
                 "-Dmaven.repo.local=" + dmvn_repo,
             ]
         )
+        if "BODO_FORCE_COLORED_BUILD" in os.environ:
+            cmd_list.append("-Dstyle.color=always")
         obj.spawn(cmd_list)
 
         executable_jar_path = os.path.join(
