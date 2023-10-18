@@ -663,14 +663,15 @@ def map_arr_getitem(arr, ind):
 
         return map_arr_getitem_impl
 
-    # bool arr indexing.
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+    if (is_list_like_index_type(ind) and ind.dtype == types.bool_) or isinstance(
+        ind, types.SliceType
+    ):
 
-        def map_arr_getitem_bool_impl(arr, ind):  # pragma: no cover
-            # Reuse the array item array implementation to support boolean arrays
+        def map_arr_getitem_impl(arr, ind):  # pragma: no cover
+            # Reuse the array item array implementation
             return init_map_arr(arr._data[ind])
 
-        return map_arr_getitem_bool_impl
+        return map_arr_getitem_impl
 
     raise BodoError(
         f"getitem for MapArray with indexing type {ind} not supported."
