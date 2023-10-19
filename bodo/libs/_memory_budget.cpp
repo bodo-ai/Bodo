@@ -25,9 +25,11 @@ void OperatorComptroller::SetMemoryBudget(int64_t pipeline_id, size_t budget) {
     pipeline_remaining_budget[pipeline_id] = budget;
 }
 
-void OperatorComptroller::RegisterOperator(
-    int64_t operator_id, [[maybe_unused]] OperatorType operator_type,
-    int64_t min_pipeline_id, int64_t max_pipeline_id, size_t estimate) {
+void OperatorComptroller::RegisterOperator(int64_t operator_id,
+                                           OperatorType operator_type,
+                                           int64_t min_pipeline_id,
+                                           int64_t max_pipeline_id,
+                                           size_t estimate) {
     if (max_pipeline_id < min_pipeline_id) {
         // this should never happen - if it does, something is wrong on the
         // BodoSQL side.
