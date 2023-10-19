@@ -3732,3 +3732,274 @@ def test_nested_loop_join_map_array(memory_leak_check):
         sort_output=True,
         only_seq=True,
     )
+
+
+def test_hash_join_tuple_array(memory_leak_check):
+    probe_table = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4, 5, 6],
+            "B": [
+                (2, 3.1),
+                None,
+                (-1, 7.8),
+                (3, 4.0),
+                (-3, -1.2),
+                (None, 9.0),
+            ],
+        }
+    )
+    build_table = pd.DataFrame(
+        {
+            "C": [1, 2, 3, 4, 5, 6],
+            "D": [
+                (-1.1, -1.1),
+                (2.1, np.nan),
+                (3.1, 4.1),
+                None,
+                (-3.1, -1.1),
+                (5.1, 9.1),
+            ],
+        }
+    )
+    build_keys_inds = bodo.utils.typing.MetaType((0,))
+    probe_keys_inds = bodo.utils.typing.MetaType((0,))
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+
+    def test_hash_join(df1, df2):
+        join_state = init_join_state(
+            -1,
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+        )
+        _temp1 = 0
+        is_last1 = False
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), kept_cols, 2
+        )
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
+            )
+            is_last1 = (_temp1 * 4000) >= len(df1)
+            _temp1 = _temp1 + 1
+            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+
+        _temp2 = 0
+        is_last2 = False
+        is_last3 = False
+        T3 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), kept_cols, 2
+        )
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+
+        while not is_last3:
+            T4 = bodo.hiframes.table.table_local_filter(
+                T3, slice((_temp2 * 4000), ((_temp2 + 1) * 4000))
+            )
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            _temp2 = _temp2 + 1
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, T4, is_last2, True
+            )
+            bodo.libs.table_builder.table_builder_append(_table_builder, out_table)
+
+        delete_join_state(join_state)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+        return df
+
+    # Generate expected output for each type of join
+    expected_df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 4, 5, 6]),
+            "B": np.array(
+                [
+                    (2, 3.1),
+                    None,
+                    (-1, 7.8),
+                    (3, 4.0),
+                    (-3, -1.2),
+                    (None, 9.0),
+                ],
+                dtype=object,
+            ),
+            "C": pd.array([1, 2, 3, 4, 5, 6]),
+            "D": np.array(
+                [
+                    (-1.1, -1.1),
+                    (2.1, None),
+                    (3.1, 4.1),
+                    None,
+                    (-3.1, -1.1),
+                    (5.1, 9.1),
+                ],
+                dtype=object,
+            ),
+        }
+    )
+
+    check_func(
+        test_hash_join,
+        (build_table, probe_table),
+        py_output=expected_df,
+        reset_index=True,
+        convert_columns_to_pandas=True,
+        sort_output=True,
+        only_seq=True,
+    )
+
+
+def test_nested_loop_join_tuple_array(memory_leak_check):
+    probe_table = pd.DataFrame(
+        {
+            "A": [1, 2, 3],
+            "B": [
+                (2, 3.1),
+                None,
+                (None, 9.0),
+            ],
+        }
+    )
+    build_table = pd.DataFrame(
+        {
+            "C": [1, 2, 3],
+            "D": [
+                (-3.1, -1.1),
+                None,
+                (2.1, np.nan),
+            ],
+        }
+    )
+    build_keys_inds = bodo.utils.typing.MetaType(())
+    probe_keys_inds = bodo.utils.typing.MetaType(())
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+
+    def test_nested_loop_join(df1, df2):
+        join_state = init_join_state(
+            -1,
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+            non_equi_condition="right.A > left.C",
+        )
+        _temp1 = 0
+        is_last1 = False
+        tt = bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1)
+        T1 = bodo.hiframes.table.logical_table_to_table(tt, (), kept_cols, 2)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
+            )
+            is_last1 = (_temp1 * 4000) >= len(df1)
+            _temp1 = _temp1 + 1
+            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+
+        _temp2 = 0
+        is_last2 = False
+        is_last3 = False
+        T3 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), kept_cols, 2
+        )
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+
+        while not is_last3:
+            T4 = bodo.hiframes.table.table_local_filter(
+                T3, slice((_temp2 * 4000), ((_temp2 + 1) * 4000))
+            )
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            _temp2 = _temp2 + 1
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, T4, is_last2, True
+            )
+            bodo.libs.table_builder.table_builder_append(_table_builder, out_table)
+
+        delete_join_state(join_state)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+        return df
+
+    # Generate expected output for each type of join
+
+    expected_df = pd.DataFrame(
+        {
+            "A": pd.array([1, 1, 2]),
+            "B": [
+                (2, 3.1),
+                (2, 3.1),
+                None,
+            ],
+            "C": pd.array([2, 3, 3]),
+            "D": [
+                None,
+                (2.1, np.nan),
+                (2.1, np.nan),
+            ],
+        }
+    )
+
+    check_func(
+        test_nested_loop_join,
+        (build_table, probe_table),
+        py_output=expected_df,
+        reset_index=True,
+        convert_columns_to_pandas=True,
+        sort_output=True,
+        only_seq=True,
+    )

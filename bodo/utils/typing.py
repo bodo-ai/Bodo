@@ -2587,11 +2587,5 @@ def error_on_nested_arrays(table_type):
     ), "error_on_nested_arrays: TableType expected"
 
     for arr_type in table_type.arr_types:
-        if isinstance(
-            arr_type,
-            (
-                bodo.TupleArrayType,
-                bodo.IntervalArrayType,
-            ),
-        ):
+        if isinstance(arr_type, bodo.IntervalArrayType):
             raise BodoError(f"Array type {arr_type} not supported in streaming yet")
