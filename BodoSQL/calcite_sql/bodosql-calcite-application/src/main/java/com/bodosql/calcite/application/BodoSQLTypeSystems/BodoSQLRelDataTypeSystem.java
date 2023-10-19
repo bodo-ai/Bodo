@@ -133,6 +133,9 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
       case VARBINARY:
       case BINARY:
         return 8388608;
+      case CHAR:
+      case VARCHAR:
+        return 16777216;
       default:
         return super.getMaxPrecision(typeName);
     }
