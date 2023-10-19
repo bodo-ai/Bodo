@@ -15,7 +15,11 @@ import org.apache.calcite.rel.metadata.MetadataDef
 import org.apache.calcite.rel.metadata.MetadataHandler
 import org.apache.calcite.rel.metadata.ReflectiveRelMetadataProvider
 import org.apache.calcite.rel.metadata.RelMetadataQuery
+import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexNode
+import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.ImmutableBitSet
 
 class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
@@ -72,21 +76,57 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         }
     }
 
+    /**
+     * Attempts to infer the distinctiveness of a call to CAST based on the distinctiveness
+     * of its input.
+     *
+     * @param rel The original projection containing this rex node
+     * @param rex The value being casted
+     * @param mq The metadata query handler
+     * @param targetType The type that rex gets casted to
+     * @return The number of distinct rows produced by rex when casted, or null if we cannot infer it.
+     */
+    private fun inferCastDistinctiveness(rel: Project, rex: RexNode, mq: RelMetadataQuery, targetType: SqlTypeName): Double? {
+        // For certain types, the output always matches the input's distinctiveness
+        if (targetType == SqlTypeName.TIMESTAMP) {
+            return inferRexDistinctness(rel, rex, mq)
+        }
+        return null
+    }
+
+    /**
+     * Attempts to infer the distinctiveness of a RexNode by inferring the distinctiveness
+     * of the Input Ref(s) involved and either passing it through unmodified, or transforming
+     * it somehow if it goes through a function call.
+     *
+     * @param rel The original projection containing this rex node
+     * @param rex The rex node whose distinctiveness information we are trying to infer
+     * @param mq The metadata query handler
+     * @return The number of distinct rows produced by rex, or null if we cannot infer it.
+     */
+    private fun inferRexDistinctness(rel: Project, rex: RexNode, mq: RelMetadataQuery): Double? {
+        // Base case: known scalar values have only 1 distinct value
+        if (rex.accept(IsScalar())) { return 1.0 }
+        // Base case: once an InputRef is reached, its distinctiveness information is calculated
+        // so that it can be propagated upward.
+        if (rex is RexInputRef) {
+            return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, rex.index)
+        }
+        if (rex is RexCall) {
+            if (rex.kind == SqlKind.CAST) {
+                return inferCastDistinctiveness(rel, rex.operands[0], mq, rex.type.sqlTypeName)
+            }
+        }
+        return null
+    }
+
     fun getColumnDistinctCount(rel: Project, mq: RelMetadataQuery, column: Int): Double? {
         val distinctCount = getColumnDistinctCount(rel as RelNode, mq, column)
         return if (distinctCount != null) {
             distinctCount
         } else {
-            // For projects check based on RexNode type.
             val columnNode = rel.projects[column]
-            return if (columnNode.accept(IsScalar())) {
-                1.0
-            } else if (columnNode is RexInputRef) {
-                // Input refs are identical to the input.
-                (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, columnNode.index)
-            } else {
-                null
-            }
+            return inferRexDistinctness(rel, columnNode, mq)
         }
     }
 
