@@ -123,7 +123,13 @@ def _test_helper(
             with expected output.
     """
     comm = MPI.COMM_WORLD
-    with temp_env_override({"BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1"}):
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+            # Enable partitioning even though spilling is not setup
+            "BODO_STREAM_GROUPBY_ENABLE_PARTITIONING": "1",
+        }
+    ):
         try:
             (
                 output,

@@ -175,7 +175,11 @@ def test_split_during_append_table(build_probe_outer, broadcast, memory_leak_che
     # In the broadcast case, we don't want it to re-partition.
     op_pool_size_bytes = 768 * 1024 if not broadcast else 2 * 1024 * 1024
     with set_broadcast_join(broadcast), temp_env_override(
-        {"BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1"}
+        {
+            "BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1",
+            # Enable partitioning even though spilling is not setup
+            "BODO_STREAM_HASH_JOIN_ENABLE_PARTITIONING": "1",
+        }
     ):
         (
             output,
@@ -242,7 +246,11 @@ def test_split_during_finalize_build(build_probe_outer, memory_leak_check):
     # This will cause partition split during the "FinalizeBuild"
     op_pool_size_bytes = 896 * 1024
     with set_broadcast_join(False), temp_env_override(
-        {"BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1"}
+        {
+            "BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1",
+            # Enable partitioning even though spilling is not setup
+            "BODO_STREAM_HASH_JOIN_ENABLE_PARTITIONING": "1",
+        }
     ):
         (
             output,
@@ -324,7 +332,11 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
     # after the shuffle on rank 1.
     op_pool_size_bytes = 1024 * 1024
     with set_broadcast_join(False), temp_env_override(
-        {"BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1"}
+        {
+            "BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1",
+            # Enable partitioning even though spilling is not setup
+            "BODO_STREAM_HASH_JOIN_ENABLE_PARTITIONING": "1",
+        }
     ):
         (
             output,
