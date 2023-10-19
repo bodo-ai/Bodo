@@ -23,6 +23,7 @@ import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeName
+import org.apache.calcite.sql.type.TZAwareSqlType
 import org.apache.calcite.sql.type.VariantSqlType
 import org.immutables.value.Value
 
@@ -239,6 +240,11 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
             if (call.kind == SqlKind.CAST) {
                 // Cast to Variant or Cast input is a variant
                 if ((call.getType() is VariantSqlType) || (call.operands[0].type is VariantSqlType)) {
+                    return true
+                }
+                // Support cast to TIMESTAMP_LTZ. In the future we may want to make this more restrictive
+                // if we ever allow casting a type to TIMESTAMP_LTZ that Snowflake doesn't.
+                if (call.getType() is TZAwareSqlType) {
                     return true
                 }
                 // Cast is to Date. In the future we may want to make this more restrictive

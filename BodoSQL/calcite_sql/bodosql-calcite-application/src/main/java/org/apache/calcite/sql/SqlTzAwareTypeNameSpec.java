@@ -51,7 +51,8 @@ public class SqlTzAwareTypeNameSpec extends SqlTypeNameSpec {
   }
 
   @Override public void unparse(final SqlWriter writer, final int leftPrec, final int rightPrec) {
-    writer.keyword(String.format("TIMESTAMP(%s)", this.origTz.getZoneExpr().emit()));
+    // Unparse is used for generating Snowflake SQL text
+    writer.keyword("TIMESTAMP_LTZ");
   }
 
   @Override public boolean equalsDeep(final SqlTypeNameSpec spec, final Litmus litmus) {
