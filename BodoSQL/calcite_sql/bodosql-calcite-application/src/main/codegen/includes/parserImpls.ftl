@@ -703,3 +703,135 @@ SqlDrop SqlDropView(Span s, boolean replace) :
 //     }
 //     AddExpression2b(ExprContext.ACCEPT_SUB_QUERY, list)
 // }
+
+SqlNode DatePartFunctionCall() :
+{
+    final Span s;
+    final SqlNode e;
+    final String interval;
+    final List<SqlNode> args = new ArrayList<SqlNode>();
+}
+{
+    <DATE_PART> { s = span(); }
+    <LPAREN>
+    interval = DatePartInterval(args)
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <RPAREN> {
+        return SqlBodoParserUtil.createDatePartFunction("DATE_PART", s.end(this), interval, args);
+    }
+}
+
+String DatePartInterval(final List<SqlNode> args) :
+{
+    final String e;
+}
+{
+    (
+        e = SimpleStringLiteral()
+    |
+        e = DatePartUnquotedInterval()
+    )
+    {
+        return e;
+    }
+}
+
+/**
+ * Parse an unquote Interval value that is legal
+ * for DATE_PART. We convert a string literal to standardize
+ * with the string implementation.
+ *
+ * See: https://docs.snowflake.com/sql-reference/functions-date-time#label-supported-date-time-parts
+ */
+String DatePartUnquotedInterval() :
+{
+    final String intervalString;
+}
+{
+    <YEAR> { return "YEAR"; }
+    | <Y> { return "YEAR"; }
+    | <YY> { return "YEAR"; }
+    | <YYY> { return "YEAR"; }
+    | <YYYY> { return "YEAR"; }
+    | <YR> { return "YEAR"; }
+    | <YEARS> { return "YEAR"; }
+    | <YRS> { return "YEAR"; }
+    | <MONTH> { return "MONTH"; }
+    | <MM> { return "MONTH"; }
+    | <MON> { return "MONTH"; }
+    | <MONS> { return "MONTH"; }
+    | <MONTHS> { return "MONTH"; }
+    | <DAY> { return "DAY"; }
+    | <D> { return "DAY"; }
+    | <DD> { return "DAY"; }
+    | <DAYS> { return "DAY"; }
+    | <DAYOFMONTH> { return "DAY"; }
+    | <DAYOFWEEK> { return "DAYOFWEEK"; }
+    | <WEEKDAY> { return "DAYOFWEEK"; }
+    | <DOW> { return "DAYOFWEEK"; }
+    | <DW> { return "DAYOFWEEK"; }
+    | <DAYOFWEEKISO> { return "DAYOFWEEKISO"; }
+    | <WEEKDAY_ISO> { return "DAYOFWEEKISO"; }
+    | <DOW_ISO> { return "DAYOFWEEKISO"; }
+    | <DW_ISO> { return "DAYOFWEEKISO"; }
+    | <DAYOFYEAR> { return "DAYOFYEAR"; }
+    | <YEARDAY> { return "DAYOFYEAR"; }
+    | <DOY> { return "DAYOFYEAR"; }
+    | <DY> { return "DAYOFYEAR"; }
+    | <WEEK> { return "WEEK"; }
+    | <W> { return "WEEK"; }
+    | <WK> { return "WEEK"; }
+    | <WEEKOFYEAR> { return "WEEK"; }
+    | <WOY> { return "WEEK"; }
+    | <WY> { return "WEEK"; }
+    | <WEEKISO> { return "WEEKISO"; }
+    | <WEEK_ISO> { return "WEEKISO"; }
+    | <WEEKOFYEARISO> { return "WEEKISO"; }
+    | <WEEKOFYEAR_ISO> { return "WEEKISO"; }
+    | <QUARTER> { return "QUARTER"; }
+    | <Q> { return "QUARTER"; }
+    | <QTR> { return "QUARTER"; }
+    | <QTRS> { return "QUARTER"; }
+    | <QUARTERS> { return "QUARTER"; }
+    | <YEAROFWEEK> { return "YEAROFWEEK"; }
+    | <YEAROFWEEKISO> { return "YEAROFWEEKISO"; }
+    | <HOUR> { return "HOUR"; }
+    | <H> { return "HOUR"; }
+    | <HH> { return "HOUR"; }
+    | <HR> { return "HOUR"; }
+    | <HOURS> { return "HOUR"; }
+    | <HRS> { return "HOUR"; }
+    | <MINUTE> { return "MINUTE"; }
+    | <M> { return "MINUTE"; }
+    | <MI> { return "MINUTE"; }
+    | <MIN> { return "MINUTE"; }
+    | <MINUTES> { return "MINUTE"; }
+    | <MINS> { return "MINUTE"; }
+    | <SECOND> { return "SECOND"; }
+    | <S> { return "SECOND"; }
+    | <SEC> { return "SECOND"; }
+    | <SECONDS> { return "SECOND"; }
+    | <SECS> { return "SECOND"; }
+    | <NANOSECOND> { return "NANOSECOND"; }
+    | <NS> { return "NANOSECOND"; }
+    | <NSEC> { return "NANOSECOND"; }
+    | <NANOSEC> { return "NANOSECOND"; }
+    | <NSECOND> { return "NANOSECOND"; }
+    | <NANOSECONDS> { return "NANOSECOND"; }
+    | <NANOSECS> { return "NANOSECOND"; }
+    | <NSECONDS> { return "NANOSECOND"; }
+    | <EPOCH_SECOND> { return "EPOCH_SECOND"; }
+    | <EPOCH> { return "EPOCH_SECOND"; }
+    | <EPOCH_SECONDS> { return "EPOCH_SECOND"; }
+    | <EPOCH_MILLISECOND> { return "EPOCH_MILLISECOND"; }
+    | <EPOCH_MILLISECONDS> { return "EPOCH_MILLISECOND"; }
+    | <EPOCH_MICROSECOND> { return "EPOCH_MICROSECOND"; }
+    | <EPOCH_MICROSECONDS> { return "EPOCH_MICROSECOND"; }
+    | <EPOCH_NANOSECOND> { return "EPOCH_NANOSECOND"; }
+    | <EPOCH_NANOSECONDS> { return "EPOCH_NANOSECOND"; }
+    | <TIMEZONE_HOUR> { return "TIMEZONE_HOUR"; }
+    | <TZH> { return "TIMEZONE_HOUR"; }
+    | <TIMEZONE_MINUTE> { return "TIMEZONE_MINUTE"; }
+    | <TZM> { return "TIMEZONE_MINUTE"; }
+}

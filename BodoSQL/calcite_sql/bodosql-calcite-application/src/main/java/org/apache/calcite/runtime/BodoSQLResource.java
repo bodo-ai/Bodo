@@ -51,6 +51,6 @@ public interface BodoSQLResource {
    @Resources.BaseMessage("Invalid time unit input for {0}: {1}")
    Resources.ExInst<SqlValidatorException> wrongTimeUnit(String fnName, String msg);
 
-   @Resources.BaseMessage("Invalid argument to CONCAT: {0}")
-   Resources.ExInst<SqlValidatorException> invalidConcatArgument(String argtype);
+   @Resources.BaseMessage("Unsupported date/time unit '{1}' for function {0}")
+   Resources.ExInst<SqlValidatorException> illegalDatePartTimeUnit(String functionName, String dateTimeUnit);
 }

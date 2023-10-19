@@ -192,6 +192,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
 
             // Date/Time related functions
             DatetimeOperatorTable.DATE_TRUNC.name,
+            DatetimeOperatorTable.NANOSECOND.name,
             SqlStdOperatorTable.HOUR.name,
             SqlStdOperatorTable.MINUTE.name,
             SqlStdOperatorTable.SECOND.name,
