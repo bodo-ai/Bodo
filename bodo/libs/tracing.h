@@ -90,7 +90,7 @@ class Event {
         if (!tracing_mod) {
             PyErr_Print();
             throw std::runtime_error(
-                "Could not import 'bodo.util.tracing' module");
+                "Could not import 'bodo.utils.tracing' module");
         }
         PyObject* is_tracing_func =
             PyObject_GetAttrString(tracing_mod, "is_tracing");
