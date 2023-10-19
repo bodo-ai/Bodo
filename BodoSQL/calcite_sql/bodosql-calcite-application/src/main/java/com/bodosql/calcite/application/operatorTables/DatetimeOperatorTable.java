@@ -785,6 +785,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction MICROSECOND =
       new SqlDatePartFunction("MICROSECOND", TimeUnit.MICROSECOND);
 
+  // NOTE: This is unique to Bodo
+  public static final SqlFunction NANOSECOND =
+      new SqlDatePartFunction("NANOSECOND", TimeUnit.NANOSECOND);
+
   public static final SqlFunction WEEKOFYEAR = new SqlDatePartFunction("WEEKOFYEAR", TimeUnit.WEEK);
 
   public static final SqlFunction WEEKISO = new SqlDatePartFunction("WEEKISO", TimeUnit.WEEK);
@@ -1063,16 +1067,6 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction DATE_PART =
-      new SqlFunction(
-          "DATE_PART",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.INTEGER_NULLABLE,
-          null,
-          OperandTypes.sequence(
-              "DATE_PART(UNIT, DATETIME)", OperandTypes.ANY, OperandTypes.DATETIME),
-          SqlFunctionCategory.TIMEDATE);
-
   public static final SqlFunction NEXT_DAY =
       new SqlFunction(
           "NEXT_DAY",
@@ -1127,7 +1121,6 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   private List<SqlOperator> functionList =
       Arrays.asList(
           CONVERT_TIMEZONE,
-          DATE_PART,
           DATEADD,
           DATE_ADD,
           DATE_SUB,
@@ -1157,6 +1150,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           MONTHS_BETWEEN,
           ADD_MONTHS,
           MICROSECOND,
+          NANOSECOND,
           WEEKOFYEAR,
           WEEKISO,
           CURDATE,

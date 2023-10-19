@@ -6633,21 +6633,6 @@ SqlNode BuiltinFunctionCall() :
             return SqlStdOperatorTable.TRIM.createCall(s.end(this), args);
         }
     |
-        <DATE_PART> { s = span(); }
-        <LPAREN>
-        (
-            QuotedOrUnquotedInterval(args)
-        |   <DOW> {
-                args.add(SqlLiteral.createSymbol(TimeUnit.DOW, getPos()));
-            }
-        )
-        <COMMA>
-        e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
-        <RPAREN> {
-            return DatetimeOperatorTable.DATE_PART.createCall(
-                s.end(this), args);
-        }
-    |
         <DATE_TRUNC> { s = span(); }
         <LPAREN>
         QuotedOrUnquotedInterval(args)

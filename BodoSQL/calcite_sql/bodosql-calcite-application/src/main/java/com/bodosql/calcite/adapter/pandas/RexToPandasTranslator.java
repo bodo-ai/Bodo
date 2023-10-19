@@ -37,7 +37,6 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.g
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getSingleArgDatetimeFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getYearWeekFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateDatePart;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.generateJsonTwoArgsInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NestedDataCodeGen.generateToArrayFnCode;
@@ -1666,27 +1665,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
             return getDoubleArgDatetimeFnInfo(
                 fnName, operands.get(0).emit(), operands.get(1).emit());
-          case "DATE_PART":
-            assert operands.size() == 2;
-            assert isScalar(fnOperation.operands.get(0));
-            isTime =
-                fnOperation
-                    .getOperands()
-                    .get(1)
-                    .getType()
-                    .getSqlTypeName()
-                    .toString()
-                    .equals("TIME");
-            isDate =
-                fnOperation
-                    .getOperands()
-                    .get(1)
-                    .getType()
-                    .getSqlTypeName()
-                    .toString()
-                    .equals("DATE");
-            return generateDatePart(
-                operands, isTime, isDate, this.weekStart, this.weekOfYearPolicy);
           case "TO_DAYS":
             return generateToDaysCode(operands.get(0));
           case "TO_SECONDS":
@@ -1773,6 +1751,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
             return generateDateTruncCode(unit, operands.get(1));
           case "MICROSECOND":
+          case "NANOSECOND":
           case "SECOND":
           case "MINUTE":
           case "DAY":

@@ -19,6 +19,7 @@ from bodo.tests.test_bodosql_array_kernels.test_bodosql_datetime_array_kernels i
     diff_fn,
 )
 from bodo.tests.utils import pytest_slow_unless_codegen
+from bodo.utils.typing import BodoError
 
 # Skip unless any codegen files were changed
 pytestmark = pytest_slow_unless_codegen
@@ -72,9 +73,15 @@ def test_date_to_date_scalar(fn_name, scalar, expected, memory_leak_check):
 def test_date_to_date_invalid(fn_name, scalar):
     query = f"select {fn_name}({scalar}) as A"
     ctx = {}
-    with pytest.raises(
-        ValueError, match="Invalid input while converting to date value"
-    ):
+    bc = bodosql.BodoSQLContext()
+    if scalar == "'1999-54-01'":
+        # Simplifying scalars now throws an exception at compile time
+        error_type = BodoError
+        msg = "Month out of range: \\[54\\]"
+    else:
+        error_type = ValueError
+        msg = "Invalid input while converting to date value"
+    with pytest.raises(error_type, match=msg):
         bc = bodosql.BodoSQLContext()
         bc.sql(query, ctx)
 
