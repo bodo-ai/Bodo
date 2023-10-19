@@ -7,6 +7,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "_memory.h"
+
 // TODO(aneesh) explore better values for this constant
 /// Fraction of the total availible memory that the memory budgeting system will
 /// use.
@@ -119,7 +121,25 @@ class OperatorComptroller {
     int64_t num_operators = 0;
 
     static bool memoryBudgetsEnabledHelper() {
-        char* use_mem_budget = std::getenv("BODO_USE_MEMORY_BUDGETS");
-        return use_mem_budget && strcmp(use_mem_budget, "1") == 0;
+        char* use_mem_budget_env_ = std::getenv("BODO_USE_MEMORY_BUDGETS");
+        if (use_mem_budget_env_) {
+            // Use operator budgets based on the env var value if
+            // the env var is set. This is primarily for testing
+            // purposes.
+            if (strcmp(use_mem_budget_env_, "1") == 0) {
+                return true;
+            } else if (strcmp(use_mem_budget_env_, "0") == 0) {
+                return false;
+            } else {
+                throw std::runtime_error(
+                    "BODO_USE_MEMORY_BUDGETS set to unsupported value: " +
+                    std::string(use_mem_budget_env_));
+            }
+        } else {
+            // If env var is not set (default case), turn on operator
+            // budgets when spilling is enabled and turn them off
+            // otherwise.
+            return bodo::BufferPool::Default()->is_spilling_enabled();
+        }
     }
 };
