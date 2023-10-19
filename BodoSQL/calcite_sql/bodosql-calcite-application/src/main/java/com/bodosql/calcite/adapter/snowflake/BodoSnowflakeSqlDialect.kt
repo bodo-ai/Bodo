@@ -172,6 +172,21 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         genericFunctionUnParse(writer, "LENGTH", call.operandList)
     }
 
+    private fun unParseNanosecond(
+        writer: SqlWriter,
+        call: SqlCall,
+        leftPrec: Int,
+        rightPrec: Int,
+    ) {
+        // Calcite doesn't have a NanoSecond function, so need to convert
+        // back into DATE_PART.
+        writer.print("DATE_PART")
+        val frame: SqlWriter.Frame = writer.startList(SqlWriter.FrameTypeEnum.FUN_CALL, "(", ")")
+        writer.print("NANOSECOND, ")
+        call.operandList[0].unparse(writer, 0, 0)
+        writer.endList(frame)
+    }
+
     override fun unparseCall(
         writer: SqlWriter,
         call: SqlCall,
@@ -180,12 +195,13 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
     ) {
         when (call.kind) {
             SqlKind.TRIM -> unParseTrim(writer, call, leftPrec, rightPrec)
-            SqlKind.OTHER_FUNCTION -> {
+            SqlKind.OTHER, SqlKind.OTHER_FUNCTION -> {
                 when (call.operator.name) {
                     "SUBSTR" -> unParseSubstring(writer, call, leftPrec, rightPrec)
                     "SUBSTRING" -> unParseSubstring(writer, call, leftPrec, rightPrec)
                     "CHAR_LENGTH" -> unParseLenAlias(writer, call, leftPrec, rightPrec)
                     "CHARACTER_LENGTH" -> unParseLenAlias(writer, call, leftPrec, rightPrec)
+                    "NANOSECOND" -> unParseNanosecond(writer, call, leftPrec, rightPrec)
                     else -> super.unparseCall(writer, call, leftPrec, rightPrec)
                 }
             }
