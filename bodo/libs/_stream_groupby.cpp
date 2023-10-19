@@ -1044,11 +1044,32 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
       // size if sync_iter == -1 (user hasn't specified number of syncs)
       adaptive_sync_counter(sync_iter == -1 ? 0 : -1),
       groupby_event("Groupby") {
-    // Disable partitioning if env var is set:
-    char* disable_partitioning_env_ =
-        std::getenv("BODO_STREAM_GROUPBY_DISABLE_PARTITIONING");
-    if (disable_partitioning_env_ &&
-        (std::strcmp(disable_partitioning_env_, "1") == 0)) {
+    // Turn partitioning on by default.
+    bool enable_partitioning = true;
+
+    // Force enable/disable partitioning if env var set. This is
+    // primarily for unit testing purposes.
+    char* enable_partitioning_env_ =
+        std::getenv("BODO_STREAM_GROUPBY_ENABLE_PARTITIONING");
+    if (enable_partitioning_env_) {
+        if (std::strcmp(enable_partitioning_env_, "0") == 0) {
+            enable_partitioning = false;
+        } else if (std::strcmp(enable_partitioning_env_, "1") == 0) {
+            enable_partitioning = true;
+        } else {
+            throw std::runtime_error(
+                "GroupbyState::GroupbyState: "
+                "BODO_STREAM_GROUPBY_ENABLE_PARTITIONING set to "
+                "unsupported value: " +
+                std::string(enable_partitioning_env_));
+        }
+    } else if (!this->op_pool->is_spilling_enabled()) {
+        // There's no point in repartitioning when spilling is not
+        // available anyway.
+        enable_partitioning = false;
+    }
+
+    if (!enable_partitioning) {
         this->DisablePartitioning();
     }
 

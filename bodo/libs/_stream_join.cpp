@@ -1061,22 +1061,43 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
     // if sync_iter == -1 (user hasn't specified number of syncs)
     this->adaptive_sync_counter = sync_iter == -1 ? 0 : -1;
 
-    // For now, we will allow re-partitioning only in the case where the
-    // build side is distributed. If we allow re-partitioning in the
-    // replicated build side case, we must assume that the partitioning
-    // state is identical on all ranks. This might not always be true.
-    // Therefore, we will turn of threshold enforcement in the replicated
-    // build case altogether.
-    // XXX Revisit this in the future if needed.
+    // Turn partitioning on by default.
+    bool enable_partitioning = true;
+
     if (!this->build_parallel) {
-        this->DisablePartitioning();
+        // For now, we will allow re-partitioning only in the case where the
+        // build side is distributed. If we allow re-partitioning in the
+        // replicated build side case, we must assume that the partitioning
+        // state is identical on all ranks. This might not always be true.
+        // Therefore, we will turn off re-partitioning in the replicated
+        // build case altogether.
+        // XXX Revisit this in the future if needed.
+        enable_partitioning = false;
+    } else {
+        // Force enable/disable partitioning if env var set. This is
+        // primarily for unit testing purposes.
+        char* enable_partitioning_env_ =
+            std::getenv("BODO_STREAM_HASH_JOIN_ENABLE_PARTITIONING");
+        if (enable_partitioning_env_) {
+            if (std::strcmp(enable_partitioning_env_, "0") == 0) {
+                enable_partitioning = false;
+            } else if (std::strcmp(enable_partitioning_env_, "1") == 0) {
+                enable_partitioning = true;
+            } else {
+                throw std::runtime_error(
+                    "HashJoinState::HashJoinState: "
+                    "BODO_STREAM_HASH_JOIN_ENABLE_PARTITIONING set to "
+                    "unsupported value: " +
+                    std::string(enable_partitioning_env_));
+            }
+        } else if (!this->op_pool->is_spilling_enabled()) {
+            // There's no point in repartitioning when spilling is not
+            // available anyway.
+            enable_partitioning = false;
+        }
     }
 
-    // Disable partitioning if env var set:
-    char* disable_partitioning_env_ =
-        std::getenv("BODO_STREAM_HASH_JOIN_DISABLE_PARTITIONING");
-    if (disable_partitioning_env_ &&
-        (std::strcmp(disable_partitioning_env_, "1") == 0)) {
+    if (!enable_partitioning) {
         this->DisablePartitioning();
     }
 

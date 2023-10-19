@@ -45,9 +45,14 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
     }
 
     // Get minimum frame size in BufferPool and set that as the
-    // minimum size of any of the buffers.
+    // minimum size of any of the buffers (when spilling is available).
+    // When spilling is not enabled, we don't want to over-allocate and
+    // inflate the BufferPool statistics and cause early OOMs (triggered by
+    // BufferPool not the OS).
     const int64_t min_buffer_allocation_size =
-        bodo::BufferPool::Default()->GetSmallestSizeClassSize();
+        bodo::BufferPool::Default()->is_spilling_enabled()
+            ? bodo::BufferPool::Default()->GetSmallestSizeClassSize()
+            : 0;
 
     // Reserve space in buffers based on type and capacity.
     // NOTE: We call Resize instead of Reserve so that we don't need
@@ -263,9 +268,14 @@ void ChunkedTableArrayBuilder::UnsafeAppendRows(
 
 void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
     // Get minimum frame size in BufferPool and set that as the
-    // minimum size of any of the buffers.
+    // minimum size of any of the buffers (when spilling is available).
+    // When spilling is not enabled, we don't want to over-allocate and
+    // inflate the BufferPool statistics and cause early OOMs (triggered by
+    // BufferPool not the OS).
     const int64_t min_buffer_allocation_size =
-        bodo::BufferPool::Default()->GetSmallestSizeClassSize();
+        bodo::BufferPool::Default()->is_spilling_enabled()
+            ? bodo::BufferPool::Default()->GetSmallestSizeClassSize()
+            : 0;
 
     // The rest is very similar to the constructor, except this time
     // we use this->size (and number of chars in case of strings, etc.) instead
