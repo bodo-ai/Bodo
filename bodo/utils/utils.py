@@ -208,7 +208,7 @@ def numba_to_c_types(
     """
     c_types = []
     for arr_type in arr_types:
-        if isinstance(arr_type, bodo.StructArrayType):
+        if isinstance(arr_type, (bodo.StructArrayType, bodo.TupleArrayType)):
             c_types.append(CTypeEnum.STRUCT.value)
             c_types.append(len(arr_type.data))
             c_types.extend(numba_to_c_types(arr_type.data))
@@ -263,15 +263,8 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
     ):
         # Special case for list of strings
         return CArrayTypeEnum.LIST_STRING.value
-    elif isinstance(
-        arr_type, (bodo.StructArrayType, bodo.MapArrayType, bodo.TupleArrayType)
-    ):
-        # TODO: Confirm map + tuple array belongs here
-        return CArrayTypeEnum.STRUCT.value
     elif isinstance(arr_type, bodo.CategoricalArrayType):
         return CArrayTypeEnum.CATEGORICAL.value
-    elif isinstance(arr_type, bodo.ArrayItemArrayType):
-        return CArrayTypeEnum.ARRAY_ITEM.value
     elif isinstance(arr_type, bodo.IntervalArrayType):
         return CArrayTypeEnum.INTERVAL.value
     elif arr_type == bodo.dict_str_arr_type:
@@ -294,7 +287,7 @@ def numba_to_c_array_types(
     """
     c_arr_types = []
     for arr_type in arr_types:
-        if isinstance(arr_type, bodo.StructArrayType):
+        if isinstance(arr_type, (bodo.StructArrayType, bodo.TupleArrayType)):
             c_arr_types.append(CArrayTypeEnum.STRUCT.value)
             c_arr_types.append(len(arr_type.data))
             c_arr_types.extend(numba_to_c_array_types(arr_type.data))
