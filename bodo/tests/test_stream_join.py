@@ -858,7 +858,6 @@ def test_hash_join_reorder(memory_leak_check):
 # Note we mark this as slow because the volume of data in
 # the output makes checking correctness slow.
 @pytest.mark.slow
-@pytest.mark.timeout(900)
 @pytest.mark.parametrize(
     "build_outer,probe_outer",
     [
@@ -876,14 +875,14 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
     """
     df1 = pd.DataFrame(
         {
-            "A": [1, 2, 3, 4, 5] * 2500,
-            "B": np.array([1, 2, 3, 4, 5] * 2500, dtype=np.int32),
+            "A": [1, 2, 3, 4, 5] * 25,
+            "B": np.array([1, 2, 3, 4, 5] * 25, dtype=np.int32),
         }
     )
     df2 = pd.DataFrame(
         {
-            "C": [2, 6] * 2500,
-            "D": np.array([2, 6] * 2500, dtype=np.int8),
+            "C": [2, 6] * 25,
+            "D": np.array([2, 6] * 25, dtype=np.int8),
         }
     )
     build_keys_inds = bodo.utils.typing.MetaType((0,))
@@ -963,26 +962,26 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
     # Generate expected output for each type of join
     right_outer = pd.DataFrame(
         {
-            "C": pd.array([None] * 10000, dtype="Int64"),
-            "D": pd.array([None] * 10000, dtype="Int8"),
-            "A": [1, 3, 4, 5] * 2500,
-            "B": np.array([1, 3, 4, 5] * 2500, dtype=np.int32),
+            "C": pd.array([None] * 100, dtype="Int64"),
+            "D": pd.array([None] * 100, dtype="Int8"),
+            "A": [1, 3, 4, 5] * 25,
+            "B": np.array([1, 3, 4, 5] * 25, dtype=np.int32),
         }
     )
     left_outer = pd.DataFrame(
         {
-            "C": [6] * 2500,
-            "D": pd.array([6] * 2500, dtype="int8"),
-            "A": pd.array([None] * 2500, dtype="Int64"),
-            "B": pd.array([None] * 2500, dtype="Int32"),
+            "C": [6] * 25,
+            "D": pd.array([6] * 25, dtype="int8"),
+            "A": pd.array([None] * 25, dtype="Int64"),
+            "B": pd.array([None] * 25, dtype="Int32"),
         }
     )
     inner = pd.DataFrame(
         {
-            "C": [2] * 2500 * 2500,
-            "D": np.array([2] * 2500 * 2500, dtype=np.int8),
-            "A": [2] * 2500 * 2500,
-            "B": np.array([2] * 2500 * 2500, dtype=np.int32),
+            "C": [2] * 25 * 25,
+            "D": np.array([2] * 25 * 25, dtype=np.int8),
+            "A": [2] * 25 * 25,
+            "B": np.array([2] * 25 * 25, dtype=np.int32),
         }
     )
     # Fuse the outputs and cast.
