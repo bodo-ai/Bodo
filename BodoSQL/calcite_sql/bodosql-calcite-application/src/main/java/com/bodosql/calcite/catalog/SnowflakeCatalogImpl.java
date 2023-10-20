@@ -9,6 +9,7 @@ import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
+import com.bodosql.calcite.sql.BodoSqlUtil;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
@@ -36,13 +37,17 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlNumericLiteral;
+import org.apache.calcite.sql.SqlSampleSpec;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.util.SqlString;
+import org.apache.calcite.util.Pair;
 import org.json.simple.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1031,6 +1036,97 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   }
 
   /**
+   * Estimate the number of distinct entries of the given column for a given fully qualified table,
+   * using sampling instead of querying the entire table.
+   *
+   * @param tableName qualified table name.
+   * @param columnName which column to sample from the table.
+   * @param rowCount how many rows does the full table have.
+   * @return estimated distinct count.
+   */
+  public @Nullable Double estimateColumnDistinctCountWithSampling(
+      List<String> tableName, String columnName, Double rowCount) {
+    // This function calls approx_count_distinct on the given column name.
+    SqlSelect select = approxCountDistinctSamplingQuery(tableName, columnName);
+    SqlString sql =
+        select.toSqlString(
+            (c) -> c.withClauseStartsLine(false).withDialect(BodoSnowflakeSqlDialect.DEFAULT));
+
+    @Nullable Pair<Long, Long> snowflakeResult = trySubmitDistinctSampleQuery(sql);
+    // If the original query failed, try again with sampling
+    if (snowflakeResult != null) {
+      Long sampleSize = snowflakeResult.left;
+      Long sampleDistinct = snowflakeResult.right;
+      return inferDistinctCountFromSample(rowCount, (double) sampleSize, (double) sampleDistinct);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * Approximation of the error function ERF. Copied from
+   * https://introcs.cs.princeton.edu/java/21function/ErrorFunction.java.html
+   */
+  public static double erf(double z) {
+    double t = 1.0 / (1.0 + 0.5 * Math.abs(z));
+    double exponent = 0.17087277;
+    exponent *= t;
+    exponent += -0.82215223;
+    exponent *= t;
+    exponent += 1.48851587;
+    exponent *= t;
+    exponent += -1.13520398;
+    exponent *= t;
+    exponent += 0.27886807;
+    exponent *= t;
+    exponent += -0.18628806;
+    exponent *= t;
+    exponent += 0.09678418;
+    exponent *= t;
+    exponent += 0.37409196;
+    exponent *= t;
+    exponent += 1.00002368;
+    exponent *= t;
+    exponent += -1.26551223;
+    exponent += -z * z;
+    return Math.signum(z) * (1 - t * Math.exp(exponent));
+  }
+
+  /**
+   * Returns the cumulative value of a normal distribution from negative infinity up to a certain
+   * value.
+   *
+   * @param x The value to accumulate up to.
+   * @param mean The mean of the distribution
+   * @param var The variance of the distribution
+   * @return The probability mass under the curve up to x.
+   */
+  public static double normalCdf(double x, double mean, double var) {
+    return 0.5 * (1 + erf((x - mean) / (Math.sqrt(2) * var)));
+  }
+
+  /**
+   * Calculates the approximate number of distinct rows based on a sample. See here for algorithm
+   * design description:
+   * https://bodo.atlassian.net/wiki/spaces/B/pages/1468235780/Snowflake+Metadata+Handling#Testing-Proposed-Algorithm-on-Sample-Data
+   *
+   * @param rowCount The number of rows in the full table.
+   * @param sampleSize The number of rows in the sample.
+   * @param sampleDistinct The number of distinct rows in the sample.
+   * @return An approximation of the number of distinct rows in the original table
+   */
+  public static Double inferDistinctCountFromSample(
+      Double rowCount, Double sampleSize, Double sampleDistinct) {
+    double mean = sampleSize / sampleDistinct;
+    double C0 = normalCdf(0.0, mean, mean);
+    double C1 = normalCdf(1.0, mean, mean);
+    double CD = normalCdf(sampleDistinct, mean, mean);
+    double normalizedRatio = (C1 - C0) / (CD - C0);
+    double appearsOnce = Math.floor(Math.max((sampleDistinct * normalizedRatio) - 1.0, 0.0));
+    return sampleDistinct + appearsOnce * (rowCount - sampleSize) / sampleSize;
+  }
+
+  /**
    * Submits the specified query to Snowflake for evaluation. Expects the return to contain exactly
    * one value integer, which is returned by this function. Returns null in the event of a timeout,
    * which is 30 seconds by default. May cause undefined behavior if the supplied sql string does
@@ -1070,6 +1166,87 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       // in the future.
     }
     return null;
+  }
+
+  /**
+   * Submits the specified query to Snowflake for evaluation. Expects the return to contain exactly
+   * two integers, which are returned by this function. Returns null in the event of a timeout,
+   * which is 30 seconds by default. May cause undefined behavior if the supplied sql string does
+   * not return exactly two integer values.
+   *
+   * @param sql The SQL query to submit to snowflake
+   * @return The integer values returned by the sql query
+   */
+  public @Nullable Pair<Long, Long> trySubmitDistinctSampleQuery(SqlString sql) {
+    String sqlString = sql.getSql();
+
+    try {
+      Connection conn = getConnection();
+      try (PreparedStatement stmt = conn.prepareStatement(sqlString)) {
+        // Value is in seconds
+        String defaultTimeout = "30";
+        stmt.setQueryTimeout(
+            Integer.parseInt(
+                System.getenv()
+                    .getOrDefault(
+                        "BODOSQL_METADATA_QUERY_TIMEOUT_TIME_IN_SECONDS", defaultTimeout)));
+        try (ResultSet rs = stmt.executeQuery()) {
+          // Only one row matters.
+          if (rs.next()) {
+            Long sampleSize = rs.getLong(1);
+            Long distinctCount = rs.getLong(2);
+            return new Pair(sampleSize, distinctCount);
+          }
+        }
+      }
+    } catch (SQLException ex) {
+      // Error executing the query.
+      // There's really nothing we can do other than just accept
+      // this failure and maybe log this when we have a logging mechanism
+      // in the future.
+    }
+    return null;
+  }
+
+  /**
+   * Creates a query to get the approximate distinct count of a certain column of a certain table
+   * using sampling.
+   *
+   * @param tableName qualified table name.
+   * @param columnName which column to sample from the table.
+   * @return The sampling query.
+   */
+  private SqlSelect approxCountDistinctSamplingQuery(List<String> tableName, String columnName) {
+    SqlNodeList selectList =
+        SqlNodeList.of(
+            SqlStdOperatorTable.COUNT.createCall(SqlParserPos.ZERO, SqlIdentifier.STAR),
+            SqlStdOperatorTable.APPROX_COUNT_DISTINCT.createCall(
+                SqlParserPos.ZERO, new SqlIdentifier(columnName, SqlParserPos.ZERO)));
+    SqlNodeList from = SqlNodeList.of(new SqlIdentifier(tableName, SqlParserPos.ZERO));
+    String samplingRate = "1";
+    SqlNumericLiteral samplePercentage =
+        SqlLiteral.createExactNumeric(samplingRate, SqlParserPos.ZERO);
+    SqlSampleSpec tableSampleSpec =
+        BodoSqlUtil.createTableSample(SqlParserPos.ZERO, false, samplePercentage, false, false, -1);
+    SqlLiteral tableSampleLiteral = SqlLiteral.createSample(tableSampleSpec, SqlParserPos.ZERO);
+    from =
+        SqlNodeList.of(
+            SqlStdOperatorTable.TABLESAMPLE.createCall(
+                SqlParserPos.ZERO, from, tableSampleLiteral));
+    return new SqlSelect(
+        SqlParserPos.ZERO,
+        SqlNodeList.EMPTY,
+        selectList,
+        from,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   private SqlSelect rowCountQuery(List<String> tableName) {
