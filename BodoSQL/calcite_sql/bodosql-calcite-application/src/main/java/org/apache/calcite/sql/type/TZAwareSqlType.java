@@ -32,6 +32,8 @@ public class TZAwareSqlType extends AbstractSqlType {
   // The tz info
   private final BodoTZInfo tzInfo;
 
+  private final int precision;
+
   //~ Constructors -----------------------------------------------------------
 
   /**
@@ -41,9 +43,10 @@ public class TZAwareSqlType extends AbstractSqlType {
    * @param tzInfo Timezone information
    * @param nullable Does this contain null values?
    */
-  public TZAwareSqlType(BodoTZInfo tzInfo, boolean nullable) {
+  public TZAwareSqlType(BodoTZInfo tzInfo, boolean nullable, int precision) {
     super(TIMESTAMP_WITH_LOCAL_TIME_ZONE, nullable, null);
     this.tzInfo = Objects.requireNonNull(tzInfo, "tzInfo");
+    this.precision = precision;
     computeDigest();
   }
 
@@ -69,5 +72,10 @@ public class TZAwareSqlType extends AbstractSqlType {
     } else {
       return null;
     }
+  }
+
+  @Override
+  public int getPrecision() {
+    return precision;
   }
 }

@@ -15,7 +15,7 @@ public interface BodoRelDataTypeFactory extends RelDataTypeFactory {
    * @param tzInfo timezone information. if null, uses the type system default.
    * @return TZAwareSqlType
    */
-  RelDataType createTZAwareSqlType(@Nullable BodoTZInfo tzInfo);
+  RelDataType createTZAwareSqlType(@Nullable BodoTZInfo tzInfo, int precision);
 
   /**
    * Creates a {@link VariantSqlType}.
@@ -25,10 +25,10 @@ public interface BodoRelDataTypeFactory extends RelDataTypeFactory {
   RelDataType createVariantSqlType();
 
   static RelDataType createTZAwareSqlType(
-      RelDataTypeFactory typeFactory, @Nullable BodoTZInfo tzInfo) {
+      RelDataTypeFactory typeFactory, @Nullable BodoTZInfo tzInfo, int precision) {
     if (typeFactory instanceof BodoRelDataTypeFactory) {
       BodoRelDataTypeFactory bodoTypeFactory = (BodoRelDataTypeFactory) typeFactory;
-      return bodoTypeFactory.createTZAwareSqlType(tzInfo);
+      return bodoTypeFactory.createTZAwareSqlType(tzInfo, precision);
     }
 
     // Timezone information is lost if used without an appropriate type factory.

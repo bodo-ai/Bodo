@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.operatorTables;
 
 import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.isOutputNullableCompile;
 
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 import java.util.Arrays;
 import java.util.List;
@@ -242,7 +243,9 @@ public class CastingOperatorTable implements SqlOperatorTable {
       returnType = arg0;
     } else {
       // Otherwise we output a timezone-aware Timestamp with the local timestamp.
-      returnType = BodoRelDataTypeFactory.createTZAwareSqlType(binding.getTypeFactory(), null);
+      returnType =
+          BodoRelDataTypeFactory.createTZAwareSqlType(
+              binding.getTypeFactory(), null, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION);
       if (runtimeFailureIsNull) {
         // Note this path includes arguments for 0 that can fail at runtime.
         // If this runtimeFailureIsNull is set then failed conversions make

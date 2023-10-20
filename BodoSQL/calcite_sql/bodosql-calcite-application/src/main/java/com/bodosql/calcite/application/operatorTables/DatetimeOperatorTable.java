@@ -6,6 +6,7 @@ import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.DateTimeType;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 import com.google.common.collect.Sets;
 import java.util.*;
@@ -321,7 +322,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       if (defaultToNaive) {
         returnType = typeFactory.createSqlType(SqlTypeName.TIMESTAMP);
       } else {
-        returnType = BodoRelDataTypeFactory.createTZAwareSqlType(typeFactory, null);
+        returnType =
+            BodoRelDataTypeFactory.createTZAwareSqlType(
+                typeFactory, null, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION);
       }
     } else {
       throw new BodoSQLCodegenException(

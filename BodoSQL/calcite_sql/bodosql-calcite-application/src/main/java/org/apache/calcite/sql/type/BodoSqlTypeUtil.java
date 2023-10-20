@@ -22,7 +22,8 @@ public class BodoSqlTypeUtil {
 
   public static SqlDataTypeSpec convertTypeToSpec(RelDataType type, @Nullable String charSetName, int maxPrecision, int maxScale) {
     if (type instanceof TZAwareSqlType) {
-      SqlTypeNameSpec typeNameSpec = new SqlTzAwareTypeNameSpec((TZAwareSqlType) type);
+      TZAwareSqlType castType = (TZAwareSqlType) type;
+      SqlTypeNameSpec typeNameSpec = new SqlTzAwareTypeNameSpec(castType.getSqlIdentifier(), castType.getPrecision(), castType.getTZInfo());
       return new SqlDataTypeSpec(typeNameSpec, SqlParserPos.ZERO);
     } else if (type instanceof VariantSqlType) {
       SqlTypeNameSpec typeNameSpec = new VariantTypeNameSpec(Objects.requireNonNull(type.getSqlIdentifier()));
