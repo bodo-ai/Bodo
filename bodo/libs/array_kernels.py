@@ -2189,6 +2189,19 @@ def concat_overload(arr_list):
             return result
 
         return impl_map_arr_list
+    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+        arr_list.dtype, bodo.TupleArrayType
+    ):
+
+        def impl_tuple_arr_list(arr_list):  # pragma: no cover
+            array_item_list = []
+            for A in arr_list:
+                array_item_list.append(A._data)
+            output_arr_item_arr = bodo.libs.array_kernels.concat(array_item_list)
+            result = bodo.libs.tuple_arr_ext.init_tuple_arr(output_arr_item_arr)
+            return result
+
+        return impl_tuple_arr_list
 
     if isinstance(arr_list, types.Tuple):
         # Generate a simpler error message for multiple timezones.

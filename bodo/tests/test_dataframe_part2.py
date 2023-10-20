@@ -1275,6 +1275,30 @@ def test_concat_nulls(memory_leak_check):
     check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
 
 
+def test_concat_tuple(memory_leak_check):
+    """Test dataframe concatenation with array of tuples"""
+
+    def test_impl(df, df2):
+        return pd.concat((df, df2), ignore_index=True)
+
+    df1 = pd.DataFrame(
+        {
+            "A": [
+                (
+                    1,
+                    2,
+                ),
+                None,
+                (3, 4),
+                (9, 11),
+            ]
+        }
+    )
+    df2 = pd.DataFrame({"A": [(4, 6), (4, 10), None]})
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
+    check_func(test_impl, (df2, df1), sort_output=True, reset_index=True)
+
+
 @pytest.mark.parametrize(
     "df",
     [
