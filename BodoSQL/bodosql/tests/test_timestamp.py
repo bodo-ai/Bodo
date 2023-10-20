@@ -266,6 +266,47 @@ def test_datediff_args3_multitable_columns_case(
     )
 
 
+def test_datediff_tz_aware_tz_naive(memory_leak_check):
+    """
+    Checks that calling DATEDIFF between tz_aware and tz_naive timestamps
+    gives a correct result.
+
+    Note this result is copied from an equivalent Snowflake query.
+    """
+    df = pd.DataFrame(
+        {
+            "A": pd.array(
+                [
+                    pd.Timestamp("2021-09-26 01:00:13", tz="US/Pacific"),
+                    pd.Timestamp("2023-10-28 00:00:00", tz="US/Pacific"),
+                    pd.Timestamp("2023-11-05 05:15:17", tz="US/Pacific"),
+                ]
+                * 5
+            ),
+            "B": pd.array(
+                [
+                    pd.Timestamp("2024-09-01 07:23:14"),
+                    pd.Timestamp("2023-10-28 00:00:00"),
+                    pd.Timestamp("2022-07-15 14:23:51"),
+                ]
+                * 5
+            ),
+        }
+    )
+    ctx = {"table1": df}
+    # Note this was verified against Snowflake by running with each scalar directly
+    py_output = pd.DataFrame(
+        {
+            "out1": pd.array([92557381, 0, -41269886] * 5),
+            "out2": pd.array([-25710, 0, 11464] * 5),
+        }
+    )
+    query = (
+        "SELECT DATEDIFF('s', A, B) as out1, DATEDIFF('H', B, A) as out2 from table1"
+    )
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+
+
 def test_str_date_case_stmt(spark_info, memory_leak_check):
     """
     Many sql dialects play fast and loose with what is a string and date/timestamp

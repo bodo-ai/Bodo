@@ -1291,8 +1291,13 @@ def create_dt_diff_fn_overload(unit):  # pragma: no cover
 def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
     """Creates an overload function to support datetime difference functions.
 
+    Note: In Snowflake you can perform a datediff between a timestamp_ntz
+    and a timestamp_ltz, in which case the ntz is cast to ltz. We replicate
+    this behavior if we one input with a timezone and one without by casting
+    the input without a timezone to the other's timezone.
+
     Args:
-        unt: the unit that the difference shoud be returned in terms of.
+        unit: the unit that the difference should be returned in terms of.
 
     Returns:
         (function): a utility that takes in a two datetimes (either can be scalars
@@ -1303,44 +1308,56 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
     """
 
     def overload_dt_diff_fn(arr0, arr1):
+        # Handle the body of the loop
         scalar_text = ""
-        if is_overload_none(arr0) and is_valid_date_arg(arr1):
-            scalar_text += "arg1 = pd.Timestamp(arg1)\n"
-        elif is_valid_time_arg(arr0):
-            assert is_valid_time_arg(arr1) or is_overload_none(arr1)
-        # If both arguments are dates, upcast them to timestamps
-        elif is_valid_date_arg(arr0) and (
-            is_valid_date_arg(arr1) or is_overload_none(arr1)
-        ):
-            scalar_text += "arg0 = pd.Timestamp(arg0)\n"
-            scalar_text += "arg1 = pd.Timestamp(arg1)\n"
-        # If one argument is a date and the other is a timestamp, upcast the
-        # date to a timestamp
-        elif is_valid_date_arg(arr0) and is_valid_tz_naive_datetime_arg(arr1):
-            scalar_text += "arg0 = pd.Timestamp(arg0)\n"
-            scalar_text += "arg1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
-        elif is_valid_tz_naive_datetime_arg(arr0) and is_valid_date_arg(arr1):
-            scalar_text += "arg0 = bodo.utils.conversion.box_if_dt64(arg0)\n"
-            scalar_text += "arg1 = pd.Timestamp(arg1)\n"
+        # Globals for casting.
+        extra_globals = {}
+
+        # Check for valid time inputs. We don't support mixing
+        # time with other types yet.
+        if is_valid_time_arg(arr0) or is_valid_time_arg(arr1):
+            supported = (is_overload_none(arr0) or is_valid_time_arg(arr0)) and (
+                is_overload_none(arr1) or is_valid_time_arg(arr1)
+            )
+            if not supported:
+                raise BodoError(
+                    "DateDiff(): If a time type is provided both arguments must be time types."
+                )
         else:
             verify_datetime_arg_allow_tz(arr0, "diff_" + unit, "arr0")
             verify_datetime_arg_allow_tz(arr1, "diff_" + unit, "arr1")
-            tz = get_tz_if_exists(arr0)
-            if get_tz_if_exists(arr1) != tz and not (
-                is_overload_none(arr0) or is_overload_none(arr1)
-            ):
-                raise_bodo_error(
-                    f"diff_{unit}: both arguments must have the same timezone"
+            # Determine all the information for casting
+            is_date_arr0 = is_valid_date_arg(arr0)
+            is_date_arr1 = is_valid_date_arg(arr1)
+            arr0_tz = get_tz_if_exists(arr0)
+            arr1_tz = get_tz_if_exists(arr1)
+            # Set the cast information. Timezone either must
+            # match or 1 must be None.
+            if arr0_tz == arr1_tz:
+                cast_tz = arr0_tz
+            elif arr0_tz is None:
+                cast_tz = arr1_tz
+            elif arr1_tz is None:
+                cast_tz = arr0_tz
+            else:
+                raise BodoError(
+                    "DateDiff is not supported between two timezone aware columns with different timezones."
                 )
-            scalar_text = ""
-            if tz == None:
+            extra_globals["_cast_tz"] = cast_tz
+            # Add casts to the prefix code.
+            if is_date_arr0 or (arr0_tz != cast_tz):
+                scalar_text += "arg0 = bodo.libs.bodosql_array_kernels.to_timestamp(arg0, None, _cast_tz, 0)\n"
+            if is_date_arr1 or (arr1_tz != cast_tz):
+                scalar_text += "arg1 = bodo.libs.bodosql_array_kernels.to_timestamp(arg1, None, _cast_tz, 0)\n"
+
+            # If we are working with tz_naive data we need to keep the result in a timestamp.
+            if cast_tz is None:
                 scalar_text += "arg0 = bodo.utils.conversion.box_if_dt64(arg0)\n"
                 scalar_text += "arg1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
 
         arg_names = ["arr0", "arr1"]
         arg_types = [arr0, arr1]
         propagate_null = [True] * 2
-        extra_globals = None
 
         # A dictionary of variable definitions shared between the kernels
         diff_defns = {
@@ -3040,7 +3057,7 @@ def months_between_util(dt0, dt1):
     scalar_text += "  months_frac_count = 0\n"
     scalar_text += "else:\n"
 
-    # Otherwise, there is a fractioanl component, which is the difference in the
+    # Otherwise, there is a fractional component, which is the difference in the
     # day numbers / 31 (per Snowflake docs), rounded to 6 decimal places.
     scalar_text += "  months_frac_count = round((arg0.day - arg1.day)/31.0, 6)\n"
     scalar_text += "res[i] = months_int_count + months_frac_count\n"
