@@ -1874,3 +1874,83 @@ def test_write_with_string_precision(memory_leak_check):
             assert table_info["type"].to_list() == expected_types
     finally:
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_use_put
+
+
+def test_write_with_timestamp_time_precision(memory_leak_check):
+    """
+    Tests streaming write using timestamp/time column precisions to specify the
+    precision for each column.
+    """
+    global_1 = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D", "E", "F"))
+    global_2 = bodo.utils.typing.MetaType((0, 1, 2, 3, 4, 5))
+    # Note: BodoSQL shouldn't generate -1, but we check just in case.
+    global_3 = bodo.utils.typing.MetaType((-1, 0, -1, 4, -1, 5))
+    # Column B is written without any precision info, so we default to the maximum
+    expected_types = [
+        "TIMESTAMP_NTZ(9)",
+        "TIMESTAMP_NTZ(0)",
+        "TIMESTAMP_LTZ(9)",
+        "TIMESTAMP_LTZ(4)",
+        "TIME(9)",
+        "TIME(5)",
+    ]
+    snowflake_user = 1
+    conn = bodo.tests.utils.get_snowflake_connection_string(
+        "TEST_DB", "PUBLIC", user=snowflake_user
+    )
+    bodo_tablename = "BODO_TEST_SNOWFLAKE_WRITE_VARCHAR_PRECISION"
+    old_use_put = bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT
+    try:
+        bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = False
+        with ensure_clean_snowflake_table(conn, bodo_tablename) as table_name:
+
+            def impl(conn):
+                A1 = bodo.utils.conversion.make_replicated_array(
+                    pd.Timestamp("01-11-2023 04:23:15"), 50
+                )
+                A2 = bodo.utils.conversion.make_replicated_array(
+                    pd.Timestamp("01-11-2023"), 50
+                )
+                A3 = bodo.utils.conversion.make_replicated_array(
+                    pd.Timestamp("01-11-2023 04:23:15", tz="US/Pacific"), 50
+                )
+                A4 = bodo.utils.conversion.make_replicated_array(
+                    pd.Timestamp("01-11-2023", tz="US/Pacific"), 50
+                )
+                A5 = bodo.utils.conversion.make_replicated_array(bodo.Time(2, 3, 4), 50)
+                A6 = bodo.utils.conversion.make_replicated_array(
+                    bodo.Time(2, 3, 4, 5, precision=6), 50
+                )
+                df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                    (A1, A2, A3, A4, A5, A6),
+                    bodo.hiframes.pd_index_ext.init_range_index(0, 50, 1, None),
+                    global_1,
+                )
+                T = bodo.hiframes.table.logical_table_to_table(
+                    bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df),
+                    (),
+                    global_2,
+                    6,
+                )
+                writer = snowflake_writer_init(
+                    -1,
+                    conn,
+                    table_name,
+                    "PUBLIC",
+                    "replace",
+                    "",
+                )
+                all_is_last = False
+                iter_val = 0
+                while not all_is_last:
+                    all_is_last = snowflake_writer_append_table(
+                        writer, T, global_1, True, iter_val, global_3
+                    )
+                    iter_val += 1
+
+            bodo.jit(cache=False)(impl)(conn)
+            table_info = pd.read_sql(f"DESCRIBE TABLE {table_name}", conn)
+            # Column B was written without any precision info, so we default to the maximum
+            assert table_info["type"].to_list() == expected_types
+    finally:
+        bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_use_put
