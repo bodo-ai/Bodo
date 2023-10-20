@@ -1654,18 +1654,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     generatedCode.add(new Op.Assign(newExitCond, batchCall));
     timerInfo.insertLoopOperationEndTimer();
     // Finalize and add the batch pipeline.
-    generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));
-
-    // At the end of the pipeline, reduce the budget of groupby to 50MB (with
-    // some extra wiggle room).
-    // TODO(aneesh) This constant was chosen arbitrarily and should
-    // be revisited.
-    int fifty_mb = Math.round((float) 1.5 * 50 * 1024 * 1024);
-    inputPipeline.addTermination(
-        new Op.Stmt(
-            new Expr.Call(
-                "bodo.libs.memory_budget.reduce_operator_budget",
-                List.of(new Expr.IntegerLiteral(operatorID), new Expr.IntegerLiteral(fifty_mb)))));
+    StreamingPipelineFrame finishedPipeline = generatedCode.endCurrentStreamingPipeline();
+    generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
+    // Only Groupby build needs a memory budget since output only has a ChunkedTableBuilder
+    generatedCode.forceEndOperatorAtCurPipeline(operatorID, finishedPipeline);
 
     // Create a new pipeline
     Variable newFlag = genGenericTempVar();
@@ -1689,7 +1681,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         new Op.Stmt(
             new Expr.Call(
                 "bodo.libs.stream_groupby.delete_groupby_state", List.of(groupbyStateVar)));
-    outputPipeline.deleteStreamingState(operatorID, deleteState);
+    outputPipeline.addTermination(deleteState);
     // Add the table to the stack
     BodoEngineTable table = new BodoEngineTable(outTable.emit(), node);
     tableGenStack.push(table);
@@ -2082,12 +2074,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.insertLoopOperationStartTimer();
     BodoEngineTable probeTable = tableGenStack.pop();
     StreamingPipelineFrame probePipeline = generatedCode.getCurrentStreamingPipeline();
-
-    probePipeline.addInitialization(
-        new Op.Stmt(
-            new Expr.Call(
-                "bodo.libs.memory_budget.increase_operator_budget",
-                new Expr.IntegerLiteral(operatorID))));
 
     Variable oldFlag = probePipeline.getExitCond();
     // Change the probe condition
