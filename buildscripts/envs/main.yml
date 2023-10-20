@@ -10,7 +10,7 @@ platforms:
 dependencies:
   - python=3.11.*
   - pip
-  - libcurl <=8.4
+  - libcurl <=8.3
 
   # Core
   - numba =0.57.1
