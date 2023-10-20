@@ -1610,8 +1610,21 @@ void apply_to_column_array_item(
     std::vector<int64_t> rows_to_copy;
     size_t n_groups = grp_info.num_groups;
     for (size_t i_grp = 0; i_grp < n_groups; i_grp++) {
+        // If we already have a value for the group, skip it
+        if (out_col->get_null_bit(i_grp)) {
+            continue;
+        }
         size_t i = grp_info.group_to_first_row[i_grp];
-        if (in_col->get_null_bit(i)) {
+        // Find the first non-null value of the group
+        bool found_match = false;
+        for (; i < grp_info.row_to_group.size(); ++i) {
+            if (((size_t)grp_info.row_to_group[i]) == i_grp &&
+                in_col->get_null_bit(i)) {
+                found_match = true;
+                break;
+            }
+        }
+        if (found_match) {
             out_col->set_null_bit(i_grp, true);
             // If the row is non-null, then the group will map to this inner
             // array entry.
@@ -1657,8 +1670,21 @@ void apply_to_column_struct(
     size_t n_groups = grp_info.num_groups;
     std::vector<int64_t> rows_to_copy;
     for (size_t i_grp = 0; i_grp < n_groups; i_grp++) {
+        // If we already have a value for the group, skip it
+        if (out_col->get_null_bit(i_grp)) {
+            continue;
+        }
         size_t i = grp_info.group_to_first_row[i_grp];
-        if (in_col->get_null_bit(i)) {
+        // Find the first non-null value of the group
+        bool found_match = false;
+        for (; i < grp_info.row_to_group.size(); ++i) {
+            if (((size_t)grp_info.row_to_group[i]) == i_grp &&
+                in_col->get_null_bit(i)) {
+                found_match = true;
+                break;
+            }
+        }
+        if (found_match) {
             rows_to_copy.push_back(i);
             out_col->set_null_bit(i_grp, true);
         }

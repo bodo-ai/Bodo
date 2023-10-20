@@ -1011,7 +1011,6 @@ get_dtypes_arr_types_from_table(const std::shared_ptr<table_info>& table) {
         _get_dtypes_arr_types_from_array(table->columns[i], arr_c_types,
                                          arr_array_types);
     }
-
     return std::make_tuple(arr_c_types, arr_array_types);
 }
 
@@ -1029,11 +1028,9 @@ void _get_dtypes_arr_types_from_array(const std::shared_ptr<array_info>& array,
                                              arr_array_types);
         }
     }
-    auto curr_arr = array;
-    while (arr_array_types.back() == bodo_array_type::ARRAY_ITEM) {
-        curr_arr = curr_arr->child_arrays[0];
-        arr_c_types.push_back(curr_arr->dtype);
-        arr_array_types.push_back(curr_arr->arr_type);
+    if (arr_array_types.back() == bodo_array_type::ARRAY_ITEM) {
+        _get_dtypes_arr_types_from_array(array->child_arrays[0], arr_c_types,
+                                         arr_array_types);
     }
 }
 
