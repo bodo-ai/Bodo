@@ -5324,22 +5324,22 @@ SqlIntervalQualifier IntervalQualifier() :
 }
 {
     (
-        start = Year() { s = span(); } startPrec = PrecisionOpt()
+        start = Year() { s = span(); } startPrec = PrecisionOpt(-1)
         (
             LOOKAHEAD(2) <TO> end = Month()
         |   { end = null; }
         )
     |
-        start = Quarter() { s = span(); } startPrec = PrecisionOpt()
+        start = Quarter() { s = span(); } startPrec = PrecisionOpt(-1)
         { end = null; }
     |
-        start = Month() { s = span(); } startPrec = PrecisionOpt()
+        start = Month() { s = span(); } startPrec = PrecisionOpt(-1)
         { end = null; }
     |
-        start = Week() { s = span(); } startPrec = PrecisionOpt()
+        start = Week() { s = span(); } startPrec = PrecisionOpt(-1)
         { end = null; }
     |
-        start = Day() { s = span(); } startPrec = PrecisionOpt()
+        start = Day() { s = span(); } startPrec = PrecisionOpt(-1)
         (
             LOOKAHEAD(2) <TO>
             (
@@ -5347,12 +5347,12 @@ SqlIntervalQualifier IntervalQualifier() :
             |
                 end = Minute()
             |
-                end = Second() secondFracPrec = PrecisionOpt()
+                end = Second() secondFracPrec = PrecisionOpt(-1)
             )
         |   { end = null; }
         )
     |
-        start = Hour() { s = span(); } startPrec = PrecisionOpt()
+        start = Hour() { s = span(); } startPrec = PrecisionOpt(-1)
         (
             LOOKAHEAD(2) <TO>
             (
@@ -5364,7 +5364,7 @@ SqlIntervalQualifier IntervalQualifier() :
         |   { end = null; }
         )
     |
-        start = Minute() { s = span(); } startPrec = PrecisionOpt()
+        start = Minute() { s = span(); } startPrec = PrecisionOpt(-1)
         (
             LOOKAHEAD(2) <TO>
             end = Second()
@@ -5407,7 +5407,7 @@ SqlIntervalQualifier IntervalQualifierStart() :
         |   start = Minute()
         )
         { s = span(); }
-        startPrec = PrecisionOpt()
+        startPrec = PrecisionOpt(-1)
     |
         start = Second() { s = span(); }
         [   <LPAREN> startPrec = UnsignedIntLiteral()
@@ -6076,7 +6076,7 @@ SqlTypeNameSpec SqlTypeName2(Span s) :
     |
         <VARBINARY> { s.add(this); sqlTypeName = SqlTypeName.VARBINARY; }
     )
-    precision = PrecisionOpt()
+    precision = PrecisionOpt(-1)
     {
         return new SqlBasicTypeNameSpec(sqlTypeName, precision, s.end(this));
     }
@@ -6299,7 +6299,7 @@ SqlTypeNameSpec CharacterTypeName(Span s) :
         (<VARCHAR> | <TEXT> | <STRING> | <NVARCHAR> | <NVARCHAR2>)
         { s.add(this); sqlTypeName = SqlTypeName.VARCHAR; }
     )
-    precision = PrecisionOpt()
+    precision = PrecisionOpt(-1)
     [
         <CHARACTER> <SET>
         charSetName = Identifier()
@@ -6327,7 +6327,7 @@ SqlTypeNameSpec DateTimeTypeName() :
 |
     LOOKAHEAD(2)
     <TIME> { s = span(); }
-    precision = PrecisionOpt()
+    precision = PrecisionOpt(9)
     withLocalTimeZone = TimeZoneOpt()
     {
         if (withLocalTimeZone) {
@@ -6339,7 +6339,7 @@ SqlTypeNameSpec DateTimeTypeName() :
     }
 |
     <TIMESTAMP> { s = span(); }
-    precision = PrecisionOpt()
+    precision = PrecisionOpt(9)
     withLocalTimeZone = TimeZoneOpt()
     {
         if (withLocalTimeZone) {
@@ -6352,16 +6352,23 @@ SqlTypeNameSpec DateTimeTypeName() :
 |
     (<TIMESTAMP_NTZ> | <DATETIME>) {
         s = span();
-        precision = PrecisionOpt();
+        precision = PrecisionOpt(9);
         typeName = SqlTypeName.TIMESTAMP;
         return new SqlBasicTypeNameSpec(typeName, precision, s.end(this));
     }
+|
+    <TIMESTAMP_LTZ> {
+        s = span();
+        precision = PrecisionOpt(9);
+        typeName = SqlTypeName.TIMESTAMP;
+        return new SqlTzAwareTypeNameSpec(new SqlIdentifier(typeName.name(), s.end(this)), precision);
+    }
 }
 
-// Parse an optional data type precision, default is -1.
-int PrecisionOpt() :
+// Parse an optional data type precision, default is defaultPrecision.
+int PrecisionOpt(final int defaultPrecision) :
 {
-    int precision = -1;
+    int precision = defaultPrecision;
 }
 {
     <LPAREN>
@@ -6369,7 +6376,7 @@ int PrecisionOpt() :
     <RPAREN>
     { return precision; }
 |
-    { return -1; }
+    { return defaultPrecision; }
 }
 
 /**

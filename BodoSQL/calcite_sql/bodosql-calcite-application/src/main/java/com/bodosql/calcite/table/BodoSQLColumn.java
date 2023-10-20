@@ -247,11 +247,11 @@ public interface BodoSQLColumn {
           temp = typeFactory.createSqlType(SqlTypeName.TIME, precision);
           break;
         case DATETIME:
-          temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP);
+          temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP, precision);
           break;
         case TZ_AWARE_TIMESTAMP:
           assert tzInfo != null;
-          temp = BodoRelDataTypeFactory.createTZAwareSqlType(typeFactory, tzInfo);
+          temp = BodoRelDataTypeFactory.createTZAwareSqlType(typeFactory, tzInfo, precision);
           break;
         case TIMEDELTA:
           // TODO: Figure out SqlParserPos. Probably not relevant

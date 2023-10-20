@@ -53,6 +53,7 @@ data: {
       "org.apache.calcite.sql.SqlCreate",
       "org.apache.calcite.sql.SqlDrop",
       "org.apache.calcite.sql.SqlDdl",
+      "org.apache.calcite.sql.SqlTzAwareTypeNameSpec",
       "org.apache.calcite.sql.ddl.SqlDdlNodes",
     ]
 
@@ -108,6 +109,7 @@ data: {
       "CLUSTER",
       "COPY",
       "GRANTS",
+      "TIMESTAMP_LTZ",
       # Tokens for Date/Time Intervals
       "Y",
       "YY",
@@ -302,9 +304,9 @@ data: {
         "DATE",
         "TIME",
         "TIMESTAMP",
-        # TIMESTAMP_LTZ and  TIMESTAMP_TZ are not registered in parser.jj yet
-        # "TIMESTAMP_LTZ",
+        "TIMESTAMP_LTZ",
         "TIMESTAMP_NTZ",
+        # TIMESTAMP_TZ is not registered as a token yet
         # "TIMESTAMP_TZ",
         "VARIANT",
         "ARRAY",

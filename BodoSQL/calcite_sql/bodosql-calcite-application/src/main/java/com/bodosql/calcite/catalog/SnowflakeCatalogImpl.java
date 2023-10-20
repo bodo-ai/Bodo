@@ -467,10 +467,23 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       }
     } else if (typeName.equals("DATE")) {
       columnDataType = BodoSQLColumnDataType.DATE;
-    } else if (typeName.startsWith("DATETIME") || typeName.startsWith("TIMESTAMP_NTZ")) {
+    } else if (typeName.startsWith("DATETIME")) {
+      // TODO(njriasan): can DATETIME contain precision?
+      // Most likely Snowflake should never return this type as
+      // its a user alias
       columnDataType = BodoSQLColumnDataType.DATETIME;
-    } else if (typeName.startsWith("TIMESTAMP_TZ") || typeName.startsWith("TIMESTAMP_LTZ")) {
+      precision = 9;
+    } else if (typeName.startsWith("TIMESTAMP_NTZ(")) {
+      columnDataType = BodoSQLColumnDataType.DATETIME;
+      // Determine the precision by parsing the type.
+      String precisionString = typeName.split("\\(|\\)")[1];
+      precision = Integer.valueOf(precisionString.trim());
+    } else if (typeName.startsWith("TIMESTAMP_TZ(") || typeName.startsWith("TIMESTAMP_LTZ(")) {
+      // TODO(njriasan): Remove TIMESTAMP_TZ
       columnDataType = BodoSQLColumnDataType.TZ_AWARE_TIMESTAMP;
+      // Determine the precision by parsing the type.
+      String precisionString = typeName.split("\\(|\\)")[1];
+      precision = Integer.valueOf(precisionString.trim());
     } else if (typeName.startsWith("TIME(")) {
       columnDataType = BodoSQLColumnDataType.TIME;
       // Determine the precision by parsing the type.

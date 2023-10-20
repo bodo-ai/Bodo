@@ -1,5 +1,6 @@
 package org.apache.calcite.sql.type;
 
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.google.common.base.Preconditions;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -131,7 +132,7 @@ public class BodoReturnTypes {
                 @Override
                 public @Nullable RelDataType inferReturnType(final SqlOperatorBinding opBinding) {
                     return BodoRelDataTypeFactory.createTZAwareSqlType(
-                            opBinding.getTypeFactory(), null);
+                            opBinding.getTypeFactory(), null, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION);
                 }
             };
 
