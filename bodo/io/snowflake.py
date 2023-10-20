@@ -217,7 +217,7 @@ def _import_snowflake_connector_logging() -> None:  # pragma: no cover
 
 
 def gen_snowflake_schema(
-    column_names, column_datatypes, str_column_precisions=None
+    column_names, column_datatypes, column_precisions=None
 ):  # pragma: no cover
     """Generate a dictionary where column is key and
     its corresponding bodo->snowflake datatypes is value
@@ -225,8 +225,8 @@ def gen_snowflake_schema(
     Args:
         column_names (array-like): Array of DataFrame column names
         column_datatypes (array-like): Array of DataFrame column datatypes
-        str_column_precisions (array-like, optional): Array of precision values for each column.
-        The values are only meaningful for string columns. A value of -1 means that the
+        column_precisions (array-like, optional): Array of precision values for each column.
+        The values are only meaningful for string and timestamp columns. A value of -1 means that the
         precision is unknown so the maximum should be used.
 
     Returns:
@@ -239,38 +239,60 @@ def gen_snowflake_schema(
             raise BodoError("Column name cannot be empty when writing to Snowflake.")
         # [BE-3587] need specific tz for each column type.
         if isinstance(col_type, bodo.DatetimeArrayType):
-            if col_type.tz is not None:
-                sf_schema[col_name] = "TIMESTAMP_LTZ"
+            if column_precisions is None:
+                precision = 9
             else:
-                sf_schema[col_name] = "TIMESTAMP_NTZ"
+                precision = column_precisions[col_idx]
+                precision = 9 if precision == -1 else precision
+            if col_type.tz is not None:
+                sf_schema[col_name] = f"TIMESTAMP_LTZ({precision})"
+            else:
+                sf_schema[col_name] = f"TIMESTAMP_NTZ({precision})"
         elif col_type == bodo.datetime_datetime_type:
-            sf_schema[col_name] = "TIMESTAMP_NTZ"
+            if column_precisions is None:
+                precision = 9
+            else:
+                precision = column_precisions[col_idx]
+                precision = 9 if precision == -1 else precision
+            sf_schema[col_name] = f"TIMESTAMP_NTZ({precision})"
         elif col_type == bodo.datetime_date_array_type:
             sf_schema[col_name] = "DATE"
         elif isinstance(col_type, bodo.TimeArrayType):
-            if col_type.precision in [0, 3, 6]:
-                precision = col_type.precision
-            elif col_type.precision == 9:
-                # Set precision to 6 due to snowflake limitation
-                # https://community.snowflake.com/s/article/Nano-second-precision-lost-after-Parquet-file-Unload
-                if bodo.get_rank() == 0:
-                    warnings.warn(
-                        BodoWarning(
-                            f"to_sql(): {col_name} time precision will be lost.\nSnowflake loses nano second precision when exporting parquet file using COPY INTO.\n"
-                            " This is due to a limitation on Parquet V1 that is currently being used in Snowflake"
+            # Note: The actual result may not match the precision
+            # https://community.snowflake.com/s/article/Nano-second-precision-lost-after-Parquet-file-Unload
+            if column_precisions is None:
+                if col_type.precision in [0, 3, 6]:
+                    precision = col_type.precision
+                elif col_type.precision == 9:
+                    # TODO(njriasan): Remove this branch eventually?
+                    # Set precision to 6 due to snowflake limitation
+                    # https://community.snowflake.com/s/article/Nano-second-precision-lost-after-Parquet-file-Unload
+                    if bodo.get_rank() == 0:
+                        warnings.warn(
+                            BodoWarning(
+                                f"to_sql(): {col_name} time precision will be lost.\nSnowflake loses nano second precision when exporting parquet file using COPY INTO.\n"
+                                " This is due to a limitation on Parquet V1 that is currently being used in Snowflake"
+                            )
                         )
-                    )
-                precision = 6
+                    precision = 6
+                else:
+                    raise ValueError("Unsupported Precision Found in Bodo Time Array")
             else:
-                raise ValueError("Unsupported Precision Found in Bodo Time Array")
+                precision = column_precisions[col_idx]
+                precision = 9 if precision == -1 else precision
             sf_schema[col_name] = f"TIME({precision})"
         elif isinstance(col_type, types.Array):
             numpy_type = col_type.dtype.name
             if numpy_type.startswith("datetime"):
-                sf_schema[col_name] = "DATETIME"
+                if column_precisions is None:
+                    precision = 9
+                else:
+                    precision = column_precisions[col_idx]
+                    precision = 9 if precision == -1 else precision
+                sf_schema[col_name] = f"TIMESTAMP_NTZ({precision})"
             # NOTE: Bodo matches Pandas behavior
             # and prints same warning and save it as a number.
-            if numpy_type.startswith("timedelta"):
+            elif numpy_type.startswith("timedelta"):
                 sf_schema[col_name] = "NUMBER(38, 0)"
                 if bodo.get_rank() == 0:
                     warnings.warn(
@@ -284,10 +306,10 @@ def gen_snowflake_schema(
             elif numpy_type.startswith(("float")):
                 sf_schema[col_name] = "REAL"
         elif is_str_arr_type(col_type):
-            if str_column_precisions is None or str_column_precisions[col_idx] < 0:
+            if column_precisions is None or column_precisions[col_idx] < 0:
                 sf_schema[col_name] = "TEXT"
             else:
-                sf_schema[col_name] = f"VARCHAR({str_column_precisions[col_idx]})"
+                sf_schema[col_name] = f"VARCHAR({column_precisions[col_idx]})"
         elif col_type == bodo.binary_array_type:
             sf_schema[col_name] = "BINARY"
         elif col_type == bodo.boolean_array_type:
