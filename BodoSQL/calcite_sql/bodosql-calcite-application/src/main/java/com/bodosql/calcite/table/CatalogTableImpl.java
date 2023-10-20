@@ -299,6 +299,14 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     // Avoid ever returning more than the row count. This can happen because
     // Snowflake returns an estimate.
     Double distinctCount = catalog.estimateColumnDistinctCount(qualifiedName, columnName);
+
+    // If the original query failed, try again with sampling
+    if (distinctCount == null) {
+      distinctCount =
+          catalog.estimateColumnDistinctCountWithSampling(
+              qualifiedName, columnName, getStatistic().getRowCount());
+    }
+
     // Important: We must use getStatistic() here to allow subclassing, which we use for
     // our mocking infrastructure.
     Double maxCount = getStatistic().getRowCount();
