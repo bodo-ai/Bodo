@@ -73,7 +73,7 @@ public class SqlAbstractTZSessionFunction extends SqlFunction {
           RESOURCE.argumentMustBeValidPrecision(
               opBinding.getOperator().getName(), 0, SqlTypeName.MAX_DATETIME_PRECISION));
     }
-    return BodoRelDataTypeFactory.createTZAwareSqlType(opBinding.getTypeFactory(), null);
+    return BodoRelDataTypeFactory.createTZAwareSqlType(opBinding.getTypeFactory(), null, precision);
   }
 
   // All TZ-Aware Timestamp functions are increasing. Not strictly increasing.

@@ -21,7 +21,7 @@ public class BodoTypeFactoryImpl extends JavaTypeFactoryImpl implements BodoRelD
   @Override
   public RelDataType createSqlType(SqlTypeName typeName) {
     if (typeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
-      return createTZAwareSqlType(null);
+      return createTZAwareSqlType(null, BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION);
     } else if (typeName == SqlTypeName.OTHER) {
       return createVariantSqlType();
     }
@@ -31,7 +31,7 @@ public class BodoTypeFactoryImpl extends JavaTypeFactoryImpl implements BodoRelD
   @Override
   public RelDataType createSqlType(SqlTypeName typeName, int precision) {
     if (typeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
-      return createTZAwareSqlType(null);
+      return createTZAwareSqlType(null, precision);
     } else if (typeName == SqlTypeName.OTHER) {
       return createVariantSqlType();
     }
@@ -41,7 +41,7 @@ public class BodoTypeFactoryImpl extends JavaTypeFactoryImpl implements BodoRelD
   @Override
   public RelDataType createSqlType(SqlTypeName typeName, int precision, int scale) {
     if (typeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
-      return createTZAwareSqlType(null);
+      return createTZAwareSqlType(null, precision);
     } else if (typeName == SqlTypeName.OTHER) {
       return createVariantSqlType();
     }
@@ -65,7 +65,7 @@ public class BodoTypeFactoryImpl extends JavaTypeFactoryImpl implements BodoRelD
   }
 
   @Override
-  public RelDataType createTZAwareSqlType(@Nullable BodoTZInfo tzInfo) {
+  public RelDataType createTZAwareSqlType(@Nullable BodoTZInfo tzInfo, int precision) {
     if (tzInfo == null) {
       if (typeSystem instanceof BodoSQLRelDataTypeSystem) {
         tzInfo = ((BodoSQLRelDataTypeSystem) typeSystem).getDefaultTZInfo();
@@ -73,12 +73,13 @@ public class BodoTypeFactoryImpl extends JavaTypeFactoryImpl implements BodoRelD
         tzInfo = BodoTZInfo.UTC;
       }
     }
-    return canonize(new TZAwareSqlType(tzInfo, false));
+    return canonize(new TZAwareSqlType(tzInfo, false, precision));
   }
 
   private RelDataType copyTZAwareSqlType(TZAwareSqlType type, boolean nullable) {
     BodoTZInfo tzInfo = requireNonNull(type.getTZInfo());
-    return canonize(new TZAwareSqlType(tzInfo, nullable));
+    int precision = type.getPrecision();
+    return canonize(new TZAwareSqlType(tzInfo, nullable, precision));
   }
 
   @Override
