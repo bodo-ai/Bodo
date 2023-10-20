@@ -458,7 +458,7 @@ def snowflake_writer_init(
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def snowflake_writer_append_table(
-    writer, table, col_names_meta, is_last, iter, str_col_precisions_meta
+    writer, table, col_names_meta, is_last, iter, col_precisions_meta
 ):  # pragma: no cover
     if not isinstance(writer, SnowflakeWriterType):  # pragma: no cover
         raise BodoError(
@@ -496,14 +496,14 @@ def snowflake_writer_append_table(
     n_cols = len(col_names_meta)
     py_table_typ = table
 
-    if str_col_precisions_meta == bodo.none:
-        str_col_precisions_tup = None
+    if col_precisions_meta == bodo.none:
+        col_precisions_tup = None
     else:
-        str_col_precisions_tup = unwrap_typeref(str_col_precisions_meta).meta
+        col_precisions_tup = unwrap_typeref(col_precisions_meta).meta
         if (
-            not isinstance(str_col_precisions_tup, tuple)
-            or len(str_col_precisions_tup) != n_cols
-            or any(not isinstance(elem, int) for elem in str_col_precisions_tup)
+            not isinstance(col_precisions_tup, tuple)
+            or len(col_precisions_tup) != n_cols
+            or any(not isinstance(elem, int) for elem in col_precisions_tup)
         ):  # pragma: no cover
             raise BodoError(
                 f"snowflake_writer_append_table: Expected col_precisions_meta "
@@ -511,7 +511,7 @@ def snowflake_writer_append_table(
             )
 
     sf_schema = bodo.io.snowflake.gen_snowflake_schema(
-        col_names_meta.meta, table.arr_types, str_col_precisions_tup
+        col_names_meta.meta, table.arr_types, col_precisions_tup
     )
 
     # Use default number of iterations for sync if not specified by user
@@ -526,7 +526,7 @@ def snowflake_writer_append_table(
     # all ranks must finish writing their respective files to Snowflake
     # internal stage and sync with rank 0 before it issues COPY INTO.
     def impl(
-        writer, table, col_names_meta, is_last, iter, str_col_precisions_meta
+        writer, table, col_names_meta, is_last, iter, col_precisions_meta
     ):  # pragma: no cover
         if writer["finished"]:
             return True
