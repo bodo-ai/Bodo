@@ -2866,6 +2866,151 @@ def test_date_diff_upcasting(unit, arr0, arr1, answer, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "arr0, arr1, answer_day, answer_hour",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    pd.Timestamp("2022-7-11"),
+                    pd.Timestamp("2022-7-11 01:00:00"),
+                    pd.Timestamp("2022-7-10 23:00:00"),
+                ]
+                * 5
+            ),
+            pd.array(
+                [
+                    pd.Timestamp("2022-7-11", tz="US/Pacific"),
+                    pd.Timestamp("2022-7-10 23:00:00", tz="US/Pacific"),
+                    pd.Timestamp("2022-7-11 01:00:00", tz="US/Pacific"),
+                ]
+                * 5
+            ),
+            pd.array([0, -1, 1] * 5),
+            pd.array([0, -2, 2] * 5),
+            id="vector-vector",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    pd.Timestamp("2022-7-11"),
+                    pd.Timestamp("2022-7-09 01:00:00"),
+                    pd.Timestamp("2022-7-07 23:00:00"),
+                ]
+                * 5
+            ),
+            pd.Timestamp("2022-7-08 17:00:00", tz="Poland"),
+            pd.array([-3, -1, 1] * 5),
+            pd.array([-55, -8, 18] * 5),
+            id="vector-scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    pd.Timestamp("2022-7-11", tz="US/Pacific"),
+                    pd.Timestamp("2022-7-10 23:00:00", tz="US/Pacific"),
+                    pd.Timestamp("2022-7-11 01:00:00", tz="US/Pacific"),
+                ]
+                * 5
+            ),
+            None,
+            pd.array([None, None, None] * 5, dtype="Int64"),
+            pd.array([None, None, None] * 5, dtype="Int64"),
+            id="vector-None",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Timestamp("2022-7-11", tz="US/Pacific"),
+            None,
+            None,
+            None,
+            id="scalar-None",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_date_diff_tz_aware_naive(
+    arr0, arr1, answer_day, answer_hour, memory_leak_check
+):
+    """
+    Tests several diff_xxx kernels with tz aware and tz naive timestamps.
+    """
+
+    def impl_day(arg0, arg1):
+        return bodo.libs.bodosql_array_kernels.diff_day(arg0, arg1)
+
+    def impl_hour(arg0, arg1):
+        return bodo.libs.bodosql_array_kernels.diff_hour(arg0, arg1)
+
+    check_func(
+        impl_day,
+        (arr0, arr1),
+        py_output=answer_day,
+    )
+    check_func(
+        impl_day,
+        (arr1, arr0),
+        py_output=-answer_day if answer_day is not None else None,
+    )
+    check_func(
+        impl_hour,
+        (arr0, arr1),
+        py_output=answer_hour,
+    )
+    check_func(
+        impl_hour,
+        (arr1, arr0),
+        py_output=-answer_hour if answer_hour is not None else None,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg0, arg1, answer",
+    [
+        pytest.param(
+            pd.Timestamp("03-12-2023 00:59:59", tz="US/Eastern"),
+            pd.Timestamp("03-12-2023 03:00:00", tz="US/Eastern"),
+            61,
+            id="spring-DST-aware",
+        ),
+        pytest.param(
+            pd.Timestamp("11-05-2023 00:59:59", tz="US/Eastern"),
+            pd.Timestamp("11-05-2023 03:00:00", tz="US/Eastern"),
+            181,
+            id="Fall-DST-aware",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Timestamp("03-12-2023 00:59:59"),
+            pd.Timestamp("03-12-2023 03:00:00", tz="US/Eastern"),
+            61,
+            id="spring-DST-naive",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Timestamp("11-05-2023 00:59:59", tz="US/Eastern"),
+            pd.Timestamp("11-05-2023 03:00:00"),
+            181,
+            id="Fall-DST-naive",
+        ),
+    ],
+)
+def test_date_diff_adjustment_boundary(arg0, arg1, answer, memory_leak_check):
+    """
+    Test the datediff kernel for minutes where the input data has values on either side of a
+    DST boundary.
+
+    This is has been checked directly in Snowflake.
+    """
+
+    def impl_min(arg0, arg1):
+        return bodo.libs.bodosql_array_kernels.diff_minute(arg0, arg1)
+
+    check_func(impl_min, (arg0, arg1), py_output=answer)
+    check_func(impl_min, (arg1, arg0), py_output=-answer)
+
+
 def test_add_interval_optional(memory_leak_check):
     def impl(tz_naive_ts, tz_aware_ts, int_val, flag0, flag1):
         arg0 = tz_naive_ts if flag0 else None
