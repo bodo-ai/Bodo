@@ -431,8 +431,9 @@ ArrowReader* snowflake_reader_init_py_entry(
         // if the error string is "python" this means the C++ exception is
         // a result of a Python exception, so we don't call PyErr_SetString
         // because we don't want to replace the original Python error
-        if (std::string(e.what()) != "python")
+        if (std::string(e.what()) != "python") {
             PyErr_SetString(PyExc_RuntimeError, e.what());
+        }
         return NULL;
     }
 }

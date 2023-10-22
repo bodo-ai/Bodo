@@ -1428,15 +1428,25 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
 table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
                                        uint64_t* total_rows_out,
                                        bool produce_output) {
-    bool is_last_out_ = false;
-    uint64_t total_rows_out_ = 0;
+    try {
+        bool is_last_out_ = false;
+        uint64_t total_rows_out_ = 0;
 
-    table_info* table =
-        reader->read_batch(is_last_out_, total_rows_out_, produce_output);
+        table_info* table =
+            reader->read_batch(is_last_out_, total_rows_out_, produce_output);
 
-    *total_rows_out = total_rows_out_;
-    *is_last_out = is_last_out_;
-    return table;
+        *total_rows_out = total_rows_out_;
+        *is_last_out = is_last_out_;
+        return table;
+    } catch (const std::exception& e) {
+        // if the error string is "python" this means the C++ exception is
+        // a result of a Python exception, so we don't call PyErr_SetString
+        // because we don't want to replace the original Python error
+        if (std::string(e.what()) != "python") {
+            PyErr_SetString(PyExc_RuntimeError, e.what());
+        }
+        return nullptr;
+    }
 }
 
 /**
