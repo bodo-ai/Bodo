@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.rex;
 
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import org.apache.calcite.avatica.util.ByteString;
 import org.apache.calcite.avatica.util.DateTimeUtils;
 import org.apache.calcite.avatica.util.TimeUnit;
@@ -799,7 +800,7 @@ public class RexLiteral extends RexNode {
     }
 
     // We don't have a type system yet so use the default
-    RelDataTypeSystem typeSystem = RelDataTypeSystem.DEFAULT;
+    RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
 
     switch (typeName) {
     case CHAR:

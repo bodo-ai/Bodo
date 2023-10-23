@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem
 import org.apache.calcite.rel.type.RelDataType
-import org.apache.calcite.rel.type.RelDataTypeSystem
 import org.apache.calcite.sql.SqlCall
 import org.apache.calcite.sql.SqlIntervalLiteral
 import org.apache.calcite.sql.SqlIntervalLiteral.IntervalValue
@@ -37,7 +37,7 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         unparseSqlIntervalQualifier(
             writer,
             interval.intervalQualifier,
-            RelDataTypeSystem.DEFAULT,
+            BodoSQLRelDataTypeSystem(),
         )
         writer.print("'")
     }
