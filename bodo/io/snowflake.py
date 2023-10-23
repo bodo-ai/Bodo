@@ -320,7 +320,9 @@ def gen_snowflake_schema(
         elif isinstance(col_type, bodo.FloatingArrayType):
             sf_schema[col_name] = "REAL"
         elif isinstance(col_type, bodo.DecimalArrayType):
-            sf_schema[col_name] = "NUMBER(38, 18)"
+            # TODO(njriasan): Integrate column_precisions when we have accurate
+            # information from BodoSQL.
+            sf_schema[col_name] = f"NUMBER({col_type.precision}, {col_type.scale})"
         elif isinstance(col_type, (ArrayItemArrayType, StructArrayType)):
             # based on testing with infer_schema
             sf_schema[col_name] = "VARIANT"
@@ -736,7 +738,11 @@ def get_number_types_from_metadata(
 
         # Map Byte Width for Integer Only Columns
         if dtype.scale == 0:
-            out_dtype = INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]
+            if byte_size <= 8:
+                out_dtype = INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]
+            else:
+                # Maintain the precision from Snowflake
+                out_dtype = dtype
         # Any non-16 byte decimal columns map to double
         elif byte_size <= 8 or downcast_decimal_to_double:
             out_dtype = pa.float64()
