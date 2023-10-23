@@ -850,6 +850,89 @@ def test_to_number_columns(fn_name):
     )
 
 
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "fn_name",
+    [
+        "TO_NUMBER",
+        "TRY_TO_NUMBER",
+    ],
+)
+def test_to_number_optional(fn_name):
+    query = f"""SELECT case when {fn_name}(A) in (0, 1, 2, 3, 4, 5)
+            then 'USA' else 'international' end as origin_zip_type
+            FROM table1 """
+
+    df = pd.DataFrame({"A": [str(i) for i in (1, 22, 3, 99, 44, 5, 0)]})
+    expected_output = pd.DataFrame(
+        {
+            "origin_zip_type": [
+                "USA",
+                "international",
+                "USA",
+                "international",
+                "international",
+                "USA",
+                "USA",
+            ]
+        }
+    )
+
+    ctx = {"table1": df}
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "fn_name",
+    [
+        "TO_NUMBER",
+        "TRY_TO_NUMBER",
+    ],
+)
+def test_to_number_optional_invalid_str(fn_name):
+    query = f"""SELECT case when {fn_name}(A) in (0, 1, 2, 3, 4, 5)
+            then 'USA' else 'international' end as origin_zip_type
+            FROM table1 """
+
+    df = pd.DataFrame({"A": [str(i) for i in (1, "$$", 3, 99, 44, 5, "-4#")]})
+    expected_output = pd.DataFrame(
+        {
+            "origin_zip_type": [
+                "USA",
+                "international",
+                "USA",
+                "international",
+                "international",
+                "USA",
+                "international",
+            ]
+        }
+    )
+    ctx = {"table1": df}
+    if "TRY" in fn_name:
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=expected_output,
+        )
+    else:
+        with pytest.raises(ValueError, match="unable to convert string literal"):
+            bc = bodosql.BodoSQLContext({"table1": df})
+
+            @bodo.jit
+            def impl(bc):
+                return bc.sql(query)
+
+            impl(bc)
+
+
 @pytest.mark.parametrize(
     "fn_name",
     [
