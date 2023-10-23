@@ -375,3 +375,307 @@ def test_timestamp_cast_utc_literal(timestamp_literal, memory_leak_check):
     ctx = {}
     expected_output = pd.DataFrame({"ts": value}, index=np.arange(1))
     check_query(query, ctx, None, expected_output=expected_output)
+
+
+@pytest.mark.parametrize(
+    "table, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.array(
+                        [
+                            pd.Timestamp("2023-11-05 23:21:24.32414"),
+                            pd.Timestamp("2018-04-01"),
+                            pd.Timestamp("1969-01-01 12:21:42"),
+                            pd.Timestamp("1970-01-01"),
+                            pd.Timestamp("2023-03-12 00:59:59"),
+                            pd.Timestamp("2023-03-12 03:00:01.324"),
+                            pd.Timestamp("2023-11-05 00:00:00.4314"),
+                            pd.Timestamp("2023-11-05 03:00:00.432423244"),
+                            None,
+                        ],
+                    )
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "out1": pd.array(
+                        [
+                            1699226484,
+                            1522540800,
+                            -31491498,
+                            0,
+                            1678582799,
+                            1678590001,
+                            1699142400,
+                            1699153200,
+                            None,
+                        ],
+                        dtype="Int64",
+                    ),
+                    "out2": pd.array(
+                        [
+                            1699226484324,
+                            1522540800000,
+                            -31491498000,
+                            0,
+                            1678582799000,
+                            1678590001324,
+                            1699142400431,
+                            1699153200432,
+                            None,
+                        ],
+                        dtype="Int64",
+                    ),
+                    "out3": pd.array(
+                        [
+                            1699226484324140,
+                            1522540800000000,
+                            -31491498000000,
+                            0,
+                            1678582799000000,
+                            1678590001324000,
+                            1699142400431400,
+                            1699153200432423,
+                            None,
+                        ],
+                        dtype="Int64",
+                    ),
+                    "out4": pd.array(
+                        [
+                            1699226484324140000,
+                            1522540800000000000,
+                            -31491498000000000,
+                            0,
+                            1678582799000000000,
+                            1678590001324000000,
+                            1699142400431400000,
+                            1699153200432423244,
+                            None,
+                        ],
+                        dtype="Int64",
+                    ),
+                }
+            ),
+            id="tz_naive",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.array(
+                        [
+                            pd.Timestamp("2023-11-05 23:21:24.32414", tz="US/Pacific"),
+                            pd.Timestamp("2018-04-01", tz="US/Pacific"),
+                            None,
+                            pd.Timestamp("1969-01-01 12:21:42", tz="US/Pacific"),
+                            pd.Timestamp("1970-01-01", tz="US/Pacific"),
+                            pd.Timestamp("2023-03-12 00:59:59", tz="US/Pacific"),
+                            pd.Timestamp("2023-03-12 03:00:01.324", tz="US/Pacific"),
+                            pd.Timestamp("2023-11-05 00:00:00.4314", tz="US/Pacific"),
+                            pd.Timestamp(
+                                "2023-11-05 03:00:00.432423244", tz="US/Pacific"
+                            ),
+                        ],
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "out1": pd.array(
+                        [
+                            1699255284,
+                            1522566000,
+                            None,
+                            -31462698,
+                            28800,
+                            1678611599,
+                            1678615201,
+                            1699167600,
+                            1699182000,
+                        ],
+                        dtype="Int64",
+                    ),
+                    "out2": pd.array(
+                        [
+                            1699255284324,
+                            1522566000000,
+                            None,
+                            -31462698000,
+                            28800000,
+                            1678611599000,
+                            1678615201324,
+                            1699167600431,
+                            1699182000432,
+                        ],
+                        dtype="Int64",
+                    ),
+                    "out3": pd.array(
+                        [
+                            1699255284324140,
+                            1522566000000000,
+                            None,
+                            -31462698000000,
+                            28800000000,
+                            1678611599000000,
+                            1678615201324000,
+                            1699167600431400,
+                            1699182000432423,
+                        ],
+                        dtype="Int64",
+                    ),
+                    "out4": pd.array(
+                        [
+                            1699255284324140000,
+                            1522566000000000000,
+                            None,
+                            -31462698000000000,
+                            28800000000000,
+                            1678611599000000000,
+                            1678615201324000000,
+                            1699167600431400000,
+                            1699182000432423244,
+                        ],
+                        dtype="Int64",
+                    ),
+                }
+            ),
+            id="tz_aware",
+        ),
+    ],
+)
+def test_date_part_epoch(table, answer, memory_leak_check):
+    query = f"SELECT DATE_PART(EPOCH_SECONDS, A) AS out1, DATE_PART(EPOCH_MILLISECONDS, A) AS out2, DATE_PART(EPOCH_MICROSECONDS, A) AS out3, DATE_PART(EPOCH_NANOSECONDS, A) AS out4 from table1"
+    ctx = {"table1": table}
+    check_query(query, ctx, None, expected_output=answer, check_dtype=False)
+
+
+def test_date_part_epoch_case(memory_leak_check):
+    """
+    Tests date_part with an epoch unit when used in a case statement.
+    """
+    table = pd.DataFrame(
+        {
+            "A": pd.array(
+                [
+                    pd.Timestamp("2023-11-05 23:21:24.32414"),
+                    pd.Timestamp("2018-04-01"),
+                    pd.Timestamp("1969-01-01 12:21:42"),
+                    pd.Timestamp("1970-01-01"),
+                    pd.Timestamp("2023-03-12 00:59:59"),
+                    pd.Timestamp("2023-03-12 03:00:01.324"),
+                    pd.Timestamp("2023-11-05 00:00:00.4314"),
+                    pd.Timestamp("2023-11-05 03:00:00.432423244"),
+                    None,
+                ],
+            ),
+            "B": pd.array([True, True, True, False, False, True, False, True, True]),
+        }
+    )
+    query = f"SELECT CASE WHEN B THEN DATE_PART(EPOCH_SECONDS, A) ELSE -1 END AS out1 from table1"
+    ctx = {"table1": table}
+    answer = pd.DataFrame(
+        {
+            "out1": pd.array(
+                [
+                    1699226484,
+                    1522540800,
+                    -31491498,
+                    -1,
+                    -1,
+                    1678590001,
+                    -1,
+                    1699153200,
+                    None,
+                ],
+                dtype="Int64",
+            ),
+        }
+    )
+    check_query(query, ctx, None, expected_output=answer, check_dtype=False)
+
+
+@pytest.mark.parametrize(
+    "table, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.array(
+                        [
+                            pd.Timestamp("2023-03-12"),
+                            pd.Timestamp("2023-03-13"),
+                            None,
+                            pd.Timestamp("2023-11-05"),
+                            pd.Timestamp("2023-11-06"),
+                        ]
+                        * 3
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "out1": pd.array([0, 0, None, 0, 0] * 3, dtype="Int32"),
+                    "out2": pd.array([0, 0, None, 0, 0] * 3, dtype="Int32"),
+                }
+            ),
+            id="tz_naive",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.array(
+                        [
+                            pd.Timestamp("2023-03-12", tz="Pacific/Marquesas"),
+                            pd.Timestamp("2023-03-13", tz="Pacific/Marquesas"),
+                            None,
+                            pd.Timestamp("2023-11-05", tz="Pacific/Marquesas"),
+                            pd.Timestamp("2023-11-06", tz="Pacific/Marquesas"),
+                        ]
+                        * 3
+                    )
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "out1": pd.array([-9, -9, None, -9, -9] * 3, dtype="Int32"),
+                    "out2": pd.array([-30, -30, None, -30, -30] * 3, dtype="Int32"),
+                }
+            ),
+            id="tz_aware",
+        ),
+    ],
+)
+def test_date_part_timezone_unit(table, answer, memory_leak_check):
+    query = "SELECT DATE_PART(TIMEZONE_HOUR, A) AS out1, DATE_PART(TIMEZONE_MINUTE, A) AS out2 from table1"
+    ctx = {"table1": table}
+    check_query(query, ctx, None, expected_output=answer, check_dtype=False)
+
+
+def test_date_part_timezone_unit_case(memory_leak_check):
+    """
+    Tests date_part with a timezone unit when used in a case statement.
+    """
+    table = pd.DataFrame(
+        {
+            "A": pd.array(
+                [
+                    pd.Timestamp("2023-03-12", tz="US/Pacific"),
+                    pd.Timestamp("2023-03-13", tz="US/Pacific"),
+                    None,
+                    pd.Timestamp("2023-11-05", tz="US/Pacific"),
+                    pd.Timestamp("2023-11-06", tz="US/Pacific"),
+                ]
+                * 3
+            ),
+            "B": pd.array([True, False, True, True, False] * 3),
+        }
+    )
+    query = "SELECT CASE WHEN B THEN DATE_PART(TIMEZONE_HOUR, A) ELSE -1 END AS out1 from table1"
+    ctx = {"table1": table}
+    answer = pd.DataFrame(
+        {
+            "out1": pd.array([-8, -1, None, -7, -1] * 3, dtype="Int32"),
+        }
+    )
+    check_query(query, ctx, None, expected_output=answer, check_dtype=False)

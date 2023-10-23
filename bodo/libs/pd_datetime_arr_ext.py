@@ -1,7 +1,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """DatetimeArray extension for Pandas DatetimeArray with timezone support."""
-
 import operator
+from typing import Any, Union
 
 import numba
 import numpy as np
@@ -143,6 +143,25 @@ def get_pytz_type_info(pytz_type):
                 "Unsupported timezone type. Timezones must be a fixedOffset or contain a zone found in pytz.all_timezones"
             )
     return tz_val
+
+
+def python_timezone_from_bodo_timezone_info(tz_value: Union[int, str, None]) -> Any:
+    """
+    Convert the Bodo internal typing representation of a timezone which is either
+    an int, string, or None to a python timezone object.
+
+    Args:
+        tz_value (Union[int, str, None]): The Bodo internal representation of a timezone.
+
+    Returns:
+        Any: An actual timezone type that can be used in Python at compile time.
+    """
+    if isinstance(tz_value, int):
+        return nanoseconds_to_offset(tz_value)
+    elif isinstance(tz_value, str):
+        return pytz.timezone(tz_value)
+    else:
+        return None
 
 
 def nanoseconds_to_offset(nanoseconds):

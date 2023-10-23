@@ -13,6 +13,9 @@ from numba.extending import overload, register_jitable
 import bodo
 from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.pd_datetime_arr_ext import (
+    python_timezone_from_bodo_timezone_info,
+)
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_int,
@@ -572,7 +575,7 @@ def add_interval_util(start_dt, interval):
     # Modified logic from add_interval_xxx functions
     elif time_zone is not None:
         if (
-            bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone)
+            bodo.hiframes.pd_timestamp_ext.tz_has_transition_times(time_zone)
             and interval != bodo.date_offset_type
         ):
             tz_obj = pytz.timezone(time_zone)
@@ -780,7 +783,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
         elif time_zone is not None:
             # Find the transition times / deltas for the timezone in question.
             # These arrays will be lowered via global variables in the exec env
-            if bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone):
+            if bodo.hiframes.pd_timestamp_ext.tz_has_transition_times(time_zone):
                 tz_obj = pytz.timezone(time_zone)
                 trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view(
                     "i8"
@@ -810,7 +813,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                     scalar_text = f"td = pd.DateOffset({unit}=arg0)\n"
                 scalar_text += f"start_value = arg1.value\n"
                 scalar_text += "end_value = (pd.Timestamp(arg1.value) + td).value\n"
-                if bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone):
+                if bodo.hiframes.pd_timestamp_ext.tz_has_transition_times(time_zone):
                     scalar_text += "start_trans = np.searchsorted(trans, start_value, side='right') - 1\n"
                     scalar_text += "end_trans = np.searchsorted(trans, end_value, side='right') - 1\n"
                     scalar_text += "offset = deltas[start_trans] - deltas[end_trans]\n"
@@ -835,7 +838,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                     scalar_text = "td = pd.Timedelta(arg0)\n"
                 else:
                     scalar_text = f"td = pd.Timedelta({unit}=arg0)\n"
-                if bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone):
+                if bodo.hiframes.pd_timestamp_ext.tz_has_transition_times(time_zone):
                     scalar_text += f"start_value = arg1.value\n"
                     scalar_text += "end_value = start_value + td.value\n"
                     scalar_text += "start_trans = np.searchsorted(trans, start_value, side='right') - 1\n"
@@ -2989,6 +2992,262 @@ def dayofweek_util(arr, week_start):
         propagate_null,
         scalar_text,
         out_dtype,
+    )
+
+
+def get_epoch(arr, unit):  # pragma: no cover
+    pass
+
+
+def get_epoch_util(arr, unit):  # pragma: no cover
+    pass
+
+
+@overload(get_epoch, no_unliteral=True)
+def overload_get_epoch(arr, unit):
+    """
+    Kernel that computes all of the EPOCH_XXX
+    calculations for DATE_PART. Unit determines which
+    function is being performed.
+
+    Args:
+        arr (datetime_like): An array or scalar of datetime like objects
+            that are either tz_aware or naive.
+        unit (string Literal): Must be one of 's', 'ms', 'us', 'ns' and
+            this dictates the output precision.
+
+    Returns:
+        An int64 giving the time since the start of Unix time in the specified units.
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.get_epoch", ["arr", "unit"], 0
+        )
+
+    def impl(arr, unit):  # pragma: no cover
+        return get_epoch_util(arr, unit)
+
+    return impl
+
+
+@overload(get_epoch_util, no_unliteral=True)
+def overload_get_epoch_util(arr, unit):
+    """
+    Kernel that computes all of the EPOCH_XXX
+    calculations for DATE_PART. Unit determines which
+    function is being performed.
+
+    Args:
+        arr (datetime_like): An array or scalar of datetime like objects
+            that are either tz_aware or naive.
+        unit (string Literal): Must be one of 's', 'ms', 'us', 'ns' and
+            this dictates the output precision.
+
+    Returns:
+        An int64 giving the time since the start of Unix time in the specified units.
+    """
+    verify_datetime_arg_allow_tz(arr, "get_epoch", "arr")
+    if not is_overload_constant_str(unit):  # pragma: no cover
+        raise_bodo_error("get_epoch(): unit must be a string literal")
+
+    # Fetch the unit and ignore casing.
+    unit = get_overload_const_str(unit).lower()
+    if unit not in ("s", "ms", "us", "ns"):  # pragma: no cover
+        raise BodoError(
+            f"get_epoch(): unit must be one of 's', 'ms', 'us', 'ns'. Found: '{unit}'"
+        )
+
+    divisor_map = {"ns": 1, "us": 1000, "ms": 1000 * 1000, "s": 1000 * 1000 * 1000}
+    divisor = divisor_map[unit]
+
+    arg_names = ["arr", "unit"]
+    arg_types = [arr, unit]
+    propagate_null = [True, False] * 2
+    tz = get_tz_if_exists(arr)
+    box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
+    scalar_text = f"res[i] = {box_str}(arg0).value // {divisor}\n"
+    out_dtype = bodo.IntegerArrayType(numba.int64)
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+def get_timezone_offset(arr, unit):  # pragma: no cover
+    pass
+
+
+def get_timezone_offset_util(arr, unit):  # pragma: no cover
+    pass
+
+
+@overload(get_timezone_offset, no_unliteral=True)
+def overload_get_timezone_offset(arr, unit):
+    """
+    Kernel that computes all of the TIMEZONE_XXX
+    calculations for DATE_PART. Unit determines which
+    function is being performed.
+
+    Args:
+        arr (datetime_like): An array or scalar of timestamp like objects
+            that are either tz_aware or naive.
+        unit (string Literal): Must be one of 'hr' or 'min'. This dictates
+            the calculation before performed.
+
+    Returns:
+        An int64 giving the time since the start of Unix time in the specified units.
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.get_timezone_offset", ["arr", "unit"], 0
+        )
+
+    def impl(arr, unit):  # pragma: no cover
+        return get_timezone_offset_util(arr, unit)
+
+    return impl
+
+
+@overload(get_timezone_offset_util, no_unliteral=True)
+def overload_get_timezone_offset_util(arr, unit):
+    """
+    Kernel that computes all of the TIMEZONE_XXX
+    calculations for DATE_PART. Unit determines which
+    function is being performed.
+
+    The TIMEZONE_XXX, although not well documented in Snowflake,
+    correspond to determining to the offset from UTC for each element.
+    HOUR gives the hours component and minute gives the minutes component.
+    NOTE:
+        MINUTE != HOUR * 60,
+        OFFSET_MINUTES = HOUR * 60 + MINUTE
+
+    This depends on the timezone in question, which basically leads to 3
+    possible cases:
+
+    TIMEZONE NAIVE (e.g. TIMESTAMP_NTZ):
+        Always output a constant 0.
+    TIMEZONE AWARE with a constant offset/no transition times (e.g. UTC):
+        Calculate the offset from UTC as a compile time constant and output
+        the result.
+    TIMEZONE AWARE with transition times (e.g. America/New_York):
+        The offset must be computed at runtime as it depends on the time in question.
+
+    Args:
+        arr (datetime_like): An array or scalar of timestamp like objects
+            that are either tz_aware or naive.
+        unit (string Literal): Must be one of 'hr' or 'min'. This dictates
+            the calculation before performed.
+
+    Returns:
+        An int64 giving the time since the start of Unix time in the specified units.
+    """
+    verify_timestamp_arg_allow_tz(arr, "get_timezone_offset", "arr")
+    if not is_overload_constant_str(unit):  # pragma: no cover
+        raise_bodo_error("get_timezone_offset(): unit must be a string literal")
+
+    # Fetch the unit and ignore casing.
+    unit = get_overload_const_str(unit).lower()
+    if unit not in ("hr", "min"):  # pragma: no cover
+        raise BodoError(
+            f"get_timezone_offset(): unit must be one of 'hr', 'min'. Found: '{unit}'"
+        )
+
+    # The offsets we derive will be in nanoseconds.
+    # This logic occurs for both the compile time and runtime paths.
+    to_minutes_divisor = 1000 * 1000 * 1000 * 60
+    modulo_map = {
+        "min": 60,
+        "hr": 24,
+    }
+    modulo = modulo_map[unit]
+    scalar_text = ""
+    extra_globals = None
+    tz = get_tz_if_exists(arr)
+    if tz is None:
+        # No timezone is always 0.
+        scalar_text += "res[i] = 0\n"
+    else:
+        tz_info = python_timezone_from_bodo_timezone_info(tz)
+        if not bodo.hiframes.pd_timestamp_ext.tz_has_transition_times(tz):
+            # If there are no transition times the offset is constant.
+            # We compute this by calling utcoffset() on any time.
+            ts = pd.Timestamp.now(tz=tz_info)
+            datetime_offset = ts.utcoffset()
+            # Convert to Pandas and extract nanoseconds.
+            nanoseconds = pd.to_timedelta(datetime_offset).value
+            # Truncate to minutes
+            minute_offset = nanoseconds // to_minutes_divisor
+            if unit == "hr":
+                # Remove the minutes
+                float_offset = minute_offset / 60
+                if minute_offset < 0:
+                    constant_offset = np.ceil(float_offset)
+                else:
+                    constant_offset = np.floor(float_offset)
+            else:
+                # Remove the hours
+                constant_offset = minute_offset % 60
+                # Python modulo converts - number to +
+                if nanoseconds < 0:
+                    constant_offset = constant_offset - modulo
+            scalar_text += f"res[i] = {constant_offset}\n"
+        else:
+            # We have a timezone with transition times, so we must compute
+            # them at runtime.
+            box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
+            trans = np.array(tz_info._utc_transition_times, dtype="M8[ns]").view("i8")
+            deltas = np.array(tz_info._transition_info)[:, 0]
+            deltas = (
+                (pd.Series(deltas).dt.total_seconds() * 1_000_000_000)
+                .astype(np.int64)
+                .values
+            )
+            extra_globals = {"trans": trans, "deltas": deltas}
+            # Implementation
+            scalar_text += f"arg0 = {box_str}(arg0)\n"
+            scalar_text += f"start_value = arg0.value\n"
+            scalar_text += (
+                "idx = np.searchsorted(trans, arg0.value, side='right') - 1\n"
+            )
+            scalar_text += "nanoseconds_offset = deltas[idx]\n"
+            scalar_text += (
+                f"minute_offset = nanoseconds_offset // {to_minutes_divisor}\n"
+            )
+            if unit == "hr":
+                scalar_text += "float_offset = minute_offset / 60 \n"
+                scalar_text += "if minute_offset < 0:\n"
+                scalar_text += "  final_offset = np.ceil(float_offset)\n"
+                scalar_text += "else:\n"
+                scalar_text += "  final_offset = np.floor(float_offset)\n"
+            else:
+                # Remove the hours
+                scalar_text += f"final_offset = minute_offset % 60\n"
+                # Python modulo converts - number to +
+                scalar_text += f"if nanoseconds_offset < 0:\n"
+                scalar_text += f"  final_offset = final_offset - {modulo}\n"
+            scalar_text += f"res[i] = final_offset\n"
+
+    arg_names = ["arr", "unit"]
+    arg_types = [arr, unit]
+    propagate_null = [True, False] * 2
+    tz = get_tz_if_exists(arr)
+    # Note: This might be smaller but snowflake bound it at a Number(9, 0), which is
+    # an int32. Since they/we may need to support out dated transition times, we will
+    # be conservative and match Snowflake.
+    out_dtype = bodo.IntegerArrayType(numba.int32)
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        extra_globals=extra_globals,
     )
 
 

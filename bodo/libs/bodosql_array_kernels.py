@@ -127,6 +127,8 @@ broadcasted_fixed_arg_functions = {
     "get_millisecond",
     "get_microsecond",
     "get_nanosecond",
+    "get_epoch",
+    "get_timezone_offset",
     "greater_than",
     "greater_than_or_equal",
     "haversine",
