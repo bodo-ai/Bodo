@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.sql2rel;
 
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import org.apache.calcite.avatica.util.Spaces;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Ord;
@@ -3047,7 +3048,7 @@ public class SqlToRelConverter {
       table = table.extend(extendedFields);
     }
 
-    BasicSqlType int_typ = new BasicSqlType(RelDataTypeSystem.DEFAULT, SqlTypeName.BIGINT);
+    BasicSqlType int_typ = new BasicSqlType(new BodoSQLRelDataTypeSystem(), SqlTypeName.BIGINT);
     //NOTE: we're defaulting this value to a random index, as we don't actually need
     // a physical index for this 'extension field'
     int newIdx = 999;

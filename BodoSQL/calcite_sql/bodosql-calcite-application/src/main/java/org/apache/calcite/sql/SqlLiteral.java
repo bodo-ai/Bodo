@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.sql;
 
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import org.apache.calcite.avatica.util.TimeUnitRange;
 import org.apache.calcite.rel.metadata.NullSentinel;
 import org.apache.calcite.rel.type.RelDataType;
@@ -288,7 +289,7 @@ public class SqlLiteral extends SqlNode {
    * @throws AssertionError if the value type is not supported
    */
   public <T extends Object> T getValueAs(Class<T> clazz) {
-    return getValueAs(clazz, RelDataTypeSystem.DEFAULT);
+    return getValueAs(clazz, new BodoSQLRelDataTypeSystem());
   }
   public <T extends Object> T getValueAs(Class<T> clazz, RelDataTypeSystem typeSystem) {
     Object value = this.value;
@@ -450,7 +451,7 @@ public class SqlLiteral extends SqlNode {
   public static @Nullable Comparable value(SqlNode node)
       throws IllegalArgumentException {
     // We don't have typeSystem information so we use the default.
-    RelDataTypeSystem typeSystem = RelDataTypeSystem.DEFAULT;
+    RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
     if (node instanceof SqlLiteral) {
       final SqlLiteral literal = (SqlLiteral) node;
       if (literal.getTypeName() == SqlTypeName.SYMBOL) {
