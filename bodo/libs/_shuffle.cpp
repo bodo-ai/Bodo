@@ -30,34 +30,6 @@ mpi_comm_info::mpi_comm_info(std::vector<std::shared_ptr<array_info>>& _arrays)
     recv_count = std::vector<int64_t>(n_pes);
     send_disp = std::vector<int64_t>(n_pes);
     recv_disp = std::vector<int64_t>(n_pes);
-    // init counts for string arrays
-    for (std::shared_ptr<array_info> arr_info : arrays) {
-        // Note that for dictionary arrays the dictionary is handled separately
-        // and so we only shuffle the indices, which is a nullable int array
-        if (arr_info->arr_type == bodo_array_type::STRING ||
-            arr_info->arr_type == bodo_array_type::LIST_STRING) {
-            send_count_sub.emplace_back(std::vector<int64_t>(n_pes, 0));
-            recv_count_sub.emplace_back(std::vector<int64_t>(n_pes));
-            send_disp_sub.emplace_back(std::vector<int64_t>(n_pes));
-            recv_disp_sub.emplace_back(std::vector<int64_t>(n_pes));
-        } else {
-            send_count_sub.emplace_back(std::vector<int64_t>());
-            recv_count_sub.emplace_back(std::vector<int64_t>());
-            send_disp_sub.emplace_back(std::vector<int64_t>());
-            recv_disp_sub.emplace_back(std::vector<int64_t>());
-        }
-        if (arr_info->arr_type == bodo_array_type::LIST_STRING) {
-            send_count_sub_sub.emplace_back(std::vector<int64_t>(n_pes, 0));
-            recv_count_sub_sub.emplace_back(std::vector<int64_t>(n_pes));
-            send_disp_sub_sub.emplace_back(std::vector<int64_t>(n_pes));
-            recv_disp_sub_sub.emplace_back(std::vector<int64_t>(n_pes));
-        } else {
-            send_count_sub_sub.emplace_back(std::vector<int64_t>());
-            recv_count_sub_sub.emplace_back(std::vector<int64_t>());
-            send_disp_sub_sub.emplace_back(std::vector<int64_t>());
-            recv_disp_sub_sub.emplace_back(std::vector<int64_t>());
-        }
-    }
     if (has_nulls) {
         send_count_null = std::vector<int64_t>(n_pes);
         recv_count_null = std::vector<int64_t>(n_pes);
@@ -216,59 +188,6 @@ void mpi_comm_info::set_counts(
     // get displacements
     calc_disp(send_disp, send_count);
     calc_disp(recv_disp, recv_count);
-
-    // counts for string arrays
-    for (size_t i = 0; i < arrays.size(); i++) {
-        std::shared_ptr<array_info> arr_info = arrays[i];
-        if (arr_info->arr_type == bodo_array_type::STRING) {
-            // send counts
-            std::vector<int64_t>& sub_counts = send_count_sub[i];
-            offset_t const* const offsets = (offset_t*)arr_info->data2();
-            for (size_t i = 0; i < n_rows; i++) {
-                offset_t str_len = offsets[i + 1] - offsets[i];
-                if (row_dest[i] == -1)
-                    continue;
-                sub_counts[row_dest[i]] += str_len;
-            }
-            // get recv count
-            MPI_Alltoall(sub_counts.data(), 1, MPI_INT64_T,
-                         recv_count_sub[i].data(), 1, MPI_INT64_T,
-                         MPI_COMM_WORLD);
-            // get displacements
-            calc_disp(send_disp_sub[i], sub_counts);
-            calc_disp(recv_disp_sub[i], recv_count_sub[i]);
-        }
-        if (arr_info->arr_type == bodo_array_type::LIST_STRING) {
-            // send counts
-            std::vector<int64_t>& sub_counts = send_count_sub[i];
-            std::vector<int64_t>& sub_sub_counts = send_count_sub_sub[i];
-            offset_t const* const index_offsets = (offset_t*)arr_info->data3();
-            offset_t const* const data_offsets = (offset_t*)arr_info->data2();
-            for (size_t i = 0; i < n_rows; i++) {
-                const int node = row_dest[i];
-                if (node == -1)
-                    continue;
-                offset_t len_sub = index_offsets[i + 1] - index_offsets[i];
-                offset_t len_sub_sub = data_offsets[index_offsets[i + 1]] -
-                                       data_offsets[index_offsets[i]];
-                sub_counts[node] += len_sub;
-                sub_sub_counts[node] += len_sub_sub;
-            }
-            // get recv count_sub
-            MPI_Alltoall(sub_counts.data(), 1, MPI_INT64_T,
-                         recv_count_sub[i].data(), 1, MPI_INT64_T,
-                         MPI_COMM_WORLD);
-            // get recv count_sub_sub
-            MPI_Alltoall(sub_sub_counts.data(), 1, MPI_INT64_T,
-                         recv_count_sub_sub[i].data(), 1, MPI_INT64_T,
-                         MPI_COMM_WORLD);
-            // get displacements
-            calc_disp(send_disp_sub[i], sub_counts);
-            calc_disp(recv_disp_sub[i], recv_count_sub[i]);
-            calc_disp(send_disp_sub_sub[i], sub_sub_counts);
-            calc_disp(recv_disp_sub_sub[i], recv_count_sub_sub[i]);
-        }
-    }
     if (has_nulls) {
         for (size_t i = 0; i < size_t(n_pes); i++) {
             send_count_null[i] = (send_count[i] + 7) >> 3;
@@ -280,6 +199,78 @@ void mpi_comm_info::set_counts(
                                        recv_count_null.end(), size_t(0));
     }
     return;
+}
+
+mpi_str_comm_info::mpi_str_comm_info(
+    const std::shared_ptr<array_info>& arr_info,
+    const mpi_comm_info& comm_info) {
+    if (arr_info->arr_type == bodo_array_type::STRING) {
+        // initialization
+        send_count_sub.resize(comm_info.n_pes);
+        recv_count_sub.resize(comm_info.n_pes);
+        send_disp_sub.resize(comm_info.n_pes);
+        recv_disp_sub.resize(comm_info.n_pes);
+        // send counts
+        offset_t const* const offsets = (offset_t*)arr_info->data2();
+        for (size_t i = 0; i < arr_info->length; i++) {
+            if (comm_info.row_dest[i] == -1)
+                continue;
+            send_count_sub[comm_info.row_dest[i]] +=
+                (int64_t)(offsets[i + 1] - offsets[i]);
+        }
+        // get recv count
+        MPI_Alltoall(send_count_sub.data(), 1, MPI_INT64_T,
+                     recv_count_sub.data(), 1, MPI_INT64_T, MPI_COMM_WORLD);
+        // get displacements
+        calc_disp(send_disp_sub, send_count_sub);
+        calc_disp(recv_disp_sub, recv_count_sub);
+        n_sub_send = std::accumulate(send_count_sub.begin(),
+                                     send_count_sub.end(), int64_t(0));
+        n_sub_recv = std::accumulate(recv_count_sub.begin(),
+                                     recv_count_sub.end(), int64_t(0));
+    } else if (arr_info->arr_type == bodo_array_type::LIST_STRING) {
+        // initialization
+        send_count_sub.resize(comm_info.n_pes);
+        recv_count_sub.resize(comm_info.n_pes);
+        send_disp_sub.resize(comm_info.n_pes);
+        recv_disp_sub.resize(comm_info.n_pes);
+        send_count_sub_sub.resize(comm_info.n_pes);
+        recv_count_sub_sub.resize(comm_info.n_pes);
+        send_disp_sub_sub.resize(comm_info.n_pes);
+        recv_disp_sub_sub.resize(comm_info.n_pes);
+        // send counts
+        offset_t const* const index_offsets = (offset_t*)arr_info->data3();
+        offset_t const* const data_offsets = (offset_t*)arr_info->data2();
+        for (size_t i = 0; i < arr_info->length; i++) {
+            const int node = comm_info.row_dest[i];
+            if (node == -1)
+                continue;
+            offset_t len_sub = index_offsets[i + 1] - index_offsets[i];
+            offset_t len_sub_sub = data_offsets[index_offsets[i + 1]] -
+                                   data_offsets[index_offsets[i]];
+            send_count_sub[node] += len_sub;
+            send_count_sub_sub[node] += len_sub_sub;
+        }
+        // get recv count_sub
+        MPI_Alltoall(send_count_sub.data(), 1, MPI_INT64_T,
+                     recv_count_sub.data(), 1, MPI_INT64_T, MPI_COMM_WORLD);
+        // get recv count_sub_sub
+        MPI_Alltoall(send_count_sub_sub.data(), 1, MPI_INT64_T,
+                     recv_count_sub_sub.data(), 1, MPI_INT64_T, MPI_COMM_WORLD);
+        // get displacements
+        calc_disp(send_disp_sub, send_count_sub);
+        calc_disp(recv_disp_sub, recv_count_sub);
+        calc_disp(send_disp_sub_sub, send_count_sub_sub);
+        calc_disp(recv_disp_sub_sub, recv_count_sub_sub);
+        n_sub_send = std::accumulate(send_count_sub.begin(),
+                                     send_count_sub.end(), int64_t(0));
+        n_sub_recv = std::accumulate(recv_count_sub.begin(),
+                                     recv_count_sub.end(), int64_t(0));
+        n_sub_sub_send = std::accumulate(send_count_sub_sub.begin(),
+                                         send_count_sub_sub.end(), int64_t(0));
+        n_sub_sub_recv = std::accumulate(recv_count_sub_sub.begin(),
+                                         recv_count_sub_sub.end(), int64_t(0));
+    }
 }
 
 /**
@@ -1481,22 +1472,9 @@ std::shared_ptr<table_info> shuffle_table_kernel(
         size_t global_table_nbytes = table_global_memory_size(in_table);
         ev.add_attribute("g_table_nbytes", global_table_nbytes);
     }
-    int n_pes = comm_info.n_pes;
     int64_t total_recv = std::accumulate(
         comm_info.recv_count.begin(), comm_info.recv_count.end(), int64_t(0));
     size_t n_cols = (size_t)in_table->ncols();
-    std::vector<int64_t> n_sub_recvs(n_cols);
-    for (size_t i = 0; i < n_cols; i++) {
-        n_sub_recvs[i] =
-            std::accumulate(comm_info.recv_count_sub[i].begin(),
-                            comm_info.recv_count_sub[i].end(), int64_t(0));
-    }
-    std::vector<int64_t> n_sub_sub_recvs(n_cols);
-    for (size_t i = 0; i < n_cols; i++) {
-        n_sub_sub_recvs[i] =
-            std::accumulate(comm_info.recv_count_sub_sub[i].begin(),
-                            comm_info.recv_count_sub_sub[i].end(), int64_t(0));
-    }
 
     // fill send buffer and send
     std::vector<std::shared_ptr<array_info>> out_arrs;
@@ -1516,39 +1494,30 @@ std::shared_ptr<table_info> shuffle_table_kernel(
         std::shared_ptr<array_info> out_arr;
         if (in_arr->arr_type != bodo_array_type::STRUCT &&
             in_arr->arr_type != bodo_array_type::ARRAY_ITEM) {
-            const std::vector<int64_t>& send_count_sub =
-                comm_info.send_count_sub[i];
-            const std::vector<int64_t>& send_count_sub_sub =
-                comm_info.send_count_sub_sub[i];
-            int64_t n_sub_elems = -1;
-            int64_t n_sub_sub_elems = -1;
-            if (send_count_sub.size() > 0)
-                n_sub_elems = std::accumulate(send_count_sub.begin(),
-                                              send_count_sub.end(), int64_t(0));
-            if (send_count_sub_sub.size() > 0)
-                n_sub_sub_elems =
-                    std::accumulate(send_count_sub_sub.begin(),
-                                    send_count_sub_sub.end(), int64_t(0));
+            mpi_str_comm_info str_comm_info(in_arr, comm_info);
             std::shared_ptr<array_info> send_arr = alloc_array(
-                n_rows_send, n_sub_elems, n_sub_sub_elems, in_arr->arr_type,
-                in_arr->dtype, -1, 2 * n_pes, in_arr->num_categories);
-            out_arr = alloc_array(total_recv, n_sub_recvs[i],
-                                  n_sub_sub_recvs[i], in_arr->arr_type,
-                                  in_arr->dtype, -1, 0, in_arr->num_categories);
-            fill_send_array(send_arr, in_arr, comm_info.send_disp,
-                            comm_info.send_disp_sub[i],
-                            comm_info.send_disp_sub_sub[i],
-                            comm_info.send_disp_null, n_pes, comm_info.row_dest,
-                            comm_info.filtered, is_parallel);
+                n_rows_send, str_comm_info.n_sub_send,
+                str_comm_info.n_sub_sub_send, in_arr->arr_type, in_arr->dtype,
+                -1, 2 * comm_info.n_pes, in_arr->num_categories);
+            out_arr =
+                alloc_array(total_recv, str_comm_info.n_sub_recv,
+                            str_comm_info.n_sub_sub_recv, in_arr->arr_type,
+                            in_arr->dtype, -1, 0, in_arr->num_categories);
+            fill_send_array(
+                send_arr, in_arr, comm_info.send_disp,
+                str_comm_info.send_disp_sub, str_comm_info.send_disp_sub_sub,
+                comm_info.send_disp_null, comm_info.n_pes, comm_info.row_dest,
+                comm_info.filtered, is_parallel);
 
             shuffle_array(
                 std::move(send_arr), out_arr, comm_info.send_count,
                 comm_info.recv_count, comm_info.send_disp, comm_info.recv_disp,
-                comm_info.send_count_sub[i], comm_info.recv_count_sub[i],
-                comm_info.send_disp_sub[i], comm_info.recv_disp_sub[i],
-                comm_info.send_count_sub_sub[i],
-                comm_info.recv_count_sub_sub[i], comm_info.send_disp_sub_sub[i],
-                comm_info.recv_disp_sub_sub[i], comm_info.send_count_null,
+                str_comm_info.send_count_sub, str_comm_info.recv_count_sub,
+                str_comm_info.send_disp_sub, str_comm_info.recv_disp_sub,
+                str_comm_info.send_count_sub_sub,
+                str_comm_info.recv_count_sub_sub,
+                str_comm_info.send_disp_sub_sub,
+                str_comm_info.recv_disp_sub_sub, comm_info.send_count_null,
                 comm_info.recv_count_null, comm_info.send_disp_null,
                 comm_info.recv_disp_null, tmp_null_bytes, is_parallel);
             if (in_arr->arr_type == bodo_array_type::LIST_STRING) {
@@ -1556,8 +1525,9 @@ std::shared_ptr<table_info> shuffle_table_kernel(
                                                  comm_info.row_dest);
             }
         } else {
-            std::shared_ptr<arrow::Array> out_array = shuffle_arrow_array(
-                to_arrow(in_arr), n_pes, std::span{comm_info.row_dest});
+            std::shared_ptr<arrow::Array> out_array =
+                shuffle_arrow_array(to_arrow(in_arr), comm_info.n_pes,
+                                    std::span{comm_info.row_dest});
             out_arr = arrow_array_to_bodo(out_array);
         }
         // release reference of input array
