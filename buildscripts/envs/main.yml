@@ -10,7 +10,7 @@ platforms:
 dependencies:
   - python=3.11.*
   - pip
-  - libcurl <=8.3
+  - libcurl <=8.4
 
   # Core
   - numba =0.57.1
@@ -28,7 +28,9 @@ dependencies:
   # MPI
   # Using h* to avoid the "external_0.conda" kind
   - mpich *=h*
-  - mpi4py
+  # TODO: Remove version lock after upgrading hdf5
+  # See https://bodo.atlassian.net/browse/BSE-1725
+  - mpi4py ==3.1.4
 
   # Java
   - openjdk =11
