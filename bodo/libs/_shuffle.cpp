@@ -198,7 +198,11 @@ void mpi_comm_info::set_counts(
         n_null_bytes = std::accumulate(recv_count_null.begin(),
                                        recv_count_null.end(), size_t(0));
     }
-    return;
+
+    n_row_send =
+        std::accumulate(send_count.begin(), send_count.end(), int64_t(0));
+    n_row_recv =
+        std::accumulate(recv_count.begin(), recv_count.end(), int64_t(0));
 }
 
 mpi_str_comm_info::mpi_str_comm_info(
@@ -448,12 +452,9 @@ static void fill_send_array_null_inner(
  */
 static void fill_send_array(std::shared_ptr<array_info> send_arr,
                             std::shared_ptr<array_info> in_arr,
-                            std::vector<int64_t> const& send_disp,
-                            std::vector<int64_t> const& send_disp_sub,
-                            std::vector<int64_t> const& send_disp_sub_sub,
-                            std::vector<int64_t> const& send_disp_null,
-                            int n_pes, const std::span<const int> row_dest,
-                            bool filter, bool is_parallel) {
+                            const mpi_comm_info& comm_info,
+                            const mpi_str_comm_info& str_comm_info,
+                            bool is_parallel) {
     tracing::Event ev("fill_send_array", is_parallel);
     const size_t n_rows = (size_t)in_arr->length;
     // dispatch to proper function
@@ -461,79 +462,93 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
     if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask(),
                                    (uint8_t*)in_arr->null_bitmask(),
-                                   send_disp_null, n_pes, n_rows, row_dest);
+                                   comm_info.send_disp_null, comm_info.n_pes,
+                                   n_rows, comm_info.row_dest);
         if (in_arr->dtype == Bodo_CTypes::_BOOL) {
             // Nullable boolean uses 1 bit per boolean so we can reuse the
             // null_bitmap function
             return fill_send_array_null_inner(
                 (uint8_t*)send_arr->data1(), (uint8_t*)in_arr->data1(),
-                send_disp_null, n_pes, n_rows, row_dest);
+                comm_info.send_disp_null, comm_info.n_pes, n_rows,
+                comm_info.row_dest);
         }
     }
     switch (in_arr->dtype) {
         case Bodo_CTypes::_BOOL:
             return fill_send_array_inner<bool>(
-                (bool*)send_arr->data1(), (bool*)in_arr->data1(), send_disp,
-                n_rows, row_dest, filter, is_parallel);
+                (bool*)send_arr->data1(), (bool*)in_arr->data1(),
+                comm_info.send_disp, n_rows, comm_info.row_dest,
+                comm_info.filtered, is_parallel);
         case Bodo_CTypes::INT8:
             return fill_send_array_inner<int8_t>(
-                (int8_t*)send_arr->data1(), (int8_t*)in_arr->data1(), send_disp,
-                n_rows, row_dest, filter, is_parallel);
+                (int8_t*)send_arr->data1(), (int8_t*)in_arr->data1(),
+                comm_info.send_disp, n_rows, comm_info.row_dest,
+                comm_info.filtered, is_parallel);
         case Bodo_CTypes::UINT8:
             return fill_send_array_inner<uint8_t>(
                 (uint8_t*)send_arr->data1(), (uint8_t*)in_arr->data1(),
-                send_disp, n_rows, row_dest, filter, is_parallel);
+                comm_info.send_disp, n_rows, comm_info.row_dest,
+                comm_info.filtered, is_parallel);
         case Bodo_CTypes::INT16:
             return fill_send_array_inner<int16_t>(
                 (int16_t*)send_arr->data1(), (int16_t*)in_arr->data1(),
-                send_disp, n_rows, row_dest, filter, is_parallel);
+                comm_info.send_disp, n_rows, comm_info.row_dest,
+                comm_info.filtered, is_parallel);
         case Bodo_CTypes::UINT16:
             return fill_send_array_inner<uint16_t>(
                 (uint16_t*)send_arr->data1(), (uint16_t*)in_arr->data1(),
-                send_disp, n_rows, row_dest, filter, is_parallel);
+                comm_info.send_disp, n_rows, comm_info.row_dest,
+                comm_info.filtered, is_parallel);
         case Bodo_CTypes::DATE:
         case Bodo_CTypes::INT32:
             return fill_send_array_inner<int32_t>(
                 (int32_t*)send_arr->data1(), (int32_t*)in_arr->data1(),
-                send_disp, n_rows, row_dest, filter, is_parallel);
+                comm_info.send_disp, n_rows, comm_info.row_dest,
+                comm_info.filtered, is_parallel);
         case Bodo_CTypes::UINT32:
             return fill_send_array_inner<uint32_t>(
                 (uint32_t*)send_arr->data1(), (uint32_t*)in_arr->data1(),
-                send_disp, n_rows, row_dest, filter, is_parallel);
+                comm_info.send_disp, n_rows, comm_info.row_dest,
+                comm_info.filtered, is_parallel);
         case Bodo_CTypes::INT64:
         case Bodo_CTypes::DATETIME:
         case Bodo_CTypes::TIME:
         case Bodo_CTypes::TIMEDELTA:
             return fill_send_array_inner<int64_t>(
                 (int64_t*)send_arr->data1(), (int64_t*)in_arr->data1(),
-                send_disp, n_rows, row_dest, filter, is_parallel);
+                comm_info.send_disp, n_rows, comm_info.row_dest,
+                comm_info.filtered, is_parallel);
         case Bodo_CTypes::UINT64:
             return fill_send_array_inner<uint64_t>(
                 (uint64_t*)send_arr->data1(), (uint64_t*)in_arr->data1(),
-                send_disp, n_rows, row_dest, filter, is_parallel);
+                comm_info.send_disp, n_rows, comm_info.row_dest,
+                comm_info.filtered, is_parallel);
         case Bodo_CTypes::FLOAT32:
             return fill_send_array_inner<float>(
-                (float*)send_arr->data1(), (float*)in_arr->data1(), send_disp,
-                n_rows, row_dest, filter, is_parallel);
+                (float*)send_arr->data1(), (float*)in_arr->data1(),
+                comm_info.send_disp, n_rows, comm_info.row_dest,
+                comm_info.filtered, is_parallel);
         case Bodo_CTypes::FLOAT64:
             return fill_send_array_inner<double>(
-                (double*)send_arr->data1(), (double*)in_arr->data1(), send_disp,
-                n_rows, row_dest, filter, is_parallel);
+                (double*)send_arr->data1(), (double*)in_arr->data1(),
+                comm_info.send_disp, n_rows, comm_info.row_dest,
+                comm_info.filtered, is_parallel);
         case Bodo_CTypes::DECIMAL:
             return fill_send_array_inner_decimal(
                 (uint8_t*)send_arr->data1(), (uint8_t*)in_arr->data1(),
-                send_disp, n_rows, row_dest, is_parallel);
+                comm_info.send_disp, n_rows, comm_info.row_dest, is_parallel);
         default:
             if (in_arr->arr_type == bodo_array_type::STRING) {
                 fill_send_array_string_inner(
                     /// XXX casting data2 offset_t to uint32
                     (char*)send_arr->data1(), (uint32_t*)send_arr->data2(),
                     (char*)in_arr->data1(), (offset_t*)in_arr->data2(),
-                    send_disp, send_disp_sub, n_rows, row_dest, is_parallel);
-                fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask(),
-                                           (uint8_t*)in_arr->null_bitmask(),
-                                           send_disp_null, n_pes, n_rows,
-                                           row_dest);
+                    comm_info.send_disp, str_comm_info.send_disp_sub, n_rows,
+                    comm_info.row_dest, is_parallel);
+                fill_send_array_null_inner(
+                    (uint8_t*)send_arr->null_bitmask(),
+                    (uint8_t*)in_arr->null_bitmask(), comm_info.send_disp_null,
+                    comm_info.n_pes, n_rows, comm_info.row_dest);
                 return;
             } else if (in_arr->arr_type == bodo_array_type::LIST_STRING) {
                 fill_send_array_list_string_inner(
@@ -541,12 +556,13 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
                     (char*)send_arr->data1(), (uint32_t*)send_arr->data2(),
                     (uint32_t*)send_arr->data3(), (char*)in_arr->data1(),
                     (offset_t*)in_arr->data2(), (offset_t*)in_arr->data3(),
-                    send_disp, send_disp_sub, send_disp_sub_sub, n_pes, n_rows,
-                    row_dest);
-                fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask(),
-                                           (uint8_t*)in_arr->null_bitmask(),
-                                           send_disp_null, n_pes, n_rows,
-                                           row_dest);
+                    comm_info.send_disp, str_comm_info.send_disp_sub,
+                    str_comm_info.send_disp_sub_sub, comm_info.n_pes, n_rows,
+                    comm_info.row_dest);
+                fill_send_array_null_inner(
+                    (uint8_t*)send_arr->null_bitmask(),
+                    (uint8_t*)in_arr->null_bitmask(), comm_info.send_disp_null,
+                    comm_info.n_pes, n_rows, comm_info.row_dest);
                 return;
             } else {
                 throw std::runtime_error(
@@ -874,22 +890,8 @@ void shuffle_list_string_null_bitmask(std::shared_ptr<array_info> in_arr,
  */
 static void shuffle_array(std::shared_ptr<array_info> send_arr,
                           std::shared_ptr<array_info> out_arr,
-                          std::vector<int64_t> const& send_count,
-                          std::vector<int64_t> const& recv_count,
-                          std::vector<int64_t> const& send_disp,
-                          std::vector<int64_t> const& recv_disp,
-                          std::vector<int64_t> const& send_count_sub,
-                          std::vector<int64_t> const& recv_count_sub,
-                          std::vector<int64_t> const& send_disp_sub,
-                          std::vector<int64_t> const& recv_disp_sub,
-                          std::vector<int64_t> const& send_count_sub_sub,
-                          std::vector<int64_t> const& recv_count_sub_sub,
-                          std::vector<int64_t> const& send_disp_sub_sub,
-                          std::vector<int64_t> const& recv_disp_sub_sub,
-                          std::vector<int64_t> const& send_count_null,
-                          std::vector<int64_t> const& recv_count_null,
-                          std::vector<int64_t> const& send_disp_null,
-                          std::vector<int64_t> const& recv_disp_null,
+                          const mpi_comm_info& comm_info,
+                          const mpi_str_comm_info& str_comm_info,
                           bodo::vector<uint8_t>& tmp_null_bytes,
                           bool is_parallel) {
     tracing::Event ev("shuffle_array", is_parallel);
@@ -899,30 +901,36 @@ static void shuffle_array(std::shared_ptr<array_info> send_arr,
             // index_offsets
             MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
 #if OFFSET_BITWIDTH == 32
-            bodo_alltoallv(send_arr->data3(), send_count, send_disp, mpi_typ,
-                           out_arr->data3(), recv_count, recv_disp, mpi_typ,
+            bodo_alltoallv(send_arr->data3(), comm_info.send_count,
+                           comm_info.send_disp, mpi_typ, out_arr->data3(),
+                           comm_info.recv_count, comm_info.recv_disp, mpi_typ,
                            MPI_COMM_WORLD);
             convert_len_arr_to_offset32((uint32_t*)out_arr->data3(),
                                         (size_t)out_arr->length);
             // data_offsets
-            bodo_alltoallv(send_arr->data2(), send_count_sub, send_disp_sub,
-                           mpi_typ, out_arr->data2(), recv_count_sub,
-                           recv_disp_sub, mpi_typ, MPI_COMM_WORLD);
+            bodo_alltoallv(send_arr->data2(), str_comm_info.send_count_sub,
+                           str_comm_info.send_disp_sub, mpi_typ,
+                           out_arr->data2(), str_comm_info.recv_count_sub,
+                           str_comm_info.recv_disp_sub, mpi_typ,
+                           MPI_COMM_WORLD);
             offset_t* data3_offset_t = (offset_t*)out_arr->data3();
             size_t len = data3_offset_t[out_arr->length];
             convert_len_arr_to_offset32((offset_t*)out_arr->data2(), len);
 #else
             bodo::vector<uint32_t> lens(out_arr->length);
-            bodo_alltoallv(send_arr->data3(), send_count, send_disp, mpi_typ,
-                           lens.data(), recv_count, recv_disp, mpi_typ,
+            bodo_alltoallv(send_arr->data3(), comm_info.send_count,
+                           comm_info.send_disp, mpi_typ, lens.data(),
+                           comm_info.recv_count, comm_info.recv_disp, mpi_typ,
                            MPI_COMM_WORLD);
             convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data3(),
                                       (size_t)out_arr->length);
             lens.resize(out_arr->n_sub_elems());
             // data_offsets
-            bodo_alltoallv(send_arr->data2(), send_count_sub, send_disp_sub,
-                           mpi_typ, lens.data(), recv_count_sub, recv_disp_sub,
-                           mpi_typ, MPI_COMM_WORLD);
+            bodo_alltoallv(send_arr->data2(), str_comm_info.send_count_sub,
+                           str_comm_info.send_disp_sub, mpi_typ, lens.data(),
+                           str_comm_info.recv_count_sub,
+                           str_comm_info.recv_disp_sub, mpi_typ,
+                           MPI_COMM_WORLD);
             offset_t* data3_offset_t = (offset_t*)out_arr->data3();
             size_t len = data3_offset_t[out_arr->length];
             convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data2(),
@@ -930,54 +938,59 @@ static void shuffle_array(std::shared_ptr<array_info> send_arr,
 #endif
             // data
             mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-            bodo_alltoallv(send_arr->data1(), send_count_sub_sub,
-                           send_disp_sub_sub, mpi_typ, out_arr->data1(),
-                           recv_count_sub_sub, recv_disp_sub_sub, mpi_typ,
+            bodo_alltoallv(send_arr->data1(), str_comm_info.send_count_sub_sub,
+                           str_comm_info.send_disp_sub_sub, mpi_typ,
+                           out_arr->data1(), str_comm_info.recv_count_sub_sub,
+                           str_comm_info.recv_disp_sub_sub, mpi_typ,
                            MPI_COMM_WORLD);
 
             // nulls
             mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-            bodo_alltoallv(send_arr->null_bitmask(), send_count_null,
-                           send_disp_null, mpi_typ, tmp_null_bytes.data(),
-                           recv_count_null, recv_disp_null, mpi_typ,
-                           MPI_COMM_WORLD);
+            bodo_alltoallv(send_arr->null_bitmask(), comm_info.send_count_null,
+                           comm_info.send_disp_null, mpi_typ,
+                           tmp_null_bytes.data(), comm_info.recv_count_null,
+                           comm_info.recv_disp_null, mpi_typ, MPI_COMM_WORLD);
             copy_gathered_null_bytes((uint8_t*)out_arr->null_bitmask(),
-                                     tmp_null_bytes, recv_count_null,
-                                     recv_count);
+                                     tmp_null_bytes, comm_info.recv_count_null,
+                                     comm_info.recv_count);
             break;
         }
         case bodo_array_type::STRING: {
             // string lengths
             MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
 #if OFFSET_BITWIDTH == 32
-            bodo_alltoallv(send_arr->data2(), send_count, send_disp, mpi_typ,
-                           out_arr->data2(), recv_count, recv_disp, mpi_typ,
+            bodo_alltoallv(send_arr->data2(), comm_info.send_count,
+                           comm_info.send_disp, mpi_typ, out_arr->data2(),
+                           comm_info.recv_count, comm_info.recv_disp, mpi_typ,
                            MPI_COMM_WORLD);
             convert_len_arr_to_offset32((uint32_t*)out_arr->data2(),
                                         (size_t)out_arr->length);
 #else
             std::vector<uint32_t> lens(out_arr->length);
-            bodo_alltoallv(send_arr->data2(), send_count, send_disp, mpi_typ,
-                           lens.data(), recv_count, recv_disp, mpi_typ,
+            bodo_alltoallv(send_arr->data2(), comm_info.send_count,
+                           comm_info.send_disp, mpi_typ, lens.data(),
+                           comm_info.recv_count, comm_info.recv_disp, mpi_typ,
                            MPI_COMM_WORLD);
             convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data2(),
                                       (size_t)out_arr->length);
 #endif
             // string data
             mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-            bodo_alltoallv(send_arr->data1(), send_count_sub, send_disp_sub,
-                           mpi_typ, out_arr->data1(), recv_count_sub,
-                           recv_disp_sub, mpi_typ, MPI_COMM_WORLD);
+            bodo_alltoallv(send_arr->data1(), str_comm_info.send_count_sub,
+                           str_comm_info.send_disp_sub, mpi_typ,
+                           out_arr->data1(), str_comm_info.recv_count_sub,
+                           str_comm_info.recv_disp_sub, mpi_typ,
+                           MPI_COMM_WORLD);
 
             // Nulls
             mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-            bodo_alltoallv(send_arr->null_bitmask(), send_count_null,
-                           send_disp_null, mpi_typ, tmp_null_bytes.data(),
-                           recv_count_null, recv_disp_null, mpi_typ,
-                           MPI_COMM_WORLD);
+            bodo_alltoallv(send_arr->null_bitmask(), comm_info.send_count_null,
+                           comm_info.send_disp_null, mpi_typ,
+                           tmp_null_bytes.data(), comm_info.recv_count_null,
+                           comm_info.recv_disp_null, mpi_typ, MPI_COMM_WORLD);
             copy_gathered_null_bytes((uint8_t*)out_arr->null_bitmask(),
-                                     tmp_null_bytes, recv_count_null,
-                                     recv_count);
+                                     tmp_null_bytes, comm_info.recv_count_null,
+                                     comm_info.recv_count);
             break;
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
@@ -989,36 +1002,39 @@ static void shuffle_array(std::shared_ptr<array_info> send_arr,
                 // We can reuse tmp_null_bytes for both.
                 // Note: Boolean always uses UINT8 MPI type.
                 mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-                bodo_alltoallv(send_arr->data1(), send_count_null,
-                               send_disp_null, mpi_typ, tmp_null_bytes.data(),
-                               recv_count_null, recv_disp_null, mpi_typ,
+                bodo_alltoallv(send_arr->data1(), comm_info.send_count_null,
+                               comm_info.send_disp_null, mpi_typ,
+                               tmp_null_bytes.data(), comm_info.recv_count_null,
+                               comm_info.recv_disp_null, mpi_typ,
                                MPI_COMM_WORLD);
-                copy_gathered_null_bytes((uint8_t*)out_arr->data1(),
-                                         tmp_null_bytes, recv_count_null,
-                                         recv_count);
+                copy_gathered_null_bytes(
+                    (uint8_t*)out_arr->data1(), tmp_null_bytes,
+                    comm_info.recv_count_null, comm_info.recv_count);
             } else {
-                bodo_alltoallv(send_arr->data1(), send_count, send_disp,
-                               mpi_typ, out_arr->data1(), recv_count, recv_disp,
+                bodo_alltoallv(send_arr->data1(), comm_info.send_count,
+                               comm_info.send_disp, mpi_typ, out_arr->data1(),
+                               comm_info.recv_count, comm_info.recv_disp,
                                mpi_typ, MPI_COMM_WORLD);
             }
 
             // nulls
             mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-            bodo_alltoallv(send_arr->null_bitmask(), send_count_null,
-                           send_disp_null, mpi_typ, tmp_null_bytes.data(),
-                           recv_count_null, recv_disp_null, mpi_typ,
-                           MPI_COMM_WORLD);
+            bodo_alltoallv(send_arr->null_bitmask(), comm_info.send_count_null,
+                           comm_info.send_disp_null, mpi_typ,
+                           tmp_null_bytes.data(), comm_info.recv_count_null,
+                           comm_info.recv_disp_null, mpi_typ, MPI_COMM_WORLD);
             copy_gathered_null_bytes((uint8_t*)out_arr->null_bitmask(),
-                                     tmp_null_bytes, recv_count_null,
-                                     recv_count);
+                                     tmp_null_bytes, comm_info.recv_count_null,
+                                     comm_info.recv_count);
             break;
         }
         case bodo_array_type::NUMPY:
         case bodo_array_type::CATEGORICAL: {
             // data
             MPI_Datatype mpi_typ = get_MPI_typ(send_arr->dtype);
-            bodo_alltoallv(send_arr->data1(), send_count, send_disp, mpi_typ,
-                           out_arr->data1(), recv_count, recv_disp, mpi_typ,
+            bodo_alltoallv(send_arr->data1(), comm_info.send_count,
+                           comm_info.send_disp, mpi_typ, out_arr->data1(),
+                           comm_info.recv_count, comm_info.recv_disp, mpi_typ,
                            MPI_COMM_WORLD);
             break;
         }
@@ -1472,15 +1488,11 @@ std::shared_ptr<table_info> shuffle_table_kernel(
         size_t global_table_nbytes = table_global_memory_size(in_table);
         ev.add_attribute("g_table_nbytes", global_table_nbytes);
     }
-    int64_t total_recv = std::accumulate(
-        comm_info.recv_count.begin(), comm_info.recv_count.end(), int64_t(0));
     size_t n_cols = (size_t)in_table->ncols();
 
     // fill send buffer and send
     std::vector<std::shared_ptr<array_info>> out_arrs;
     bodo::vector<uint8_t> tmp_null_bytes(comm_info.n_null_bytes);
-    const int64_t n_rows_send = std::accumulate(
-        comm_info.send_count.begin(), comm_info.send_count.end(), int64_t(0));
     for (size_t i = 0; i < n_cols; i++) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i];
         if (in_arr->arr_type == bodo_array_type::DICT) {
@@ -1496,30 +1508,17 @@ std::shared_ptr<table_info> shuffle_table_kernel(
             in_arr->arr_type != bodo_array_type::ARRAY_ITEM) {
             mpi_str_comm_info str_comm_info(in_arr, comm_info);
             std::shared_ptr<array_info> send_arr = alloc_array(
-                n_rows_send, str_comm_info.n_sub_send,
+                comm_info.n_row_send, str_comm_info.n_sub_send,
                 str_comm_info.n_sub_sub_send, in_arr->arr_type, in_arr->dtype,
                 -1, 2 * comm_info.n_pes, in_arr->num_categories);
             out_arr =
-                alloc_array(total_recv, str_comm_info.n_sub_recv,
+                alloc_array(comm_info.n_row_recv, str_comm_info.n_sub_recv,
                             str_comm_info.n_sub_sub_recv, in_arr->arr_type,
                             in_arr->dtype, -1, 0, in_arr->num_categories);
-            fill_send_array(
-                send_arr, in_arr, comm_info.send_disp,
-                str_comm_info.send_disp_sub, str_comm_info.send_disp_sub_sub,
-                comm_info.send_disp_null, comm_info.n_pes, comm_info.row_dest,
-                comm_info.filtered, is_parallel);
-
-            shuffle_array(
-                std::move(send_arr), out_arr, comm_info.send_count,
-                comm_info.recv_count, comm_info.send_disp, comm_info.recv_disp,
-                str_comm_info.send_count_sub, str_comm_info.recv_count_sub,
-                str_comm_info.send_disp_sub, str_comm_info.recv_disp_sub,
-                str_comm_info.send_count_sub_sub,
-                str_comm_info.recv_count_sub_sub,
-                str_comm_info.send_disp_sub_sub,
-                str_comm_info.recv_disp_sub_sub, comm_info.send_count_null,
-                comm_info.recv_count_null, comm_info.send_disp_null,
-                comm_info.recv_disp_null, tmp_null_bytes, is_parallel);
+            fill_send_array(send_arr, in_arr, comm_info, str_comm_info,
+                            is_parallel);
+            shuffle_array(std::move(send_arr), out_arr, comm_info,
+                          str_comm_info, tmp_null_bytes, is_parallel);
             if (in_arr->arr_type == bodo_array_type::LIST_STRING) {
                 shuffle_list_string_null_bitmask(in_arr, out_arr, comm_info,
                                                  comm_info.row_dest);
