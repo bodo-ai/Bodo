@@ -63,31 +63,12 @@ class SqlBodoParserUtil {
                 "MINUTE", "M", "MI", "MIN", "MINUTES", "MINS" -> return SqlStdOperatorTable.MINUTE.createCall(pos, args)
                 "SECOND", "S", "SEC", "SECONDS", "SECS" -> return SqlStdOperatorTable.SECOND.createCall(pos, args)
                 "NANOSECOND", "NS", "NSEC", "NANOSEC", "NSECOND", "NANOSECONDS", "NANOSECS", "NSECONDS" -> return DatetimeOperatorTable.NANOSECOND.createCall(pos, args)
-                // TODO(njriasan): Add function calls
-                "EPOCH_SECOND", "EPOCH", "EPOCH_SECONDS" -> throw SqlUtil.newContextException(
-                    pos,
-                    BODO_SQL_RESOURCE.illegalDatePartTimeUnit(funcName, intervalName),
-                )
-                "EPOCH_MILLISECOND", "EPOCH_MILLISECONDS" -> throw SqlUtil.newContextException(
-                    pos,
-                    BODO_SQL_RESOURCE.illegalDatePartTimeUnit(funcName, intervalName),
-                )
-                "EPOCH_MICROSECOND", "EPOCH_MICROSECONDS" -> throw SqlUtil.newContextException(
-                    pos,
-                    BODO_SQL_RESOURCE.illegalDatePartTimeUnit(funcName, intervalName),
-                )
-                "EPOCH_NANOSECOND", "EPOCH_NANOSECONDS" -> throw SqlUtil.newContextException(
-                    pos,
-                    BODO_SQL_RESOURCE.illegalDatePartTimeUnit(funcName, intervalName),
-                )
-                "TIMEZONE_HOUR", "TZH" -> throw SqlUtil.newContextException(
-                    pos,
-                    BODO_SQL_RESOURCE.illegalDatePartTimeUnit(funcName, intervalName),
-                )
-                "TIMEZONE_MINUTE", "TZM" -> throw SqlUtil.newContextException(
-                    pos,
-                    BODO_SQL_RESOURCE.illegalDatePartTimeUnit(funcName, intervalName),
-                )
+                "EPOCH_SECOND", "EPOCH", "EPOCH_SECONDS" -> return DatetimeOperatorTable.EPOCH_SECOND.createCall(pos, args)
+                "EPOCH_MILLISECOND", "EPOCH_MILLISECONDS" -> return DatetimeOperatorTable.EPOCH_MILLISECOND.createCall(pos, args)
+                "EPOCH_MICROSECOND", "EPOCH_MICROSECONDS" -> return DatetimeOperatorTable.EPOCH_MICROSECOND.createCall(pos, args)
+                "EPOCH_NANOSECOND", "EPOCH_NANOSECONDS" -> return DatetimeOperatorTable.EPOCH_NANOSECOND.createCall(pos, args)
+                "TIMEZONE_HOUR", "TZH" -> return DatetimeOperatorTable.TIMEZONE_HOUR.createCall(pos, args)
+                "TIMEZONE_MINUTE", "TZM" -> return DatetimeOperatorTable.TIMEZONE_MINUTE.createCall(pos, args)
                 else -> throw SqlUtil.newContextException(
                     pos,
                     BODO_SQL_RESOURCE.illegalDatePartTimeUnit(funcName, intervalName),

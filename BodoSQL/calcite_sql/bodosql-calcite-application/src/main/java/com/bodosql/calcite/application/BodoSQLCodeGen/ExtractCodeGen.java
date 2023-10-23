@@ -31,6 +31,19 @@ public class ExtractCodeGen {
     dayPlusUnits.add("DAYOFWEEKISO");
   }
 
+  // List of units that are only supported for datetime inputs, not date or time.
+  public static List<String> timestampOnlyUnits;
+
+  static {
+    timestampOnlyUnits = new ArrayList<>();
+    timestampOnlyUnits.add("TIMEZONE_HOUR");
+    timestampOnlyUnits.add("TIMEZONE_MINUTE");
+    timestampOnlyUnits.add("EPOCH_SECOND");
+    timestampOnlyUnits.add("EPOCH_MILLISECOND");
+    timestampOnlyUnits.add("EPOCH_MICROSECOND");
+    timestampOnlyUnits.add("EPOCH_NANOSECOND");
+  }
+
   /**
    * Function that return the necessary generated code for an Extract call.
    *
@@ -47,6 +60,10 @@ public class ExtractCodeGen {
       boolean isDate,
       Integer weekStart,
       Integer weekOfYearPolicy) {
+    if ((isDate || isTime) && timestampOnlyUnits.contains(datetimeVal)) {
+      throw new BodoSQLCodegenException(
+          "To extract unit " + datetimeVal + " requires TIMESTAMP values");
+    }
     if (isTime && dayPlusUnits.contains(datetimeVal)) {
       throw new BodoSQLCodegenException("Cannot extract unit " + datetimeVal + " from TIME values");
     }
@@ -96,6 +113,30 @@ public class ExtractCodeGen {
         break;
       case "WEEKISO":
         kernelName = "get_weekofyear";
+        break;
+      case "TIMEZONE_HOUR":
+        kernelName = "get_timezone_offset";
+        args.add(new Expr.StringLiteral("hr"));
+        break;
+      case "TIMEZONE_MINUTE":
+        kernelName = "get_timezone_offset";
+        args.add(new Expr.StringLiteral("min"));
+        break;
+      case "EPOCH_SECOND":
+        kernelName = "get_epoch";
+        args.add(new Expr.StringLiteral("s"));
+        break;
+      case "EPOCH_MILLISECOND":
+        kernelName = "get_epoch";
+        args.add(new Expr.StringLiteral("ms"));
+        break;
+      case "EPOCH_MICROSECOND":
+        kernelName = "get_epoch";
+        args.add(new Expr.StringLiteral("us"));
+        break;
+      case "EPOCH_NANOSECOND":
+        kernelName = "get_epoch";
+        args.add(new Expr.StringLiteral("ns"));
         break;
       default:
         throw new BodoSQLCodegenException(

@@ -1766,6 +1766,12 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "WEEK":
           case "WEEKOFYEAR":
           case "WEEKISO":
+          case "EPOCH_SECOND":
+          case "EPOCH_MILLISECOND":
+          case "EPOCH_MICROSECOND":
+          case "EPOCH_NANOSECOND":
+          case "TIMEZONE_HOUR":
+          case "TIMEZONE_MINUTE":
             isTime =
                 fnOperation
                     .getOperands()

@@ -3843,3 +3843,249 @@ def test_time_slice_columns(
         (date_col, slice_length),
         py_output=answer,
     )
+
+
+@pytest.mark.parametrize(
+    "arr, unit, answer",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    pd.Timestamp("2023-11-05 23:21:24.32414"),
+                    pd.Timestamp("2018-04-01"),
+                    pd.Timestamp("1969-01-01 12:21:42"),
+                    pd.Timestamp("1970-01-01"),
+                    pd.Timestamp("2023-03-12 00:59:59"),
+                    pd.Timestamp("2023-03-12 03:00:01.324"),
+                    pd.Timestamp("2023-11-05 00:00:00.4314"),
+                    pd.Timestamp("2023-11-05 03:00:00.432423244"),
+                    None,
+                ],
+            ),
+            "s",
+            pd.array(
+                [
+                    1699226484,
+                    1522540800,
+                    -31491498,
+                    0,
+                    1678582799,
+                    1678590001,
+                    1699142400,
+                    1699153200,
+                    None,
+                ],
+                dtype="Int64",
+            ),
+            id="vector-s-tz-naive",
+        ),
+        pytest.param(
+            pd.Timestamp("2023-11-05 03:00:00.432423244"),
+            "ms",
+            1699153200432,
+            marks=pytest.mark.slow,
+            id="scalar-ms-tz-naive",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    pd.Timestamp("2023-11-05 23:21:24.32414", tz="US/Pacific"),
+                    pd.Timestamp("2018-04-01", tz="US/Pacific"),
+                    None,
+                    pd.Timestamp("1969-01-01 12:21:42", tz="US/Pacific"),
+                    pd.Timestamp("1970-01-01", tz="US/Pacific"),
+                    pd.Timestamp("2023-03-12 00:59:59", tz="US/Pacific"),
+                    pd.Timestamp("2023-03-12 03:00:01.324", tz="US/Pacific"),
+                    pd.Timestamp("2023-11-05 00:00:00.4314", tz="US/Pacific"),
+                    pd.Timestamp("2023-11-05 03:00:00.432423244", tz="US/Pacific"),
+                ],
+            ),
+            "us",
+            pd.array(
+                [
+                    1699255284324140,
+                    1522566000000000,
+                    None,
+                    -31462698000000,
+                    28800000000,
+                    1678611599000000,
+                    1678615201324000,
+                    1699167600431400,
+                    1699182000432423,
+                ],
+                dtype="Int64",
+            ),
+            marks=pytest.mark.slow,
+            id="vector-us-tz-aware",
+        ),
+        pytest.param(
+            pd.Timestamp("2023-11-05 03:00:00.432423244", tz="US/Eastern"),
+            "ns",
+            1699171200432423244,
+            id="scalar-ns-tz-aware",
+        ),
+    ],
+)
+def test_get_epoch(arr, unit, answer, memory_leak_check):
+    """
+    Tests the get_epoch array kernel for various precisions
+    and types.
+
+    These answers are verified in Snowflake.
+    """
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.get_epoch(arr, unit)
+
+    check_func(impl, (arr,), py_output=answer)
+
+
+def test_get_epoch_optional(memory_leak_check):
+    def impl(ts_value, flag):
+        arg0 = ts_value if flag else None
+        return bodo.libs.bodosql_array_kernels.get_epoch(arg0, "ns")
+
+    ts_value = pd.Timestamp("2018-04-01")
+    for flag in [True, False]:
+        check_func(
+            impl,
+            (ts_value, flag),
+            py_output=ts_value.value if flag else None,
+        )
+
+
+@pytest.mark.parametrize(
+    "arr, unit, answer",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    pd.Timestamp("2023-03-12"),
+                    pd.Timestamp("2023-03-13"),
+                    None,
+                    pd.Timestamp("2023-11-05"),
+                    pd.Timestamp("2023-11-06"),
+                ]
+                * 3
+            ),
+            "hr",
+            pd.array([0, 0, None, 0, 0] * 3, dtype="Int32"),
+            marks=pytest.mark.slow,
+            id="vector-hour-tz-naive",
+        ),
+        pytest.param(
+            pd.Timestamp("2023-11-05 23:32:12.322", tz="Pacific/Honolulu"),
+            "hr",
+            -10,
+            id="scalar-hour-no-transition",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    pd.Timestamp("2023-03-12", tz="US/Pacific"),
+                    pd.Timestamp("2023-03-13", tz="US/Pacific"),
+                    None,
+                    pd.Timestamp("2023-11-05", tz="US/Pacific"),
+                    pd.Timestamp("2023-11-06", tz="US/Pacific"),
+                ]
+                * 3
+            ),
+            "hr",
+            pd.array([-8, -7, None, -7, -8] * 3, dtype="Int32"),
+            id="vector-hour-transition",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    pd.Timestamp("2023-03-12", tz="Asia/Kathmandu"),
+                    pd.Timestamp("2023-03-13", tz="Asia/Kathmandu"),
+                    None,
+                    pd.Timestamp("2023-11-05", tz="Asia/Kathmandu"),
+                    pd.Timestamp("2023-11-06", tz="Asia/Kathmandu"),
+                ]
+                * 3
+            ),
+            "min",
+            pd.array([45, 45, None, 45, 45] * 3, dtype="Int32"),
+            id="vector-minute-transition",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    pd.Timestamp("2023-03-12", tz="Australia/Lord_Howe"),
+                    pd.Timestamp("2023-06-13", tz="Australia/Lord_Howe"),
+                    None,
+                    pd.Timestamp("2023-09-05", tz="Australia/Lord_Howe"),
+                    pd.Timestamp("2023-12-06", tz="Australia/Lord_Howe"),
+                ]
+                * 3
+            ),
+            "min",
+            pd.array([0, 30, None, 30, 0] * 3, dtype="Int32"),
+            id="vector-minute-transition-changes",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    pd.Timestamp("2023-03-12", tz="Pacific/Marquesas"),
+                    pd.Timestamp("2023-03-13", tz="Pacific/Marquesas"),
+                    None,
+                    pd.Timestamp("2023-11-05", tz="Pacific/Marquesas"),
+                    pd.Timestamp("2023-11-06", tz="Pacific/Marquesas"),
+                ]
+                * 3
+            ),
+            "min",
+            pd.array([-30, -30, None, -30, -30] * 3, dtype="Int32"),
+            id="vector-negative-minute-transition",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Timestamp("2023-10-11 23:32:12.322", tz=pytz.FixedOffset(419)),
+            "min",
+            59,
+            id="scalar-minute-fixed",
+        ),
+        pytest.param(
+            pd.Timestamp("2023-10-11 23:32:12.322", tz=pytz.FixedOffset(-419)),
+            "hr",
+            -6,
+            id="scalar-hour-fixed",
+        ),
+    ],
+)
+def test_get_timezone_offset(arr, unit, answer, memory_leak_check):
+    """
+    Test for get_timezone_offset for various units and
+    timezones. The tests that match Snowflake:
+
+    TIMESTAMP_NTZ: tz=None
+    TIMESTAMP_LTZ without transition times for modern times: tz=Pacific/Honolulu
+    TIMESTAMP_LTZ with transition times: tz=US/Pacific
+    TIMESTAMP_LTZ with minute values: tz=Asia/Kathmandu and tz=Pacific/Marquesas
+
+    In addition we also add a test for FixedOffset, although
+    its unclear if this is supported in Snowflake. Based on the definition
+    FixedOffset is trivial to have a defined result because it is "Fixed".
+    """
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.get_timezone_offset(arr, unit)
+
+    check_func(impl, (arr,), py_output=answer)
+
+
+def test_get_timezone_offset_optional(memory_leak_check):
+    def impl(ts_value, flag):
+        arg0 = ts_value if flag else None
+        return bodo.libs.bodosql_array_kernels.get_timezone_offset(arg0, "min")
+
+    ts_value = pd.Timestamp("2018-04-01")
+    for flag in [True, False]:
+        check_func(
+            impl,
+            (ts_value, flag),
+            py_output=0 if flag else None,
+        )
