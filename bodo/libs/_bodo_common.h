@@ -1320,16 +1320,6 @@ struct mpi_comm_info {
     std::vector<int64_t> recv_count;
     std::vector<int64_t> send_disp;
     std::vector<int64_t> recv_disp;
-    // counts required for string arrays
-    std::vector<std::vector<int64_t>> send_count_sub;
-    std::vector<std::vector<int64_t>> recv_count_sub;
-    std::vector<std::vector<int64_t>> send_disp_sub;
-    std::vector<std::vector<int64_t>> recv_disp_sub;
-    // counts required for string list arrays
-    std::vector<std::vector<int64_t>> send_count_sub_sub;
-    std::vector<std::vector<int64_t>> recv_count_sub_sub;
-    std::vector<std::vector<int64_t>> send_disp_sub_sub;
-    std::vector<std::vector<int64_t>> recv_disp_sub_sub;
     // counts for arrays with null bitmask
     std::vector<int64_t> send_count_null;
     std::vector<int64_t> recv_count_null;
@@ -1378,6 +1368,30 @@ struct mpi_comm_info {
         const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
         SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr,
         const uint8_t* null_bitmask = nullptr);
+};
+
+struct mpi_str_comm_info {
+    int64_t n_sub_send, n_sub_recv, n_sub_sub_send, n_sub_sub_recv;
+    // counts required for string arrays
+    std::vector<int64_t> send_count_sub;
+    std::vector<int64_t> recv_count_sub;
+    std::vector<int64_t> send_disp_sub;
+    std::vector<int64_t> recv_disp_sub;
+    // counts required for string list arrays
+    std::vector<int64_t> send_count_sub_sub;
+    std::vector<int64_t> recv_count_sub_sub;
+    std::vector<int64_t> send_disp_sub_sub;
+    std::vector<int64_t> recv_disp_sub_sub;
+
+    /**
+     * @brief Initialize mpi_str_comm_info based on the array type
+     *
+     * @param arr_info The input array. If arr_info is neither string nor list
+     * string array, the constructor will be a no-op
+     * @param comm_info The mpi_comm_info of arr_info
+     */
+    mpi_str_comm_info(const std::shared_ptr<array_info>& arr_info,
+                      const mpi_comm_info& comm_info);
 };
 
 struct table_info {
