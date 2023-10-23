@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.sql.validate;
 
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
@@ -111,7 +112,7 @@ public class TableIdentifierWithIDNamespace extends AbstractNamespace {
     final SqlNameMatcher nameMatcher = validator.catalogReader.nameMatcher();
 
     //NOTE: BasicSqlType defaults to non null
-    BasicSqlType int_typ = new BasicSqlType(RelDataTypeSystem.DEFAULT, SqlTypeName.BIGINT);
+    BasicSqlType int_typ = new BasicSqlType(new BodoSQLRelDataTypeSystem(), SqlTypeName.BIGINT);
     // NOTE: we don't use this index anywhere, so we just default it to a random value
     int newIdx = 999;
     RelDataTypeField rowIdFieldType = new RelDataTypeFieldImpl("_bodo_row_id",

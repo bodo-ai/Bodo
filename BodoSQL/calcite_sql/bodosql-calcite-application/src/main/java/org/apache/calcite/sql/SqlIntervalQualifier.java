@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.sql;
 
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.avatica.util.TimeUnitRange;
 import org.apache.calcite.rel.type.RelDataType;
@@ -331,7 +332,7 @@ public class SqlIntervalQualifier extends SqlNode {
       int leftPrec,
       int rightPrec) {
     writer.getDialect()
-        .unparseSqlIntervalQualifier(writer, this, RelDataTypeSystem.DEFAULT);
+        .unparseSqlIntervalQualifier(writer, this, new BodoSQLRelDataTypeSystem());
   }
 
   /**
