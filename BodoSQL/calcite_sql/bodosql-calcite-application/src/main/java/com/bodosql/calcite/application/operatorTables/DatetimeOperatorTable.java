@@ -1121,6 +1121,104 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME)),
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction EPOCH_SECOND =
+      new SqlFunction(
+          "EPOCH_SECOND",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.BIGINT_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.DATETIME,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction EPOCH_MILLISECOND =
+      new SqlFunction(
+          "EPOCH_MILLISECOND",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.BIGINT_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.DATETIME,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction EPOCH_MICROSECOND =
+      new SqlFunction(
+          "EPOCH_MICROSECOND",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.BIGINT_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.DATETIME,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction EPOCH_NANOSECOND =
+      new SqlFunction(
+          "EPOCH_NANOSECOND",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.BIGINT_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.DATETIME,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TIMEZONE_HOUR =
+      new SqlFunction(
+          "TIMEZONE_HOUR",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // Note: This is the max type the SF return precision.
+          // It seems like a tinyint should be possible.
+          BodoReturnTypes.SMALLINT_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.DATETIME,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TIMEZONE_MINUTE =
+      new SqlFunction(
+          "TIMEZONE_MINUTE",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // Note: This is the max type the SF return precision.
+          // It seems like a tinyint should be possible.
+          BodoReturnTypes.SMALLINT_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.DATETIME,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           CONVERT_TIMEZONE,
@@ -1176,7 +1274,13 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           YEAROFWEEKISO,
           NEXT_DAY,
           PREVIOUS_DAY,
-          DAY);
+          DAY,
+          EPOCH_SECOND,
+          EPOCH_MILLISECOND,
+          EPOCH_MICROSECOND,
+          EPOCH_NANOSECOND,
+          TIMEZONE_HOUR,
+          TIMEZONE_MINUTE);
 
   @Override
   public void lookupOperatorOverloads(
