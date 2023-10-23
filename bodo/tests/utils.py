@@ -2370,6 +2370,39 @@ def drop_snowflake_table(table_name: str, db: str, schema: str) -> None:
         raise drop_err
 
 
+@contextmanager
+def create_snowflake_table_from_select_query(
+    query: str, base_table_name: str, db: str, schema: str
+) -> Generator[str, None, None]:
+    """Creates a new table in Snowflake derived from the base table name
+    and using the given select query. The name from the base name is modified to help
+    reduce the likelihood of conflicts during concurrent tests.
+
+    Returns the name of the table added to Snowflake.
+
+    Args:
+        query (str): A valid Snowfalke SQL query that will be used to create the table.
+            This will be a SELECT query as we wrap the query in a create or replace table as clause.
+        base_table_name (str): Base string for generating the table name.
+        db (str): Name of the snowflake db.
+        schema (str): Name of the snowflake schema
+
+    Returns:
+        str: The final table name.
+    """
+    comm = MPI.COMM_WORLD
+    table_name = None
+    try:
+        if bodo.get_rank() == 0:
+            table_name = gen_unique_table_id(base_table_name)
+            conn_str = get_snowflake_connection_string(db, schema)
+            pd.read_sql(f"CREATE or REPLACE TABLE {table_name} as ({query})", conn_str)
+        table_name = comm.bcast(table_name)
+        yield table_name
+    finally:
+        drop_snowflake_table(table_name, db, schema)
+
+
 def generate_comparison_ops_func(op, check_na=False):
     """
     Generates a comparison function. If check_na,

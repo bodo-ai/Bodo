@@ -27,6 +27,7 @@ from bodo.io.snowflake_write import (
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
+    create_snowflake_table_from_select_query,
     drop_snowflake_table,
     get_snowflake_connection_string,
     get_start_end,
@@ -1954,3 +1955,75 @@ def test_write_with_timestamp_time_precision(memory_leak_check):
             assert table_info["type"].to_list() == expected_types
     finally:
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_use_put
+
+
+def test_decimal_sub_38_precision_write(memory_leak_check):
+    """
+    Tests that reading and writing a number column that requires > int64 but
+    is smaller than Number(38, 0) is read and written correctly by Bodo.
+    """
+    if bodo.get_size() != 1:
+        pytest.skip("This test is only designed for 1 rank")
+
+    snowflake_user = 1
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = bodo.tests.utils.get_snowflake_connection_string(
+        db, schema, user=snowflake_user
+    )
+    bodo_write_tablename = "BODO_TEST_SNOWFLAKE_WRITE_DECIMAL_25_PRECISION"
+    with ensure_clean_snowflake_table(conn, bodo_write_tablename) as write_table_name:
+        bodo_read_tablename = "BODO_TEST_SNOWFLAKE_READ_DECIMAL_25_PRECISION"
+        select_query = "Select 9999999999999999999999999::NUMBER(25, 0) as A from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.REGION"
+        with create_snowflake_table_from_select_query(
+            select_query, bodo_read_tablename, db, schema
+        ) as read_table_name:
+            global_1 = bodo.utils.typing.ColNamesMetaType(("A",))
+
+            def impl(conn):
+                reader = pd.read_sql(
+                    read_table_name,
+                    conn,
+                    _bodo_is_table_input=True,
+                    _bodo_chunksize=4096,
+                    _bodo_read_as_table=True,
+                )
+
+                writer = snowflake_writer_init(
+                    -1,
+                    conn,
+                    write_table_name,
+                    "PUBLIC",
+                    "replace",
+                    "",
+                )
+                _iter_1 = 0
+                _temp22 = False
+                while not (_temp22):
+                    (
+                        T1,
+                        __bodo_is_last_streaming_output_1,
+                    ) = bodo.io.arrow_reader.read_arrow_next(reader, True)
+                    _temp22 = bodo.io.snowflake_write.snowflake_writer_append_table(
+                        writer,
+                        T1,
+                        global_1,
+                        __bodo_is_last_streaming_output_1,
+                        _iter_1,
+                        None,
+                    )
+                    _iter_1 = _iter_1 + 1
+                bodo.io.arrow_reader.arrow_reader_del(reader)
+
+            bodo.jit(cache=False)(impl)(conn)
+            table_info = pd.read_sql(f"DESCRIBE TABLE {read_table_name}", conn)
+            expected_types = ["NUMBER(25,0)"]
+            assert (
+                table_info["type"].to_list() == expected_types
+            ), "Incorrect type found"
+            # Verify the result of an except query with these tables is empty
+            result = pd.read_sql(
+                f"SELECT * FROM {write_table_name} EXCEPT SELECT * FROM {read_table_name}",
+                conn,
+            )
+            assert len(result) == 0, "Unexpected difference in tables"
