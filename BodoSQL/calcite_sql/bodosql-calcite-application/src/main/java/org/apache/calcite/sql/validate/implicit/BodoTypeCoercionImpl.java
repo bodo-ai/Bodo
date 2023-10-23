@@ -44,11 +44,22 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
   public @Nullable RelDataType implicitCast(RelDataType in, SqlTypeFamily expected) {
     // Allow casting from Variant to any string.
     // TODO: Add the other type families.
-    if (in instanceof VariantSqlType && expected != SqlTypeFamily.ANY && expected.getTypeNames().contains(SqlTypeName.VARCHAR)) {
-      return factory.createTypeWithNullability(
-              factory.createSqlType(SqlTypeName.VARCHAR),
-              in.isNullable()
-      );
+    if (in instanceof VariantSqlType && expected != SqlTypeFamily.ANY) {
+
+      if (expected.getTypeNames().contains(SqlTypeName.VARCHAR)) {
+        return factory.createTypeWithNullability(
+                factory.createSqlType(SqlTypeName.VARCHAR),
+                in.isNullable()
+        );
+      } else if (expected.equals(SqlTypeFamily.BOOLEAN)) {
+        // Note: We check for exactly boolean in case boolean is one of many accepted types to avoid
+        // unexpected casting. For example, if a function were to accept both BOOLEAN and NUMERIC types,
+        // then we don't necessarily want to cast to BOOLEAN.
+        return factory.createTypeWithNullability(
+                factory.createSqlType(SqlTypeName.BOOLEAN),
+                in.isNullable()
+        );
+      }
     }
     // Calcite natively enables casting STRING -> BINARY AND BINARY -> STRING.
     // We don't want this behavior so we disable it.
