@@ -1333,6 +1333,7 @@ struct mpi_comm_info {
     bodo::vector<int> row_dest;
     // true if using a bloom filter to discard rows before shuffling
     bool filtered = false;
+    int64_t n_row_send, n_row_recv;
 
     explicit mpi_comm_info(std::vector<std::shared_ptr<array_info>>& _arrays);
 
@@ -1377,7 +1378,7 @@ struct mpi_str_comm_info {
     std::vector<int64_t> recv_count_sub;
     std::vector<int64_t> send_disp_sub;
     std::vector<int64_t> recv_disp_sub;
-    // counts required for string list arrays
+    // counts required for string list arrays (will deprecate soon)
     std::vector<int64_t> send_count_sub_sub;
     std::vector<int64_t> recv_count_sub_sub;
     std::vector<int64_t> send_disp_sub_sub;
