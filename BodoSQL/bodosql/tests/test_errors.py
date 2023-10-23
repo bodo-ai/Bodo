@@ -398,11 +398,12 @@ def test_str_date_select_cond_fns(fn_name, memory_leak_check):
         bc = bodosql.BodoSQLContext({"table1": df})
         return bc.sql(f"select {fn_name}(B, A) from table1")
 
+    # Does not explicitly check the types of the two arguments since changes to
+    # type handling could cause their precision info to change, which may cause
+    # a failure even though we still got the overall error we expected.
     with pytest.raises(
         BodoError,
-        match=re.escape(
-            f"Cannot infer return type for {fn_name}; operand types: [TIMESTAMP(9), VARCHAR]"
-        ),
+        match=re.escape(f"Cannot infer return type for {fn_name}; operand types:"),
     ):
         impl(df)
 
