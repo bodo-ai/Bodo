@@ -1480,40 +1480,35 @@ def _install_to_binary_funcs():
 _install_to_binary_funcs()
 
 
-@numba.generated_jit(nopython=True)
-def to_number(expr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
-    """Handle TO_NUMBER and it's variants."""
-    if isinstance(expr, types.optional):  # pragma: no cover
-        return unopt_argument(
-            "bodo.libs.bodosql_snowflake_conversion_array_kernels.to_number_util",
-            ["expr", "dict_encoding_state", "func_id"],
-            0,
-            default_map={"dict_encoding_state": None, "func_id": -1},
-        )
+def make_to_number(_try):
+    """Generate utility functions to unopt TO_NUMBER (and its variants) arguments"""
+    func_name = "to_number"
+    if _try:
+        func_name = "try_to_number"
 
-    def impl(expr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
-        return to_number_util(
-            expr, numba.literally(False), dict_encoding_state, func_id
-        )
+    @numba.generated_jit(nopython=True)
+    def func(expr, dict_encoding_state=None, func_id=-1):
+        """Handles cases where TO_NUMBER receives optional arguments and forwards
+        to the appropriate version of the real implementation"""
+        if isinstance(expr, types.optional):  # pragma: no cover
+            return unopt_argument(
+                f"bodo.libs.bodosql_array_kernels.{func_name}",
+                ["expr", "dict_encoding_state", "func_id"],
+                0,
+            )
 
-    return impl
+        def impl(expr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+            return to_number_util(
+                expr, numba.literally(_try), dict_encoding_state, func_id
+            )
+
+        return impl
+
+    return func
 
 
-@numba.generated_jit(nopython=True)
-def try_to_number(expr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
-    """Handle TRY_TO_NUMBER and it's variants."""
-    if isinstance(expr, types.optional):  # pragma: no cover
-        return unopt_argument(
-            "bodo.libs.bodosql_snowflake_conversion_array_kernels.to_number_util",
-            ["expr", "dict_encoding_state", "func_id"],
-            0,
-            default_map={"dict_encoding_state": None, "func_id": -1},
-        )
-
-    def impl(expr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
-        return to_number_util(expr, numba.literally(True), dict_encoding_state, func_id)
-
-    return impl
+try_to_number = make_to_number(True)
+to_number = make_to_number(False)
 
 
 @numba.generated_jit(nopython=True)
