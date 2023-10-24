@@ -1156,6 +1156,7 @@ def test_write_existing_fail(
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
 
 
+@pytest.mark.timeout(1000)
 @pytest.mark.slow
 @pytest.mark.parametrize("read_behavior", ["spark", "bodo"])
 def test_basic_write_replace(
