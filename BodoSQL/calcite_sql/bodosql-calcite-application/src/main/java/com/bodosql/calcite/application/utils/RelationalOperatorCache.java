@@ -90,7 +90,9 @@ public class RelationalOperatorCache {
                 "bodo.libs.table_builder.init_table_builder_state",
                 List.of(new Expr.IntegerLiteral(operatorID)),
                 List.of(new Pair<>("use_chunked_builder", Expr.True.INSTANCE)))),
-        OperatorType.ACCUMULATE_TABLE);
+        OperatorType.ACCUMULATE_TABLE,
+        // ChunkedTableBuilder doesn't need pinned memory budget
+        0);
 
     frame.add(
         new Op.Stmt(

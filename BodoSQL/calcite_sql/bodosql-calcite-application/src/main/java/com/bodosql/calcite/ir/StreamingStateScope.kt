@@ -18,18 +18,12 @@ class StreamingStateScope {
         return operators.isNotEmpty()
     }
 
-    fun startOperator(opID: Int, startPipelineID: Int, type: OperatorType) {
+    fun startOperator(opID: Int, startPipelineID: Int, type: OperatorType, memoryEstimate: Int = -1) {
         if (operators.containsKey(opID)) {
             throw Exception("StreamingStateScope: Repeated Operator ID Found")
         }
         operators[opID] = Pair(OperatorPipelineRange(opID, startPipelineID), type)
-        // TODO(aneesh) consider moving this to the C++ code, or derive the
-        // chunksize for writing from the allocated budget.
-        if (type == OperatorType.SNOWFLAKE_WRITE) {
-            // Writes only use a constant amount of memory of 256MB. We multiply
-            // that by 1.5 to allow for some wiggle room.
-            operators[opID]!!.first.memEstimate = (1.5 * 256 * 1024 * 1024).toInt()
-        }
+        operators[opID]!!.first.memEstimate = memoryEstimate
     }
 
     fun endOperator(opID: Int, endPipelineID: Int) {
