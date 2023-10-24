@@ -142,6 +142,7 @@ broadcasted_fixed_arg_functions = {
     "is_not_false",
     "is_not_true",
     "is_true",
+    "jarowinkler_similarity",
     "json_extract_path_text",
     "last_day_year",
     "last_day_month",

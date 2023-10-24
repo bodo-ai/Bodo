@@ -397,6 +397,105 @@ def test_editdistance(args, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "args, answer",
+    [
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        "jake",
+                        "jake",
+                        "amy",
+                        "amy",
+                        "Gute nacht",
+                        "Ich weiß nicht",
+                        "Ich weiß nicht",
+                        "Snowflake",
+                        "Snowflake",
+                        "",
+                        "",
+                        "scissors",
+                        "scissors",
+                        "alpha beta",
+                    ]
+                ),
+                pd.Series(
+                    [
+                        "JOE",
+                        "john",  # 50 on Snowflake, 55 with the wiki algorithm
+                        "mary",
+                        "jean",
+                        "Ich weis nicht",
+                        "Ich wei? nicht",
+                        "Ich weiss nicht",
+                        "Oracle",
+                        "Snowflake",
+                        "Snowflake",
+                        "",
+                        None,
+                        "scolding",  # 58 on Snowflake, 66 with the wiki algorithm
+                        "Alphabet Soup",
+                    ]
+                ),
+            ),
+            pd.Series(
+                [75, 50, 80, 0, 56, 97, 95, 61, 100, 0, 0, None, 58, 87],
+                dtype=pd.Int8Dtype(),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        "The quick",
+                        None,
+                        "brown",
+                        "The lazy green ferret leaps around the zippy wolf",  # 65 on Snowflake, 79 with the wiki algorithm
+                        "god yzal eht revo spmuj xof nworb kciuq ehT",
+                        "lazy dog",
+                        "lazy",
+                        "Quick the Fox brown Over jumps dog Lazy the",
+                        "hte quick brown fox jumps over hte lazy dog",
+                    ]
+                ),
+                "The quick brown fox jumps over the lazy dog",
+            ),
+            pd.Series(
+                [84, None, 70, 65, 66, 43, 0, 86, 98],
+                dtype=pd.Int8Dtype(),
+            ),
+            id="vector_scalar",
+        ),
+        pytest.param(
+            (
+                "pseudopseudohypoparathyroidism",
+                "supercalifragilisticexpialidocious",
+            ),
+            56,
+            id="all_scalar",
+        ),
+    ],
+)
+def test_jarowinkler_similarity(args, answer, memory_leak_check):
+    """
+    Answers calculated via https://tilores.io/jaro-winkler-distance-algorithm-online-tool
+    (accounting for the fact that the online calculator is case-sensitive by
+    re-writing all strings as lowercase before calculating their refsol)
+    """
+
+    def impl(s, t):
+        return pd.Series(bodo.libs.bodosql_array_kernels.jarowinkler_similarity(s, t))
+
+    # avoid Series conversion for scalar output
+    if not isinstance(answer, pd.Series):
+        impl = lambda s, t: bodo.libs.bodosql_array_kernels.jarowinkler_similarity(s, t)
+
+    check_func(impl, args, py_output=answer, check_dtype=False, reset_index=True)
+    check_func(impl, args[::-1], py_output=answer, check_dtype=False, reset_index=True)
+
+
+@pytest.mark.parametrize(
     "args",
     [
         pytest.param(

@@ -103,6 +103,26 @@ def editdistance_no_max(s, t, dict_encoding_state=None, func_id=-1):
 
 
 @numba.generated_jit(nopython=True)
+def jarowinkler_similarity(s, t, dict_encoding_state=None, func_id=-1):
+    """Handles cases where JAROWINKLER_SIMILARITY receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [s, t]
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.jarowinkler_similarity",
+                ["s", "t", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
+            )
+
+    def impl(s, t, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return jarowinkler_similarity_util(s, t, dict_encoding_state, func_id)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def editdistance_with_max(s, t, maxDistance, dict_encoding_state=None, func_id=-1):
     """Handles cases where EDITDISTANCE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -943,6 +963,127 @@ def editdistance_with_max_util(s, t, maxDistance, dict_encoding_state, func_id):
     scalar_text = "res[i] = bodo.libs.bodosql_array_kernels.min_edit_distance_with_max(arg0, arg1, arg2)"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
+
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
+
+
+@register_jitable
+def jarowinkler_similarity_fn(s, t):  # pragma: no cover
+    """
+    Implementation of Jaro-Winkler similarity defined by the following formula:
+
+        len = max(|s|, |t|)
+        d = len // 2 - 1
+        m = number of matches between s & t (same character, at most d apart)
+        t = number of transpositions (matches out of order)
+        jaro_similarity = (m / |s| + m / |t| + (m - t) / m) / 3
+        l = length of the longest common prefix of s and t
+        jarowinkler_similarity = jaro_similarity + 0.1 * l * (1 - jarowinkler_similarity)
+
+    Using the algorithm as DuckDB:
+    https://github.com/duckdb/duckdb/blob/main/third_party/jaro_winkler/details/jaro_impl.hpp
+
+    Structured more closely to this Geeks for Geeks implementation:
+    https://www.geeksforgeeks.org/jaro-and-jaro-winkler-similarity/
+    """
+    # If either string is empty, the answer is automatically zero
+    if min(len(s), len(t)) == 0:
+        return np.int8(0)
+
+    # For simplicity, make all characters the same case, and have s be the longer string.
+    s, t = s.lower(), t.lower()
+    if len(s) < len(t):
+        s, t = t, s
+
+    # Calculate the maximum matching distance
+    s_len, t_len = len(s), len(t)
+    d = max(s_len, t_len) // 2 - 1
+    matches = 0
+
+    # Find all of the indices in s and t that have a match in the other
+    s_matches = np.full(s_len, False, dtype=np.bool_)
+    t_matches = np.full(t_len, False, dtype=np.bool_)
+    for s_idx in range(s_len):
+        for t_idx in range(max(0, s_idx - d), min(t_len, s_idx + d + 1)):
+            if s[s_idx] == t[t_idx] and not t_matches[t_idx]:
+                s_matches[s_idx] = True
+                t_matches[t_idx] = True
+                matches += 1
+                break
+
+    # If we found no matches, stop now because we already know the answer will be zero
+    if matches == 0:
+        return np.int8(0)
+
+    # Calculate how many of the matches are also transpositions
+    transpositions = 0
+    finger = 0
+    for s_idx in range(s_len):
+        if s_matches[s_idx]:
+            while not t_matches[finger]:
+                finger += 1
+            transpositions += s[s_idx] != t[finger]
+            finger += 1
+    transpositions //= 2
+
+    # Calculate the Jaro similarity
+    j_similarity = (
+        (matches / s_len) + (matches / t_len) + (matches - transpositions) / matches
+    ) / 3.0
+
+    # Don't use the Winkler boost if Jaro similarity is below 0.7
+    if j_similarity < 0.7:
+        return np.int8(100 * j_similarity)
+
+    # Find the longest common prefix (at most 4 chars)
+    common_prefix = 0
+    for i in range(min(4, s_len, t_len)):
+        if s[i] != t[i]:
+            break
+        common_prefix += 1
+
+    # Calculate the Jaro-Winkler similarity and convert to an integer between 0 and 100
+    scaling_factor = 0.1
+    jw_similarity = j_similarity + scaling_factor * common_prefix * (1 - j_similarity)
+    return np.int8(min(jw_similarity * 100, 100))
+
+
+@numba.generated_jit(nopython=True)
+def jarowinkler_similarity_util(s, t, dict_encoding_state, func_id):
+    """A dedicated kernel for the Snowflake SQL function JAROWINKLER_SIMILARITY
+    which takes in two strings (or columns of strings) and returns the Jaro-Winkler
+    similarity between them.
+
+    Args:
+        s (string array/series/scalar): the first string(s) being compared
+        t (string array/series/scalar): the second string(s) being compared
+
+    Returns:
+        int series/scalar: the jarowinkler similarity of the two strings as an integer
+        between 0 and 100 (rounded down).
+    """
+
+    verify_string_arg(s, "jarowinkler_similarity", "s")
+    verify_string_arg(t, "jarowinkler_similarity", "t")
+
+    arg_names = ["s", "t", "dict_encoding_state", "func_id"]
+    arg_types = [s, t, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
+    scalar_text = (
+        "res[i] = bodo.libs.bodosql_array_kernels.jarowinkler_similarity_fn(arg0, arg1)"
+    )
+
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int8)
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -2199,7 +2340,7 @@ def split_util(string, separator, dict_encoding_state, func_id):  # pragma: no c
 @numba.generated_jit(nopython=True)
 def sha2(msg, digest_size, dict_encoding_state=None, func_id=-1):
     """Handles cases where sha2 receives optional arguments and forwards
-        to the appropriate version of the real implementation"""
+    to the appropriate version of the real implementation"""
     args = [msg, digest_size]
     for i, arg in enumerate(args):
         if isinstance(arg, types.optional):  # pragma: no cover
@@ -2242,7 +2383,9 @@ def sha2_util(msg, digest_size, dict_encoding_state, func_id):
         scalar_text = "msg_str = arg0._to_str()\n"
     else:
         scalar_text = "msg_str = arg0\n"
-    scalar_text += "res[i] = bodo.libs.bodosql_crypto_funcs.sha2_algorithms(msg_str, arg1)"
+    scalar_text += (
+        "res[i] = bodo.libs.bodosql_crypto_funcs.sha2_algorithms(msg_str, arg1)"
+    )
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -2260,7 +2403,7 @@ def sha2_util(msg, digest_size, dict_encoding_state, func_id):
 @numba.generated_jit(nopython=True)
 def md5(msg, dict_encoding_state=None, func_id=-1):
     """Handles cases where md5 receives optional arguments and forwards
-        to the appropriate version of the real implementation"""
+    to the appropriate version of the real implementation"""
     if isinstance(msg, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.md5",
