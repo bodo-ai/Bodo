@@ -112,6 +112,197 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
     }
 }
 
+// --------------------- bodo::DataType and bodo::Schema ---------------------
+
+static const char* arr_type_to_str(bodo_array_type::arr_type_enum arr_type) {
+    if (arr_type == bodo_array_type::NUMPY)
+        return "NUMPY";
+    if (arr_type == bodo_array_type::STRING)
+        return "STRING";
+    if (arr_type == bodo_array_type::NULLABLE_INT_BOOL)
+        return "NULLABLE";
+    if (arr_type == bodo_array_type::LIST_STRING)
+        return "LIST_STRING";
+    if (arr_type == bodo_array_type::ARRAY_ITEM)
+        return "ARRAY_ITEM";
+    if (arr_type == bodo_array_type::STRUCT)
+        return "STRUCT";
+    if (arr_type == bodo_array_type::CATEGORICAL)
+        return "CATEGORICAL";
+    if (arr_type == bodo_array_type::DICT)
+        return "DICT";
+    return "UNKNOWN";
+}
+
+static const char* dtype_to_str(Bodo_CTypes::CTypeEnum dtype) {
+    if (dtype == Bodo_CTypes::INT8)
+        return "INT8";
+    if (dtype == Bodo_CTypes::UINT8)
+        return "UINT8";
+    if (dtype == Bodo_CTypes::INT16)
+        return "INT16";
+    if (dtype == Bodo_CTypes::UINT16)
+        return "UINT16";
+    if (dtype == Bodo_CTypes::INT32)
+        return "INT32";
+    if (dtype == Bodo_CTypes::UINT32)
+        return "UINT32";
+    if (dtype == Bodo_CTypes::INT64)
+        return "INT64";
+    if (dtype == Bodo_CTypes::UINT64)
+        return "UINT64";
+    if (dtype == Bodo_CTypes::FLOAT32)
+        return "FLOAT32";
+    if (dtype == Bodo_CTypes::FLOAT64)
+        return "FLOAT64";
+    if (dtype == Bodo_CTypes::STRING)
+        return "STRING";
+    if (dtype == Bodo_CTypes::LIST_STRING)
+        return "LIST_STRING";
+    if (dtype == Bodo_CTypes::BINARY)
+        return "BINARY";
+    if (dtype == Bodo_CTypes::_BOOL)
+        return "_BOOL";
+    if (dtype == Bodo_CTypes::DECIMAL)
+        return "DECIMAL";
+    if (dtype == Bodo_CTypes::DATE)
+        return "DATE";
+    if (dtype == Bodo_CTypes::DATETIME)
+        return "DATETIME";
+    if (dtype == Bodo_CTypes::TIMEDELTA)
+        return "TIMEDELTA";
+    if (dtype == Bodo_CTypes::TIME)
+        return "TIME";
+    if (dtype == Bodo_CTypes::LIST)
+        return "LIST";
+    if (dtype == Bodo_CTypes::STRUCT)
+        return "STRUCT";
+    return "UNKNOWN";
+}
+
+std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype) {
+    return dtype_to_str(dtype);
+}
+
+std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type) {
+    return arr_type_to_str(arr_type);
+}
+
+namespace bodo {
+
+void DataType::to_string_inner(std::string& out) {
+    out += arr_type_to_str(this->array_type);
+    out += "[";
+    out += dtype_to_str(this->c_type);
+    out += "]";
+}
+
+void ArrayType::to_string_inner(std::string& out) {
+    out += arr_type_to_str(this->array_type);
+    out += "[";
+    this->value_type->to_string_inner(out);
+    out += "]";
+}
+
+void StructType::to_string_inner(std::string& out) {
+    out += arr_type_to_str(this->array_type);
+    out += "[";
+
+    for (size_t i = 0; i < child_types.size(); i++) {
+        if (i != 0) {
+            out += ", ";
+        }
+        out += std::to_string(i);
+        out += ": ";
+        child_types[i]->to_string_inner(out);
+    }
+
+    out += "]";
+}
+
+void DataType::Serialize(std::vector<int8_t>& arr_array_types,
+                         std::vector<int8_t>& arr_c_types) {
+    arr_array_types.push_back(array_type);
+    arr_c_types.push_back(c_type);
+}
+
+void ArrayType::Serialize(std::vector<int8_t>& arr_array_types,
+                          std::vector<int8_t>& arr_c_types) {
+    arr_array_types.push_back(array_type);
+    arr_c_types.push_back(c_type);
+    value_type->Serialize(arr_array_types, arr_c_types);
+}
+
+void StructType::Serialize(std::vector<int8_t>& arr_array_types,
+                           std::vector<int8_t>& arr_c_types) {
+    arr_array_types.push_back(array_type);
+    arr_c_types.push_back(c_type);
+    arr_array_types.push_back(child_types.size());
+    arr_c_types.push_back(child_types.size());
+
+    for (auto& child_type : child_types) {
+        child_type->Serialize(arr_array_types, arr_c_types);
+    }
+}
+
+static std::unique_ptr<DataType> from_byte_helper(
+    const std::span<const int8_t> arr_array_types,
+    const std::span<const int8_t> arr_c_types, size_t& i) {
+    auto array_type =
+        static_cast<bodo_array_type::arr_type_enum>(arr_array_types[i]);
+    auto c_type = static_cast<Bodo_CTypes::CTypeEnum>(arr_c_types[i]);
+    i += 1;
+
+    if (array_type == bodo_array_type::ARRAY_ITEM) {
+        auto inner_arr = from_byte_helper(arr_array_types, arr_c_types, i);
+        return std::make_unique<ArrayType>(inner_arr);
+
+    } else if (array_type == bodo_array_type::STRUCT) {
+        std::vector<std::unique_ptr<DataType>> child_types;
+        size_t num_fields = static_cast<size_t>(arr_array_types[i]);
+        i += 1;
+
+        for (size_t j = 0; j < num_fields; j++) {
+            child_types.push_back(
+                from_byte_helper(arr_array_types, arr_c_types, i));
+        }
+        return std::make_unique<StructType>(child_types);
+
+    } else {
+        return std::make_unique<DataType>(array_type, c_type);
+    }
+}
+
+std::unique_ptr<Schema> Schema::Deserialize(
+    const std::span<const int8_t> arr_array_types,
+    const std::span<const int8_t> arr_c_types) {
+    auto schema = std::make_unique<Schema>();
+    schema->column_types.reserve(arr_array_types.size());
+    size_t i = 0;
+
+    while (i < arr_array_types.size()) {
+        schema->column_types.push_back(
+            from_byte_helper(arr_array_types, arr_c_types, i));
+    }
+
+    return schema;
+}
+
+std::pair<std::vector<int8_t>, std::vector<int8_t>> Schema::Serialize() {
+    std::vector<int8_t> arr_array_types;
+    std::vector<int8_t> arr_c_types;
+
+    for (auto& arr_type : column_types) {
+        arr_type->Serialize(arr_array_types, arr_c_types);
+    }
+
+    return std::pair(arr_array_types, arr_c_types);
+}
+
+}  // namespace bodo
+
+// ---------------------------------------------------------------------------
+
 std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
     std::shared_ptr<arrow::Array> arrow_arr;
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;

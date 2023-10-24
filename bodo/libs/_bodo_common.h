@@ -448,6 +448,132 @@ struct bodo_array_type {
     };
 };
 
+std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype);
+
+inline std::string GetDtype_as_string(int8_t dtype) {
+    return GetDtype_as_string(static_cast<Bodo_CTypes::CTypeEnum>(dtype));
+}
+
+std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type);
+
+inline std::string GetArrType_as_string(int8_t arr_type) {
+    return GetArrType_as_string(
+        static_cast<bodo_array_type::arr_type_enum>(arr_type));
+}
+
+namespace bodo {
+
+/**
+ * @brief Wrapper class for uniquely identifying the type of a Bodo Array.
+ * Array types are a composition of a bodo_array_type (e.g. NUMPY, STRING, etc.)
+ * and inner dtype (e.g. INT8, UINT8, etc.).
+ */
+struct DataType {
+    const bodo_array_type::arr_type_enum array_type;
+    const Bodo_CTypes::CTypeEnum c_type;
+
+    /**
+     * @brief Construct a new DataType from a bodo_array_type and CTypeEnum
+     * @param array_type Type / Structure of the Array
+     * @param c_type Type of the Array Elements
+     */
+    DataType(bodo_array_type::arr_type_enum array_type,
+             Bodo_CTypes::CTypeEnum c_type)
+        : array_type(array_type), c_type(c_type) {}
+
+    virtual ~DataType() = default;
+
+    /// @brief Is the Array Primitive (i.e. not nested)
+    bool is_primitive() {
+        return array_type != bodo_array_type::STRUCT &&
+               array_type != bodo_array_type::ARRAY_ITEM &&
+               array_type != bodo_array_type::DICT &&
+               array_type != bodo_array_type::LIST_STRING;
+    }
+
+    /// @brief Is the Array a Nested Array?
+    bool is_array() { return array_type == bodo_array_type::ARRAY_ITEM; }
+
+    /// @brief If the Array a Struct Array?
+    bool is_struct() { return array_type == bodo_array_type::STRUCT; }
+
+    /// @brief Helper Function to Generate the Output of ToString()
+    virtual void to_string_inner(std::string& out);
+
+    /// @brief Convert the DataType to a single-line string
+    std::string ToString() {
+        std::string out;
+        to_string_inner(out);
+        return out;
+    }
+
+    ///@brief Serialize a bodo::Schema to a Python <-> C++ communication format
+    virtual void Serialize(std::vector<int8_t>& arr_array_types,
+                           std::vector<int8_t>& arr_c_types);
+};
+
+/// @brief Wrapper class for Representing the Type of ArrayItem Arrays
+struct ArrayType final : public DataType {
+    const std::unique_ptr<DataType> value_type;
+
+    /// @brief Construct a new ArrayType given the Inner Array DataType
+    ArrayType(std::unique_ptr<DataType>& _value_type)
+        : DataType(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST),
+          value_type(std::move(_value_type)) {}
+
+    void to_string_inner(std::string& out) override;
+
+    void Serialize(std::vector<int8_t>& arr_array_types,
+                   std::vector<int8_t>& arr_c_types) override;
+};
+
+/// @brief Wrapper class for Representing the Type of Struct Arrays
+struct StructType final : public DataType {
+    std::vector<std::unique_ptr<DataType>> child_types;
+
+    /// @brief Construct a new StructType given the Inner Array DataTypes
+    StructType(std::vector<std::unique_ptr<DataType>>& _child_types)
+        : DataType(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT),
+          child_types(std::move(_child_types)) {}
+
+    void to_string_inner(std::string& out) override;
+
+    void Serialize(std::vector<int8_t>& arr_array_types,
+                   std::vector<int8_t>& arr_c_types) override;
+};
+
+/**
+ * @brief Wrapper Class for a Schema of a Bodo Table
+ * Consisting of a vector of DataTypes for each column / array.
+ */
+struct Schema {
+    std::vector<std::unique_ptr<DataType>> column_types;
+
+    /**
+     * @brief Construct a bodo::Schema from a serialized schema from Python.
+     * The serialized schema consists of a vector of bodo_array_types and
+     * a vector of CTypes.
+     *
+     * @param arr_array_types First half of serialization, array types
+     * @param arr_c_types Second half of serialization, content types
+     * @return std::unique_ptr<Schema> Output Schema
+     */
+    static std::unique_ptr<Schema> Deserialize(
+        const std::span<const int8_t> arr_array_types,
+        const std::span<const int8_t> arr_c_types);
+
+    /**
+     * @brief Serialize a bodo::Schema to a Python <-> C++ communication
+     * format. The serialized schema consists of a vector of bodo_array_types
+     * and a vector of CTypes.
+     *
+     * @return (arr_array_types, arr_c_types) Serialization vecs
+     */
+    std::pair<std::vector<int8_t>, std::vector<int8_t>> Serialize();
+};
+
+}  // namespace bodo
+
 // copied from Arrow bit_util.h
 // Bitmask selecting the k-th bit in a byte
 static constexpr uint8_t kBitmask[] = {1, 2, 4, 8, 16, 32, 64, 128};
