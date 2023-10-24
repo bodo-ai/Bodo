@@ -108,8 +108,8 @@ class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar
         initializations.add(assign)
     }
 
-    fun initializeStreamingState(opID: Int, assign: Op.Assign, type: OperatorType) {
-        scope.startOperator(opID, pipelineID, type)
+    fun initializeStreamingState(opID: Int, assign: Op.Assign, type: OperatorType, memoryEstimate: Int = -1) {
+        scope.startOperator(opID, pipelineID, type, memoryEstimate)
         addInitialization(assign)
     }
 
