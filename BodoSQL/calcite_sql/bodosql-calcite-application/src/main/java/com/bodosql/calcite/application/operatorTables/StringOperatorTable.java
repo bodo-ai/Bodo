@@ -208,6 +208,22 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction JAROWINKLER_SIMILARITY =
+      new SqlFunction(
+          "JAROWINKLER_SIMILARITY",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.INTEGER_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.STRING_STRING,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.STRING);
+
   public static final SqlFunction FORMAT =
       new SqlFunction(
           "FORMAT",
@@ -675,6 +691,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           REGEXP_INSTR,
           STRCMP,
           EDITDISTANCE,
+          JAROWINKLER_SIMILARITY,
           FORMAT,
           UCASE,
           LCASE,
