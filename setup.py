@@ -371,6 +371,7 @@ if is_testing:
         [
             "bodo/tests/test_framework.cpp",
             "bodo/tests/test_example.cpp",
+            "bodo/tests/test_schema.cpp",
             "bodo/tests/test_pinnable.cpp",
             "bodo/tests/test_dict_builder.cpp",
             "bodo/tests/test_memory_budget.cpp",

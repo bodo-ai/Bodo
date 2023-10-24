@@ -921,19 +921,6 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
     const std::shared_ptr<uint32_t[]> hashes, const size_t len,
     bool is_parallel);
 
-std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype);
-
-inline std::string GetDtype_as_string(int8_t dtype) {
-    return GetDtype_as_string(static_cast<Bodo_CTypes::CTypeEnum>(dtype));
-}
-
-std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type);
-
-inline std::string GetArrType_as_string(int8_t arr_type) {
-    return GetArrType_as_string(
-        static_cast<bodo_array_type::arr_type_enum>(arr_type));
-}
-
 /**
  * @brief concatenate tables vertically into a single table.
  * Input tables are assumed to have the same schema, and will
