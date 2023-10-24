@@ -9,35 +9,6 @@
 #include "_bodo_to_arrow.h"
 #include "_distributed.h"
 
-mpi_comm_info::mpi_comm_info(std::vector<std::shared_ptr<array_info>>& _arrays)
-    : arrays(_arrays) {
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    n_rows = arrays[0]->length;
-    has_nulls = false;
-    for (std::shared_ptr<array_info> arr_info : arrays) {
-        if (arr_info->arr_type == bodo_array_type::STRING ||
-            arr_info->arr_type == bodo_array_type::DICT ||
-            arr_info->arr_type == bodo_array_type::LIST_STRING ||
-            arr_info->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            has_nulls = true;
-            break;
-        }
-    }
-    n_null_bytes = 0;
-    // init counts
-    send_count = std::vector<int64_t>(n_pes, 0);
-    recv_count = std::vector<int64_t>(n_pes);
-    send_disp = std::vector<int64_t>(n_pes);
-    recv_disp = std::vector<int64_t>(n_pes);
-    if (has_nulls) {
-        send_count_null = std::vector<int64_t>(n_pes);
-        recv_count_null = std::vector<int64_t>(n_pes);
-        send_disp_null = std::vector<int64_t>(n_pes);
-        recv_disp_null = std::vector<int64_t>(n_pes);
-    }
-}
-
 /**
  * @brief Template used to handle the unmatchable rows in
  * mpi_comm_info::set_counts. This is used in two cases:
@@ -89,6 +60,33 @@ void handle_unmatchable_rows<false>(bodo::vector<int>& row_dest,
     // -1 and hence get dropped.
 }
 
+mpi_comm_info::mpi_comm_info(
+    const std::vector<std::shared_ptr<array_info>>& arrays)
+    : n_rows(arrays[0]->length), has_nulls(false), n_null_bytes(0) {
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    for (const std::shared_ptr<array_info>& arr_info : arrays) {
+        if (arr_info->arr_type == bodo_array_type::STRING ||
+            arr_info->arr_type == bodo_array_type::DICT ||
+            arr_info->arr_type == bodo_array_type::LIST_STRING ||
+            arr_info->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            has_nulls = true;
+            break;
+        }
+    }
+    // init counts
+    send_count.resize(n_pes);
+    recv_count.resize(n_pes);
+    send_disp.resize(n_pes);
+    recv_disp.resize(n_pes);
+    if (has_nulls) {
+        send_count_null.resize(n_pes);
+        recv_count_null.resize(n_pes);
+        send_disp_null.resize(n_pes);
+        recv_disp_null.resize(n_pes);
+    }
+}
+
 template <bool keep_nulls_and_filter_misses>
 void mpi_comm_info::set_counts(
     const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
@@ -103,7 +101,6 @@ void mpi_comm_info::set_counts(
                                             keep_nulls_and_filter_misses));
     ev.add_attribute("g_drop_nulls", ((null_bitmask != nullptr) &&
                                       !keep_nulls_and_filter_misses));
-
     // get send count
     // -1 indicates that a row is dropped (not sent anywhere)
     row_dest.resize(n_rows, -1);
@@ -173,18 +170,19 @@ void mpi_comm_info::set_counts(
     // Rows can get filtered if either a bloom-filter or a null filter is
     // provided
     this->filtered = (null_bitmask != nullptr) || (filter != nullptr);
+    // get recv count
+    MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
+                 MPI_INT64_T, MPI_COMM_WORLD);
+    n_rows_send =
+        std::accumulate(send_count.begin(), send_count.end(), int64_t(0));
+    n_rows_recv =
+        std::accumulate(recv_count.begin(), recv_count.end(), int64_t(0));
 
     if (ev.is_tracing()) {
-        int64_t n_rows_send =
-            std::accumulate(send_count.begin(), send_count.end(), int64_t(0));
         ev.add_attribute("nrows_filtered",
                          static_cast<size_t>(n_rows - n_rows_send));
         ev.add_attribute("filtered", filtered);
     }
-    // get recv count
-    MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
-                 MPI_INT64_T, MPI_COMM_WORLD);
-
     // get displacements
     calc_disp(send_disp, send_count);
     calc_disp(recv_disp, recv_count);
@@ -198,11 +196,6 @@ void mpi_comm_info::set_counts(
         n_null_bytes = std::accumulate(recv_count_null.begin(),
                                        recv_count_null.end(), size_t(0));
     }
-
-    n_row_send =
-        std::accumulate(send_count.begin(), send_count.end(), int64_t(0));
-    n_row_recv =
-        std::accumulate(recv_count.begin(), recv_count.end(), int64_t(0));
 }
 
 mpi_str_comm_info::mpi_str_comm_info(
@@ -217,10 +210,10 @@ mpi_str_comm_info::mpi_str_comm_info(
         // send counts
         offset_t const* const offsets = (offset_t*)arr_info->data2();
         for (size_t i = 0; i < arr_info->length; i++) {
-            if (comm_info.row_dest[i] == -1)
-                continue;
-            send_count_sub[comm_info.row_dest[i]] +=
-                (int64_t)(offsets[i + 1] - offsets[i]);
+            if (comm_info.row_dest[i] != -1) {
+                send_count_sub[comm_info.row_dest[i]] +=
+                    (int64_t)(offsets[i + 1] - offsets[i]);
+            }
         }
         // get recv count
         MPI_Alltoall(send_count_sub.data(), 1, MPI_INT64_T,
@@ -1478,8 +1471,9 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
   accordingly. 2b) Second do the shuffling of data between all processors.
  */
 std::shared_ptr<table_info> shuffle_table_kernel(
-    std::shared_ptr<table_info> in_table, std::shared_ptr<uint32_t[]>& hashes,
-    mpi_comm_info const& comm_info, bool is_parallel) {
+    std::shared_ptr<table_info> in_table,
+    const std::shared_ptr<uint32_t[]>& hashes, const mpi_comm_info& comm_info,
+    bool is_parallel) {
     tracing::Event ev("shuffle_table_kernel", is_parallel);
     if (ev.is_tracing()) {
         ev.add_attribute("table_nrows_before",
@@ -1508,11 +1502,11 @@ std::shared_ptr<table_info> shuffle_table_kernel(
             in_arr->arr_type != bodo_array_type::ARRAY_ITEM) {
             mpi_str_comm_info str_comm_info(in_arr, comm_info);
             std::shared_ptr<array_info> send_arr = alloc_array(
-                comm_info.n_row_send, str_comm_info.n_sub_send,
+                comm_info.n_rows_send, str_comm_info.n_sub_send,
                 str_comm_info.n_sub_sub_send, in_arr->arr_type, in_arr->dtype,
                 -1, 2 * comm_info.n_pes, in_arr->num_categories);
             out_arr =
-                alloc_array(comm_info.n_row_recv, str_comm_info.n_sub_recv,
+                alloc_array(comm_info.n_rows_recv, str_comm_info.n_sub_recv,
                             str_comm_info.n_sub_sub_recv, in_arr->arr_type,
                             in_arr->dtype, -1, 0, in_arr->num_categories);
             fill_send_array(send_arr, in_arr, comm_info, str_comm_info,
