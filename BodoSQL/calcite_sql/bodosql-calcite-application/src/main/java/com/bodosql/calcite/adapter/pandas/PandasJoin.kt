@@ -12,7 +12,9 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelWriter
 import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
+import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexNode
+import kotlin.math.ceil
 
 class PandasJoin(
     cluster: RelOptCluster,
@@ -68,6 +70,17 @@ class PandasJoin(
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
         return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
+    }
+
+    /**
+     * Get join build memory estimate for memory budget comptroller
+     */
+    fun estimateBuildMemory(mq: RelMetadataQuery): Int {
+        // Streaming join needs the build table in memory, which is the right input
+        val buildRows = mq.getRowCount(this.getRight())
+        val averageBuildRowSize = mq.getAverageRowSize(this.getRight()) ?: 8.0
+        // Account for hash table key/value pairs and group ids for each row (all int64)
+        return ceil(buildRows * (averageBuildRowSize + (3 * 8))).toInt()
     }
 
     companion object {

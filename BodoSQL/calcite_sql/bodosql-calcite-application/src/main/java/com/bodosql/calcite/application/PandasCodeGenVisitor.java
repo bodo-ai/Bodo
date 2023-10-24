@@ -68,6 +68,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Stack;
 import java.util.function.Supplier;
 import kotlin.Unit;
@@ -83,6 +84,7 @@ import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.core.TableScan;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -164,6 +166,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // Extra arguments to pass to the write code for the fileList and Snapshot
   // id in the form of "argName1=varName1, argName2=varName2"
   private @Nullable String fileListAndSnapshotIdArgs;
+
+  // TODO(aneesh) consider moving this to the C++ code, or derive the
+  // chunksize for writing from the allocated budget.
+  // Writes only use a constant amount of memory of 256MB. We multiply
+  // that by 1.5 to allow for some wiggle room.
+  private final int SNOWFLAKE_WRITE_MEMORY_ESTIMATE = ((int) (1.5 * 256 * 1024 * 1024));
 
   public PandasCodeGenVisitor(
       HashMap<String, String> loweredGlobalVariablesMap,
@@ -465,6 +473,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Generate the list we are accumulating into.
     Variable batchAccumulatorVariable = this.genBatchAccumulatorVar();
     StreamingPipelineFrame activePipeline = this.generatedCode.getCurrentStreamingPipeline();
+
+    // get memory estimate of input
+    RelMetadataQuery mq = node.getCluster().getMetadataQuery();
+    Double inputRows = mq.getRowCount(node.getInput(0));
+    Double averageInputRowSize =
+        Optional.ofNullable(mq.getAverageRowSize(node.getInput(0))).orElse(8.0);
+    int memoryEstimate = Double.valueOf(Math.ceil(inputRows * averageInputRowSize)).intValue();
     activePipeline.initializeStreamingState(
         operatorID,
         new Op.Assign(
@@ -472,7 +487,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             new Expr.Call(
                 "bodo.libs.table_builder.init_table_builder_state",
                 new Expr.IntegerLiteral(operatorID))),
-        OperatorType.ACCUMULATE_TABLE);
+        OperatorType.ACCUMULATE_TABLE,
+        memoryEstimate);
 
     // Append to the list at the end of the loop.
     List<Expr> args = new ArrayList<>();
@@ -629,7 +645,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
     StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
     // Add Initialization Code
     timerInfo.insertStateStartTimer();
-    inputPipeline.initializeStreamingState(operatorID, unionInit, OperatorType.UNION);
+    // UNION ALL is implemented as a ChunkedTableBuilder and doesn't need tracked in the memory
+    // budget comptroller
+    if (node.all) {
+      inputPipeline.addInitialization(unionInit);
+    } else {
+      RelMetadataQuery mq = node.getCluster().getMetadataQuery();
+      inputPipeline.initializeStreamingState(
+          operatorID, unionInit, OperatorType.UNION, node.estimateBuildMemory(mq));
+    }
     timerInfo.insertStateEndTimer();
 
     // All but the last union call just requires the union_consume_batch call
@@ -674,7 +698,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
     generatedCode.add(new Op.Assign(newExitCond, consumeCall));
     timerInfo.insertLoopOperationEndTimer();
     pipeline.endSection(newExitCond);
-    generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));
+    StreamingPipelineFrame finishedPipeline = generatedCode.endCurrentStreamingPipeline();
+    generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
+
+    // Union's produce pipeline is only a ChunkedTableBuilder with no need for memory budget so
+    // ending after last input
+    if (!(node.all)) {
+      generatedCode.forceEndOperatorAtCurPipeline(operatorID, finishedPipeline);
+    }
 
     // Create a new pipeline for output of table_builder
     Variable newFlag = genFinishedStreamingFlag();
@@ -697,7 +728,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Union state is deleted automatically by Numba
     Op.Stmt deleteState =
         new Op.Stmt(new Expr.Call("bodo.libs.stream_union.delete_union_state", List.of(stateVar)));
-    outputPipeline.deleteStreamingState(operatorID, deleteState);
+    outputPipeline.addTermination(deleteState);
 
     // Add the output table from last pipeline to the stack
     BodoEngineTable outEngineTable = new BodoEngineTable(outTable.emit(), node);
@@ -974,7 +1005,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
             new Expr.IntegerLiteral(operatorID), node.getTableName(), ifExists, createTableType);
     Variable writerVar = this.genWriterVar();
     currentPipeline.initializeStreamingState(
-        operatorID, new Op.Assign(writerVar, writeInitCode), OperatorType.SNOWFLAKE_WRITE);
+        operatorID,
+        new Op.Assign(writerVar, writeInitCode),
+        OperatorType.SNOWFLAKE_WRITE,
+        SNOWFLAKE_WRITE_MEMORY_ESTIMATE);
     timerInfo.insertStateEndTimer();
 
     // Second, append the Table to the writer
@@ -1263,7 +1297,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
         bodoSqlTable.generateStreamingWriteInitCode(new Expr.IntegerLiteral(operatorID));
     Variable writerVar = this.genWriterVar();
     currentPipeline.initializeStreamingState(
-        operatorID, new Op.Assign(writerVar, writeInitCode), OperatorType.SNOWFLAKE_WRITE);
+        operatorID,
+        new Op.Assign(writerVar, writeInitCode),
+        OperatorType.SNOWFLAKE_WRITE,
+        SNOWFLAKE_WRITE_MEMORY_ESTIMATE);
     timerInfo.insertStateEndTimer();
 
     // Second, append the Table to the writer
@@ -1641,7 +1678,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Fetch the streaming pipeline
     StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
     timerInfo.insertStateStartTimer();
-    inputPipeline.initializeStreamingState(operatorID, groupbyInit, OperatorType.GROUPBY);
+    RelMetadataQuery mq = node.getCluster().getMetadataQuery();
+    inputPipeline.initializeStreamingState(
+        operatorID, groupbyInit, OperatorType.GROUPBY, node.estimateBuildMemory(mq));
     timerInfo.insertStateEndTimer();
     Variable batchExitCond = inputPipeline.getExitCond();
     Variable newExitCond = genGenericTempVar();
@@ -2031,7 +2070,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 isLeftOuter),
             namedArgs);
     Op.Assign joinInit = new Op.Assign(joinStateVar, stateCall);
-    batchPipeline.initializeStreamingState(operatorID, joinInit, OperatorType.JOIN);
+
+    RelMetadataQuery mq = node.getCluster().getMetadataQuery();
+    batchPipeline.initializeStreamingState(
+        operatorID, joinInit, OperatorType.JOIN, node.estimateBuildMemory(mq));
+
     timerInfo.insertStateEndTimer();
     return joinStateVar;
   }

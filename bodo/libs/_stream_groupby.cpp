@@ -1097,6 +1097,8 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
         int ftype = ftypes[i];
         // NOTE: adding all functions that need accumulating inputs for now
         // but they may not be supported in streaming groupby yet
+        // Should be kept in sync with
+        // https://github.com/Bodo-inc/Bodo/blob/56c77832aea4c4d5b33fd5cf631b201f4157f73a/BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/rel/core/AggregateBase.kt#L58
         if (ftype == Bodo_FTypes::median || ftype == Bodo_FTypes::cumsum ||
             ftype == Bodo_FTypes::cumprod || ftype == Bodo_FTypes::cummin ||
             ftype == Bodo_FTypes::cummax || ftype == Bodo_FTypes::shift ||
