@@ -1542,3 +1542,38 @@ def test_binary_pad_2args_errorchecking(func, memory_leak_check):
             # Pointless output, but must be set
             expected_output=pd.DataFrame(),
         )
+
+
+def test_jarowinkler_similarity(datapath, memory_leak_check):
+    """
+    Tests the correctness of the function JAROWINKLER_SIMILARITY on a larger dataset
+    generated via Snowflake.
+
+    The data was produced from the following Snowflake query:
+
+    SELECT
+        translate(p1.p_name, 'aeiou', '') as A,
+        Initcap(translate(p2.p_name, 'aiu', '.')) as B,
+        JAROWINKLER_SIMILARITY(A, B) AS J
+    FROM TPCH_SF1.part p1, TPCH_SF1.part p2
+    WHERE
+        p1.p_brand = p2.p_brand
+        AND p1.p_size = p2.p_size
+        AND p1.p_container = p2.p_container
+        AND CEIL(p1.p_retailprice) % 4 = 0
+        AND CEIL(p2.p_retailprice) % 5 = 0
+
+    The produced csv data has 49,766 rows in the following format:
+
+    sddl zr stl mgnt drk,Ch.Rtrese Bl.Nched Or.Nge Vory Nd.N,51
+    pr mtllc lmnd snn sddl,Per Met.Llc .Lmond Senn. S.Ddle,91
+    pr mtllc lmnd snn sddl,Cre.M Goldenrod Pff S.Ddle Bl.Ck,60
+    """
+
+    jw_data = pd.read_csv(datapath("jaro_winkler_data.csv"))
+    ctx = {"table1": jw_data[["A", "B"]]}
+    query = "SELECT A, B, JAROWINKLER_SIMILARITY(A, B) FROM table1"
+
+    check_query(
+        query, ctx, None, check_dtype=False, check_names=False, expected_output=jw_data
+    )

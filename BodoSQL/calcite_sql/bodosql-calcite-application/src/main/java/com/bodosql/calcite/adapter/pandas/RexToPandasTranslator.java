@@ -1148,6 +1148,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "UPPER":
       case "SPACE":
       case "RTRIMMED_LENGTH":
+      case "JAROWINKLER_SIMILARITY":
       case "REPEAT":
       case "STRCMP":
       case "RIGHT":
@@ -1740,6 +1741,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "STRTOK":
           case "SPLIT":
           case "EDITDISTANCE":
+          case "JAROWINKLER_SIMILARITY":
           case "INITCAP":
           case "SHA2":
           case "SHA2_HEX":
