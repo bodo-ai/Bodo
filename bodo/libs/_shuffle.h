@@ -150,8 +150,9 @@ std::shared_ptr<table_info> coherent_shuffle_table(
  * @return the new table after the shuffling.
  */
 std::shared_ptr<table_info> shuffle_table_kernel(
-    std::shared_ptr<table_info> in_table, std::shared_ptr<uint32_t[]>& hashes,
-    mpi_comm_info const& comm_info, bool is_parallel = true);
+    std::shared_ptr<table_info> in_table,
+    const std::shared_ptr<uint32_t[]>& hashes, const mpi_comm_info& comm_info,
+    bool is_parallel);
 
 /** Reverse shuffling a table from all nodes to all the other nodes.
  *

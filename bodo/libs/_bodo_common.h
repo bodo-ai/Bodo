@@ -1310,10 +1310,9 @@ inline T& getv(const std::unique_ptr<array_info>& arr, size_t idx) {
 }
 
 struct mpi_comm_info {
-    int myrank;
-    int n_pes;
-    std::vector<std::shared_ptr<array_info>> arrays;
+    int myrank, n_pes;
     size_t n_rows;
+    int64_t n_rows_send, n_rows_recv;
     bool has_nulls;
     // generally required MPI counts
     std::vector<int64_t> send_count;
@@ -1333,36 +1332,41 @@ struct mpi_comm_info {
     bodo::vector<int> row_dest;
     // true if using a bloom filter to discard rows before shuffling
     bool filtered = false;
-    int64_t n_row_send, n_row_recv;
-
-    explicit mpi_comm_info(std::vector<std::shared_ptr<array_info>>& _arrays);
 
     /**
-     * Computation of:
-     * - send_count/recv_count arrays
-     * - send_count_sub / recv_count_sub
-     * - send_count_sub_sub / recv_count_sub_sub
-     * Those are used for the shuffling of data1/data2/data3 and their sizes.
-     * @param hashes : hashes of all the rows
-     * @param is_parallel: true if data is distributed (used to indicate whether
-     *                     tracing should be parallel or not)
-     * @param filter : Bloom filter. Rows whose hash is not in the filter will
-     * be discarded from shuffling. If no filter is provided no filtering will
+     * @brief Table level constructor for mpi_comm_info. Initialize
+     * mpi_comm_info counts and displacement vectors and stats based on input
+     * table
+     *
+     * @param arrays Vector of array from input table
+     */
+    explicit mpi_comm_info(
+        const std::vector<std::shared_ptr<array_info>>& arrays);
+
+    /**
+     * @brief Compute all information needed for the shuffling of
+     * data1/data2/data3 and their sizes
+     *
+     * @param hashes Hashes of all the rows
+     * @param is_parallel True if data is distributed (used to indicate whether
+     * tracing should be parallel or not)
+     * @param filter Bloom filter. Rows whose hash is not in the filter will be
+     * discarded from shuffling. If no filter is provided no filtering will
      * happen.
-     * @param null_bitmask : Null bitmask specifying if any of the keys are
-     * null. In those cases, the rows will be handled based on the value of the
+     * @param null_bitmask Null bitmask specifying if any of the keys are null.
+     * In those cases, the rows will be handled based on the value of the
      * templated parameter keep_nulls_and_filter_misses. Note that this should
      * only be passed when nulls are not considered equal to each other (e.g.
      * SQL join).
      *
      * @tparam keep_nulls_and_filter_misses : In case a Bloom filter is provided
      * and a key is not present in the bloom filter, should we keep the value on
-     * this rank (i.e. not discard it altogether).
-     * Similarly, in case a null-bitmask is provided and a row
-     * is determined to have a null in one of the keys (i.e. this row cannot
-     * match with any other in case of SQL joins), this flag determines whether
-     * to keep the row on this rank (i.e. not discard it altogether).
-     * This is useful in the outer join cases. Defaults to false.
+     * this rank (i.e. not discard it altogether). Similarly, in case a
+     * null-bitmask is provided and a row is determined to have a null in one of
+     * the keys (i.e. this row cannot match with any other in case of SQL
+     * joins), this flag determines whether to keep the row on this rank (i.e.
+     * not discard it altogether). This is useful in the outer join cases.
+     * Defaults to false.
      */
     template <bool keep_nulls_and_filter_misses = false>
     void set_counts(
