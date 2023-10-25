@@ -20,6 +20,9 @@
 
 #define GROUPBY_MAX_PARTITION_DEPTH 15
 
+// Chunk size of build_table_buffer_chunked in GroupbyPartition
+#define INACTIVE_PARTITION_TABLE_CHUNK_SIZE 16 * 1024
+
 class GroupbyPartition;
 class GroupbyState;
 
@@ -110,8 +113,7 @@ class GroupbyPartition {
         const std::vector<std::shared_ptr<BasicColSet>>& col_sets_,
         const std::vector<int32_t>& f_in_offsets_,
         const std::vector<int32_t>& f_in_cols_,
-        const std::vector<int32_t>& f_running_value_offsets_,
-        const uint64_t batch_size_, bool is_active_,
+        const std::vector<int32_t>& f_running_value_offsets_, bool is_active_,
         bool accumulate_before_update_, bool req_extended_group_info_,
         bodo::OperatorBufferPool* op_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_mm_);
@@ -298,7 +300,6 @@ class GroupbyPartition {
     /// 'build_table_buffer_chunked'. When true, this means that the data has
     /// been moved to the 'build_table_buffer'.
     bool is_active = false;
-    const uint64_t batch_size;
 
     /// @brief OperatorBufferPool of the Groupby operator that this is a
     /// partition in. The pool is owned by the parent GroupbyState, so

@@ -134,7 +134,7 @@ struct BufferPoolOptions {
     /// on memory_size and min_size_class.
     /// Since this needs to be encodable in 6 bits,
     /// the max allowed value is 63.
-    uint64_t max_num_size_classes = 21;
+    uint64_t max_num_size_classes = 23;
 
     /// @brief Whether or not to enforce the specified
     /// memory limit during allocations. This is useful

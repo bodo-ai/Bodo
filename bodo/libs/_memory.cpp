@@ -770,8 +770,17 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         // Set memory_size as mem_fraction of mem_per_rank
         options.memory_size =
             static_cast<uint64_t>(mem_per_rank * mem_fraction);
+
+        // If we're not over-allocating memory (e.g. the case where spilling is
+        // available), use 16KiB as the size of the smallest frame to allow
+        // packing buffers more efficiently. Otherwise, use the default (64KiB).
+        if (mem_fraction <= 1.0) {
+            options.min_size_class = 16;
+        }
     }
 
+    // Override the default size of the smallest Size-Class if provided
+    // by an env var.
     if (char* min_size_class_env_ =
             std::getenv("BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB")) {
         options.min_size_class = std::stoi(min_size_class_env_);
