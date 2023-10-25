@@ -1017,8 +1017,7 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
                            std::vector<int32_t> f_in_offsets_,
                            std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
                            int64_t output_batch_size_, bool parallel_,
-                           int64_t sync_iter_, int64_t op_pool_size_bytes,
-                           size_t max_partition_depth_)
+                           int64_t sync_iter_, int64_t op_pool_size_bytes)
     :  // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           ((op_pool_size_bytes == -1)
@@ -1029,7 +1028,12 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
           bodo::BufferPool::Default(),
           GROUPBY_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD)),
       op_mm(bodo::buffer_memory_manager(op_pool.get())),
-      max_partition_depth(max_partition_depth_),
+      // Get the max partition depth from env var if set. This is primarily
+      // for unit testing purposes. If it's not set, use the default.
+      max_partition_depth(std::getenv("BODO_STREAM_GROUPBY_MAX_PARTITION_DEPTH")
+                              ? std::atoi(std::getenv(
+                                    "BODO_STREAM_GROUPBY_MAX_PARTITION_DEPTH"))
+                              : GROUPBY_DEFAULT_MAX_PARTITION_DEPTH),
       n_keys(n_keys_),
       parallel(parallel_),
       output_batch_size(output_batch_size_),
@@ -1043,7 +1047,7 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
       // size if sync_iter == -1 (user hasn't specified number of syncs)
       adaptive_sync_counter(sync_iter == -1 ? 0 : -1),
       groupby_event("Groupby") {
-    // Turn partitioning on by default.
+    // Partitioning is enabled by default:
     bool enable_partitioning = true;
 
     // Force enable/disable partitioning if env var set. This is
@@ -1389,7 +1393,17 @@ GroupbyState::getSeparateOutputColumns(
 }
 
 void GroupbyState::DisablePartitioning() {
-    this->op_pool->DisableThresholdEnforcement();
+    if (this->partitioning_enabled) {
+        this->op_pool->DisableThresholdEnforcement();
+        this->partitioning_enabled = false;
+    }
+}
+
+void GroupbyState::EnablePartitioning() {
+    if (!this->partitioning_enabled) {
+        this->op_pool->EnableThresholdEnforcement();
+        this->partitioning_enabled = true;
+    }
 }
 
 void GroupbyState::SplitPartition(size_t idx) {
@@ -1940,8 +1954,38 @@ void GroupbyState::FinalizeBuild() {
 
         while (true) {
             bool exception_caught = true;
+            bool orig_partitioning_enabled = this->partitioning_enabled;
             std::shared_ptr<table_info> output_table;
             try {
+                // If partitioning is enabled and this partition is at max
+                // partition depth, then temporarily disable partitioning. If it
+                // wouldn't have run into a threshold enforcement error, there's
+                // no side-effects. If it would've, then it would've tried to
+                // split the partition which would've simply raised a
+                // runtime-error and halted the execution. In this situation,
+                // it's better to let it use as much memory as is available. If
+                // it fails, we're no worse off than before. However, there's a
+                // chance that this will succeed. Overall, we're better off
+                // doing this. Note that this is only until we implement a
+                // proper fallback mechanism such as a sorted aggregation.
+                if ((this->partitions[i_part]->get_num_top_bits() ==
+                     this->max_partition_depth) &&
+                    orig_partitioning_enabled) {
+                    this->DisablePartitioning();
+                    if (this->debug_partitioning) {
+                        // Log a warning
+                        std::cerr
+                            << "[DEBUG] WARNING: Disabling partitioning and "
+                               "threshold enforcement temporarily to finalize "
+                               "partition "
+                            << i_part
+                            << " which is at max allowed partition depth ("
+                            << this->max_partition_depth
+                            << "). This may invoke the OOM killer."
+                            << std::endl;
+                    }
+                }
+
                 // Finalize the partition and get output from it.
                 // TODO: Write output directly into the GroupybyState's
                 // output buffer instead of returning the output.
@@ -1984,6 +2028,27 @@ void GroupbyState::FinalizeBuild() {
                 output_table = this->UnifyOutputDictionaryArrays(output_table);
                 this->output_buffer->AppendBatch(output_table);
                 output_table.reset();
+                if (this->debug_partitioning) {
+                    std::cerr << "[DEBUG] GroupbyState::FinalizeBuild: "
+                                 "Successfully finalized partition "
+                              << i_part << "." << std::endl;
+                }
+                // If we disabled partitioning (and it was originally enabled),
+                // turn it back on. Note that we only need to check this in the
+                // case that it succeeded (i.e. exception_caught = false). If we
+                // disabled partitioning, OperatorPoolThresholdExceededError
+                // couldn't have been thrown and that's the only error we catch.
+                // Note that re-enabling partitioning cannot raise the
+                // OperatorPoolThresholdExceededError here since we have already
+                // free-d all allocations that were made since temporarily
+                // disabling partitioning (the entire partition and the output
+                // table have been freed). The output was pushed into the
+                // output_buffer which is not tracked by the OperatorPool.
+                // Therefore, if we were below the threshold then, we must be
+                // below the threshold now as well.
+                if (orig_partitioning_enabled) {
+                    this->EnablePartitioning();
+                }
                 break;
             }
         }
