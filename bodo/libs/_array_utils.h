@@ -1397,4 +1397,5 @@ template <bodo_array_type::arr_type_enum ArrType, typename T,
 inline void set_arr_item(array_info& arr, size_t idx, T val) {
     SetBitTo((uint8_t*)arr.data1(), idx, val);
 }
+
 #endif  // _ARRAY_UTILS_H_INCLUDED
