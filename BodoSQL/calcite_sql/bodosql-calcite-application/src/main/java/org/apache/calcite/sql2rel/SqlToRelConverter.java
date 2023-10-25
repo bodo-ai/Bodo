@@ -2872,7 +2872,10 @@ public class SqlToRelConverter {
     // Gather fields.
     final AggConverter aggConverter =
         new AggConverter(pivotBb, (AggregatingSelectScope) null);
-    final Set<String> usedColumnNames = pivot.usedColumnNames();
+    final Set<String> origColumnNames = pivot.usedColumnNames();
+    // Bodo Change: Generate a name matcher for comparing names.
+    final Set<String> usedColumnNames = catalogReader.nameMatcher().createSet();
+    usedColumnNames.addAll(origColumnNames);
 
     // 1. Gather group keys.
     inputRowType.getFieldList().stream()

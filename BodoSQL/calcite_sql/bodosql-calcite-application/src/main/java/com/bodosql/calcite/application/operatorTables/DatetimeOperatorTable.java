@@ -1083,7 +1083,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           // What Input Types does the function accept.
           OperandTypes.sequence(
-              "PREVIOUS_DAY(DATETIME_OR_DATETIME_STRING, STRING_LITERAL)",
+              "NEXT_DAY(DATETIME_OR_DATETIME_STRING, STRING_LITERAL)",
               OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
               OperandTypes.or(OperandTypes.STRING, OperandTypes.LITERAL)),
           // What group of functions does this fall into?

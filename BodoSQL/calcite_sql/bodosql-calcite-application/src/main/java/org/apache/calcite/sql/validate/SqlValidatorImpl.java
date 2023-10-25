@@ -6534,7 +6534,10 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
 
     // Columns that have been seen as arguments to aggregates or as axes
     // do not appear in the output.
-    final Set<String> columnNames = pivot.usedColumnNames();
+    final Set<String> origColumnNames = pivot.usedColumnNames();
+    // Bodo Change: Generate a name matcher for comparing names.
+    final Set<String> columnNames = catalogReader.nameMatcher().createSet();
+    columnNames.addAll(origColumnNames);
     final RelDataTypeFactory.Builder typeBuilder = typeFactory.builder();
     scope.getChild().getRowType().getFieldList().forEach(field -> {
       if (!columnNames.contains(field.getName())) {
