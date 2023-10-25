@@ -4342,6 +4342,53 @@ def test_timestamp_from_parts(
     check_query(query, ctx, None, expected_output=py_output, check_names=False)
 
 
+@pytest.mark.parametrize(
+    "func, use_case, use_timestamp",
+    [
+        pytest.param("TIMESTAMP_FROM_PARTS", False, False, id="no_case-time"),
+        pytest.param("TIMESTAMPFROMPARTS", True, True, id="with_case-timestamp"),
+        pytest.param("TIMESTAMP_NTZ_FROM_PARTS", True, False, id="with_case-time"),
+        pytest.param("TIMESTAMPNTZFROMPARTS", False, True, id="no_case-timestamp"),
+    ],
+)
+def test_timestamp_from_parts_datetime_overload(
+    func, use_case, use_timestamp, memory_leak_check
+):
+    time_part = "TIME_FROM_PARTS(hours, minutes, seconds, nanoseconds)"
+    if use_timestamp:
+        time_part = (
+            "TIMESTAMP_NTZ_FROM_PARTS(2020, 1, 1, hours, minutes, seconds, nanoseconds)"
+        )
+    fn_call = f"{func}(TO_DATE(date), {time_part})"
+
+    query = f"SELECT {fn_call} as t FROM table1"
+    if use_case:
+        query = f"SELECT CASE WHEN {fn_call} > DATE '2211-01-01' THEN DATE '2211-01-01' ELSE {fn_call} END as t from table1"
+    df = pd.DataFrame(
+        {
+            "date": ["1999/1/12", "2000/2/1", "2010/5/4"],
+            "hours": [0, 1, 12],
+            "minutes": [0, 2, 30],
+            "seconds": [0, 3, 55],
+            "nanoseconds": [0, 40001003, 550001004],
+        }
+    )
+    ctx = {"table1": df}
+
+    def row_to_timestamp(row):
+        return pd.Timestamp(row["date"]) + pd.Timedelta(
+            hours=row["hours"],
+            minutes=row["minutes"],
+            seconds=row["seconds"],
+            nanoseconds=row["nanoseconds"],
+        )
+
+    py_output = pd.DataFrame(
+        {"t": pd.Series([row_to_timestamp(df.loc[i]) for i in range(len(df))])}
+    )
+    check_query(query, ctx, None, expected_output=py_output, check_names=False)
+
+
 @pytest.fixture(
     params=[
         "MONTHNAME",

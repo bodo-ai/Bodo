@@ -1717,33 +1717,38 @@ BodoSQL currently supports the following Timestamp functions:
     12:34:56.987654321
     ```
 
-
 #### TIMESTAMP_FROM_PARTS
--   `TIMESTAMP_FROM_PARTS(year, month, day, hour, minute, second[, nanosecond[, timezone]])`
-
-    Equivalent to `DATE_FROM_PARTS` but also takes in an hour, minute and second
-    (which can be out of bounds just like the month/day). Optionally takes in
-    a nanosecond value, and a timezone value for the output. If the timezone is
-    not specified, the output is timezone-naive.
+-   `#!sql TIMESTAMP_FROM_PARTS(year, month, day, hour, minute, second[, nanosecond[, timezone]])`
+-   `#!sql TIMESTAMP_FROM_PARTS(date_expr, time_expr)`
+    The first overload is equivalent to `DATE_FROM_PARTS` but also takes in an
+    hour, minute and second (which can be out of bounds just like the
+    month/day). Optionally takes in a nanosecond value, and a timezone value for
+    the output. If the timezone is not specified, the output is timezone-naive.
 
     Note: timezone argument is not supported at this time.
+
+    The second overload constructs the timestamp by combining the date and time
+    arguments. The output of this function is always timestamp-naive.
 
 
 #### TIMESTAMPFROMPARTS
 -   `TIMESTAMPFROMPARTS(year, month, day, hour, minute, second[, nanosecond[, timezone]])`
+-   `TIMESTAMPFROMPARTS(date_expr, time_expr)`
 
     Equivalent to `TIMESTAMP_FROM_PARTS`
 
 
 #### TIMESTAMP_NTZ_FROM_PARTS
 -   `TIMESTAMP_NTZ_FROM_PARTS(year, month, day, hour, minute, second[, nanosecond])`
+-   `TIMESTAMP_NTZ_FROM_PARTS(date_expr, time_expr)`
 
-    Equivalent to `TIMESTAMP_FROM_PARTS` but without the optional timezone argument.
-    The output is always timezone-naive.
+    Equivalent to `TIMESTAMP_FROM_PARTS` but without the optional timezone
+    argument in the first overload. The output is always timezone-naive.
 
 
-#### TIMESTAMPNTZFROM_PARTS
+#### TIMESTAMPNTZFROMPARTS
 -   `TIMESTAMP_NTZ_FROM_PARTS(year, month, day, hour, minute, second[, nanosecond])`
+-   `TIMESTAMP_NTZ_FROM_PARTS(date_expr, time_expr)`
 
     Equivalent to `TIMESTAMP_NTZ_FROM_PARTS`
 
@@ -1751,11 +1756,12 @@ BodoSQL currently supports the following Timestamp functions:
 #### TIMESTAMP_LTZ_FROM_PARTS
 -   `TIMESTAMP_LTZ_FROM_PARTS(year, month, day, hour, minute, second[, nanosecond])`
 
-    Equivalent to `TIMESTAMP_FROM_PARTS` but without the optional timezone argument.
-    The output is always timezone-aware using the local timezone.
+    Equivalent to `TIMESTAMP_FROM_PARTS(year, month, day, hour, minute, second[, nanosecond])`
+    but without the optional timezone argument in the first overload. The output
+    is always timezone-aware using the local timezone.
 
 
-#### TIMESTAMPLTZFROM_PARTS
+#### TIMESTAMPLTZFROMPARTS
 -   `TIMESTAMP_LTZ_FROM_PARTS(year, month, day, hour, minute, second[, nanosecond])`
 
     Equivalent to `TIMESTAMP_LTZ_FROM_PARTS`
@@ -1764,8 +1770,9 @@ BodoSQL currently supports the following Timestamp functions:
 #### TIMESTAMP_TZ_FROM_PARTS
 -   `TIMESTAMP_TZ_FROM_PARTS(year, month, day, hour, minute, second[, nanosecond[, timezone]])`
 
-    Equivalent to `TIMESTAMP_FROM_PARTS` except the default behavior if no timezone
-    is provided is to use the local timezone instead of timezone-naive.
+    Equivalent to `TIMESTAMP_FROM_PARTS(year, month, day, hour, minute, second[, nanosecond[, timezone]])`
+    except the default behavior if no timezone is provided is to use the local
+    timezone instead of timezone-naive.
 
     Note: timezone argument is not supported at this time.
 
