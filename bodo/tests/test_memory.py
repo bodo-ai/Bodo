@@ -55,7 +55,7 @@ def test_default_buffer_pool_options():
         options = BufferPoolOptions.defaults()
         assert options.memory_size > 0
         assert options.min_size_class == 64
-        assert options.max_num_size_classes == 21
+        assert options.max_num_size_classes == 23
         assert not options.enforce_max_limit_during_allocation
         assert not options.debug_mode
 
@@ -72,7 +72,7 @@ def test_default_buffer_pool_options():
         options = BufferPoolOptions.defaults()
         assert options.memory_size == 128
         assert options.min_size_class == 64
-        assert options.max_num_size_classes == 21
+        assert options.max_num_size_classes == 23
 
     # Check that specifying min_size_class and
     # max_num_size_classes through env vars works as
@@ -148,8 +148,10 @@ def test_default_memory_options(tmp_path: Path):
     ):
         options = BufferPoolOptions.defaults()
         assert options.memory_size == int(0.65 * total_mem)
+        assert options.min_size_class == 16
 
-    # Now check that the default is 95% when spilling is available
+    # Now check that the default is 95% when spilling is available.
+    # Also check that the default min size class is 16KiB.
     with temp_env_override(
         {
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
@@ -164,8 +166,10 @@ def test_default_memory_options(tmp_path: Path):
         options = BufferPoolOptions.defaults()
         assert options.memory_size == int(0.95 * total_mem)
         assert len(options.storage_options) == 1
+        assert options.min_size_class == 16
 
-    # Now check that the default is 500% when spilling is not available
+    # Now check that the default is 500% when spilling is not available.
+    # Also check that the default min size class is 64KiB.
     with temp_env_override(
         {
             "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
@@ -179,6 +183,7 @@ def test_default_memory_options(tmp_path: Path):
         options = BufferPoolOptions.defaults()
         assert options.memory_size == int(5.0 * total_mem)
         assert len(options.storage_options) == 0
+        assert options.min_size_class == 64
 
     # Now check that the default is 500% when spilling is disabled
     # Also check that disabling spilling through env vars works as expected
@@ -198,6 +203,7 @@ def test_default_memory_options(tmp_path: Path):
         assert options.memory_size == int(5.0 * total_mem)
         assert len(options.storage_options) == 0
         assert not BufferPool.from_options(options).is_spilling_enabled()
+        assert options.min_size_class == 64
 
     # Check that not disabling spilling through env vars works as expected
     with temp_env_override(
@@ -216,6 +222,7 @@ def test_default_memory_options(tmp_path: Path):
         assert options.memory_size == int(0.95 * total_mem)
         assert len(options.storage_options) == 1
         assert BufferPool.from_options(options).is_spilling_enabled()
+        assert options.min_size_class == 16
 
     # Verify that it raises an error when spill-on-unpin is set but
     # no spilling locations are provided.
@@ -263,6 +270,48 @@ def test_default_memory_options(tmp_path: Path):
     with temp_env_override({"BODO_BUFFER_POOL_DEBUG_MODE": "1"}):
         options = BufferPoolOptions.defaults()
         assert options.debug_mode
+
+    # Test that the default min SizeClass size is chosen correctly
+    # based on the usable percent.
+    for mem_percent in range(40, 150, 5):
+        with temp_env_override(
+            {
+                "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+                "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": str(mem_percent),
+                "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
+                "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+            }
+        ):
+            options = BufferPoolOptions.defaults()
+            # It should be 16KiB when mem_fraction is <= 1.0
+            if mem_percent <= 100:
+                assert options.min_size_class == 16
+            # and 64KiB otherwise
+            else:
+                assert options.min_size_class == 64
+
+    # Test the same thing, but with spilling available.
+    # The default min SizeClass size should still be chosen
+    # based on the usable percent.
+    for mem_percent in range(40, 150, 5):
+        with temp_env_override(
+            {
+                "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+                "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": str(mem_percent),
+                "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
+                "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+                "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+                "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "1",
+                "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
+            }
+        ):
+            options = BufferPoolOptions.defaults()
+            # It should be 16KiB when mem_fraction is <= 1.0
+            if mem_percent <= 100:
+                assert options.min_size_class == 16
+            # and 64KiB otherwise
+            else:
+                assert options.min_size_class == 64
 
 
 def test_default_storage_options(tmp_path: Path):

@@ -23,6 +23,10 @@ using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
 
 #define JOIN_MAX_PARTITION_DEPTH 15
 
+// Chunk size of build_table_buffer_chunked and probe_table_buffer_chunked in
+// JoinPartition
+#define INACTIVE_PARTITION_TABLE_CHUNK_SIZE 16 * 1024
+
 class JoinPartition;
 struct HashHashJoinTable {
     /**
@@ -91,8 +95,7 @@ class JoinPartition {
             build_table_dict_builders_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>&
             probe_table_dict_builders_,
-        const uint64_t batch_size_, bool is_active_,
-        bodo::OperatorBufferPool* op_pool_,
+        bool is_active_, bodo::OperatorBufferPool* op_pool_,
         const std::shared_ptr<::arrow::MemoryManager> op_mm_);
 
     // The types of the columns in the build table and probe tables.
@@ -105,8 +108,8 @@ class JoinPartition {
     std::vector<std::shared_ptr<DictionaryBuilder>> probe_table_dict_builders;
 
     // Contiguous append-only buffer, used if a partition is active or after
-    // the Finalize step for inactive partitions
-    TableBuildBuffer build_table_buffer;
+    // the Finalize step for inactive partitions.
+    std::unique_ptr<TableBuildBuffer> build_table_buffer;
     // These allocations will go through the OperatorBufferPool
     // so that we can enforce limits and trigger re-partitioning.
     bodo::pinnable<bodo::vector<uint32_t>> build_table_join_hashes;
@@ -116,8 +119,8 @@ class JoinPartition {
         build_table_join_hashes_guard;
 
     // Chunked append-only buffer, only used if a partition is inactive and
-    // not yet finalized
-    ChunkedTableBuilder build_table_buffer_chunked;
+    // not yet finalized.
+    std::unique_ptr<ChunkedTableBuilder> build_table_buffer_chunked;
 
     // Join hash table (key row number -> matching row numbers).
     // These allocations will go through the OperatorBufferPool
@@ -183,10 +186,13 @@ class JoinPartition {
     // We don't need partitioning hashes since we should never
     // need to repartition.
 
-    ChunkedTableBuilder probe_table_buffer_chunked;
+    // Buffer to hold probe input for inactive partitions.
+    // This is initialized only for all partitions except the 0th
+    // partition in the first iteration of the probe loop
+    // through the InitInactiveProbeInputBuffer API.
+    std::unique_ptr<ChunkedTableBuilder> probe_table_buffer_chunked = nullptr;
     // TODO Convert this into a chunked buffer
     bodo::pinnable<bodo::vector<uint32_t>> probe_table_buffer_join_hashes;
-    const int64_t batch_size;
 
     // Temporary state during probe step. These will be
     // reset between iterations.
@@ -323,6 +329,13 @@ class JoinPartition {
      *
      */
     void FinalizeBuild();
+
+    /**
+     * @brief Initialize probe_table_buffer_chunked.
+     * This is a NOP if it is already initialized.
+     *
+     */
+    void InitProbeInputBuffer();
 
     /**
      * @brief Append a batch of data into the probe table buffer.
@@ -732,6 +745,16 @@ class HashJoinState : public JoinState {
      *
      */
     void DisablePartitioning();
+
+    /**
+     * @brief Initialize probe_table_buffer_chunked of
+     * partitions 1 onwards (i.e. not the 0th).
+     * This is meant to be called in the first probe
+     * iteration, however, it is idempotent and can
+     * be called again safely.
+     *
+     */
+    void InitProbeInputBuffers();
 
     /**
      * @brief Append probe batch to the probe table buffer of the
