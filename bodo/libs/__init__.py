@@ -7,6 +7,7 @@ from bodo.ext import (  # noqa
     hdist,
     hio,
     hstr_ext,
+    lateral,
     lead_lag,
     listagg,
     quantile_alg,

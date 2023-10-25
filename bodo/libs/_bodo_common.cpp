@@ -1392,6 +1392,7 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, hstr_ext);
     SetAttrStringFromPyInit(m, decimal_ext);
     SetAttrStringFromPyInit(m, quantile_alg);
+    SetAttrStringFromPyInit(m, lateral);
     SetAttrStringFromPyInit(m, lead_lag);
     SetAttrStringFromPyInit(m, crypto_funcs);
     SetAttrStringFromPyInit(m, hdatetime_ext);
