@@ -97,7 +97,8 @@ cdef extern from "_operator_pool.h" namespace "bodo" nogil:
 
     cdef cppclass COperatorBufferPool" bodo::OperatorBufferPool"(CIBufferPool):
 
-        COperatorBufferPool(uint64_t max_pinned_size_bytes, shared_ptr[CBufferPool] parent_pool, double error_threshold)
+        COperatorBufferPool(uint64_t operator_budget_bytes, shared_ptr[CBufferPool] parent_pool, double error_threshold)
+        void SetErrorThreshold(double error_threshold) except +
         CStatus Allocate(int64_t size, int64_t alignment, uint8_t** out) except +
         CStatus Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) except +
         void Free(uint8_t* buffer, int64_t size, int64_t alignment) except +
@@ -107,8 +108,9 @@ cdef extern from "_operator_pool.h" namespace "bodo" nogil:
         void DisableThresholdEnforcement()
         void EnableThresholdEnforcement() except +
         shared_ptr[CBufferPool] get_parent_pool() const
-        uint64_t get_max_pinned_size_bytes() const
+        uint64_t get_operator_budget_bytes() const
         uint64_t get_memory_error_threshold() const
+        double get_error_threshold() const
 
         # put overloads under a different name to avoid cython bug with multiple
         # layers of inheritance
