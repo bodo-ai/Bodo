@@ -1867,6 +1867,20 @@ class DistributedAnalysis:
             # bitxor_agg doesn't affect input's distribution
             return
 
+        if fdef == ("lateral_flatten", "bodo.libs.lateral"):
+            # If the input is replicated the output is replicated, otherwise
+            # the output is always 1D_Var since each rank may explode its
+            # rows into different sizes.
+            if lhs not in array_dists:
+                if (
+                    rhs.args[0].name in array_dists
+                    and array_dists[rhs.args[0].name] == Distribution.REP
+                ):
+                    self._set_var_dist(lhs, array_dists, Distribution.REP)
+                else:
+                    self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+            return
+
         if fdef == ("series_str_dt64_astype", "bodo.hiframes.pd_timestamp_ext"):
             # LHS should match RHS
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)

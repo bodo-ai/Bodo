@@ -1862,6 +1862,7 @@ PyMODINIT_FUNC PyInit_hdist(void);
 PyMODINIT_FUNC PyInit_hstr_ext(void);
 PyMODINIT_FUNC PyInit_decimal_ext(void);
 PyMODINIT_FUNC PyInit_quantile_alg(void);
+PyMODINIT_FUNC PyInit_lateral(void);
 PyMODINIT_FUNC PyInit_lead_lag(void);
 PyMODINIT_FUNC PyInit_crypto_funcs(void);
 PyMODINIT_FUNC PyInit_hdatetime_ext(void);
