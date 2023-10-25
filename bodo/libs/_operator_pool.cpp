@@ -2,7 +2,27 @@
 
 namespace bodo {
 
-inline ::arrow::Status OperatorBufferPool::check_limits(int64_t size) const {
+void OperatorBufferPool::SetErrorThreshold(double error_threshold) {
+    assert(error_threshold <= 1.0);
+
+    uint64_t new_memory_error_threshold_ =
+        static_cast<uint64_t>(error_threshold * this->operator_budget_bytes_);
+
+    // If new threshold is smaller than before and threshold enforcement is
+    // enabled, then check that number of bytes that are currently pinned is
+    // lesser than the new threshold.
+    if (error_threshold < this->error_threshold_) {
+        if (this->threshold_enforcement_enabled_ &&
+            (this->bytes_pinned() > new_memory_error_threshold_)) {
+            // XXX TODO Maybe use arrow::Status instead?
+            throw OperatorPoolThresholdExceededError();
+        }
+    }
+    this->error_threshold_ = error_threshold;
+    this->memory_error_threshold_ = new_memory_error_threshold_;
+}
+
+inline void OperatorBufferPool::enforce_threshold(int64_t size) const {
     // If threshold enforcement is turned on, then check if this
     // allocation would cross the threshold. If it does, throw
     // a custom error.
@@ -10,19 +30,6 @@ inline ::arrow::Status OperatorBufferPool::check_limits(int64_t size) const {
         ((size + this->bytes_pinned()) > this->memory_error_threshold_)) {
         throw OperatorPoolThresholdExceededError();
     }
-    // Even if threshold enforcement is not turned on, we need
-    // to ensure that the number of pinned bytes at any time
-    // is within the alloted limit.
-    if ((size + this->bytes_pinned()) > this->max_pinned_size_bytes_) {
-        return ::arrow::Status::OutOfMemory(
-            "Allocation failed. This allocation (" + std::to_string(size) +
-            ") would lead to more pinned "
-            "memory (current: " +
-            std::to_string(this->bytes_pinned()) +
-            ") than what is allowed for this operator (" +
-            std::to_string(this->max_pinned_size_bytes_) + ").");
-    }
-    return ::arrow::Status::OK();
 }
 
 ::arrow::Status OperatorBufferPool::Allocate(int64_t size, int64_t alignment,
@@ -37,10 +44,7 @@ inline ::arrow::Status OperatorBufferPool::check_limits(int64_t size) const {
         return ::arrow::Status::OutOfMemory("malloc size overflows size_t");
     }
 
-    ::arrow::Status limits_status = this->check_limits(size);
-    if (!limits_status.ok()) {
-        return limits_status;
-    }
+    this->enforce_threshold(size);
 
     // Allocate through the parent pool
     ::arrow::Status alloc_status =
@@ -92,10 +96,9 @@ void OperatorBufferPool::Free(uint8_t* buffer, int64_t size,
     if (!was_pinned) {
         combined_pinned_bytes += old_size;
     }
-    ::arrow::Status limits_status = this->check_limits(combined_pinned_bytes);
-    if (!limits_status.ok()) {
-        return limits_status;
-    }
+
+    this->enforce_threshold(combined_pinned_bytes);
+
     // Re-allocate will pin this in memory if it wasn't already, so we must
     // update our stats:
     if (!was_pinned) {
@@ -144,12 +147,16 @@ bool OperatorBufferPool::is_spilling_enabled() const {
     return this->parent_pool_->is_spilling_enabled();
 }
 
-uint64_t OperatorBufferPool::get_max_pinned_size_bytes() const {
-    return this->max_pinned_size_bytes_;
+uint64_t OperatorBufferPool::get_operator_budget_bytes() const {
+    return this->operator_budget_bytes_;
 }
 
 uint64_t OperatorBufferPool::get_memory_error_threshold() const {
     return this->memory_error_threshold_;
+}
+
+double OperatorBufferPool::get_error_threshold() const {
+    return this->error_threshold_;
 }
 
 std::shared_ptr<BufferPool> OperatorBufferPool::get_parent_pool() const {
@@ -162,10 +169,7 @@ std::shared_ptr<BufferPool> OperatorBufferPool::get_parent_pool() const {
     bool is_pinned = this->parent_pool_->IsPinned(*ptr, size, alignment);
     if (!is_pinned) {
         // Verify that there's enough space to pin this allocation:
-        ::arrow::Status limits_status = this->check_limits(size);
-        if (!limits_status.ok()) {
-            return limits_status;
-        }
+        this->enforce_threshold(size);
 
         // Call Pin on parent pool
         ::arrow::Status pin_status =

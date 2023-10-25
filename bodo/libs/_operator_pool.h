@@ -21,22 +21,35 @@ class OperatorBufferPool final : public IBufferPool {
     /**
      * @brief Constructor for OperatorBufferPool.
      *
-     * @param max_pinned_size_bytes Max amount of bytes that
-     * can be pinned at any point in time by this OperatorBufferPool.
+     * @param operator_budget_bytes The budget assigned to this operator.
+     * The absolute threshold values will be based on this budget.
      * @param parent_pool The parent pool that this OperatorBufferPool
      * is going to allocate/pin/reallocate/unpin/free through.
-     * @param error_threshold The fraction of the available pinned
-     * bytes limit at which OperatorPoolThresholdExceededError will
-     * be raised when threshold enforcement is enabled.
+     * @param error_threshold The fraction of the operator budget
+     * at which OperatorPoolThresholdExceededError will be raised
+     * when threshold enforcement is enabled.
      */
     explicit OperatorBufferPool(
-        uint64_t max_pinned_size_bytes,
+        uint64_t operator_budget_bytes,
         std::shared_ptr<BufferPool> parent_pool = BufferPool::Default(),
         double error_threshold = 0.5)
         : parent_pool_(std::move(parent_pool)),
-          max_pinned_size_bytes_(max_pinned_size_bytes),
-          memory_error_threshold_(
-              static_cast<uint64_t>(error_threshold * max_pinned_size_bytes)) {}
+          operator_budget_bytes_(operator_budget_bytes) {
+        this->SetErrorThreshold(error_threshold);
+    }
+
+    /**
+     * @brief Change the error threshold. The absolute error
+     * threshold (in bytes) will be error_threshold * operator-budget.
+     * Note that if threshold enforcement is enabled and the
+     * number of bytes pinned is greater than what the new
+     * threshold would be, we will raise a
+     * OperatorPoolThresholdExceededError. The threshold
+     * won't be updated in this case.
+     *
+     * @param error_threshold New threshold. Must be <= 1.0
+     */
+    void SetErrorThreshold(double error_threshold);
 
     /**
      * @brief Allocates a buffer of 'size' bytes. The allocated buffer will be
@@ -44,8 +57,6 @@ class OperatorBufferPool final : public IBufferPool {
      * This will raise the OperatorPoolThresholdExceededError if
      * size + currently pinned bytes > memory_error_threshold (assuming
      * threshold enforcement is enabled).
-     * It will similarly return an Arrow OutOfMemory Status if
-     * size + currently pinned bytes > max_pinned_size_bytes.
      *
      * @param size Number of bytes to allocate.
      * @param alignment Alignment that needs to be guaranteed for the
@@ -72,9 +83,7 @@ class OperatorBufferPool final : public IBufferPool {
      * old buffer (old_size) together would take the amount of
      * pinned bytes over the threshold and threshold enforcement
      * is enabled, it will raise the
-     * OperatorPoolThresholdExceededError error. Similarly for
-     * total pinned bytes limit where an Arrow OutOfMemory Status
-     * will be returned.
+     * OperatorPoolThresholdExceededError error.
      *
      * @param old_size Previous allocation size.
      * @param new_size Number of bytes to allocate.
@@ -108,12 +117,12 @@ class OperatorBufferPool final : public IBufferPool {
     bool is_spilling_enabled() const;
 
     /**
-     * @brief Getter for max_pinned_size_bytes
+     * @brief Getter for the operator_budget_bytes
      * attribute.
      *
      * @return uint64_t
      */
-    uint64_t get_max_pinned_size_bytes() const;
+    uint64_t get_operator_budget_bytes() const;
 
     /**
      * @brief Getter for memory_error_threshold
@@ -122,6 +131,13 @@ class OperatorBufferPool final : public IBufferPool {
      * @return uint64_t
      */
     uint64_t get_memory_error_threshold() const;
+
+    /**
+     * @brief Getter for the error_threshold attribute.
+     *
+     * @return double
+     */
+    double get_error_threshold() const;
 
     /**
      * @brief Pin an allocation/block to memory.
@@ -196,12 +212,18 @@ class OperatorBufferPool final : public IBufferPool {
     /// @brief Parent pool through which all the allocations, etc. will go
     /// through.
     const std::shared_ptr<BufferPool> parent_pool_;
-    /// @brief Total memory size in bytes that's allowed to
-    /// be pinned at any point in time.
-    const uint64_t max_pinned_size_bytes_;
+
+    /// @brief Memory budget for this operator (in bytes).
+    /// Currently, this is fixed after initialization, but in the future this
+    /// may be adjusted during execution.
+    const uint64_t operator_budget_bytes_;
+    /// @brief The current error threshold. This is relative to
+    /// the operator budget. This must be <= 1.0.
+    double error_threshold_;
     /// @brief The memory threshold (in bytes) to enforce when threshold
-    /// enforcement is enabled.
-    const uint64_t memory_error_threshold_;
+    /// enforcement is enabled. This is essentially
+    /// (error_threshold * operator_budget_bytes_)
+    uint64_t memory_error_threshold_;
     /// @brief Flag for threshold enforcement.
     bool threshold_enforcement_enabled_ = true;
     /// @brief Number of bytes currently pinned
@@ -218,24 +240,15 @@ class OperatorBufferPool final : public IBufferPool {
     inline void update_pinned_bytes(int64_t diff);
 
     /**
-     * @brief Check if 'size' bytes can be pinned without
-     * overflowing any limits.
-     * If threshold enforcement is enabled, we first check
-     * if currently pinned bytes + size would be within the
-     * memory threshold ('memory_error_threshold_'). If it
-     * wouldn't be, we throw the custom
-     * OperatorPoolThresholdExceededError error. Even if
-     * threshold enforcement is disabled, we verify that
-     * currently pinned bytes + size is within total pinned
-     * bytes limit ('max_pinned_size_bytes_').
+     * @brief Utility function for throwing the
+     * OperatorPoolThresholdExceededError if threshold
+     * enforcement is enabled and if
+     * currently pinned bytes + size would be over the
+     * memory threshold ('memory_error_threshold_').
      *
-     * @param size Number of bytes to pin.
-     * @return ::arrow::Status OK if 'size' can be pinned
-     * while being within limits. If it would cross
-     * 'max_pinned_size_bytes_', we return an
-     * 'OutOfMemory' status.
+     * @param size Number of additional bytes to pin/allocate.
      */
-    inline ::arrow::Status check_limits(int64_t size) const;
+    inline void enforce_threshold(int64_t size) const;
 };
 
 }  // namespace bodo

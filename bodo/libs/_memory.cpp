@@ -1466,29 +1466,32 @@ uint64_t BufferPool::get_memory_size_bytes() const {
         return ::arrow::Status::OK();
     }
 
-    if (is_unswizzled(old_memory_ptr)) {
-        auto status = this->Pin(ptr);
-        if (!status.IsOutOfMemory()) {
-            return arrow::Status::OutOfMemory(
-                "Reallocate failed. Not enough space to pin old allocation (" +
-                std::to_string(old_size) + ").");
-        } else if (!status.ok()) {
-            return status;
+    // Record if the allocation is pinned. If it isn't, we will pin it in the
+    // next step. However, if there's a failure later while allocating the new
+    // memory space, we will unpin the original allocation to restore the
+    // original state.
+    bool was_pinned = this->IsPinned(old_memory_ptr, old_size, alignment);
+
+    // Pin it if it isn't already. We either need it to be in memory for the
+    // memcpy or even if we end up re-using the same frame, Reallocate needs to
+    // pin the frame.
+    if (!was_pinned) {
+        auto status = this->Pin(ptr, old_size, alignment);
+        if (!status.ok()) {
+            return status.WithMessage(
+                "BufferPool::Reallocate: Failed while trying to pin old "
+                "allocation (" +
+                std::to_string(old_size) + "): " + status.ToString());
         }
+        // Update old_memory_ptr in case the original was unswizzled and the
+        // Pin operation brought it back into memory.
+        old_memory_ptr = *ptr;
     }
 
+    // We can only get these details once we've pinned it back.
     auto [is_mmap_alloc, size_class_idx, frame_idx, old_size_aligned] =
         this->get_alloc_details(old_memory_ptr, old_size, alignment);
 
-    // In case of an mmap frame: pin it if it isn't already. We either
-    // need it to be in memory for the memcpy or even if we end up re-using
-    // the same frame, Reallocate needs to pin the frame.
-    if (is_mmap_alloc) {
-        if (!this->size_classes_[size_class_idx]->isFramePinned(frame_idx)) {
-            this->size_classes_[size_class_idx]->PinFrame(frame_idx);
-            this->update_pinned_bytes(this->size_class_bytes_[size_class_idx]);
-        }
-    }
     // In case of an mmap frame: if new_size still fits, it's a NOP.
     // Note that we only do this when new_size >= old_size, because
     // otherwise we should change the SizeClass (to make sure assumptions
@@ -1507,10 +1510,21 @@ uint64_t BufferPool::get_memory_size_bytes() const {
     // memory in old_memory_ptr that we can use for the memcpy.
     // Since we pinned the old frame, this allocate won't evict
     // the old block which is required for the memcpy.
-    CHECK_ARROW_MEM(this->Allocate(new_size, alignment, ptr),
-                    "Allocation failed!");
+    arrow::Status alloc_status = this->Allocate(new_size, alignment, ptr);
+    if (!alloc_status.ok()) {
+        // Undo pinning if it wasn't originally pinned (to restore
+        // original state). Note that if it was read from disk, we
+        // won't spill it back to disk at this point. Future allocations
+        // can spill it if required.
+        if (!was_pinned) {
+            this->Unpin(old_memory_ptr, old_size, alignment);
+        }
+        return alloc_status.WithMessage(
+            "BufferPool::Reallocate: Allocation of new memory failed: " +
+            alloc_status.ToString());
+    }
 
-    // Get a lock on the BufferPool state for the duration
+    // Get a lock on the BufferPool state for the rest
     // of this function. 'scoped_lock' guarantees that the
     // lock will be released when the function ends (even if
     // there's an exception).
@@ -1519,8 +1533,8 @@ uint64_t BufferPool::get_memory_size_bytes() const {
     uint8_t* new_memory_ptr = *ptr;
 
     // Copy over the contents
-    memcpy(new_memory_ptr, old_memory_ptr,
-           static_cast<size_t>(std::min(new_size, old_size)));
+    std::memcpy(new_memory_ptr, old_memory_ptr,
+                static_cast<size_t>(std::min(new_size, old_size)));
 
     // Free original memory (re-use information from get_alloc_details output)
     this->free_helper(old_memory_ptr, is_mmap_alloc, size_class_idx, frame_idx,
