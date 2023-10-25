@@ -388,9 +388,9 @@ GroupbyPartition::GroupbyPartition(
     const std::vector<std::shared_ptr<BasicColSet>>& col_sets_,
     const std::vector<int32_t>& f_in_offsets_,
     const std::vector<int32_t>& f_in_cols_,
-    const std::vector<int32_t>& f_running_value_offsets_,
-    const uint64_t batch_size_, bool is_active_, bool accumulate_before_update_,
-    bool req_extended_group_info_, bodo::OperatorBufferPool* op_pool_,
+    const std::vector<int32_t>& f_running_value_offsets_, bool is_active_,
+    bool accumulate_before_update_, bool req_extended_group_info_,
+    bodo::OperatorBufferPool* op_pool_,
     const std::shared_ptr<::arrow::MemoryManager> op_mm_)
     : build_arr_c_types(build_arr_c_types_),
       build_arr_array_types(build_arr_array_types_),
@@ -411,7 +411,6 @@ GroupbyPartition::GroupbyPartition(
       accumulate_before_update(accumulate_before_update_),
       req_extended_group_info(req_extended_group_info_),
       is_active(is_active_),
-      batch_size(batch_size_),
       op_pool(op_pool_),
       op_mm(op_mm_) {
     if (this->is_active) {
@@ -428,7 +427,8 @@ GroupbyPartition::GroupbyPartition(
         this->build_table_buffer_chunked =
             std::make_unique<ChunkedTableBuilder>(
                 this->build_arr_c_types, this->build_arr_array_types,
-                this->build_table_dict_builders, this->batch_size,
+                this->build_table_dict_builders,
+                INACTIVE_PARTITION_TABLE_CHUNK_SIZE,
                 DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
     }
 }
@@ -706,9 +706,9 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->separate_out_cols_c_types,
             this->separate_out_cols_array_types, this->n_keys,
             this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
-            this->f_in_cols, this->f_running_value_offsets, this->batch_size,
-            is_active, this->accumulate_before_update,
-            this->req_extended_group_info, this->op_pool, this->op_mm);
+            this->f_in_cols, this->f_running_value_offsets, is_active,
+            this->accumulate_before_update, this->req_extended_group_info,
+            this->op_pool, this->op_mm);
 
     std::shared_ptr<GroupbyPartition> new_part2 =
         std::make_shared<GroupbyPartition>(
@@ -717,9 +717,9 @@ std::vector<std::shared_ptr<GroupbyPartition>> GroupbyPartition::SplitPartition(
             this->separate_out_cols_c_types,
             this->separate_out_cols_array_types, this->n_keys,
             this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
-            this->f_in_cols, this->f_running_value_offsets, this->batch_size,
-            false, this->accumulate_before_update,
-            this->req_extended_group_info, this->op_pool, this->op_mm);
+            this->f_in_cols, this->f_running_value_offsets, false,
+            this->accumulate_before_update, this->req_extended_group_info,
+            this->op_pool, this->op_mm);
 
     std::vector<bool> append_partition1;
     if (is_active) {
@@ -1316,7 +1316,6 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
         separate_out_col_c_types, separate_out_col_array_types, this->n_keys,
         this->build_table_dict_builders, this->col_sets, this->f_in_offsets,
         this->f_in_cols, this->f_running_value_offsets,
-        /*batch_size*/ this->output_batch_size,
         /*is_active*/ true, this->accumulate_before_update,
         this->req_extended_group_info, this->op_pool.get(), this->op_mm));
     this->partition_state.emplace_back(std::make_pair<size_t, uint32_t>(0, 0));

@@ -668,7 +668,7 @@ def test_split_during_update_combine(capfd, memory_leak_check):
 
     # This will cause partition split during the "UpdateGroupsAndCombine[4]"
     op_pool_size_bytes = 4 * 1024 * 1024
-    expected_partition_state = [(1, 0), (1, 1)]
+    expected_partition_state = [(1, 0), (2, 2), (2, 3)]
 
     # Verify that we split a partition during UpdateGroupsAndCombine.
     expected_log_msg = "[DEBUG] GroupbyState::UpdateGroupsAndCombine[4]: Encountered OperatorPoolThresholdExceededError.\n[DEBUG] Splitting partition 0."
@@ -1042,9 +1042,7 @@ def test_drop_duplicates_spilt_during_shuffle_out_update_combine_and_diff_part_s
     # it's hard to invoke partition split on one rank and not the other.
     op_pool_size_bytes = 4 * 1024 * 1024 if bodo.get_rank() == 1 else 8 * 1024 * 1024
     expected_partition_state = (
-        [(3, 0), (3, 1), (2, 1), (2, 2), (2, 3)]
-        if bodo.get_rank() == 1
-        else [(1, 0), (1, 1)]
+        [(3, 0), (3, 1), (2, 1), (1, 1)] if bodo.get_rank() == 1 else [(1, 0), (1, 1)]
     )
 
     # Verify that we split a partition during UpdateGroupsAndCombine on the
