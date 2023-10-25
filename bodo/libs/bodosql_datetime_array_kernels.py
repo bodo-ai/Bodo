@@ -1814,6 +1814,68 @@ def date_from_parts_util(year, month, day):
 
 
 @numba.generated_jit(nopython=True)
+def timestamp_from_date_and_time(date_expr, time_expr):  # pragma: no cover
+    args = [date_expr, time_expr]
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.timestamp_from_date_and_time",
+                ["date_expr", "time_expr"],
+                i,
+            )
+
+    def impl(date_expr, time_expr):  # pragma: no cover
+        return timestamp_from_date_and_time_util(date_expr, time_expr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def timestamp_from_date_and_time_util(date_expr, time_expr):
+    """A dedicated kernel for building a timestamp from a date and time
+
+    Args:
+        date_expr (types.Type): tz-naive Timestamp or Timestamp array
+        time_expr (types.Type): bodo.Time or bodo.Time array
+
+    Returns:
+        timestamp array/scalar: a tz-naive timestamp with the date and time as
+        specified above.
+    """
+    arg_names = ["date_expr", "time_expr"]
+    arg_types = [date_expr, time_expr]
+    propagate_null = [True, True]
+    if is_valid_date_arg(time_expr):
+        raise Exception("Expected time expression for second argument")
+
+    scalar_text = ""
+    # The input timezone doesn't matter for this function, we will always treat
+    # all timestamps as having no timezone info
+    if not is_valid_time_arg(time_expr):
+        scalar_text += "arg1 = pd.Timestamp(arg1)\n"
+    ts = "pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day"
+    ts += ", hour=arg1.hour, minute=arg1.minute, second=arg1.second"
+    if is_valid_time_arg(time_expr):
+        ts += ", microsecond=arg1.millisecond * 1000 + arg1.microsecond"
+    else:
+        # timestamps don't have milliseconds as a property - it's covered by
+        # microsecond + nanosecond
+        ts += ", microsecond=arg1.microsecond"
+    ts += ", nanosecond=arg1.nanosecond)"
+    scalar_text += f"res[i] = {ts}\n"
+
+    out_dtype = bodo.DatetimeArrayType(None)
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+@numba.generated_jit(nopython=True)
 def dayname_util(arr):
     """A dedicated kernel for returning the name of the day of the week of
        a datetime (or column of datetimes).

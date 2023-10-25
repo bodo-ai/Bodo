@@ -27,6 +27,7 @@ import org.apache.calcite.sql.fun.SqlDatePartFunction;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
@@ -77,7 +78,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       unit = ((SqlCallBinding) binding).operand(0).toString();
     else unit = binding.getOperandLiteralValue(0, String.class);
     unit = standardizeTimeUnit(fnName, unit, DateTimeType.TIMESTAMP);
-    // TODO: refactor standardizeTimeUnit function to change the third argument to SqlTypeName
+    // TODO: refactor standardizeTimeUnit function to change the third argument to
+    // SqlTypeName
     RelDataType returnType;
     if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
       Set<String> DATE_UNITS =
@@ -191,7 +193,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          /// What Input Types does the function accept. This function accepts the following
+          /// What Input Types does the function accept. This function accepts the
+          /// following
           // arguments (Datetime, Interval), (String, Interval)
           OperandTypes.sequence(
               "DATE_ADD(DATETIME_OR_DATETIME_STRING, INTERVAL_OR_INTEGER)",
@@ -370,16 +373,14 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction TIMESTAMP_FROM_PARTS =
-      new SqlFunction(
-          "TIMESTAMP_FROM_PARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          opBinding -> timestampConstructionOutputType(opBinding, true),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
+  // Operand type checker for the overloade timestamp_from_parts functions. The
+  // first overload has the signature:
+  // timestamp_(ntz_)from_parts(year, month, day, hour, minute, second[,
+  // nanosecond]),
+  // while the second has the signature
+  // timestamp_(ntz_)from_parts(date_expr, time_expr)
+  public static final SqlOperandTypeChecker OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER =
+      OperandTypes.or(
           argumentRange(
               6,
               SqlTypeFamily.INTEGER,
@@ -390,6 +391,19 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               SqlTypeFamily.INTEGER,
               SqlTypeFamily.INTEGER,
               SqlTypeFamily.STRING),
+          OperandTypes.sequence(
+              "TIMESTAMP_FROM_PARTS(DATE, TIME)", OperandTypes.DATETIME, OperandTypes.DATETIME));
+  public static final SqlFunction TIMESTAMP_FROM_PARTS =
+      new SqlFunction(
+          "TIMESTAMP_FROM_PARTS",
+          // What SqlKind should match?
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          opBinding -> timestampConstructionOutputType(opBinding, true),
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -403,16 +417,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          argumentRange(
-              6,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.STRING),
+          OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -426,15 +431,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          argumentRange(
-              6,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER),
+          OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -448,15 +445,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          argumentRange(
-              6,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER),
+          OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -877,7 +866,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          /// What Input Types does the function accept. This function accepts the following
+          /// What Input Types does the function accept. This function accepts the
+          /// following
           // arguments (Datetime, Interval), (String, Interval)
           OperandTypes.sequence(
               "ADD_MONTHS(DATETIME, NUMERIC)",
@@ -1302,7 +1292,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
         continue;
       }
       // TODO: Check the category. The Lexing currently thinks
-      //  all of these functions are user defined functions.
+      // all of these functions are user defined functions.
       operatorList.add(func);
     }
   }
