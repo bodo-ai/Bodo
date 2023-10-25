@@ -112,6 +112,7 @@ def _test_helper(
     expected_log_messages,
     capfd,
     multi_rank,
+    max_partition_depth=None,
 ):
     """
     Helper for testing.
@@ -128,6 +129,9 @@ def _test_helper(
             "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
             # Enable partitioning even though spilling is not setup
             "BODO_STREAM_GROUPBY_ENABLE_PARTITIONING": "1",
+            "BODO_STREAM_GROUPBY_MAX_PARTITION_DEPTH": str(max_partition_depth)
+            if max_partition_depth is not None
+            else None,
         }
     ):
         try:
@@ -599,6 +603,87 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
     )
 
 
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+def test_max_partition_depth_fallback_acc_finalize(capfd, memory_leak_check):
+    """
+    Test that we fall back to disabling partitioning while
+    finalizing partitions at max depth. This primarily tests
+    that the expected warnings are printed in debug mode.
+    We cannot really test for the case where the OOM killer
+    is invoked in a unit test, so we just test for the case
+    where it succeeds.
+    """
+    df = pd.DataFrame(
+        {
+            "A": pd.array(list(np.arange(1000)) * 32, dtype="Int64"),
+            "B": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
+                dtype=np.float32,
+            ),
+            "C": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+        }
+    )
+    func_names = ["median", "sum", "nunique"]
+    f_in_offsets = [0, 1, 2, 3]
+    f_in_cols = [
+        1,
+        1,
+        2,
+    ]
+    expected_out = df.groupby("A", as_index=False).agg(
+        {"B": ["median", "sum"], "C": ["nunique"]}
+    )
+    expected_out.reset_index(inplace=True, drop=True)
+    expected_out.columns = ["key"] + [f"out_{i}" for i in range(3)]
+    expected_output_size = 1000
+
+    # This will cause partition split during the "FinalizeBuild"
+    # and would usually lead to 3 partitions. Setting max partition
+    # depth of 1 force just 2 partitions at most.
+    op_pool_size_bytes = 2 * 1024 * 1024
+    expected_partition_state = [(1, 0), (1, 1)]
+    max_partition_depth = 1
+    # Verify that we split a partition during FinalizeBuild and we log
+    # the expected warnings.
+    expected_log_msgs = [
+        "[DEBUG] GroupbyState::AppendBuildBatch[3]: Encountered OperatorPoolThresholdExceededError.",
+        "[DEBUG] Splitting partition 0.",
+        "[DEBUG] WARNING: Disabling partitioning and threshold enforcement temporarily to finalize partition 0 which is at max allowed partition depth (1). This may invoke the OOM killer.",
+        "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 0.",
+        "[DEBUG] WARNING: Disabling partitioning and threshold enforcement temporarily to finalize partition 1 which is at max allowed partition depth (1). This may invoke the OOM killer.",
+        "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 1.",
+        "[DEBUG] GroupbyState::FinalizeBuild: Total number of partitions: 2.",
+    ]
+
+    _test_helper(
+        df,
+        expected_out,
+        expected_partition_state,
+        expected_output_size,
+        [0],
+        func_names,
+        f_in_offsets,
+        f_in_cols,
+        op_pool_size_bytes,
+        expected_log_msgs,
+        capfd,
+        False,
+        max_partition_depth,
+    )
+
+
 ##########################################################
 
 ####### TESTS FOR INCREMENTAL AGGREGATION STRATEGY #######
@@ -1067,6 +1152,112 @@ def test_drop_duplicates_spilt_during_shuffle_out_update_combine_and_diff_part_s
         [expected_log_msg],
         capfd,
         True,
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
+def test_max_partition_depth_fallback_agg_finalize(capfd, memory_leak_check):
+    """
+    Test that we fall back to disabling partitioning while
+    finalizing partitions at max depth. This primarily tests
+    that the expected warnings are printed in debug mode.
+    We cannot really test for the case where the OOM killer
+    is invoked in a unit test, so we just test for the case
+    where it succeeds.
+    """
+
+    df = pd.DataFrame(
+        {
+            "A": np.array(list(np.arange(8000, dtype=np.int32)) * 4, dtype=np.int32),
+            "B": np.array(
+                [1, 3, 5, 11, 1, 3, 5, 3, 4, 78, 23, 120, 87, 34, 52, 34] * 2000,
+                dtype=np.float32,
+            ),
+            "C": pd.array([1, 2, 3, 4, 5, 6, 5, 4] * 4000, dtype="Int64"),
+            "D": np.arange(32000, 64000, dtype=np.float64),
+            "E": ([True] * 5) + ([False] * (32000 - 5)),
+            "F": pd.array(
+                [
+                    "tapas",
+                    "bravas",
+                    "pizza",
+                    "omelette",
+                    "salad",
+                    "spinach",
+                    "celery",
+                ]
+                * 4000
+                + ["sandwich", "burrito", "ramen", "carrot-cake"] * 1000
+            ),
+        }
+    )
+
+    func_names = [
+        "sum",
+        "mean",
+        "min",
+        "max",
+        "skew",
+        "kurtosis",
+        "count",
+        "var",
+        "std",
+        "boolxor_agg",
+        "count",
+    ]
+    f_in_cols = [1, 1, 2, 2, 2, 2, 2, 3, 3, 4, 5]
+    f_in_offsets = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    expected_out = df.groupby("A", as_index=False).agg(
+        {
+            "B": ["sum", "mean"],
+            "C": ["min", "max", "skew", pd.Series.kurt, "count"],
+            "D": ["var", "std"],
+            "E": [(lambda x: sum(x) == 1)],
+            "F": ["count"],
+        }
+    )
+    expected_out.reset_index(inplace=True, drop=True)
+    expected_out.columns = ["key"] + [f"out_{i}" for i in range(11)]
+    expected_output_size = 8000
+
+    # This will cause partition split during the "FinalizeBuild"
+    # and would usually lead to 7 partitions. Setting max partition
+    # depth of 2 force just 4 partitions at most.
+    op_pool_size_bytes = 3 * 1024 * 1024
+    expected_partition_state = [(2, 0), (2, 1), (2, 2), (2, 3)]
+    max_partition_depth = 2
+
+    # Verify that we split (inactive) partitions during FinalizeBuild (during ActivatePartition)
+    # and that we display the expected warnings.
+    expected_log_msgs = [
+        "[DEBUG] WARNING: Disabling partitioning and threshold enforcement temporarily to finalize partition 0 which is at max allowed partition depth (2). This may invoke the OOM killer.",
+        "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 0.",
+        "[DEBUG] WARNING: Disabling partitioning and threshold enforcement temporarily to finalize partition 1 which is at max allowed partition depth (2). This may invoke the OOM killer.",
+        "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 1.",
+        # This verifies that partitioning was re-enabled successfully after disabling it temporarily
+        # for finalizing partitions 0 and 1.
+        "[DEBUG] GroupbyState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 2.",
+        "[DEBUG] Splitting partition 2.",
+        "[DEBUG] WARNING: Disabling partitioning and threshold enforcement temporarily to finalize partition 2 which is at max allowed partition depth (2). This may invoke the OOM killer.",
+        "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 2.",
+        "[DEBUG] WARNING: Disabling partitioning and threshold enforcement temporarily to finalize partition 3 which is at max allowed partition depth (2). This may invoke the OOM killer.",
+        "[DEBUG] GroupbyState::FinalizeBuild: Successfully finalized partition 3.",
+        "[DEBUG] GroupbyState::FinalizeBuild: Total number of partitions: 4.",
+    ]
+    _test_helper(
+        df,
+        expected_out,
+        expected_partition_state,
+        expected_output_size,
+        [0],
+        func_names,
+        f_in_offsets,
+        f_in_cols,
+        op_pool_size_bytes,
+        expected_log_msgs,
+        capfd,
+        False,
+        max_partition_depth,
     )
 
 

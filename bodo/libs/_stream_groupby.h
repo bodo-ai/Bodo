@@ -18,7 +18,7 @@
 // Use all available memory by default
 #define GROUPBY_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL 1.0
 
-#define GROUPBY_MAX_PARTITION_DEPTH 15
+#define GROUPBY_DEFAULT_MAX_PARTITION_DEPTH 15
 
 // Chunk size of build_table_buffer_chunked in GroupbyPartition
 #define INACTIVE_PARTITION_TABLE_CHUNK_SIZE 16 * 1024
@@ -465,6 +465,9 @@ class GroupbyState {
     /// about partitioning such as when a partition is split.
     bool debug_partitioning = false;
 
+    /// @brief Whether partitioning is currently enabled.
+    bool partitioning_enabled = true;
+
     tracing::ResumableEvent groupby_event;
 
     GroupbyState(std::vector<int8_t> in_arr_c_types,
@@ -473,8 +476,7 @@ class GroupbyState {
                  std::vector<int32_t> f_in_offsets_,
                  std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
                  int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
-                 int64_t op_pool_size_bytes,
-                 size_t max_partition_depth_ = GROUPBY_MAX_PARTITION_DEPTH);
+                 int64_t op_pool_size_bytes);
 
     /**
      * @brief Unify dictionaries of input table with build table
@@ -647,6 +649,18 @@ class GroupbyState {
      *
      */
     void DisablePartitioning();
+
+    /**
+     * @brief Enable (or re-enable) partitioning by enabling
+     * threshold enforcement in the OperatorBufferPool.
+     *
+     * Note that in the case where we are re-enabling
+     * partitioning, if the memory usage has overall increased
+     * and gone beyond the threshold since disabling it, this
+     * could raise the OperatorPoolThresholdExceededError error.
+     *
+     */
+    void EnablePartitioning();
 
     /// @brief Get the number of bytes allocated through this Groupby operator's
     /// OperatorBufferPool that are currently pinned.
