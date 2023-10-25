@@ -738,39 +738,46 @@ cdef class OperatorBufferPool(IBufferPool):
     cdef shared_ptr[COperatorBufferPool] c_pool
 
     def __init__(self,
-                 int max_pinned_size_bytes,
+                 int operator_budget_bytes,
                  parent_pool: BufferPool = None,
                  double error_threshold = 0.5):
         """
-        Create a new OperatorBufferPool which can have
-        a maximum of 'max_pinned_size_bytes' bytes pinned
-        at any time. It will use the provided 'parent_pool'.
+        Create a new OperatorBufferPool for an operator with
+        a budget of 'operator_budget_bytes' bytes. 
+        It will use the provided 'parent_pool'.
         If a parent_pool is not specified, the default
         BufferPool will be used.
         The 'error_threshold' defines the fraction of
-        'max_pinned_size_bytes' at which the OperatorBufferPool
+        'operator_budget_bytes' at which the OperatorBufferPool
         will raise a 'OperatorPoolThresholdExceededError' error.
         """
         if parent_pool is None:
             parent_pool = BufferPool.default()
 
-        self.c_pool = make_shared[COperatorBufferPool](max_pinned_size_bytes,
+        self.c_pool = make_shared[COperatorBufferPool](operator_budget_bytes,
                                                        parent_pool.c_pool,
                                                        error_threshold)
 
     @property
-    def max_pinned_size_bytes(self) -> int:
+    def operator_budget_bytes(self) -> int:
         """
-        Getter for the 'max_pinned_size_bytes' attribute.
+        Getter for the 'operator_budget_bytes' attribute.
         """
-        return (deref(self.c_pool)).get_max_pinned_size_bytes()
-
+        return (deref(self.c_pool)).get_operator_budget_bytes()
+    
     @property
     def memory_error_threshold(self) -> int:
         """
         Getter for the 'memory_error_threshold' attribute.
         """
         return (deref(self.c_pool)).get_memory_error_threshold()
+    
+    @property
+    def error_threshold(self) -> double:
+        """
+        Getter for the 'error_threshold' attribute
+        """
+        return (deref(self.c_pool)).get_error_threshold()
 
     @property
     def threshold_enforcement_enabled(self) -> bool:
@@ -793,6 +800,16 @@ cdef class OperatorBufferPool(IBufferPool):
         # Set the shared_ptr for the instance.
         parent_pool.cinit(parent_pool_shared_ptr)
         return parent_pool
+
+    cdef void c_set_error_threshold(self, double error_threshold) except *:
+        (deref(self.c_pool)).SetErrorThreshold(error_threshold)
+    
+    def set_error_threshold(self, error_threshold: double):
+        """
+        Set the error threshold ratio.
+        """
+        self.c_set_error_threshold(error_threshold)
+
 
     cdef void c_enable_threshold_enforcement(self) except *:
         (deref(self.c_pool)).EnableThresholdEnforcement()
