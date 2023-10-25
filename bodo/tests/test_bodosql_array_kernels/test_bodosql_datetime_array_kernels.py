@@ -2711,6 +2711,81 @@ def test_construct_timestamp(
     )
 
 
+@pytest.mark.parametrize(
+    "timetype",
+    [
+        pytest.param("time"),
+        pytest.param("timestamp"),
+        pytest.param("datetime64"),
+    ],
+)
+def test_timestamp_from_date_and_time(timetype, memory_leak_check):
+    """
+    Tests timestamp_from_date_and_time
+    """
+
+    time_constructor = bodo.Time
+
+    def timestamp_constructor(h, m, s, ms, us, ns):
+        return pd.Timestamp(2023, 1, 1, h, m, s, ms * 1000 + us, ns)
+
+    def datetime_constructor(h, m, s, ms, us, ns):
+        ts = timestamp_constructor(h, m, s, ms, us, ns)
+        return np.datetime64(ts)
+
+    time_value_constructor = time_constructor
+    match timetype:
+        case "time":
+            time_value_constructor = time_constructor
+        case "timestamp":
+            time_value_constructor = timestamp_constructor
+        case "datetime":
+            time_value_constructor = datetime_constructor
+
+    def impl(date, time):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.timestamp_from_date_and_time(date, time)
+        )
+
+    args = (
+        pd.Series(
+            [
+                datetime.date(1890, 11, 8),
+                datetime.date(2016, 2, 13),
+                datetime.date(1847, 9, 27),
+                datetime.date(1946, 1, 3),
+                datetime.date(2014, 4, 7),
+            ]
+        ),
+        pd.Series(
+            [
+                time_value_constructor(5, 26, 19, 653, 1, 5),
+                time_value_constructor(5, 11, 50, 716, 2, 4),
+                time_value_constructor(12, 37, 18, 371, 3, 3),
+                time_value_constructor(11, 19, 51, 179, 4, 2),
+                time_value_constructor(3, 33, 56, 570, 5, 1),
+            ]
+        ),
+    )
+
+    answer = pd.Series(
+        [
+            pd.Timestamp(1890, 11, 8, 5, 26, 19, 653001, 5),
+            pd.Timestamp(2016, 2, 13, 5, 11, 50, 716002, 4),
+            pd.Timestamp(1847, 9, 27, 12, 37, 18, 371003, 3),
+            pd.Timestamp(1946, 1, 3, 11, 19, 51, 179004, 2),
+            pd.Timestamp(2014, 4, 7, 3, 33, 56, 570005, 1),
+        ]
+    )
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.fixture(params=["scalar", "vector", "null"])
 def construct_date_data(request):
     if request.param == "null":

@@ -214,6 +214,7 @@ broadcasted_fixed_arg_functions = {
     "tan",
     "tanh",
     "time_slice",
+    "timestamp_from_date_and_time",
     "to_array",
     "to_boolean",
     "to_char",
