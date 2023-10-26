@@ -7,6 +7,7 @@
  *
  */
 #include "_crypto_funcs.h"
+#include "_base64.h"
 
 #include <Python.h>
 #include <openssl/evp.h>
@@ -75,7 +76,127 @@ void run_crypto_function(char *in_str, int64_t in_len, crypto_function func,
     }
 }
 
-// Initialize run_crypto_function function for usage with python
+/** Implementation of Snowflake function BASE64_ENCODE
+ *
+ *  Wikipedia:
+ *      https://en.wikipedia.org/wiki/Base64
+ *
+ *  Snowflake:
+ *      https://docs.snowflake.com/en/sql-reference/functions/base64_encode
+ */
+
+void run_base64_encode(char *in_str, int in_len, int out_len, int max_line_len,
+                       char *char_62_str, char *char_63_str, char *char_pad_str,
+                       char *out_str) {
+    char char_62 = char_62_str[0];
+    char char_63 = char_63_str[0];
+    char char_pad = char_pad_str[0];
+
+    // Use the base64 library to do the regular encoding scheme, writing into
+    // a temporary character buffer
+    int encode_length = Base64encode_len(in_len);
+    char temp[encode_length];
+    Base64encode(temp, in_str, in_len);
+
+    // Copy over the characters from the temporary buffer into the output
+    // buffer, adding newline characters and replacing the 62/63/pad characters
+    // as needed.
+    int write_offset = 0;
+    for (int read_offset = 0; read_offset < encode_length - 1; read_offset++) {
+        char c = temp[read_offset];
+        switch (c) {
+            case '+': {
+                out_str[write_offset] = char_62;
+                break;
+            }
+            case '/': {
+                out_str[write_offset] = char_63;
+                break;
+            }
+            case '=': {
+                out_str[write_offset] = char_pad;
+                break;
+            }
+            default: {
+                out_str[write_offset] = c;
+            }
+        }
+        write_offset++;
+        if (max_line_len > 0 &&
+            ((read_offset % max_line_len) == (max_line_len - 1)) &&
+            (read_offset != (encode_length - 2))) {
+            out_str[write_offset] = '\n';
+            write_offset++;
+        }
+    }
+}
+
+/** Implementation of Snowflake function BASE64_DECODE_STRING
+ *
+ *  Wikipedia:
+ *      https://en.wikipedia.org/wiki/Base64
+ *
+ *  Snowflake:
+ *      https://docs.snowflake.com/en/sql-reference/functions/base64_decode_string
+ */
+
+bool run_base64_decode_string(char *in_str, int in_len, char *char_62_str,
+                              char *char_63_str, char *char_pad_str,
+                              char *out_str) {
+    char char_62 = char_62_str[0];
+    char char_63 = char_63_str[0];
+    char char_pad = char_pad_str[0];
+
+    // Return failure if the length is not a multiple of 4
+    if ((in_len % 4) != 0) {
+        return false;
+    }
+
+    // Convert the characters from the input string to the original encoding
+    // setup, writing the result into a temporary buffer, plus an extra null
+    // terminator.
+    char temp_in[in_len + 1];
+    for (int read_offset = 0; read_offset < in_len; read_offset++) {
+        char c = in_str[read_offset];
+        if (c == char_62) {
+            // Replace occurrences of the index 62 character with the default:
+            // '+'
+            temp_in[read_offset] = '+';
+        } else if (c == char_63) {
+            // Replace occurrences of the index 63 character with the default:
+            // '/'
+            temp_in[read_offset] = '/';
+        } else if (c == char_pad) {
+            // Replace occurrences of the padding character with the default:
+            // '='
+            temp_in[read_offset] = '=';
+        } else if (!('a' <= c && c <= 'z') && !('A' <= c && c <= 'Z') &&
+                   !('0' <= c && c <= '9')) {
+            // Return failure if the character is not one of the remaining legal
+            // characters
+            return false;
+        } else {
+            // For any other character, copy it over directly
+            temp_in[read_offset] = c;
+        }
+    }
+    temp_in[in_len] = '\x00';
+
+    // Use the base64 library to do the decoding encoding scheme, writing into
+    // a temporary output buffer which has room for an extra null terminator.
+    int out_len = (in_len >> 2) * 3;
+    char temp_out[out_len + 1];
+    int decoded_length = Base64decode(temp_out, temp_in);
+
+    // Copy the result to the output buffer, without the extra null terminator.
+    for (int write_offset = 0; write_offset < decoded_length; write_offset++) {
+        out_str[write_offset] = temp_out[write_offset];
+    }
+
+    return true;
+}
+
+// Initialize encryption/encoding functions for usage with python
 PyMODINIT_FUNC PyInit_crypto_funcs(void) {
     PyObject *m;
     MOD_DEF(m, "crypto_funcs", "No docs", NULL);
@@ -86,6 +207,8 @@ PyMODINIT_FUNC PyInit_crypto_funcs(void) {
     bodo_common_init();
 
     SetAttrStringFromVoidPtr(m, run_crypto_function);
+    SetAttrStringFromVoidPtr(m, run_base64_encode);
+    SetAttrStringFromVoidPtr(m, run_base64_decode_string);
 
     return m;
 }

@@ -2852,3 +2852,210 @@ def test_split(string, separator, memory_leak_check):
         check_dtype=False,
         is_out_distributed=is_out_distributed,
     )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(0, id="lower"),
+        pytest.param(1, id="upper", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "string, answer",
+    [
+        pytest.param(
+            "Snowflake",
+            "536e6f77666c616b65",
+            id="scalar-ascii",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "Snake 🐍 Infinity ∞",
+            "536e616b6520f09f908d20496e66696e69747920e2889e",
+            id="scalar-non_ascii",
+        ),
+        pytest.param(
+            pd.Series(["", None, "\x01\x02\x42\x6c", "A", "@Ѐࠀ䀀"]),
+            pd.Series(["", None, "0102426c", "41", "40d080e0a080e48080"]),
+            id="vector-mixed",
+        ),
+    ],
+)
+def test_hex_encode(string, case, answer, memory_leak_check):
+    # Pass in case as a global
+    if isinstance(string, pd.Series):
+
+        def impl(string):
+            return pd.Series(bodo.libs.bodosql_array_kernels.hex_encode(string, case))
+
+        answer = answer.str.lower() if case == 0 else answer.str.upper()
+
+    else:
+        impl = lambda string: bodo.libs.bodosql_array_kernels.hex_encode(string, case)
+        answer = answer.lower() if case == 0 else answer.upper()
+
+    check_func(
+        impl,
+        (string,),
+        py_output=answer,
+        check_dtype=False,
+    )
+    # For ascii strings, check again but with the input converted from strings to binary
+    if isinstance(string, str) and string.isascii():
+        check_func(
+            impl,
+            (bytes(string, encoding="utf-8"),),
+            py_output=answer,
+            check_dtype=False,
+        )
+
+
+@pytest.mark.parametrize(
+    "string, max_line_length, alphabet, answer",
+    [
+        pytest.param(
+            "Snowflake",
+            0,
+            "+/=",
+            "U25vd2ZsYWtl",
+            id="scalar-ascii-no_limit-defaults-no_pad",
+        ),
+        pytest.param(
+            "Snowflake",
+            2,
+            "+/=",
+            "U2\n5v\nd2\nZs\nYW\ntl",
+            id="scalar-ascii-small_limit-defaults-no_pad",
+        ),
+        pytest.param(
+            "HELLO",
+            0,
+            "+/=",
+            "SEVMTE8=",
+            id="scalar-ascii-no_limit-defaults-one_pad",
+        ),
+        pytest.param(
+            "Snowflake",
+            0,
+            "+/=",
+            "U25vd2ZsYWtl",
+            id="scalar-ascii-multiline-defaults-no_pad",
+        ),
+        pytest.param(
+            "Snowflake ❄❄❄ Snowman ☃☃☃",
+            32,
+            "$",
+            "U25vd2ZsYWtlIOKdhOKdhOKdhCBTbm93\nbWFuIOKYg$KYg$KYgw==",
+            id="scalar-nonascii-multiline-alternative_chars",
+        ),
+        pytest.param(
+            "🐍",
+            0,
+            "",
+            "8J+QjQ==",
+            id="scalar-nonascii-single_char",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "",
+                    "S",
+                    "Sn",
+                    "Sno",
+                    "Snow",
+                    "Snowf",
+                    "Snowfl",
+                    "Snowfla",
+                    "Snowflak",
+                    "Snowflake",
+                ]
+                * 4
+            ),
+            3,
+            "@?*",
+            pd.Series(
+                [
+                    "",
+                    "Uw*\n*",
+                    "U24\n*",
+                    "U25\nv",
+                    "U25\nvdw\n**",
+                    "U25\nvd2\nY*",
+                    "U25\nvd2\nZs",
+                    "U25\nvd2\nZsY\nQ**",
+                    "U25\nvd2\nZsY\nWs*",
+                    "U25\nvd2\nZsY\nWtl",
+                ]
+                * 4
+            ),
+            id="vector-limit-alternative",
+        ),
+    ],
+)
+def test_base64_encode_decode(
+    string, max_line_length, alphabet, answer, memory_leak_check
+):
+    # Pass in max_line_length and alphabet as globals
+    if isinstance(string, pd.Series):
+
+        def impl_enc(string):
+            return pd.Series(
+                bodo.libs.bodosql_array_kernels.base64_encode(
+                    string, max_line_length, alphabet
+                )
+            )
+
+        def impl_dec_str(string):
+            return pd.Series(
+                bodo.libs.bodosql_array_kernels.base64_decode_string(string, alphabet)
+            )
+
+        def impl_dec_bin(string):
+            return pd.Series(
+                bodo.libs.bodosql_array_kernels.base64_decode_binary(string, alphabet)
+            )
+
+    else:
+        impl_enc = lambda string: bodo.libs.bodosql_array_kernels.base64_encode(
+            string, max_line_length, alphabet
+        )
+        impl_dec_str = (
+            lambda string: bodo.libs.bodosql_array_kernels.base64_decode_string(
+                string, alphabet
+            )
+        )
+        impl_dec_bin = (
+            lambda string: bodo.libs.bodosql_array_kernels.base64_decode_binary(
+                string, alphabet
+            )
+        )
+
+    check_func(
+        impl_enc,
+        (string,),
+        py_output=answer,
+        check_dtype=False,
+    )
+
+    check_func(
+        impl_dec_str,
+        (answer,),
+        py_output=string,
+        check_dtype=False,
+    )
+
+    # For ascii strings, check again but with the input converted from strings to binary
+    if isinstance(string, str) and string.isascii():
+        check_func(
+            impl_enc,
+            (bytes(string, encoding="utf-8"),),
+            py_output=answer,
+            check_dtype=False,
+        )
+        check_func(
+            impl_dec_bin,
+            (answer,),
+            py_output=bytes(string, encoding="utf-8"),
+            check_dtype=False,
+        )

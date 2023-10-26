@@ -11,7 +11,14 @@ from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import BodoError, is_overload_none
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_bool,
+    get_overload_const_int,
+    get_overload_const_str,
+    is_overload_constant_int,
+    is_overload_none,
+)
 
 
 @numba.generated_jit(nopython=True)
@@ -2292,7 +2299,9 @@ def split(string, separator, dict_encoding_state=None, func_id=-1):  # pragma: n
                 default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(string, separator, dict_encoding_state=None, func_id=-1):
+    def impl(
+        string, separator, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
         return split_util(string, separator, dict_encoding_state, func_id)
 
     return impl
@@ -2351,7 +2360,9 @@ def sha2(msg, digest_size, dict_encoding_state=None, func_id=-1):
                 default_map={"dict_encoding_state": None, "func_id": -1},
             )
 
-    def impl(msg, digest_size, dict_encoding_state=None, func_id=-1):
+    def impl(
+        msg, digest_size, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
         return sha2_util(msg, digest_size, dict_encoding_state, func_id)
 
     return impl
@@ -2412,7 +2423,7 @@ def md5(msg, dict_encoding_state=None, func_id=-1):
             default_map={"dict_encoding_state": None, "func_id": -1},
         )
 
-    def impl(msg, dict_encoding_state=None, func_id=-1):
+    def impl(msg, dict_encoding_state=None, func_id=-1):  # pragma: no cover
         return md5_util(msg, dict_encoding_state, func_id)
 
     return impl
@@ -2448,6 +2459,347 @@ def md5_util(msg, dict_encoding_state, func_id):
         propagate_null,
         scalar_text,
         out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def hex_encode(msg, case, dict_encoding_state=None, func_id=-1):
+    """Handles cases where HEX_ENCODE receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [msg, case]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.hex_encode",
+                [
+                    "msg",
+                    "case",
+                    "dict_encoding_state",
+                    "func_id",
+                ],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
+            )
+
+    def impl(msg, case, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return hex_encode_util(msg, case, dict_encoding_state, func_id)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def hex_encode_util(msg, case, dict_encoding_state, func_id):
+    """A dedicated kernel for the SQL function HEX_ENCODE which takes in a string,
+               binary, (or string/binary column) and returns the string encoded using
+               the hex encoding scheme, with a second argument to specify how the
+               letters a-f should be capitalized.
+
+    Args:
+        msg (string scalar/column): The strings(s) to be encrypted.
+        case (integer): how to captitalize 1-f: 0 for lowercase, 1 for uppercase
+
+
+    Returns:
+        String scalar/column: hex-encoded string
+    """
+    verify_string_binary_arg(msg, "BASE64_ENCODE", "msg")
+
+    # Verify that the case argument is either zero or 1
+    case_int = get_overload_const_int(case)
+    if case_int not in (0, 1):
+        raise_bodo_error(f"hex_encode: invalid case integer: '{case_int}'")
+
+    arg_names = ["msg", "case", "dict_encoding_state", "func_id"]
+    arg_types = [msg, case, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
+    out_dtype = bodo.string_array_type
+    if is_valid_binary_arg(msg):
+        scalar_text = "msg_str = arg0._to_str()\n"
+    else:
+        scalar_text = "msg_str = arg0\n"
+    scalar_text += (
+        # "hex_encoded = bodo.libs.bodosql_crypto_funcs.hex_encode_algorithm(msg_str)\n"
+        "hex_encoded = bodo.libs.bodosql_crypto_funcs.hex_encode_algorithm(msg_str)\n"
+    )
+    scalar_text += (
+        f"res[i] = hex_encoded{'.lower()' if case_int == 0 else '.upper()'}\n"
+    )
+
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def base64_encode(msg, max_line_length, alphabet, dict_encoding_state=None, func_id=-1):
+    """Handles cases where BASE64_ENCODE receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [msg, max_line_length, alphabet]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.base64_encode",
+                [
+                    "msg",
+                    "max_line_length",
+                    "alphabet",
+                    "dict_encoding_state",
+                    "func_id",
+                ],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
+            )
+
+    def impl(
+        msg, max_line_length, alphabet, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return base64_encode_util(
+            msg, max_line_length, alphabet, dict_encoding_state, func_id
+        )
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def base64_encode_util(msg, max_line_length, alphabet, dict_encoding_state, func_id):
+    """A dedicated kernel for the SQL function BASE64_ENCODE which takes in a string,
+               binary, (or string/binary column) and returns the string encoded using
+               the base64 encoding scheme, with optional extra arguments to specify
+               the max line length and the final/padding characters.
+
+    Args:
+        msg (string scalar/column): The strings(s) to be encrypted.
+        max_line_length (constant string): The 3 letter string where the first character is
+        the character to be used as index 62, the second character is the character to be used
+        as index 63, and the third character is the padding character (normally '+/=').
+        alphabet (constant string): The 3 letter string where the first character is
+        the character to be used as index 62, the second character is the character to be used
+        as index 63, and the third character is the padding character (normally '+/=').
+
+
+    Returns:
+        String scalar/column: base64-encoded string
+    """
+    verify_string_binary_arg(msg, "BASE64_ENCODE", "msg")
+
+    # Verify that the max line length is a constant non-negative integer
+    verify_int_arg(max_line_length, "BASE64_ENCODE", "max_line_length")
+    if not is_overload_constant_int(max_line_length):
+        raise_bodo_error(
+            "base64_encode: non-constant integer max_line_length argument not currently supported"
+        )
+    max_line_length_int = get_overload_const_int(max_line_length)
+    if max_line_length_int < 0:
+        raise_bodo_error(
+            f"base64_encode: invalid max_line_length integer: '{max_line_length_int}'"
+        )
+
+    # Verify that the alphabet argument is a 3-character constant string that does not have any
+    # repeats with itself or with the regular domain of base64 encoding chars (a-z, A-Z and 0-9)
+    if not is_overload_constant_str(alphabet):
+        raise_bodo_error(
+            "base64_encode: non-constant string alphabet argument not currently supported"
+        )
+    alphabet_str = get_overload_const_str(alphabet)
+    if len(alphabet_str) < 1:
+        alphabet_str += "+"
+    if len(alphabet_str) < 2:
+        alphabet_str += "/"
+    if len(alphabet_str) < 3:
+        alphabet_str += "="
+    if (
+        len(alphabet_str) != 3
+        or any(c.isalnum() or c == "\n" for c in alphabet_str)
+        or len(set(alphabet_str)) != 3
+    ):
+        raise_bodo_error(f"base64_encode: invalid alphabet string: '{alphabet_str}'")
+    extra_globals = {
+        "char_62": alphabet_str[0],
+        "char_63": alphabet_str[1],
+        "char_pad": alphabet_str[2],
+        "line_length": max_line_length_int,
+    }
+
+    arg_names = ["msg", "max_line_length", "alphabet", "dict_encoding_state", "func_id"]
+    arg_types = [msg, max_line_length, alphabet, dict_encoding_state, func_id]
+    propagate_null = [True] * 3 + [False] * 2
+    out_dtype = bodo.string_array_type
+    if is_valid_binary_arg(msg):
+        scalar_text = "msg_str = arg0._to_str()\n"
+    else:
+        scalar_text = "msg_str = arg0\n"
+    scalar_text += "res[i] = bodo.libs.bodosql_crypto_funcs.base64_encode_algorithm(msg_str, line_length, char_62, char_63, char_pad)"
+
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        extra_globals=extra_globals,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def base64_decode_string(
+    msg, alphabet, _try=False, dict_encoding_state=None, func_id=-1
+):
+    """Handles cases where BASE64_DECODE_STRING receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [msg, alphabet]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.base64_decode_string",
+                [
+                    "msg",
+                    "alphabet",
+                    "try",
+                    "dict_encoding_state",
+                    "func_id",
+                ],
+                i,
+                default_map={"_try": False, "dict_encoding_state": None, "func_id": -1},
+            )
+
+    def impl(
+        msg, alphabet, _try=False, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return base64_decode_util(
+            msg, alphabet, _try, True, dict_encoding_state, func_id
+        )
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def base64_decode_binary(
+    msg, alphabet, _try=False, dict_encoding_state=None, func_id=-1
+):
+    """Handles cases where BASE64_DECODE_BINARY receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [msg, alphabet]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.base64_decode_binary",
+                [
+                    "msg",
+                    "alphabet",
+                    "try",
+                    "dict_encoding_state",
+                    "func_id",
+                ],
+                i,
+                default_map={"_try": False, "dict_encoding_state": None, "func_id": -1},
+            )
+
+    def impl(
+        msg, alphabet, _try=False, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return base64_decode_util(
+            msg, alphabet, _try, False, dict_encoding_state, func_id
+        )
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def base64_decode_util(msg, alphabet, _try, _is_str, dict_encoding_state, func_id):
+    """A dedicated kernel for the SQL function BASE64_DECODE family of functions
+       which takes in a string, produced by calling BASE64_ENCODE on a string/binary value,
+       and reverses the process to return the original string/binary value.
+
+    Args:
+        msg (string scalar/column): The strings(s) to be decoded.
+        alphabet (constant string): The 3 letter string where the first character is
+        the character to be used as index 62, the second character is the character to be used
+        as index 63, and the third character is the padding character (normally '+/=').
+        _try (boolean): if True, returns null on an error instead of raising an exception.
+        _is_str (boolean): if True, returns the result as a string instead of binary.
+
+    Returns:
+        String scalar/column: the original string such that calling BASE64_ENCODE
+        with the output with the same arguments would produce the input to this function.
+    """
+    _try_bool = get_overload_const_bool(_try)
+    _is_str_bool = get_overload_const_bool(_is_str)
+    func_name = "BASE64_DECODE"
+    if _try_bool:
+        func_name = "TRY_" + func_name
+    if _is_str_bool:
+        func_name += "_STRING"
+    else:
+        func_name += "_BINARY"
+
+    verify_string_arg(msg, func_name, "msg")
+
+    # Verify that the alphabet argument is a 3-character constant string that does not have any
+    # repeats with itself or with the regular domain of base64 encoding chars (a-z, A-Z and 0-9)
+    if not is_overload_constant_str(alphabet):
+        raise_bodo_error(
+            "base64_encode: non-constant string alphabet argument not currently supported"
+        )
+    alphabet_str = get_overload_const_str(alphabet)
+    if len(alphabet_str) < 1:
+        alphabet_str += "+"
+    if len(alphabet_str) < 2:
+        alphabet_str += "/"
+    if len(alphabet_str) < 3:
+        alphabet_str += "="
+    if (
+        len(alphabet_str) != 3
+        or any(c.isalnum() or c == "\n" for c in alphabet_str)
+        or len(set(alphabet_str)) != 3
+    ):
+        raise_bodo_error(
+            f"{func_name.lower()}: invalid alphabet string: '{alphabet_str}'"
+        )
+
+    extra_globals = {
+        "char_62": alphabet_str[0],
+        "char_63": alphabet_str[1],
+        "char_pad": alphabet_str[2],
+    }
+
+    arg_names = ["msg", "alphabet", "_try", "_is_str", "dict_encoding_state", "func_id"]
+    arg_types = [msg, alphabet, _try, _is_str, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 4
+    out_dtype = bodo.string_array_type if _is_str_bool else bodo.binary_array_type
+    scalar_text = f"ans, success = bodo.libs.bodosql_crypto_funcs.base64_decode_algorithm(arg0, char_62, char_63, char_pad, {_is_str_bool})\n"
+    scalar_text += "if success:\n"
+    scalar_text += "  res[i] = ans\n"
+    scalar_text += "else:\n"
+    if _try_bool:
+        scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+    else:
+        scalar_text += (
+            f"  raise ValueError('{func_name} failed due to malformed string input')\n"
+        )
+
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        extra_globals=extra_globals,
         # Add support for dict encoding caching with streaming.
         dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
         func_id_name="func_id" if use_dict_caching else None,
