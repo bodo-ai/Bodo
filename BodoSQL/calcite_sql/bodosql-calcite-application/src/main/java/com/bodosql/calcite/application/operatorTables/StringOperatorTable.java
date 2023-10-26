@@ -671,6 +671,72 @@ public final class StringOperatorTable implements SqlOperatorTable {
           OperandTypes.STRING,
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction HEX_ENCODE =
+      new SqlFunction(
+          "HEX_ENCODE",
+          SqlKind.OTHER_FUNCTION,
+          // [BSE-1714] TODO: calculate the output precision in terms of the input precision
+          // and the second argument.
+          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          null,
+          argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction BASE64_ENCODE =
+      new SqlFunction(
+          "BASE64_ENCODE",
+          SqlKind.OTHER_FUNCTION,
+          // [BSE-1714] TODO: calculate the output precision in terms of the input precision
+          // and the second argument.
+          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          null,
+          argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.STRING),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction BASE64_DECODE_STRING =
+      new SqlFunction(
+          "BASE64_DECODE_STRING",
+          SqlKind.OTHER_FUNCTION,
+          // [BSE-1714] TODO: calculate the output precision in terms of the input precision
+          // and the second argument.
+          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          null,
+          argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction TRY_BASE64_DECODE_STRING =
+      new SqlFunction(
+          "TRY_BASE64_DECODE_STRING",
+          SqlKind.OTHER_FUNCTION,
+          // [BSE-1714] TODO: calculate the output precision in terms of the input precision
+          // and the second argument.
+          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          null,
+          argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction BASE64_DECODE_BINARY =
+      new SqlFunction(
+          "BASE64_DECODE_BINARY",
+          SqlKind.OTHER_FUNCTION,
+          // [BSE-1714] TODO: calculate the output precision in terms of the input precision
+          // and the second argument.
+          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          null,
+          argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction TRY_BASE64_DECODE_BINARY =
+      new SqlFunction(
+          "TRY_BASE64_DECODE_BINARY",
+          SqlKind.OTHER_FUNCTION,
+          // [BSE-1714] TODO: calculate the output precision in terms of the input precision
+          // and the second argument.
+          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          null,
+          argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
+          SqlFunctionCategory.STRING);
+
   private List<SqlOperator> stringOperatorList =
       Arrays.asList(
           CONCAT,
@@ -678,6 +744,12 @@ public final class StringOperatorTable implements SqlOperatorTable {
           CONTAINS,
           MD5,
           MD5_HEX,
+          HEX_ENCODE,
+          BASE64_ENCODE,
+          BASE64_DECODE_STRING,
+          TRY_BASE64_DECODE_STRING,
+          BASE64_DECODE_BINARY,
+          TRY_BASE64_DECODE_BINARY,
           MID,
           SUBSTR,
           INSTR,

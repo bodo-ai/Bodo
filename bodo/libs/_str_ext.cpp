@@ -841,7 +841,7 @@ void bytes_to_hex(char* output, char* data, int64_t data_len) {
     // and a null terminator at the end that is already set.
     for (int i = 0; i < data_len; i++) {
         char c = data[i];
-        output[2 * i] = hex_values[c >> 4];
+        output[2 * i] = hex_values[(c >> 4) & 0x0f];
         output[(2 * i) + 1] = hex_values[c & 0x0f];
     }
 }

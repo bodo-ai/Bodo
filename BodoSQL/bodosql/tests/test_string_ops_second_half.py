@@ -1511,6 +1511,419 @@ def test_md5_columns(query, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "col_fmt",
+    [
+        pytest.param("S", id="string"),
+        pytest.param("B", id="binary", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "query_fmt, uppercase",
+    [
+        pytest.param(
+            "SELECT HEX_ENCODE({0}) FROM table1",
+            True,
+            id="default_uppercase",
+        ),
+        pytest.param(
+            "SELECT HEX_ENCODE({0}, 1) FROM table1",
+            True,
+            id="manual_uppercase",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT HEX_ENCODE({0}, 0) FROM table1",
+            False,
+            id="manual_lowercase",
+        ),
+    ],
+)
+def test_hex_encode(query_fmt, uppercase, col_fmt, memory_leak_check):
+    """Tests HEX_ENCODE with and without CASE statements"""
+    query = query_fmt.format(col_fmt)
+    s = "Alphabet Soup"
+    b = b"Alphabet Soup"
+    h = "416c70686162657420536f7570"
+    if uppercase:
+        h = h.upper()
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "S": [None if i % 5 == 2 else s[:i] for i in range(14)],
+                "B": [None if i % 5 == 2 else b[:i] for i in range(14)],
+            }
+        )
+    }
+    answer = pd.DataFrame(
+        {
+            0: [None if i % 5 == 2 else h[: 2 * i] for i in range(14)],
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        expected_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "col_fmt",
+    [
+        pytest.param("S", id="string"),
+        pytest.param("B", id="binary", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "query_fmt, answer",
+    [
+        pytest.param(
+            "SELECT BASE64_ENCODE({0}) FROM table1",
+            pd.Series(
+                [
+                    "Uw==",
+                    "U24=",
+                    "U25v",
+                    None,
+                    "U25vdw==",
+                    "U25vd2Y=",
+                    "U25vd2Zs",
+                    None,
+                    "U25vd2ZsYQ==",
+                    "U25vd2ZsYWs=",
+                    "U25vd2ZsYWtl",
+                    "QUI/Q0Q+RUYvR0g8",
+                ]
+            ),
+            id="encode-no_extra_args-no_case",
+        ),
+        pytest.param(
+            "SELECT BASE64_ENCODE({0}, 5) FROM table1",
+            pd.Series(
+                [
+                    "Uw==",
+                    "U24=",
+                    "U25v",
+                    None,
+                    "U25vd\nw==",
+                    "U25vd\n2Y=",
+                    "U25vd\n2Zs",
+                    None,
+                    "U25vd\n2ZsYQ\n==",
+                    "U25vd\n2ZsYW\ns=",
+                    "U25vd\n2ZsYW\ntl",
+                    "QUI/Q\n0Q+RU\nYvR0g\n8",
+                ]
+            ),
+            id="encode-limit_5-no_case",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT BASE64_ENCODE({0}, 0, '!@ ') FROM table1",
+            pd.Series(
+                [
+                    "Uw  ",
+                    "U24 ",
+                    "U25v",
+                    None,
+                    "U25vdw  ",
+                    "U25vd2Y ",
+                    "U25vd2Zs",
+                    None,
+                    "U25vd2ZsYQ  ",
+                    "U25vd2ZsYWs ",
+                    "U25vd2ZsYWtl",
+                    "QUI@Q0Q!RUYvR0g8",
+                ]
+            ),
+            id="encode-no_limit-replace_alphabet-no_case",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT CASE WHEN S IS NULL THEN '' ELSE BASE64_ENCODE({0}) END FROM table1",
+            pd.Series(
+                [
+                    "Uw==",
+                    "U24=",
+                    "U25v",
+                    "",
+                    "U25vdw==",
+                    "U25vd2Y=",
+                    "U25vd2Zs",
+                    "",
+                    "U25vd2ZsYQ==",
+                    "U25vd2ZsYWs=",
+                    "U25vd2ZsYWtl",
+                    "QUI/Q0Q+RUYvR0g8",
+                ]
+            ),
+            id="encode-no_extra_args-with_case",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT BASE64_DECODE_STRING(BASE64_ENCODE({0})) FROM table1",
+            pd.Series(
+                [
+                    "S",
+                    "Sn",
+                    "Sno",
+                    None,
+                    "Snow",
+                    "Snowf",
+                    "Snowfl",
+                    None,
+                    "Snowfla",
+                    "Snowflak",
+                    "Snowflake",
+                    "AB?CD>EF/GH<",
+                ]
+            ),
+            id="decode_string-no_extra_args-no_case",
+        ),
+        pytest.param(
+            "SELECT BASE64_DECODE_STRING(BASE64_ENCODE({0}, 3, '().'), '().') FROM table1",
+            pd.Series(
+                [
+                    "S",
+                    "Sn",
+                    "Sno",
+                    None,
+                    "Snow",
+                    "Snowf",
+                    "Snowfl",
+                    None,
+                    "Snowfla",
+                    "Snowflak",
+                    "Snowflake",
+                    "AB?CD>EF/GH<",
+                ]
+            ),
+            id="decode_string-limit_3-replace_alphabet-no_case",
+        ),
+        pytest.param(
+            "SELECT BASE64_DECODE_BINARY(BASE64_ENCODE({0}, 3, '().'), '().') FROM table1",
+            pd.Series(
+                [
+                    b"S",
+                    b"Sn",
+                    b"Sno",
+                    None,
+                    b"Snow",
+                    b"Snowf",
+                    b"Snowfl",
+                    None,
+                    b"Snowfla",
+                    b"Snowflak",
+                    b"Snowflake",
+                    b"AB?CD>EF/GH<",
+                ]
+            ),
+            id="decode_binary-limit_3-replace_alphabet-no_case",
+        ),
+    ],
+)
+def test_base64_encode_decode(query_fmt, answer, col_fmt, memory_leak_check):
+    """Tests BASE64_ENCODE and BASE64_DECODE_STRING with and without CASE statements"""
+    # Note: "AB?CD>EF/GH<" is important as it forces the usage of the 62 & 63 characters
+    query = query_fmt.format(col_fmt)
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "S": [
+                    "S",
+                    "Sn",
+                    "Sno",
+                    None,
+                    "Snow",
+                    "Snowf",
+                    "Snowfl",
+                    None,
+                    "Snowfla",
+                    "Snowflak",
+                    "Snowflake",
+                    "AB?CD>EF/GH<",
+                ],
+                "B": [
+                    b"S",
+                    b"Sn",
+                    b"Sno",
+                    None,
+                    b"Snow",
+                    b"Snowf",
+                    b"Snowfl",
+                    None,
+                    b"Snowfla",
+                    b"Snowflak",
+                    b"Snowflake",
+                    b"AB?CD>EF/GH<",
+                ],
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        expected_output=pd.DataFrame({0: answer}),
+    )
+
+
+@pytest.mark.parametrize(
+    "func",
+    [
+        pytest.param("BASE64_DECODE_STRING"),
+        pytest.param("TRY_BASE64_DECODE_STRING"),
+        pytest.param("BASE64_DECODE_BINARY", marks=pytest.mark.slow),
+        pytest.param("TRY_BASE64_DECODE_BINARY", marks=pytest.mark.slow),
+    ],
+)
+def test_base64_decode_error(func):
+    """Tests BASE64_DECODE_STRING and BASE64_DECODE_STRING with invalid strings to see
+    how well they handle decoding errors"""
+
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "S": pd.Series(
+                    [
+                        "",
+                        "Uw==",
+                        "U24=",
+                        "U25v",
+                        None,
+                        "U25vdw==",
+                        "U25vd2Y=",
+                        "U25vd2Zs",
+                        "U25vd2ZsYQ==",
+                        "U25vd2ZsYWs=",
+                        "U25vd2ZsYWtl",
+                        "QUI/Q0Q+RUYvR0g8",
+                    ]
+                ),
+                "T": pd.Series(
+                    [
+                        "",
+                        "U",
+                        "Uw",
+                        "Uwe",
+                        "Uw==",
+                        "U25vd",
+                        "U25vdw",
+                        "U25vdw=",
+                        "U25vdw==",
+                        "",
+                        "",
+                        "",
+                    ]
+                ),
+                "U": pd.Series(
+                    ["U25v", "====", "U25v", "U===", "U25v", "=U5vd2Y="] * 2
+                ),
+            }
+        )
+    }
+
+    # First type of invalid situation: the padding character is wrong
+    query_pad_error = f"SELECT {func}(S, '+/.') FROM table1"
+    original_strings_pad_error = pd.Series(
+        [
+            "",
+            None,
+            None,
+            "Sno",
+            None,
+            None,
+            None,
+            "Snowfl",
+            None,
+            None,
+            "Snowflake",
+            "AB?CD>EF/GH<",
+        ]
+    )
+
+    # Second type of invalid situation: the index 62 character is wrong
+    query_62_error = f"SELECT {func}(S, '%') FROM table1"
+    original_strings_62_error = pd.Series(
+        [
+            "",
+            "S",
+            "Sn",
+            "Sno",
+            None,
+            "Snow",
+            "Snowf",
+            "Snowfl",
+            "Snowfla",
+            "Snowflak",
+            "Snowflake",
+            None,
+        ]
+    )
+
+    # Third type of invalid situation: not all strings are 4 characters
+    query_length_error = f"SELECT {func}(T) FROM table1"
+    original_strings_length_error = pd.Series(
+        [
+            "",
+            None,
+            None,
+            None,
+            "S",
+            None,
+            None,
+            None,
+            "Snow",
+            "",
+            "",
+            "",
+        ],
+    )
+
+    # Fourth type of invalid situation: invalid padding characters
+    query_pad_location_error = f"SELECT {func}(U) FROM table1"
+    original_strings_pad_location_error = pd.Series(["Sno", None] * 6)
+
+    combinations = [
+        (query_pad_error, original_strings_pad_error),
+        (query_62_error, original_strings_62_error),
+        (query_length_error, original_strings_length_error),
+        (query_pad_location_error, original_strings_pad_location_error),
+    ]
+
+    for query, answer in combinations:
+        if func.startswith("TRY"):
+            if func.endswith("BINARY"):
+                answer = answer.apply(
+                    lambda x: None if pd.isna(x) else bytes(x, encoding="utf-8")
+                )
+            check_query(
+                query,
+                ctx,
+                None,
+                check_names=False,
+                expected_output=pd.DataFrame({0: answer}),
+                only_jit_seq=True,
+            )
+        else:
+            with pytest.raises(
+                ValueError,
+                match=f"{func} failed due to malformed string input",
+            ):
+                check_query(
+                    query,
+                    ctx,
+                    None,
+                    check_names=False,
+                    # Pointless output, but must be set
+                    expected_output=pd.DataFrame(),
+                    only_jit_seq=True,
+                )
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("func", ["LPAD", "RPAD"])
 def test_binary_pad_2args_errorchecking(func, memory_leak_check):

@@ -60,9 +60,12 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.generateToDaysCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.generateToSecondsCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.generateUnixTimestamp;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateBase64DecodeFn;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateBase64Encode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatWSCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateEditdistance;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateHexEncode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateInitcapInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generatePadCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generatePosition;
@@ -1186,6 +1189,15 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "MD5":
       case "MD5_HEX":
         return ExprKt.BodoSQLKernel("md5", operands, streamingNamedArgs);
+      case "HEX_ENCODE":
+        return generateHexEncode(operands, streamingNamedArgs);
+      case "BASE64_ENCODE":
+        return generateBase64Encode(operands, streamingNamedArgs);
+      case "BASE64_DECODE_STRING":
+      case "TRY_BASE64_DECODE_STRING":
+      case "BASE64_DECODE_BINARY":
+      case "TRY_BASE64_DECODE_BINARY":
+        return generateBase64DecodeFn(fnName, operands, streamingNamedArgs);
       default:
         throw new BodoSQLCodegenException(String.format("Unexpected String function: %s", fnName));
     }
@@ -1747,6 +1759,12 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "SHA2_HEX":
           case "MD5":
           case "MD5_HEX":
+          case "HEX_ENCODE":
+          case "BASE64_ENCODE":
+          case "BASE64_DECODE_STRING":
+          case "TRY_BASE64_DECODE_STRING":
+          case "BASE64_DECODE_BINARY":
+          case "TRY_BASE64_DECODE_BINARY":
             return visitStringFunc(fnOperation, operands);
           case "DATE_TRUNC":
             dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(1));
