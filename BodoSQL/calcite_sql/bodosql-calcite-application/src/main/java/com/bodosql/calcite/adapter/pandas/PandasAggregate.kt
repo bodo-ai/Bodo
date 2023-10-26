@@ -72,22 +72,22 @@ class PandasAggregate(
 
         // Streaming groupby uses accumulate path when running values are string or nested data types
         // https://github.com/Bodo-inc/Bodo/blob/da5696256a1fc44d41a62354de8f492bf0e7f148/bodo/libs/_stream_groupby.cpp#L1182
-        if (this.rowType != null) {
-            for (i in 0..<this.rowType.fieldList.size) {
-                if (keySet.contains(i)) {
-                    continue
-                }
-                val field = this.rowType.fieldList[i]
-                val typeName = field.type.sqlTypeName
-                if (typeName.equals(SqlTypeName.VARCHAR) || typeName.equals(SqlTypeName.VARBINARY) ||
-                    typeName.equals(SqlTypeName.CHAR) || typeName.equals(SqlTypeName.BINARY) ||
-                    typeName.equals(SqlTypeName.ARRAY) || typeName.equals(SqlTypeName.MAP) ||
-                    // OTHER is VARIANT type
-                    typeName.equals(SqlTypeName.OTHER)
-                ) {
-                    isStreamAccumulate = true
-                    break
-                }
+        for (i in 0..<this.getRowType().fieldList.size) {
+            // NOTE: this.rowType will access the actual attribute here which could be null.
+            // We are in a subclass and the attributed is protected, so we have access and Kotlin won't use the getter.
+            if (keySet.contains(i)) {
+                continue
+            }
+            val field = this.getRowType().fieldList[i]
+            val typeName = field.type.sqlTypeName
+            if (typeName.equals(SqlTypeName.VARCHAR) || typeName.equals(SqlTypeName.VARBINARY) ||
+                typeName.equals(SqlTypeName.CHAR) || typeName.equals(SqlTypeName.BINARY) ||
+                typeName.equals(SqlTypeName.ARRAY) || typeName.equals(SqlTypeName.MAP) ||
+                // OTHER is VARIANT type
+                typeName.equals(SqlTypeName.OTHER)
+            ) {
+                isStreamAccumulate = true
+                break
             }
         }
 
