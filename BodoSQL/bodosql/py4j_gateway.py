@@ -24,7 +24,7 @@ def get_java_path() -> str:
     installed in the current conda environment
     """
 
-    # Currently inside a conda subenvironment
+    # Currently inside a conda sub-environment
     # except for platform
     if (
         "CONDA_PREFIX" in os.environ
@@ -61,12 +61,12 @@ def get_java_path() -> str:
 
 def get_gateway():
     """
-    Launches the Java gateway server on rank 0 if not already intialized,
+    Launches the Java gateway server on rank 0 if not already initialized,
     and returns the gateway for rank 0.
     Has no effect and returns None when called on any rank other than rank 0.
 
     Note that whenever this function is called, it must be called on every rank, so that errors
-    are properly propgated, and we don't hang.
+    are properly propagated, and we don't hang.
     """
     global gateway
 
