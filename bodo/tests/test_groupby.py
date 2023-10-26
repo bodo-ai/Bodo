@@ -1121,7 +1121,7 @@ def test_random_string_sum_min_max_first_last(memory_leak_check):
         eList_B = []
         # String cols are dropped for sum, so we need an extra column to avoid empty output in that case
         eList_C = []
-        for i in range(n):
+        for _ in range(n):
             len_str = random.randint(1, 10)
             k2 = random.randint(1, len_str)
             nonascii_val_B = " ".join(random.sample(gen_nonascii_list(k2), k2))
@@ -1132,6 +1132,13 @@ def test_random_string_sum_min_max_first_last(memory_leak_check):
             eList_A.append(val_A)
             eList_B.append(val_B)
             eList_C.append(1)
+        # add a group with all NA values in string data column
+        eList_A.append(0)
+        eList_A.append(0)
+        eList_B.append(None)
+        eList_B.append(None)
+        eList_C.append(3)
+        eList_C.append(4)
         return pd.DataFrame({"A": eList_A, "B": eList_B, "C": eList_C})
 
     df1 = random_dataframe(100)
