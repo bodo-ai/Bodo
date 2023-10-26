@@ -14,3 +14,15 @@ Bodo 2023.10 Release (Date: 10/02/2023) {#October_2023}
   `ABS`, `LAG`, and `MATCH_NUMBER`.
 - Allow a BodoSQL Snowflake Catalog to be created from a connection string using `bodosql.SnowflakeCatalog.from_conn_str`.
 - Support `ANY_VALUE` on array data
+
+### 2023.10.1 New Features and Improvements
+
+- Fix critical runtime bugs in vectorized execution mode.
+- BodoSQL generated plans have been further optimized to reduce runtime and memory usage.
+- Better compile time evaluation for datetime operations inside the planner.
+- Major version upgrades
+  - Upgrade Python to 3.11
+  - Upgrade Numba to 0.57
+  - Upgrade Calcite to 1.31
+  - Upgrade Iceberg to 1.3.1
+  - Upgrade Pandas to 1.5
