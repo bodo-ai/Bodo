@@ -19,7 +19,6 @@ from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_conversion_arr
     _timestamps_nans,
     str_to_bool,
 )
-from bodo.utils.typing import BodoError
 
 valid_bool_params = [
     pytest.param(
@@ -866,3 +865,123 @@ def test_try_to_double_scalars(spark_info):
         check_names=False,
         expected_output=pd.DataFrame({"a": py_output}),
     )
+
+
+# @pytest.mark.slow
+@pytest.mark.parametrize(
+    "fn_name",
+    [
+        "TO_BOOLEAN",
+        "TRY_TO_BOOLEAN",
+    ],
+)
+def test_to_boolean_optional_invalid_str(fn_name):
+    """Test TRY_TO_BOOLEAN and TO_BOOLEAN in optional argument case"""
+    query = f"""SELECT case when {fn_name}(A) in (0, 1, 2, 3, 4, 5)
+            then 'USA' else 'international' end as origin_zip_type
+            FROM table1 """
+    df = pd.DataFrame(
+        {
+            "A": [
+                "a",
+                "yes",
+                "T",
+                "TRUE",
+                "on",
+                "1",
+                "n",
+                "NO",
+                "f",
+                "FALSE",
+                "OFF",
+                "0",
+            ]
+        }
+    )
+    expected_output = pd.DataFrame(
+        {
+            "origin_zip_type": [
+                "USA",
+                "USA",
+                "USA",
+                "USA",
+                "USA",
+                "USA",
+                "international",
+                "international",
+                "international",
+                "international",
+                "international",
+                "international",
+            ]
+        }
+    )
+    ctx = {"table1": df}
+    if "TRY" in fn_name:
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=expected_output,
+        )
+    else:
+        with pytest.raises(ValueError, match="invalid value for boolean conversion"):
+            bc = bodosql.BodoSQLContext({"table1": df})
+
+            bc.sql(query)
+
+
+# @pytest.mark.slow
+@pytest.mark.parametrize(
+    "fn_name",
+    [
+        "TO_DOUBLE",
+        "TRY_TO_DOUBLE",
+    ],
+)
+def test_to_double_optional_invalid_str(fn_name):
+    """Test TRY_TO_DOUBLE and TO_DOUBLE in optional argument case"""
+    query = f"""SELECT case when {fn_name}(A) > -1
+            then 'USA' else 'international' end as origin_zip_type
+            FROM table1 """
+    df = pd.DataFrame(
+        {
+            "A": [
+                "+2.64",
+                "baked beans",
+                "-2.64e-07",
+                "+",
+                "123.456e+010",
+                "nan",
+                "nane",
+                ".",
+            ]
+        }
+    )
+    expected_output = pd.DataFrame(
+        {
+            "origin_zip_type": [
+                "USA",
+                "USA",
+                "USA",
+                "international",
+                "international",
+                "international",
+                "international",
+                "international",
+            ]
+        }
+    )
+    ctx = {"table1": df}
+    if "TRY" in fn_name:
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=expected_output,
+        )
+    else:
+        with pytest.raises(ValueError, match="invalid value for double conversion"):
+            bc = bodosql.BodoSQLContext({"table1": df})
+
+            bc.sql(query)
