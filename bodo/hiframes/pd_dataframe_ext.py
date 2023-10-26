@@ -66,7 +66,6 @@ from bodo.libs.array import (
     py_table_to_cpp_table,
     shuffle_table,
 )
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
@@ -74,7 +73,6 @@ from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.libs.str_ext import string_type, unicode_to_utf8
-from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils import tracing
 from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.conversion import fix_arr_dtype, index_to_array
@@ -3727,7 +3725,15 @@ def gen_pandas_parquet_metadata(
         elif isinstance(col_type, TimeArrayType):
             pandas_type = "datetime"
             numpy_type = "object"
-        elif isinstance(col_type, (StructArrayType, ArrayItemArrayType)):
+        elif isinstance(
+            col_type,
+            (
+                bodo.ArrayItemArrayType,
+                bodo.StructArrayType,
+                # TODO BSE-1317
+                # bodo.MapArrayType,
+            ),
+        ):
             # TODO: provide meaningful pandas_type when possible.
             # For example "pandas_type": "list[list[int64]]", "numpy_type": "object"
             # can occur

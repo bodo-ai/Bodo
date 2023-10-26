@@ -1812,6 +1812,217 @@ def test_batched_write_agg(
             cursor_w.close()
 
 
+@pytest.mark.parametrize(
+    "df, expected_df, column_type",
+    [
+        (  # array item array
+            pd.DataFrame({"a": np.arange(10), "b": [np.arange(5)] * 10}),
+            pd.DataFrame({"a": np.arange(10), "b": [[0, 1, 2, 3, 4]] * 10}),
+            "array",
+        ),
+        (  # array item array
+            pd.DataFrame({"a": np.arange(10), "b": [np.arange(5)] * 10}),
+            pd.DataFrame(
+                {"a": np.arange(10), "b": ["[\n  0,\n  1,\n  2,\n  3,\n  4\n]"] * 10}
+            ),
+            "variant",
+        ),
+        (  # struct array
+            pd.DataFrame(
+                {
+                    "a": np.arange(10),
+                    "b": [
+                        {
+                            "X": "AB",
+                            "Y": [1.1, 2.2],
+                            "Z": [[i], None, [3, None]],
+                            "W": {"A": 1, "B": "A"},
+                        }
+                        for i in range(10)
+                    ],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "a": np.arange(10),
+                    "b": [
+                        f'{{\n  "W": {{\n    "A": 1,\n    "B": "A"\n  }},\n  "X": "AB",\n  "Y": [\n    1.100000000000000e+00,\n    2.200000000000000e+00\n  ],\n  "Z": [\n    [\n      {i}\n    ],\n    null,\n    [\n      3,\n      null\n    ]\n  ]\n}}'
+                        for i in range(10)
+                    ],
+                }
+            ),
+            "object",
+        ),
+        (  # struct array
+            pd.DataFrame(
+                {
+                    "a": np.arange(10),
+                    "b": [
+                        {
+                            "X": "AB",
+                            "Y": [1.1, 2.2],
+                            "Z": [[i], None, [3, None]],
+                            "W": {"A": 1, "B": "A"},
+                        }
+                        for i in range(10)
+                    ],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "a": np.arange(10),
+                    "b": [
+                        f'{{\n  "W": {{\n    "A": 1,\n    "B": "A"\n  }},\n  "X": "AB",\n  "Y": [\n    1.100000000000000e+00,\n    2.200000000000000e+00\n  ],\n  "Z": [\n    [\n      {i}\n    ],\n    null,\n    [\n      3,\n      null\n    ]\n  ]\n}}'
+                        for i in range(10)
+                    ],
+                }
+            ),
+            "variant",
+        ),
+        # TODO BSE-1317
+        # (  # map array
+        #    pd.DataFrame(
+        #        {
+        #            "a": np.arange(10),
+        #            "b": [{"2": 1.4, "1": 3.1} for i in range(10)],
+        #        }
+        #    ),
+        #    pd.DataFrame(
+        #        {
+        #            "a": np.arange(10),
+        #            "b": [
+        #                '{\n  "1": 3.100000000000000e+00,\n  "2": 1.400000000000000e+00\n}'
+        #                for i in range(10)
+        #            ],
+        #        }
+        #    ),
+        #    "object",
+        # ),
+        # (  # map array
+        #    pd.DataFrame(
+        #        {
+        #            "a": np.arange(10),
+        #            "b": [{"2": 1.4, "1": 3.1} for i in range(10)],
+        #        }
+        #    ),
+        #    pd.DataFrame(
+        #        {
+        #            "a": np.arange(10),
+        #            "b": [
+        #                '{\n  "1": 3.100000000000000e+00,\n  "2": 1.400000000000000e+00\n}'
+        #                for i in range(10)
+        #            ],
+        #        }
+        #    ),
+        #    "variant",
+        # ),
+    ],
+    ids=[
+        "array_item_array",
+        "array_item_variant",
+        "struct_object",
+        "struct_variant",
+        # TODO BSE-1317
+        # "map_object",
+        # "map_variant",
+    ],
+)
+@pytest.mark.parametrize("write_type", ["append", "replace"])
+def test_batched_write_nested_array(
+    df, expected_df, column_type, write_type, memory_leak_check
+):
+    """
+    Test writing a table with a column of nested arrays to Snowflake
+    and then reading it back
+    """
+    if column_type != "variant" and write_type == "replace":
+        pytest.skip("When replacing a table columns are always written as variant")
+
+    from bodo.io.snowflake import snowflake_connect
+
+    comm = MPI.COMM_WORLD
+    conn = bodo.tests.utils.get_snowflake_connection_string("TEST_DB", "PUBLIC")
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "a",
+            "b",
+        )
+    )
+    batch_size = 3
+
+    with ensure_clean_snowflake_table(conn, "NESTED_ARRAY_WRITE_TEST") as table_name:
+        # Create table with correct schema
+        cursor = snowflake_connect(conn).cursor()
+        if write_type == "append":
+            run_rank0(
+                lambda cursor, table_name, column_type: cursor.execute(
+                    f"create or replace transient table {table_name} (a NUMBER, b {column_type})"
+                ),
+                bcast_result=False,
+            )(cursor, table_name, column_type)
+        cursor.close()
+
+        def write_impl(conn, df):
+            writer = snowflake_writer_init(
+                -1,
+                conn,
+                table_name,
+                "PUBLIC",
+                write_type,
+                "TRANSIENT",
+            )
+
+            # Streaming read might output a different number of chunks on each
+            # rank, but streaming write assumes the number of chunks is equal,
+            # so we need to manually synchronize `is_last`. We assume that
+            # arrow_reader handles repeated empty calls.
+            all_is_last = False
+            iter_val = 0
+            T1 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df),
+                (),
+                kept_cols,
+                2,
+            )
+            while not all_is_last:
+                table = bodo.hiframes.table.table_local_filter(
+                    T1,
+                    slice(
+                        (iter_val * batch_size),
+                        ((iter_val + 1) * batch_size),
+                    ),
+                )
+                is_last = (iter_val * batch_size) >= len(df)
+                all_is_last = snowflake_writer_append_table(
+                    writer, table, col_meta, is_last, iter_val, None
+                )
+                iter_val += 1
+
+        def read_impl(conn):
+            df = pd.read_sql(f"select * from {table_name}", conn)
+            return df
+
+        bodo.jit(write_impl)(conn, df)
+        # Check the output columns type
+        table_info = pd.read_sql(f"DESCRIBE TABLE {table_name}", conn)
+        remote_column_type = table_info[table_info["name"] == "B"]["type"].iloc[0]
+        assert (
+            remote_column_type == column_type.upper()
+            if write_type == "append"
+            else "VARIANT"
+        )
+
+        check_func(
+            read_impl,
+            (conn,),
+            py_output=expected_df,
+            sort_output=True,
+            reset_index=True,
+            only_1DVar=True,
+        )
+
+
 def test_write_with_string_precision(memory_leak_check):
     """
     Tests streaming write using string column precisions to specify the maximum

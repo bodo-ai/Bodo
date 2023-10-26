@@ -33,12 +33,15 @@ from bodo.io.helpers import (
     update_env_vars,
     update_file_contents,
 )
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
-from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
-from bodo.utils.typing import BodoError, BodoWarning, is_str_arr_type
+from bodo.utils.typing import (
+    BodoError,
+    BodoWarning,
+    is_str_arr_type,
+    raise_bodo_error,
+)
 
 # Imports for typechecking
 if TYPE_CHECKING:  # pragma: no cover
@@ -323,9 +326,26 @@ def gen_snowflake_schema(
             # TODO(njriasan): Integrate column_precisions when we have accurate
             # information from BodoSQL.
             sf_schema[col_name] = f"NUMBER({col_type.precision}, {col_type.scale})"
-        elif isinstance(col_type, (ArrayItemArrayType, StructArrayType)):
+        elif isinstance(
+            col_type,
+            (
+                bodo.ArrayItemArrayType,
+                bodo.StructArrayType,
+            ),
+        ):
             # based on testing with infer_schema
             sf_schema[col_name] = "VARIANT"
+
+        elif isinstance(col_type, bodo.MapArrayType):
+            raise_bodo_error("Writing Map Arrays to Snowflake is unsupported")
+        # TODO BSE-1317
+        #    if col_type.key_arr_type != bodo.string_array_type:
+        #        warning = BodoWarning(
+        #            f"Snowflake does not support objects with non-string key type {col_type.key_arr_type}. Column {col_name} will be parsed as {{'key': key_value, 'value': value_value }}."
+        #        )
+        #        warnings.warn(warning)
+        #    # based on testing with infer_schema
+        #    sf_schema[col_name] = "VARIANT"
         # See https://bodo.atlassian.net/browse/BSE-1525
         elif col_type == bodo.null_array_type:
             sf_schema[col_name] = "VARCHAR"

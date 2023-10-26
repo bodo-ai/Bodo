@@ -31,7 +31,7 @@ from bodo.utils.typing import BodoError
 @pytest.mark.parametrize(
     "df",
     [
-        pd.DataFrame(
+        pd.DataFrame(  # nested strings
             {
                 "A": [
                     ["a", None, "cde"],
@@ -45,9 +45,49 @@ from bodo.utils.typing import BodoError
                 ]
             }
         ),
+        pd.DataFrame(  # nested arrays
+            {
+                "A": [
+                    [[1], [2], None],
+                    [[3], None, [4]],
+                ]
+            }
+        ),
+        pd.DataFrame(  # struct arrays
+            {
+                "A": [
+                    {
+                        "X": "D",
+                        "Y": [4.0, 6.0],
+                        "Z": [[1], None],
+                        "W": {"A": 1, "B": ""},
+                    },
+                    {
+                        "X": "VFD",
+                        "Y": [1.2],
+                        "Z": [[], [3, 1]],
+                        "W": {"A": 1, "B": "AA"},
+                    },
+                ]
+            }
+        ),
+        # TODO BSE-1317
+        # pd.DataFrame( # map arrays
+        #        {
+        #            "a": np.arange(2),
+        #             "b": [{'1': 1.4, '2': 3.1}, {'3':7.0, '4':8.0}],
+        #        }
+        # )
     ],
+    ids=(
+        "nested_strings",
+        "nested_arrays",
+        "struct_arrays",
+        # TODO BSE-1317
+        # "map_arrays"
+    ),
 )
-def test_nested_string(df, datapath: DataPath):
+def test_semi_structured_data(df, datapath: DataPath):
     fp_bodo = datapath("bodo.pq", check_exists=False)
     fp_pandas = datapath("pandas.pq", check_exists=False)
     write = lambda df: df.to_parquet(fp_bodo)
@@ -72,7 +112,7 @@ def test_nested_string(df, datapath: DataPath):
             bodo.barrier()
             df_bodo = pd.read_parquet(fp_bodo)
             df_pandas = pd.read_parquet(fp_pandas)
-        pd.testing.assert_frame_equal(df_bodo, df_pandas, check_column_type=False)
+        pd.testing.assert_frame_equal(df_bodo, df_pandas, check_column_type=True)
 
 
 def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
