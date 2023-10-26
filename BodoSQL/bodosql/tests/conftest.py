@@ -1732,6 +1732,15 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodosql_21of22,
         pytest.mark.bodosql_22of22,
     ]
+    azure_3p_markers = [
+        pytest.mark.bodosql_1of7,
+        pytest.mark.bodosql_2of7,
+        pytest.mark.bodosql_3of7,
+        pytest.mark.bodosql_4of7,
+        pytest.mark.bodosql_5of7,
+        pytest.mark.bodosql_6of7,
+        pytest.mark.bodosql_7of7,
+    ]
     # to run the tests from the given test file. In this case, we add the
     # "single_mod" mark to the tests belonging to that module. This envvar is
     # set in runtests.py, which also adds the "-m single_mod" to the pytest
@@ -1752,8 +1761,10 @@ def pytest_collection_modifyitems(items):
         # don't end up entirely in 1 group
         azure_1p_marker = azure_1p_markers[hash_ % len(azure_1p_markers)]
         azure_2p_marker = azure_2p_markers[hash_ % len(azure_2p_markers)]
+        azure_3p_marker = azure_3p_markers[hash_ % len(azure_3p_markers)]
         item.add_marker(azure_1p_marker)
         item.add_marker(azure_2p_marker)
+        item.add_marker(azure_3p_marker)
 
     # Check if we should try and mark groups for AWS Codebuild
     if "NUMBER_GROUPS_SPLIT" in os.environ:
