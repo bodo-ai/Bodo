@@ -521,6 +521,8 @@ void apply_to_column_dict(
         // Allocate the indices. Count and sum don't use this array.
         indices_arr =
             alloc_nullable_array(num_groups, Bodo_CTypes::INT32, 0, pool, mm);
+        // Output is null if all values in group are null
+        memset(indices_arr->null_bitmask(), 0, ((num_groups + 7) >> 3));
     }
     bodo::vector<uint8_t> V(n_bytes, 0,
                             pool);  // bitmask to mark if group's been updated
