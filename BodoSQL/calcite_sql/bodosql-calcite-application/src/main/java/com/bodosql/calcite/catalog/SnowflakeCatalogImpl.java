@@ -732,11 +732,11 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     // Hide the username, password, and accountName for
     // sharing code without leaking credentials.
     String username;
-    String password;
+    @Nullable String password;
     String accountName;
     if (RelationalAlgebraGenerator.hideCredentials) {
       username = "USERNAME***";
-      password = "PASSWORD***";
+      password = this.password.isEmpty() ? "" : "PASSWORD***";
       accountName = "ACCOUNT***";
     } else {
       username = this.username;
@@ -744,10 +744,15 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       accountName = this.accountName;
     }
 
+    // Only add extra colon if password is given
+    if (password != null && !password.isEmpty()) {
+      password = String.format(":%s", password);
+    }
+
     try {
       connString.append(
           String.format(
-              "snowflake://%s:%s@%s/%s",
+              "snowflake://%s%s@%s/%s",
               URLEncoder.encode(username, "UTF-8"),
               URLEncoder.encode(password, "UTF-8"),
               URLEncoder.encode(accountName, "UTF-8"),
