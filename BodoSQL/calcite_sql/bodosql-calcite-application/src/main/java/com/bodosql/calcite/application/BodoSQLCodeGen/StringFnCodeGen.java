@@ -345,4 +345,115 @@ public class StringFnCodeGen {
       throw new BodoSQLCodegenException("Invalid number of arguments passed to SHA2.");
     }
   }
+
+  /**
+   * Generate python code for HEX_ENCODE
+   *
+   * @param operands Input arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Generated code
+   */
+  public static Expr generateHexEncode(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    ArrayList<Expr> args = new ArrayList<>(operands);
+    if (args.size() == 1) {
+      args.add(new Expr.IntegerLiteral(1));
+    } else {
+      // Extract the second argument as a literal instead of a call with np.int32
+      String lineArgStr = operands.get(1).emit();
+      if (!(lineArgStr.startsWith("np.int"))) {
+        throw new BodoSQLCodegenException(
+            "Invalid second argument to BASE64_ENCODE: " + (operands.get(1).emit()));
+      }
+      Expr numericArg = new Expr.Raw(lineArgStr.split("\\(|\\)")[1]);
+      args.set(1, numericArg);
+    }
+    assert args.size() == 2;
+    return ExprKt.BodoSQLKernel("hex_encode", args, streamingNamedArgs);
+  }
+
+  /**
+   * Generate python code for BASE64_ENCODE
+   *
+   * @param operands Input arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Generated code
+   */
+  public static Expr generateBase64Encode(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    ArrayList<Expr> args = new ArrayList<>(operands);
+    if (args.size() == 1) {
+      args.add(new Expr.IntegerLiteral(0));
+    } else {
+      // Extract the second argument as a literal instead of a call with np.int32
+      String lineArgStr = operands.get(1).emit();
+      if (!(lineArgStr.startsWith("np.int"))) {
+        throw new BodoSQLCodegenException(
+            "Invalid second argument to BASE64_ENCODE: " + (operands.get(1).emit()));
+      }
+      Expr numericArg = new Expr.Raw(lineArgStr.split("\\(|\\)")[1]);
+      args.set(1, numericArg);
+    }
+    if (args.size() == 2) {
+      args.add(new Expr.StringLiteral("+/="));
+    }
+    assert args.size() == 3;
+    return ExprKt.BodoSQLKernel("base64_encode", args, streamingNamedArgs);
+  }
+
+  /**
+   * Generate python code for one of the decoding functions for BASE64_ENCODE
+   *
+   * @param fnName Which decoding function is being used (currently only supports
+   *     BASE64_DECODE_STRING and TRY_BASE64_DECODE_STRING)
+   * @param operands Input arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Generated code
+   */
+  public static Expr generateBase64DecodeFn(
+      String fnName, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    ArrayList<Expr> args = new ArrayList<>(operands);
+    if (args.size() == 1) {
+      args.add(new Expr.StringLiteral("+/="));
+    }
+    boolean tryMode;
+    String kernel;
+    switch (fnName) {
+      case "BASE64_DECODE_STRING":
+        {
+          tryMode = false;
+          kernel = "base64_decode_string";
+          break;
+        }
+      case "TRY_BASE64_DECODE_STRING":
+        {
+          tryMode = true;
+          kernel = "base64_decode_string";
+          break;
+        }
+      case "BASE64_DECODE_BINARY":
+        {
+          tryMode = false;
+          kernel = "base64_decode_binary";
+          break;
+        }
+      case "TRY_BASE64_DECODE_BINARY":
+        {
+          tryMode = true;
+          kernel = "base64_decode_binary";
+          break;
+        }
+      default:
+        {
+          throw new BodoSQLCodegenException(
+              "Unsupported function for generateBase64DecodeFn: " + fnName);
+        }
+    }
+    args.add(new Expr.BooleanLiteral(tryMode));
+    assert args.size() == 3;
+    return ExprKt.BodoSQLKernel(kernel, args, streamingNamedArgs);
+  }
 }

@@ -2453,7 +2453,7 @@ BodoSQL currently supports the following string functions:
 
 
 #### MD5
--   `#!sql MD5(msg])`
+-   `#!sql MD5(msg)`
 
     Encodes the `msg` string using the `MD5` algorithm. Outputs the
     result as a hex-encoded string.
@@ -2463,6 +2463,58 @@ BodoSQL currently supports the following string functions:
 -   `#!sql MD5_HEX(msg)`
 
     Equivalent to `#!sql MD5_HEX(msg)`
+
+
+#### HEX_ENCODE
+-   `#!sql HEX_ENCODE(msg[, case])`
+
+    Encodes the `msg` string into a string using the hex encoding scheme as if
+    it were binary data (or directly encodes binary data). If `#!sql case` 
+    (default one) is zero then the alphabetical hex characters are lowercase,
+    if it is one then they are uppercase.
+    [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/hex_encode).
+
+
+#### BASE64_ENCODE
+-   `#!sql BASE64_ENCODE(msg[, max_line_length[, alphabet]])`
+
+    Encodes the `msg` string into a string using the base64 encoding scheme as if
+    it were binary data (or directly encodes binary data). If `#!sql max_line_length` 
+    (default zero) is greater than zero, then newline characters will be inserted
+    after that many characters to effectively add "text wrapping". If `#!sql alphabet`
+    is provided, it specifies substitutes for the usual encoding characters for
+    index 62, index 63, and the padding character. 
+    [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/base64_encode).
+
+
+#### BASE64_DECODE_STRING
+-   `#!sql BASE64_DECODE_STRING(msg[, alphabet])`
+
+    Reverses the process of calling `#!sql BASE64_ENCODE` on a string with the given alphabet,
+    ignoring any newline characters produced by the `#!sql max_line_length` argument. Raises an
+    exception if the string is malformed in any way.
+    [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/base64_decode_string).
+
+
+#### TRY_BASE64_DECODE_STRING
+-   `#!sql TRY_BASE64_DECODE_STRING(msg[, alphabet])`
+
+    Equivalent to `#!sql BASE64_DECODE_STRING` except that it will return null instead of raising
+    an exception if the string is malformed in any way.
+
+
+#### BASE64_DECODE_BINARY
+-   `#!sql BASE64_DECODE_BINARY(msg[, alphabet])`
+
+    The same as `#!sql BASE64_DECODE_STRING` except that the output is binary instead of a string.
+
+
+
+#### TRY_BASE64_DECODE_BINARY
+-   `#!sql TRY_BASE64_DECODE_BINARY(msg[, alphabet])`
+
+    Equivalent to `#!sql BASE64_DECODE_BINARY` except that it will return null instead of raising
+    an exception if the string is malformed in any way.
 
 
 ###  Regex Functions
