@@ -29,13 +29,17 @@ from bodo.utils.typing import (
 def make_to_boolean(_try):
     """Generate utility functions to unopt TO_BOOLEAN arguments"""
 
+    func_name = "to_boolean"
+    if _try:
+        func_name = "try_to_boolean"
+
     @numba.generated_jit(nopython=True)
     def func(arr, dict_encoding_state=None, func_id=-1):
         """Handles cases where TO_BOOLEAN receives optional arguments and forwards
         to the appropriate version of the real implementation"""
         if isinstance(arr, types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.to_boolean",
+                f"bodo.libs.bodosql_array_kernels.{func_name}",
                 ["arr", "dict_encoding_state", "func_id"],
                 0,
             )
@@ -760,6 +764,10 @@ def to_char_util(arr, format_str=None):
 def make_to_double(_try):
     """Generate utility functions to unopt TO_DOUBLE arguments"""
 
+    func_name = "to_double"
+    if _try:
+        func_name = "try_to_double"
+
     @numba.generated_jit(nopython=True)
     def func(val, optional_format_string, dict_encoding_state=None, func_id=-1):
         """Handles cases where TO_DOUBLE receives optional arguments and forwards
@@ -768,7 +776,7 @@ def make_to_double(_try):
         for i, arg in enumerate(args):
             if isinstance(arg, types.optional):  # pragma: no cover
                 return unopt_argument(
-                    "bodo.libs.bodosql_array_kernels.to_double",
+                    f"bodo.libs.bodosql_array_kernels.{func_name}",
                     ["val", "optional_format_string", "dict_encoding_state", "func_id"],
                     i,
                     default_map={"dict_encoding_state": None, "func_id": -1},

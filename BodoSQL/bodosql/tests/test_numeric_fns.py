@@ -859,6 +859,7 @@ def test_to_number_columns(fn_name):
     ],
 )
 def test_to_number_optional(fn_name):
+    """Test TRY_TO_NUMBER and TO_NUMBER in optional argument case"""
     query = f"""SELECT case when {fn_name}(A) in (0, 1, 2, 3, 4, 5)
             then 'USA' else 'international' end as origin_zip_type
             FROM table1 """
