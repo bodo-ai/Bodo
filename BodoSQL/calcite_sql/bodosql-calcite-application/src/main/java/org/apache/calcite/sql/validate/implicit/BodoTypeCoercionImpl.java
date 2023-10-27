@@ -1,10 +1,12 @@
 package org.apache.calcite.sql.validate.implicit;
 
+import kotlin.jvm.functions.Function3;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeFactoryImpl;
 import org.apache.calcite.sql.SqlCall;
+import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlDynamicParam;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
@@ -18,6 +20,9 @@ import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
+
+import java.util.List;
+import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
@@ -40,29 +45,71 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     return super.getTightestCommonType(type1, type2);
   }
 
-  @Override
-  public @Nullable RelDataType implicitCast(RelDataType in, SqlTypeFamily expected) {
-    // Allow casting from Variant to any string.
-    // TODO: Add the other type families.
-    if (in instanceof VariantSqlType && expected != SqlTypeFamily.ANY) {
+  /**
+   * Cast a variant type for a given operator name and argument number to its intended
+   * cast. If no cast is provided or the argument does not need to be cast it returns
+   * the original type.
+   *
+   * @param variantType The original type to cast.
+   * @param operatorName The name of the function. This is presumed to be a unique identifier. If an
+   *                     overloaded function is encountered additional information may be required.
+   * @param argNum Which argument is being cast. This is important for functions where arguments have different
+   *               defined types.
+   * @return A new type or the original type.
+   */
+  protected RelDataType variantImplicitCast(RelDataType variantType, String operatorName, int argNum) {
+    // TODO(njriasan): Define a simpler name for this type
+    Map<String, Function3<RelDataType, RelDataTypeFactory, Integer, RelDataType>> variantMap = VariantCastTable.Companion.getVariantNameMapping();
+    if (variantMap.containsKey(operatorName)) {
+      Function3<RelDataType, RelDataTypeFactory, Integer, RelDataType> castFunction = variantMap.get(operatorName);
+      return castFunction.invoke(variantType, factory, argNum);
+    } else {
+      return variantType;
+    }
+  }
 
-      if (expected.getTypeNames().contains(SqlTypeName.VARCHAR)) {
-        return factory.createTypeWithNullability(
-                factory.createSqlType(SqlTypeName.VARCHAR),
-                in.isNullable()
-        );
-      } else if (expected.equals(SqlTypeFamily.BOOLEAN)) {
-        // Note: We check for exactly boolean in case boolean is one of many accepted types to avoid
-        // unexpected casting. For example, if a function were to accept both BOOLEAN and NUMERIC types,
-        // then we don't necessarily want to cast to BOOLEAN.
-        return factory.createTypeWithNullability(
-                factory.createSqlType(SqlTypeName.BOOLEAN),
-                in.isNullable()
-        );
+  /**
+   * Bodo extension of builtinFunctionCoercion to control variant behavior.
+   * Within Snowflake Variants do not seem to follow simple rules like
+   * Variant -> Boolean if a boolean is accepted. Instead, the behavior
+   * seems to be function dependent.
+   *
+   * If we wanted to make global changes to implicitCast, then we wouldn't
+   * have the level of control necessary to specify the action for each function.
+   * As a result, instead we cast variants on a per-function basis before reaching
+   * the general casting behavior. After we handle variants we return to the parent's
+   * behavior.
+   *
+   * @param binding          Call binding
+   * @param operandTypes     Types of the operands passed in
+   * @param expectedFamilies Expected SqlTypeFamily list by user specified
+   * @return Was any input coerced to another type?
+   */
+  @Override public boolean builtinFunctionCoercion(
+          SqlCallBinding binding,
+          List<RelDataType> operandTypes,
+          List<SqlTypeFamily> expectedFamilies) {
+    boolean coerced = false;
+    String operatorName = binding.getOperator().getName();
+    for (int i = 0; i < operandTypes.size(); i++) {
+      RelDataType operandType = operandTypes.get(i);
+      if (operandType instanceof VariantSqlType) {
+        RelDataType implicitType = variantImplicitCast(operandType, operatorName, i);
+        coerced = null != implicitType
+                && operandTypes.get(i) != implicitType
+                && coerceOperandType(binding.getScope(), binding.getCall(), i, implicitType)
+                || coerced;
       }
     }
+    // Perform any other casting
+    boolean otherCoerced = super.builtinFunctionCoercion(binding, operandTypes, expectedFamilies);
+    return otherCoerced || coerced;
+  }
+
+  @Override
+  public @Nullable RelDataType implicitCast(RelDataType in, SqlTypeFamily expected) {
     // Calcite natively enables casting STRING -> BINARY AND BINARY -> STRING.
-    // We don't want this behavior so we disable it.
+    // We don't want this behavior, so we disable it.
     if ((SqlTypeUtil.isBinary(in) && expected == SqlTypeFamily.CHARACTER) || (SqlTypeUtil.isCharacter(in) && expected == SqlTypeFamily.BINARY)) {
       return null;
     }
