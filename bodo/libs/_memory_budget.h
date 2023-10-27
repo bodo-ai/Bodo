@@ -10,9 +10,9 @@
 #include "_memory.h"
 
 // TODO(aneesh) explore better values for this constant
-/// Fraction of the total availible memory that the memory budgeting system will
+/// Fraction of the total available memory that the memory budgeting system will
 /// use.
-#define BODO_MEMORY_BUDGET_USAGE_FRACTION 0.75
+#define BODO_MEMORY_BUDGET_USAGE_FRACTION 0.85
 
 /// All supported streaming operator types. The order here must match the order
 /// in _memory_budget.py's OperatorType.
@@ -27,12 +27,12 @@ enum class OperatorType {
 
 /**
  * @brief Class that manages operator memory budget
- * This class will be availible as a singleton through the Default() method.
+ * This class will be available as a singleton through the Default() method.
  */
 class OperatorComptroller {
    public:
     /**
-     * @brief Get the globally availible singleton instance
+     * @brief Get the globally available singleton instance
      */
     static std::shared_ptr<OperatorComptroller> Default() {
         static std::shared_ptr<OperatorComptroller> comptroller_(
@@ -55,7 +55,7 @@ class OperatorComptroller {
      * @param pipeline_id Pipeline to modify
      * @param budget total budget to set (in bytes)
      */
-    void SetMemoryBudget(int64_t pipeline_id, size_t budget);
+    void SetPipelineMemoryBudget(int64_t pipeline_id, size_t budget);
 
     /**
      * @brief Register an operator and associate it with all pipelines where it
@@ -114,6 +114,13 @@ class OperatorComptroller {
         int64_t min_pipeline_id;
         int64_t max_pipeline_id;
         size_t estimate;
+
+        inline bool estimate_is_relative() {
+            // Currently only Snowflake Write asks for an absolute budget.
+            // The rest provide a relative estimate and need to be treated
+            // as such.
+            return this->operator_type != OperatorType::SNOWFLAKE_WRITE;
+        }
     };
     std::vector<OperatorRequest> requests_per_operator;
 
