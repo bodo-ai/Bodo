@@ -244,15 +244,14 @@ static bodo::tests::suite tests([] {
     });
 
     bodo::tests::test("test_get_col_idx_map", [] {
-        std::vector<int8_t> arr_array_types(sample_array_types);
+        std::span<const int8_t> arr_array_types(sample_array_types);
         bodo::tests::check(get_col_idx_map(arr_array_types) ==
                            std::vector<size_t>{0, 1, 4, 6, 11, 12});
-        bodo::tests::check(get_col_idx_map(arr_array_types, 8, 11) ==
-                           std::vector<size_t>{8, 9});
-        arr_array_types.resize(13);
+        bodo::tests::check(get_col_idx_map(arr_array_types.subspan<8, 3>()) ==
+                           std::vector<size_t>{0, 1});
         bool exception_caught = false;
         try {
-            get_col_idx_map(arr_array_types);
+            get_col_idx_map(arr_array_types.subspan<0, 13>());
         } catch (std::runtime_error &ex) {
             bodo::tests::check(std::string(ex.what()) ==
                                "The last array type cannot be ARRAY_ITEM: "
@@ -263,8 +262,7 @@ static bodo::tests::suite tests([] {
     });
 
     bodo::tests::test("test_empty_col_idx_map", [] {
-        std::vector<int8_t> arr_array_types;
-        bodo::tests::check(get_col_idx_map(arr_array_types) ==
+        bodo::tests::check(get_col_idx_map(std::span<int8_t>()) ==
                            std::vector<size_t>());
     });
 });
