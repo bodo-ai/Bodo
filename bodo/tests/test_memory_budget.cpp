@@ -29,13 +29,14 @@ bodo::tests::suite memory_budget_tests([] {
                 comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 1, 0,
                                               100);
             },
-            "max_pipeline_id cannot be less than min_pipeline_id");
+            "OperatorComptroller::RegisterOperator: max_pipeline_id cannot be "
+            "less than min_pipeline_id");
     });
 
     bodo::tests::test("test_1_op_satisfiable_estimate", [] {
         auto comptroller = OperatorComptroller::Default();
         comptroller->Initialize();
-        comptroller->SetMemoryBudget(0, 100);
+        comptroller->SetPipelineMemoryBudget(0, 100);
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 100);
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 100);
@@ -45,7 +46,7 @@ bodo::tests::suite memory_budget_tests([] {
     bodo::tests::test("test_1_op_unsatisfiable_estimate", [] {
         auto comptroller = OperatorComptroller::Default();
         comptroller->Initialize();
-        comptroller->SetMemoryBudget(0, 100);
+        comptroller->SetPipelineMemoryBudget(0, 100);
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 200);
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 100);
@@ -55,7 +56,7 @@ bodo::tests::suite memory_budget_tests([] {
     bodo::tests::test("test_2_ops_equal_unsatisfiable_estimates", [] {
         auto comptroller = OperatorComptroller::Default();
         comptroller->Initialize();
-        comptroller->SetMemoryBudget(0, 100);
+        comptroller->SetPipelineMemoryBudget(0, 100);
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 100);
         comptroller->RegisterOperator(1, OperatorType::UNKNOWN, 0, 0, 100);
         comptroller->ComputeSatisfiableBudgets();
@@ -66,7 +67,7 @@ bodo::tests::suite memory_budget_tests([] {
     bodo::tests::test("test_2_ops_unequal_satisfiable_estimates", [] {
         auto comptroller = OperatorComptroller::Default();
         comptroller->Initialize();
-        comptroller->SetMemoryBudget(0, 100);
+        comptroller->SetPipelineMemoryBudget(0, 100);
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 75);
         comptroller->RegisterOperator(1, OperatorType::UNKNOWN, 0, 0, 25);
         comptroller->ComputeSatisfiableBudgets();
@@ -77,8 +78,8 @@ bodo::tests::suite memory_budget_tests([] {
     bodo::tests::test("test_1_ops_2_pipelines_satisfiable", [] {
         auto comptroller = OperatorComptroller::Default();
         comptroller->Initialize();
-        comptroller->SetMemoryBudget(0, 100);
-        comptroller->SetMemoryBudget(1, 0);
+        comptroller->SetPipelineMemoryBudget(0, 100);
+        comptroller->SetPipelineMemoryBudget(1, 0);
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 100);
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 100);
@@ -87,8 +88,8 @@ bodo::tests::suite memory_budget_tests([] {
     bodo::tests::test("test_1_ops_2_pipelines_unsatisfiable", [] {
         auto comptroller = OperatorComptroller::Default();
         comptroller->Initialize();
-        comptroller->SetMemoryBudget(0, 100);
-        comptroller->SetMemoryBudget(1, 50);
+        comptroller->SetPipelineMemoryBudget(0, 100);
+        comptroller->SetPipelineMemoryBudget(1, 50);
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 1, 100);
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
@@ -98,8 +99,8 @@ bodo::tests::suite memory_budget_tests([] {
     bodo::tests::test("test_1_ops_2_pipelines_unsatisfiable", [] {
         auto comptroller = OperatorComptroller::Default();
         comptroller->Initialize();
-        comptroller->SetMemoryBudget(0, 100);
-        comptroller->SetMemoryBudget(1, 100);
+        comptroller->SetPipelineMemoryBudget(0, 100);
+        comptroller->SetPipelineMemoryBudget(1, 100);
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 1, 100);
         comptroller->RegisterOperator(1, OperatorType::UNKNOWN, 1, 1, 100);
         comptroller->ComputeSatisfiableBudgets();
@@ -111,7 +112,7 @@ bodo::tests::suite memory_budget_tests([] {
     bodo::tests::test("test_reduce_budget", [] {
         auto comptroller = OperatorComptroller::Default();
         comptroller->Initialize();
-        comptroller->SetMemoryBudget(0, 100);
+        comptroller->SetPipelineMemoryBudget(0, 100);
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 100);
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 100);
@@ -128,7 +129,7 @@ bodo::tests::suite memory_budget_tests([] {
     bodo::tests::test("test_increase_budget", [] {
         auto comptroller = OperatorComptroller::Default();
         comptroller->Initialize();
-        comptroller->SetMemoryBudget(0, 100);
+        comptroller->SetPipelineMemoryBudget(0, 100);
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 50);
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
@@ -141,7 +142,7 @@ bodo::tests::suite memory_budget_tests([] {
         "test_increase_budget_unsatisfiable_becomes_satisfiable", [] {
             auto comptroller = OperatorComptroller::Default();
             comptroller->Initialize();
-            comptroller->SetMemoryBudget(0, 100);
+            comptroller->SetPipelineMemoryBudget(0, 100);
             comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 75);
             comptroller->RegisterOperator(1, OperatorType::UNKNOWN, 0, 0, 75);
             comptroller->ComputeSatisfiableBudgets();

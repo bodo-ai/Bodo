@@ -2,27 +2,29 @@
 #include "_memory_budget.h"
 #include "_bodo_common.h"
 
-void OperatorComptroller::Initialize() { current_pipeline_id = 0; }
+void OperatorComptroller::Initialize() { this->current_pipeline_id = 0; }
 
 void OperatorComptroller::Reset() {
-    current_pipeline_id = UNINITIALIZED_PIPELINE_ID;
+    this->current_pipeline_id = UNINITIALIZED_PIPELINE_ID;
 
-    pipeline_remaining_budget.clear();
-    pipeline_remaining_operators.clear();
-    operator_allocated_budget.clear();
+    this->pipeline_remaining_budget.clear();
+    this->pipeline_remaining_operators.clear();
+    this->operator_allocated_budget.clear();
 
-    requests_per_operator.clear();
+    this->requests_per_operator.clear();
 
-    num_pipelines = 0;
-    num_operators = 0;
+    this->num_pipelines = 0;
+    this->num_operators = 0;
 }
 
-void OperatorComptroller::SetMemoryBudget(int64_t pipeline_id, size_t budget) {
-    if (static_cast<int64_t>(pipeline_remaining_budget.size() - 1) <
+void OperatorComptroller::SetPipelineMemoryBudget(int64_t pipeline_id,
+                                                  size_t budget) {
+    if (static_cast<int64_t>(this->pipeline_remaining_budget.size() - 1) <
         pipeline_id) {
-        pipeline_remaining_budget.resize(pipeline_id + 1);
+        this->pipeline_remaining_budget.resize(pipeline_id + 1);
     }
-    pipeline_remaining_budget[pipeline_id] = budget;
+    this->pipeline_remaining_budget[pipeline_id] = budget;
+    this->num_pipelines = std::max(this->num_pipelines, pipeline_id + 1);
 }
 
 void OperatorComptroller::RegisterOperator(int64_t operator_id,
@@ -34,36 +36,37 @@ void OperatorComptroller::RegisterOperator(int64_t operator_id,
         // this should never happen - if it does, something is wrong on the
         // BodoSQL side.
         throw std::runtime_error(
-            "max_pipeline_id cannot be less than min_pipeline_id");
+            "OperatorComptroller::RegisterOperator: max_pipeline_id cannot be "
+            "less than min_pipeline_id");
     }
 
-    if (num_operators < (operator_id + 1)) {
+    if (this->num_operators < (operator_id + 1)) {
         // We have to do this resize here, because we are currently writing to
         // the requests_per_operator map.
-        operator_allocated_budget.resize(operator_id + 1);
-        requests_per_operator.resize(operator_id + 1);
-        num_operators = operator_id + 1;
+        this->operator_allocated_budget.resize(operator_id + 1);
+        this->requests_per_operator.resize(operator_id + 1);
+        this->num_operators = operator_id + 1;
     }
 
-    requests_per_operator[operator_id] = OperatorRequest{
+    this->requests_per_operator[operator_id] = OperatorRequest{
         operator_type, min_pipeline_id, max_pipeline_id, estimate};
     this->num_pipelines = std::max(this->num_pipelines, max_pipeline_id + 1);
 }
 
 void OperatorComptroller::IncrementPipelineID() {
-    if (current_pipeline_id == UNINITIALIZED_PIPELINE_ID) {
+    if (this->current_pipeline_id == UNINITIALIZED_PIPELINE_ID) {
         throw std::runtime_error(
             "Initialize() was not called before IncrementPipelineID()");
     }
 
-    current_pipeline_id++;
+    this->current_pipeline_id++;
 }
 
 int64_t OperatorComptroller::GetOperatorBudget(int64_t operator_id) {
     if (operator_id < 0) {
         return -1;
     }
-    return operator_allocated_budget[operator_id];
+    return this->operator_allocated_budget[operator_id];
 }
 
 void OperatorComptroller::ReduceOperatorBudget(int64_t operator_id,
@@ -72,66 +75,73 @@ void OperatorComptroller::ReduceOperatorBudget(int64_t operator_id,
         return;
     }
 
-    if (operator_allocated_budget[operator_id] <=
+    if (this->operator_allocated_budget[operator_id] <=
         static_cast<int64_t>(budget)) {
-        std::cerr << "New budget for operator " << operator_id
-                  << " is not strictly less than old budget" << std::endl;
+        std::cerr << "OperatorComptroller::ReduceOperatorBudget: New budget "
+                     "for operator "
+                  << operator_id << " is not strictly less than old budget"
+                  << std::endl;
         return;
     }
-    auto old_budget = operator_allocated_budget[operator_id];
+    auto old_budget = this->operator_allocated_budget[operator_id];
     auto delta = old_budget - budget;
-    const auto& req = requests_per_operator[operator_id];
+    const auto& req = this->requests_per_operator[operator_id];
 
     // Reduce budget for this operator
-    operator_allocated_budget[operator_id] = budget;
+    this->operator_allocated_budget[operator_id] = budget;
     // Add the freed budget back to pipeline_remaining_budget so that operators
     // that call IncreaseOperatorBudget can take advantage of it
     for (int64_t pipeline_id = req.min_pipeline_id;
          pipeline_id <= req.max_pipeline_id; pipeline_id++) {
-        pipeline_remaining_budget[pipeline_id] += delta;
+        this->pipeline_remaining_budget[pipeline_id] += delta;
     }
 }
 
 void OperatorComptroller::IncreaseOperatorBudget(int64_t operator_id) {
-    const auto& req = requests_per_operator[operator_id];
+    const auto& req = this->requests_per_operator[operator_id];
     size_t max_update = std::numeric_limits<size_t>::max();
     // Determine the largest amount of budget we can allocate for this operator
     for (int64_t pipeline_id = req.min_pipeline_id;
          pipeline_id <= req.max_pipeline_id; pipeline_id++) {
         max_update =
-            std::min(max_update, pipeline_remaining_budget[pipeline_id]);
+            std::min(max_update, this->pipeline_remaining_budget[pipeline_id]);
     }
 
     // If we are able to increase the budget, then do so.
     if (max_update) {
-        operator_allocated_budget[operator_id] += max_update;
+        this->operator_allocated_budget[operator_id] += max_update;
         for (int64_t pipeline_id = req.min_pipeline_id;
              pipeline_id <= req.max_pipeline_id; pipeline_id++) {
-            pipeline_remaining_budget[pipeline_id] -= max_update;
+            this->pipeline_remaining_budget[pipeline_id] -= max_update;
         }
     }
 }
 
 void OperatorComptroller::ComputeSatisfiableBudgets() {
-    // Tests might have set their own max budgets
-    if (this->pipeline_remaining_budget.size() !=
-        static_cast<size_t>(this->num_pipelines)) {
-        // If the budgets for each pipeline have not been initialized yet,
-        // initialize it with the total memory availible (with some factor
-        // applied to the total size to allow for non-budgeted memory usage.
+    // Tests might have set their own max budgets.
+    if (this->pipeline_remaining_budget.size() == 0) {
+        // If the budgets for each pipeline have not been initialized yet
+        // (common/default case), initialize it with the total memory available
+        // (with some factor applied to the total size to allow for non-budgeted
+        // memory usage.
         size_t total_mem = BODO_MEMORY_BUDGET_USAGE_FRACTION *
                            bodo::BufferPool::Default()->get_memory_size_bytes();
-        for (int64_t i = 0; i < this->num_pipelines; i++) {
-            SetMemoryBudget(i, total_mem);
+        this->pipeline_remaining_budget.resize(this->num_pipelines, total_mem);
+    } else {
+        if (this->pipeline_remaining_budget.size() !=
+            static_cast<size_t>(this->num_pipelines)) {
+            throw std::runtime_error(
+                "OperatorComptroller::ComputeSatisfiableBudgets: Either all "
+                "pipeline budgets must be initialized manually or none of them "
+                "should be!");
         }
     }
-    pipeline_remaining_budget.resize(this->num_pipelines);
-    pipeline_remaining_operators.resize(this->num_pipelines);
+    this->pipeline_remaining_operators.resize(this->num_pipelines);
 
-    for (const auto& req : requests_per_operator) {
+    for (const auto& req : this->requests_per_operator) {
         for (int64_t pipeline_id = req.min_pipeline_id;
              pipeline_id <= req.max_pipeline_id; pipeline_id++) {
-            pipeline_remaining_operators[pipeline_id]++;
+            this->pipeline_remaining_operators[pipeline_id]++;
         }
     }
 
@@ -139,9 +149,10 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
         // Until more work is done to refine the memory estimates, disable
         // memory budgeting by default so that performance doesn't degrade.
         for (int64_t op_id = 0;
-             op_id < static_cast<int64_t>(operator_allocated_budget.size());
+             op_id <
+             static_cast<int64_t>(this->operator_allocated_budget.size());
              op_id++) {
-            operator_allocated_budget[op_id] = -1;
+            this->operator_allocated_budget[op_id] = -1;
         }
         return;
     }
@@ -149,20 +160,21 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
     while (true) {
         bool changed = false;
         std::vector<size_t> updates_per_operator(
-            operator_allocated_budget.size());
+            this->operator_allocated_budget.size());
         // Discover new updates but don't apply them so that all operators can
-        // recieve the largest possible slice of memory in this iteration. Since
+        // receive the largest possible slice of memory in this iteration. Since
         // we only hand out memory in chunks of size:
-        //   (total availible)/(num unsatisfied operators)
+        //   (total available)/(num unsatisfied operators)
         // it's safe to do this.
         for (int64_t op_id = 0;
-             op_id < static_cast<int64_t>(operator_allocated_budget.size());
+             op_id <
+             static_cast<int64_t>(this->operator_allocated_budget.size());
              op_id++) {
             // In this loop, for each operator, attempt to increase the allotted
             // memory by pipeline_remaining_budget / num_unsatisfied_operators
             // across all pipelines (take the min amount of memory across all
             // pipelines).
-            const auto& req = requests_per_operator[op_id];
+            const auto& req = this->requests_per_operator[op_id];
             if (req.estimate == 0) {
                 continue;
             }
@@ -171,9 +183,9 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
             for (int64_t pipeline_id = req.min_pipeline_id;
                  pipeline_id <= req.max_pipeline_id; pipeline_id++) {
                 size_t remaining_budget =
-                    pipeline_remaining_budget[pipeline_id];
+                    this->pipeline_remaining_budget[pipeline_id];
                 size_t remaining_operators =
-                    pipeline_remaining_operators[pipeline_id];
+                    this->pipeline_remaining_operators[pipeline_id];
                 size_t requesting_allocation = std::min(
                     req.estimate, remaining_budget / remaining_operators);
                 available_allocation =
@@ -184,25 +196,25 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
 
         // Apply updates
         for (int64_t op_id = 0;
-             op_id < static_cast<int64_t>(requests_per_operator.size());
+             op_id < static_cast<int64_t>(this->requests_per_operator.size());
              op_id++) {
-            auto& req = requests_per_operator[op_id];
+            auto& req = this->requests_per_operator[op_id];
             auto available_allocation = updates_per_operator[op_id];
             if (available_allocation > 0) {
                 // Update the memory allocated for this operator
-                operator_allocated_budget[op_id] += available_allocation;
+                this->operator_allocated_budget[op_id] += available_allocation;
                 // Update the memory remaining in the request
                 req.estimate -= available_allocation;
 
                 for (int64_t pipeline_id = req.min_pipeline_id;
                      pipeline_id <= req.max_pipeline_id; pipeline_id++) {
                     // Mark memory as used in all pipelines with this operator
-                    pipeline_remaining_budget[pipeline_id] -=
+                    this->pipeline_remaining_budget[pipeline_id] -=
                         available_allocation;
                     // If this request is completely satisfied, remove it from
                     // the remaining operators for this pipeline
                     if (req.estimate == 0) {
-                        pipeline_remaining_operators[pipeline_id] -= 1;
+                        this->pipeline_remaining_operators[pipeline_id] -= 1;
                     }
                 }
                 changed = true;
