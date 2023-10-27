@@ -51,6 +51,7 @@ from bodo.utils.typing import BodoError
                     [[1], [2], None],
                     [[3], None, [4]],
                 ]
+                * 10
             }
         ),
         pd.DataFrame(  # struct arrays
@@ -69,6 +70,7 @@ from bodo.utils.typing import BodoError
                         "W": {"A": 1, "B": "AA"},
                     },
                 ]
+                * 10
             }
         ),
         # TODO BSE-1317
