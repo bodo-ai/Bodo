@@ -3,6 +3,7 @@ import pytest
 from bodosql.tests.string_ops_common import *  # noqa
 from bodosql.tests.utils import check_query
 
+import bodo
 from bodo.tests.utils import gen_nonascii_list, pytest_slow_unless_codegen
 
 # Skip unless any codegen files were changed
@@ -1771,6 +1772,10 @@ def test_base64_encode_decode(query_fmt, answer, col_fmt, memory_leak_check):
     )
 
 
+@pytest.mark.skipif(
+    bodo.get_size() > 1,
+    reason="Error handling tests produce inconsistent results on multiple ranks on certain platforms",
+)
 @pytest.mark.parametrize(
     "func",
     [
