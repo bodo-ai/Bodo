@@ -35,7 +35,7 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
     size_t _max_resize_count)
     : data_array(_data_array),
       dict_builder(_dict_builder),
-      size(_data_array->length),
+      size(this->data_array->length),
       capacity(chunk_size),
       max_resize_count(_max_resize_count) {
     if (this->data_array->length != 0) {

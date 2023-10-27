@@ -8,7 +8,7 @@ ArrayBuildBuffer::ArrayBuildBuffer(
     std::shared_ptr<array_info> _data_array,
     std::shared_ptr<DictionaryBuilder> _dict_builder)
     : data_array(_data_array),
-      size(_data_array->length),
+      size(this->data_array->length),
       capacity(0),
       dict_builder(_dict_builder) {
     if (_data_array->length != 0) {
