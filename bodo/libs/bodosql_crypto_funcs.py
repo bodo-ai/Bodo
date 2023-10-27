@@ -170,6 +170,109 @@ def overload_hex_encode_algorithm(msg):
     return impl
 
 
+def hex_decode_string_algorithm(msg):  # pragma: no cover
+    """Function used to calculate the result of hex decryption"""
+
+
+def hex_decode_binary_algorithm(msg):  # pragma: no cover
+    """Function used to calculate the result of hex decryption"""
+
+
+@overload(hex_decode_string_algorithm)
+def overload_hex_decode_string_algorithm(msg):  # pragma: no cover
+    """
+    Computes the result of the hex decoding algorithm on a scalar string.
+
+    Args:
+        msg (string): the string to be encoded
+
+    Answer:
+        (string, boolean): the hex-decoded string, and a boolean indicating success vs failure
+    """
+
+    def impl(msg):  # pragma: no cover
+        if len(msg) == 0:
+            return "", True
+
+        # Verify that the number of characters is a multiple of 2
+        if (len(msg) % 2) != 0:
+            return "", False
+
+        # Verify that all characters are hex characters
+        for c in msg:
+            if c not in "0123456789abcdefABCDEF":
+                return "", False
+
+        # Every 2 bytes in the encoded string corresponds to 1 byte in the decoded string
+        decoded_length = len(msg) // 2
+        output = np.array([0] * decoded_length, dtype=np.uint8)
+        bodo.libs.binary_arr_ext._bytes_fromhex(output.ctypes, msg._data, len(msg))
+        return bodo.libs.str_arr_ext.decode_utf8(output.ctypes, decoded_length), True
+
+    return impl
+
+
+@overload(hex_decode_binary_algorithm)
+def overload_hex_decode_binary_algorithm(msg):  # pragma: no cover
+    """
+    Computes the result of the hex decoding algorithm on a scalar string.
+
+    Args:
+        msg (string): the string to be encoded
+
+    Answer:
+        (string, boolean): the hex-decoded binary data, and a boolean indicating success vs failure
+    """
+
+    def impl(msg):  # pragma: no cover
+        if len(msg) == 0:
+            return b"", True
+
+        # Verify that the number of characters is a multiple of 2
+        if (len(msg) % 2) != 0:
+            return b"", False
+
+        # Verify that all characters are hex characters
+        for c in msg:
+            if c not in "0123456789abcdefABCDEF":
+                return b"", False
+
+        # Every 2 bytes in the encoded string corresponds to 1 byte in the decoded string
+        decoded_length = len(msg) // 2
+        output = np.array([0] * decoded_length, dtype=np.uint8)
+        bodo.libs.binary_arr_ext._bytes_fromhex(output.ctypes, msg._data, len(msg))
+        return bodo.libs.binary_arr_ext.init_bytes_type(output, decoded_length), True
+
+    return impl
+
+
+@overload(hex_encode_algorithm)
+def overload_hex_encode_algorithm(msg):
+    """
+    Computes the result of the hex encoding algorithm on a scalar string.
+
+    Args:
+        msg (string): the string to be encoded
+
+    Answer:
+        (string): the hex-encoded string
+    """
+    kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
+
+    def impl(msg):  # pragma: no cover
+        # Every 3 bytes in the input becomes 2 bytes in the output
+        utf8_str, utf8_len = bodo.libs.str_ext.unicode_to_utf8_and_len(msg)
+        output = numba.cpython.unicode._empty_string(kind, utf8_len * 2, 1)
+        run_hex_encode(
+            utf8_str,
+            np.int64(utf8_len),
+            output,
+        )
+        return output
+
+    return impl
+
+
 @intrinsic
 def run_base64_encode(
     typingctx,
@@ -376,7 +479,6 @@ def overload_base64_decode_algorithm(msg, char_63, char_64, char_pad, _is_str):
         (string, boolean): the base64-decoded string, and a boolean indicating success vs failure
     """
     _is_str_bool = get_overload_const_bool(_is_str)
-    kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
     if _is_str_bool:
 
         def impl(msg, char_63, char_64, char_pad, _is_str):  # pragma: no cover

@@ -374,6 +374,56 @@ public class StringFnCodeGen {
   }
 
   /**
+   * Generate python code for one of the decoding functions for HEX_ENCODE
+   *
+   * @param fnName Which decoding function is being used
+   * @param operands Input arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return Generated code
+   */
+  public static Expr generateHexDecodeFn(
+      String fnName, List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    ArrayList<Expr> args = new ArrayList<>(operands);
+    assert args.size() == 1;
+    boolean tryMode;
+    String kernel;
+    switch (fnName) {
+      case "HEX_DECODE_STRING":
+        {
+          tryMode = false;
+          kernel = "hex_decode_string";
+          break;
+        }
+      case "TRY_HEX_DECODE_STRING":
+        {
+          tryMode = true;
+          kernel = "hex_decode_string";
+          break;
+        }
+      case "HEX_DECODE_BINARY":
+        {
+          tryMode = false;
+          kernel = "hex_decode_binary";
+          break;
+        }
+      case "TRY_HEX_DECODE_BINARY":
+        {
+          tryMode = true;
+          kernel = "hex_decode_binary";
+          break;
+        }
+      default:
+        {
+          throw new BodoSQLCodegenException(
+              "Unsupported function for generateHexDecodeFn: " + fnName);
+        }
+    }
+    args.add(new Expr.BooleanLiteral(tryMode));
+    return ExprKt.BodoSQLKernel(kernel, args, streamingNamedArgs);
+  }
+
+  /**
    * Generate python code for BASE64_ENCODE
    *
    * @param operands Input arguments
@@ -406,8 +456,7 @@ public class StringFnCodeGen {
   /**
    * Generate python code for one of the decoding functions for BASE64_ENCODE
    *
-   * @param fnName Which decoding function is being used (currently only supports
-   *     BASE64_DECODE_STRING and TRY_BASE64_DECODE_STRING)
+   * @param fnName Which decoding function is being used
    * @param operands Input arguments
    * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
    *     we aren't in a streaming context.

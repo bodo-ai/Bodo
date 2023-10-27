@@ -2868,12 +2868,12 @@ def test_split(string, separator, memory_leak_check):
             "Snowflake",
             "536e6f77666c616b65",
             id="scalar-ascii",
-            marks=pytest.mark.slow,
         ),
         pytest.param(
             "Snake 🐍 Infinity ∞",
             "536e616b6520f09f908d20496e66696e69747920e2889e",
             id="scalar-non_ascii",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series(["", None, "\x01\x02\x42\x6c", "A", "@Ѐࠀ䀀"]),
@@ -2882,31 +2882,61 @@ def test_split(string, separator, memory_leak_check):
         ),
     ],
 )
-def test_hex_encode(string, case, answer, memory_leak_check):
+def test_hex_encode_decode(string, case, answer, memory_leak_check):
     # Pass in case as a global
     if isinstance(string, pd.Series):
 
-        def impl(string):
+        def impl_enc(string):
             return pd.Series(bodo.libs.bodosql_array_kernels.hex_encode(string, case))
+
+        def impl_dec_str(string):
+            return pd.Series(
+                bodo.libs.bodosql_array_kernels.hex_decode_string(string, True)
+            )
+
+        def impl_dec_bin(string):
+            return pd.Series(
+                bodo.libs.bodosql_array_kernels.hex_decode_bin(string, False)
+            )
 
         answer = answer.str.lower() if case == 0 else answer.str.upper()
 
     else:
-        impl = lambda string: bodo.libs.bodosql_array_kernels.hex_encode(string, case)
+        impl_enc = lambda string: bodo.libs.bodosql_array_kernels.hex_encode(
+            string, case
+        )
+        impl_dec_str = lambda string: bodo.libs.bodosql_array_kernels.hex_decode_string(
+            string, False
+        )
+        impl_dec_bin = lambda string: bodo.libs.bodosql_array_kernels.hex_decode_binary(
+            string, True
+        )
         answer = answer.lower() if case == 0 else answer.upper()
 
     check_func(
-        impl,
+        impl_enc,
         (string,),
         py_output=answer,
+        check_dtype=False,
+    )
+    check_func(
+        impl_dec_str,
+        (answer,),
+        py_output=string,
         check_dtype=False,
     )
     # For ascii strings, check again but with the input converted from strings to binary
     if isinstance(string, str) and string.isascii():
         check_func(
-            impl,
+            impl_enc,
             (bytes(string, encoding="utf-8"),),
             py_output=answer,
+            check_dtype=False,
+        )
+        check_func(
+            impl_dec_bin,
+            (answer,),
+            py_output=bytes(string, encoding="utf-8"),
             check_dtype=False,
         )
 
