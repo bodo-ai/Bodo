@@ -2,6 +2,7 @@ package com.bodosql.calcite.rel.metadata
 
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter
+import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.utils.IsScalar
 import org.apache.calcite.plan.volcano.RelSubset
 import org.apache.calcite.rel.RelNode
@@ -17,8 +18,10 @@ import org.apache.calcite.rel.metadata.ReflectiveRelMetadataProvider
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.ImmutableBitSet
 
@@ -95,6 +98,34 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
     }
 
     /**
+     * Infer the distinctiveness for concat. Currently, we only support the case where
+     * all literals are being appended to at most 1 column containing compute. We do not attempt to
+     * make any estimations as to how concatenating multiple columns impacts uniqueness.
+     *
+     * @param rel The original projection containing this rex node
+     * @param operands The arguments being passed to the concat function.
+     * @param mq The metadata query handler
+     * @return The number of distinct rows produced by rex when concatenated, or null if we cannot infer it.
+     */
+    private fun inferConcatDistinctiveness(rel: Project, operands: List<RexNode>, mq: RelMetadataQuery): Double? {
+        var index = -1
+        for ((i, operand) in operands.withIndex()) {
+            if (operand !is RexLiteral) {
+                if (index != -1) {
+                    // Multiple columns encountered. Return NULL.
+                    return null
+                }
+                index = i
+            }
+        }
+        // If its all literals there is a singular unique value.
+        if (index == -1) {
+            return 1.0
+        }
+        return inferRexDistinctness(rel, operands[index], mq)
+    }
+
+    /**
      * Attempts to infer the distinctiveness of a RexNode by inferring the distinctiveness
      * of the Input Ref(s) involved and either passing it through unmodified, or transforming
      * it somehow if it goes through a function call.
@@ -115,6 +146,15 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         if (rex is RexCall) {
             if (rex.kind == SqlKind.CAST) {
                 return inferCastDistinctiveness(rel, rex.operands[0], mq, rex.type.sqlTypeName)
+            } else if (rex.kind == SqlKind.OTHER_FUNCTION) {
+                val concatFunctions = listOf(StringOperatorTable.CONCAT.name, StringOperatorTable.CONCAT_WS.name)
+                if (concatFunctions.contains(rex.operator.name)) {
+                    return inferConcatDistinctiveness(rel, rex.operands, mq)
+                }
+            } else if (rex.kind == SqlKind.OTHER) {
+                if (rex.operator.name == SqlStdOperatorTable.CONCAT.name) {
+                    return inferConcatDistinctiveness(rel, rex.operands, mq)
+                }
             }
         }
         return null
