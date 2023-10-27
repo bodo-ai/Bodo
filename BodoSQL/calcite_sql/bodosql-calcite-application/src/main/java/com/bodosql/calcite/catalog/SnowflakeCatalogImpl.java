@@ -6,6 +6,7 @@ import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.snowflake.BodoSnowflakeSqlDialect;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
+import com.bodosql.calcite.application.utils.Memoizer;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
@@ -30,6 +31,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
@@ -525,6 +527,41 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     }
     SnowflakeTypeInfo typeInfo = new SnowflakeTypeInfo(columnDataType, elemType, precision);
     return typeInfo;
+  }
+
+  private final Function<List<String>, Boolean> isTablePossiblyView =
+      Memoizer.memoize(this::isTablePossiblyViewImpl);
+
+  /**
+   * Determine if a table could be a view. A table is a view if either show views like ... returns
+   * or if the query times out.
+   *
+   * @param tableName A list of schema name, table name. If the list doesn't match this format we
+   *     determine the table could be a view.
+   * @return If the table might be a view.
+   */
+  private boolean isTablePossiblyViewImpl(List<String> tableName) {
+    if (tableName.size() != 2) {
+      return true;
+    }
+    try {
+      ResultSet viewInfo =
+          executeSnowflakeQuery(
+              String.format(
+                  Locale.ROOT,
+                  "SHOW VIEWS LIKE '%s' IN SCHEMA \"%s\".\"%s\"",
+                  tableName.get(1),
+                  catalogName,
+                  tableName.get(0)));
+      // ResultSet.next() returns if there is a valid next value.
+      // If the result is empty we don't have a view.
+      return viewInfo.next();
+    } catch (SQLException e) {
+      String errorMsg =
+          String.format(
+              Locale.ROOT, "Unable to check for if tables are views. Error message: %s", e);
+      throw new RuntimeException(errorMsg);
+    }
   }
 
   /**
@@ -1064,6 +1101,13 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   public @Nullable Double estimateColumnDistinctCountWithSampling(
       List<String> tableName, String columnName, Double rowCount) {
+    // Sampling is not supported for views. This is because Row based
+    // sampling is generally too slow and views do not support system
+    // sampling.
+    boolean isView = isTablePossiblyView.apply(tableName);
+    if (isView) {
+      return null;
+    }
     // This function calls approx_count_distinct on the given column name.
     SqlSelect select = approxCountDistinctSamplingQuery(tableName, columnName);
     SqlString sql =
@@ -1228,7 +1272,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
 
   /**
    * Creates a query to get the approximate distinct count of a certain column of a certain table
-   * using sampling.
+   * using sampling. The table must be a real table and not a view.
    *
    * @param tableName qualified table name.
    * @param columnName which column to sample from the table.
@@ -1241,7 +1285,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
             SqlStdOperatorTable.APPROX_COUNT_DISTINCT.createCall(
                 SqlParserPos.ZERO, new SqlIdentifier(columnName, SqlParserPos.ZERO)));
     SqlNodeList from = SqlNodeList.of(new SqlIdentifier(tableName, SqlParserPos.ZERO));
-    String samplingRate = "1";
+    final String samplingRate = "1";
     SqlNumericLiteral samplePercentage =
         SqlLiteral.createExactNumeric(samplingRate, SqlParserPos.ZERO);
     SqlSampleSpec tableSampleSpec =
