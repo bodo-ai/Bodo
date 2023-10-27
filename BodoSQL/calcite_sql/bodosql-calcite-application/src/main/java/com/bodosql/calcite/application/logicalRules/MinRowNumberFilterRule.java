@@ -182,17 +182,23 @@ public class MinRowNumberFilterRule extends RelRule<MinRowNumberFilterRule.Confi
     return false;
   }
 
-  public void buildNewFilter(
+  /**
+   * Builder the min_row_number_filter from the existing filter.
+   *
+   * @param builder The Relbuilder
+   * @param origFilter The original filter condition. This is used to find the
+   *     min_row_number_filter.
+   * @param origProject The original projection. This is used to build the min_row_number_filter.
+   * @param windowColumn The information about the window column.
+   */
+  public void buildMinRowNumberFilter(
       RelBuilder builder,
       Filter origFilter,
       final Project origProject,
       final WindowColumnInfo windowColumn) {
-    // Find the parts of the original condition to replace
+    // Find the part of the original condition to replace
     List<RexNode> oldConditions = RelOptUtil.conjunctions(origFilter.getCondition());
-    // Collect all parts of the condition
-    List<RexNode> newConditions = new ArrayList<>();
     for (RexNode cond : oldConditions) {
-      final RexNode newNode;
       if (cond.equals(windowColumn.sourceRexNode)) {
         // Fetch the original Window column
         List<RexNode> colProjects = origProject.getProjects();
@@ -239,17 +245,40 @@ public class MinRowNumberFilterRule extends RelRule<MinRowNumberFilterRule.Confi
                 .over()
                 .partitionBy(window.partitionKeys)
                 .orderBy(newOrderKeys);
+        final RexNode newNode;
         if (window.isRows()) {
           newNode = baseCall.rowsBetween(window.getLowerBound(), window.getUpperBound()).toRex();
         } else {
           newNode = baseCall.rangeBetween(window.getLowerBound(), window.getUpperBound()).toRex();
         }
-      } else {
-        newNode = cond;
+        builder.filter(newNode);
+        return;
       }
-      newConditions.add(newNode);
     }
-    builder.filter(newConditions);
+  }
+
+  /**
+   * Build the filter for all remaining filter components that don't map to the original
+   * min_row_number_filter condition.
+   *
+   * @param builder The Relbuilder for creating the filter.
+   * @param origFilter The original filter conditions.
+   * @param windowColumn The information about the window function column.
+   */
+  public void buildRemainingFilters(
+      RelBuilder builder, Filter origFilter, final WindowColumnInfo windowColumn) {
+    // Find the parts of the original condition to replace
+    List<RexNode> oldConditions = RelOptUtil.conjunctions(origFilter.getCondition());
+    // Collect all parts of the condition
+    List<RexNode> newConditions = new ArrayList<>();
+    for (RexNode cond : oldConditions) {
+      if (!cond.equals(windowColumn.sourceRexNode)) {
+        newConditions.add(cond);
+      }
+    }
+    if (!newConditions.isEmpty()) {
+      builder.filter(newConditions);
+    }
   }
 
   public void buildNewProject(
@@ -314,8 +343,12 @@ public class MinRowNumberFilterRule extends RelRule<MinRowNumberFilterRule.Confi
     // Now perform the actual update.
     RelBuilder builder = call.builder();
     builder.push(origProject.getInput());
-    buildNewFilter(builder, origFilter, origProject, windowInfo);
+    // Build the min row number filter
+    buildMinRowNumberFilter(builder, origFilter, origProject, windowInfo);
+    // Create the projection
     buildNewProject(builder, origProject, windowInfo);
+    // Build any remaining filters
+    buildRemainingFilters(builder, origFilter, windowInfo);
     // Grab the output and transform the call.
     RelNode output = builder.build();
     call.transformTo(output);
