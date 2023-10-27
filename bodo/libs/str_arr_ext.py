@@ -1960,8 +1960,8 @@ def str_arr_getitem_int(A, ind):
         def str_arr_getitem_impl(A, ind):  # pragma: no cover
             if ind < 0:
                 ind += A.size
-            start_offset = getitem_str_offset(A, ind)
-            end_offset = getitem_str_offset(A, ind + 1)
+            start_offset = getitem_str_offset(A, np.int64(ind))
+            end_offset = getitem_str_offset(A, np.int64(ind) + 1)
             length = end_offset - start_offset
             ptr = get_data_ptr_ind(A, start_offset)
             ret = decode_utf8(ptr, length)

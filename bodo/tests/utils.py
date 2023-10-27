@@ -14,16 +14,7 @@ import warnings
 from contextlib import contextmanager
 from decimal import Decimal
 from enum import Enum
-from typing import (
-    Callable,
-    Dict,
-    Generator,
-    List,
-    Optional,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import Callable, Generator, Optional, TypeVar, Union
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -149,7 +140,7 @@ def check_func(
     func,
     args,
     is_out_distributed=None,
-    distributed: Union[List[Tuple[str, int]], bool, None] = None,
+    distributed: Union[list[tuple[str, int]], bool, None] = None,
     sort_output=False,
     check_names=True,
     copy_input=False,
@@ -170,8 +161,9 @@ def check_func(
     rtol: float = 1e-05,
     use_table_format=True,
     use_dict_encoded_strings=None,
+    use_map_arrays: bool = False,
     convert_to_nullable_float=True,
-) -> Dict[str, Callable]:
+) -> dict[str, Callable]:
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
 
@@ -211,6 +203,7 @@ def check_func(
     If None, tests both formats if input arguments have dataframes.
     - use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded
     format for testing.
+    - use_map_arrays: Flag for forcing all input dict-object arrays to be unboxed as map arrays
     If None, tests both formats if input arguments have string arrays.
     - check_typing_issues: raise an error if there is a typing issue for input args.
     Runs bodo typing on arguments and converts warnings to errors.
@@ -287,10 +280,11 @@ def check_func(
         py_output.sort_index(axis=1, inplace=True)
 
     # List of Output Bodo Functions
-    bodo_funcs: Dict[str, Callable] = {}
+    bodo_funcs: dict[str, Callable] = {}
 
     saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
     saved_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
+    saved_struct_size_limit = bodo.hiframes.boxing.struct_size_limit
     try:
         # test table format for dataframes (non-table format tested below if flag is
         # None)
@@ -301,6 +295,10 @@ def check_func(
         # flag is None)
         if use_dict_encoded_strings:
             bodo.hiframes.boxing._use_dict_str_type = True
+
+        # Test all dict-like arguments as map arrays (no structs) if flag is set
+        if use_map_arrays:
+            bodo.hiframes.boxing.struct_size_limit = -1
 
         # sequential
         if run_seq:
@@ -425,6 +423,7 @@ def check_func(
     finally:
         bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
         bodo.hiframes.boxing._use_dict_str_type = saved_use_dict_str_type
+        bodo.hiframes.boxing.struct_size_limit = saved_struct_size_limit
 
     # test non-table format case if there is any dataframe in input
     if use_table_format is None and any(
@@ -568,7 +567,7 @@ def check_func_seq(
     atol,
     rtol,
     test_str_literal=False,
-) -> Tuple[Callable, List[warnings.WarningMessage]]:
+) -> tuple[Callable, list[warnings.WarningMessage]]:
     """check function output against Python without manually setting inputs/outputs
     distributions (keep the function sequential)
     """
@@ -630,7 +629,7 @@ def check_func_1D(
     args,
     py_output,
     is_out_distributed,
-    distributed: Union[List[Tuple[str, int]], bool, None],
+    distributed: Union[list[tuple[str, int]], bool, None],
     copy_input,
     sort_output,
     check_names,
@@ -713,7 +712,7 @@ def check_func_1D_var(
     args,
     py_output,
     is_out_distributed,
-    distributed: Union[List[str], bool, None],
+    distributed: Union[list[str], bool, None],
     copy_input,
     sort_output,
     check_names,
@@ -1697,7 +1696,7 @@ def convert_non_pandas_columns(df):
 # Mapping Between Numpy Dtype and Equivalent Pandas Extension Dtype
 # Bodo returns the Pandas Dtype while other implementations like Pandas and Spark
 # return the Numpy equivalent. Need to convert during testing.
-np_to_pd_dtype: Dict[np.dtype, pd.api.extensions.ExtensionDtype] = {
+np_to_pd_dtype: dict[np.dtype, pd.api.extensions.ExtensionDtype] = {
     np.dtype(np.int8): pd.Int8Dtype,
     np.dtype(np.int16): pd.Int16Dtype,
     np.dtype(np.int32): pd.Int32Dtype,
@@ -2257,7 +2256,7 @@ def _ensure_func_calls_optimized_out(bodo_func, call_names):
 # We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
 # are stored there (to avoid failing on AWS or our local machines)
 def get_snowflake_connection_string(
-    db: str, schema: str, conn_params: Optional[Dict[str, str]] = None, user: int = 1
+    db: str, schema: str, conn_params: Optional[dict[str, str]] = None, user: int = 1
 ) -> str:
     """
     Generates a common snowflake connection string. Some details (how to determine
@@ -2432,7 +2431,7 @@ def find_funcname_in_annotation_ir(annotation, desired_callname):
         contain the blocks and typemap.
 
     Returns:
-        Tuple(Name of the LHS variable, List[Name of argument variables])
+        tuple(Name of the LHS variable, list[Name of argument variables])
 
     Raises Assertion Error if the desired_callname is not found.
     """
@@ -2473,7 +2472,7 @@ def find_nested_dispatcher_and_args(
     Args:
         dispatcher (Dispatch): A numba/bodo dispatcher
         args (tuple(numba.core.types.Type)): Input tuple of Numba types
-        func_name (Tuple[str, str]): func_name to find.
+        func_name (tuple[str, str]): func_name to find.
         return_dispatcher (bool): Should we find and return the dispatcher + arguments?
             This is True when we are doing this as part of a multi-step traversal.
 
@@ -2706,7 +2705,7 @@ def temp_env_override(env_vars):
     in a dictionary and then restore it after.
 
     Args
-        env_vars (Dict(str, str or None)): A dictionary of environment variables to set.
+        env_vars (dict(str, str or None)): A dictionary of environment variables to set.
             A value of None indicates a variable should be removed.
     """
 
@@ -2806,7 +2805,7 @@ def _nullable_float_arr_maker(L, to_null, to_nan):
     return pd.Series(A)
 
 
-def run_rank0(func, bcast_result: bool = True, result_default=None):
+def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
     """
     Utility function decorator to run a function on just rank 0
     but re-raise any Exceptions safely on all ranks.

@@ -247,6 +247,25 @@ def construct_array_column_type(arr_type, col_name):
     return ColumnClass(col_name, col_dtype, elem_dtype, nullable, tz_info, precision)
 
 
+def construct_json_column_type(arr_type, col_name):
+    """Construct a BodoSQL column type for a JSON column
+    value.
+
+    Args:
+        typ (bodo.StructArrayType): A StructArray type
+        col_name (str): Column name
+
+    Returns:
+        JavaObject: The Java Object for the BodoSQL column type.
+    """
+    col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Json_Object.value)
+    elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Variant.value)
+    nullable = True
+    tz_info = None
+    precision = -1
+    return ColumnClass(col_name, col_dtype, elem_dtype, nullable, tz_info, precision)
+
+
 def get_sql_column_type(arr_type, col_name):
     """get SQL type for a given array type."""
     warning_msg = f"DataFrame column '{col_name}' with type {arr_type} not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
@@ -260,6 +279,9 @@ def get_sql_column_type(arr_type, col_name):
     elif isinstance(arr_type, bodo.ArrayItemArrayType):
         # TODO: [BSE-560] Make get_sql_column_type recursive for semi-structured data
         return construct_array_column_type(arr_type, col_name)
+    elif isinstance(arr_type, (bodo.StructArrayType, bodo.MapArrayType)):
+        # TODO: [BSE-560] Make get_sql_column_type recursive for semi-structured data
+        return construct_json_column_type(arr_type, col_name)
     elif arr_type.dtype in _numba_to_sql_column_type_map:
         col_dtype = ColumnTypeClass.fromTypeId(
             _numba_to_sql_column_type_map[arr_type.dtype]

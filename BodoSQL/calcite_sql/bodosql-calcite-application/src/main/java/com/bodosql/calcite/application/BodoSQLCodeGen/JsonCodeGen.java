@@ -3,6 +3,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
 import java.util.HashMap;
+import java.util.List;
 
 public class JsonCodeGen {
   static HashMap<String, String> jsonFnMap;
@@ -11,29 +12,22 @@ public class JsonCodeGen {
     jsonFnMap = new HashMap<>();
     jsonFnMap.put(
         "JSON_EXTRACT_PATH_TEXT", "bodo.libs.bodosql_array_kernels.json_extract_path_text");
+    jsonFnMap.put("OBJECT_KEYS", "bodo.libs.bodosql_array_kernels.object_keys");
   }
   /**
-   * Function that return the necessary generated code for a two argument JSON function call.
+   * Function that return the necessary generated code for a JSON function call in the hashmap
+   * defined above.
    *
-   * @param arg0 The first argument to the function
-   * @param arg1 The second argument to the function
-   * @return
+   * @param fnName The name of the function
+   * @param operands The arguments to the function
+   * @return The function call expression
    */
-  public static Expr generateJsonTwoArgsInfo(String fnName, Expr arg0, Expr arg1) {
+  public static Expr visitJsonFunc(String fnName, List<Expr> operands) {
 
     if (!(jsonFnMap.containsKey(fnName))) {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
 
-    StringBuilder output = new StringBuilder();
-    output
-        .append(jsonFnMap.get(fnName))
-        .append("(")
-        .append(arg0.emit())
-        .append(", ")
-        .append(arg1.emit())
-        .append(")");
-
-    return new Expr.Raw(output.toString());
+    return new Expr.Call(jsonFnMap.get(fnName), operands);
   }
 }

@@ -1058,8 +1058,8 @@ def array_item_arr_getitem_array(arr, ind):
                 ind += len(arr)
             offsets = get_offsets(arr)
             data = get_data(arr)
-            l_start_offset = offsets[ind]
-            l_end_offset = offsets[ind + 1]
+            l_start_offset = offsets[np.int64(ind)]
+            l_end_offset = offsets[np.int64(ind) + 1]
             return data[l_start_offset:l_end_offset]
 
         return array_item_arr_getitem_impl
