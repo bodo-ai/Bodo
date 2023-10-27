@@ -88,6 +88,7 @@ def check_query(
     use_dict_encoded_strings: Optional[bool] = None,
     is_out_distributed: bool = True,
     check_typing_issues: bool = True,
+    use_map_arrays: bool = False,
     atol: float = 1e-08,
     rtol: float = 1e-05,
     convert_columns_to_pandas: bool = False,
@@ -229,6 +230,8 @@ def check_query(
             Default True.
         check_typing_issues: raise an error if there is a typing issue for input args.
         Runs bodo typing on arguments and converts warnings to errors.
+
+        use_map_arrays: Flag for forcing all input dict-object arrays to be unboxed as map arrays.
 
         atol: absolute tolerance used for approximately-equal calculations
 
@@ -438,6 +441,7 @@ def check_query(
         is_out_distributed=is_out_distributed,
         check_typing_issues=check_typing_issues,
         convert_columns_to_pandas=convert_columns_to_pandas,
+        use_map_arrays=use_map_arrays,
         atol=atol,
         rtol=rtol,
     )
@@ -483,6 +487,7 @@ def check_query_jit(
     is_out_distributed,
     check_typing_issues,
     convert_columns_to_pandas,
+    use_map_arrays,
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
@@ -539,6 +544,7 @@ def check_query_jit(
 
     saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
     saved_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
+    saved_struct_size_limit = bodo.hiframes.boxing.struct_size_limit
     try:
         # test table format for dataframes (non-table format tested below if flag is
         # None)
@@ -549,6 +555,10 @@ def check_query_jit(
         # flag is None)
         if use_dict_encoded_strings:
             bodo.hiframes.boxing._use_dict_str_type = True
+
+        # Test all dict-like arguments as map arrays (no structs) if flag is set
+        if use_map_arrays:
+            bodo.hiframes.boxing.struct_size_limit = -1
 
         if run_jit_seq:
             check_query_jit_seq(
@@ -603,6 +613,7 @@ def check_query_jit(
     finally:
         bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
         bodo.hiframes.boxing._use_dict_str_type = saved_use_dict_str_type
+        bodo.hiframes.boxing.struct_size_limit = saved_struct_size_limit
 
     # test non-table format case
     if use_table_format is None:
@@ -624,6 +635,7 @@ def check_query_jit(
             is_out_distributed=is_out_distributed,
             check_typing_issues=check_typing_issues,
             convert_columns_to_pandas=convert_columns_to_pandas,
+            use_map_arrays=use_map_arrays,
             atol=atol,
             rtol=rtol,
         )
@@ -653,6 +665,7 @@ def check_query_jit(
             is_out_distributed=is_out_distributed,
             check_typing_issues=check_typing_issues,
             convert_columns_to_pandas=convert_columns_to_pandas,
+            use_map_arrays=use_map_arrays,
             atol=atol,
             rtol=rtol,
         )

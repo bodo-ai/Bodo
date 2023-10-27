@@ -82,6 +82,9 @@ TABLE_FORMAT_THRESHOLD = 0
 # A flag to use dictionary-encode string arrays for all string arrays
 # Used for testing purposes
 _use_dict_str_type = False
+# A flag for using StructArrays for dictionaries under n elements
+# Modified for testing purposes, to force input argument type
+struct_size_limit = 100
 
 
 def _set_bodo_meta_in_pandas():
@@ -101,7 +104,7 @@ _set_bodo_meta_in_pandas()
 
 
 @typeof_impl.register(pd.DataFrame)
-def typeof_pd_dataframe(val, c):
+def typeof_pd_dataframe(val: pd.DataFrame, c):
     from bodo.transforms.distributed_analysis import Distribution
 
     # convert "columns" from Index/MultiIndex to a tuple
@@ -142,7 +145,7 @@ def typeof_pd_dataframe(val, c):
 
 # register series types for import
 @typeof_impl.register(pd.Series)
-def typeof_pd_series(val, c):
+def typeof_pd_series(val: pd.Series, c):
     from bodo.transforms.distributed_analysis import Distribution
 
     dist = (
@@ -320,7 +323,7 @@ class SeriesDtypeEnum(Enum):
 
 
 # Map of types that can be mapped to a singular enum. Maps type -> enum
-_one_to_one_type_to_enum_map = {
+_one_to_one_type_to_enum_map: dict[types.Type, int] = {
     types.int8: SeriesDtypeEnum.Int8.value,
     types.uint8: SeriesDtypeEnum.UInt8.value,
     types.int32: SeriesDtypeEnum.Int32.value,
@@ -354,7 +357,7 @@ _one_to_one_type_to_enum_map = {
 }
 
 # The reverse of the above map, Maps enum -> type
-_one_to_one_enum_to_type_map = {
+_one_to_one_enum_to_type_map: dict[int, types.Type] = {
     SeriesDtypeEnum.Int8.value: types.int8,
     SeriesDtypeEnum.UInt8.value: types.uint8,
     SeriesDtypeEnum.Int32.value: types.int32,
@@ -829,7 +832,7 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
 def _is_wrapper_pd_arr(arr):
     """return True if 'arr' is a Pandas wrapper array around regular Numpy like PandasArray"""
 
-    # Pandas bug (as of 1.4): StringArray is a subclass of PandasArray for some reason
+    # Pandas bug (as of 1.5): StringArray is a subclass of PandasArray for some reason
     if isinstance(arr, pd.arrays.StringArray):
         return False
 
@@ -864,7 +867,7 @@ def _fix_series_arr_type(pd_arr):
     return pd_arr
 
 
-def _infer_series_arr_type(S, array_metadata=None):
+def _infer_series_arr_type(S: pd.Series, array_metadata=None):
     """infer underlying array type for unboxing a Pandas Series object
 
     Args:
@@ -1621,7 +1624,6 @@ def _infer_ndarray_obj_dtype(val):
     first_val = val[i]
     # For compilation purposes we also impose a limit to the size
     # of the struct as very large structs cannot be efficiently compiled.
-    struct_size_limit = 100
     if isinstance(first_val, str):
         return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
     elif isinstance(first_val, (bytes, bytearray)):

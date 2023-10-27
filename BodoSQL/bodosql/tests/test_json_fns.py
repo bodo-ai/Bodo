@@ -137,3 +137,83 @@ def test_json_extract_path_text(json_extract_path_args, use_case, memory_leak_ch
         check_names=False,
         only_jit_1DVar=True,
     )
+
+
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case"),
+    ],
+)
+@pytest.mark.parametrize(
+    "data, use_map, answer",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    {"Q1": 100, "Q2": -13, "Q3": 40, "Q4": 500},
+                    {"Q1": 0, "Q2": 42, "Q3": 90, "Q4": 300},
+                    None,
+                    {"Q1": 50, "Q2": 256, "Q3": -10, "Q4": 64},
+                    {"Q1": 26, "Q2": 128, "Q3": 72, "Q4": 512},
+                ]
+                * 3
+            ),
+            False,
+            pd.Series(
+                [
+                    ["Q1", "Q2", "Q3", "Q4"],
+                    ["Q1", "Q2", "Q3", "Q4"],
+                    None,
+                    ["Q1", "Q2", "Q3", "Q4"],
+                    ["Q1", "Q2", "Q3", "Q4"],
+                ]
+                * 3
+            ),
+            id="struct_array",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {"Jan": [0, 10, 10, 15], "Feb": [10, None, 5, 13], "Mar": []},
+                    {"Apr": [20]},
+                    None,
+                    {"Sep": [1], "Oct": [2, 3], "Nov": [], "Dec": [4, 5, 6]},
+                    {},
+                ]
+                * 3
+            ),
+            True,
+            pd.Series(
+                [
+                    ["Jan", "Feb", "Mar"],
+                    ["Apr"],
+                    None,
+                    ["Sep", "Oct", "Nov", "Dec"],
+                    [],
+                ]
+                * 3
+            ),
+            id="map_array",
+        ),
+    ],
+)
+def test_object_keys(data, use_map, use_case, answer, memory_leak_check):
+    if use_case:
+        query = "SELECT CASE WHEN B THEN OBJECT_KEYS(J) ELSE OBJECT_KEYS(J_COPY) END FROM table1"
+    else:
+        query = "SELECT OBJECT_KEYS(J) FROM table1"
+    check_query(
+        query,
+        {"table1": pd.DataFrame({"J": data, "J_COPY": data, "B": [True] * len(data)})},
+        None,
+        expected_output=pd.DataFrame({0: answer}),
+        check_dtype=False,
+        check_names=False,
+        use_map_arrays=use_map,
+        # Can't use check_python because of intricacies of unboxing map arrays
+        only_jit_1DVar=True,
+        # Can't sort output due to gaps when sorting columns of arrays
+        sort_output=False,
+    )

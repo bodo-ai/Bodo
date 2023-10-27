@@ -38,7 +38,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.g
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getYearWeekFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.generateJsonTwoArgsInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.visitJsonFunc;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NestedDataCodeGen.generateToArrayFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.genFloorCeilCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLeastGreatestCode;
@@ -1708,7 +1708,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "FROM_UNIXTIME":
             return generateFromUnixTimeCode(operands.get(0));
           case "JSON_EXTRACT_PATH_TEXT":
-            return generateJsonTwoArgsInfo(fnName, operands.get(0), operands.get(1));
+          case "OBJECT_KEYS":
+            return visitJsonFunc(fnName, operands);
           case "RLIKE":
           case "REGEXP_LIKE":
           case "REGEXP_COUNT":

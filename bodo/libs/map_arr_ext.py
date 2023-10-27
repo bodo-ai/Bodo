@@ -655,8 +655,8 @@ def map_arr_getitem(arr, ind):
             offsets = bodo.libs.array_item_arr_ext.get_offsets(arr._data)
             struct_arr = bodo.libs.array_item_arr_ext.get_data(arr._data)
             key_data, value_data = bodo.libs.struct_arr_ext.get_data(struct_arr)
-            start_offset = offsets[ind]
-            end_offset = offsets[ind + 1]
+            start_offset = offsets[np.int64(ind)]
+            end_offset = offsets[np.int64(ind) + 1]
             for i in range(start_offset, end_offset):
                 out[key_data[i]] = value_data[i]
             return out
