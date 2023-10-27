@@ -49,13 +49,12 @@ public class SnowflakeGenTest {
             + "    revenue desc\n";
     Map envVars = System.getenv();
     Properties prop = new Properties();
-    prop.put("schema", "TPCH_SF10");
     BodoSQLCatalog catalog =
         new SnowflakeCatalogImpl(
             (String) envVars.get("SF_USERNAME"),
             (String) envVars.get("SF_PASSWORD"),
             (String) envVars.get("SF_ACCOUNT"),
-            (String) envVars.get("SF_CATALOG"),
+            (String) envVars.get("SF_DATABASE"),
             "DEMO_WH",
             prop);
     LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
