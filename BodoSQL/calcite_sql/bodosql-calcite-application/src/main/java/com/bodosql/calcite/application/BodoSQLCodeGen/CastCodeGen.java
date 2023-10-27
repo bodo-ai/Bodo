@@ -60,6 +60,7 @@ public class CastCodeGen {
             break;
           case CHAR:
           case VARCHAR:
+          case NULL:
             fnName = "bodo.libs.bodosql_array_kernels.cast_str_to_tz_aware";
             appendStreamingArgs = true;
             break;

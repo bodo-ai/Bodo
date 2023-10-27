@@ -731,6 +731,8 @@ def to_char_util(arr, format_str=None):
         scalar_text += "  res[i] = str(arg0)"
     elif is_valid_boolean_arg(arr):
         scalar_text = "res[i] = 'true' if arg0 else 'false'"
+    elif arr == bodo.null_array_type:
+        scalar_text = "res[i] = None "
     else:
         int_types = {
             8: np.int8,

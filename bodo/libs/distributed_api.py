@@ -3076,6 +3076,17 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return tz_aware_getitem_impl
 
+    if arr == bodo.null_array_type:
+
+        def null_getitem_impl(
+            arr, ind, arr_start, total_len, is_1D
+        ):  # pragma: no cover
+            if ind >= total_len:
+                raise IndexError("index out of bounds")
+            return None
+
+        return null_getitem_impl
+
     if arr == bodo.datetime_date_array_type:
 
         def date_getitem_impl(
