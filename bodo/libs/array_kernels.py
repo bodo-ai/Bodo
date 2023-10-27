@@ -199,6 +199,10 @@ def overload_isna(arr, i):
     if isinstance(arr, DatetimeArrayType):
         return lambda arr, i: np.isnat(arr._data[i])  # pragma: no cover
 
+    # NullArrayType
+    if arr == bodo.null_array_type:
+        return lambda arr, i: True  # pragma: no cover
+
     # TODO: extend to other types (which ones are missing?)
     assert isinstance(arr, types.Array), f"Invalid array type in isna(): {arr}"
 

@@ -26,6 +26,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 from bodo.utils.typing import (
     dtype_to_array_type,
+    is_list_like_index_type,
     is_scalar_type,
     to_nullable_type,
     unwrap_typeref,
@@ -222,14 +223,51 @@ def overload_null_astype(A, dtype, copy=True):
 
 
 @overload(operator.getitem, no_unliteral=True)
-def str_arr_getitem_slice(A, ind):
-    if A != null_array_type or not isinstance(ind, types.SliceType):
+def null_arr_getitem(A, ind):
+    if A != null_array_type:
         return
 
-    def null_arr_slice_impl(A, ind):  # pragma: no cover
-        n = len(A)
-        slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
-        final_len = (slice_idx.stop - slice_idx.start) // slice_idx.step
-        return init_null_array(final_len)
+    if isinstance(ind, types.Integer):
 
-    return null_arr_slice_impl
+        def impl(A, ind):  # pragma: no cover
+            return None
+
+        return impl
+
+    # bool arr indexing.
+    # array length is the number of true entries.
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+
+        def impl_bool(A, ind):  # pragma: no cover
+            ind = bodo.utils.conversion.coerce_to_array(ind)
+            n = ind.sum()
+            return init_null_array(n)
+
+        return impl_bool
+
+    # list of ints indexing
+    # array length is the length of the list.
+    if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+
+        def impl_list(A, ind):  # pragma: no cover
+            ind = bodo.utils.conversion.coerce_to_array(ind)
+            n = len(ind)
+            return init_null_array(n)
+
+        return impl_list
+
+    # slice case
+    # array length is number of entries in the range [0, len(arr)).
+    if isinstance(ind, types.SliceType):
+
+        def impl_slice(A, ind):  # pragma: no cover
+            n = len(A)
+            slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
+            final_len = (slice_idx.stop - slice_idx.start) // slice_idx.step
+            return init_null_array(final_len)
+
+        return impl_slice
+
+    raise bodo.utils.typing.BodoError(
+        f"getitem for NullArrayType with indexing type {ind} not supported."
+    )  # pragma: no cover
