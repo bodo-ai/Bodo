@@ -1606,25 +1606,12 @@ get_dtypes_arr_types_from_array(const std::shared_ptr<array_info>& array);
  * @brief Generate a map from column index to the actual index to the array type
  * and C type arrays
  *
- * @param arr_array_types The array of array types for all columns
- * @param arr_start_idx Start index (inclusive) of the index range that needs
- * converting to column-index map
- * @param arr_end_idx End index (exclusive) of the index range that needs
- * converting to column-index map
+ * @param arr_array_types The span of array types
  * @return A vector that maps from the column index to the start index in the
  * type array
  */
-std::vector<size_t> get_col_idx_map(const std::vector<int8_t>& arr_array_types,
-                                    size_t arr_start_idx, size_t arr_end_idx);
-
-/**
- * @brief Overloading of get_col_idx_map to make (0, arr_array_types.size())
- * i.e. the whole type array the default value for (arr_start_idx, arr_end_idx)
- */
-inline std::vector<size_t> get_col_idx_map(
-    const std::vector<int8_t>& arr_array_types) {
-    return get_col_idx_map(arr_array_types, 0, arr_array_types.size());
-}
+std::vector<size_t> get_col_idx_map(
+    const std::span<const int8_t>& arr_array_types);
 
 /**
  * @brief Helper function for early reference (and potentially memory)

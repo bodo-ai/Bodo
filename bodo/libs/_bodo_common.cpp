@@ -421,7 +421,8 @@ std::unique_ptr<array_info> alloc_struct(
     const std::vector<int8_t>& arr_c_types, bodo::IBufferPool* const pool,
     const std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<size_t> col_to_idx_map =
-        get_col_idx_map(arr_array_types, start_idx + 2, end_idx);
+        get_col_idx_map(std::span(arr_array_types.begin() + start_idx + 2,
+                                  arr_array_types.begin() + end_idx));
     std::vector<std::shared_ptr<array_info>> child_arrays;
 
     child_arrays.reserve(col_to_idx_map.size());
@@ -1233,114 +1234,50 @@ get_dtypes_arr_types_from_array(const std::shared_ptr<array_info>& array) {
 }
 
 /**
- * @brief Get the next start and end index of bodo array types array in place.
- *
- * For example, given the following inputs:
- * col_start_idx = 0, col_end_idx = 2 i.e. range = [0, 2)
+ * @brief Get start index of next column e.g. given the following inputs:
  * arr_array_types = [ARRAY_ITEM, NULLABLE_INT_BOOL, ARRAY_ITEM, ARRAY_ITEM,
- * NULLABLE_INT_BOOL, NULLABLE_INT_BOOL]
+ * NULLABLE_INT_BOOL, NULLABLE_INT_BOOL] idx = 2 The function will output 5
  *
- * The function will modify the range to [2, 5)
- *
- * To get the range for the first column i.e. initialization,
- * call get_next_col_arr_type with col_end_idx = 0
- *
- * @param[in, out] col_start_idx Start index (inclusive) of the index range
- * corresponding to the previous column
- * @param[in, out] col_end_idx End index (exclusive) of the index range
- * corresponding to the previous column
- * @param[in] arr_array_types The array of array types for all columns
- * @param[in] arr_end_idx End index (exclusive) of the array type array. This
- * parameter is used mostly for recursive call on type subarray when handling
- * STRUCT column.
+ * @param arr_array_types The span of array types
+ * @param idx The index of the current column
+ * @return The index of next column
  */
-void get_next_col_arr_type(size_t& col_start_idx, size_t& col_end_idx,
-                           const std::vector<int8_t>& arr_array_types,
-                           size_t arr_end_idx) {
-    if (col_end_idx >= arr_end_idx) {
-        throw std::runtime_error("get_next_col_arr_type: index " +
-                                 std::to_string(col_end_idx) +
-                                 " out of bound!");
+size_t get_next_col_idx(const std::span<const int8_t>& arr_array_types,
+                        size_t idx) {
+    if (idx >= arr_array_types.size()) {
+        throw std::runtime_error("get_next_col_idx: index " +
+                                 std::to_string(idx) + " out of bound!");
     }
-    col_start_idx = col_end_idx;
-    if (arr_array_types[col_end_idx] == bodo_array_type::ARRAY_ITEM) {
+    if (arr_array_types[idx] == bodo_array_type::ARRAY_ITEM) {
         do {
-            ++col_end_idx;
-        } while (col_end_idx < arr_end_idx &&
-                 arr_array_types[col_end_idx] == bodo_array_type::ARRAY_ITEM);
-        if (col_end_idx >= arr_end_idx) {
+            ++idx;
+        } while (idx < arr_array_types.size() &&
+                 arr_array_types[idx] == bodo_array_type::ARRAY_ITEM);
+        if (idx >= arr_array_types.size()) {
             throw std::runtime_error(
                 "The last array type cannot be ARRAY_ITEM: inner array type "
                 "needs to be provided!");
         }
-        get_next_col_arr_type(col_end_idx, col_end_idx, arr_array_types,
-                              arr_end_idx);
-    } else if (arr_array_types[col_end_idx] == bodo_array_type::STRUCT) {
-        int8_t tot = arr_array_types[col_end_idx + 1];
-        col_end_idx += 2;
+        return get_next_col_idx(arr_array_types, idx);
+    } else if (arr_array_types[idx] == bodo_array_type::STRUCT) {
+        int8_t tot = arr_array_types[idx + 1];
+        idx += 2;
         while (tot--) {
-            get_next_col_arr_type(col_end_idx, col_end_idx, arr_array_types,
-                                  arr_end_idx);
+            idx = get_next_col_idx(arr_array_types, idx);
         }
+        return idx;
     } else {
-        ++col_end_idx;
+        return idx + 1;
     }
 }
 
-/**
- * @brief Overloading of the previous get_next_col_arr_type to make
- * arr_array_types.size() the default value for arr_end_idx
- */
-inline void get_next_col_arr_type(size_t& col_start_idx, size_t& col_end_idx,
-                                  const std::vector<int8_t>& arr_array_types) {
-    get_next_col_arr_type(col_start_idx, col_end_idx, arr_array_types,
-                          arr_array_types.size());
-}
-
-/**
- * @brief Get the start index of next bodo array types array in place. This
- * function is used when you don't care about the end index / length of the
- * output.
- *
- * For example, given the following inputs:
- * col_idx = 0
- * arr_array_types = [ARRAY_ITEM, NULLABLE_INT_BOOL, ARRAY_ITEM, ARRAY_ITEM,
- * NULLABLE_INT_BOOL, NULLABLE_INT_BOOL]
- *
- * The function will modify col_idx to 2
- *
- * @param[in, out] col_idx Column index of the index range corresponding to the
- * previous column
- * @param[in] arr_array_types The array of array types for all columns
- * @param[in] arr_end_idx End index (exclusive) of the array type array. This
- * parameter is used mostly for recursive call on type subarray when handling
- * STRUCT array.
- */
-inline void get_next_col_arr_type(size_t& col_idx,
-                                  const std::vector<int8_t>& arr_array_types,
-                                  size_t arr_end_idx) {
-    get_next_col_arr_type(col_idx, col_idx, arr_array_types, arr_end_idx);
-}
-
-/**
- * @brief Overloading of the previous get_next_col_arr_type to make
- * arr_array_types.size() the default value for arr_end_idx
- */
-inline void get_next_col_arr_type(size_t& col_idx,
-                                  const std::vector<int8_t>& arr_array_types) {
-    get_next_col_arr_type(col_idx, col_idx, arr_array_types,
-                          arr_array_types.size());
-}
-
-std::vector<size_t> get_col_idx_map(const std::vector<int8_t>& arr_array_types,
-                                    size_t arr_start_idx, size_t arr_end_idx) {
+std::vector<size_t> get_col_idx_map(
+    const std::span<const int8_t>& arr_array_types) {
     std::vector<size_t> col_idx_map;
-
-    while (arr_start_idx < arr_end_idx) {
-        col_idx_map.push_back(arr_start_idx);
-        get_next_col_arr_type(arr_start_idx, arr_array_types);
+    for (size_t i = 0; i < arr_array_types.size();
+         i = get_next_col_idx(arr_array_types, i)) {
+        col_idx_map.push_back(i);
     }
-
     return col_idx_map;
 }
 
