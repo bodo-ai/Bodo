@@ -459,3 +459,89 @@ def test_json_extract_path_text_invalid(data, path):
 
     with pytest.raises(ValueError):
         func(data, path)
+
+
+@pytest.mark.parametrize(
+    "vector",
+    [
+        pytest.param(True, id="vector"),
+        pytest.param(False, id="scalar"),
+    ],
+)
+@pytest.mark.parametrize(
+    "data, use_map, answer",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    {"first": "Rand", "last": "al'Thor", "nation": "Andor"},
+                    {"first": "Lan", "last": "Mandragoran", "nation": "Malkier"},
+                    None,
+                    {"first": "Rodel", "last": "Ituralde", "nation": "Arad Doman"},
+                    {"first": "Faile", "last": "Aybara", "nation": "Saldea"},
+                ]
+                * 3
+            ),
+            False,
+            pd.Series(
+                [
+                    ["first", "last", "nation"],
+                    ["first", "last", "nation"],
+                    None,
+                    ["first", "last", "nation"],
+                    ["first", "last", "nation"],
+                ]
+                * 3
+            ),
+            id="struct_array",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {
+                        "A": ["Computer Science", "Physics"],
+                        "B+": ["Math"],
+                        "B-": ["Spanish"],
+                    },
+                    {"B": ["Math", "Physics", "English"]},
+                    None,
+                    {"A": ["German"], "A-": ["English", "Spanish"], "B+": ["Math"]},
+                    {},
+                    {"A-": ["Computer Science", "Art"], "B-": ["Spanish", "German"]},
+                ]
+                * 3
+            ),
+            True,
+            pd.Series(
+                [["A", "B+", "B-"], ["B"], None, ["A", "A-", "B+"], [], ["A-", "B-"]]
+                * 3
+            ),
+            id="map_array",
+        ),
+    ],
+)
+def test_object_keys(data, use_map, answer, vector, memory_leak_check):
+    def impl_vector(data):
+        return pd.Series(bodo.libs.bodosql_array_kernels.object_keys(data))
+
+    def impl_scalar(data):
+        return bodo.libs.bodosql_array_kernels.object_keys(data[0])
+
+    if vector:
+        check_func(
+            impl_vector,
+            (data,),
+            py_output=answer,
+            check_dtype=False,
+            use_map_arrays=use_map,
+        )
+    else:
+        check_func(
+            impl_scalar,
+            (data,),
+            py_output=answer[0],
+            check_dtype=False,
+            use_map_arrays=use_map,
+            distributed=False,
+            is_out_distributed=False,
+        )

@@ -3,6 +3,8 @@ package com.bodosql.calcite.application.operatorTables;
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -13,6 +15,7 @@ import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
+import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
 public final class JsonOperatorTable implements SqlOperatorTable {
@@ -55,7 +58,21 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           OperandTypes.STRING_STRING,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  private List<SqlOperator> functionList = Arrays.asList(GET_PATH, JSON_EXTRACT_PATH_TEXT);
+  public static final SqlFunction OBJECT_KEYS =
+      new SqlFunction(
+          "OBJECT_KEYS",
+          SqlKind.OTHER_FUNCTION,
+          opBinding -> {
+            RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
+            RelDataType inputType = opBinding.getOperandType(0);
+            return typeFactory.createArrayType(inputType.getKeyType(), -1);
+          },
+          null,
+          OperandTypes.family(SqlTypeFamily.MAP),
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  private List<SqlOperator> functionList =
+      Arrays.asList(GET_PATH, JSON_EXTRACT_PATH_TEXT, OBJECT_KEYS);
 
   @Override
   public void lookupOperatorOverloads(

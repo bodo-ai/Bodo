@@ -178,6 +178,7 @@ broadcasted_fixed_arg_functions = {
     "not_equal_null",
     "nullif",
     "nvl2",
+    "object_keys",
     "ord_ascii",
     "parse_json",
     "position",

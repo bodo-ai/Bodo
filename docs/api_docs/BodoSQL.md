@@ -2766,6 +2766,14 @@ BodoSQL currently supports the following regex functions:
 
 BodoSQL currently supports the following JSON functions:
 
+
+#### OBJECT_KEYS
+-   `#!sql OBJECT_KEYS(data)`
+
+    Extracts all of the field names from the JSON object `data` and returns them
+    as an array of strings.
+
+
 #### JSON_EXTRACT_PATH_TEXT
 -   `#!sql JSON_EXTRACT_PATH_TEXT(data, path)`
 

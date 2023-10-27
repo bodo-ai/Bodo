@@ -13,6 +13,73 @@ from bodo.utils.typing import is_overload_none, unwrap_typeref
 
 
 @numba.generated_jit(nopython=True)
+def object_keys(arr):
+    """
+    Handles cases where OBJECT_KEYS receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.object_keys_util",
+            ["arr"],
+            0,
+        )
+
+    def impl(arr):  # pragma: no cover
+        return object_keys_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def object_keys_util(arr):
+    """
+    A dedicated kernel for the SQL function OBJECT which takes in an
+    a JSON value (either a scalar, or a map/struct array) and returns
+    an array of all of its keys.
+
+    Args:
+        arr (array scalar/array item array): the JSON value(s)
+
+    Returns:
+        string array / string array array: the keys of the JSON value(s)
+    """
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    # TODO: see if we can optimize this for dictionary encoding, at least for the struct cases?
+    out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(bodo.string_array_type)
+    typ = arr
+    if bodo.hiframes.pd_series_ext.is_series_type(typ):
+        typ = typ.data
+    if bodo.utils.utils.is_array_typ(typ) and isinstance(
+        typ.dtype, bodo.libs.struct_arr_ext.StructType
+    ):
+        scalar_text = (
+            f"res[i] = bodo.libs.str_arr_ext.str_list_to_array({list(typ.dtype.names)})"
+        )
+    elif isinstance(typ, bodo.libs.struct_arr_ext.StructType):
+        scalar_text = (
+            f"res[i] = bodo.libs.str_arr_ext.str_list_to_array({list(typ.names)})"
+        )
+    elif isinstance(typ, bodo.libs.map_arr_ext.MapArrayType) or (
+        isinstance(typ, types.DictType) and typ.key_type == types.unicode_type
+    ):
+        scalar_text = "res[i] = bodo.libs.str_arr_ext.str_list_to_array(list(arg0))\n"
+    elif typ == bodo.none:
+        scalar_text = "res[i] = None"
+    else:
+        raise_bodo_error(f"object_keys: unsupported type {arr}")
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+@numba.generated_jit(nopython=True)
 def to_array(arr, dtype, dict_encoding_state=None, func_id=-1):
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument("bodo.libs.bodosql_array_kernels.to_array", ["arr"], 0)
