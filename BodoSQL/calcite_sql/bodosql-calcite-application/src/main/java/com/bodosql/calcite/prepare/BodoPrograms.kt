@@ -433,7 +433,7 @@ object BodoPrograms {
      */
     private class DecorateAttributesProgram : Program by Programs.hep(
         listOf(PandasRules.PANDAS_JOIN_REBALANCE_OUTPUT_RULE),
-        true,
+        false,
         DefaultRelMetadataProvider.INSTANCE,
     )
 

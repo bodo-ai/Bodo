@@ -30,6 +30,7 @@ import org.apache.calcite.rel.metadata.RelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rex.BodoRexSimplify;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexExecutor;
@@ -84,7 +85,7 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
             join,
             RexUtil.composeConjunction(rexBuilder, leftInfo.pulledUpPredicates),
             RexUtil.composeConjunction(rexBuilder, rightInfo.pulledUpPredicates),
-            new RexSimplify(rexBuilder, RelOptPredicateList.EMPTY, executor));
+            new BodoRexSimplify(rexBuilder, RelOptPredicateList.EMPTY, executor));
 
     return joinInference.inferPredicates(false);
   }
@@ -340,6 +341,7 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
         List<RexNode> inferredPredicates,
         boolean includeEqualityInference,
         ImmutableBitSet inferringFields) {
+      List<RexNode> localInferredPredicates = new ArrayList<>();
       for (RexNode r : RelOptUtil.conjunctions(predicates)) {
         if (!includeEqualityInference && equalityPredicates.contains(r)) {
           continue;
@@ -356,10 +358,24 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
           }
           if (checkTarget(inferringFields, allExprs, tr)
               && checkTarget(inferringFields, allExprs, simplifiedTarget)) {
-            inferredPredicates.add(simplifiedTarget);
+            // Bodo Change: Write to an integer mediate target instead.
+            localInferredPredicates.add(simplifiedTarget);
             allExprs.add(simplifiedTarget);
           }
         }
+      }
+      // Bodo Change: Ensure the predicates aren't added if all simplified together. If any
+      // predicate matches
+      // then we can update the inferred predicates. This won't catch every combination, as its
+      // possible that
+      // only some filters are new, but this should prevent repeatedly adding the same simplified
+      // filters.
+      if (localInferredPredicates.size() == 1
+          || checkTarget(
+              inferringFields,
+              allExprs,
+              simplify.simplifyFilterPredicates(localInferredPredicates))) {
+        inferredPredicates.addAll(localInferredPredicates);
       }
     }
 
