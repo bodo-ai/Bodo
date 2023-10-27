@@ -4,7 +4,6 @@
 
 import argparse
 import json
-import sys
 import time
 from urllib.parse import urlencode
 
@@ -103,21 +102,12 @@ def load_tables(args):
 
 
 def main(args):
-    if args.streaming:
-        bodo.bodosql_use_streaming_plan = True
-    else:
-        bodo.bodosql_use_streaming_plan = False
-
     if bodo.get_rank() == 0:
         print(
             "STREAMING: ",
             bodo.bodosql_use_streaming_plan,
         )
 
-    if args.streaming_batch_size:
-        if bodo.get_rank() == 0:
-            print("Set batch size to ", args.streaming_batch_size, file=sys.stderr)
-        bodo.bodosql_streaming_batch_size = args.streaming_batch_size
     # Throw an error in the case that the use supplied both only_test_compiles, and an argument that
     # requires a full run
     if args.only_test_compiles:
@@ -244,12 +234,6 @@ if __name__ == "__main__":
         help="Path to Snowflake credentials file. The following keys must be present: SF_USERNAME, SF_PASSWORD and SF_ACCOUNT. The following keys are optional: SF_WAREHOUSE, SF_DATABASE",
     )
     parser.add_argument("--sf-schema", help="Snowflake schema to use")
-    parser.add_argument(
-        "--streaming", action="store_true", help="Enable streaming execution"
-    )
-    parser.add_argument(
-        "--streaming-batch-size", type=int, help="Streaming batch size to use"
-    )
     parser.add_argument(
         "-f", "--filename", required=True, help="Path to .sql file with the query."
     )
