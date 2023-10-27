@@ -451,3 +451,22 @@ def test_nested_case(memory_leak_check):
     ctx = {"table1": df}
     py_output = pd.DataFrame({"res": [1, 1, 0, 2, -1] * 3})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+
+
+def test_nullarray_to_timezone_aware(memory_leak_check):
+    """Test CASE + casting NULL to Timezone-aware type"""
+    df = pd.DataFrame({"A": [pd.Timestamp("1999-12-15 11:03:40", tz="Asia/Dubai")] * 5})
+    ctx = {"table1": df}
+
+    query = """
+        select case when t is not null then t else A end as out1
+        from table1
+        cross join (select null as t)
+        """
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=df,
+        check_names=False,
+    )
