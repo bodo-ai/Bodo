@@ -136,6 +136,8 @@ broadcasted_fixed_arg_functions = {
     "greater_than",
     "greater_than_or_equal",
     "haversine",
+    "hex_decode_binary",
+    "hex_decode_string",
     "hex_encode",
     "initcap",
     "insert",

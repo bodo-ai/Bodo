@@ -2475,6 +2475,35 @@ BodoSQL currently supports the following string functions:
     [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/hex_encode).
 
 
+#### HEX_DECODE_STRING
+-   `#!sql HEX_DECODE_STRING(msg)`
+
+   Reverses the process of calling `#!sql HEX_ENCODE` on a string with either capitalization.
+   Raises an exception if the string is malformed in any way.
+    [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/hex_decode_string).
+
+
+#### TRY_HEX_DECODE_STRING
+-   `#!sql TRY_HEX_DECODE_STRING(msg)`
+
+    Equivalent to `#!sql HEX_DECODE_STRING` except that it will return null instead of raising
+    an exception if the string is malformed in any way.
+
+
+#### HEX_DECODE_BINARY
+-   `#!sql HEX_DECODE_BINARY(msg)`
+
+    The same as `#!sql HEX_DECODE_STRING` except that the output is binary instead of a string.
+
+
+
+#### TRY_HEX_DECODE_BINARY
+-   `#!sql TRY_HEX_DECODE_BINARY(msg)`
+
+    Equivalent to `#!sql HEX_DECODE_BINARY` except that it will return null instead of raising
+    an exception if the string is malformed in any way.
+
+
 #### BASE64_ENCODE
 -   `#!sql BASE64_ENCODE(msg[, max_line_length[, alphabet]])`
 

@@ -65,6 +65,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.gen
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatWSCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateEditdistance;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateHexDecodeFn;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateHexEncode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateInitcapInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generatePadCode;
@@ -1191,6 +1192,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         return ExprKt.BodoSQLKernel("md5", operands, streamingNamedArgs);
       case "HEX_ENCODE":
         return generateHexEncode(operands, streamingNamedArgs);
+      case "HEX_DECODE_STRING":
+      case "HEX_DECODE_BINARY":
+      case "TRY_HEX_DECODE_STRING":
+      case "TRY_HEX_DECODE_BINARY":
+        return generateHexDecodeFn(fnName, operands, streamingNamedArgs);
       case "BASE64_ENCODE":
         return generateBase64Encode(operands, streamingNamedArgs);
       case "BASE64_DECODE_STRING":
@@ -1761,6 +1767,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "MD5":
           case "MD5_HEX":
           case "HEX_ENCODE":
+          case "HEX_DECODE_STRING":
+          case "HEX_DECODE_BINARY":
+          case "TRY_HEX_DECODE_STRING":
+          case "TRY_HEX_DECODE_BINARY":
           case "BASE64_ENCODE":
           case "BASE64_DECODE_STRING":
           case "TRY_BASE64_DECODE_STRING":

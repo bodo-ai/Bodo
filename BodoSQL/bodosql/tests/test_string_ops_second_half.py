@@ -1525,24 +1525,34 @@ def test_md5_columns(query, memory_leak_check):
         pytest.param(
             "SELECT HEX_ENCODE({0}) FROM table1",
             True,
-            id="default_uppercase",
+            id="default_uppercase-no_case",
         ),
         pytest.param(
             "SELECT HEX_ENCODE({0}, 1) FROM table1",
             True,
-            id="manual_uppercase",
+            id="manual_uppercase-no_case",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            "SELECT HEX_ENCODE({0}, 0) FROM table1",
+            "SELECT CASE WHEN D THEN HEX_ENCODE({0}, 0) ELSE NULL END FROM table1",
             False,
-            id="manual_lowercase",
+            id="manual_lowercase-with_case",
         ),
     ],
 )
-def test_hex_encode(query_fmt, uppercase, col_fmt, memory_leak_check):
-    """Tests HEX_ENCODE with and without CASE statements"""
-    query = query_fmt.format(col_fmt)
+def test_hex_encode_decode(query_fmt, uppercase, col_fmt, memory_leak_check):
+    """Tests HEX_ENCODE and the various HEX_DECODE functions with and without CASE statements"""
+    enc_query = query_fmt.format(col_fmt)
+    if "CASE" in query_fmt:
+        dec_str_query = (
+            "SELECT CASE WHEN D THEN HEX_DECODE_STRING(H) ELSE NULL END FROM table1"
+        )
+        dec_bin_query = (
+            "SELECT CASE WHEN D THEN HEX_DECODE_BINARY(H) ELSE NULL END FROM table1"
+        )
+    else:
+        dec_str_query = "SELECT HEX_DECODE_STRING(H) FROM table1"
+        dec_bin_query = "SELECT HEX_DECODE_BINARY(H) FROM table1"
     s = "Alphabet Soup"
     b = b"Alphabet Soup"
     h = "416c70686162657420536f7570"
@@ -1551,23 +1561,109 @@ def test_hex_encode(query_fmt, uppercase, col_fmt, memory_leak_check):
     ctx = {
         "table1": pd.DataFrame(
             {
+                "D": [True] * 14,
                 "S": [None if i % 5 == 2 else s[:i] for i in range(14)],
                 "B": [None if i % 5 == 2 else b[:i] for i in range(14)],
+                "H": [None if i % 5 == 2 else h[: 2 * i] for i in range(14)],
             }
         )
     }
-    answer = pd.DataFrame(
-        {
-            0: [None if i % 5 == 2 else h[: 2 * i] for i in range(14)],
-        }
-    )
     check_query(
-        query,
+        enc_query,
         ctx,
         None,
         check_names=False,
-        expected_output=answer,
+        expected_output=pd.DataFrame({0: ctx["table1"]["H"]}),
     )
+    check_query(
+        dec_str_query,
+        ctx,
+        None,
+        check_names=False,
+        expected_output=pd.DataFrame({0: ctx["table1"]["S"]}),
+    )
+    check_query(
+        dec_bin_query,
+        ctx,
+        None,
+        check_names=False,
+        expected_output=pd.DataFrame({0: ctx["table1"]["B"]}),
+    )
+
+
+@pytest.mark.skipif(
+    bodo.get_size() > 1,
+    reason="Error handling tests produce inconsistent results on multiple ranks on certain platforms",
+)
+@pytest.mark.parametrize(
+    "func",
+    [
+        pytest.param("HEX_DECODE_STRING"),
+        pytest.param("TRY_HEX_DECODE_STRING"),
+        pytest.param("HEX_DECODE_BINARY", marks=pytest.mark.slow),
+        pytest.param("TRY_HEX_DECODE_BINARY", marks=pytest.mark.slow),
+    ],
+)
+def test_hex_decode_error(func):
+    """Tests the HEX_DECODE family of functions with invalid strings to see
+    how well they handle decoding errors"""
+
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "S": pd.Series(
+                    [
+                        "",
+                        "4",  # Odd number of characters
+                        "46",
+                        "466",  # Odd number of characters
+                        "466f",
+                        "466f6",  # Odd number of characters
+                        "466f6f",
+                        "ABCDEG",  # Non-hex character: 'G'
+                        "",
+                        "12#4",  # Non-hex character: '#'
+                        "",
+                        "F🐍",  # Non-hex character: '🐍'
+                        "",
+                    ]
+                ),
+            }
+        )
+    }
+
+    query = f"SELECT {func}(S) FROM table1"
+    result = pd.Series(
+        ["", None, "F", None, "Fo", None, "Foo", None, "", None, "", None, ""]
+    )
+
+    if func.startswith("TRY"):
+        if func.endswith("BINARY"):
+            result = result.apply(
+                lambda x: None if pd.isna(x) else bytes(x, encoding="utf-8")
+            )
+        check_query(
+            query,
+            ctx,
+            None,
+            check_names=False,
+            expected_output=pd.DataFrame({0: result}),
+            only_jit_seq=True,
+        )
+    else:
+        with pytest.raises(
+            ValueError,
+            match=f"{func} failed due to malformed string input",
+        ):
+            check_query(
+                query,
+                ctx,
+                None,
+                check_names=False,
+                # Pointless output, but must be set
+                expected_output=pd.DataFrame(),
+                only_jit_seq=True,
+            )
 
 
 @pytest.mark.parametrize(
@@ -1786,7 +1882,7 @@ def test_base64_encode_decode(query_fmt, answer, col_fmt, memory_leak_check):
     ],
 )
 def test_base64_decode_error(func):
-    """Tests BASE64_DECODE_STRING and BASE64_DECODE_STRING with invalid strings to see
+    """Tests the BASE64_DECODE family of functions with invalid strings to see
     how well they handle decoding errors"""
 
     ctx = {

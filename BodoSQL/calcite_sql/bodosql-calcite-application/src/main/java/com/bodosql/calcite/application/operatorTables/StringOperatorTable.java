@@ -18,6 +18,8 @@ import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlOperandCountRanges;
 import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
 public final class StringOperatorTable implements SqlOperatorTable {
@@ -677,9 +679,57 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
-          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction HEX_DECODE_STRING =
+      new SqlFunction(
+          "HEX_DECODE_STRING",
+          SqlKind.OTHER_FUNCTION,
+          // [BSE-1714] TODO: calculate the output precision in terms of the input precision
+          // and the second argument.
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
+          null,
+          OperandTypes.STRING,
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction HEX_DECODE_BINARY =
+      new SqlFunction(
+          "HEX_DECODE_BINARY",
+          SqlKind.OTHER_FUNCTION,
+          // [BSE-1714] TODO: calculate the output precision in terms of the input precision
+          // and the second argument.
+          ReturnTypes.explicit(SqlTypeName.BINARY)
+              .andThen(SqlTypeTransforms.TO_NULLABLE)
+              .andThen(SqlTypeTransforms.TO_VARYING),
+          null,
+          OperandTypes.STRING,
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction TRY_HEX_DECODE_STRING =
+      new SqlFunction(
+          "TRY_HEX_DECODE_BINARY",
+          SqlKind.OTHER_FUNCTION,
+          // [BSE-1714] TODO: calculate the output precision in terms of the input precision
+          // and the second argument.
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
+          null,
+          OperandTypes.STRING,
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction TRY_HEX_DECODE_BINARY =
+      new SqlFunction(
+          "TRY_HEX_DECODE_STRING",
+          SqlKind.OTHER_FUNCTION,
+          // [BSE-1714] TODO: calculate the output precision in terms of the input precision
+          // and the second argument.
+          ReturnTypes.explicit(SqlTypeName.BINARY)
+              .andThen(SqlTypeTransforms.TO_NULLABLE)
+              .andThen(SqlTypeTransforms.TO_VARYING),
+          null,
+          OperandTypes.STRING,
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction BASE64_ENCODE =
@@ -688,7 +738,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
-          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
@@ -699,7 +749,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
-          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
@@ -710,7 +760,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
-          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
           null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
@@ -721,7 +771,9 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
-          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+          ReturnTypes.explicit(SqlTypeName.BINARY)
+              .andThen(SqlTypeTransforms.TO_NULLABLE)
+              .andThen(SqlTypeTransforms.TO_VARYING),
           null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
@@ -732,7 +784,10 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
-          BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
+
+          ReturnTypes.explicit(SqlTypeName.BINARY)
+              .andThen(SqlTypeTransforms.TO_NULLABLE)
+              .andThen(SqlTypeTransforms.TO_VARYING),
           null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
@@ -745,6 +800,10 @@ public final class StringOperatorTable implements SqlOperatorTable {
           MD5,
           MD5_HEX,
           HEX_ENCODE,
+          HEX_DECODE_STRING,
+          TRY_HEX_DECODE_STRING,
+          HEX_DECODE_BINARY,
+          TRY_HEX_DECODE_BINARY,
           BASE64_ENCODE,
           BASE64_DECODE_STRING,
           TRY_BASE64_DECODE_STRING,
