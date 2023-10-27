@@ -11,7 +11,6 @@ import org.apache.calcite.sql.SqlIdentifier
 import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.SqlSelect
 import org.apache.calcite.sql.SqlWriterConfig
-import org.apache.calcite.sql.dialect.SnowflakeSqlDialect
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.parser.SqlParserPos
 import org.apache.calcite.sql.util.SqlString
@@ -82,7 +81,7 @@ interface SnowflakeRel : RelNode {
         val metadataSelectQueryString: SqlString = metadataSelectQuery.toSqlString(
             UnaryOperator { c: SqlWriterConfig ->
                 c.withClauseStartsLine(false)
-                    .withDialect(SnowflakeSqlDialect.DEFAULT)
+                    .withDialect(BodoSnowflakeSqlDialect.NO_DOLLAR_ESCAPE)
             },
         )
 

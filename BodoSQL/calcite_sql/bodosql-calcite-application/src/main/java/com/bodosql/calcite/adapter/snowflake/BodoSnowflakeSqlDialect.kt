@@ -217,5 +217,10 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
 
         @JvmField
         val DEFAULT = BodoSnowflakeSqlDialect(DEFAULT_CONTEXT)
+
+        // Default implementation to use before we have support for $ strings in the parser.
+        // TODO: Add $ string suppport
+        @JvmField
+        val NO_DOLLAR_ESCAPE = BodoSnowflakeSqlDialect(org.apache.calcite.sql.dialect.SnowflakeSqlDialect.DEFAULT_CONTEXT)
     }
 }
