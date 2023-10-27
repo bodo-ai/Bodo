@@ -1437,7 +1437,6 @@ inline T& getv(const std::unique_ptr<array_info>& arr, size_t idx) {
 
 struct mpi_comm_info {
     int myrank, n_pes;
-    size_t n_rows;
     int64_t n_rows_send, n_rows_recv;
     bool has_nulls;
     // generally required MPI counts
@@ -1468,6 +1467,17 @@ struct mpi_comm_info {
      */
     explicit mpi_comm_info(
         const std::vector<std::shared_ptr<array_info>>& arrays);
+
+    /**
+     * @brief Construct mpi_comm_info for inner array of array item array.
+     * Initialize mpi_comm_info counts and displacement vectors and stats based
+     * on the parent array and row dest information.
+     *
+     * @param parent_arr The parent ARRAY_ITEM array
+     * @param parent_comm_info The mpi_comm_info of parent_arr
+     */
+    explicit mpi_comm_info(const std::shared_ptr<array_info>& parent_arr,
+                           const mpi_comm_info& parent_comm_info);
 
     /**
      * @brief Compute all information needed for the shuffling of

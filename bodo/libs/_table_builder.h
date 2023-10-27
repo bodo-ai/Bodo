@@ -284,7 +284,8 @@ struct ArrayBuildBuffer {
                                             (this->size + 1 + append_rows_sum)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
         CHECK_ARROW_MEM(
-            data_array->buffers[1]->SetSize(size + append_rows_sum),
+            data_array->buffers[1]->SetSize(
+                arrow::bit_util::BytesForBits(size + append_rows_sum)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
 
         offset_t* out_offsets = (offset_t*)this->data_array->data1<arr_type>();
@@ -337,7 +338,8 @@ struct ArrayBuildBuffer {
                            const std::vector<bool>& append_rows,
                            uint64_t append_rows_sum) {
         CHECK_ARROW_MEM(
-            data_array->buffers[0]->SetSize(size + append_rows_sum),
+            data_array->buffers[0]->SetSize(
+                arrow::bit_util::BytesForBits(size + append_rows_sum)),
             "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!:");
 
         uint8_t* out_bitmask =
