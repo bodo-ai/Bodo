@@ -2521,12 +2521,115 @@ def hex_encode_util(msg, case, dict_encoding_state, func_id):
     else:
         scalar_text = "msg_str = arg0\n"
     scalar_text += (
-        # "hex_encoded = bodo.libs.bodosql_crypto_funcs.hex_encode_algorithm(msg_str)\n"
         "hex_encoded = bodo.libs.bodosql_crypto_funcs.hex_encode_algorithm(msg_str)\n"
     )
     scalar_text += (
         f"res[i] = hex_encoded{'.lower()' if case_int == 0 else '.upper()'}\n"
     )
+
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def hex_decode_string(msg, _try=False, dict_encoding_state=None, func_id=-1):
+    """Handles cases where HEX_DECODE_STRING receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(msg, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.hex_decode_string",
+            [
+                "msg",
+                "_try",
+                "dict_encoding_state",
+                "func_id",
+            ],
+            0,
+            default_map={"_try": False, "dict_encoding_state": None, "func_id": -1},
+        )
+
+    def impl(msg, _try=False, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return hex_decode_util(msg, _try, True, dict_encoding_state, func_id)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def hex_decode_binary(msg, _try=False, dict_encoding_state=None, func_id=-1):
+    """Handles cases where HEX_DECODE_BINARY receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(msg, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.hex_decode_binary",
+            [
+                "msg",
+                "_try",
+                "dict_encoding_state",
+                "func_id",
+            ],
+            0,
+            default_map={"_try": False, "dict_encoding_state": None, "func_id": -1},
+        )
+
+    def impl(msg, _try=False, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return hex_decode_util(msg, _try, False, dict_encoding_state, func_id)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def hex_decode_util(msg, _try, _is_str, dict_encoding_state, func_id):
+    """A dedicated kernel for the SQL function HEX_DECODE family of functions
+       which takes in a string, produced by calling HEX_ENCODE on a string/binary value,
+       and reverses the process to return the original string/binary value.
+
+    Args:
+        msg (string scalar/column): The strings(s) to be decoded.
+        _try (boolean): if True, returns null on an error instead of raising an exception.
+        _is_str (boolean): if True, returns the result as a string instead of binary.
+
+    Returns:
+        String scalar/column: the original string such that calling HEX_ENCODE
+        with the output with the same arguments would produce the input to this function.
+    """
+    _try_bool = get_overload_const_bool(_try)
+    _is_str_bool = get_overload_const_bool(_is_str)
+    func_name = "HEX_DECODE"
+    if _try_bool:
+        func_name = "TRY_" + func_name
+    if _is_str_bool:
+        func_name += "_STRING"
+    else:
+        func_name += "_BINARY"
+
+    verify_string_arg(msg, func_name, "msg")
+
+    arg_names = ["msg", "_try", "_is_str", "dict_encoding_state", "func_id"]
+    arg_types = [msg, _try, _is_str, dict_encoding_state, func_id]
+    propagate_null = [True] + [False] * 4
+    out_dtype = bodo.string_array_type if _is_str_bool else bodo.binary_array_type
+    if _is_str_bool:
+        scalar_text = f"ans, success = bodo.libs.bodosql_crypto_funcs.hex_decode_string_algorithm(arg0)\n"
+    else:
+        scalar_text = f"ans, success = bodo.libs.bodosql_crypto_funcs.hex_decode_binary_algorithm(arg0)\n"
+    scalar_text += "if success:\n"
+    scalar_text += "  res[i] = ans\n"
+    scalar_text += "else:\n"
+    if _try_bool:
+        scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+    else:
+        scalar_text += (
+            f"  raise ValueError('{func_name} failed due to malformed string input')\n"
+        )
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
