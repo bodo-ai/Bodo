@@ -3,6 +3,7 @@
 #include "../io/arrow_reader.h"
 #include "../libs/_table_builder.h"
 #include "./test.hpp"
+#include "arrow/builder.h"
 
 namespace {
 /**
