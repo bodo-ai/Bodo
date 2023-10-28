@@ -1,6 +1,7 @@
 /// bodo::pinnable tests
 
 #include <ranges>
+#include <set>
 #include <sstream>
 
 #include "../libs/_memory.h"
