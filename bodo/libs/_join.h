@@ -1,5 +1,4 @@
-#ifndef _JOIN_H_INCLUDED
-#define _JOIN_H_INCLUDED
+#pragma once
 
 #include "_bodo_common.h"
 
@@ -287,5 +286,3 @@ void get_gen_cond_data_ptrs(std::shared_ptr<table_info> table,
                             std::vector<array_info*>* array_infos,
                             std::vector<void*>* col_ptrs,
                             std::vector<void*>* null_bitmaps);
-
-#endif  // _JOIN_H_INCLUDED

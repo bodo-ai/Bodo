@@ -3,8 +3,8 @@
 // functions here are used in np.tofile() and np.fromfile()
 // file_write_parallel is also used for df.to_csv() distributed writing to posix
 
-#ifndef _IO_H_INCLUDED
-#define _IO_H_INCLUDED
+#pragma once
+
 #include <cstdint>
 
 extern "C" {
@@ -15,9 +15,7 @@ void file_write_py_entrypt(char* file_name, void* buff, int64_t size);
 void file_read_parallel(char* file_name, char* buff, int64_t start,
                         int64_t count);
 void file_write_parallel(char* file_name, char* buff, int64_t start,
-                         int64_t count, int64_t elem_size); 
+                         int64_t count, int64_t elem_size);
 void file_write_parallel_py_entrypt(char* file_name, char* buff, int64_t start,
                                     int64_t count, int64_t elem_size);
 }  // extern "C"
-
-#endif  // _IO_H_INCLUDED

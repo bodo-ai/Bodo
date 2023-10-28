@@ -1,5 +1,8 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_memory_budget.h"
+
+#include <iostream>
+
 #include "_bodo_common.h"
 
 void OperatorComptroller::Initialize() { this->current_pipeline_id = 0; }

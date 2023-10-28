@@ -1,25 +1,15 @@
 // Copyright (C) 2022 Bodo Inc. All rights reserved.
 
-#ifndef _BODO_ICEBERG_TRANSFORMS_H
-#define _BODO_ICEBERG_TRANSFORMS_H
+#pragma once
 
-#include <Python.h>
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-#include <numpy/arrayobject.h>
 #include <algorithm>
-#include <boost/xpressive/xpressive.hpp>
 #include <functional>
 #include <random>
 #include <set>
-#include "_array_hash.h"
-#include "_array_operations.h"
-#include "_array_utils.h"
+
+#include <Python.h>
+
 #include "_bodo_common.h"
-#include "_datetime_ext.h"
-#include "_datetime_utils.h"
-#include "_distributed.h"
-#include "_shuffle.h"
-#include "gfx/timsort.hpp"
 
 // Iceberg Transforms
 // See more details here: https://iceberg.apache.org/spec/#partition-transforms
@@ -59,7 +49,7 @@ std::shared_ptr<array_info> array_transform_bucket_N(
  * https://iceberg.apache.org/spec/#truncate-transform-details
  *
  * @param in_arr Array to transform
- * @param width Truncase width
+ * @param width Truncate width
  * @param is_parallel Whether the operation is being performed in parallel. Used
  * for tracing.
  * @return std::shared_ptr<array_info> Transformed array.
@@ -183,5 +173,3 @@ std::string transform_val_to_str(std::string transform_name,
  */
 PyObject* iceberg_transformed_val_to_py(std::shared_ptr<array_info> arr,
                                         size_t idx);
-
-#endif  // _BODO_ICEBERG_TRANSFORMS_H

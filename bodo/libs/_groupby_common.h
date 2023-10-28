@@ -1,7 +1,5 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-
-#ifndef _GROUPBY_COMMON_H_INCLUDED
-#define _GROUPBY_COMMON_H_INCLUDED
+#pragma once
 
 #include "_bodo_common.h"
 #include "_groupby.h"
@@ -79,5 +77,3 @@ std::shared_ptr<table_info> grouped_sort(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
-
-#endif  // _GROUPBY_COMMON_H_INCLUDED

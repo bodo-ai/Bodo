@@ -1,12 +1,9 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
-#include <iostream>
-
 
 #ifndef Py_UNREACHABLE
 #define Py_UNREACHABLE() abort()
 #endif
-
 
 // ******** ported from CPython 31e8d69bfe7cf5d4ffe0967cb225d2a8a229cc97
 
@@ -33,10 +30,7 @@ typedef struct {
     unsigned char readonly;
 } _C_UnicodeWriter;
 
-
-void
-_C_UnicodeWriter_Init(_C_UnicodeWriter *writer)
-{
+void _C_UnicodeWriter_Init(_C_UnicodeWriter *writer) {
     memset(writer, 0, sizeof(*writer));
 
     /* ASCII is the bare minimum */
@@ -50,25 +44,22 @@ _C_UnicodeWriter_Init(_C_UnicodeWriter *writer)
 }
 
 #ifdef MS_WINDOWS
-   /* On Windows, overallocate by 50% is the best factor */
-#  define OVERALLOCATE_FACTOR 2
+/* On Windows, overallocate by 50% is the best factor */
+#define OVERALLOCATE_FACTOR 2
 #else
-   /* On Linux, overallocate by 25% is the best factor */
-#  define OVERALLOCATE_FACTOR 4
+/* On Linux, overallocate by 25% is the best factor */
+#define OVERALLOCATE_FACTOR 4
 #endif
 
 /* Maximum code point of Unicode 6.0: 0x10ffff (1,114,111) */
 #define MAX_UNICODE 0x10ffff
 
-
-
 #define KIND_MAX_CHAR_VALUE(kind) \
-      (kind == PyUnicode_1BYTE_KIND ?                                   \
-       (0xffU) :                                                        \
-       (kind == PyUnicode_2BYTE_KIND ?                                  \
-        (0xffffU) :                                                     \
-        (0x10ffffU)))
+    (kind == PyUnicode_1BYTE_KIND \
+         ? (0xffU)                \
+         : (kind == PyUnicode_2BYTE_KIND ? (0xffffU) : (0x10ffffU)))
 
+// clang-format off
 #include "stringlib/bytesobject.cpp"
 
 #include "stringlib/asciilib.h"
@@ -87,18 +78,17 @@ _C_UnicodeWriter_Init(_C_UnicodeWriter *writer)
 #include "stringlib/codecs.h"
 #include "stringlib/undef.h"
 
-
-int64_t unicode_to_utf8(char* out_data, char* data, int64_t size, int kind)
-{
+// clang-format on
+int64_t unicode_to_utf8(char *out_data, char *data, int64_t size, int kind) {
     //
     switch (kind) {
-    default:
-        Py_UNREACHABLE();
-    case PyUnicode_1BYTE_KIND:
-        return ucs1lib_utf8_encoder(out_data, (Py_UCS1 *)data, size);
-    case PyUnicode_2BYTE_KIND:
-        return ucs2lib_utf8_encoder(out_data, (Py_UCS2 *)data, size);
-    case PyUnicode_4BYTE_KIND:
-        return ucs4lib_utf8_encoder(out_data, (Py_UCS4 *)data, size);
+        default:
+            Py_UNREACHABLE();
+        case PyUnicode_1BYTE_KIND:
+            return ucs1lib_utf8_encoder(out_data, (Py_UCS1 *)data, size);
+        case PyUnicode_2BYTE_KIND:
+            return ucs2lib_utf8_encoder(out_data, (Py_UCS2 *)data, size);
+        case PyUnicode_4BYTE_KIND:
+            return ucs4lib_utf8_encoder(out_data, (Py_UCS4 *)data, size);
     }
 }

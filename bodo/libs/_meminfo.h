@@ -1,12 +1,8 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-#ifndef BODO_MEMINFO_INCLUDED
-#define BODO_MEMINFO_INCLUDED
+#pragma once
 
 #include <cassert>
-#include <cstdarg>
-#include <cstdio>
-#include <cstring>
-#include <iostream>
+
 #include "_memory.h"
 
 #define ALIGNMENT 64  // preferred alignment for AVX512
@@ -147,7 +143,7 @@ inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
 inline void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
                              NRT_dtor_function dtor, void *dtor_info,
                              void *external_allocator) {
-    mi->refct = 1; /* starts with 1 refct */
+    mi->refct = 1; /* starts with 1 refcount */
     mi->dtor = dtor;
     mi->dtor_info = dtor_info;
     mi->data = data;
@@ -288,5 +284,3 @@ inline void NRT_MemInfo_Unpin(NRT_MemInfo *mi) {
     auto pool = reinterpret_cast<bodo::IBufferPool *>(mi->dtor_info);
     pool->Unpin(reinterpret_cast<uint8_t *>(mi->data), mi->size, ALIGNMENT);
 }
-
-#endif  // #ifndef BODO_MEMINFO_INCLUDED

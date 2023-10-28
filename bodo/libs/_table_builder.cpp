@@ -1,6 +1,8 @@
 #include "_table_builder.h"
+
 #include "_array_hash.h"
 #include "_stream_join.h"
+#include "_table_builder_utils.h"
 
 /* -------------------------- ArrayBuildBuffer ---------------------------- */
 

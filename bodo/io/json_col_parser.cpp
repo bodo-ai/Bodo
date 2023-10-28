@@ -3,6 +3,7 @@
 #include <charconv>
 #include <string>
 
+#include <arrow/builder.h>
 #include <arrow/type.h>
 
 #include "../libs/_bodo_common.h"

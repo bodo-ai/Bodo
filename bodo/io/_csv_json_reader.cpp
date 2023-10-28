@@ -15,7 +15,6 @@
 #include <Python.h>
 #include <mpi.h>
 #include <algorithm>
-#include <boost/algorithm/string/predicate.hpp>
 #include <cinttypes>
 #include <ciso646>
 #include <cstdint>
@@ -205,10 +204,10 @@ class PathInfo {
      */
     std::shared_ptr<arrow::fs::FileSystem> get_fs() {
         if (!fs) {
-            bool is_hdfs = boost::starts_with(file_path, "hdfs://") ||
-                           boost::starts_with(file_path, "abfs://") ||
-                           boost::starts_with(file_path, "abfss://");
-            bool is_s3 = boost::starts_with(file_path, "s3://");
+            bool is_hdfs = file_path.starts_with("hdfs://") ||
+                           file_path.starts_with("abfs://") ||
+                           file_path.starts_with("abfss://");
+            bool is_s3 = file_path.starts_with("s3://");
             if (is_s3 || is_hdfs) {
                 this->is_remote_fs = true;
                 arrow::internal::Uri uri;
@@ -358,14 +357,14 @@ class PathInfo {
                             // skip 0 size files
                             (fsize <= 0) ||
                             // Skip checksums
-                            (boost::ends_with(fname, ".crc")) ||
+                            (fname.ends_with(".crc")) ||
                             // Skip HDFS directories in S3
-                            (boost::ends_with(fname, "_$folder$")) ||
+                            (fname.ends_with("_$folder$")) ||
                             // Skip hidden files starting with "_" (e.g.
                             // "_SUCCESS")
-                            (boost::starts_with(fname, "_")) ||
+                            (fname.starts_with("_")) ||
                             // Skip hidden files starting with "."
-                            (boost::starts_with(fname, "."))) {
+                            (fname.starts_with("."))) {
                             continue;
                         }
 
@@ -435,9 +434,9 @@ class PathInfo {
                     // infer compression scheme from the name of the first file
                     fname = get_first_file();
                 }
-                if (boost::ends_with(fname, ".gz"))
+                if (fname.ends_with(".gz"))
                     compression = "gzip";  // using arrow-cpp's representation
-                else if (boost::ends_with(fname, ".bz2"))
+                else if (fname.ends_with(".bz2"))
                     compression = "bz2";  // using arrow-cpp's representation
                 // ... TODO: more compression formats
                 else
@@ -505,7 +504,7 @@ class LocalDirectoryFileReader : public DirectoryFileReader {
         auto nonEmptyEndsWithSuffix =
             [suffix](const std::filesystem::path &path) -> bool {
             return (std::filesystem::is_regular_file(path) &&
-                    boost::ends_with(path.string(), suffix) &&
+                    path.string().ends_with(suffix) &&
                     std::filesystem::file_size(path) > 0);
         };
 

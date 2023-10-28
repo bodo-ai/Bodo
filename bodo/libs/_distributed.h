@@ -1,6 +1,5 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef _DISTRIBUTED_H_INCLUDED
-#define _DISTRIBUTED_H_INCLUDED
+#pragma once
 
 #include <Python.h>
 #include <mpi.h>
@@ -11,7 +10,6 @@
 #include <numeric>
 #include <random>
 #include <span>
-#include <tuple>
 #include <vector>
 
 #include "_bodo_common.h"
@@ -1078,5 +1076,3 @@ static void calc_disp(std::vector<T>& disps, std::vector<T> const& counts) {
         disps[i] = disps[i - 1] + counts[i - 1];
     }
 }
-
-#endif  // _DISTRIBUTED_H_INCLUDED

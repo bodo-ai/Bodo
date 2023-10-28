@@ -7,8 +7,17 @@
 #endif
 
 #include "parquet_write.h"
-#include <arrow/compute/api.h>
+
+#include <arrow/compute/cast.h>
+#include <arrow/ipc/writer.h>
+#include <arrow/table.h>
 #include <arrow/type.h>
+#include <arrow/util/base64.h>
+#include <arrow/util/key_value_metadata.h>
+#include <parquet/arrow/schema.h>
+#include <parquet/arrow/writer.h>
+#include <parquet/file_writer.h>
+
 #include "../libs/_array_hash.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"

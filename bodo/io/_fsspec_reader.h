@@ -3,7 +3,7 @@
 #include <string>
 #include <unordered_map>
 
-#include <arrow/io/api.h>
+#include <arrow/io/interfaces.h>
 
 extern std::unordered_map<std::string, PyObject *> pyfs;
 

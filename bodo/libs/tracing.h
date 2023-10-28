@@ -1,6 +1,4 @@
-#ifndef _TRACING_H_INCLUDED
-#define _TRACING_H_INCLUDED
-
+#pragma once
 #include <Python.h>
 
 namespace tracing {
@@ -157,5 +155,3 @@ class ResumableEvent : public Event {
 };
 
 }  // namespace tracing
-
-#endif  // _TRACING_H_INCLUDED

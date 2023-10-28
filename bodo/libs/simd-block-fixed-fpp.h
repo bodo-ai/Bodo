@@ -30,14 +30,11 @@
 
 #pragma once
 
-#include <cstdint>
-#include <cstdlib>
-
 #include <algorithm>
-#include <new>
+#include <cstdlib>
+#include <memory>
 
 #include <mpi.h>
-#include <vector>
 #include "hashutil.h"
 #include "tracing.h"
 
@@ -124,7 +121,7 @@ class SimdBlockFilterFixed {
     void union_reduction() {
         tracing::Event ev("bloom_union_reduction");
         // disable use of MPI_IN_PLACE since it causes incorrect results
-        // wiht I_MPI_ADJUST_ALLREDUCE=4
+        // with I_MPI_ADJUST_ALLREDUCE=4
         // See [BE-2377]
         // MPI_Allreduce(MPI_IN_PLACE, directory_,
         // static_cast<int>(SizeInBytes() / sizeof(uint64_t)),
@@ -182,7 +179,7 @@ template <typename HashFamily>
 [[gnu::always_inline]] inline __m256i
 SimdBlockFilterFixed<HashFamily>::MakeMask(const uint32_t hash) noexcept {
     const __m256i ones = _mm256_set1_epi32(1);
-    // Odd contants for hashing:
+    // Odd constants for hashing:
     const __m256i rehash =
         _mm256_setr_epi32(0x47b6137bU, 0x44974d91U, 0x8824ad5bU, 0xa2b7289dU,
                           0x705495c7U, 0x2df1424bU, 0x9efc4947U, 0x5c6bfb31U);

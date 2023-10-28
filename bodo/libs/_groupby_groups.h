@@ -1,6 +1,5 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-#ifndef _GROUPBY_GROUPS_H_INCLUDED
-#define _GROUPBY_GROUPS_H_INCLUDED
+#pragma once
 
 #include "_groupby.h"
 
@@ -77,5 +76,3 @@ int64_t get_groupby_labels(std::shared_ptr<table_info> table,
 int64_t get_groupby_labels_py_entry(table_info* table, int64_t* out_labels,
                                     int64_t* sort_idx, bool key_dropna,
                                     bool is_parallel);
-
-#endif  // _GROUPBY_GROUPS_H_INCLUDED

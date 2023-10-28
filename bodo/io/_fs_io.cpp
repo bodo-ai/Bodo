@@ -6,11 +6,12 @@
 #include <sstream>
 #include <string>
 
+#include <arrow/filesystem/filesystem.h>
+#include <arrow/filesystem/s3fs.h>
+#include <arrow/result.h>
+
 #include "../libs/_bodo_common.h"
 #include "_fs_io.h"
-#include "arrow/filesystem/filesystem.h"
-#include "arrow/filesystem/s3fs.h"
-#include "arrow/result.h"
 #include "mpi.h"
 
 // if expr is not true, form an err msg and raise a

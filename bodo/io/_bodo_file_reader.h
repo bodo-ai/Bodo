@@ -1,13 +1,11 @@
-#ifndef _BODO_FILE_READER_H_INCLUDED
-#define _BODO_FILE_READER_H_INCLUDED
-#include <boost/algorithm/string/predicate.hpp>
+#pragma once
+
 #include <cstdint>
 #include <filesystem>
 #include <vector>
+
 #include "../libs/_bodo_common.h"
 #include "../libs/_distributed.h"
-#include "arrow/filesystem/filesystem.h"
-#include "arrow/python/filesystem.h"
 #include "mpi.h"
 
 typedef std::vector<int64_t> size_vec;
@@ -297,8 +295,7 @@ class DirectoryFileReader : public FileReader {
         // find & set all file name
         for (auto it = file_names_sizes.begin(); it != file_names_sizes.end();
              ++it) {
-            if ((boost::ends_with(((*it).first.c_str()), suffix)) &&
-                (*it).second > 0) {
+            if ((*it).first.ends_with(suffix) && (*it).second > 0) {
                 this->file_names.push_back((*it).first);
             }
         }
@@ -309,8 +306,7 @@ class DirectoryFileReader : public FileReader {
         // find and set file_sizes & dir_size
         for (auto it = file_names_sizes.begin(); it != file_names_sizes.end();
              ++it) {
-            if ((boost::ends_with(((*it).first.c_str()), suffix)) &&
-                (*it).second > 0) {
+            if ((*it).first.ends_with(suffix) && (*it).second > 0) {
                 (this->file_sizes).push_back(this->dir_size);
                 this->dir_size += (*it).second - this->csv_header_bytes;
             }
@@ -418,5 +414,3 @@ class DirectoryFileReader : public FileReader {
         this->csv_header_bytes = header_size;
     }
 };
-
-#endif  // _BODO_FILE_READER_H_INCLUDED

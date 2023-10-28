@@ -1,5 +1,4 @@
-#ifndef _JOIN_HASHING_H_INCLUDED
-#define _JOIN_HASHING_H_INCLUDED
+#pragma once
 
 #include "_array_hash.h"
 #include "_bodo_common.h"
@@ -176,5 +175,3 @@ struct SecondLevelKeyEqualHashJoinTable {
 std::unique_ptr<uint32_t[]> hash_data_cols_table(
     const std::vector<std::shared_ptr<array_info>>& in_table,
     uint64_t* col_nums, size_t n_cols, uint32_t seed, bool is_parallel);
-
-#endif  // _JOIN_HASHING_H_INCLUDED

@@ -1,12 +1,15 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef _FS_IO_H_INCLUDED
-#define _FS_IO_H_INCLUDED
+#pragma once
+
 #include <Python.h>
-#include <arrow/io/api.h>
 #include <string>
+
+#include <arrow/filesystem/hdfs.h>
+#include <arrow/filesystem/s3fs.h>
+#include <arrow/io/interfaces.h>
+#include <arrow/python/filesystem.h>
+
 #include "_bodo_file_reader.h"
-#include "arrow/filesystem/hdfs.h"
-#include "arrow/filesystem/s3fs.h"
 
 struct Bodo_Fs {
     enum FsEnum { posix = 0, s3 = 1, hdfs = 2, gcs = 3 };
@@ -186,5 +189,3 @@ void parallel_in_order_write(
     const std::string &fname, char *buff, int64_t count, int64_t elem_size,
     std::shared_ptr<arrow::fs::S3FileSystem> s3_fs,
     std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs);
-
-#endif  // _FS_IO_H_INCLUDED

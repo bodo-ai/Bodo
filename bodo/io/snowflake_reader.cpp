@@ -7,6 +7,7 @@
 #include <queue>
 #include "arrow_reader.h"
 
+#include "../libs/_bodo_to_arrow.h"
 #include "../libs/_dict_builder.h"
 #include "../libs/_distributed.h"
 #include "../libs/_table_builder.h"

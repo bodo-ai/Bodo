@@ -2,6 +2,20 @@
 
 #include "iceberg_transforms.h"
 
+#include <boost/xpressive/xpressive.hpp>
+
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/arrayobject.h>
+
+#include "_array_hash.h"
+#include "_array_operations.h"
+#include "_array_utils.h"
+#include "_datetime_ext.h"
+#include "_datetime_utils.h"
+#include "_distributed.h"
+#include "_shuffle.h"
+#include "gfx/timsort.hpp"
+
 //
 // Utilities for Iceberg Transforms
 //
