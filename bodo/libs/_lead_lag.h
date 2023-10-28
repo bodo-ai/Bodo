@@ -6,8 +6,7 @@
  * @copyright Copyright (C) 2023 Bodo Inc. All rights reserved.
  *
  */
-#ifndef _LEAD_LAG_H_INCLUDED
-#define _LEAD_LAG_H_INCLUDED
+#pragma once
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -76,5 +75,3 @@ std::unique_ptr<array_info> lead_lag_seq_wrapper(
     const std::shared_ptr<array_info> &in_col, int64_t shift_amt,
     const std::optional<T> &default_fill_val, const bool ignore_nulls,
     int64_t default_fill_val_len = 0);
-
-#endif  // _LEAD_LAG_H_INCLUDED

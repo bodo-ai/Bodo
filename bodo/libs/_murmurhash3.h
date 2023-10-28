@@ -3,8 +3,7 @@
 // based on MurmurHash3 written by Austin Appleby
 // https://github.com/aappleby/smhasher/blob/master/src/MurmurHash3.cpp
 
-#ifndef _MURMURHASH3_H_
-#define _MURMURHASH3_H_
+#pragma once
 
 #define USE_MURMUR_32 0  // MurmurHash3_x86_32
 #define USE_MURMUR_128 \
@@ -89,5 +88,3 @@ inline void hash_inner_murmurhash3_x86_32(T* data, const uint32_t seed,
 }
 
 //-----------------------------------------------------------------------------
-
-#endif  // _MURMURHASH3_H_

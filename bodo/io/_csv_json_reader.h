@@ -1,9 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef _CSV_JSON_READER_H_INCLUDED
-#define _CSV_JSON_READER_H_INCLUDED
+#pragma once
 
 #include <Python.h>
-#include <string>
 
 #include "../libs/_bodo_common.h"
 
@@ -97,5 +95,3 @@ extern "C" void initialize_csv_reader(PyObject *reader);
  **/
 // extern "C" PyObject* csv_string_chunk_reader(const std::string * str, bool
 // is_parallel);
-
-#endif  // _CSV_JSON_READER_H_INCLUDED

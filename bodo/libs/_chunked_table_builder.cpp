@@ -1,4 +1,7 @@
 #include "_chunked_table_builder.h"
+
+#include <numeric>
+
 #include "_table_builder.h"
 
 /* --------------------------- Helper Functions --------------------------- */

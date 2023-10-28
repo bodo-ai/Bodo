@@ -1,7 +1,5 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-
-#ifndef _WINDOW_COMPUTE_H_INCLUDED
-#define _WINDOW_COMPUTE_H_INCLUDED
+#pragma once
 
 #include "_array_operations.h"
 #include "_array_utils.h"
@@ -36,5 +34,3 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
                         const std::vector<bool>& na_pos_vect,
                         const std::vector<void*>& window_args, int n_input_cols,
                         bool is_parallel, bool use_sql_rules);
-
-#endif  // _WINDOW_COMPUTE_H_INCLUDED

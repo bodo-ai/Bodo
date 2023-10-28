@@ -1,10 +1,14 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 
 #include "_groupby_do_apply_to_column.h"
+
+#include <numeric>
+
 #include "_bodo_common.h"
 #include "_groupby_agg_funcs.h"
 #include "_groupby_eval.h"
 #include "_groupby_ftypes.h"
+#include "_stl.h"
 
 /**
  * This file defines the functions that create the

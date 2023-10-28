@@ -1,7 +1,7 @@
 #pragma once
 
-#include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_stl.h"
 
 /**
  * @brief Implementation of the C++ side for Dictionary Encoding streaming state

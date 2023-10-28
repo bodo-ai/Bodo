@@ -1,7 +1,7 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 
-#ifndef _GROUPBY_HASHING_H_INCLUDED
-#define _GROUPBY_HASHING_H_INCLUDED
+#pragma once
+
 #include "_array_hash.h"
 #include "_array_utils.h"
 #include "_murmurhash3.h"
@@ -326,5 +326,3 @@ struct hash<T> {
     }
 };
 }  // namespace std
-
-#endif  // _GROUPBY_HASHING_H_INCLUDED

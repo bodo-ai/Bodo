@@ -1,6 +1,5 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef BODO_COMMON_H_INCLUDED_
-#define BODO_COMMON_H_INCLUDED_
+#pragma once
 
 #if defined(__GNUC__)
 #define __UNUSED__ __attribute__((unused))
@@ -9,9 +8,8 @@
 #endif
 
 #include <Python.h>
-#include <arrow/api.h>
 #include <vector>
-#include "_datetime_utils.h"
+
 #include "_meminfo.h"
 #include "simd-block-fixed-fpp.h"
 #include "tracing.h"
@@ -66,11 +64,7 @@
         Py_DECREF(mod);                        \
     } while (0)
 
-inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
-    std::cerr << "BodoRuntimeCppError, setting PyErr_SetString to " << message
-              << "\n";
-    PyErr_SetString(type, message);
-}
+void Bodo_PyErr_SetString(PyObject* type, const char* message);
 
 // --------- MemInfo Helper Functions --------- //
 NRT_MemInfo* alloc_meminfo(int64_t length);
@@ -567,7 +561,7 @@ struct Schema {
      * format. The serialized schema consists of a vector of bodo_array_types
      * and a vector of CTypes.
      *
-     * @return (arr_array_types, arr_c_types) Serialization vecs
+     * @return (arr_array_types, arr_c_types) Serialization vectors
      */
     std::pair<std::vector<int8_t>, std::vector<int8_t>> Serialize();
 };
@@ -1025,75 +1019,8 @@ struct array_info {
     /**
      * Return string representation of value in position `idx` of this array.
      */
-    std::string val_to_str(size_t idx) {
-        switch (dtype) {
-            case Bodo_CTypes::INT8:
-                return std::to_string(this->at<int8_t>(idx));
-            case Bodo_CTypes::UINT8:
-                return std::to_string(this->at<uint8_t>(idx));
-            case Bodo_CTypes::INT32:
-                return std::to_string(this->at<int32_t>(idx));
-            case Bodo_CTypes::UINT32:
-                return std::to_string(this->at<uint32_t>(idx));
-            case Bodo_CTypes::INT64:
-                return std::to_string(this->at<int64_t>(idx));
-            case Bodo_CTypes::UINT64:
-                return std::to_string(this->at<uint64_t>(idx));
-            case Bodo_CTypes::FLOAT32:
-                return std::to_string(this->at<float>(idx));
-            case Bodo_CTypes::FLOAT64:
-                return std::to_string(this->at<double>(idx));
-            case Bodo_CTypes::INT16:
-                return std::to_string(this->at<int16_t>(idx));
-            case Bodo_CTypes::UINT16:
-                return std::to_string(this->at<uint16_t>(idx));
-            case Bodo_CTypes::STRING: {
-                if (this->arr_type == bodo_array_type::DICT) {
-                    // In case of dictionary encoded string array
-                    // get the string value by indexing into the dictionary
-                    return this->child_arrays[0]->val_to_str(
-                        this->child_arrays[1]->at<int32_t>(idx));
-                }
-                offset_t* offsets = (offset_t*)data2();
-                return std::string(data1() + offsets[idx],
-                                   offsets[idx + 1] - offsets[idx]);
-            }
-            case Bodo_CTypes::DATE: {
-                int64_t day = this->at<int32_t>(idx);
-                int64_t year = days_to_yearsdays(&day);
-                int64_t month;
-                get_month_day(year, day, &month, &day);
-                std::string date_str;
-                date_str.reserve(10);
-                date_str += std::to_string(year) + "-";
-                if (month < 10)
-                    date_str += "0";
-                date_str += std::to_string(month) + "-";
-                if (day < 10)
-                    date_str += "0";
-                date_str += std::to_string(day);
-                return date_str;
-            }
-            case Bodo_CTypes::_BOOL:
-                bool val;
-                if (this->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                    val = GetBit((uint8_t*)data1(), idx);
-                } else {
-                    val = this->at<bool>(idx);
-                }
-                if (val) {
-                    return "True";
-                } else {
-                    return "False";
-                }
-            default: {
-                std::vector<char> error_msg(100);
-                snprintf(error_msg.data(), error_msg.size(),
-                         "val_to_str not implemented for dtype %d", dtype);
-                throw std::runtime_error(error_msg.data());
-            }
-        }
-    }
+    std::string val_to_str(size_t idx);
+
     template <
         bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
     void set_null_bit(size_t idx, bool bit) {
@@ -1640,7 +1567,8 @@ void reset_col_if_last_table_ref(std::shared_ptr<table_info> const& table,
  */
 void clear_all_cols_if_last_table_ref(std::shared_ptr<table_info> const& table);
 
-/* Compute the total memory of local chunk of the table on current rank
+/**
+ * Compute the total memory of local chunk of the table on current rank
  *
  * @param table : The input table
  * @param include_dict_size : Should the size of dictionaries be included?
@@ -1670,7 +1598,8 @@ void bodo_common_init();
 std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> arr,
                                        bool shallow_copy_child_arrays = false);
 
-/* Calculate the size of one row
+/**
+ * Calculate the size of one row
  *
  * @param arr_c_types : the array of types for the row
  * @return the total size of the row
@@ -1801,26 +1730,6 @@ inline bool is_na(const uint8_t* null_bitmap, int64_t i) {
 }
 }
 
-/// \brief Get binary value as a string_view
-// A version of Arrow's GetView() that returns std::string_view directly.
-// Arrow < 10.0 versions return arrow::util::string_view which is a vendored
-// version that doesn't work in containers (see string_hash below).
-// TODO: replace with Arrow's GetView after upgrade to Arrow 10
-// https://github.com/apache/arrow/blob/a2881a124339d7d50088c5b9778c725316a7003e/cpp/src/arrow/array/array_binary.h#L70
-///
-/// \param i the value index
-/// \return the view over the selected value
-template <typename ARROW_ARRAY_TYPE>
-std::string_view ArrowStrArrGetView(std::shared_ptr<ARROW_ARRAY_TYPE> str_arr,
-                                    int64_t i) {
-    auto raw_value_offsets = str_arr->raw_value_offsets();
-
-    auto pos = raw_value_offsets[i];
-    return std::string_view(
-        reinterpret_cast<const char*>(str_arr->raw_data() + pos),
-        raw_value_offsets[i + 1] - pos);
-}
-
 // C++20 magic to support "heterogeneous" access to unordered containers
 // makes the key "transparent", allowing std::string_view to be used similar to
 // std::string https://www.cppstories.com/2021/heterogeneous-access-cpp20/
@@ -1882,5 +1791,3 @@ PyMODINIT_FUNC PyInit_table_builder_cpp(void);
 PyMODINIT_FUNC PyInit_test_cpp(void);
 #endif
 }  // extern "C"
-
-#endif /* BODO_COMMON_H_INCLUDED_ */

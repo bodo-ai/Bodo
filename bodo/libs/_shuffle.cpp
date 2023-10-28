@@ -1,8 +1,12 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_shuffle.h"
-#include <arrow/api.h>
+
 #include <numeric>
 #include <span>
+
+#include <arrow/api.h>
+#include <mpi.h>
+
 #include "_array_hash.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
@@ -1561,7 +1565,7 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
         int node = row_dest[i_row];
         if (node == -1)
             continue;
-        std::string_view e_str = ArrowStrArrGetView(string_array, i_row);
+        std::string_view e_str = string_array->GetView(i_row);
         int64_t n_char = e_str.size();
         for (int64_t i_char = 0; i_char < n_char; i_char++) {
             send_char[list_shift[node] + i_char] = e_str.data()[i_char];

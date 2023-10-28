@@ -10,7 +10,10 @@
 #include <string>
 #include <unordered_map>
 
+#include <arrow/builder.h>
+
 #include "_decimal_ext.h"
+#include "hyperloglog.hpp"
 
 /**
  * Append values from a byte buffer to a primitive array builder.
@@ -1227,10 +1230,8 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             if (epair.first != 0)
                 return epair.first;
             if (epair.second) {
-                std::string_view str1 =
-                    ArrowStrArrGetView(str_array1, pos1_s + idx);
-                std::string_view str2 =
-                    ArrowStrArrGetView(str_array2, pos2_s + idx);
+                std::string_view str1 = str_array1->GetView(pos1_s + idx);
+                std::string_view str2 = str_array2->GetView(pos2_s + idx);
                 size_t len1 = str1.size();
                 size_t len2 = str2.size();
                 size_t minlen = std::min(len1, len2);

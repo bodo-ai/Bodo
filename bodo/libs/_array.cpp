@@ -9,9 +9,11 @@
 #include <Python.h>
 #include <datetime.h>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+
 #include <arrow/api.h>
 #include <arrow/python/pyarrow.h>
 #include <numpy/arrayobject.h>
+
 #include "_array_hash.h"
 #include "_array_operations.h"
 #include "_array_utils.h"

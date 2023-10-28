@@ -8,11 +8,6 @@
 
 #include "../libs/_bodo_common.h"
 #include "_fs_io.h"
-#include "arrow/ipc/writer.h"
-#include "arrow/util/base64.h"
-#include "parquet/arrow/schema.h"
-#include "parquet/arrow/writer.h"
-#include "parquet/file_writer.h"
 
 /**
  * Struct used during pq_write_partitioned_py_entry and iceberg_pq_write to

@@ -440,7 +440,7 @@ void apply_arrow_string_hashes(
                 hash_string_32(&val_c, 1, out_hashes[i_row],
                                &out_hashes[i_row]);
             } else {
-                std::string_view e_str = ArrowStrArrGetView(input_array, idx);
+                std::string_view e_str = input_array->GetView(idx);
                 hash_string_32(e_str.data(), e_str.size(), out_hashes[i_row],
                                &out_hashes[i_row]);
             }

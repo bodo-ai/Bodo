@@ -1,6 +1,5 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef _GROUPBY_H_INCLUDED
-#define _GROUPBY_H_INCLUDED
+#pragma once
 #include "_bodo_common.h"
 
 /** Data structure used for the computation of groups.
@@ -180,5 +179,3 @@ void copy_values_transform(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
-
-#endif  // _GROUPBY_H_INCLUDED

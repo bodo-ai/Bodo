@@ -5,12 +5,18 @@
 #if _MSC_VER >= 1900
 #undef timezone
 #endif
+#include <optional>
 
 #include <arrow/python/api.h>
+
 #include <boost/uuid/uuid.hpp>             // uuid class
 #include <boost/uuid/uuid_generators.hpp>  // generators
 #include <boost/uuid/uuid_io.hpp>          // streaming operators etc.
-#include <optional>
+
+#include "../libs/_array_hash.h"
+#include "../libs/_array_operations.h"
+#include "../libs/_array_utils.h"
+#include "../libs/_shuffle.h"
 #include "../libs/iceberg_transforms.h"
 #include "parquet_write.h"
 

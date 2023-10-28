@@ -1,6 +1,5 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-#ifndef _GROUPBY_EVAL_H_INCLUDED
-#define _GROUPBY_EVAL_H_INCLUDED
+#pragma once
 
 #include <cmath>
 #include <cstdint>
@@ -195,5 +194,3 @@ inline void boolxor_eval(const std::shared_ptr<array_info>& one,
     bool two_bit = GetBit((uint8_t*)two->data1(), i);
     SetBitTo((uint8_t*)one->data1(), i, one_bit && !two_bit);
 }
-
-#endif  // _GROUPBY_EVAL_H_INCLUDED

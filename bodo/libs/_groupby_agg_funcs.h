@@ -1,7 +1,5 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-
-#ifndef _GROUPBY_AGG_FUNCS_H_INCLUDED
-#define _GROUPBY_AGG_FUNCS_H_INCLUDED
+#pragma once
 
 #include <concepts>
 #include <span>
@@ -884,5 +882,3 @@ bool idx_compare_column(const std::shared_ptr<array_info>& out_arr,
                         int64_t grp_num,
                         const std::shared_ptr<array_info>& in_arr,
                         int64_t in_idx, bool asc, bool na_pos);
-
-#endif  // _GROUPBY_AGG_FUNCS_H_INCLUDED

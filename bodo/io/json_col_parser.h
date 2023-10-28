@@ -1,6 +1,5 @@
 #pragma once
 
-#include <arrow/api.h>
 #include <arrow/array.h>
 #include <arrow/table.h>
 #include <arrow/type.h>

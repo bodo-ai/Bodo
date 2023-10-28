@@ -6,8 +6,7 @@
  *
  * @copyright Copyright (C) 2023 Bodo Inc. All rights reserved.
  */
-#ifndef _LISTAGG_HEADER_INCLUDED
-#define _LISTAGG_HEADER_INCLUDED
+#pragma once
 
 #include "_bodo_common.h"
 
@@ -32,5 +31,3 @@ char *listagg_seq(std::shared_ptr<table_info> in_table,
                   const std::string &separator, int num_order_cols,
                   bool *window_ascending, bool *window_na_position,
                   int64_t *output_string_size_ptr);
-
-#endif  // _LISTAGG_HEADER_INCLUDED

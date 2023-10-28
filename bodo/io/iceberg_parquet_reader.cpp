@@ -6,6 +6,8 @@
 
 #include "parquet_reader.h"
 
+#include <numeric>
+
 // -------- IcebergParquetReader --------
 
 class IcebergParquetReader : public ParquetReader {

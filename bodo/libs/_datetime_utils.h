@@ -1,6 +1,5 @@
 // Copyright (C) 2022 Bodo Inc. All rights reserved.
-#ifndef BODO_DATETIME_UTILS_H_INCLUDED_
-#define BODO_DATETIME_UTILS_H_INCLUDED_
+#pragma once
 
 #include <stdint.h>
 
@@ -36,5 +35,3 @@ int64_t days_to_yearsdays(int64_t* days_);
  * @param day[out]
  */
 void get_month_day(int64_t year, int64_t days, int64_t* month, int64_t* day);
-
-#endif /* BODO_DATETIME_UTILS_H_INCLUDED_ */

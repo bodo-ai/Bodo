@@ -1,8 +1,6 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-#ifndef _GROUPBY_FTYPES_H_INCLUDED
-#define _GROUPBY_FTYPES_H_INCLUDED
+#pragma once
 
-#include <iostream>
 #include <string>
 
 /**
@@ -104,5 +102,3 @@ struct Bodo_FTypes {
 };
 
 const std::string get_name_for_Bodo_FTypes(int enumVal);
-
-#endif  // _GROUPBY_FTYPES_H_INCLUDED

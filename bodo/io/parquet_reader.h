@@ -4,8 +4,6 @@
 // functionality that is specific to reading parquet datasets
 
 #include "arrow_reader.h"
-#include "parquet/api/reader.h"
-#include "parquet/arrow/reader.h"
 
 class ParquetReader : public ArrowReader {
    public:

@@ -1,6 +1,10 @@
 #include "_bodo_common.h"
+
+#include <arrow/array.h>
+
 #include "_array_utils.h"
 #include "_bodo_to_arrow.h"
+#include "_datetime_utils.h"
 #include "_distributed.h"
 
 std::vector<size_t> numpy_item_size(Bodo_CTypes::_numtypes);
@@ -58,6 +62,12 @@ void bodo_common_init() {
                              "float64 size mismatch between C++ and NumPy!");
         return;
     }
+}
+
+void Bodo_PyErr_SetString(PyObject* type, const char* message) {
+    std::cerr << "BodoRuntimeCppError, setting PyErr_SetString to " << message
+              << "\n";
+    PyErr_SetString(type, message);
 }
 
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
@@ -328,6 +338,76 @@ std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
     int64_t itemsize = numpy_item_size[typ_enum];
     int64_t size = length * itemsize;
     return AllocateBodoBuffer(size, pool, std::move(mm));
+}
+
+std::string array_info::val_to_str(size_t idx) {
+    switch (dtype) {
+        case Bodo_CTypes::INT8:
+            return std::to_string(this->at<int8_t>(idx));
+        case Bodo_CTypes::UINT8:
+            return std::to_string(this->at<uint8_t>(idx));
+        case Bodo_CTypes::INT32:
+            return std::to_string(this->at<int32_t>(idx));
+        case Bodo_CTypes::UINT32:
+            return std::to_string(this->at<uint32_t>(idx));
+        case Bodo_CTypes::INT64:
+            return std::to_string(this->at<int64_t>(idx));
+        case Bodo_CTypes::UINT64:
+            return std::to_string(this->at<uint64_t>(idx));
+        case Bodo_CTypes::FLOAT32:
+            return std::to_string(this->at<float>(idx));
+        case Bodo_CTypes::FLOAT64:
+            return std::to_string(this->at<double>(idx));
+        case Bodo_CTypes::INT16:
+            return std::to_string(this->at<int16_t>(idx));
+        case Bodo_CTypes::UINT16:
+            return std::to_string(this->at<uint16_t>(idx));
+        case Bodo_CTypes::STRING: {
+            if (this->arr_type == bodo_array_type::DICT) {
+                // In case of dictionary encoded string array
+                // get the string value by indexing into the dictionary
+                return this->child_arrays[0]->val_to_str(
+                    this->child_arrays[1]->at<int32_t>(idx));
+            }
+            offset_t* offsets = (offset_t*)data2();
+            return std::string(data1() + offsets[idx],
+                               offsets[idx + 1] - offsets[idx]);
+        }
+        case Bodo_CTypes::DATE: {
+            int64_t day = this->at<int32_t>(idx);
+            int64_t year = days_to_yearsdays(&day);
+            int64_t month;
+            get_month_day(year, day, &month, &day);
+            std::string date_str;
+            date_str.reserve(10);
+            date_str += std::to_string(year) + "-";
+            if (month < 10)
+                date_str += "0";
+            date_str += std::to_string(month) + "-";
+            if (day < 10)
+                date_str += "0";
+            date_str += std::to_string(day);
+            return date_str;
+        }
+        case Bodo_CTypes::_BOOL:
+            bool val;
+            if (this->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                val = GetBit((uint8_t*)data1(), idx);
+            } else {
+                val = this->at<bool>(idx);
+            }
+            if (val) {
+                return "True";
+            } else {
+                return "False";
+            }
+        default: {
+            std::vector<char> error_msg(100);
+            snprintf(error_msg.data(), error_msg.size(),
+                     "val_to_str not implemented for dtype %d", dtype);
+            throw std::runtime_error(error_msg.data());
+        }
+    }
 }
 
 std::unique_ptr<array_info> alloc_numpy(

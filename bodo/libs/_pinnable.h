@@ -3,8 +3,8 @@
 
 #include <cstdint>
 
-#include "_array_utils.h"
 #include "_memory.h"
+#include "_stl.h"
 
 // This file provides several utilities for managing pinnable memory
 // Background:
@@ -237,7 +237,7 @@ struct pinnable_ptr {
     }
 
    private:
-    /// @brief Create a pinnable_ptr from a new allocatior. Only called by
+    /// @brief Create a pinnable_ptr from a new allocator. Only called by
     /// PinnableAllocator
     /// @param p
     pinnable_ptr(pinnable_ptr_base *p) : base_(p), offset_(0) {}
@@ -401,7 +401,7 @@ class PinnableAllocator {
 #endif
 
    private:
-    /// @brief Allocators must be copyable and rebindable in order to comply
+    /// @brief Allocators must be copyable and re-bindable in order to comply
     /// with the C++ standard.
     ///
     /// However, each allocator derived from the same data structure is part of
@@ -455,7 +455,7 @@ struct pinning_traits<std::pair<K, V>> {
 /// For example, any bodo buffer pool allocator can be made a pinning allocator
 ////
 /// To make a new allocator adaptable with the pinning support,you should
-/// specilaize this template, and define is_pinnable=true and set
+/// specialize this template, and define is_pinnable=true and set
 /// pinnable_type to the type of the pinning allocator.
 ///
 /// @tparam T The allocator type

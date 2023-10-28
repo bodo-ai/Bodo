@@ -1,10 +1,10 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef _ARRAY_HASH_H_INCLUDED
-#define _ARRAY_HASH_H_INCLUDED
+#pragma once
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_murmurhash3.h"
+#include "_stl.h"
 
 #define SEED_HASH_PARTITION 0xb0d01289
 #define SEED_HASH_MULTIKEY 0xb0d01288
@@ -1144,5 +1144,3 @@ int8_t check_like_kernel_cache(like_kernel_cache_t* cache, uint32_t idx1,
  * @param cache Pointer to the hashmap
  */
 void dealloc_like_kernel_cache(like_kernel_cache_t* cache) noexcept;
-
-#endif  // _ARRAY_HASH_H_INCLUDED

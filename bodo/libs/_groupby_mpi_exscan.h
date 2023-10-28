@@ -1,7 +1,5 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-
-#ifndef _GROUPBY_MPI_EXSCAN_H_INCLUDED
-#define _GROUPBY_MPI_EXSCAN_H_INCLUDED
+#pragma once
 
 #include "_bodo_common.h"
 /**
@@ -67,5 +65,3 @@ std::shared_ptr<table_info> mpi_exscan_computation(
 std::shared_ptr<array_info> compute_categorical_index(
     std::shared_ptr<table_info> in_table, int64_t num_keys, bool is_parallel,
     bool key_dropna = true);
-
-#endif  // _GROUPBY_MPI_EXSCAN_H_INCLUDED
