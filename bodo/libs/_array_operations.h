@@ -1,8 +1,9 @@
-#ifndef _ARRAY_OPERATIONS_H_INCLUDED
-#define _ARRAY_OPERATIONS_H_INCLUDED
+#pragma once
 
 #include "_bodo_common.h"
-#include "_stream_dict_encoding.h"
+
+// Forward Declaration from _stream_dict_encoding
+class DictEncodingState;
 
 /**
  * Compute the boolean array on output corresponds to the "isin" function in
@@ -304,4 +305,3 @@ array_info* get_replace_regex_dict_state_py_entry(array_info* p_in_arr,
                                                   char const* replacement,
                                                   DictEncodingState* state,
                                                   int64_t func_id);
-#endif  // _ARRAY_OPERATIONS_H_INCLUDED

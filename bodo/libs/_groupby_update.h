@@ -1,6 +1,5 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-#ifndef _GROUPBY_UPDATE_H_INCLUDED
-#define _GROUPBY_UPDATE_H_INCLUDED
+#pragma once
 
 #include "_groupby.h"
 #include "_groupby_ftypes.h"
@@ -311,5 +310,3 @@ void nunique_computation(
     std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
     grouping_info const& grp_info, bool const& dropna, bool const& is_parallel,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr());
-
-#endif  // _GROUPBY_UPDATE_H_INCLUDED

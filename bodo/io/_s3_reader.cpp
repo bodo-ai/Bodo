@@ -1,14 +1,14 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
-#include <iostream>
+
+#include <arrow/filesystem/filesystem.h>
+#include <arrow/filesystem/s3fs.h>
+#include <arrow/io/interfaces.h>
+#include <arrow/result.h>
+#include <arrow/status.h>
 
 #include "../libs/_bodo_common.h"
 #include "_bodo_file_reader.h"
-#include "arrow/filesystem/filesystem.h"
-#include "arrow/filesystem/s3fs.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
 
 // helper macro for CHECK_ARROW to add a message regarding AWS creds or S3
 // bucket region being an issue.

@@ -1,5 +1,6 @@
 #include "_table_builder_utils.h"
 #include "_bodo_common.h"
+#include "_bodo_to_arrow.h"
 
 std::unique_ptr<array_info> alloc_empty_array(
     const std::unique_ptr<bodo::DataType>& datatype,

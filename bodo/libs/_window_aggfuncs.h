@@ -1,6 +1,5 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-#ifndef _WINDOW_AGGFUNCS_H_INCLUDED
-#define _WINDOW_AGGFUNCS_H_INCLUDED
+#pragma once
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -76,5 +75,3 @@ void window_frame_computation(std::shared_ptr<array_info> in_arr,
                               std::shared_ptr<array_info> sorted_groups,
                               std::shared_ptr<array_info> sorted_idx,
                               int64_t* frame_lo, int64_t* frame_hi, int ftype);
-
-#endif  // _WINDOW_AGGFUNCS_H_INCLUDED

@@ -1,6 +1,5 @@
-#ifndef _NESTED_LOOP_JOIN_H_INCLUDED
-#define _NESTED_LOOP_JOIN_H_INCLUDED
-#endif
+#pragma once
+
 #include "_join.h"
 #include "_pinnable.h"
 
@@ -121,4 +120,3 @@ void nested_loop_join_table_local(
         delete[] match_arr;
     }
 };
-#undef _NESTED_LOOP_JOIN_H_INCLUDED

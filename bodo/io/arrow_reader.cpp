@@ -2,7 +2,9 @@
 
 // Implementation of ArrowReader, ColumnBuilder subclasses and
 // helper code to read Arrow data into Bodo.
+#include "arrow_reader.h"
 
+#include <arrow/array/concatenate.h>
 #include <arrow/compute/api.h>
 
 #include "../libs/_array_utils.h"
@@ -10,8 +12,8 @@
 #include "../libs/_datetime_ext.h"
 #include "../libs/_datetime_utils.h"
 #include "../libs/_distributed.h"
+#include "../libs/_stl.h"
 
-#include "arrow_reader.h"
 #include "json_col_parser.h"
 
 using arrow::Type;
@@ -725,8 +727,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
             indices_arr->set_null_bit(n_strings_copied + i, true);
             const uint64_t length = in_offsets[str_start_offset + i + 1] -
                                     in_offsets[str_start_offset + i];
-            std::string_view val =
-                ArrowStrArrGetView<ARROW_ARRAY_TYPE>(str_arr, i);
+            std::string_view val = str_arr->GetView(i);
             if (auto it = str_to_ind.find(val); it != str_to_ind.end()) {
                 indices_arr->at<int32_t>(n_strings_copied + i) =
                     it->second.first;

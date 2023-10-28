@@ -1,7 +1,6 @@
 #pragma once
 #include "_chunked_table_builder.h"
 #include "_dict_builder.h"
-#include "_table_builder_utils.h"
 
 /**
  * @brief Wrapper around array_info to turn it into build buffer.

@@ -1,6 +1,5 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-#ifndef _GROUPBY_COL_SET_H_INCLUDED
-#define _GROUPBY_COL_SET_H_INCLUDED
+#pragma once
 
 #include <algorithm>
 #include "_bodo_common.h"
@@ -1414,5 +1413,3 @@ std::unique_ptr<BasicColSet> makeColSet(
     std::shared_ptr<table_info> udf_table = nullptr, int udf_table_idx = 0,
     std::shared_ptr<table_info> nunique_table = nullptr,
     bool use_sql_rules = false);
-
-#endif  // _GROUPBY_COL_SET_H_INCLUDED

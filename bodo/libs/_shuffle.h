@@ -1,8 +1,6 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef _SHUFFLE_H_INCLUDED
-#define _SHUFFLE_H_INCLUDED
+#pragma once
 
-#include <mpi.h>
 #include "_bodo_common.h"
 
 #if 0
@@ -410,5 +408,3 @@ std::tuple<bool, uint64_t, int64_t> shuffle_this_iter(
     const std::shared_ptr<table_info>& shuffle_table, const uint64_t iter,
     const uint64_t sync_iter, const uint64_t prev_shuffle_iter,
     const int64_t adaptive_sync_counter);
-
-#endif  // _SHUFFLE_H_INCLUDED

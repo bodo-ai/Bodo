@@ -1,6 +1,7 @@
 #pragma once
 #include <deque>
 
+#include "_array_utils.h"
 #include "_dict_builder.h"
 #include "_table_builder_utils.h"
 

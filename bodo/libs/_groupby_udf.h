@@ -1,6 +1,5 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-#ifndef _GROUPBY_UDF_H_INCLUDED
-#define _GROUPBY_UDF_H_INCLUDED
+#pragma once
 
 #include "_bodo_common.h"
 
@@ -76,5 +75,3 @@ struct udfinfo_t {
      */
     udf_general_fn general_udf;
 };
-
-#endif  // _GROUPBY_UDF_H_INCLUDED

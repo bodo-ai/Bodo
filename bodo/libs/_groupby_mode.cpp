@@ -1,4 +1,6 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
+#include "_groupby_mode.h"
+
 #include "_array_hash.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -25,7 +27,7 @@ void mode_operation(
     for (size_t igrp = 0; igrp < num_group; igrp++) {
         // Set up a hashtable with key type T and value type integer
         bodo::unord_map_container<T, int> counts(pool);
-        // Keep track of NaN values seperately
+        // Keep track of NaN values separately
         size_t nan_count = 0;
         // Iterate over all the elements in the group by starting
         // at the first row in the group and following the
@@ -74,7 +76,7 @@ void mode_operation(
 /**
  * @brief Compute the mode within each group for an array of strings. Within
  * each group, a hashtable mapping each string in the group to its count is
- * built, then the string with the highest count is found. The most frquent
+ * built, then the string with the highest count is found. The most frequent
  * strings for each group are placed into a vector which is then converted into
  * the final array.
  *

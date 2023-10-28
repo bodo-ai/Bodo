@@ -1,6 +1,7 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_ftypes.h"
-#include <iostream>
+
+#include <stdexcept>
 #include <string>
 
 /**

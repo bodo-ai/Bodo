@@ -1,6 +1,5 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-#ifndef _GROUPBY_DO_APPLY_TO_COLUMN_H_INCLUDED
-#define _GROUPBY_DO_APPLY_TO_COLUMN_H_INCLUDED
+#pragma once
 
 #include "_groupby.h"
 
@@ -61,5 +60,3 @@ void idx_n_columns_apply(std::shared_ptr<array_info> out_arr,
                          const std::vector<bool>& asc_vect,
                          const std::vector<bool>& na_pos_vect,
                          grouping_info const& grp_info, int ftype);
-
-#endif  // _GROUPBY_DO_APPLY_TO_COLUMN_H_INCLUDED

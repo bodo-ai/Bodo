@@ -13,11 +13,11 @@
 
 #include <algorithm>
 #include <cmath>
-#include <iostream>
 #include <limits>
 #include <queue>
 #include <tuple>
 #include <vector>
+
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"

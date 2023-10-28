@@ -1,6 +1,5 @@
 // Copyright (C) 2020 Bodo Inc. All rights reserved.
-#ifndef BODO_DATETIME_H_INCLUDED_
-#define BODO_DATETIME_H_INCLUDED_
+#pragma once
 #include <cstdint>
 
 static inline int is_leapyear(int64_t year) {
@@ -24,5 +23,3 @@ static const int month_offset[26] = {
 static const int days_per_month_table[2][12] = {
     {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
     {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}};
-
-#endif /* BODO_DATETIME_H_INCLUDED_ */

@@ -1,8 +1,8 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
-#include <iostream>
 
 #include <arrow/io/api.h>
+
 #include "_csv_json_reader.h"
 #include "_fs_io.h"
 #include "_io.h"

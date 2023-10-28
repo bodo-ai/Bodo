@@ -7,17 +7,17 @@
 // Arrow arrays to Bodo. Column builder subclasses are defined in
 // arrow_reader.cpp for specific array types.
 
-#ifndef _BODO_ARROW_READER_H
-#define _BODO_ARROW_READER_H
+#pragma once
 
 #include <Python.h>
 #include <set>
 
+#include <arrow/array.h>
+#include <arrow/python/pyarrow.h>
+#include <arrow/table.h>
+#include <arrow/type.h>
+
 #include "../libs/_bodo_common.h"
-#include "arrow/array.h"
-#include "arrow/python/pyarrow.h"
-#include "arrow/table.h"
-#include "arrow/type.h"
 
 #define CHECK_ARROW(expr, msg)                                               \
     if (!(expr.ok())) {                                                      \
@@ -343,5 +343,3 @@ class ArrowReader {
         }
     }
 };
-
-#endif  // _BODO_ARROW_READER_H

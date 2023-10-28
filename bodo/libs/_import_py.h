@@ -1,6 +1,4 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef _IMPORT_PY_INCLUDED
-#define _IMPORT_PY_INCLUDED
+#pragma once
 
 #include <Python.h>
 
@@ -29,5 +27,3 @@ static PyObject *import_sym(const char *module, const char *sym) __UNUSED__ {
     return func;
 #undef CHECK
 }
-
-#endif  // _IMPORT_PY_INCLUDED

@@ -1,7 +1,6 @@
 // Copyright (C) 2021 Bodo Inc. All rights reserved.
 #include <Python.h>
 #include <cstddef>
-#include <iostream>
 #include <unordered_map>
 
 #include <arrow/filesystem/filesystem.h>

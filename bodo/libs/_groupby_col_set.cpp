@@ -1,5 +1,9 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_col_set.h"
+
+#include <iostream>
+#include <numeric>
+
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"

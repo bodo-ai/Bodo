@@ -1,7 +1,5 @@
 #pragma once
-#include "_array_utils.h"
 #include "_bodo_common.h"
-#include "_bodo_to_arrow.h"
 
 /// Helper functions
 
@@ -9,7 +7,7 @@
  * @brief allocate an empty table with provided column types
  *
  * @param arr_c_types vector of ints for column dtypes (in Bodo_CTypes format)
- * @param arr_array_types vector of ints for colmun array types (in
+ * @param arr_array_types vector of ints for column array types (in
  * bodo_array_type format)
  * @param pool IBufferPool to use for allocating the underlying data
  * buffers.

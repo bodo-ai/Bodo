@@ -1,25 +1,15 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-#ifndef BODO_MEMORY_INCLUDED
-#define BODO_MEMORY_INCLUDED
+#pragma once
 
 #include <atomic>
 #include <filesystem>
-#include <iostream>
 #include <mutex>
-#include <optional>
 #include <span>
 
-#include <arrow/compute/api.h>
-#include <arrow/filesystem/api.h>
-#include <arrow/io/api.h>
+#include <arrow/compute/exec.h>
+#include <arrow/filesystem/localfs.h>
+#include <arrow/io/interfaces.h>
 #include <arrow/memory_pool.h>
-#include <arrow/stl_allocator.h>
-
-#include <boost/uuid/uuid.hpp>             // uuid class
-#include <boost/uuid/uuid_generators.hpp>  // generators
-#include <boost/uuid/uuid_io.hpp>          // streaming operators etc.
-
-#include <mpi.h>
 
 // TODO Tell the compiler that the branch is unlikely.
 #define CHECK_ARROW_MEM(expr, msg)                                      \
@@ -175,17 +165,7 @@ struct BufferPoolOptions {
 /// from a storage location as well as size limitations
 class StorageManager {
    public:
-    StorageManager(const std::shared_ptr<StorageOptions> options)
-        : options(options) {
-        int rank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-        // Generate Unique UUID per Rank
-        boost::uuids::uuid _uuid = boost::uuids::random_generator()();
-        std::string uuid = boost::uuids::to_string(_uuid);
-
-        this->uuid = std::to_string(rank) + "-" + uuid;
-    }
+    StorageManager(const std::shared_ptr<StorageOptions> options);
 
     // Required otherwise won't compile
     // All cleanup operations occur within the Cleanup virtual function
@@ -1365,5 +1345,3 @@ inline size_t get_total_node_memory() {
 }
 
 #endif
-
-#endif  // #ifndef BODO_MEMORY_INCLUDED

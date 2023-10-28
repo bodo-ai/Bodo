@@ -1,10 +1,20 @@
 #include "_memory.h"
-#include <arrow/util/bit_util.h>
+
 #include <sys/mman.h>
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
+#include <iostream>
+#include <optional>
 #include <sstream>
+
+#include <arrow/util/bit_util.h>
+
+#include <boost/uuid/uuid.hpp>             // uuid class
+#include <boost/uuid/uuid_generators.hpp>  // generators
+#include <boost/uuid/uuid_io.hpp>          // streaming operators etc.
+
+#include <mpi.h>
 
 #define MAX_NUM_STORAGE_MANAGERS 4
 
@@ -69,6 +79,18 @@ Swip construct_unswizzled_swip(uint8_t size_class_idx,
 }
 
 //// StorageManager
+
+StorageManager::StorageManager(std::shared_ptr<StorageOptions> options)
+    : options(options) {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    // Generate Unique UUID per Rank
+    boost::uuids::uuid _uuid = boost::uuids::random_generator()();
+    std::string uuid = boost::uuids::to_string(_uuid);
+
+    this->uuid = std::to_string(rank) + "-" + uuid;
+}
 
 arrow::Status LocalStorageManager::ReadBlock(uint64_t block_id, int64_t n_bytes,
                                              uint8_t* out_ptr) {
