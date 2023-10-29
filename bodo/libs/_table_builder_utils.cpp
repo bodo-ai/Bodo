@@ -20,8 +20,9 @@ std::unique_ptr<array_info> alloc_empty_array(
 
         return alloc_struct(0, arrs, pool, mm);
     } else {
-        return alloc_array(0, 0, 0, datatype->array_type, datatype->c_type, -1,
-                           0, 0, false, false, false, pool, mm);
+        return alloc_array_top_level(0, 0, 0, datatype->array_type,
+                                     datatype->c_type, -1, 0, 0, false, false,
+                                     false, pool, mm);
     }
 }
 

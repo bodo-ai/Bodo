@@ -867,7 +867,7 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
                     "HashJoinState: Key column array types don't match "
                     "between build and probe tables!");
             }
-            std::shared_ptr<array_info> dict = alloc_array(
+            std::shared_ptr<array_info> dict = alloc_array_top_level(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             this->key_dict_builders[i] =
                 std::make_shared<DictionaryBuilder>(dict, true);
@@ -886,7 +886,7 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
     for (size_t i = this->n_keys; i < this->build_col_to_idx_map.size(); i++) {
         if (this->build_arr_array_types[this->build_col_to_idx_map[i]] ==
             bodo_array_type::DICT) {
-            std::shared_ptr<array_info> dict = alloc_array(
+            std::shared_ptr<array_info> dict = alloc_array_top_level(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             build_table_non_key_dict_builders.emplace_back(
                 std::make_shared<DictionaryBuilder>(dict, false));
@@ -901,7 +901,7 @@ JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
     for (size_t i = this->n_keys; i < this->probe_col_to_idx_map.size(); i++) {
         if (this->probe_arr_array_types[this->probe_col_to_idx_map[i]] ==
             bodo_array_type::DICT) {
-            std::shared_ptr<array_info> dict = alloc_array(
+            std::shared_ptr<array_info> dict = alloc_array_top_level(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             probe_table_non_key_dict_builders.emplace_back(
                 std::make_shared<DictionaryBuilder>(dict, false));

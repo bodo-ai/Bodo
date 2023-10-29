@@ -127,9 +127,9 @@ void array_isin_py_entry(array_info* p_out_arr, array_info* p_in_arr,
             std::move(table_in_arr), hashes, comm_info, is_parallel);
         // Creation of the output array.
         int64_t len = shuf_table_in_arr->columns[0]->length;
-        std::shared_ptr<array_info> shuf_out_arr =
-            alloc_array(len, -1, -1, out_arr->arr_type, out_arr->dtype, -1, 0,
-                        out_arr->num_categories);
+        std::shared_ptr<array_info> shuf_out_arr = alloc_array_top_level(
+            len, -1, -1, out_arr->arr_type, out_arr->dtype, -1, 0,
+            out_arr->num_categories);
         // Calling isin on the shuffled info
         array_isin_kernel(shuf_out_arr, shuf_table_in_arr->columns[0],
                           shuf_table_in_values->columns[0], is_parallel);

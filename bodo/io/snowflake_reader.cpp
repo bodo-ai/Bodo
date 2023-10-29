@@ -42,7 +42,7 @@ class SnowflakeReader : public ArrowReader {
         this->dict_builders = std::vector<std::shared_ptr<DictionaryBuilder>>(
             schema->num_fields());
         for (int str_as_dict_col : str_as_dict_cols) {
-            std::shared_ptr<array_info> dict = alloc_array(
+            std::shared_ptr<array_info> dict = alloc_array_top_level(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             this->dict_builders[str_as_dict_col] =
                 std::make_shared<DictionaryBuilder>(dict, false);
