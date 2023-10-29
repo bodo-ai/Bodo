@@ -56,9 +56,9 @@ class ParquetReader : public ArrowReader {
         // where we only fill out the codes in C++ (see fill_partition_column
         // comments)
         for (auto i = 0; i < num_partition_cols; i++) {
-            part_cols.push_back(
-                alloc_array(count, -1, -1, bodo_array_type::NUMPY,
-                            Bodo_CTypes::CTypeEnum(_part_cols_cat_dtype[i])));
+            part_cols.push_back(alloc_array_top_level(
+                count, -1, -1, bodo_array_type::NUMPY,
+                Bodo_CTypes::CTypeEnum(_part_cols_cat_dtype[i])));
             selected_part_cols.push_back(_selected_part_cols[i]);
             this->part_cols_cat_dtype.push_back(_part_cols_cat_dtype[i]);
         }

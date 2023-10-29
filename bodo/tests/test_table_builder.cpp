@@ -18,7 +18,7 @@ bodo::tests::suite table_builder_tests([] {
 
         const size_t num_rows = 10;
         // Create a table with a single column and `num_rows` rows
-        auto array = alloc_array(
+        auto array = alloc_array_top_level(
             num_rows, 0, 0, bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL,
             Bodo_CTypes::CTypeEnum::INT64);
         auto* data = (int64_t*)(array->data1());

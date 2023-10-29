@@ -501,8 +501,8 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
     *length = n;
     if (n == 0) {
         // empty sequence, this is not an error, need to set size
-        std::shared_ptr<array_info> out_arr =
-            alloc_array(0, 0, -1, bodo_array_type::STRING, Bodo_CTypes::STRING);
+        std::shared_ptr<array_info> out_arr = alloc_array_top_level(
+            0, 0, -1, bodo_array_type::STRING, Bodo_CTypes::STRING);
         info_to_string_array(out_arr.get(), length, out_n_chars, data_arr,
                              offsets_arr, null_bitmap_arr);
         return;

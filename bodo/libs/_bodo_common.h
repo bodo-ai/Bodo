@@ -1166,26 +1166,6 @@ struct array_info {
  */
 std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> info);
 
-std::unique_ptr<array_info> alloc_array(
-    int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
-    bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
-    int64_t array_id = -1, int64_t extra_null_bytes = 0,
-    int64_t num_categories = 0, bool is_globally_replicated = false,
-    bool is_locally_unique = false, bool is_locally_sorted = false,
-    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
-    std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
-
-/**
- * @brief Allocate an empty array with the same schema as 'in_arr', similar to
- * alloc_table_like function. Currently only used by alloc_table_like function.
- *
- * @param in_arr Reference array
- * @return std::unique_ptr<array_info> Pointer to the allocated array
- */
-std::unique_ptr<array_info> alloc_array_like(std::shared_ptr<array_info> in_arr,
-                                             bool reuse_dictionaries = true);
-
 std::unique_ptr<array_info> alloc_numpy(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
@@ -1199,20 +1179,6 @@ std::unique_ptr<array_info> alloc_array_item(
         bodo::default_buffer_memory_manager());
 
 /**
- * @brief Allocate an empty ARRAY_ITEM array with the types within index range
- * [start_idx, end_idx)
- *
- * @return pointer to the allocated array_info
- */
-std::unique_ptr<array_info> alloc_array_item(
-    int64_t n_arrays, size_t start_idx, size_t end_idx,
-    const std::vector<int8_t>& arr_c_types,
-    const std::vector<int8_t>& arr_array_types,
-    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
-    const std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
-
-/**
  * @brief Allocate a STRUCT array
  * @param length length of the STRUCT array
  * @param child_arrays child arrays of the STRUCT array
@@ -1223,20 +1189,6 @@ std::unique_ptr<array_info> alloc_struct(
     int64_t length, std::vector<std::shared_ptr<array_info>> child_arrays,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
-
-/**
- * @brief Allocate an empty STRUCT array with the types within index range
- * [start_idx, end_idx)
- *
- * @return pointer to the allocated array_info
- */
-std::unique_ptr<array_info> alloc_struct(
-    int64_t length, size_t start_idx, size_t end_idx,
-    const std::vector<int8_t>& arr_array_types,
-    const std::vector<int8_t>& arr_c_types,
-    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
-    const std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
 std::unique_ptr<array_info> alloc_categorical(
@@ -1346,6 +1298,49 @@ std::unique_ptr<array_info> create_list_string_array(
 std::unique_ptr<array_info> create_dict_string_array(
     std::shared_ptr<array_info> dict_arr,
     std::shared_ptr<array_info> indices_arr);
+
+/**
+ * The allocations array function for the function.
+ *
+ * In the case of NUMPY, CATEGORICAL, NULLABLE_INT_BOOL or STRUCT:
+ * -- length is the number of rows, and n_sub_elems, n_sub_sub_elems do not
+ * matter.
+ * In the case of STRING:
+ * -- length is the number of rows (= number of strings)
+ * -- n_sub_elems is the total number of characters.
+ * In the case of LIST_STRING:
+ * -- length is the number of rows.
+ * -- n_sub_elems is the number of strings.
+ * -- n_sub_sub_elems is the total number of characters.
+ * In the case of DICT:
+ * -- length is the number of rows (same as the number of indices)
+ * -- n_sub_elems is the number of keys in the dictionary
+ * -- n_sub_sub_elems is the total number of characters for
+ *    the keys in the dictionary
+ * In the case of ARRAY_ITEM or STRUCT:
+ * -- length is the number of rows (same as the number of indices)
+ * -- Dummy child arrays are returned. The caller is responsible for
+ * initializing the child arrays
+ */
+std::unique_ptr<array_info> alloc_array_top_level(
+    int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
+    bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
+    int64_t array_id = -1, int64_t extra_null_bytes = 0,
+    int64_t num_categories = 0, bool is_globally_replicated = false,
+    bool is_locally_unique = false, bool is_locally_sorted = false,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
+/**
+ * @brief Allocate an empty array with the same schema as 'in_arr', similar to
+ * alloc_table_like function. Currently only used by alloc_table_like function.
+ *
+ * @param in_arr Reference array
+ * @return std::unique_ptr<array_info> Pointer to the allocated array
+ */
+std::unique_ptr<array_info> alloc_array_like(std::shared_ptr<array_info> in_arr,
+                                             bool reuse_dictionaries = true);
 
 /* The "get-value" functionality for array_info.
    This is the equivalent of at functionality.

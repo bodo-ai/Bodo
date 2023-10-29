@@ -76,10 +76,10 @@ void min_row_number_filter_window_computation_no_sort(
         }
         // Allocate intermediate buffer to find the true element for
         // each group.
-        idx_col =
-            alloc_array(num_groups, 1, 1, idx_arr_type, Bodo_CTypes::UINT64);
+        idx_col = alloc_array_top_level(num_groups, 1, 1, idx_arr_type,
+                                        Bodo_CTypes::UINT64);
         // create array to store min/max value
-        std::shared_ptr<array_info> data_col = alloc_array(
+        std::shared_ptr<array_info> data_col = alloc_array_top_level(
             num_groups, 1, 1, orderby_arr->arr_type, orderby_arr->dtype);
         // Initialize the index column. This is 0 initialized and will
         // not initialize the null values.
@@ -100,8 +100,8 @@ void min_row_number_filter_window_computation_no_sort(
         ftype = Bodo_FTypes::idx_n_columns;
         // We don't need null for indices
         // We only allocate an index column.
-        idx_col = alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                              Bodo_CTypes::UINT64);
+        idx_col = alloc_array_top_level(
+            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::UINT64);
         aggfunc_output_initialize(idx_col, Bodo_FTypes::count, use_sql_rules);
         // Call the idx_n_columns function path.
         idx_n_columns_apply(idx_col, orderby_arrs, asc_vect, na_pos_vect,
@@ -373,8 +373,8 @@ void percent_rank_computation(
     std::shared_ptr<array_info> sorted_idx) {
     // Create an intermediary column to store the regular rank
     int64_t n = out_arr->length;
-    std::shared_ptr<array_info> rank_arr =
-        alloc_array(n, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::INT64);
+    std::shared_ptr<array_info> rank_arr = alloc_array_top_level(
+        n, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::INT64);
     // Start the counter at 1, snap upward each we encounter a row
     // that is distinct from the previous row, and reset the counter
     // to 1 when we reach a new group. When a group ends, set
@@ -437,8 +437,8 @@ void cume_dist_computation(
     std::shared_ptr<array_info> sorted_idx) {
     // Create an intermediary column to store the tie-up rank
     int64_t n = out_arr->length;
-    std::shared_ptr<array_info> rank_arr =
-        alloc_array(n, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::INT64);
+    std::shared_ptr<array_info> rank_arr = alloc_array_top_level(
+        n, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::INT64);
     // Start the counter at 1, snap upward each we encounter a row
     // that is distinct from the previous row, and reset the counter
     // to 1 when we reach a new group. When a group ends, set

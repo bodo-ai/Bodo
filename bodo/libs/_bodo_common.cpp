@@ -459,28 +459,6 @@ std::unique_ptr<array_info> alloc_array_item(
         std::vector<std::shared_ptr<array_info>>({inner_arr}));
 }
 
-std::unique_ptr<array_info> alloc_array_item(
-    int64_t n_arrays, size_t start_idx, size_t end_idx,
-    const std::vector<int8_t>& arr_array_types,
-    const std::vector<int8_t>& arr_c_types, bodo::IBufferPool* const pool,
-    const std::shared_ptr<::arrow::MemoryManager> mm) {
-    if (arr_array_types[start_idx] == bodo_array_type::ARRAY_ITEM) {
-        std::unique_ptr<array_info> inner_array =
-            alloc_array_item(n_arrays, start_idx + 1, end_idx, arr_array_types,
-                             arr_c_types, pool, mm);
-        return alloc_array_item(n_arrays, std::move(inner_array), pool, mm);
-    } else if (arr_array_types[start_idx] == bodo_array_type::STRUCT) {
-        return alloc_struct(n_arrays, start_idx, end_idx, arr_array_types,
-                            arr_c_types, pool, mm);
-    } else {
-        return alloc_array(
-            n_arrays, 0, 0,
-            (bodo_array_type::arr_type_enum)arr_array_types[start_idx],
-            (Bodo_CTypes::CTypeEnum)arr_c_types[start_idx], -1, 0, 0, false,
-            false, false, pool, mm);
-    }
-}
-
 std::unique_ptr<array_info> alloc_struct(
     int64_t length, std::vector<std::shared_ptr<array_info>> child_arrays,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
@@ -493,70 +471,6 @@ std::unique_ptr<array_info> alloc_struct(
         bodo_array_type::STRUCT, Bodo_CTypes::CTypeEnum::STRUCT, length,
         std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer_bitmask)}),
         std::move(child_arrays));
-}
-
-std::unique_ptr<array_info> alloc_struct(
-    int64_t length, size_t start_idx, size_t end_idx,
-    const std::vector<int8_t>& arr_array_types,
-    const std::vector<int8_t>& arr_c_types, bodo::IBufferPool* const pool,
-    const std::shared_ptr<::arrow::MemoryManager> mm) {
-    std::vector<size_t> col_to_idx_map =
-        get_col_idx_map(std::span(arr_array_types.begin() + start_idx + 2,
-                                  arr_array_types.begin() + end_idx));
-    std::vector<std::shared_ptr<array_info>> child_arrays;
-
-    child_arrays.reserve(col_to_idx_map.size());
-    for (size_t i = 0; i < col_to_idx_map.size(); ++i) {
-        size_t col_start_idx = col_to_idx_map[i],
-               col_end_idx = i + 1 == col_to_idx_map.size()
-                                 ? end_idx
-                                 : col_to_idx_map[i + 1];
-        bodo_array_type::arr_type_enum arr_type =
-            (bodo_array_type::arr_type_enum)arr_array_types[col_start_idx];
-        Bodo_CTypes::CTypeEnum dtype =
-            (Bodo_CTypes::CTypeEnum)arr_c_types[col_start_idx];
-        if (arr_type == bodo_array_type::ARRAY_ITEM) {
-            child_arrays.push_back(
-                alloc_array_item(length, col_start_idx, col_end_idx,
-                                 arr_array_types, arr_c_types, pool, mm));
-        } else if (arr_type == bodo_array_type::STRUCT) {
-            child_arrays.push_back(alloc_struct(length, col_start_idx,
-                                                col_end_idx, arr_array_types,
-                                                arr_c_types, pool, mm));
-        } else {
-            child_arrays.push_back(alloc_array(length, 0, 0, arr_type, dtype,
-                                               -1, 0, 0, false, false, false,
-                                               pool, mm));
-        }
-    }
-
-    return alloc_struct(length, std::move(child_arrays), pool, mm);
-}
-
-std::unique_ptr<array_info> alloc_array_like(std::shared_ptr<array_info> in_arr,
-                                             bool reuse_dictionaries) {
-    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
-    Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
-    if (arr_type == bodo_array_type::ARRAY_ITEM) {
-        return alloc_array_item(0,
-                                alloc_array_like(in_arr->child_arrays.front()));
-    } else if (arr_type == bodo_array_type::STRUCT) {
-        std::vector<std::shared_ptr<array_info>> child_arrays;
-        child_arrays.reserve(in_arr->child_arrays.size());
-        for (std::shared_ptr<array_info> child_array : in_arr->child_arrays) {
-            child_arrays.push_back(alloc_array_like(child_array));
-        }
-        return alloc_struct(0, std::move(child_arrays));
-    } else {
-        std::unique_ptr<array_info> out_arr =
-            alloc_array(0, 0, 0, arr_type, dtype);
-        // For dict encoded columns, re-use the same dictionary if
-        // reuse_dictionaries = true
-        if (reuse_dictionaries && (arr_type == bodo_array_type::DICT)) {
-            out_arr->child_arrays.front() = in_arr->child_arrays.front();
-        }
-        return out_arr;
-    }
 }
 
 std::unique_ptr<array_info> alloc_categorical(
@@ -846,10 +760,10 @@ std::unique_ptr<array_info> alloc_list_string_array(
     int64_t extra_null_bytes, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
     // allocate string data array
-    std::shared_ptr<array_info> data_arr =
-        alloc_array(n_strings, n_chars, -1,
-                    bodo_array_type::arr_type_enum::STRING, Bodo_CTypes::UINT8,
-                    -1, extra_null_bytes, 0, false, false, false, pool, mm);
+    std::shared_ptr<array_info> data_arr = alloc_array_top_level(
+        n_strings, n_chars, -1, bodo_array_type::arr_type_enum::STRING,
+        Bodo_CTypes::UINT8, -1, extra_null_bytes, 0, false, false, false, pool,
+        mm);
 
     return alloc_list_string_array(n_lists, data_arr, extra_null_bytes, pool,
                                    std::move(mm));
@@ -887,30 +801,7 @@ void decref_numpy_payload(numpy_arr_payload arr) {
     }
 }
 
-/**
- * The allocations array function for the function.
- *
- * In the case of NUMPY, CATEGORICAL, NULLABLE_INT_BOOL or STRUCT:
- * -- length is the number of rows, and n_sub_elems, n_sub_sub_elems do not
- * matter.
- * In the case of STRING:
- * -- length is the number of rows (= number of strings)
- * -- n_sub_elems is the total number of characters.
- * In the case of LIST_STRING:
- * -- length is the number of rows.
- * -- n_sub_elems is the number of strings.
- * -- n_sub_sub_elems is the total number of characters.
- * In the case of DICT:
- * -- length is the number of rows (same as the number of indices)
- * -- n_sub_elems is the number of keys in the dictionary
- * -- n_sub_sub_elems is the total number of characters for
- *    the keys in the dictionary
- * In the case of ARRAY_ITEM or STRUCT:
- * -- length is the number of rows (same as the number of indices)
- * -- Dummy child arrays are returned. The caller is responsible for
- * initializing the child arrays
- */
-std::unique_ptr<array_info> alloc_array(
+std::unique_ptr<array_info> alloc_array_top_level(
     int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
     bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
     int64_t array_id, int64_t extra_null_bytes, int64_t num_categories,
@@ -953,6 +844,32 @@ std::unique_ptr<array_info> alloc_array(
             throw std::runtime_error("alloc_array: array type (" +
                                      GetArrType_as_string(arr_type) +
                                      ") not supported");
+    }
+}
+
+std::unique_ptr<array_info> alloc_array_like(std::shared_ptr<array_info> in_arr,
+                                             bool reuse_dictionaries) {
+    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+    if (arr_type == bodo_array_type::ARRAY_ITEM) {
+        return alloc_array_item(0,
+                                alloc_array_like(in_arr->child_arrays.front()));
+    } else if (arr_type == bodo_array_type::STRUCT) {
+        std::vector<std::shared_ptr<array_info>> child_arrays;
+        child_arrays.reserve(in_arr->child_arrays.size());
+        for (std::shared_ptr<array_info> child_array : in_arr->child_arrays) {
+            child_arrays.push_back(alloc_array_like(child_array));
+        }
+        return alloc_struct(0, std::move(child_arrays));
+    } else {
+        std::unique_ptr<array_info> out_arr =
+            alloc_array_top_level(0, 0, 0, arr_type, dtype);
+        // For dict encoded columns, re-use the same dictionary if
+        // reuse_dictionaries = true
+        if (reuse_dictionaries && (arr_type == bodo_array_type::DICT)) {
+            out_arr->child_arrays.front() = in_arr->child_arrays.front();
+        }
+        return out_arr;
     }
 }
 
@@ -1109,7 +1026,7 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
         }
         farr = alloc_struct(earr->length, child_arrays);
     } else {
-        farr = alloc_array(
+        farr = alloc_array_top_level(
             earr->length, earr->n_sub_elems(), earr->n_sub_sub_elems(),
             earr->arr_type, earr->dtype,
             earr->arr_type == bodo_array_type::STRING ? earr->array_id : -1, 0,

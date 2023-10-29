@@ -82,8 +82,9 @@ void copy_string_values_transform(
             idx = grp_info.next_row_in_group[idx];
         }
     }
-    out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, -1, 0, 0,
-                          false, false, false, pool, std::move(mm));
+    out_arr =
+        alloc_array_top_level(nRowOut, n_chars, -1, arr_type, dtype, -1, 0, 0,
+                              false, false, false, pool, std::move(mm));
     offset_t* out_offsets = (offset_t*)out_arr->data2();
     char* out_data1 = out_arr->data1();
     // keep track of output array position

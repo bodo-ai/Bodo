@@ -20,8 +20,8 @@ bodo::tests::suite dict_builder_tests([] {
         // Test that the transpose cache works correctly when
         // multiple arrays are cached, even when a dict is used after an
         // intermediate.
-        std::shared_ptr<array_info> dict =
-            alloc_array(0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
+        std::shared_ptr<array_info> dict = alloc_array_top_level(
+            0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
         DictionaryBuilder dict_builder = DictionaryBuilder(dict, false, 2);
 
         std::shared_ptr<array_info> arr = alloc_dict_string_array(0, 0, 0);
@@ -44,8 +44,8 @@ bodo::tests::suite dict_builder_tests([] {
     bodo::tests::test("test_dict_builder_transpose_lru_cache", [] {
         // Test that the transpose cache evicts the least recently used
         // entry.
-        std::shared_ptr<array_info> dict =
-            alloc_array(0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
+        std::shared_ptr<array_info> dict = alloc_array_top_level(
+            0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
         DictionaryBuilder dict_builder = DictionaryBuilder(dict, false, 2);
 
         std::shared_ptr<array_info> arr = alloc_dict_string_array(0, 0, 0);
@@ -75,8 +75,8 @@ bodo::tests::suite dict_builder_tests([] {
     });
 
     bodo::tests::test("test_dict_builder_id_replacement", [] {
-        std::shared_ptr<array_info> dict =
-            alloc_array(0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
+        std::shared_ptr<array_info> dict = alloc_array_top_level(
+            0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
         DictionaryBuilder dict_builder = DictionaryBuilder(dict, false, 2);
         // Assert that we start with the empty dictionary id
         bodo::tests::check(dict_builder.dict_buff->data_array->array_id == 0);
@@ -121,11 +121,12 @@ bodo::tests::suite dict_builder_tests([] {
          */
 
         DictionaryBuilder dict_builder_dst = DictionaryBuilder(
-            alloc_array(0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING),
+            alloc_array_top_level(0, 0, 0, bodo_array_type::STRING,
+                                  Bodo_CTypes::STRING),
             false, 2);
 
-        std::shared_ptr<array_info> src_data =
-            alloc_array(0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
+        std::shared_ptr<array_info> src_data = alloc_array_top_level(
+            0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
         DictionaryBuilder dict_builder_src =
             DictionaryBuilder(src_data, false, 2);
 
@@ -188,7 +189,8 @@ bodo::tests::suite dict_builder_tests([] {
          */
 
         DictionaryBuilder dict_builder = DictionaryBuilder(
-            alloc_array(0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING),
+            alloc_array_top_level(0, 0, 0, bodo_array_type::STRING,
+                                  Bodo_CTypes::STRING),
             false);
         // Assert that the dictionary is empty
         bodo::tests::check(dict_builder.dict_buff->data_array->array_id <= 0);

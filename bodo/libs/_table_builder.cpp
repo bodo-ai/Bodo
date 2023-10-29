@@ -1179,7 +1179,7 @@ struct TableBuilderState {
         // Create dictionary builders for all columns
         for (size_t i : col_to_idx_map) {
             if (arr_array_types[i] == bodo_array_type::DICT) {
-                std::shared_ptr<array_info> dict = alloc_array(
+                std::shared_ptr<array_info> dict = alloc_array_top_level(
                     0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
                 dict_builders.emplace_back(
                     std::make_shared<DictionaryBuilder>(dict, false));
@@ -1309,7 +1309,7 @@ struct ChunkedTableBuilderState {
         // Create dictionary builders for all columns
         for (size_t i : col_to_idx_map) {
             if (arr_array_types[i] == bodo_array_type::DICT) {
-                std::shared_ptr<array_info> dict = alloc_array(
+                std::shared_ptr<array_info> dict = alloc_array_top_level(
                     0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
                 dict_builders.emplace_back(
                     std::make_shared<DictionaryBuilder>(dict, false));
