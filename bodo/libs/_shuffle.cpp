@@ -685,7 +685,7 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
                 mpi_comm_info comm_info_inner(in_arr, comm_info);
                 mpi_str_comm_info str_comm_info_inner(in_arr->child_arrays[0],
                                                       comm_info_inner);
-                send_arr->child_arrays[0] = alloc_array(
+                send_arr->child_arrays[0] = alloc_array_top_level(
                     comm_info_inner.n_rows_send, str_comm_info_inner.n_sub_send,
                     str_comm_info_inner.n_sub_sub_send,
                     in_arr->child_arrays[0]->arr_type,
@@ -704,7 +704,7 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
                 for (const std::shared_ptr<array_info>& child_array :
                      in_arr->child_arrays) {
                     mpi_str_comm_info str_comm_info(child_array, comm_info);
-                    send_arr->child_arrays.push_back(alloc_array(
+                    send_arr->child_arrays.push_back(alloc_array_top_level(
                         comm_info.n_rows_send, str_comm_info.n_sub_send,
                         str_comm_info.n_sub_sub_send, child_array->arr_type,
                         child_array->dtype));
@@ -1219,7 +1219,7 @@ static void shuffle_array(std::shared_ptr<array_info> send_arr,
             mpi_comm_info comm_info_inner(in_arr, comm_info);
             mpi_str_comm_info str_comm_info_inner(in_arr->child_arrays[0],
                                                   comm_info_inner);
-            out_arr->child_arrays[0] = alloc_array(
+            out_arr->child_arrays[0] = alloc_array_top_level(
                 comm_info_inner.n_rows_recv, str_comm_info_inner.n_sub_recv,
                 str_comm_info_inner.n_sub_sub_recv,
                 send_arr->child_arrays[0]->arr_type,
@@ -1259,11 +1259,11 @@ static void shuffle_array(std::shared_ptr<array_info> send_arr,
             for (size_t i = 0; i < send_arr->child_arrays.size(); i++) {
                 mpi_str_comm_info str_comm_info(in_arr->child_arrays[i],
                                                 comm_info);
-                out_arr->child_arrays.push_back(
-                    alloc_array(out_arr->length, str_comm_info.n_sub_recv,
-                                str_comm_info.n_sub_sub_recv,
-                                in_arr->child_arrays[i]->arr_type,
-                                in_arr->child_arrays[i]->dtype));
+                out_arr->child_arrays.push_back(alloc_array_top_level(
+                    out_arr->length, str_comm_info.n_sub_recv,
+                    str_comm_info.n_sub_sub_recv,
+                    in_arr->child_arrays[i]->arr_type,
+                    in_arr->child_arrays[i]->dtype));
                 out_arr->child_arrays[i]->precision =
                     in_arr->child_arrays[i]->precision;
                 out_arr->child_arrays[i]->scale =
@@ -1742,14 +1742,14 @@ std::shared_ptr<table_info> shuffle_table_kernel(
             in_arr = in_arr->child_arrays[1];
         }
         mpi_str_comm_info str_comm_info(in_arr, comm_info);
-        std::shared_ptr<array_info> send_arr = alloc_array(
+        std::shared_ptr<array_info> send_arr = alloc_array_top_level(
             comm_info.n_rows_send, str_comm_info.n_sub_send,
             str_comm_info.n_sub_sub_send, in_arr->arr_type, in_arr->dtype, -1,
             2 * comm_info.n_pes, in_arr->num_categories);
-        std::shared_ptr<array_info> out_arr =
-            alloc_array(comm_info.n_rows_recv, str_comm_info.n_sub_recv,
-                        str_comm_info.n_sub_sub_recv, in_arr->arr_type,
-                        in_arr->dtype, -1, 0, in_arr->num_categories);
+        std::shared_ptr<array_info> out_arr = alloc_array_top_level(
+            comm_info.n_rows_recv, str_comm_info.n_sub_recv,
+            str_comm_info.n_sub_sub_recv, in_arr->arr_type, in_arr->dtype, -1,
+            0, in_arr->num_categories);
         out_arr->precision = in_arr->precision;
         out_arr->scale = in_arr->scale;
         fill_send_array(send_arr, in_arr, comm_info, str_comm_info,
@@ -1867,8 +1867,8 @@ std::shared_ptr<array_info> reverse_shuffle_data_array(
     size_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
                                         comm_info.send_count.end(), size_t(0));
     std::shared_ptr<array_info> out_arr =
-        alloc_array(n_rows_ret, 0, 0, in_arr->arr_type, in_arr->dtype, -1, 0,
-                    in_arr->num_categories);
+        alloc_array_top_level(n_rows_ret, 0, 0, in_arr->arr_type, in_arr->dtype,
+                              -1, 0, in_arr->num_categories);
     reverse_shuffle_preallocated_data_array(in_arr, out_arr, hashes, comm_info);
     return out_arr;
 }
@@ -1898,8 +1898,8 @@ std::shared_ptr<array_info> reverse_shuffle_string_array(
     int64_t n_rows_ret = std::accumulate(
         comm_info.send_count.begin(), comm_info.send_count.end(), int64_t(0));
     std::shared_ptr<array_info> out_arr =
-        alloc_array(n_rows_ret, n_count_sub, 0, in_arr->arr_type, in_arr->dtype,
-                    -1, 0, in_arr->num_categories);
+        alloc_array_top_level(n_rows_ret, n_count_sub, 0, in_arr->arr_type,
+                              in_arr->dtype, -1, 0, in_arr->num_categories);
     int64_t in_len = in_arr->length;
     int64_t out_len = out_arr->length;
     // 3: the offsets
@@ -2036,9 +2036,9 @@ std::shared_ptr<array_info> reverse_shuffle_list_string_array(
             ? alloc_array_item(
                   n_rows_ret, alloc_string_array(Bodo_CTypes::CTypeEnum::STRING,
                                                  n_count_sub, n_count_sub_sub))
-            : alloc_array(n_rows_ret, n_count_sub, n_count_sub_sub,
-                          in_arr->arr_type, in_arr->dtype, -1, 0,
-                          in_arr->num_categories);
+            : alloc_array_top_level(n_rows_ret, n_count_sub, n_count_sub_sub,
+                                    in_arr->arr_type, in_arr->dtype, -1, 0,
+                                    in_arr->num_categories);
     int64_t in_len = in_arr->length;
     int64_t out_len = out_arr->length;
 
@@ -2706,7 +2706,7 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
         if (myrank == mpi_root) {
             out_arr = copy_array(in_arr);
         } else {
-            out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype);
+            out_arr = alloc_array_top_level(n_rows, -1, -1, arr_type, dtype);
         }
         out_arr->precision = precision;
         uint64_t bcast_size;
@@ -2725,7 +2725,7 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
         if (myrank == mpi_root) {
             out_arr = copy_array(in_arr);
         } else {
-            out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype);
+            out_arr = alloc_array_top_level(n_rows, -1, -1, arr_type, dtype);
         }
         MPI_Bcast(out_arr->data1(), n_rows, mpi_typ, mpi_root, MPI_COMM_WORLD);
         MPI_Bcast(out_arr->data2(), n_rows, mpi_typ, mpi_root, MPI_COMM_WORLD);
@@ -2735,8 +2735,9 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
         if (myrank == mpi_root) {
             out_arr = copy_array(in_arr);
         } else {
-            out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
-                                  arr_type, dtype, -1, 0, num_categories);
+            out_arr =
+                alloc_array_top_level(n_rows, n_sub_elems, n_sub_sub_elems,
+                                      arr_type, dtype, -1, 0, num_categories);
         }
         MPI_Bcast(out_arr->data1(), n_sub_elems, mpi_typ8, mpi_root,
                   MPI_COMM_WORLD);
@@ -2748,8 +2749,9 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
         if (myrank == mpi_root) {
             out_arr = copy_array(in_arr);
         } else {
-            out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
-                                  arr_type, dtype, -1, 0, num_categories);
+            out_arr =
+                alloc_array_top_level(n_rows, n_sub_elems, n_sub_sub_elems,
+                                      arr_type, dtype, -1, 0, num_categories);
         }
         MPI_Bcast(out_arr->data1(), n_sub_sub_elems, mpi_typ8, mpi_root,
                   MPI_COMM_WORLD);
@@ -3259,8 +3261,8 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                            recv_count_bytes.data(), recv_disp_bytes.data(),
                            mpi_typ, mpi_root, MPI_COMM_WORLD, all_gather);
             if (myrank == mpi_root || all_gather) {
-                out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, -1,
-                                      0, num_categories);
+                out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type,
+                                                dtype, -1, 0, num_categories);
                 uint8_t* data_arr_o = (uint8_t*)out_arr->data1();
                 copy_gathered_null_bytes(data_arr_o, tmp_data_bytes,
                                          recv_count_bytes, rows_counts);
@@ -3269,8 +3271,8 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             MPI_Datatype mpi_typ = get_MPI_typ(dtype);
             char* data1_ptr = nullptr;
             if (myrank == mpi_root || all_gather) {
-                out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, -1,
-                                      0, num_categories);
+                out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type,
+                                                dtype, -1, 0, num_categories);
                 data1_ptr = out_arr->data1();
             }
             MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
@@ -3287,8 +3289,8 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         char* data1_ptr = nullptr;
         char* data2_ptr = nullptr;
         if (myrank == mpi_root || all_gather) {
-            out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, -1, 0,
-                                  num_categories);
+            out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type, dtype,
+                                            -1, 0, num_categories);
             data1_ptr = out_arr->data1();
             data2_ptr = out_arr->data2();
         }
@@ -3311,8 +3313,9 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         // Doing the characters
         char* data1_ptr = nullptr;
         if (myrank == mpi_root || all_gather) {
-            out_arr = alloc_array(n_rows_tot, n_chars_tot, -1, arr_type, dtype,
-                                  -1, 0, num_categories);
+            out_arr =
+                alloc_array_top_level(n_rows_tot, n_chars_tot, -1, arr_type,
+                                      dtype, -1, 0, num_categories);
             data1_ptr = out_arr->data1();
         }
         std::vector<int> char_disps(n_pes), char_counts(n_pes);
@@ -3380,9 +3383,9 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                        mpi_typ8, mpi_root, MPI_COMM_WORLD, all_gather);
         char* data1_ptr = nullptr;
         if (myrank == mpi_root || all_gather) {
-            out_arr =
-                alloc_array(n_rows_tot, n_sub_elems_tot, n_sub_sub_elems_tot,
-                            arr_type, dtype, -1, 0, num_categories);
+            out_arr = alloc_array_top_level(n_rows_tot, n_sub_elems_tot,
+                                            n_sub_sub_elems_tot, arr_type,
+                                            dtype, -1, 0, num_categories);
             data1_ptr = out_arr->data1();
             uint8_t* sub_null_bitmask_o = (uint8_t*)out_arr->sub_null_bitmask();
             copy_gathered_null_bytes(sub_null_bitmask_o, V, n_sub_bytes_count,

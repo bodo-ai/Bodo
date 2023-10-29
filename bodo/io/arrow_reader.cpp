@@ -369,7 +369,8 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
         bodo_array_type::arr_type_enum out_array_type =
             is_nullable ? bodo_array_type::NULLABLE_INT_BOOL
                         : bodo_array_type::NUMPY;
-        out_array = alloc_array(length, -1, -1, out_array_type, dtype);
+        out_array =
+            alloc_array_top_level(length, -1, -1, out_array_type, dtype);
     }
 
     PrimitiveBuilder(std::shared_ptr<arrow::DataType> type, int64_t length,
@@ -895,8 +896,8 @@ class AllNullsBuilder : public TableBuilder::BuilderColumn {
    public:
     AllNullsBuilder(int64_t length) {
         // Arrow null arrays are typed as string in parquet_pio.py
-        out_array = alloc_array(length, 0, 0, bodo_array_type::STRING,
-                                Bodo_CTypes::STRING);
+        out_array = alloc_array_top_level(length, 0, 0, bodo_array_type::STRING,
+                                          Bodo_CTypes::STRING);
         // set offsets to zero
         memset(out_array->data2(), 0, sizeof(offset_t) * length);
         // setting all to null

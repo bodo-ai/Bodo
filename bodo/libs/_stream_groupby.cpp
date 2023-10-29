@@ -1279,7 +1279,7 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
     // Create dictionary builders for key columns:
     for (uint64_t i = 0; i < this->n_keys; i++) {
         if (build_arr_array_types[i] == bodo_array_type::DICT) {
-            std::shared_ptr<array_info> dict = alloc_array(
+            std::shared_ptr<array_info> dict = alloc_array_top_level(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             this->key_dict_builders[i] =
                 std::make_shared<DictionaryBuilder>(dict, true);
@@ -1293,7 +1293,7 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
     // Create dictionary builders for non-key columns in build table:
     for (size_t i = this->n_keys; i < build_arr_array_types.size(); i++) {
         if (build_arr_array_types[i] == bodo_array_type::DICT) {
-            std::shared_ptr<array_info> dict = alloc_array(
+            std::shared_ptr<array_info> dict = alloc_array_top_level(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             build_table_non_key_dict_builders.emplace_back(
                 std::make_shared<DictionaryBuilder>(dict, false));
@@ -1826,7 +1826,7 @@ void GroupbyState::InitOutputBuffer(
     // input arrays
     for (size_t i = this->n_keys; i < dummy_table->ncols(); i++) {
         if (dummy_table->columns[i]->arr_type == bodo_array_type::DICT) {
-            std::shared_ptr<array_info> dict = alloc_array(
+            std::shared_ptr<array_info> dict = alloc_array_top_level(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING);
             this->out_dict_builders[i] =
                 std::make_shared<DictionaryBuilder>(dict, false);

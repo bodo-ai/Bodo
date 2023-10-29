@@ -638,7 +638,7 @@ void alloc_init_keys(
         if (key_col->arr_type == bodo_array_type::NUMPY ||
             key_col->arr_type == bodo_array_type::CATEGORICAL ||
             key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            new_key_col = alloc_array(
+            new_key_col = alloc_array_top_level(
                 num_groups, 1, 1, key_col->arr_type, key_col->dtype, -1, 0,
                 key_col->num_categories, false, false, false, pool, mm);
             if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
@@ -670,7 +670,7 @@ void alloc_init_keys(
         }
         if (key_col->arr_type == bodo_array_type::DICT) {
             array_info* key_indices = (key_col->child_arrays[1]).get();
-            std::shared_ptr<array_info> new_key_indices = alloc_array(
+            std::shared_ptr<array_info> new_key_indices = alloc_array_top_level(
                 num_groups, -1, -1, key_indices->arr_type, key_indices->dtype,
                 -1, 0, 0, false, false, false, pool, mm);
             for (size_t j = 0; j < num_groups; j++) {
@@ -699,7 +699,7 @@ void alloc_init_keys(
                 n_chars += in_offsets[key_row + 1] - in_offsets[key_row];
             }
             // XXX Shouldn't we forward the array_id here?
-            new_key_col = alloc_array(
+            new_key_col = alloc_array_top_level(
                 num_groups, n_chars, 1, key_col->arr_type, key_col->dtype, -1,
                 0, key_col->num_categories, key_col->is_globally_replicated,
                 key_col->is_locally_unique, key_col->is_locally_sorted, pool,
@@ -741,10 +741,10 @@ void alloc_init_keys(
                 n_chars += in_data_offsets[in_index_offsets[key_row + 1]] -
                            in_data_offsets[in_index_offsets[key_row]];
             }
-            new_key_col =
-                alloc_array(num_groups, n_strings, n_chars, key_col->arr_type,
-                            key_col->dtype, -1, 0, key_col->num_categories,
-                            false, false, false, pool, mm);
+            new_key_col = alloc_array_top_level(
+                num_groups, n_strings, n_chars, key_col->arr_type,
+                key_col->dtype, -1, 0, key_col->num_categories, false, false,
+                false, pool, mm);
             uint8_t* in_sub_null_bitmask =
                 (uint8_t*)key_col->sub_null_bitmask();
             uint8_t* out_sub_null_bitmask =

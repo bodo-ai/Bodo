@@ -276,9 +276,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
     // use_nullable_arr is specified
     if (use_nullable_arr &&
         (is_integer(dtype) || is_float(dtype) || dtype == Bodo_CTypes::_BOOL)) {
-        out_arr = alloc_array(nRowOut, -1, -1,
-                              bodo_array_type::NULLABLE_INT_BOOL, dtype, -1, 0,
-                              0, false, false, false, pool, std::move(mm));
+        out_arr = alloc_array_top_level(
+            nRowOut, -1, -1, bodo_array_type::NULLABLE_INT_BOOL, dtype, -1, 0,
+            0, false, false, false, pool, std::move(mm));
         char* out_data1 = out_arr->data1();
         if (dtype == Bodo_CTypes::_BOOL) {
             // Boolean needs a special implementation because the output
@@ -308,8 +308,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
             }
         }
     } else {
-        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false,
-                              false, false, pool, std::move(mm));
+        out_arr =
+            alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0,
+                                  false, false, false, pool, std::move(mm));
 
         if (siztype == sizeof(int32_t)) {
             using T = int32_t;
@@ -378,8 +379,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     std::shared_ptr<array_info> out_arr =
-        alloc_array(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false, false,
-                    false, pool, std::move(mm));
+        alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false,
+                              false, false, pool, std::move(mm));
     uint64_t siztype = numpy_item_size[dtype];
 
     if (dtype == Bodo_CTypes::_BOOL) {
@@ -495,9 +496,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
                 tot_size_index += size_index;
                 tot_size_data += size_data;
             }
-            out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data,
-                                  arr_type, dtype, -1, 0, 0, false, false,
-                                  false, pool, std::move(mm));
+            out_arr = alloc_array_top_level(
+                nRowOut, tot_size_index, tot_size_data, arr_type, dtype, -1, 0,
+                0, false, false, false, pool, std::move(mm));
             uint8_t* out_sub_null_bitmask =
                 (uint8_t*)out_arr->sub_null_bitmask();
             offset_t pos_index = 0;
@@ -563,8 +564,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
                 ListSizes[iRow] = size;
                 n_chars += size;
             }
-            out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, -1, 0,
-                                  0, false, false, false, pool, std::move(mm));
+            out_arr = alloc_array_top_level(nRowOut, n_chars, -1, arr_type,
+                                            dtype, -1, 0, 0, false, false,
+                                            false, pool, std::move(mm));
             offset_t* out_offsets = (offset_t*)out_arr->data2();
             char* out_data1 = out_arr->data1();
             offset_t pos = 0;
@@ -607,8 +609,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             std::vector<char> vectNaN = RetrieveNaNentry(dtype);
             char* left_data = in_arr->data1();
             char* right_data = in_arr->data2();
-            out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0,
-                                  false, false, false, pool, std::move(mm));
+            out_arr = alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype,
+                                            -1, 0, 0, false, false, false, pool,
+                                            std::move(mm));
             char* out_left_data = out_arr->data1();
             char* out_right_data = out_arr->data2();
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -797,8 +800,8 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             tot_size_index += size_index;
             tot_size_data += size_data;
         }
-        out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data, arr_type,
-                              dtype);
+        out_arr = alloc_array_top_level(nRowOut, tot_size_index, tot_size_data,
+                                        arr_type, dtype);
         uint8_t* out_sub_null_bitmask = (uint8_t*)out_arr->sub_null_bitmask();
         offset_t pos_index = 0;
         offset_t pos_data = 0;
@@ -869,7 +872,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             ListSizes[iRow] = size;
             n_chars += size;
         }
-        out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype);
+        out_arr = alloc_array_top_level(nRowOut, n_chars, -1, arr_type, dtype);
         offset_t pos = 0;
         offset_t* out_offsets =
             (offset_t*)out_arr->data2<bodo_array_type::STRING>();
@@ -901,9 +904,9 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // if (is_parallel && !arr1->child_arrays[0]->is_globally_replicated)
         //    throw std::runtime_error("RetrieveArray_TwoColumns: reference
         //    column doesn't have a global dictionary");
-        std::shared_ptr<array_info> out_indices =
-            alloc_array(nRowOut, -1, -1, arr1->child_arrays[1]->arr_type,
-                        arr1->child_arrays[1]->dtype);
+        std::shared_ptr<array_info> out_indices = alloc_array_top_level(
+            nRowOut, -1, -1, arr1->child_arrays[1]->arr_type,
+            arr1->child_arrays[1]->dtype);
         uint64_t siztype = numpy_item_size[arr1->child_arrays[1]->dtype];
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
@@ -932,7 +935,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // suffices for the copy.
         // In the case of missing array a value of false is assigned
         // to the bitmask.
-        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype);
+        out_arr = alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype);
         if (dtype == Bodo_CTypes::_BOOL) {
             // Nullable boolean arrays store 1 bit per boolean so we
             // need to use a different loop.
@@ -1014,7 +1017,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // ---floating point: std::nan as here both notions match.
         uint64_t siztype = numpy_item_size[dtype];
         std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype);
+        out_arr = alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
                 get_iRow(iRow);

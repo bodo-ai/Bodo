@@ -236,7 +236,7 @@ std::shared_ptr<table_info> ParquetReader::get_empty_out_table() {
     if (part_cols.size() > 0) {
         std::vector<std::shared_ptr<array_info>> batch_part_cols;
         for (size_t i = 0; i < part_cols.size(); i++) {
-            batch_part_cols.push_back(alloc_array(
+            batch_part_cols.push_back(alloc_array_top_level(
                 0, -1, -1, bodo_array_type::NUMPY,
                 Bodo_CTypes::CTypeEnum(this->part_cols_cat_dtype[i]), 0, -1));
         }
@@ -291,7 +291,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
         if (part_cols.size() > 0) {
             std::vector<std::shared_ptr<array_info>> batch_part_cols;
             for (size_t i = 0; i < part_cols.size(); i++) {
-                batch_part_cols.push_back(alloc_array(
+                batch_part_cols.push_back(alloc_array_top_level(
                     length, -1, -1, bodo_array_type::NUMPY,
                     Bodo_CTypes::CTypeEnum(this->part_cols_cat_dtype[i]), 0,
                     -1));

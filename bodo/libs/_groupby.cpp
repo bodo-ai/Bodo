@@ -480,8 +480,8 @@ class GroupbyPipeline {
      */
     void add_head_key_sort_column() {
         std::shared_ptr<array_info> head_sort_col =
-            alloc_array(in_table->nrows(), 1, 1, bodo_array_type::NUMPY,
-                        Bodo_CTypes::UINT64);
+            alloc_array_top_level(in_table->nrows(), 1, 1,
+                                  bodo_array_type::NUMPY, Bodo_CTypes::UINT64);
         int64_t num_ranks = dist_get_size();
         int64_t my_rank = dist_get_rank();
         // Gather the number of rows on every rank
