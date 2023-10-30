@@ -661,16 +661,6 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
                     (uint8_t*)in_arr->null_bitmask(), comm_info.send_disp_null,
                     comm_info.n_pes, n_rows, comm_info.row_dest);
             } else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
-                // TODO(Yipeng): this is a hard-coded fix to fill the gaps for
-                // list string shuffling. We set the array type to array item to
-                // reuse the array item infrastructure, and reset it back in
-                // shuffle_array. It should be removed after list string is
-                // deprecated/remove (BSE-1050).
-                if (in_arr->child_arrays[0]->arr_type ==
-                    bodo_array_type::LIST_STRING) {
-                    in_arr->child_arrays[0]->arr_type =
-                        bodo_array_type::ARRAY_ITEM;
-                }
                 // Fill the offset buffer
                 fill_send_array_inner_array_item(
                     (uint32_t*)send_arr->data1(), (offset_t*)in_arr->data1(),
@@ -681,36 +671,12 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
                     (uint8_t*)send_arr->null_bitmask(),
                     (uint8_t*)in_arr->null_bitmask(), comm_info.send_disp_null,
                     comm_info.n_pes, n_rows, comm_info.row_dest);
-                // Fill the inner array
-                mpi_comm_info comm_info_inner(in_arr, comm_info);
-                mpi_str_comm_info str_comm_info_inner(in_arr->child_arrays[0],
-                                                      comm_info_inner);
-                send_arr->child_arrays[0] = alloc_array_top_level(
-                    comm_info_inner.n_rows_send, str_comm_info_inner.n_sub_send,
-                    str_comm_info_inner.n_sub_sub_send,
-                    in_arr->child_arrays[0]->arr_type,
-                    in_arr->child_arrays[0]->dtype);
-                fill_send_array(send_arr->child_arrays[0],
-                                in_arr->child_arrays[0], comm_info_inner,
-                                str_comm_info_inner, is_parallel);
             } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
-                // Fill the null bitmask first
+                // Fill the null bitmask
                 fill_send_array_null_inner(
                     (uint8_t*)send_arr->null_bitmask(),
                     (uint8_t*)in_arr->null_bitmask(), comm_info.send_disp_null,
                     comm_info.n_pes, n_rows, comm_info.row_dest);
-                // For STRUCT type, things are a bit easier as all displacements
-                // of child arrays are the same as the parent's.
-                for (const std::shared_ptr<array_info>& child_array :
-                     in_arr->child_arrays) {
-                    mpi_str_comm_info str_comm_info(child_array, comm_info);
-                    send_arr->child_arrays.push_back(alloc_array_top_level(
-                        comm_info.n_rows_send, str_comm_info.n_sub_send,
-                        str_comm_info.n_sub_sub_send, child_array->arr_type,
-                        child_array->dtype));
-                    fill_send_array(send_arr->child_arrays.back(), child_array,
-                                    comm_info, str_comm_info, is_parallel);
-                }
             } else {
                 throw std::runtime_error(
                     "Invalid data type for fill_send_array: " +
@@ -1031,17 +997,48 @@ void shuffle_list_string_null_bitmask(std::shared_ptr<array_info> in_arr,
 }
 
 /**
- * @param is_parallel: Used to indicate whether tracing should be parallel
- * or not
+ * @brief Shuffle in_arr based on comm_info
+ *
+ * @param in_arr Input array
+ * @param comm_info Information needed for shuffling
+ * @param tmp_null_bytes Temperary buffer used to store intermediate result for
+ * shuffling null bitmask
+ * @param is_parallel Used to indicate whether tracing should be parallel or not
+ * @return The shuffled array
  */
-static void shuffle_array(std::shared_ptr<array_info> send_arr,
-                          const std::shared_ptr<array_info>& in_arr,
-                          std::shared_ptr<array_info> out_arr,
-                          const mpi_comm_info& comm_info,
-                          const mpi_str_comm_info& str_comm_info,
-                          bodo::vector<uint8_t>& tmp_null_bytes,
-                          bool is_parallel) {
+std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
+                                          const mpi_comm_info& comm_info,
+                                          bodo::vector<uint8_t>& tmp_null_bytes,
+                                          bool is_parallel) {
     tracing::Event ev("shuffle_array", is_parallel);
+
+    std::shared_ptr<array_info> dict_array;
+    if (in_arr->arr_type == bodo_array_type::DICT) {
+        if (!in_arr->child_arrays[0]->is_globally_replicated) {
+            throw std::runtime_error(
+                "shuffle_array: input dictionary array doesn't have a "
+                "global dictionary");
+        }
+        // in_arr <- indices array, to simplify code below
+        // TODO[BSE-1374]: Make dict array recursive
+        dict_array = in_arr;
+        in_arr = in_arr->child_arrays[1];
+    }
+
+    mpi_str_comm_info str_comm_info(in_arr, comm_info);
+
+    std::shared_ptr<array_info> send_arr = alloc_array_top_level(
+        comm_info.n_rows_send, str_comm_info.n_sub_send,
+        str_comm_info.n_sub_sub_send, in_arr->arr_type, in_arr->dtype, -1,
+        2 * comm_info.n_pes, in_arr->num_categories);
+    fill_send_array(send_arr, in_arr, comm_info, str_comm_info, is_parallel);
+
+    std::shared_ptr<array_info> out_arr =
+        alloc_array_top_level(comm_info.n_rows_recv, str_comm_info.n_sub_recv,
+                              str_comm_info.n_sub_sub_recv, in_arr->arr_type,
+                              in_arr->dtype, -1, 0, in_arr->num_categories);
+    out_arr->precision = in_arr->precision;
+    out_arr->scale = in_arr->scale;
 
     switch (send_arr->arr_type) {
         case bodo_array_type::LIST_STRING: {
@@ -1090,7 +1087,6 @@ static void shuffle_array(std::shared_ptr<array_info> send_arr,
                            out_arr->data1(), str_comm_info.recv_count_sub_sub,
                            str_comm_info.recv_disp_sub_sub, mpi_typ,
                            MPI_COMM_WORLD);
-
             // nulls
             mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
             bodo_alltoallv(send_arr->null_bitmask(), comm_info.send_count_null,
@@ -1100,6 +1096,9 @@ static void shuffle_array(std::shared_ptr<array_info> send_arr,
             copy_gathered_null_bytes((uint8_t*)out_arr->null_bitmask(),
                                      tmp_null_bytes, comm_info.recv_count_null,
                                      comm_info.recv_count);
+            // sub-nulls
+            shuffle_list_string_null_bitmask(in_arr, out_arr, comm_info,
+                                             comm_info.row_dest);
             break;
         }
         case bodo_array_type::STRING: {
@@ -1128,8 +1127,7 @@ static void shuffle_array(std::shared_ptr<array_info> send_arr,
                            out_arr->data1(), str_comm_info.recv_count_sub,
                            str_comm_info.recv_disp_sub, mpi_typ,
                            MPI_COMM_WORLD);
-
-            // Nulls
+            // nulls
             mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
             bodo_alltoallv(send_arr->null_bitmask(), comm_info.send_count_null,
                            comm_info.send_disp_null, mpi_typ,
@@ -1163,7 +1161,6 @@ static void shuffle_array(std::shared_ptr<array_info> send_arr,
                                comm_info.recv_count, comm_info.recv_disp,
                                mpi_typ, MPI_COMM_WORLD);
             }
-
             // nulls
             mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
             bodo_alltoallv(send_arr->null_bitmask(), comm_info.send_count_null,
@@ -1217,32 +1214,11 @@ static void shuffle_array(std::shared_ptr<array_info> send_arr,
                                      comm_info.recv_count);
             // inner array
             mpi_comm_info comm_info_inner(in_arr, comm_info);
-            mpi_str_comm_info str_comm_info_inner(in_arr->child_arrays[0],
-                                                  comm_info_inner);
-            out_arr->child_arrays[0] = alloc_array_top_level(
-                comm_info_inner.n_rows_recv, str_comm_info_inner.n_sub_recv,
-                str_comm_info_inner.n_sub_sub_recv,
-                send_arr->child_arrays[0]->arr_type,
-                send_arr->child_arrays[0]->dtype);
-            out_arr->child_arrays[0]->precision =
-                in_arr->child_arrays[0]->precision;
-            out_arr->child_arrays[0]->scale = in_arr->child_arrays[0]->scale;
             tmp_null_bytes.resize(comm_info_inner.n_null_bytes);
-            shuffle_array(send_arr->child_arrays[0], in_arr->child_arrays[0],
-                          out_arr->child_arrays[0], comm_info_inner,
-                          str_comm_info_inner, tmp_null_bytes, is_parallel);
+            out_arr->child_arrays[0] =
+                shuffle_array(in_arr->child_arrays[0], comm_info_inner,
+                              tmp_null_bytes, is_parallel);
             tmp_null_bytes.resize(comm_info.n_null_bytes);
-            // TODO(Yipeng): this is a hard-coded fix to fill the gaps for list
-            // string shuffling. We set the array type to array item in
-            // fill_send_array to reuse the array item infrastructure, and reset
-            // it back here. It should be removed after list string is
-            // deprecated/remove (BSE-1050).
-            if (in_arr->child_arrays[0]->arr_type ==
-                    bodo_array_type::ARRAY_ITEM &&
-                in_arr->dtype == Bodo_CTypes::LIST_STRING) {
-                in_arr->child_arrays[0]->arr_type =
-                    bodo_array_type::LIST_STRING;
-            }
             break;
         }
         case bodo_array_type::STRUCT: {
@@ -1256,30 +1232,22 @@ static void shuffle_array(std::shared_ptr<array_info> send_arr,
                                      tmp_null_bytes, comm_info.recv_count_null,
                                      comm_info.recv_count);
             // child arrays
-            for (size_t i = 0; i < send_arr->child_arrays.size(); i++) {
-                mpi_str_comm_info str_comm_info(in_arr->child_arrays[i],
-                                                comm_info);
-                out_arr->child_arrays.push_back(alloc_array_top_level(
-                    out_arr->length, str_comm_info.n_sub_recv,
-                    str_comm_info.n_sub_sub_recv,
-                    in_arr->child_arrays[i]->arr_type,
-                    in_arr->child_arrays[i]->dtype));
-                out_arr->child_arrays[i]->precision =
-                    in_arr->child_arrays[i]->precision;
-                out_arr->child_arrays[i]->scale =
-                    in_arr->child_arrays[i]->scale;
-                shuffle_array(send_arr->child_arrays[i],
-                              in_arr->child_arrays[i], out_arr->child_arrays[i],
-                              comm_info, str_comm_info, tmp_null_bytes,
-                              is_parallel);
+            for (size_t i = 0; i < in_arr->child_arrays.size(); i++) {
+                out_arr->child_arrays.push_back(
+                    shuffle_array(in_arr->child_arrays[i], comm_info,
+                                  tmp_null_bytes, is_parallel));
             }
             break;
         }
         default:
             throw std::runtime_error(
                 "Unsupported array type for shuffle_array: " +
-                GetArrType_as_string(send_arr->arr_type));
+                GetArrType_as_string(in_arr->arr_type));
     }
+
+    return dict_array != nullptr
+               ? create_dict_string_array(dict_array->child_arrays[0], out_arr)
+               : out_arr;
 }
 
 /*
@@ -1720,67 +1688,20 @@ std::shared_ptr<table_info> shuffle_table_kernel(
     bool is_parallel) {
     tracing::Event ev("shuffle_table_kernel", is_parallel);
     if (ev.is_tracing()) {
-        ev.add_attribute("table_nrows_before",
-                         static_cast<size_t>(in_table->nrows()));
+        ev.add_attribute("table_nrows_before", in_table->nrows());
         ev.add_attribute("filtered", comm_info.filtered);
-        size_t global_table_nbytes = table_global_memory_size(in_table);
-        ev.add_attribute("g_table_nbytes", global_table_nbytes);
+        ev.add_attribute("g_table_nbytes", table_global_memory_size(in_table));
     }
-    size_t n_cols = (size_t)in_table->ncols();
-
     // fill send buffer and send
     std::vector<std::shared_ptr<array_info>> out_arrs;
     bodo::vector<uint8_t> tmp_null_bytes(comm_info.n_null_bytes);
-    for (size_t i = 0; i < n_cols; i++) {
-        std::shared_ptr<array_info> in_arr = in_table->columns[i];
-        if (in_arr->arr_type == bodo_array_type::DICT) {
-            if (!in_arr->child_arrays[0]->is_globally_replicated)
-                throw std::runtime_error(
-                    "shuffle_array: input dictionary array doesn't have a "
-                    "global dictionary");
-            // in_arr <- indices array, to simplify code below
-            in_arr = in_arr->child_arrays[1];
-        }
-        mpi_str_comm_info str_comm_info(in_arr, comm_info);
-        std::shared_ptr<array_info> send_arr = alloc_array_top_level(
-            comm_info.n_rows_send, str_comm_info.n_sub_send,
-            str_comm_info.n_sub_sub_send, in_arr->arr_type, in_arr->dtype, -1,
-            2 * comm_info.n_pes, in_arr->num_categories);
-        std::shared_ptr<array_info> out_arr = alloc_array_top_level(
-            comm_info.n_rows_recv, str_comm_info.n_sub_recv,
-            str_comm_info.n_sub_sub_recv, in_arr->arr_type, in_arr->dtype, -1,
-            0, in_arr->num_categories);
-        out_arr->precision = in_arr->precision;
-        out_arr->scale = in_arr->scale;
-        fill_send_array(send_arr, in_arr, comm_info, str_comm_info,
-                        is_parallel);
-        shuffle_array(std::move(send_arr), in_arr, out_arr, comm_info,
-                      str_comm_info, tmp_null_bytes, is_parallel);
-        if (in_arr->arr_type == bodo_array_type::LIST_STRING) {
-            shuffle_list_string_null_bitmask(in_arr, out_arr, comm_info,
-                                             comm_info.row_dest);
-        }
-        // release reference of input array
-        // This is a steal reference case. The idea is to release memory as
-        // soon as possible. If this release is not wished (which is a rare
-        // case) then the incref before operation is needed. Using an
-        // optional argument (like decref_input) to the input is a false
-        // good idea since it changes the semantics to something different
-        // from Python.
-        if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
-            in_arr = in_table->columns[i];
-            std::shared_ptr<array_info> out_dict_arr =
-                create_dict_string_array(in_arr->child_arrays[0], out_arr);
-            out_arr = out_dict_arr;
-        }
-        in_arr.reset();
+    for (uint64_t i = 0; i < in_table->ncols(); i++) {
+        out_arrs.push_back(shuffle_array(in_table->columns[i], comm_info,
+                                         tmp_null_bytes, is_parallel));
         // Release reference (and memory) early if possible.
         reset_col_if_last_table_ref(in_table, i);
-        out_arrs.push_back(out_arr);
     }
-
-    ev.add_attribute("table_nrows_after",
-                     static_cast<size_t>(out_arrs[0]->length));
+    ev.add_attribute("table_nrows_after", out_arrs[0]->length);
     return std::make_shared<table_info>(out_arrs);
 }
 
