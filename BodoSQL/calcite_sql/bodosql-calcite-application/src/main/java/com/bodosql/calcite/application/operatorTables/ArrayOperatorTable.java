@@ -96,7 +96,24 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           .withGroupOrder(Optionality.OPTIONAL)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
-  private List<SqlOperator> functionList = Arrays.asList(TO_ARRAY, ARRAY_TO_STRING, ARRAY_AGG);
+  public static final SqlFunction ARRAY_SIZE =
+      new SqlFunction(
+          "ARRAY_SIZE",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.INTEGER_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // The input can be any data type.
+          OperandTypes.ARRAY,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  private List<SqlOperator> functionList =
+      Arrays.asList(TO_ARRAY, ARRAY_TO_STRING, ARRAY_AGG, ARRAY_SIZE);
 
   @Override
   public void lookupOperatorOverloads(

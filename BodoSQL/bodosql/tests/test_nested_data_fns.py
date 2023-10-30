@@ -253,6 +253,7 @@ def array_df():
     return {
         "table1": pd.DataFrame(
             {
+                "idx_col": pd.Series(range(20)),
                 "int_col": pd.Series(
                     [
                         pd.array([4234, -123, 0]),
@@ -631,6 +632,217 @@ def test_array_to_string_scalar(basic_df, input, answer, memory_leak_check):
     """
     query = f"SELECT ARRAY_TO_STRING(TO_ARRAY({input}), ', ')"
     py_output = pd.DataFrame({"A": pd.Series([answer])})
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.parametrize(
+    "query, answer",
+    [
+        pytest.param(
+            "SELECT ARRAY_SIZE(int_col) FROM table1",
+            pd.Series([3, 0, None, 5, 7] * 4),
+            id="int",
+        ),
+        pytest.param(
+            "SELECT ARRAY_SIZE(float_col) FROM table1",
+            pd.Series([0, 3, None, 5, 7] * 4),
+            id="float",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT ARRAY_SIZE(bool_col) FROM table1",
+            pd.Series(
+                [
+                    6,
+                    0,
+                    3,
+                    None,
+                    5,
+                ]
+                * 4
+            ),
+            id="bool",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT ARRAY_SIZE(string_col) FROM table1",
+            pd.Series(
+                [
+                    6,
+                    3,
+                    None,
+                    0,
+                    5,
+                ]
+                * 4
+            ),
+            id="string",
+        ),
+        pytest.param(
+            "SELECT ARRAY_SIZE(date_col) FROM table1",
+            pd.Series(
+                [
+                    6,
+                    2,
+                    None,
+                    0,
+                    5,
+                ]
+                * 4
+            ),
+            id="date",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT ARRAY_SIZE(time_col) FROM table1",
+            pd.Series(
+                [
+                    None,
+                    5,
+                    0,
+                    3,
+                    6,
+                ]
+                * 4
+            ),
+            id="time",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT ARRAY_SIZE(timestamp_col) FROM table1",
+            pd.Series(
+                [
+                    0,
+                    6,
+                    2,
+                    5,
+                    None,
+                ]
+                * 4
+            ),
+            id="timestamp",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT ARRAY_SIZE(nested_array_col) FROM table1",
+            pd.Series(
+                [
+                    3,
+                    3,
+                    2,
+                    None,
+                    2,
+                ]
+                * 4
+            ),
+            id="nested_array",
+        ),
+        pytest.param(
+            "SELECT CASE WHEN idx_col < 10 THEN ARRAY_SIZE(int_col) ELSE NULL END FROM table1",
+            pd.Series(
+                [
+                    3,
+                    0,
+                    None,
+                    5,
+                    7,
+                ]
+                * 2
+                + [None] * 10
+            ),
+            id="case",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT CASE WHEN idx_col < 10 THEN ARRAY_SIZE(nested_array_col) ELSE NULL END FROM table1",
+            pd.Series(
+                [
+                    3,
+                    3,
+                    2,
+                    None,
+                    2,
+                ]
+                * 2
+                + [None] * 10
+            ),
+            id="case_nested",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_array_size_column(array_df, query, answer, memory_leak_check):
+    """
+    Test ARRAY_SIZE works correctly with different data type columns
+    """
+    py_output = pd.DataFrame({"A": answer})
+    check_query(
+        query,
+        array_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.parametrize(
+    "input",
+    [
+        pytest.param(
+            "2395",
+            id="int",
+        ),
+        pytest.param(
+            "12.482",
+            id="float",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "True",
+            id="bool",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "'koagri'",
+            id="string",
+        ),
+        pytest.param(
+            "TO_DATE('2019-06-12')",
+            id="date",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "TO_TIME('16:47:23')",
+            id="time",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "TO_TIMESTAMP('2023-06-13 16:49:50')",
+            id="timestamp",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "TO_ARRAY(1)",
+            id="nested_array",
+        ),
+    ],
+)
+def test_array_size_scalar(basic_df, input, memory_leak_check):
+    """
+    Test ARRAY_SIZE works correctly with different data type scalars
+    """
+    query = f"SELECT ARRAY_SIZE(TO_ARRAY({input}))"
+    py_output = pd.DataFrame({"A": pd.Series(1)})
     check_query(
         query,
         basic_df,

@@ -9,7 +9,13 @@ import numba
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import is_overload_none, unwrap_typeref
+from bodo.utils.typing import (
+    get_overload_const_bool,
+    is_overload_constant_bool,
+    is_overload_none,
+    raise_bodo_error,
+    unwrap_typeref,
+)
 
 
 @numba.generated_jit(nopython=True)
@@ -167,4 +173,79 @@ def array_to_string_util(arr, separator):
         array_is_scalar=True,
         # Protect against the input being a "scalar" string/dict array.
         support_dict_encoding=False,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def array_size(arr, is_single_row):
+    """
+    Handles cases where ARRAY_SIZE receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.array_size",
+            [
+                "arr",
+                "is_single_row",
+            ],
+            0,
+        )
+
+    def impl(arr, is_single_row):  # pragma: no cover
+        return array_size_util(arr, is_single_row)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def array_size_util(arr, is_single_row):
+    """
+    A dedicated kernel for the SQL function ARRAY_SIZE which takes in an
+           array, (or array column). If it is an array it returns the size, if it is a column
+           it returns the size of each array in the column.
+    Args:
+        arr (array scalar/array item array): the array(s) to get the size of
+        is_single_row (bool literal): Whether this is called in a single row context, necessary
+        to determine whether to return the length of a nested array or an array of the lengths
+        of it's children in a case statment
+    Returns:
+        An integer scalar/array: the result lengths
+    """
+    if is_overload_none(arr):
+        return lambda arr, is_single_row: None
+
+    if not is_overload_constant_bool(is_single_row):  # pragma: no cover
+        raise_bodo_error("array_size(): 'is_single_row' must be a constant boolean")
+
+    if not is_array_item_array(arr) and not (
+        bodo.utils.utils.is_array_typ(arr) and is_single_row
+    ):  # pragma: no cover
+        # When not is_single_row only array item ararys are supported
+        # When is_single_row then all arrays are supported
+        raise_bodo_error(
+            f"array_size(): unsupported for type {arr} when is_single_row={is_single_row}"
+        )
+
+    # Whether to call len on each element or on arr itself
+    arr_is_array = is_array_item_array(arr) and not get_overload_const_bool(
+        is_single_row
+    )
+
+    scalar_text = "res[i] = len(arg0)"
+    arg_names = ["arr", "is_single_row"]
+    arg_types = [
+        bodo.utils.conversion.coerce_to_array(arr),
+        is_single_row,
+    ]
+    propagate_null = [True, False, False, False]
+    out_dtype = bodo.IntegerArrayType(types.int32)
+    are_arrays = [arr_is_array] + [False] * 3
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=are_arrays,
     )

@@ -209,3 +209,62 @@ def test_array_to_string(array, separator, answer, memory_leak_check):
         distributed=distributed,
         is_out_distributed=distributed,
     )
+
+
+@pytest.mark.parametrize(
+    "array, answer",
+    [
+        pytest.param(
+            pd.Series([[[1, 2, 3]], None, [[1], [2, 3]]] * 4),
+            pd.Series([1, None, 2] * 4),
+            id="null_int_nested",
+        ),
+        pytest.param(
+            pd.Series([["abc", "bce"], ["bce"], ["def", "xyz", "abc"], [], None] * 4),
+            pd.Series([2, 1, 3, 0, None] * 4),
+            id="null_string_nested",
+        ),
+        pytest.param(
+            pd.Series(
+                [[[1, 2, 3], [None]], None, [], [[1, 2, 3, 4, 5, 6], None, [7, 8, 9]]]
+                * 4
+            ),
+            pd.Series([2, None, 0, 3] * 4),
+            id="null_nested_nested_array",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [{"W": [1], "Y": "abc"}],
+                    None,
+                    [{"W": [1, 2, 3], "Y": "xyz"}, {"W": [], "Y": "123"}],
+                ]
+                * 4
+            ),
+            pd.Series([1, None, 2] * 4),
+            id="null_nested_nested_struct",
+        ),
+    ],
+)
+def test_array_size_array(array, answer, memory_leak_check):
+    def impl(array):
+        return pd.Series(bodo.libs.bodosql_array_kernels.array_size(array, False))
+
+    check_func(impl, (array,), py_output=answer, check_dtype=False)
+
+
+@pytest.mark.parametrize(
+    "array,answer",
+    [
+        pytest.param(pd.Series(["A", "BC", None]), 3, id="null_string"),
+        pytest.param(pd.Series([1, 2, None, 3]), 4, id="null_int"),
+        pytest.param(None, None, id="null"),
+    ],
+)
+def test_array_size_scalar(array, answer, memory_leak_check):
+    def impl(array):
+        return bodo.libs.bodosql_array_kernels.array_size(array, True)
+
+    check_func(
+        impl, (array,), py_output=answer, distributed=False, is_out_distributed=False
+    )
