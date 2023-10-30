@@ -701,16 +701,14 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
-          ReturnTypes.explicit(SqlTypeName.BINARY)
-              .andThen(SqlTypeTransforms.TO_NULLABLE)
-              .andThen(SqlTypeTransforms.TO_VARYING),
+          ReturnTypes.explicit(SqlTypeName.VARBINARY).andThen(SqlTypeTransforms.TO_NULLABLE),
           null,
           OperandTypes.STRING,
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction TRY_HEX_DECODE_STRING =
       new SqlFunction(
-          "TRY_HEX_DECODE_BINARY",
+          "TRY_HEX_DECODE_STRING",
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
@@ -721,13 +719,11 @@ public final class StringOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction TRY_HEX_DECODE_BINARY =
       new SqlFunction(
-          "TRY_HEX_DECODE_STRING",
+          "TRY_HEX_DECODE_BINARY",
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
-          ReturnTypes.explicit(SqlTypeName.BINARY)
-              .andThen(SqlTypeTransforms.TO_NULLABLE)
-              .andThen(SqlTypeTransforms.TO_VARYING),
+          ReturnTypes.explicit(SqlTypeName.VARBINARY).andThen(SqlTypeTransforms.TO_NULLABLE),
           null,
           OperandTypes.STRING,
           SqlFunctionCategory.STRING);
@@ -771,9 +767,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
-          ReturnTypes.explicit(SqlTypeName.BINARY)
-              .andThen(SqlTypeTransforms.TO_NULLABLE)
-              .andThen(SqlTypeTransforms.TO_VARYING),
+          ReturnTypes.explicit(SqlTypeName.VARBINARY).andThen(SqlTypeTransforms.TO_NULLABLE),
           null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
@@ -785,9 +779,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
 
-          ReturnTypes.explicit(SqlTypeName.BINARY)
-              .andThen(SqlTypeTransforms.TO_NULLABLE)
-              .andThen(SqlTypeTransforms.TO_VARYING),
+          ReturnTypes.explicit(SqlTypeName.VARBINARY).andThen(SqlTypeTransforms.TO_NULLABLE),
           null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
