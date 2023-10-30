@@ -328,13 +328,15 @@ def gen_snowflake_schema(
             sf_schema[col_name] = f"NUMBER({col_type.precision}, {col_type.scale})"
         elif isinstance(
             col_type,
-            (
-                bodo.ArrayItemArrayType,
-                bodo.StructArrayType,
-            ),
+            (bodo.ArrayItemArrayType,),
         ):
-            # based on testing with infer_schema
-            sf_schema[col_name] = "VARIANT"
+            sf_schema[col_name] = "ARRAY"
+
+        elif isinstance(
+            col_type,
+            (bodo.StructArrayType,),
+        ):
+            sf_schema[col_name] = "OBJECT"
 
         elif isinstance(col_type, bodo.MapArrayType):
             raise_bodo_error("Writing Map Arrays to Snowflake is unsupported")
