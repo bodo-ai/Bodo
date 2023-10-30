@@ -41,6 +41,7 @@ broadcasted_fixed_arg_functions = {
     "add_interval_years",
     "add_months",
     "add_numeric",
+    "array_size",
     "asin",
     "asinh",
     "atan",
