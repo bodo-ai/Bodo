@@ -88,7 +88,11 @@ public class FilterProjectTransposeNoCaseRule
                 project.getTraitSet(), newFilterRel, project.getProjects(), project.getRowType())
             : relBuilder
                 .push(newFilterRel)
-                .project(project.getProjects(), project.getRowType().getFieldNames())
+                .project(
+                    project.getProjects(),
+                    project.getRowType().getFieldNames(),
+                    false,
+                    project.getVariablesSet())
                 .build();
 
     call.transformTo(newProject);

@@ -70,7 +70,10 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                 .sqlValidatorConfig(
                     SqlValidator.Config.DEFAULT
                         .withNamedParamTableName(config.namedParamTableName)
-                        .withDefaultNullCollation(NullCollation.LOW)
+                        // Note: We use NullCollation.HIGH to match Snowflake. In the future
+                        // when we get Databricks customers we need to either allows users to configure
+                        // null collation automatically based on the catalog or define Bodo rules (or both).
+                        .withDefaultNullCollation(NullCollation.HIGH)
                         .withCallRewrite(false)
                         .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
                         .withTypeCoercionRules(BodoSqlTypeCoercionRule.instance()),

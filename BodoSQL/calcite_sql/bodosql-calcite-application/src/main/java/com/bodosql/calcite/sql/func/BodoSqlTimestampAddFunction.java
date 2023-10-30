@@ -320,13 +320,13 @@ public class BodoSqlTimestampAddFunction extends SqlFunction {
     // https://docs.snowflake.com/en/sql-reference/functions/timestampadd
     // Based on my reading of this:
 
-    // Given a Date input, we get a Date ouput if the unit value added is larger than a day,
+    // Given a Date input, we get a Date output if the unit value added is larger than a day,
     // and Timestamp otherwise
 
     // Given a time input, we get a Time output. if the unit value added is larger than a day, we
     // error
 
-    // Given a timestamp input, we get a timestamp output always (Precicion determined by arg2
+    // Given a timestamp input, we get a timestamp output always (Precision determined by arg2
     // type and timeunit size)
 
     boolean timeUnitSmallerThanDay;

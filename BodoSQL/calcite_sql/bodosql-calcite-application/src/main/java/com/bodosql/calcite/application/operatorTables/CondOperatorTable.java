@@ -341,7 +341,7 @@ public class CondOperatorTable implements SqlOperatorTable {
               "BOOLOR_AGG",
               SqlKind.OTHER,
               ReturnTypes.BOOLEAN_NULLABLE,
-              OperandTypes.or(OperandTypes.BOOLEAN, OperandTypes.NUMERIC))
+              OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC))
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
@@ -351,7 +351,7 @@ public class CondOperatorTable implements SqlOperatorTable {
               "BOOLAND_AGG",
               SqlKind.OTHER,
               ReturnTypes.BOOLEAN_NULLABLE,
-              OperandTypes.or(OperandTypes.BOOLEAN, OperandTypes.NUMERIC))
+              OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC))
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
@@ -361,7 +361,7 @@ public class CondOperatorTable implements SqlOperatorTable {
               "BOOLXOR_AGG",
               SqlKind.OTHER,
               ReturnTypes.BOOLEAN_NULLABLE,
-              OperandTypes.or(OperandTypes.BOOLEAN, OperandTypes.NUMERIC))
+              OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC))
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 

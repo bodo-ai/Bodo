@@ -97,4 +97,35 @@ public class BodoSQLSqlConformance extends SqlAbstractConformance {
   public boolean allowPluralTimeUnits() {
     return true;
   }
+
+  /**
+   * Whether {@code VALUE} is allowed as an alternative to {@code VALUES} in the parser.
+   *
+   * <p>Among the built-in conformance levels, true in {@link SqlConformanceEnum#BABEL}, {@link
+   * SqlConformanceEnum#LENIENT}, {@link SqlConformanceEnum#MYSQL_5}; false otherwise.
+   */
+  @Override
+  public boolean isValueAllowed() {
+    return false;
+  }
+
+  /**
+   * Whether to allow coercion string literal to array literal
+   *
+   * <p>For example,
+   *
+   * <blockquote>
+   *
+   * <pre>SELECT ARRAY[0,1,2] == '{0,1,2}'
+   * </pre>
+   *
+   * </blockquote>
+   *
+   * <p>Among the built-in conformance levels, true in {@link SqlConformanceEnum#BABEL}, false
+   * otherwise.
+   */
+  @Override
+  public boolean allowCoercionStringToArray() {
+    return false;
+  }
 }

@@ -199,7 +199,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           null,
           // What Input Types does the function accept.
           // This function one or two numeric argument
-          OperandTypes.or(OperandTypes.NUMERIC, OperandTypes.NUMERIC_NUMERIC),
+          OperandTypes.NUMERIC.or(OperandTypes.NUMERIC_NUMERIC),
           // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
@@ -398,7 +398,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
               "BITOR_AGG",
               SqlKind.BIT_OR,
               sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
-              OperandTypes.or(OperandTypes.NUMERIC, OperandTypes.STRING))
+              OperandTypes.NUMERIC.or(OperandTypes.STRING))
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
@@ -407,7 +407,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
               "BITAND_AGG",
               SqlKind.BIT_AND,
               sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
-              OperandTypes.or(OperandTypes.NUMERIC, OperandTypes.STRING))
+              OperandTypes.NUMERIC.or(OperandTypes.STRING))
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
@@ -416,7 +416,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
               "BITXOR_AGG",
               SqlKind.BIT_XOR,
               sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
-              OperandTypes.or(OperandTypes.NUMERIC, OperandTypes.STRING))
+              OperandTypes.NUMERIC.or(OperandTypes.STRING))
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
@@ -427,7 +427,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.BIGINT_NULLABLE,
           null,
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          OperandTypes.NUMERIC.or(OperandTypes.STRING),
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction TO_NUMERIC =
@@ -436,7 +436,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.BIGINT_NULLABLE,
           null,
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          OperandTypes.NUMERIC.or(OperandTypes.STRING),
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction TO_DECIMAL =
@@ -445,7 +445,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.BIGINT_NULLABLE,
           null,
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          OperandTypes.NUMERIC.or(OperandTypes.STRING),
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction TRY_TO_NUMBER =
@@ -454,7 +454,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.BIGINT_NULLABLE,
           null,
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          OperandTypes.NUMERIC.or(OperandTypes.STRING),
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction TRY_TO_NUMERIC =
@@ -463,7 +463,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.BIGINT_NULLABLE,
           null,
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          OperandTypes.NUMERIC.or(OperandTypes.STRING),
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction TRY_TO_DECIMAL =
@@ -472,7 +472,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.BIGINT_NULLABLE,
           null,
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          OperandTypes.NUMERIC.or(OperandTypes.STRING),
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction RANDOM = new SqlRandomOperator();

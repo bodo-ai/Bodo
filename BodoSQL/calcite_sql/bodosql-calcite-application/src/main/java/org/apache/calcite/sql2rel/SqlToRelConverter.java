@@ -18,6 +18,7 @@ package org.apache.calcite.sql2rel;
 
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import org.apache.calcite.avatica.util.Spaces;
+import org.apache.calcite.config.NullCollation;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.linq4j.tree.TableExpressionFactory;
@@ -74,6 +75,7 @@ import org.apache.calcite.rel.logical.LogicalUnion;
 import org.apache.calcite.rel.logical.LogicalValues;
 import org.apache.calcite.rel.metadata.RelColumnMapping;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
+import org.apache.calcite.rel.rel2sql.SqlImplementor;
 import org.apache.calcite.rel.stream.Delta;
 import org.apache.calcite.rel.stream.LogicalDelta;
 import org.apache.calcite.rel.type.RelDataType;
@@ -224,6 +226,8 @@ import java.util.function.BiFunction;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
+
+import static com.google.common.base.Preconditions.checkArgument;
 
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
 import static org.apache.calcite.sql.SqlUtil.getAliasedString;
@@ -913,7 +917,7 @@ public class SqlToRelConverter {
       newProjects.add(RexInputRef.of2(i, fields));
     }
     final RelNode projectRel = LogicalProject.create(filterRelNode, ImmutableList.of(),
-        Pair.left(newProjects), Pair.right(newProjects));
+        Pair.left(newProjects), Pair.right(newProjects), ImmutableSet.of());
     bb.setRoot(projectRel, false);
   }
 
@@ -967,7 +971,7 @@ public class SqlToRelConverter {
       }
       rel =
           LogicalProject.create(rel, ImmutableList.of(),
-              Pair.left(newProjects), Pair.right(newProjects));
+              Pair.left(newProjects), Pair.right(newProjects), project.getVariablesSet());
       bb.root = rel;
       distinctify(bb, false);
       rel = bb.root();
@@ -988,7 +992,7 @@ public class SqlToRelConverter {
 
       rel =
           LogicalProject.create(rel, ImmutableList.of(),
-              Pair.left(undoProjects), Pair.right(undoProjects));
+              Pair.left(undoProjects), Pair.right(undoProjects), ImmutableSet.of());
       bb.setRoot(
           rel,
           false);
@@ -1067,7 +1071,8 @@ public class SqlToRelConverter {
           LogicalProject.create(bb.root(),
               ImmutableList.of(),
               exprs,
-              rowType.getFieldNames().subList(0, fieldCount)),
+              rowType.getFieldNames().subList(0, fieldCount),
+              ImmutableSet.of()),
           false);
     }
   }
@@ -1270,7 +1275,15 @@ public class SqlToRelConverter {
       final Blackboard bb,
       final SqlNode expr,
       RelOptUtil.Logic logic) {
-    findSubQueries(bb, expr, logic, false);
+    replaceSubQueries(bb, expr, logic, null);
+  }
+
+  private void replaceSubQueries(
+      final Blackboard bb,
+      final SqlNode expr,
+      RelOptUtil.Logic logic,
+      final SqlImplementor.@Nullable Clause clause) {
+    findSubQueries(bb, expr, logic, false, clause);
     for (SubQuery node : bb.subQueryList) {
       substituteSubQuery(bb, node);
     }
@@ -2242,12 +2255,14 @@ public class SqlToRelConverter {
    *                                     corresponds to a variation of a select
    *                                     node, only register it if it's a scalar
    *                                     sub-query
+   * @param clause A clause inside which sub-query is searched
    */
   private void findSubQueries(
       Blackboard bb,
       SqlNode node,
       RelOptUtil.Logic logic,
-      boolean registerOnlyScalarSubQueries) {
+      boolean registerOnlyScalarSubQueries,
+      SqlImplementor.@Nullable Clause clause) {
     final SqlKind kind = node.getKind();
     switch (kind) {
     case EXISTS:
@@ -2262,7 +2277,7 @@ public class SqlToRelConverter {
     case SCALAR_QUERY:
       if (!registerOnlyScalarSubQueries
           || (kind == SqlKind.SCALAR_QUERY)) {
-        bb.registerSubQuery(node, RelOptUtil.Logic.TRUE_FALSE);
+        bb.registerSubQuery(node, RelOptUtil.Logic.TRUE_FALSE, clause);
       }
       return;
     case IN:
@@ -2294,7 +2309,7 @@ public class SqlToRelConverter {
           findSubQueries(bb, operand, logic,
               kind == SqlKind.IN || kind == SqlKind.NOT_IN
                   || kind == SqlKind.SOME || kind == SqlKind.ALL
-                  || registerOnlyScalarSubQueries);
+                  || registerOnlyScalarSubQueries, clause);
         }
       }
     } else if (node instanceof SqlNodeList) {
@@ -2302,7 +2317,7 @@ public class SqlToRelConverter {
         findSubQueries(bb, child, logic,
             kind == SqlKind.IN || kind == SqlKind.NOT_IN
                 || kind == SqlKind.SOME || kind == SqlKind.ALL
-                || registerOnlyScalarSubQueries);
+                || registerOnlyScalarSubQueries, clause);
       }
     }
 
@@ -2331,7 +2346,7 @@ public class SqlToRelConverter {
       default:
         break;
       }
-      bb.registerSubQuery(node, logic);
+      bb.registerSubQuery(node, logic, clause);
       break;
     default:
       break;
@@ -2475,7 +2490,7 @@ public class SqlToRelConverter {
     }
 
     try {
-      Preconditions.checkArgument(bb.window == null,
+      checkArgument(bb.window == null,
           "already in window agg mode");
       bb.window = window;
       RexNode rexAgg = exprConverter.convertCall(bb, aggCall);
@@ -2664,10 +2679,11 @@ public class SqlToRelConverter {
       replaceSubQueries(bb, node, RelOptUtil.Logic.TRUE_FALSE_UNKNOWN);
     }
     final List<RexNode> exprs = new ArrayList<>();
-    for (Ord<SqlNode> node : Ord.zip(nodes)) {
-      exprs.add(
-          relBuilder.alias(bb.convertExpression(node.e), validator().deriveAlias(node.e, node.i)));
-    }
+    Ord.forEach(nodes, (node, i) -> {
+      final RexNode e = bb.convertExpression(node);
+      final String alias = SqlValidatorUtil.alias(node, i);
+      exprs.add(relBuilder.alias(e, alias));
+    });
     RelNode child =
         (null != bb.root) ? bb.root : LogicalValues.createOneRow(cluster);
     RelNode uncollect;
@@ -3005,7 +3021,7 @@ public class SqlToRelConverter {
       final SqlValidatorTable validatorTable =
           table.unwrapOrThrow(SqlValidatorTable.class);
       final List<RelDataTypeField> extendedFields =
-          SqlValidatorUtil.getExtendedColumns(validator, validatorTable,
+          SqlValidatorUtil.getExtendedColumns(validator(), validatorTable,
               extendedColumns);
       table = table.extend(extendedFields);
     }
@@ -3045,7 +3061,7 @@ public class SqlToRelConverter {
       final SqlValidatorTable validatorTable =
           table.unwrapOrThrow(SqlValidatorTable.class);
       final List<RelDataTypeField> extendedFields =
-          SqlValidatorUtil.getExtendedColumns(validator, validatorTable,
+          SqlValidatorUtil.getExtendedColumns(validator(), validatorTable,
               extendedColumns);
 
       table = table.extend(extendedFields);
@@ -3597,7 +3613,9 @@ public class SqlToRelConverter {
     int old_right_rel_count = new LookupContext(
         bb, ImmutableList.of(rightRel), bb.systemFieldList.size()).relOffsetList.size();
     RelNode curRightRel = rightRel;
-    findSubQueries(bb, condition, RelOptUtil.Logic.UNKNOWN_AS_FALSE, false);
+    // Bodo Change: We have modified this code to better account for subqueries. In particular,
+    // our changes fix a bug related to using IN within an ON condition.
+    findSubQueries(bb, condition, RelOptUtil.Logic.UNKNOWN_AS_FALSE, false, null);
     for (SubQuery node : bb.subQueryList) {
 
       substituteSubQuery(bb, node);
@@ -3784,7 +3802,8 @@ public class SqlToRelConverter {
       groupList = SqlNodeList.EMPTY;
     }
 
-    replaceSubQueries(bb, groupList, RelOptUtil.Logic.TRUE_FALSE_UNKNOWN);
+    replaceSubQueries(bb, groupList, RelOptUtil.Logic.TRUE_FALSE_UNKNOWN,
+        SqlImplementor.Clause.GROUP_BY);
 
     // register the group exprs
 
@@ -3806,7 +3825,7 @@ public class SqlToRelConverter {
     final List<Pair<RexNode, String>> projects = new ArrayList<>();
 
     try {
-      Preconditions.checkArgument(bb.agg == null, "already in agg mode");
+      checkArgument(bb.agg == null, "already in agg mode");
       bb.agg = aggConverter;
 
       // convert the select and having expressions, so that the
@@ -3894,7 +3913,8 @@ public class SqlToRelConverter {
       // This needs to be done separately from the sub-query inside
       // any aggregate in the select list, and after the aggregate rel
       // is allocated.
-      replaceSubQueries(bb, selectList, RelOptUtil.Logic.TRUE_FALSE_UNKNOWN);
+      replaceSubQueries(bb, selectList, RelOptUtil.Logic.TRUE_FALSE_UNKNOWN,
+          SqlImplementor.Clause.SELECT);
 
       // Now sub-queries in the entire select list have been converted.
       // Convert the select expressions to get the final list to be
@@ -3932,14 +3952,14 @@ public class SqlToRelConverter {
         projects.add(
             Pair.of(bb.convertExpression(expr),
                 k < sysFieldCount || (addedQualifyExpr && k == selectList.size() - 1)
-                    ? castNonNull(validator().deriveAlias(expr, k++))
+                    ? SqlValidatorUtil.alias(expr, k++)
                     : names.get(k++ - sysFieldCount)));
       }
 
       for (SqlNode expr : orderExprList) {
         projects.add(
             Pair.of(bb.convertExpression(expr),
-                castNonNull(validator().deriveAlias(expr, k++))));
+                SqlValidatorUtil.alias(expr, k++)));
       }
 
     } finally {
@@ -5433,7 +5453,7 @@ public class SqlToRelConverter {
   private RelNode convertRowConstructor(
       Blackboard bb,
       SqlCall rowConstructor) {
-    Preconditions.checkArgument(isRowConstructor(rowConstructor));
+    checkArgument(isRowConstructor(rowConstructor));
     final List<SqlNode> operands = rowConstructor.getOperandList();
     return convertMultisets(operands, bb);
   }
@@ -5507,7 +5527,7 @@ public class SqlToRelConverter {
       lastList = new ArrayList<>();
       relBuilder.push(
           Collect.create(requireNonNull(input, "input"),
-              call.getKind(), castNonNull(validator().deriveAlias(call, i))));
+              call.getKind(), SqlValidatorUtil.alias(call, i)));
       joinList.add(relBuilder.build());
     }
 
@@ -5610,7 +5630,13 @@ public class SqlToRelConverter {
     final RelNode r;
     final CorrelationUse p = getCorrelationUse(bb, project);
     if (p != null) {
-      r = p.r;
+      assert p.r instanceof Project;
+      // correlation variables have been normalized in p.r, we should use expressions
+      // in p.r instead of the original exprs
+      Project project1 = (Project) p.r;
+      r = relBuilder.push(bb.root())
+          .projectNamed(project1.getProjects(), fieldNames, true, ImmutableSet.of(p.id))
+          .build();
     } else {
       r = project;
     }
@@ -5647,13 +5673,14 @@ public class SqlToRelConverter {
       List<SqlMonotonicity> columnMonotonicityList) {
   }
 
-  private String deriveAlias(
+  private static String deriveAlias(
       final SqlNode node,
       Collection<String> aliases,
       final int ordinal) {
-    String alias = validator().deriveAlias(node, ordinal);
-    if (alias == null || aliases.contains(alias)) {
-      final String aliasBase = Util.first(alias, SqlUtil.GENERATED_EXPR_ALIAS_PREFIX);
+    checkArgument(ordinal >= 0);
+    String alias = SqlValidatorUtil.alias(node, ordinal);
+    if (aliases.contains(alias)) {
+      final String aliasBase = alias;
       for (int j = 0; ; j++) {
         alias = aliasBase + j;
         if (!aliases.contains(alias)) {
@@ -5744,12 +5771,10 @@ public class SqlToRelConverter {
       replaceSubQueries(tmpBb, rowConstructor,
           RelOptUtil.Logic.TRUE_FALSE_UNKNOWN);
       final List<Pair<RexNode, String>> exps = new ArrayList<>();
-      for (Ord<SqlNode> operand : Ord.zip(rowConstructor.getOperandList())) {
-        exps.add(
-            Pair.of(
-                tmpBb.convertExpression(operand.e),
-                castNonNull(validator().deriveAlias(operand.e, operand.i))));
-      }
+      Ord.forEach(rowConstructor.getOperandList(), (operand, i) ->
+          exps.add(
+              Pair.of(tmpBb.convertExpression(operand),
+                  SqlValidatorUtil.alias(operand, i))));
       RelNode in =
           (null == tmpBb.root)
               ? LogicalValues.createOneRow(cluster)
@@ -6256,22 +6281,27 @@ public class SqlToRelConverter {
       }
     }
 
-    void registerSubQuery(SqlNode node, RelOptUtil.Logic logic) {
-      for (SubQuery subQuery : subQueryList) {
-        // Compare the reference to make sure the matched node has
-        // exact scope where it belongs.
-        if (node == subQuery.node) {
-          return;
-        }
+    void registerSubQuery(SqlNode node, RelOptUtil.Logic logic,
+        SqlImplementor.@Nullable Clause clause) {
+      if (getSubQuery(node, clause) == null) {
+        subQueryList.add(new SubQuery(node, logic, clause));
       }
-      subQueryList.add(new SubQuery(node, logic));
     }
 
-    @Nullable SubQuery getSubQuery(SqlNode expr) {
+    @Nullable SubQuery getSubQuery(SqlNode expr, SqlImplementor.@Nullable Clause exprClause) {
       for (SubQuery subQuery : subQueryList) {
         // Compare the reference to make sure the matched node has
         // exact scope where it belongs.
         if (expr == subQuery.node) {
+          return subQuery;
+        }
+
+        // Reference comparing does not work in case when select list has column which refers
+        // to the column inside `GROUP BY` clause.
+        // For example: SELECT deptno IN (1,2) FROM emp.deptno GROUP BY deptno IN (1,2);
+        if (exprClause == SqlImplementor.Clause.SELECT
+            && subQuery.clause == SqlImplementor.Clause.GROUP_BY
+            && expr.equalsDeep(subQuery.node, Litmus.IGNORE)) {
           return subQuery;
         }
       }
@@ -6425,7 +6455,7 @@ public class SqlToRelConverter {
       case CURSOR:
       case IN:
       case NOT_IN:
-        subQuery = requireNonNull(getSubQuery(expr));
+        subQuery = requireNonNull(getSubQuery(expr, null));
         rex = requireNonNull(subQuery.expr);
         return StandardConvertletTable.castToValidatedType(expr, rex,
             validator(), rexBuilder);
@@ -6436,7 +6466,7 @@ public class SqlToRelConverter {
       case ARRAY_QUERY_CONSTRUCTOR:
       case MAP_QUERY_CONSTRUCTOR:
       case MULTISET_QUERY_CONSTRUCTOR:
-        subQuery = getSubQuery(expr);
+        subQuery = getSubQuery(expr, null);
         assert subQuery != null;
         rex = subQuery.expr;
         assert rex != null : "rex != null";
@@ -6483,6 +6513,7 @@ public class SqlToRelConverter {
      * Converts an item in an ORDER BY clause inside a window (OVER) clause,
      * extracting DESC, NULLS LAST and NULLS FIRST flags first.
      */
+    @Deprecated // to be removed before 2.0
     public RexFieldCollation convertSortExpression(SqlNode expr,
         RelFieldCollation.Direction direction,
         RelFieldCollation.NullDirection nullDirection) {
@@ -6513,6 +6544,8 @@ public class SqlToRelConverter {
       }
     }
 
+    // Only used by deprecated method "convertSortExpression", and will be
+    // removed with that method.
     private RexFieldCollation sortToRexFieldCollation(SqlNode expr,
         RelFieldCollation.Direction direction,
         RelFieldCollation.NullDirection nullDirection) {
@@ -6550,8 +6583,20 @@ public class SqlToRelConverter {
         RelFieldCollation.Direction direction,
         RelFieldCollation.NullDirection nullDirection) {
       RexNode node = convertExpression(expr);
-      if (direction == RelFieldCollation.Direction.DESCENDING) {
+      final boolean desc = direction == RelFieldCollation.Direction.DESCENDING;
+      if (desc) {
         node = relBuilder.desc(node);
+      }
+      if (nullDirection == RelFieldCollation.NullDirection.UNSPECIFIED) {
+        final NullCollation nullCollation =
+            validator().config().defaultNullCollation();
+        final boolean nullsLast = nullCollation.last(desc);
+        final boolean nullsFirst = !nullsLast;
+        if (!NullCollation.HIGH.isDefaultOrder(nullsFirst, desc)) {
+          nullDirection = nullsLast
+              ? RelFieldCollation.NullDirection.LAST
+              : RelFieldCollation.NullDirection.FIRST;
+        }
       }
       if (nullDirection == RelFieldCollation.NullDirection.FIRST) {
         node = relBuilder.nullsFirst(node);
@@ -6609,7 +6654,7 @@ public class SqlToRelConverter {
     }
 
     @Override public RexRangeRef getSubQueryExpr(SqlCall call) {
-      final SubQuery subQuery = getSubQuery(call);
+      final SubQuery subQuery = getSubQuery(call, null);
       assert subQuery != null;
       return (RexRangeRef) requireNonNull(subQuery.expr, () -> "subQuery.expr for " + call);
     }
@@ -6830,8 +6875,7 @@ public class SqlToRelConverter {
           name = call.operand(1).toString();
         }
         if (name == null) {
-          name = validator().deriveAlias(selectItem, i);
-          assert name != null : "alias must not be null for " + selectItem + ", i=" + i;
+          name = SqlValidatorUtil.alias(selectItem, i);
         }
         nameMap.put(selectItem.toString(), name);
       }
@@ -7501,10 +7545,13 @@ public class SqlToRelConverter {
     final SqlNode node;
     final RelOptUtil.Logic logic;
     @Nullable RexNode expr;
+    final SqlImplementor.@Nullable Clause clause;
 
-    private SubQuery(SqlNode node, RelOptUtil.Logic logic) {
+    private SubQuery(SqlNode node, RelOptUtil.Logic logic,
+        SqlImplementor.@Nullable Clause clause) {
       this.node = node;
       this.logic = logic;
+      this.clause = clause;
     }
   }
 
@@ -7836,7 +7883,8 @@ public class SqlToRelConverter {
           newInput,
           project.getHints(),
           newProjections.build(),
-          project.getRowType().getFieldNames());
+          project.getRowType().getFieldNames(),
+          project.getVariablesSet());
     }
 
     private Set<Integer> requiredJsonOutputFromParent(RelNode relNode) {

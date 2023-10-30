@@ -26,6 +26,7 @@ import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.SqlTableIdentifierWithID;
 import org.apache.calcite.sql.SqlWindow;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Util;
 
@@ -124,6 +125,26 @@ public interface SqlValidatorScope {
    * @return A qualified identifier, never null
    */
   SqlQualified fullyQualify(SqlIdentifier identifier);
+
+  /** Returns whether an expression is a reference to a measure column. */
+  default boolean isMeasureRef(SqlNode node) {
+    if (node instanceof SqlIdentifier) {
+      final SqlQualified q = fullyQualify((SqlIdentifier) node);
+      if (q.suffix().size() == 1
+          && q.namespace != null) {
+        final @Nullable RelDataTypeField f =
+            q.namespace.field(q.suffix().get(0));
+        if (q.namespace instanceof SelectNamespace) {
+          final SqlSelect select = ((SelectNamespace) q.namespace).getNode();
+          return f != null
+              && SqlValidatorUtil.isMeasure(select.getSelectList().get(f.getIndex()));
+        }
+        return f != null
+            && f.getType().getSqlTypeName() == SqlTypeName.MEASURE;
+      }
+    }
+    return false;
+  }
 
   /**
    * Converts a table identifier with an ID column into a fully-qualified identifier.

@@ -91,6 +91,9 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Utility methods related to validation.
+ *
+ * Bodo Change: Include the changes to SqlSelect for merge into and a visitor
+ * for SqlTableIdentifierWithID.
  */
 public class SqlValidatorUtil {
   private SqlValidatorUtil() {}
@@ -127,11 +130,9 @@ public class SqlValidatorUtil {
       if (resolvedNamespace.isWrapperFor(TableNamespace.class)) {
         final TableNamespace tableNamespace = resolvedNamespace.unwrap(TableNamespace.class);
         final SqlValidatorTable validatorTable = tableNamespace.getTable();
-        final @Nullable SqlNodeList extendedList = dmlNamespace.getExtendList();
-        final List<RelDataTypeField> extendedFields = extendedList == null
+        final List<RelDataTypeField> extendedFields = dmlNamespace.getExtendList() == null
             ? ImmutableList.of()
-            : getExtendedColumns(namespace.getValidator(),
-                validatorTable, extendedList);
+            : getExtendedColumns(namespace.getValidator(), validatorTable, dmlNamespace.getExtendList());
         return getRelOptTable(
             tableNamespace, requireNonNull(catalogReader, "catalogReader"),
             datasetName, usedDataset, extendedFields);
@@ -167,7 +168,8 @@ public class SqlValidatorUtil {
    * Gets a list of extended columns with field indices to the underlying table.
    */
   public static List<RelDataTypeField> getExtendedColumns(
-      @Nullable SqlValidator validator, SqlValidatorTable table, SqlNodeList extendedColumns) {
+      SqlValidator validator, SqlValidatorTable table,
+      SqlNodeList extendedColumns) {
     final ImmutableList.Builder<RelDataTypeField> extendedFields =
         ImmutableList.builder();
     final ExtensibleTable extTable = table.unwrap(ExtensibleTable.class);
@@ -319,10 +321,34 @@ public class SqlValidatorUtil {
    * <li>Anything else yields "expr$<i>ordinal</i>"
    * </ul>
    *
+   * @param node   Node
+   * @param ordinal Ordinal in SELECT clause (must be &ge; 0)
+   *
    * @return An alias, if one can be derived; or a synthetic alias
-   * "expr$<i>ordinal</i>" if ordinal &lt; 0; otherwise null
+   * "expr$<i>ordinal</i>"; never null
    */
+  public static String alias(SqlNode node, int ordinal) {
+    Preconditions.checkArgument(ordinal >= 0);
+    return requireNonNull(alias_(node, ordinal), "alias");
+  }
+
+  public static @Nullable String alias(SqlNode node) {
+    return alias_(node, -1);
+  }
+
+  /** Derives an alias for a node, and invents a mangled identifier if it
+   * cannot.
+   *
+   * @deprecated Use {@link #alias(SqlNode)} if {@code ordinal} is negative,
+   * or {@link #alias(SqlNode, int)} if {@code ordinal} is non-negative. */
+  @Deprecated // to be removed before 2.0
   public static @Nullable String getAlias(SqlNode node, int ordinal) {
+    return alias_(node, ordinal);
+  }
+
+  /** Returns an alias, if one can be derived; or a synthetic alias
+   * "expr$<i>ordinal</i>" if ordinal &ge; 0; otherwise null. */
+  private static @Nullable String alias_(SqlNode node, int ordinal) {
     switch (node.getKind()) {
     case AS:
       // E.g. "1 + 2 as foo" --> "foo"
@@ -835,7 +861,7 @@ public class SqlValidatorUtil {
    * grouped, and returns a bitmap indicating which expressions this tuple
    * is grouping. */
   private static List<ImmutableBitSet> analyzeGroupTuple(SqlValidatorScope scope,
-       GroupAnalyzer groupAnalyzer, List<SqlNode> operandList) {
+      GroupAnalyzer groupAnalyzer, List<SqlNode> operandList) {
     List<ImmutableBitSet> list = new ArrayList<>();
     for (SqlNode operand : operandList) {
       list.add(
@@ -1266,6 +1292,22 @@ public class SqlValidatorUtil {
     }
   }
 
+  /** Returns whether a select item is a measure. */
+  public static boolean isMeasure(SqlNode selectItem) {
+    return getMeasure(selectItem) != null;
+  }
+
+  /** Returns the measure expression if a select item is a measure, null
+   * otherwise.
+   *
+   * <p>For a measure, {@code selectItem} will have the form
+   * {@code AS(MEASURE(exp), alias)} and this method returns {@code exp}. */
+  public static @Nullable SqlNode getMeasure(SqlNode selectItem) {
+    // The implementation of this method will be extended when we add the
+    // 'AS MEASURE' construct in [CALCITE-4496].
+    return null;
+  }
+
   //~ Inner Classes ----------------------------------------------------------
 
   /**
@@ -1363,8 +1405,15 @@ public class SqlValidatorUtil {
     /** Extra expressions, computed from the input as extra GROUP BY
      * expressions. For example, calls to the {@code TUMBLE} functions. */
     final List<SqlNode> extraExprs = new ArrayList<>();
+    final List<SqlNode> measureExprs = new ArrayList<>();
     final List<SqlNode> groupExprs = new ArrayList<>();
     final Map<Integer, Integer> groupExprProjection = new HashMap<>();
+    final List<ImmutableBitSet> flatGroupSets = new ArrayList<>();
+
+    AggregatingSelectScope.Resolved finish() {
+      return new AggregatingSelectScope.Resolved(extraExprs, measureExprs,
+          groupExprs, flatGroupSets, groupExprProjection);
+    }
   }
 
   /**

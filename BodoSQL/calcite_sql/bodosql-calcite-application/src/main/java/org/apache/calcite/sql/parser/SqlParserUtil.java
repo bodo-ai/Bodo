@@ -40,6 +40,8 @@ import org.apache.calcite.sql.SqlTimeLiteral;
 import org.apache.calcite.sql.SqlTimestampLiteral;
 import org.apache.calcite.sql.SqlUtil;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.parser.impl.SqlParserImpl;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.DateString;
 import org.apache.calcite.util.PrecedenceClimbingParser;
 import org.apache.calcite.util.TimeString;
@@ -53,6 +55,7 @@ import com.google.common.collect.ImmutableList;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 
+import java.io.StringReader;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.Charset;
@@ -69,6 +72,7 @@ import java.util.function.Predicate;
 import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 import static org.apache.calcite.util.Static.RESOURCE;
 
+import static java.lang.Integer.parseInt;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -112,12 +116,180 @@ public final class SqlParserUtil {
     return strip(s, "'", "'", "''", Casing.UNCHANGED);
   }
 
+  /**
+   * Converts the contents of a SQL quoted character literal with C-style
+   * escapes into the corresponding Java string representation.
+   *
+   * @throws MalformedUnicodeEscape if input contains invalid unicode escapes
+   */
+  public static String parseCString(String s) throws MalformedUnicodeEscape {
+    final String s2 = parseString(s);
+    return replaceEscapedChars(s2);
+  }
+
+  /**
+   * Converts the contents of a character literal  with escapes like those used
+   * in the C programming language to the corresponding Java string
+   * representation.
+   *
+   * <p>If the literal "{@code E'a\tc'}" occurs in the SQL source text, then
+   * this method will be invoked with the string "{@code a\tc}" (4 characters)
+   * and will return a Java string with the three characters 'a', TAB, 'b'.
+   *
+   * <p>The format is the same as the Postgres; see
+   * <a href="https://www.postgresql.org/docs/14/sql-syntax-lexical.html#SQL-SYNTAX-CONSTANTS">
+   * Postgres 4.1.2.2. String Constants With C-Style Escapes</a>.
+   *
+   * @param input String that contains C-style escapes
+   * @return String with escapes converted into Java characters
+   * @throws MalformedUnicodeEscape if input contains invalid unicode escapes
+   */
+  public static String replaceEscapedChars(String input)
+      throws MalformedUnicodeEscape {
+    // The implementation of this method is based on Crate's method
+    // Literals.replaceEscapedChars.
+    final int length = input.length();
+    if (length <= 1) {
+      return input;
+    }
+    final StringBuilder builder = new StringBuilder(length);
+    int endIdx;
+    for (int i = 0; i < length; i++) {
+      char currentChar = input.charAt(i);
+      if (currentChar == '\\' && i + 1 < length) {
+        char nextChar = input.charAt(i + 1);
+        switch (nextChar) {
+        case 'b':
+          builder.append('\b');
+          i++;
+          break;
+        case 'f':
+          builder.append('\f');
+          i++;
+          break;
+        case 'n':
+          builder.append('\n');
+          i++;
+          break;
+        case 'r':
+          builder.append('\r');
+          i++;
+          break;
+        case 't':
+          builder.append('\t');
+          i++;
+          break;
+        case '\\':
+        case '\'':
+          builder.append(nextChar);
+          i++;
+          break;
+        case 'u':
+        case 'U':
+          // handle unicode case
+          final int charsToConsume = (nextChar == 'u') ? 4 : 8;
+          if (i + 1 + charsToConsume >= length) {
+            throw new MalformedUnicodeEscape(i);
+          }
+          endIdx = calculateMaxCharsInSequence(input,
+              i + 2,
+              charsToConsume,
+              SqlParserUtil::isHexDigit);
+          if (endIdx != i + 2 + charsToConsume) {
+            throw new MalformedUnicodeEscape(i);
+          }
+          builder.appendCodePoint(parseInt(input.substring(i + 2, endIdx), 16));
+          i = endIdx - 1; // skip already consumed chars
+          break;
+        case 'x':
+          // handle hex byte case - up to 2 chars for hex value
+          endIdx = calculateMaxCharsInSequence(input,
+              i + 2,
+              2,
+              SqlParserUtil::isHexDigit);
+          if (endIdx > i + 2) {
+            builder.appendCodePoint(parseInt(input.substring(i + 2, endIdx), 16));
+            i = endIdx - 1; // skip already consumed chars
+          } else {
+            // hex sequence unmatched - output original char
+            builder.append(nextChar);
+            i++;
+          }
+          break;
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+          // handle octal case - up to 3 chars
+          endIdx = calculateMaxCharsInSequence(input,
+              i + 2,
+              2,      // first char is already "consumed"
+              SqlParserUtil::isOctalDigit);
+          builder.appendCodePoint(parseInt(input.substring(i + 1, endIdx), 8));
+          i = endIdx - 1; // skip already consumed chars
+          break;
+        default:
+          // non-valid escaped char sequence
+          builder.append(currentChar);
+        }
+      } else {
+        builder.append(currentChar);
+      }
+    }
+    return builder.toString();
+  }
+
+  /**
+   * Calculates the maximum number of consecutive characters of the
+   * {@link CharSequence} argument, starting from {@code beginIndex}, that match
+   * a given {@link Predicate}. The number of characters to match are either
+   * capped from the {@code maxCharsToMatch} parameter or the sequence length.
+   *
+   * <p>Examples:
+   * <pre>
+   * {@code
+   *    calculateMaxCharsInSequence("12345", 0, 2, Character::isDigit) -> 2
+   *    calculateMaxCharsInSequence("12345", 3, 2, Character::isDigit) -> 5
+   *    calculateMaxCharsInSequence("12345", 4, 2, Character::isDigit) -> 5
+   * }
+   * </pre>
+   *
+   * @return the index of the first non-matching character
+   */
+  private static int calculateMaxCharsInSequence(CharSequence seq,
+      int beginIndex,
+      int maxCharsToMatch,
+      Predicate<Character> predicate) {
+    int idx = beginIndex;
+    final int end = Math.min(seq.length(), beginIndex + maxCharsToMatch);
+    while (idx < end && predicate.test(seq.charAt(idx))) {
+      idx++;
+    }
+    return idx;
+  }
+
   public static BigDecimal parseDecimal(String s) {
     return new BigDecimal(s);
   }
 
   public static BigDecimal parseInteger(String s) {
     return new BigDecimal(s);
+  }
+
+  /**
+   * Returns true if the specific character is a base-8 digit.
+   */
+  public static boolean isOctalDigit(final char ch) {
+    return ch >= '0' && ch <= '7';
+  }
+
+  /**
+   * Returns true if the specified character is a base-16 digit.
+   */
+  public static boolean isHexDigit(final char ch) {
+    return (ch >= '0' && ch <= '9')
+        || (ch >= 'A' && ch <= 'F')
+        || (ch >= 'a' && ch <= 'f');
   }
 
   // CHECKSTYLE: IGNORE 1
@@ -170,6 +342,17 @@ public final class SqlParserUtil {
 
   public static SqlTimestampLiteral parseTimestampLiteral(String s,
       SqlParserPos pos) {
+    return parseTimestampLiteral(SqlTypeName.TIMESTAMP, s, pos);
+  }
+
+  public static SqlTimestampLiteral parseTimestampWithLocalTimeZoneLiteral(
+      String s, SqlParserPos pos) {
+    return parseTimestampLiteral(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE, s,
+        pos);
+  }
+
+  private static SqlTimestampLiteral parseTimestampLiteral(SqlTypeName typeName,
+      String s, SqlParserPos pos) {
     final Format format = Format.get();
     DateTimeUtils.PrecisionTime pt = null;
     // Allow timestamp literals with and without time fields (as does
@@ -184,13 +367,13 @@ public final class SqlParserUtil {
     }
     if (pt == null) {
       throw SqlUtil.newContextException(pos,
-          RESOURCE.illegalLiteral("TIMESTAMP", s,
+          RESOURCE.illegalLiteral(typeName.getName().replace('_', ' '), s,
               RESOURCE.badFormat(DateTimeUtils.TIMESTAMP_FORMAT_STRING).str()));
     }
     final TimestampString ts =
         TimestampString.fromCalendarFields(pt.getCalendar())
             .withFraction(pt.getFraction());
-    return SqlLiteral.createTimestamp(ts, pt.getPrecision(), pos);
+    return SqlLiteral.createTimestamp(typeName, ts, pt.getPrecision(), pos);
   }
 
   public static SqlIntervalLiteral parseIntervalLiteral(SqlParserPos pos,
@@ -201,6 +384,23 @@ public final class SqlParserUtil {
               + intervalQualifier.toString(), pos.toString()));
     }
     return SqlLiteral.createInterval(sign, s, intervalQualifier, pos);
+  }
+
+  /**
+   * Parses string to array literal
+   * using {@link org.apache.calcite.sql.parser.impl.SqlParserImpl} parser.
+   * String format description can be found at the
+   * <a href="https://www.postgresql.org/docs/current/arrays.html#ARRAYS-INPUT">link</a>
+   *
+   * @param s a string to parse
+   * @return a array value
+   *
+   * @throws SqlParseException if there is a parse error
+   */
+  public static SqlNode parseArrayLiteral(String s) throws SqlParseException {
+    SqlAbstractParserImpl parser = SqlParserImpl.FACTORY.getParser(
+        new StringReader(s));
+    return parser.parseArray();
   }
 
   /**
@@ -439,7 +639,7 @@ public final class SqlParserUtil {
     if (value.charAt(0) == '-') {
       throw new NumberFormatException(value);
     }
-    return Integer.parseInt(value);
+    return parseInt(value);
   }
 
   /**
@@ -485,9 +685,8 @@ public final class SqlParserUtil {
   public static String strip(String s, @Nullable String startQuote,
       @Nullable String endQuote, @Nullable String escape, Casing casing) {
     if (startQuote != null) {
-      return stripQuotes(s, Objects.requireNonNull(startQuote, "startQuote"),
-          Objects.requireNonNull(endQuote, "endQuote"), Objects.requireNonNull(escape, "escape"),
-          casing);
+      return stripQuotes(s, startQuote, requireNonNull(endQuote, "endQuote"),
+          requireNonNull(escape, "escape"), casing);
     } else {
       return toCase(s, casing);
     }
@@ -1105,5 +1304,14 @@ public final class SqlParserUtil {
         new SimpleDateFormat(DateTimeUtils.TIME_FORMAT_STRING, Locale.ROOT);
     final DateFormat date =
         new SimpleDateFormat(DateTimeUtils.DATE_FORMAT_STRING, Locale.ROOT);
+  }
+
+  /** Thrown by {@link #replaceEscapedChars(String)}. */
+  public static class MalformedUnicodeEscape extends Exception {
+    public final int i;
+
+    MalformedUnicodeEscape(int i) {
+      this.i = i;
+    }
   }
 }
