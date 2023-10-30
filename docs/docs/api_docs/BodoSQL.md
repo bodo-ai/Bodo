@@ -2353,12 +2353,24 @@ BodoSQL currently supports the following string functions:
 #### EDITDISTANCE
 -   `#!sql EDITDISTANCE(string0, string1[, max_distance])`
 
-    Returns the minimum edit distance between string0 and string1
+    Returns the minimum edit distance between `#!sql string0` and `#!sql string1`
     according to Levenshtein distance. Optionally accepts a third
     argument specifying a maximum distance value. If the minimum
     edit distance between the two strings exceeds this value, then
     this value is returned instead. If it is negative, zero
     is returned.
+
+
+#### JAROWINKLER_SIMILARITY
+-   `#!sql JAROWINKLER_SIMILARITY(string0, string1)`
+
+    Computes the Jaro-Winkler similarity between `#!sql string0`
+    and `#!sql string1` as an integer between 0 and 100 (with 0
+    being no similarity and 100 being an exact match). The computation
+    is not case-sensitive, but is sensitive to spaces or formatting
+    characters. A scaling factor of 0.1 is used for the computation.
+    For the definition of Jaro-Winkler similarity, [see here](https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance).
+
 
 
 #### SPLIT_PART
@@ -2447,7 +2459,7 @@ BodoSQL currently supports the following string functions:
 
 
 #### MD5
--   `#!sql MD5(msg])`
+-   `#!sql MD5(msg)`
 
     Encodes the `msg` string using the `MD5` algorithm. Outputs the
     result as a hex-encoded string.
@@ -2457,6 +2469,87 @@ BodoSQL currently supports the following string functions:
 -   `#!sql MD5_HEX(msg)`
 
     Equivalent to `#!sql MD5_HEX(msg)`
+
+
+#### HEX_ENCODE
+-   `#!sql HEX_ENCODE(msg[, case])`
+
+    Encodes the `msg` string into a string using the hex encoding scheme as if
+    it were binary data (or directly encodes binary data). If `#!sql case` 
+    (default one) is zero then the alphabetical hex characters are lowercase,
+    if it is one then they are uppercase.
+    [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/hex_encode).
+
+
+#### HEX_DECODE_STRING
+-   `#!sql HEX_DECODE_STRING(msg)`
+
+   Reverses the process of calling `#!sql HEX_ENCODE` on a string with either capitalization.
+   Raises an exception if the string is malformed in any way.
+    [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/hex_decode_string).
+
+
+#### TRY_HEX_DECODE_STRING
+-   `#!sql TRY_HEX_DECODE_STRING(msg)`
+
+    Equivalent to `#!sql HEX_DECODE_STRING` except that it will return null instead of raising
+    an exception if the string is malformed in any way.
+
+
+#### HEX_DECODE_BINARY
+-   `#!sql HEX_DECODE_BINARY(msg)`
+
+    The same as `#!sql HEX_DECODE_STRING` except that the output is binary instead of a string.
+
+
+
+#### TRY_HEX_DECODE_BINARY
+-   `#!sql TRY_HEX_DECODE_BINARY(msg)`
+
+    Equivalent to `#!sql HEX_DECODE_BINARY` except that it will return null instead of raising
+    an exception if the string is malformed in any way.
+
+
+#### BASE64_ENCODE
+-   `#!sql BASE64_ENCODE(msg[, max_line_length[, alphabet]])`
+
+    Encodes the `msg` string into a string using the base64 encoding scheme as if
+    it were binary data (or directly encodes binary data). If `#!sql max_line_length` 
+    (default zero) is greater than zero, then newline characters will be inserted
+    after that many characters to effectively add "text wrapping". If `#!sql alphabet`
+    is provided, it specifies substitutes for the usual encoding characters for
+    index 62, index 63, and the padding character. 
+    [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/base64_encode).
+
+
+#### BASE64_DECODE_STRING
+-   `#!sql BASE64_DECODE_STRING(msg[, alphabet])`
+
+    Reverses the process of calling `#!sql BASE64_ENCODE` on a string with the given alphabet,
+    ignoring any newline characters produced by the `#!sql max_line_length` argument. Raises an
+    exception if the string is malformed in any way.
+    [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/base64_decode_string).
+
+
+#### TRY_BASE64_DECODE_STRING
+-   `#!sql TRY_BASE64_DECODE_STRING(msg[, alphabet])`
+
+    Equivalent to `#!sql BASE64_DECODE_STRING` except that it will return null instead of raising
+    an exception if the string is malformed in any way.
+
+
+#### BASE64_DECODE_BINARY
+-   `#!sql BASE64_DECODE_BINARY(msg[, alphabet])`
+
+    The same as `#!sql BASE64_DECODE_STRING` except that the output is binary instead of a string.
+
+
+
+#### TRY_BASE64_DECODE_BINARY
+-   `#!sql TRY_BASE64_DECODE_BINARY(msg[, alphabet])`
+
+    Equivalent to `#!sql BASE64_DECODE_BINARY` except that it will return null instead of raising
+    an exception if the string is malformed in any way.
 
 
 ###  Regex Functions
@@ -2708,6 +2801,14 @@ BodoSQL currently supports the following regex functions:
 
 BodoSQL currently supports the following JSON functions:
 
+
+#### OBJECT_KEYS
+-   `#!sql OBJECT_KEYS(data)`
+
+    Extracts all of the field names from the JSON object `data` and returns them
+    as an array of strings.
+
+
 #### JSON_EXTRACT_PATH_TEXT
 -   `#!sql JSON_EXTRACT_PATH_TEXT(data, path)`
 
@@ -2841,6 +2942,16 @@ BodoSQL currently supports the following JSON functions:
     Arguments do not have the same type, BodoSQL will attempt
     to cast them to a common data type, which is currently
     undefined behavior.
+
+### Array Functions
+Bodo currently supports the following functions that operate on columns of arrays:
+
+#### ARRAY_SIZE
+-   `#!sql ARRAY_SIZE(array)`
+
+    Returns the size of array, size includes inner elements that are `NULL``.
+    Returns `NULL` if array is `NULL`.
+    [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/array_size).
 
 
 ### Window Functions
