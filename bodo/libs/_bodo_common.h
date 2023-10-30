@@ -1359,7 +1359,7 @@ inline T& getv(const std::unique_ptr<array_info>& arr, size_t idx) {
 
 struct mpi_comm_info {
     int myrank, n_pes;
-    int64_t n_rows_send, n_rows_recv;
+    int64_t n_rows_send = 0, n_rows_recv = 0;
     bool has_nulls;
     // generally required MPI counts
     std::vector<int64_t> send_count;
@@ -1371,7 +1371,7 @@ struct mpi_comm_info {
     std::vector<int64_t> recv_count_null;
     std::vector<int64_t> send_disp_null;
     std::vector<int64_t> recv_disp_null;
-    size_t n_null_bytes;
+    size_t n_null_bytes = 0;
     // Store input row to destination rank. This way we only need to do
     // hash_to_rank() once during shuffle. Also stores the result of filtering
     // rows with bloom filters (removed rows have dest == -1), so that we only
@@ -1434,7 +1434,8 @@ struct mpi_comm_info {
 };
 
 struct mpi_str_comm_info {
-    int64_t n_sub_send, n_sub_recv, n_sub_sub_send, n_sub_sub_recv;
+    int64_t n_sub_send = 0, n_sub_recv = 0;
+    int64_t n_sub_sub_send = 0, n_sub_sub_recv = 0;
     // counts required for string arrays
     std::vector<int64_t> send_count_sub;
     std::vector<int64_t> recv_count_sub;
