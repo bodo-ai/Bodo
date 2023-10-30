@@ -79,31 +79,21 @@ public class SqlNodeToRexConverterImpl implements SqlNodeToRexConverter {
   @Override public RexNode convertLiteral(
       SqlRexContext cx,
       SqlLiteral literal) {
-    RexBuilder rexBuilder = cx.getRexBuilder();
-    RelDataTypeFactory typeFactory = cx.getTypeFactory();
-    RelDataTypeSystem typeSystem = typeFactory.getTypeSystem();
-    SqlValidator validator = cx.getValidator();
+    // Bodo Change: Include the typesystem when creating literals.
+    final RelDataTypeFactory typeFactory = cx.getTypeFactory();
+    final RelDataTypeSystem typeSystem = typeFactory.getTypeSystem();
+    final RexBuilder rexBuilder = cx.getRexBuilder();
     if (literal.getValue() == null) {
-      // Since there is no eq. RexLiteral of SqlLiteral.Unknown we
-      // treat it as a cast(null as boolean)
-      RelDataType type;
-      if (literal.getTypeName() == SqlTypeName.BOOLEAN) {
-        type = typeFactory.createSqlType(SqlTypeName.BOOLEAN);
-        type = typeFactory.createTypeWithNullability(type, true);
-      } else {
-        type = validator.getValidatedNodeType(literal);
-      }
+      RelDataType type = cx.getValidator().getValidatedNodeType(literal);
       return rexBuilder.makeNullLiteral(type);
     }
 
-    final BitString bitString;
     switch (literal.getTypeName()) {
     case DECIMAL:
       // exact number
       BigDecimal bd = literal.getValueAs(BigDecimal.class, typeSystem);
-      return rexBuilder.makeExactLiteral(
-          bd,
-          literal.createSqlType(typeFactory));
+      RelDataType type = literal.createSqlType(cx.getTypeFactory());
+      return rexBuilder.makeExactLiteral(bd, type);
 
     case DOUBLE:
       // approximate type
@@ -115,13 +105,13 @@ public class SqlNodeToRexConverterImpl implements SqlNodeToRexConverter {
     case BOOLEAN:
       return rexBuilder.makeLiteral(literal.getValueAs(Boolean.class, typeSystem));
     case BINARY:
-      bitString = literal.getValueAs(BitString.class, typeSystem);
+      final BitString bitString = literal.getValueAs(BitString.class, typeSystem);
       Preconditions.checkArgument((bitString.getBitCount() % 8) == 0,
           "incomplete octet");
 
       // An even number of hexits (e.g. X'ABCD') makes whole number
       // of bytes.
-      ByteString byteString = new ByteString(bitString.getAsByteArray());
+      final ByteString byteString = new ByteString(bitString.getAsByteArray());
       return rexBuilder.makeBinaryLiteral(byteString);
     case SYMBOL:
       return rexBuilder.makeFlag(literal.getValueAs(Enum.class, typeSystem));
@@ -154,6 +144,10 @@ public class SqlNodeToRexConverterImpl implements SqlNodeToRexConverter {
       return rexBuilder.makeIntervalLiteral(
           literal.getValueAs(BigDecimal.class, typeSystem),
           sqlIntervalQualifier);
+
+    case UNKNOWN:
+      return convertLiteral(cx, cx.getValidator().resolveLiteral(literal));
+
     default:
       throw Util.unexpected(literal.getTypeName());
     }

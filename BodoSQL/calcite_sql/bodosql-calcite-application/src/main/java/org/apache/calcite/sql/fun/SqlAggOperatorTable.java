@@ -1,5 +1,6 @@
 package org.apache.calcite.sql.fun;
 
+import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -8,8 +9,11 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.type.BodoReturnTypes;
+import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
+import org.apache.calcite.util.Optionality;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
@@ -38,7 +42,24 @@ public class SqlAggOperatorTable implements SqlOperatorTable {
     // Override LISTAGG because it has the wrong precision
     public static final SqlFunction LISTAGG = new SqlListaggAggFunction(SqlKind.LISTAGG, BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE);
 
-    private List<SqlOperator> aggOperatorList = Arrays.asList(LISTAGG);
+    // Override PERCENTILE_CONT because it has the wrong return type.
+    /**
+     * {@code PERCENTILE_CONT} inverse distribution aggregate function.
+     *
+     * <p>The argument must be a numeric literal in the range 0 to 1 inclusive
+     * (representing a percentage), and the return type is the type of the
+     * {@code ORDER BY} expression.
+     */
+    public static final SqlAggFunction PERCENTILE_CONT =
+            SqlBasicAggFunction
+                    // Force nullable in case there is an empty group.
+                    .create(SqlKind.PERCENTILE_CONT, ReturnTypes.DOUBLE.andThen(SqlTypeTransforms.FORCE_NULLABLE),
+                            OperandTypes.UNIT_INTERVAL_NUMERIC_LITERAL)
+                    .withFunctionType(SqlFunctionCategory.SYSTEM)
+                    .withGroupOrder(Optionality.MANDATORY)
+                    .withPercentile(true);
+
+    private List<SqlOperator> aggOperatorList = Arrays.asList(LISTAGG, PERCENTILE_CONT);
 
     @Override
     public void lookupOperatorOverloads(

@@ -86,6 +86,7 @@ parser: {
     "DATA"
     "DATE"
     "DATABASE"
+    "DATE_TRUNC"
     "DATETIME_INTERVAL_CODE"
     "DATETIME_INTERVAL_PRECISION"
     "DAYS"
@@ -216,6 +217,7 @@ parser: {
     "PRIVILEGES"
     "PUBLIC"
     "QUARTER"
+    "QUARTERS"
     "READ"
     "RELATIVE"
     "RENAME"
@@ -321,9 +323,13 @@ parser: {
     "TEMPORARY"
     "TEXT"
     "TIES"
+    "TIME_DIFF"
+    "TIME_TRUNC"
     "TIMESTAMP"
     "TIMESTAMPADD"
     "TIMESTAMPDIFF"
+    "TIMESTAMP_DIFF"
+    "TIMESTAMP_TRUNC"
     "TOP"
     "TOP_LEVEL_COUNT"
     "TRANSACTION"
@@ -354,6 +360,7 @@ parser: {
     "VERSION"
     "VIEW"
     "WEEK"
+    "WEEKS"
     "WORK"
     "WRAPPER"
     "WRITE"
@@ -441,4 +448,5 @@ parser: {
   includeCompoundIdentifier: true
   includeBraces: true
   includeAdditionalDeclarations: false
+  includeParsingStringLiteralAsArrayLiteral: false
 }

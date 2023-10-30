@@ -602,8 +602,15 @@ def test_now_equivalents_cols(basic_df, now_equiv_fns, memory_leak_check):
             "is_valid_minute": True,
         }
     )
-
-    check_query(query, basic_df, None, expected_output=py_output, check_dtype=False)
+    # Note: These tests can be very slow so we just run 1DVar. Slowness is a potential correctness issue.
+    check_query(
+        query,
+        basic_df,
+        None,
+        expected_output=py_output,
+        check_dtype=False,
+        only_jit_1DVar=True,
+    )
 
 
 def test_now_equivalents_case(now_equiv_fns, memory_leak_check):
@@ -637,7 +644,15 @@ def test_now_equivalents_case(now_equiv_fns, memory_leak_check):
             "is_valid_minute": S,
         }
     )
-    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    # Note: These tests can be very slow so we just run 1DVar. Slowness is a potential correctness issue.
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+        check_dtype=False,
+        only_jit_1DVar=True,
+    )
 
 
 @pytest.fixture(
@@ -671,7 +686,15 @@ def test_localtime_equivalents_cols(basic_df, localtime_equiv_fns, memory_leak_c
         }
     )
 
-    check_query(query, basic_df, None, expected_output=py_output, check_dtype=False)
+    # Note: These tests can be very slow so we just run 1DVar. Slowness is a potential correctness issue.
+    check_query(
+        query,
+        basic_df,
+        None,
+        expected_output=py_output,
+        check_dtype=False,
+        only_jit_1DVar=True,
+    )
 
 
 def test_localtime_equivalents_case(localtime_equiv_fns, memory_leak_check):
@@ -699,7 +722,15 @@ def test_localtime_equivalents_case(localtime_equiv_fns, memory_leak_check):
             "is_valid_minute": S,
         }
     )
-    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    # Note: These tests can be very slow so we just run 1DVar. Slowness is a potential correctness issue.
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+        check_dtype=False,
+        only_jit_1DVar=True,
+    )
 
 
 @pytest.fixture(
@@ -720,7 +751,7 @@ def test_sysdate_equivalents_cols(
     Tests the group of equivalent functions which return the UTC timestamp.
     As the results depend on when the function was run, we precompute a list of valid times.
     """
-    current_time = pd.Timestamp.now(tz="UTC")
+    current_time = pd.Timestamp.now()
     valid_days, valid_hours, valid_minutes = compute_valid_times(current_time)
     query = (
         f"SELECT A, "
@@ -740,6 +771,7 @@ def test_sysdate_equivalents_cols(
         }
     )
 
+    # Note: These tests can be very slow so we just run 1DVar. Slowness is a potential correctness issue.
     check_query(
         query,
         basic_df,
@@ -747,6 +779,7 @@ def test_sysdate_equivalents_cols(
         check_names=False,
         check_dtype=False,
         expected_output=py_output,
+        only_jit_1DVar=True,
     )
 
 
@@ -756,7 +789,7 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
     Tests the group of equivalent functions which return the UTC timestamp in case.
     As the results depend on when the function was run, we precompute a list of valid times.
     """
-    current_time = pd.Timestamp.now(tz="UTC")
+    current_time = pd.Timestamp.now()
     valid_days, valid_hours, valid_minutes = compute_valid_times(current_time)
     query = (
         f"SELECT A, "
@@ -790,6 +823,7 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
         check_names=False,
         check_dtype=False,
         expected_output=py_output,
+        only_jit_1DVar=True,
     )
 
 

@@ -55,8 +55,12 @@ object BodoLogicalRelFactories {
     @JvmField
     val BODO_LOGICAL_BUILDER: RelBuilderFactory = RelBuilder.proto(DEFAULT_CONTEXT)
 
-    private fun createProject(input: RelNode, hints: List<RelHint>, childExprs: List<RexNode>, fieldNames: List<String?>?): RelNode =
-        BodoLogicalProject.create(input, hints, childExprs, fieldNames)
+    private fun createProject(input: RelNode, hints: List<RelHint>, childExprs: List<RexNode>, fieldNames: List<String?>?, variablesSet: Set<CorrelationId>): RelNode =
+        if (variablesSet.isNotEmpty()) {
+            throw UnsupportedOperationException("Correlation variables are not supported")
+        } else {
+            BodoLogicalProject.create(input, hints, childExprs, fieldNames)
+        }
 
     private fun createFilter(input: RelNode, condition: RexNode, variablesSet: Set<CorrelationId>): RelNode =
         if (variablesSet.isNotEmpty()) {

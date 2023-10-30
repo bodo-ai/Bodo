@@ -106,10 +106,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           null,
           // What Input Types does the function accept. CHAR_INT_INT or CHAR_INT (length is
           // optional)
-          OperandTypes.or(
-              OperandTypes.family(
-                  SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
-              OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER)),
+          OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER)
+              .or(OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
@@ -206,7 +204,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           // What Input Types does the function accept.
-          OperandTypes.or(OperandTypes.STRING_STRING, OperandTypes.STRING_STRING_INTEGER),
+          OperandTypes.STRING_STRING.or(OperandTypes.STRING_STRING_INTEGER),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
@@ -475,8 +473,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // case we keep the same string.
           ReturnTypes.ARG0_NULLABLE_VARYING,
           null,
-          OperandTypes.or(
-              OperandTypes.STRING, OperandTypes.STRING_STRING, OperandTypes.STRING_STRING_INTEGER),
+          OperandTypes.STRING.or(OperandTypes.STRING_STRING).or(OperandTypes.STRING_STRING_INTEGER),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction LTRIM =
@@ -612,7 +609,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // This is a mappable function so the precision is the same.
           ReturnTypes.ARG0_NULLABLE,
           null,
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.STRING_STRING),
+          OperandTypes.STRING.or(OperandTypes.STRING_STRING),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction CONTAINS =
@@ -640,7 +637,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // SHA2 outputs at most 128 characters.
           BodoReturnTypes.VARCHAR_128_NULLABLE,
           null,
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.STRING_INTEGER),
+          OperandTypes.STRING.or(OperandTypes.STRING_INTEGER),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction SHA2_HEX =
@@ -650,7 +647,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // SHA2 outputs at most 128 characters.
           BodoReturnTypes.VARCHAR_128_NULLABLE,
           null,
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.STRING_INTEGER),
+          OperandTypes.STRING.or(OperandTypes.STRING_INTEGER),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction MD5 =

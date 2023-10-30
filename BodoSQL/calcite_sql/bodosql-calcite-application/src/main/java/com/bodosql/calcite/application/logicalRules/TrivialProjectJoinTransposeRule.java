@@ -23,6 +23,7 @@ import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.rex.RexShuttle;
+import org.apache.calcite.sql.SqlKind;
 import org.immutables.value.Value;
 
 /**
@@ -69,7 +70,7 @@ public class TrivialProjectJoinTransposeRule extends RelRule<TrivialProjectJoinT
   }
 
   /**
-   * Convert a Project from an implementation with non-InputRef expresions into a Projection with
+   * Convert a Project from an implementation with non-InputRef expressions into a Projection with
    * only inputRef expressions that cover every column used by the original node.
    *
    * @param node Projection to be converted to just input refs
@@ -196,7 +197,27 @@ public class TrivialProjectJoinTransposeRule extends RelRule<TrivialProjectJoinT
   public interface Config extends RelRule.Config {
     Config DEFAULT =
         ImmutableTrivialProjectJoinTransposeRule.Config.builder()
-            .withPreserveExprCondition(expr -> !(expr instanceof RexOver))
+            .withPreserveExprCondition(
+                expr -> {
+                  // Do not push down over's expression by default
+                  if (expr instanceof RexOver) {
+                    return false;
+                  }
+                  if (SqlKind.CAST == expr.getKind()) {
+                    final RelDataType relType = expr.getType();
+                    final RexCall castCall = (RexCall) expr;
+                    final RelDataType operand0Type = castCall.getOperands().get(0).getType();
+                    if (relType.getSqlTypeName() == operand0Type.getSqlTypeName()
+                        && operand0Type.isNullable()
+                        && !relType.isNullable()) {
+                      // Do not push down not nullable cast's expression with the same type by
+                      // default
+                      // eg: CAST($1):VARCHAR(10) NOT NULL, and type of $1 is nullable VARCHAR(10)
+                      return false;
+                    }
+                  }
+                  return true;
+                })
             .build()
             .withOperandFor(BodoLogicalProject.class, BodoLogicalJoin.class);
 

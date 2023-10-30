@@ -81,9 +81,7 @@ def test_orderby_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     )
 
 
-def test_orderby_nullable_numeric(
-    bodosql_nullable_numeric_types, spark_info, memory_leak_check
-):
+def test_orderby_nullable_numeric(bodosql_nullable_numeric_types, memory_leak_check):
     """
     Tests orderby works in the simple case for nullable numeric types
     """
@@ -103,23 +101,31 @@ def test_orderby_nullable_numeric(
         ORDER BY
             A DESC
         """
+    output1 = bodosql_nullable_numeric_types["table1"].sort_values(
+        by=["A"], ascending=True, na_position="last"
+    )
     check_query(
         query,
         bodosql_nullable_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
         sort_output=False,
+        expected_output=output1,
+    )
+    output2 = bodosql_nullable_numeric_types["table1"].sort_values(
+        by=["A"], ascending=False, na_position="first"
     )
     check_query(
         query2,
         bodosql_nullable_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
         sort_output=False,
+        expected_output=output2,
     )
 
 
-def test_orderby_bool(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_orderby_bool(bodosql_boolean_types, memory_leak_check):
     """
     Tests orderby works in the simple case for boolean types
     """
@@ -139,21 +145,32 @@ def test_orderby_bool(bodosql_boolean_types, spark_info, memory_leak_check):
         ORDER BY
             A, B, C DESC
         """
+    output1 = bodosql_boolean_types["table1"].sort_values(
+        by=["A", "B", "C"], ascending=True, na_position="last"
+    )
     check_query(
         query,
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
         sort_output=False,
-        convert_columns_bool=["A", "B", "C"],
+        expected_output=output1,
+    )
+    # Note Pandas doesn't allow passing separate NA position values for A and B yet. As a result we need
+    # to write manual code to handle this case.
+    output2 = bodosql_boolean_types["table1"].sort_values(
+        by=["A", "B", "C"], ascending=[True, True, False], na_position="last"
+    )
+    output2["C"] = output2.groupby(["A", "B"], dropna=False).transform(
+        lambda x: x.sort_values(ascending=False, na_position="first")
     )
     check_query(
         query2,
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
         sort_output=False,
-        convert_columns_bool=["A", "B", "C"],
+        expected_output=output2,
     )
 
 
@@ -183,7 +200,7 @@ def test_orderby_str(bodosql_string_types, spark_info, memory_leak_check):
     check_query(query2, bodosql_string_types, spark_info, sort_output=False)
 
 
-def test_orderby_binary(bodosql_binary_types, spark_info, memory_leak_check):
+def test_orderby_binary(bodosql_binary_types, memory_leak_check):
     """
     Tests orderby works in the simple case for binary types
     """
@@ -195,16 +212,25 @@ def test_orderby_binary(bodosql_binary_types, spark_info, memory_leak_check):
         ORDER BY
             B, A DESC
         """
+    # Note Pandas doesn't allow passing separate NA position values for A and B yet. As a result we need
+    # to write manual code to handle this case.
+    output = bodosql_binary_types["table1"].drop_duplicates()
+    output = output.sort_values(
+        by=["B", "A"], ascending=[True, False], na_position="last"
+    )
+    output["A"] = output.groupby(["B", "C"], dropna=False).transform(
+        lambda x: x.sort_values(ascending=False, na_position="first")
+    )
     check_query(
         query,
         bodosql_binary_types,
-        spark_info,
-        convert_columns_bytearray=["A", "B", "C"],
+        None,
         sort_output=False,
+        expected_output=output,
     )
 
 
-def test_orderby_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
+def test_orderby_datetime(bodosql_datetime_types, memory_leak_check):
     """
     Tests orderby works in the simple case for datetime types
     """
@@ -224,8 +250,24 @@ def test_orderby_datetime(bodosql_datetime_types, spark_info, memory_leak_check)
         ORDER BY
             A, B, C DESC
         """
-    check_query(query1, bodosql_datetime_types, spark_info, sort_output=False)
-    check_query(query2, bodosql_datetime_types, spark_info, sort_output=False)
+    base_output = bodosql_datetime_types["table1"].drop_duplicates()
+    output1 = base_output.sort_values(
+        by=["A", "B", "C"], ascending=True, na_position="last"
+    )
+    check_query(
+        query1, bodosql_datetime_types, None, sort_output=False, expected_output=output1
+    )
+    # Note Pandas doesn't allow passing separate NA position values for A and B yet. As a result we need
+    # to write manual code to handle this case.
+    output2 = base_output.sort_values(
+        by=["A", "B", "C"], ascending=[True, True, False], na_position="last"
+    )
+    output2["C"] = output2.groupby(["A", "B"], dropna=False).transform(
+        lambda x: x.sort_values(ascending=False, na_position="first")
+    )
+    check_query(
+        query2, bodosql_datetime_types, None, sort_output=False, expected_output=output2
+    )
 
 
 def test_orderby_interval(bodosql_interval_types, memory_leak_check):
@@ -285,7 +327,7 @@ def test_distinct_orderby(bodosql_numeric_types, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_orderby_multiple_cols(col_a_identical_tables, spark_info, memory_leak_check):
+def test_orderby_multiple_cols(col_a_identical_tables, memory_leak_check):
     """
     checks that orderby works correctly when sorting by multiple columns
     """
@@ -297,8 +339,16 @@ def test_orderby_multiple_cols(col_a_identical_tables, spark_info, memory_leak_c
         ORDER BY
             A, B
         """
+    output = col_a_identical_tables["table1"].sort_values(
+        by=["A", "B"], ascending=True, na_position="last"
+    )
     check_query(
-        query, col_a_identical_tables, spark_info, check_dtype=False, sort_output=False
+        query,
+        col_a_identical_tables,
+        None,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=output,
     )
 
 
@@ -318,10 +368,9 @@ def null_ordering_table(request):
     return request.param
 
 
-def test_orderby_nulls_defaults(null_ordering_table, spark_info, memory_leak_check):
+def test_orderby_nulls_defaults(null_ordering_table, spark_info):
     """
-    checks that order by null ordering matches the spark
-    defaults
+    checks that order by null ordering is ASC by default with NULLS LAST
     """
     query = f"""
         SELECT
@@ -331,16 +380,23 @@ def test_orderby_nulls_defaults(null_ordering_table, spark_info, memory_leak_che
         ORDER BY
             A, B
         """
+    output = null_ordering_table["table1"].sort_values(
+        by=["A", "B"], na_position="last"
+    )
     check_query(
-        query, null_ordering_table, spark_info, check_dtype=False, sort_output=False
+        query,
+        null_ordering_table,
+        None,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=output,
     )
 
 
 @pytest.mark.slow
-def test_orderby_nulls_defaults_asc(null_ordering_table, spark_info, memory_leak_check):
+def test_orderby_nulls_defaults_asc(null_ordering_table, memory_leak_check):
     """
-    checks that order by null ordering matches the spark
-    defaults for ASC
+    checks that order by null ordering is NULLS LAST for ASC
     """
     query = f"""
         SELECT
@@ -350,18 +406,23 @@ def test_orderby_nulls_defaults_asc(null_ordering_table, spark_info, memory_leak
         ORDER BY
             A ASC, B
         """
+    output = null_ordering_table["table1"].sort_values(
+        by=["A", "B"], na_position="last"
+    )
     check_query(
-        query, null_ordering_table, spark_info, check_dtype=False, sort_output=False
+        query,
+        null_ordering_table,
+        None,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=output,
     )
 
 
 @pytest.mark.slow
-def test_orderby_nulls_defaults_desc(
-    null_ordering_table, spark_info, memory_leak_check
-):
+def test_orderby_nulls_defaults_desc(null_ordering_table, memory_leak_check):
     """
-    checks that order by null ordering matches the spark
-    defaults for DESC
+    checks that order by null ordering is NULLS FIRST for DESC
     """
     query = f"""
         SELECT
@@ -371,8 +432,21 @@ def test_orderby_nulls_defaults_desc(
         ORDER BY
             A DESC, B
     """
+    # Note Pandas doesn't allow passing separate NA position values for A and B yet. As a result we need
+    # to write manual code to handle this case.
+    output = null_ordering_table["table1"].sort_values(
+        by=["A", "B"], ascending=[False, True], na_position="first"
+    )
+    output["B"] = output.groupby(["A"], dropna=False).transform(
+        lambda x: x.sort_values(ascending=True, na_position="last")
+    )
     check_query(
-        query, null_ordering_table, spark_info, check_dtype=False, sort_output=False
+        query,
+        null_ordering_table,
+        None,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=output,
     )
 
 

@@ -5,7 +5,7 @@ import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
-import org.apache.calcite.avatica.util.TimeUnit
+import org.apache.calcite.avatica.util.TimeUnitRange
 import org.apache.calcite.plan.RelOptPredicateList
 import org.apache.calcite.sql.SqlBinaryOperator
 import org.apache.calcite.sql.SqlKind
@@ -725,9 +725,9 @@ class BodoRexSimplify(
         val offset = (e.operands[1] as RexLiteral).getValueAs(BigDecimal::class.java)!!.toLong()
         val base = e.operands[2] as RexLiteral
 
-        // Extract the time unit, either as a unit literal or a string literal
+        // Extract the time unit, either as a unit literal or a string literal.
         val isSymbol = unitLiteral.typeName == SqlTypeName.SYMBOL
-        val unitStr = if (isSymbol) { unitLiteral.getValueAs(TimeUnit::class.java)!!.toString() } else { unitLiteral.getValueAs(String::class.java)!! }
+        val unitStr = if (isSymbol) { unitLiteral.getValueAs(TimeUnitRange::class.java)!!.toString() } else { unitLiteral.getValueAs(String::class.java)!! }
         val dateTimeType = DatetimeFnCodeGen.getDateTimeDataType(base)
         val unit = DatetimeFnCodeGen.standardizeTimeUnit(e.operator.name, unitStr, dateTimeType)
         val isTime = unit in listOf("hour", "minute", "second", "millisecond", "microsecond", "nanosecond")

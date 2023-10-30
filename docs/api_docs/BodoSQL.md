@@ -233,11 +233,17 @@ SELECT A FROM table1 WHERE B > 4
 
 ### ORDER BY
 
-The `#!sql ORDER BY` keyword sorts the resulting dataframe in ascending
-or descending order, with `NULL` values either at the start or end
-of the column. By default, it sorts the records in ascending order
-with null values at the end. For descending order and nulls at the
-front, the `#!sql DESC` and `#!sql NULLS FIRST` keywords can be used:
+The `#!sql ORDER BY` keyword sorts the resulting DataFrame in ascending
+or descending order. By default, it sorts the records in ascending order.
+NULLs are sorted in accordance with the optional `#!sql NULLS FIRST` or
+`#!sql NULLS LAST` keywords.
+
+If the null ordering is not provided, then the default ordering depends
+on if the column is ascending or descending. For ascending order, by
+default NULL values are returned at the end, while for descending order
+nulls are returned at the front. If the order of nulls matter we strongly
+recommend explicitly providing either `#!sql NULLS FIRST` or
+`#!sql NULLS LAST`.
 
 ```sql
 SELECT <COLUMN_NAMES>
@@ -247,7 +253,7 @@ ORDER BY <ORDERED_COLUMN_NAMES> [ASC|DESC] [NULLS FIRST|LAST]
 
 For Example:
 ```sql
-SELECT A, B FROM table1 ORDER BY B, A DESC NULLS FIRST
+SELECT A, B FROM table1 ORDER BY B, A DESC NULLS LAST
 ```
 
 ***Example Usage***
@@ -2469,7 +2475,7 @@ BodoSQL currently supports the following string functions:
 -   `#!sql HEX_ENCODE(msg[, case])`
 
     Encodes the `msg` string into a string using the hex encoding scheme as if
-    it were binary data (or directly encodes binary data). If `#!sql case` 
+    it were binary data (or directly encodes binary data). If `#!sql case`
     (default one) is zero then the alphabetical hex characters are lowercase,
     if it is one then they are uppercase.
     [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/hex_encode).
@@ -2508,11 +2514,11 @@ BodoSQL currently supports the following string functions:
 -   `#!sql BASE64_ENCODE(msg[, max_line_length[, alphabet]])`
 
     Encodes the `msg` string into a string using the base64 encoding scheme as if
-    it were binary data (or directly encodes binary data). If `#!sql max_line_length` 
+    it were binary data (or directly encodes binary data). If `#!sql max_line_length`
     (default zero) is greater than zero, then newline characters will be inserted
     after that many characters to effectively add "text wrapping". If `#!sql alphabet`
     is provided, it specifies substitutes for the usual encoding characters for
-    index 62, index 63, and the padding character. 
+    index 62, index 63, and the padding character.
     [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/base64_encode).
 
 

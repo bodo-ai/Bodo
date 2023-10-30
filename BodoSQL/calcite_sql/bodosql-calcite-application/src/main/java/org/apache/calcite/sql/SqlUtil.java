@@ -42,6 +42,7 @@ import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.util.BarfingInvocationHandler;
 import org.apache.calcite.util.ConversionUtil;
 import org.apache.calcite.util.Glossary;
+import org.apache.calcite.util.Litmus;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Util;
@@ -75,6 +76,10 @@ import static org.apache.calcite.util.Static.RESOURCE;
 
 /**
  * Contains utility functions related to SQL parsing, all static.
+ *
+ * Bodo changes are TableIdentifierWithID support and the definition of
+ * getAliasedString, which can be moved to Bodo only code once TableIdentifierWithID
+ * is removed to remove this file.
  */
 public abstract class SqlUtil {
   //~ Constants --------------------------------------------------------------
@@ -159,6 +164,18 @@ public abstract class SqlUtil {
       ret.add(node);
     }
     return ret;
+  }
+
+  /** Finds the index of an expression in a list, comparing using
+   * {@link SqlNode#equalsDeep(SqlNode, Litmus)}. */
+  public static int indexOfDeep(List<? extends SqlNode> list, SqlNode e,
+      Litmus litmus) {
+    for (int i = 0; i < list.size(); i++) {
+      if (e.equalsDeep(list.get(i), litmus)) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   /**
