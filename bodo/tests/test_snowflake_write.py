@@ -1935,8 +1935,8 @@ def test_batched_write_nested_array(
     Test writing a table with a column of nested arrays to Snowflake
     and then reading it back
     """
-    if column_type != "variant" and write_type == "replace":
-        pytest.skip("When replacing a table columns are always written as variant")
+    if column_type == "variant" and write_type == "replace":
+        pytest.skip("When replacing a table columns are never written as variant")
 
     from bodo.io.snowflake import snowflake_connect
 
@@ -2007,11 +2007,7 @@ def test_batched_write_nested_array(
         # Check the output columns type
         table_info = pd.read_sql(f"DESCRIBE TABLE {table_name}", conn)
         remote_column_type = table_info[table_info["name"] == "B"]["type"].iloc[0]
-        assert (
-            remote_column_type == column_type.upper()
-            if write_type == "append"
-            else "VARIANT"
-        )
+        assert remote_column_type == column_type.upper()
 
         check_func(
             read_impl,
