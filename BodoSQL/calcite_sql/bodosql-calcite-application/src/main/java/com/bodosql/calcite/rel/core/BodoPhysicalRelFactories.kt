@@ -80,8 +80,11 @@ object BodoPhysicalRelFactories {
     @JvmField
     val BODO_PHYSICAL_BUILDER: RelBuilderFactory = RelBuilder.proto(DEFAULT_CONTEXT)
 
-    private fun createProject(input: RelNode, hints: List<RelHint>, childExprs: List<RexNode>, fieldNames: List<String?>?): RelNode {
+    private fun createProject(input: RelNode, hints: List<RelHint>, childExprs: List<RexNode>, fieldNames: List<String?>?, variablesSet: Set<CorrelationId>): RelNode {
         assert(input.convention != null) { "Internal Error in Bodo Physical Builder: Input does not have any convention" }
+        if (variablesSet.isNotEmpty()) {
+            throw UnsupportedOperationException("Correlation variables are not supported")
+        }
 
         val retVal = if (input.convention == PandasRel.CONVENTION) {
             PandasProject.create(input, childExprs, fieldNames)

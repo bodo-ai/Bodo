@@ -852,7 +852,9 @@ def test_any_value(agg_col, spark_info, memory_leak_check):
         )
     }
 
-    query = f"SELECT K, ANY_VALUE({agg_col}) FROM table1 GROUP BY K ORDER BY K"
+    query = (
+        f"SELECT K, ANY_VALUE({agg_col}) FROM table1 GROUP BY K ORDER BY K NULLS FIRST"
+    )
 
     check_query(
         query,

@@ -24,8 +24,8 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <kotlin.compiler.incremental>true</kotlin.compiler.incremental>
         <org.slf4j-version>1.7.29</org.slf4j-version>
-        <org.apache.calcite-version>1.32.0</org.apache.calcite-version>
-        <org.apache.calcite.avatica-version>1.22.0</org.apache.calcite.avatica-version>
+        <org.apache.calcite-version>1.33.0</org.apache.calcite-version>
+        <org.apache.calcite.avatica-version>1.23.0</org.apache.calcite.avatica-version>
         <com.google.protobuf-version>3.21.5</com.google.protobuf-version>
         <!-- TODO(njriasan): Upgrade to 3.14.1. This changes retry behavior so we need to test -->
         <snowflake-jdbc-version>3.13.33</snowflake-jdbc-version>
@@ -287,6 +287,7 @@
                                         <exclude>org/apache/calcite/prepare/RelOptTableImpl$3.class</exclude>
                                         <exclude>org/apache/calcite/prepare/RelOptTableImpl$MySchemaPlus.class</exclude>
                                         <exclude>org/apache/calcite/prepare/RelOptTableImpl.class</exclude>
+                                        <exclude>org/apache/calcite/rel/core/AggregateCall.class</exclude>
                                         <exclude>org/apache/calcite/rel/core/LogicalTableCreate.class</exclude>
                                         <exclude>org/apache/calcite/rel/core/TableCreate.class</exclude>
                                         <exclude>org/apache/calcite/rel/core/TableModify$1.class</exclude>
@@ -348,7 +349,6 @@
                                         <exclude>org/apache/calcite/sql/ddl/SqlCreateTable.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlCoalesceFunction.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlQuantifyOperator.class</exclude>
-                                        <exclude>org/apache/calcite/sql/fun/SqlTimestampDiffFunction.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlAbstractParserImpl$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlAbstractParserImpl$ExprContext.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlAbstractParserImpl$LexicalState.class</exclude>
@@ -357,6 +357,7 @@
                                         <exclude>org/apache/calcite/sql/parser/SqlAbstractParserImpl.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$Format.class</exclude>
+                                        <exclude>org/apache/calcite/sql/parser/SqlParserUtil$MalformedUnicodeEscape.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$OldTokenSequenceImpl.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$ParsedCollation.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$ToTreeListItem.class</exclude>
@@ -485,6 +486,7 @@
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$SubstrConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$TimestampAddConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$TimestampDiffConvertlet.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$TimestampSubConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$TrimConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTableConfig.class</exclude>

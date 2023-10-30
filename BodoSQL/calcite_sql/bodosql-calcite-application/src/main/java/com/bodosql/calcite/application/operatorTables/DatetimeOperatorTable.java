@@ -74,9 +74,14 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
     RelDataTypeFactory typeFactory = binding.getTypeFactory();
     RelDataType datetimeType = operandTypes.get(2);
     String unit;
-    if (operandTypes.get(0).getSqlTypeName().equals(SqlTypeName.SYMBOL))
+    RelDataType typeArg0 = operandTypes.get(0);
+    if (typeArg0.getSqlTypeName().equals(SqlTypeName.SYMBOL)
+        || SqlTypeFamily.INTERVAL_YEAR_MONTH.contains(typeArg0)
+        || SqlTypeFamily.INTERVAL_DAY_TIME.contains(typeArg0)) {
       unit = ((SqlCallBinding) binding).operand(0).toString();
-    else unit = binding.getOperandLiteralValue(0, String.class);
+    } else {
+      unit = binding.getOperandLiteralValue(0, String.class);
+    }
     unit = standardizeTimeUnit(fnName, unit, DateTimeType.TIMESTAMP);
     // TODO: refactor standardizeTimeUnit function to change the third argument to
     // SqlTypeName
@@ -156,16 +161,15 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           opBinding -> dateaddReturnType(opBinding),
           null,
-          OperandTypes.or(
-              OperandTypes.sequence(
+          OperandTypes.sequence(
                   "DATEADD(UNIT, VALUE, DATETIME)",
                   OperandTypes.ANY,
                   OperandTypes.INTEGER,
-                  OperandTypes.DATETIME),
-              OperandTypes.sequence(
-                  "DATEADD(DATETIME_OR_DATETIME_STRING, INTERVAL_OR_INTEGER)",
-                  OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-                  OperandTypes.or(OperandTypes.INTERVAL, OperandTypes.INTEGER))),
+                  OperandTypes.DATETIME)
+              .or(OperandTypes.DATETIME_INTERVAL)
+              .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER))
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME_INTERVAL))
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIMEADD =
@@ -193,13 +197,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          /// What Input Types does the function accept. This function accepts the
-          /// following
-          // arguments (Datetime, Interval), (String, Interval)
-          OperandTypes.sequence(
-              "DATE_ADD(DATETIME_OR_DATETIME_STRING, INTERVAL_OR_INTEGER)",
-              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.or(OperandTypes.INTERVAL, OperandTypes.INTEGER)),
+          OperandTypes.DATETIME_INTERVAL
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME_INTERVAL))
+              .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER))
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -213,10 +214,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          OperandTypes.or(
-              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.sequence(
-                  "TO_TIME(STRING, STRING)", OperandTypes.STRING, OperandTypes.STRING)),
+          OperandTypes.DATETIME
+              .or(OperandTypes.CHARACTER)
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -230,10 +230,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          OperandTypes.or(
-              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.sequence(
-                  "TIME(STRING, STRING)", OperandTypes.STRING, OperandTypes.STRING)),
+          OperandTypes.DATETIME
+              .or(OperandTypes.CHARACTER)
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -247,10 +246,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          OperandTypes.or(
-              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.sequence(
-                  "TRY_TO_TIME(STRING, STRING)", OperandTypes.STRING, OperandTypes.STRING)),
+          OperandTypes.DATETIME
+              .or(OperandTypes.CHARACTER)
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -264,18 +262,18 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          OperandTypes.or(
-              OperandTypes.sequence(
+          OperandTypes.sequence(
                   "TIMEFROMPARTS(HOUR, MINUTE, SECOND)",
                   OperandTypes.INTEGER,
                   OperandTypes.INTEGER,
-                  OperandTypes.INTEGER),
-              OperandTypes.sequence(
-                  "TIMEFROMPARTS(HOUR, MINUTE, SECOND, NANOSECOND)",
-                  OperandTypes.INTEGER,
-                  OperandTypes.INTEGER,
-                  OperandTypes.INTEGER,
-                  OperandTypes.INTEGER)),
+                  OperandTypes.INTEGER)
+              .or(
+                  OperandTypes.sequence(
+                      "TIMEFROMPARTS(HOUR, MINUTE, SECOND, NANOSECOND)",
+                      OperandTypes.INTEGER,
+                      OperandTypes.INTEGER,
+                      OperandTypes.INTEGER,
+                      OperandTypes.INTEGER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -289,18 +287,18 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          OperandTypes.or(
-              OperandTypes.sequence(
+          OperandTypes.sequence(
                   "TIME_FROM_PARTS(HOUR, MINUTE, SECOND)",
                   OperandTypes.INTEGER,
                   OperandTypes.INTEGER,
-                  OperandTypes.INTEGER),
-              OperandTypes.sequence(
-                  "TIME_FROM_PARTS(HOUR, MINUTE, SECOND, NANOSECOND)",
-                  OperandTypes.INTEGER,
-                  OperandTypes.INTEGER,
-                  OperandTypes.INTEGER,
-                  OperandTypes.INTEGER)),
+                  OperandTypes.INTEGER)
+              .or(
+                  OperandTypes.sequence(
+                      "TIME_FROM_PARTS(HOUR, MINUTE, SECOND, NANOSECOND)",
+                      OperandTypes.INTEGER,
+                      OperandTypes.INTEGER,
+                      OperandTypes.INTEGER,
+                      OperandTypes.INTEGER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -380,8 +378,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   // while the second has the signature
   // timestamp_(ntz_)from_parts(date_expr, time_expr)
   public static final SqlOperandTypeChecker OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER =
-      OperandTypes.or(
-          argumentRange(
+      argumentRange(
               6,
               SqlTypeFamily.INTEGER,
               SqlTypeFamily.INTEGER,
@@ -390,9 +387,12 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               SqlTypeFamily.INTEGER,
               SqlTypeFamily.INTEGER,
               SqlTypeFamily.INTEGER,
-              SqlTypeFamily.STRING),
-          OperandTypes.sequence(
-              "TIMESTAMP_FROM_PARTS(DATE, TIME)", OperandTypes.DATETIME, OperandTypes.DATETIME));
+              SqlTypeFamily.STRING)
+          .or(
+              OperandTypes.sequence(
+                  "TIMESTAMP_FROM_PARTS(DATE, TIME)",
+                  OperandTypes.DATETIME,
+                  OperandTypes.DATETIME));
   public static final SqlFunction TIMESTAMP_FROM_PARTS =
       new SqlFunction(
           "TIMESTAMP_FROM_PARTS",
@@ -552,11 +552,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           // What Input Types does the function accept. This function accepts only
           // (Datetime/String, Interval/Integer)
-          OperandTypes.sequence(
-              "DATE_SUB(DATETIME_OR_DATETIME_STRING, INTERVAL_OR_INTEGER)",
-              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.or(OperandTypes.INTERVAL, OperandTypes.INTEGER)),
-
+          OperandTypes.DATETIME_INTERVAL
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME_INTERVAL))
+              .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER))
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -573,10 +572,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           // What Input Types does the function accept. This function accepts only
           // (Datetime/String, Interval/Integer)
-          OperandTypes.sequence(
-              "SUBDATE(DATETIME_OR_DATETIME_STRING, INTERVAL_OR_INTEGER)",
-              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.or(OperandTypes.INTERVAL, OperandTypes.INTEGER)),
+          OperandTypes.DATETIME_INTERVAL
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME_INTERVAL))
+              .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER))
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -593,10 +592,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           // What Input Types does the function accept. This function accepts either
           // (Datetime, Interval) or (Datetime, Integer)
-          OperandTypes.sequence(
-              "ADDDATE(DATETIME_OR_DATETIME_STRING, INTERVAL_OR_INTEGER)",
-              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.or(OperandTypes.INTERVAL, OperandTypes.INTEGER)),
+          OperandTypes.DATETIME_INTERVAL
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME_INTERVAL))
+              .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER))
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -614,16 +613,16 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What Input Types does the function accept. This function accepts only
           // (Datetime, Datetime)
 
-          OperandTypes.or(
-              OperandTypes.sequence(
+          OperandTypes.sequence(
                   "DATEDIFF(TIMESTAMP/DATE, TIMESTAMP/DATE)",
                   OperandTypes.DATETIME,
-                  OperandTypes.DATETIME),
-              OperandTypes.sequence(
-                  "DATEDIFF(UNIT, TIMESTAMP/DATE/TIME, TIMESTAMP/DATE/TIME)",
-                  OperandTypes.ANY,
-                  OperandTypes.DATETIME,
-                  OperandTypes.DATETIME)),
+                  OperandTypes.DATETIME)
+              .or(
+                  OperandTypes.sequence(
+                      "DATEDIFF(UNIT, TIMESTAMP/DATE/TIME, TIMESTAMP/DATE/TIME)",
+                      OperandTypes.ANY,
+                      OperandTypes.DATETIME,
+                      OperandTypes.DATETIME)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -660,9 +659,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What Input Types does the function accept. This function accepts only
           // (String, Literal String)
           OperandTypes.sequence(
-              "STR_TO_DATE(STRING, STRING_LITERAL)",
-              OperandTypes.STRING,
-              OperandTypes.and(OperandTypes.STRING, OperandTypes.LITERAL)),
+              "STR_TO_DATE(STRING, LITERAL)", OperandTypes.STRING, OperandTypes.LITERAL),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -848,10 +845,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           /// What Input Types does the function accept.
-          OperandTypes.sequence(
-              "MONTHS_BETWEEN(DATETIME, DATETIME)",
-              OperandTypes.or(OperandTypes.DATE, OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
-              OperandTypes.or(OperandTypes.DATE, OperandTypes.DATETIME, OperandTypes.TIMESTAMP)),
+          OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.DATETIME),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -866,13 +860,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          /// What Input Types does the function accept. This function accepts the
-          /// following
-          // arguments (Datetime, Interval), (String, Interval)
-          OperandTypes.sequence(
-              "ADD_MONTHS(DATETIME, NUMERIC)",
-              OperandTypes.or(OperandTypes.DATE, OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
-              OperandTypes.NUMERIC),
+          OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.NUMERIC),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -906,9 +894,12 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What Input Types does the function accept. This function accepts only
           // (String, Literal String)
           OperandTypes.sequence(
-              "DATE_FORMAT(DATE/TIMESTAMP, STRING_LITERAL)",
-              OperandTypes.or(OperandTypes.DATE, OperandTypes.TIMESTAMP),
-              OperandTypes.and(OperandTypes.STRING, OperandTypes.LITERAL)),
+                  "DATE_FORMAT(DATE, STRING_LITERAL)", OperandTypes.DATE, OperandTypes.LITERAL)
+              .or(
+                  OperandTypes.sequence(
+                      "DATE_FORMAT(TIMESTAMP, STRING_LITERAL)",
+                      OperandTypes.TIMESTAMP,
+                      OperandTypes.LITERAL)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -990,18 +981,18 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           // What Input Types does the function accept.
-          OperandTypes.or(
-              OperandTypes.sequence(
+          OperandTypes.sequence(
                   "TIME_SLICE(DATETIME, INT, UNIT)",
-                  OperandTypes.or(OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
+                  OperandTypes.DATETIME,
                   OperandTypes.INTEGER,
-                  OperandTypes.ANY),
-              OperandTypes.sequence(
-                  "TIME_SLICE(DATETIME, INT, UNIT, STRING)",
-                  OperandTypes.or(OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
-                  OperandTypes.INTEGER,
-                  OperandTypes.ANY,
-                  OperandTypes.STRING)),
+                  OperandTypes.ANY)
+              .or(
+                  OperandTypes.sequence(
+                      "TIME_SLICE(DATETIME, INT, UNIT, STRING)",
+                      OperandTypes.DATETIME,
+                      OperandTypes.INTEGER,
+                      OperandTypes.ANY,
+                      OperandTypes.STRING)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -1023,10 +1014,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           opBinding -> truncReturnType(opBinding),
           null,
           // What Input Types does the function accept.
-          OperandTypes.or(
-              OperandTypes.sequence(
-                  "TRUNC(UNIT, DATETIME)", OperandTypes.ANY, OperandTypes.DATETIME),
-              argumentRange(1, SqlTypeFamily.NUMERIC, SqlTypeFamily.INTEGER)),
+          OperandTypes.sequence("TRUNC(UNIT, DATETIME)", OperandTypes.ANY, OperandTypes.DATETIME)
+              .or(argumentRange(1, SqlTypeFamily.NUMERIC, SqlTypeFamily.INTEGER)),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction YEAROFWEEK =
@@ -1072,10 +1061,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // this, so we set it to None.
           null,
           // What Input Types does the function accept.
-          OperandTypes.sequence(
-              "NEXT_DAY(DATETIME_OR_DATETIME_STRING, STRING_LITERAL)",
-              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.or(OperandTypes.STRING, OperandTypes.LITERAL)),
+          OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.CHARACTER)
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -1091,10 +1078,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // this, so we set it to None.
           null,
           // What Input Types does the function accept.
-          OperandTypes.sequence(
-              "PREVIOUS_DAY(DATETIME_OR_DATETIME_STRING, STRING_LITERAL)",
-              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.or(OperandTypes.STRING, OperandTypes.LITERAL)),
+          OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.CHARACTER)
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -1106,8 +1091,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.TIMESTAMP,
           null,
-          OperandTypes.or(
-              OperandTypes.CHARACTER_CHARACTER_DATETIME,
+          OperandTypes.CHARACTER_CHARACTER_DATETIME.or(
               OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME)),
           SqlFunctionCategory.TIMEDATE);
 

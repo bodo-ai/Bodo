@@ -37,13 +37,6 @@ public class SemiStructuredOperandChecker implements SqlSingleOperandTypeChecker
     return true;
   }
 
-  // This operand checker currently will not work with optional arguments; if that functionality
-  // is later required, then we will need to go back and revise this class.
-  @Override
-  public boolean isOptional(int i) {
-    return false;
-  }
-
   // This operand checker is not designed to be called on the entire call binding,
   // only on a single operand.
   @Override
@@ -59,10 +52,5 @@ public class SemiStructuredOperandChecker implements SqlSingleOperandTypeChecker
   @Override
   public String getAllowedSignatures(SqlOperator op, String opName) {
     return "<SEMI_STRUCTURED>";
-  }
-
-  @Override
-  public Consistency getConsistency() {
-    return Consistency.NONE;
   }
 }

@@ -168,7 +168,6 @@ public class ${parser.class} extends SqlAbstractParserImpl
     private Casing unquotedCasing;
     private Casing quotedCasing;
     private int identifierMaxLength;
-    private ImmutableMap<String, TimeUnit> timeUnitCodes;
     private SqlConformance conformance;
 
     /**
@@ -230,10 +229,6 @@ public class ${parser.class} extends SqlAbstractParserImpl
         this.identifierMaxLength = identifierMaxLength;
     }
 
-    public void setTimeUnitCodes(Map<String, TimeUnit> timeUnitCodes) {
-        this.timeUnitCodes = ImmutableMap.copyOf(timeUnitCodes);
-    }
-
     public void setConformance(SqlConformance conformance) {
         this.conformance = conformance;
     }
@@ -248,6 +243,17 @@ public class ${parser.class} extends SqlAbstractParserImpl
 
     public SqlNodeList parseSqlStmtList() throws Exception {
         return SqlStmtList();
+    }
+
+    public SqlNode parseArray() throws SqlParseException {
+        switchTo(LexicalState.BQID);
+        try {
+          return ArrayLiteral();
+        } catch (ParseException ex) {
+          throw normalizeException(ex);
+        } catch (TokenMgrError ex) {
+          throw normalizeException(ex);
+        }
     }
 
     private SqlNode extend(SqlNode table, SqlNodeList extendList) {
@@ -2096,10 +2102,32 @@ SqlInsert WhenNotMatchedClause(SqlNode table, Span notMatchedSpan) :
     )
     (
         <LPAREN>
-        <VALUES> { valuesSpan = span(); } rowConstructor = RowConstructor()
+        (
+            <VALUES> { valuesSpan = span(); }
+        |
+            <VALUE>
+            {
+                valuesSpan = span();
+                if (!this.conformance.isValueAllowed()) {
+                    throw SqlUtil.newContextException(getPos(), RESOURCE.valueNotAllowed());
+                }
+            }
+        )
+        rowConstructor = RowConstructor()
         <RPAREN>
     |
-        <VALUES> { valuesSpan = span(); } rowConstructor = RowConstructor()
+        (
+            <VALUES> { valuesSpan = span(); }
+        |
+            <VALUE>
+            {
+                valuesSpan = span();
+                if (!this.conformance.isValueAllowed()) {
+                    throw SqlUtil.newContextException(getPos(), RESOURCE.valueNotAllowed());
+                }
+            }
+        )
+        rowConstructor = RowConstructor()
     )
     {
         // TODO zfong 5/26/06: note that extra parentheses are accepted above
@@ -2718,7 +2746,17 @@ SqlNode TableConstructor() :
     final Span s;
 }
 {
-    <VALUES> { s = span(); }
+    (
+        <VALUES> { s = span(); }
+    |
+        <VALUE>
+        {
+            s = span();
+            if (!this.conformance.isValueAllowed()) {
+                throw SqlUtil.newContextException(getPos(), RESOURCE.valueNotAllowed());
+            }
+        }
+    )
     AddRowConstructor(list)
     (
         LOOKAHEAD(2)
@@ -3783,11 +3821,8 @@ SqlNode LeafQueryOrExpr(ExprContext exprContext) :
 SqlNode e;
 }
 {
-    // Bodo Change: since values is now an unreserved keyword, we need to try and parse
-    // The LeafQuery first, otherwise we'll go down the expression path when trying to parse
-    // tableConstructor (IE: (VALUES (1,2), (3,4)))
     e = LeafQuery(exprContext) { return e; }
-    |
+|
     e = Expression(exprContext) { return e; }
 }
 
@@ -4949,6 +4984,17 @@ SqlNode StringLiteral() :
         }
     }
 |
+    <C_STYLE_ESCAPED_STRING_LITERAL>
+    {
+        try {
+            p = SqlParserUtil.parseCString(getToken(0).image);
+        } catch (SqlParserUtil.MalformedUnicodeEscape e) {
+            throw SqlUtil.newContextException(getPos(),
+                RESOURCE.unicodeEscapeMalformed(e.i));
+       }
+       return SqlLiteral.createCharString(p, "UTF16", getPos());
+    }
+|
     <BIG_QUERY_DOUBLE_QUOTED_STRING>
     {
         p = SqlParserUtil.stripQuotes(getToken(0).image, DQ, DQ, "\\\"",
@@ -5027,15 +5073,24 @@ SqlLiteral DateTimeLiteral() :
     }
 |
     <DATE> { s = span(); } p = SimpleStringLiteral() {
-        return SqlParserUtil.parseDateLiteral(p, s.end(this));
+      return SqlLiteral.createUnknown("DATE", p, s.end(this));
+    }
+|
+    <DATETIME> { s = span(); } p = SimpleStringLiteral() {
+        return SqlLiteral.createUnknown("DATETIME", p, s.end(this));
     }
 |
     <TIME> { s = span(); } p = SimpleStringLiteral() {
-        return SqlParserUtil.parseTimeLiteral(p, s.end(this));
+      return SqlLiteral.createUnknown("TIME", p, s.end(this));
     }
 |
+    LOOKAHEAD(2)
     <TIMESTAMP> { s = span(); } p = SimpleStringLiteral() {
-        return SqlParserUtil.parseTimestampLiteral(p, s.end(this));
+        return SqlLiteral.createUnknown("TIMESTAMP", p, s.end(this));
+    }
+|
+    <TIMESTAMP> { s = span(); } <WITH> <LOCAL> <TIME> <ZONE> p = SimpleStringLiteral() {
+        return SqlLiteral.createUnknown("TIMESTAMP WITH LOCAL TIME ZONE", p, s.end(this));
     }
 }
 
@@ -5076,6 +5131,7 @@ SqlNode ArrayConstructor() :
     SqlNodeList args;
     SqlNode e;
     final Span s;
+    final String p;
 }
 {
     <ARRAY> { s = span(); }
@@ -5102,7 +5158,41 @@ SqlNode ArrayConstructor() :
             return SqlStdOperatorTable.ARRAY_VALUE_CONSTRUCTOR.createCall(
                 s.end(this), args.getList());
         }
+<#if (parser.includeParsingStringLiteralAsArrayLiteral!default.parser.includeParsingStringLiteralAsArrayLiteral) >
+    |
+        p = SimpleStringLiteral() {
+            try {
+                return SqlParserUtil.parseArrayLiteral(p);
+            } catch (SqlParseException ex) {
+                throw SqlUtil.newContextException(getPos(),
+                    RESOURCE.illegalArrayExpression(p));
+            }
+        }
+</#if>
     )
+}
+
+
+SqlCall ArrayLiteral() :
+{
+    final List<SqlNode> list;
+    SqlNode e;
+    final Span s;
+}
+{
+    <LBRACE> { s = span(); }
+    (
+        e = Literal() { list = startList(e); }
+        ( <COMMA> e = Literal() { list.add(e); } )*
+    |
+        e = ArrayLiteral() { list = startList(e); }
+        ( <COMMA> e = ArrayLiteral() { list.add(e); } )*
+    |
+        { list = Collections.emptyList(); }
+    )
+    <RBRACE> {
+       return SqlStdOperatorTable.ARRAY_VALUE_CONSTRUCTOR.createCall(s.end(this), list);
+    }
 }
 
 /** Parses a MAP constructor */
@@ -5421,103 +5511,75 @@ SqlIntervalQualifier IntervalQualifierStart() :
     }
 }
 
-/**
- * Parses time unit for CEIL and FLOOR functions.
+/** Parses a built-in time unit (e.g. "YEAR")
+ * or user-defined time frame (e.g. "MINUTE15")
+ * and in each case returns a {@link SqlIntervalQualifier}.
+ *
+ * <p>The units are used in several functions, incuding CEIL, FLOOR, EXTRACT.
+ * Includes NANOSECOND, MILLISECOND, which were previously allowed in EXTRACT
+ * but not CEIL, FLOOR.
+ *
+ * <p>Includes {@code WEEK} and {@code WEEK(SUNDAY)} through
+  {@code WEEK(SATURDAY)}.
+ *
+ * <p>Does not include SQL_TSI_DAY, SQL_TSI_FRAC_SECOND etc. These will be
+ * parsed as identifiers and can be resolved in the validator if they are
+ * registered as abbreviations in your time frame set.
  */
-TimeUnit TimeUnit() :
-{
+SqlIntervalQualifier TimeUnitOrName() : {
+    final Span span;
+    final String w;
     final TimeUnit unit;
+    final SqlIdentifier unitName;
 }
 {
-    LOOKAHEAD(1)
+    LOOKAHEAD(2)
+    <NANOSECOND> { return new SqlIntervalQualifier(TimeUnit.NANOSECOND, null, getPos()); }
+|   <MICROSECOND> { return new SqlIntervalQualifier(TimeUnit.MICROSECOND, null, getPos()); }
+|   <MILLISECOND> { return new SqlIntervalQualifier(TimeUnit.MILLISECOND, null, getPos()); }
+|   <SECOND> { return new SqlIntervalQualifier(TimeUnit.SECOND, null, getPos()); }
+|   <MINUTE> { return new SqlIntervalQualifier(TimeUnit.MINUTE, null, getPos()); }
+|   <HOUR> { return new SqlIntervalQualifier(TimeUnit.HOUR, null, getPos()); }
+|   <DAY> { return new SqlIntervalQualifier(TimeUnit.DAY, null, getPos()); }
+|   <DOW> { return new SqlIntervalQualifier(TimeUnit.DOW, null, getPos()); }
+|   <DOY> { return new SqlIntervalQualifier(TimeUnit.DOY, null, getPos()); }
+|   <ISODOW> { return new SqlIntervalQualifier(TimeUnit.ISODOW, null, getPos()); }
+|   <ISOYEAR> { return new SqlIntervalQualifier(TimeUnit.ISOYEAR, null, getPos()); }
+|   <WEEK> { span = span(); }
     (
-        <MILLISECOND> { return TimeUnit.MILLISECOND; }
-    |   <SECOND> { return TimeUnit.SECOND; }
-    |   <MINUTE> { return TimeUnit.MINUTE; }
-    |   <HOUR> { return TimeUnit.HOUR; }
-    |   <DAY> { return TimeUnit.DAY; }
-    |   <DOW> { return TimeUnit.DOW; }
-    |   <DOY> { return TimeUnit.DOY; }
-    |   <ISODOW> { return TimeUnit.ISODOW; }
-    |   <ISOYEAR> { return TimeUnit.ISOYEAR; }
-    |   <WEEK> { return TimeUnit.WEEK; }
-    |   <MONTH> { return TimeUnit.MONTH; }
-    |   <QUARTER> { return TimeUnit.QUARTER; }
-    |   <YEAR> { return TimeUnit.YEAR; }
-    |   <EPOCH> { return TimeUnit.EPOCH; }
-    |   <DECADE> { return TimeUnit.DECADE; }
-    |   <CENTURY> { return TimeUnit.CENTURY; }
-    |   <MILLENNIUM> { return TimeUnit.MILLENNIUM; }
-    )
-|
-    unit = TimeUnitIdentifier() { return unit; }
-}
-
-/**
- * Parses time unit for the EXTRACT function.
- * As for FLOOR and CEIL, but also includes NANOSECOND and MICROSECOND.
- */
-TimeUnit TimeUnitForExtract() :
-{
-    final TimeUnit unit;
-}
-{
-    LOOKAHEAD(1)
-    (
-        <NANOSECOND> { return TimeUnit.NANOSECOND; }
-    |   <MICROSECOND> { return TimeUnit.MICROSECOND; }
-    )
-|
-    unit = TimeUnit() { return unit; }
-}
-
-/**
- * Parses a simple identifier as a TimeUnit.
- */
-TimeUnit TimeUnitIdentifier() :
-{
-    final List<String> names = new ArrayList<String>();
-    final List<SqlParserPos> positions = new ArrayList<SqlParserPos>();
-}
-{
-    AddIdentifierSegment(names, positions) {
-        TimeUnit unit = timeUnitCodes.get(names.get(0));
-        if (unit != null) {
-          return unit;
+        LOOKAHEAD(2)
+        <LPAREN> w = weekdayName() <RPAREN> {
+            return new SqlIntervalQualifier(w, span.end(this));
         }
-        throw SqlUtil.newContextException(positions.get(0),
-            RESOURCE.invalidDatetimeFormat(SqlIdentifier.getString(names)));
-    }
+    |
+        { return new SqlIntervalQualifier(TimeUnit.WEEK, null, getPos()); }
+    )
+|   <MONTH> { return new SqlIntervalQualifier(TimeUnit.MONTH, null, getPos()); }
+|   <QUARTER> { return new SqlIntervalQualifier(TimeUnit.QUARTER, null, getPos()); }
+|   <YEAR> { return new SqlIntervalQualifier(TimeUnit.YEAR, null, getPos()); }
+|   <EPOCH> { return new SqlIntervalQualifier(TimeUnit.EPOCH, null, getPos()); }
+|   <DECADE> { return new SqlIntervalQualifier(TimeUnit.DECADE, null, getPos()); }
+|   <CENTURY> { return new SqlIntervalQualifier(TimeUnit.CENTURY, null, getPos()); }
+|   <MILLENNIUM> { return new SqlIntervalQualifier(TimeUnit.MILLENNIUM, null, getPos()); }
+// Bodo Change: Remove unit name until we cleanup our Snowflake function parsing.
+// |   unitName = SimpleIdentifier() {
+//        return new SqlIntervalQualifier(unitName.getSimple(),
+//            unitName.getParserPosition());
+//    }
 }
 
-TimeUnit TimestampInterval() :
-{}
+String weekdayName() :
 {
-    <MILLISECOND> { return TimeUnit.MILLISECOND; }
-|   <FRAC_SECOND> { return TimeUnit.MICROSECOND; }
-|   <MICROSECOND> { return TimeUnit.MICROSECOND; }
-|   <NANOSECOND> { return TimeUnit.NANOSECOND; }
-|   <SQL_TSI_FRAC_SECOND> { return TimeUnit.NANOSECOND; }
-|   <SQL_TSI_MICROSECOND> { return TimeUnit.MICROSECOND; }
-|   <SECOND> { return TimeUnit.SECOND; }
-|   <SQL_TSI_SECOND> { return TimeUnit.SECOND; }
-|   <MINUTE> { return TimeUnit.MINUTE; }
-|   <SQL_TSI_MINUTE> { return TimeUnit.MINUTE; }
-|   <HOUR> { return TimeUnit.HOUR; }
-|   <SQL_TSI_HOUR> { return TimeUnit.HOUR; }
-|   <DAY> { return TimeUnit.DAY; }
-|   <SQL_TSI_DAY> { return TimeUnit.DAY; }
-|   <WEEK> { return TimeUnit.WEEK; }
-|   <SQL_TSI_WEEK> { return TimeUnit.WEEK; }
-|   <MONTH> { return TimeUnit.MONTH; }
-|   <SQL_TSI_MONTH> { return TimeUnit.MONTH; }
-|   <QUARTER> { return TimeUnit.QUARTER; }
-|   <SQL_TSI_QUARTER> { return TimeUnit.QUARTER; }
-|   <YEAR> { return TimeUnit.YEAR; }
-|   <SQL_TSI_YEAR> { return TimeUnit.YEAR; }
 }
-
-
+{
+    <SUNDAY> { return "WEEK_SUNDAY"; }
+|   <MONDAY> { return "WEEK_MONDAY"; }
+|   <TUESDAY> { return "WEEK_TUESDAY"; }
+|   <WEDNESDAY> { return "WEEK_WEDNESDAY"; }
+|   <THURSDAY> { return "WEEK_THURSDAY"; }
+|   <FRIDAY> { return "WEEK_FRIDAY"; }
+|   <SATURDAY> { return "WEEK_SATURDAY"; }
+}
 
 /**
  * Parses a dynamic parameter marker.
@@ -6453,7 +6515,7 @@ SqlNode BuiltinFunctionCall() :
     final Span s;
     SqlDataTypeSpec dt;
     TimeUnit interval;
-    final TimeUnit unit;
+    final SqlIntervalQualifier unit;
     final SqlNode node;
 }
 {
@@ -6484,8 +6546,8 @@ SqlNode BuiltinFunctionCall() :
         }
     |
         <EXTRACT> { s = span(); }
-        <LPAREN> unit = TimeUnitForExtract() {
-            args.add(new SqlIntervalQualifier(unit, null, getPos()));
+        <LPAREN> unit = TimeUnitOrName() {
+            args.add(unit);
         }
         <FROM>
         AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
@@ -6653,6 +6715,18 @@ SqlNode BuiltinFunctionCall() :
         node = TimestampAddFunctionCall() { return node; }
     |
         node = TimestampDiffFunctionCall() { return node; }
+    // Bodo Change: Disable changes to builtin function calls that may conflict
+    // with our builtin functions.
+    // |
+    //     node = DateTruncFunctionCall() { return node; }
+    // |
+    //     node = TimestampDiff3FunctionCall() { return node; }
+    // |
+    //     node = TimestampTruncFunctionCall() { return node; }
+    // |
+    //     node = TimeDiffFunctionCall() { return node; }
+    // |
+    //     node = TimeTruncFunctionCall() { return node; }
     |
 <#list (parser.builtinFunctionCallMethods!default.parser.builtinFunctionCallMethods) as method>
         node = ${method} { return node; }
@@ -7159,7 +7233,6 @@ SqlCall TimestampAddFunctionCall() :
 {
     final List<SqlNode> args = new ArrayList<SqlNode>();
     final Span s;
-    final TimeUnit interval;
 }
 {
     <DATEADD> { s = span(); }
@@ -7210,7 +7283,6 @@ SqlCall TimestampDiffFunctionCall() :
 {
     final List<SqlNode> args = new ArrayList<SqlNode>();
     final Span s;
-    final TimeUnit interval;
 }
 {
     <DATEDIFF> { s = span(); }
@@ -7254,18 +7326,134 @@ SqlCall TimestampDiffFunctionCall() :
     }
 }
 
+/**
+ * Parses a call to BigQuery's TIMESTAMP_DIFF.
+ *
+ * <p>The difference between TIMESTAMPDIFF and TIMESTAMP_DIFF is the ordering of
+ * the parameters and the arrangement of the subtraction.
+ * TIMESTAMPDIFF uses (unit, timestamp1, timestamp2) with (t2 - t1), while
+ * TIMESTAMP_DIFF uses (timestamp1, timestamp2, unit) with (t1 - t2).
+ */
+SqlCall TimestampDiff3FunctionCall() :
+{
+    final List<SqlNode> args = new ArrayList<SqlNode>();
+    final Span s;
+    final SqlIntervalQualifier unit;
+}
+{
+    <TIMESTAMP_DIFF> { s = span(); }
+    <LPAREN>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <COMMA>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <COMMA>
+    unit = TimeUnitOrName() { args.add(unit); }
+    <RPAREN> {
+        return SqlLibraryOperators.TIMESTAMP_DIFF3.createCall(s.end(this), args);
+    }
+}
+
+/**
+ * Parses a call to DATE_TRUNC.
+ */
+SqlCall DateTruncFunctionCall() :
+{
+    final List<SqlNode> args = new ArrayList<SqlNode>();
+    final Span s;
+    final SqlIntervalQualifier unit;
+}
+{
+    <DATE_TRUNC> { s = span(); }
+    <LPAREN>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <COMMA>
+    // A choice of arguments allows us to support both
+    // the BigQuery variant, e.g. "DATE_TRUNC(d, YEAR)",
+    // and the Redshift variant, e.g. "DATE_TRUNC('year', DATE '2008-09-08')".
+    (
+        unit = TimeUnitOrName() { args.add(unit); }
+    |
+        AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    )
+    <RPAREN> {
+        return SqlLibraryOperators.DATE_TRUNC.createCall(s.end(this), args);
+    }
+}
+
+/**
+ * Parses a call to TIMESTAMP_TRUNC.
+ */
+SqlCall TimestampTruncFunctionCall() :
+{
+    final List<SqlNode> args = new ArrayList<SqlNode>();
+    final Span s;
+    final SqlIntervalQualifier unit;
+}
+{
+    <TIMESTAMP_TRUNC> { s = span(); }
+    <LPAREN>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <COMMA>
+    unit = TimeUnitOrName() { args.add(unit); }
+    <RPAREN> {
+        return SqlLibraryOperators.TIMESTAMP_TRUNC.createCall(s.end(this), args);
+    }
+}
+
+/**
+ * Parses a call to BigQuery's TIME_DIFF.
+ */
+SqlCall TimeDiffFunctionCall() :
+{
+    final List<SqlNode> args = new ArrayList<SqlNode>();
+    final Span s;
+    final SqlIntervalQualifier unit;
+}
+{
+    <TIME_DIFF> { s = span(); }
+    <LPAREN>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <COMMA>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <COMMA>
+    unit = TimeUnitOrName() { args.add(unit); }
+    <RPAREN> {
+        return SqlLibraryOperators.TIME_DIFF.createCall(s.end(this), args);
+    }
+}
+
+/**
+ * Parses a call to TIME_TRUNC.
+ */
+SqlCall TimeTruncFunctionCall() :
+{
+    final List<SqlNode> args = new ArrayList<SqlNode>();
+    final Span s;
+    final SqlIntervalQualifier unit;
+}
+{
+    <TIME_TRUNC> { s = span(); }
+    <LPAREN>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <COMMA>
+    unit = TimeUnitOrName() { args.add(unit); }
+    <RPAREN> {
+        return SqlLibraryOperators.TIME_TRUNC.createCall(s.end(this), args);
+    }
+}
+
 void QuotedOrUnquotedInterval(final List<SqlNode> args) :
 {
     final SqlNode e;
-    TimeUnit interval;
+    final SqlIntervalQualifier unit;
 }
 {
     e = StringLiteral() {
         args.add(e);
     }
 |
-    interval = TimestampInterval() {
-        args.add(SqlLiteral.createSymbol(interval, getPos()));
+    unit = TimeUnitOrName() {
+        args.add(unit);
     }
 }
 
@@ -7273,7 +7461,7 @@ void QuotedOrUnquotedInterval(final List<SqlNode> args) :
  * Parses a call to a grouping function inside the GROUP BY clause,
  * for example {@code TUMBLE(rowtime, INTERVAL '1' MINUTE)}.
  */
-SqlCall GroupByWindowingCall():
+SqlCall GroupByWindowingCall() :
 {
     final Span s;
     final List<SqlNode> args;
@@ -7568,7 +7756,6 @@ SqlNode StandardFloorCeilOptions(Span s, boolean floorFlag) :
 {
     SqlNode e;
     final List<SqlNode> args = new ArrayList<SqlNode>();
-    TimeUnit unit;
     SqlCall function;
     final Span s1;
 }
@@ -7748,6 +7935,39 @@ SqlNode JdbcFunctionCall() :
             name = call.getOperator().getName();
             args = new SqlNodeList(call.getOperandList(), getPos());
         }
+    // Bodo Change: Disable changes to builtin function calls that may conflict
+    // with our builtin functions. We aren't quite sure when this function matches.
+
+    // |
+    //     LOOKAHEAD(1)
+    //     call = DateTruncFunctionCall() {
+    //         name = call.getOperator().getName();
+    //         args = new SqlNodeList(call.getOperandList(), getPos());
+    //     }
+    // |
+    //     LOOKAHEAD(1)
+    //     call = TimestampTruncFunctionCall() {
+    //         name = call.getOperator().getName();
+    //         args = new SqlNodeList(call.getOperandList(), getPos());
+    //     }
+    // |
+    //     LOOKAHEAD(1)
+    //     call = TimeTruncFunctionCall() {
+    //         name = call.getOperator().getName();
+    //         args = new SqlNodeList(call.getOperandList(), getPos());
+    //     }
+    // |
+    //     LOOKAHEAD(1)
+    //     call = TimestampDiff3FunctionCall() {
+    //         name = call.getOperator().getName();
+    //         args = new SqlNodeList(call.getOperandList(), getPos());
+    //     }
+    // |
+    //     LOOKAHEAD(1)
+    //     call = TimeDiffFunctionCall() {
+    //         name = call.getOperator().getName();
+    //         args = new SqlNodeList(call.getOperandList(), getPos());
+    //     }
     |
         LOOKAHEAD(3)
         call = TimestampDiffFunctionCall() {
@@ -8211,6 +8431,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < FRAC_SECOND: "FRAC_SECOND" >
 |   < FRAME_ROW: "FRAME_ROW" >
 |   < FREE: "FREE" >
+|   < FRIDAY: "FRIDAY" >
 |   < FROM: "FROM" > { beforeTableName(); }
 |   < FULL: "FULL" >
 |   < FUNCTION: "FUNCTION" >
@@ -8340,6 +8561,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < MOD: "MOD" >
 |   < MODIFIES: "MODIFIES" >
 |   < MODULE: "MODULE" >
+|   < MONDAY: "MONDAY" >
 |   < MONTH: "MONTH" >
 |   < MONTHS: "MONTHS" >
 |   < MORE_: "MORE" >
@@ -8492,6 +8714,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < ROWS: "ROWS" >
 |   < RUNNING: "RUNNING" >
 |   < SAMPLE: "SAMPLE" >
+|   < SATURDAY: "SATURDAY" >
 |   < SAVEPOINT: "SAVEPOINT" >
 |   < SCALAR: "SCALAR" >
 |   < SCALE: "SCALE" >
@@ -8607,6 +8830,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < SUBSTRING_REGEX: "SUBSTRING_REGEX" >
 |   < SUCCEEDS: "SUCCEEDS" >
 |   < SUM: "SUM" >
+|   < SUNDAY: "SUNDAY" >
 |   < SWAP: "SWAP" >
 |   < SYMMETRIC: "SYMMETRIC" >
 |   < SYSTEM: "SYSTEM" >
@@ -8618,14 +8842,19 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < TEMPORARY: "TEMPORARY" >
 |   < TEXT: "TEXT" >
 |   < THEN: "THEN" >
+|   < THURSDAY: "THURSDAY" >
 |   < TIES: "TIES" >
 |   < TIME: "TIME" >
 |   < TIMEADD: "TIMEADD" >
 |   < TIMEDIFF: "TIMEDIFF" >
+|   < TIME_DIFF: "TIME_DIFF" >
+|   < TIME_TRUNC: "TIME_TRUNC" >
 |   < TIMESTAMP: "TIMESTAMP" >
 |   < TIMESTAMP_NTZ: "TIMESTAMP_NTZ" >
 |   < TIMESTAMPADD: "TIMESTAMPADD" >
 |   < TIMESTAMPDIFF: "TIMESTAMPDIFF" >
+|   < TIMESTAMP_DIFF: "TIMESTAMP_DIFF" >
+|   < TIMESTAMP_TRUNC: "TIMESTAMP_TRUNC" >
 |   < TIMEZONE_HOUR: "TIMEZONE_HOUR" >
 |   < TIMEZONE_MINUTE: "TIMEZONE_MINUTE" >
 |   < TINYINT: "TINYINT" >
@@ -8651,6 +8880,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < TRIM_ARRAY: "TRIM_ARRAY" >
 |   < TRUE: "TRUE" >
 |   < TRUNCATE: "TRUNCATE" >
+|   < TUESDAY: "TUESDAY" >
 |   < TRY_CAST: "TRY_CAST" >
 |   < TUMBLE: "TUMBLE" >
 |   < TYPE: "TYPE" >
@@ -8690,6 +8920,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < VERSION: "VERSION" >
 |   < VERSIONING: "VERSIONING" >
 |   < VIEW: "VIEW" >
+|   < WEDNESDAY: "WEDNESDAY" >
 |   < WEEK: "WEEK" >
 |   < WEEKS: "WEEKS" >
 |   < WHEN: "WHEN" >
@@ -8825,6 +9056,8 @@ void NonReservedKeyWord2of3() :
     < PREFIXED_STRING_LITERAL: ("_" <CHARSETNAME> | "N") <QUOTED_STRING> >
 |
     < UNICODE_STRING_LITERAL: "U" "&" <QUOTED_STRING> >
+|
+    < C_STYLE_ESCAPED_STRING_LITERAL: "E" <QUOTE> ( (~["'", "\\"]) | ("\\" ~[]) | "''")* <QUOTE> >
 |
     < #CHARSETNAME: (["a"-"z","A"-"Z","0"-"9"])
     (["a"-"z","A"-"Z","0"-"9",":",".","-","_"])*

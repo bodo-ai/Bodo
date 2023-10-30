@@ -3,7 +3,6 @@ package com.bodosql.calcite.prepare;
 import com.bodosql.calcite.adapter.pandas.PandasRowSample;
 import com.bodosql.calcite.adapter.pandas.PandasSample;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
-import com.bodosql.calcite.rex.RexNamedParam;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -30,9 +29,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeImpl;
 import org.apache.calcite.rex.RexCorrelVariable;
-import org.apache.calcite.rex.RexDynamicParam;
 import org.apache.calcite.rex.RexFieldAccess;
-import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexPermuteInputsShuttle;
 import org.apache.calcite.rex.RexUtil;
@@ -200,20 +197,9 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
       return result(sort, Mappings.createIdentity(fieldCount));
     }
 
-    // leave the Sort unchanged in case we have dynamic limits
-    // Bodo Change: Include RexNamedParam.
-    if (sort.offset instanceof RexDynamicParam
-        || sort.fetch instanceof RexDynamicParam
-        || sort.offset instanceof RexNamedParam
-        || sort.fetch instanceof RexNamedParam) {
-      return result(sort, inputMapping);
-    }
-
     relBuilder.push(newInput);
-    final int offset = sort.offset == null ? 0 : RexLiteral.intValue(sort.offset);
-    final int fetch = sort.fetch == null ? -1 : RexLiteral.intValue(sort.fetch);
     final ImmutableList<RexNode> fields = relBuilder.fields(RexUtil.apply(inputMapping, collation));
-    relBuilder.sortLimit(offset, fetch, fields);
+    relBuilder.sortLimit(sort.offset, sort.fetch, fields);
 
     // The result has the same mapping as the input gave us. Sometimes we
     // return fields that the consumer didn't ask for, because the filter

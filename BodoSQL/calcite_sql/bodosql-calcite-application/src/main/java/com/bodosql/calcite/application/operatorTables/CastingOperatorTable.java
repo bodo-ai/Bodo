@@ -40,15 +40,12 @@ public class CastingOperatorTable implements SqlOperatorTable {
   // optional format string is allowed as a second argument. If the argument
   // is a number, an optional scale integer is allowed as a second argument.
   static final SqlOperandTypeChecker toTimestampAcceptedArguments =
-      OperandTypes.or(
-          OperandTypes.CHARACTER,
-          OperandTypes.DATETIME,
-          OperandTypes.DATE,
-          OperandTypes.TIMESTAMP,
-          OperandTypes.NUMERIC,
-          OperandTypes.sequence(
-              "TO_TIMESTAMP(CHARACTER, CHARACTER)", OperandTypes.CHARACTER, OperandTypes.CHARACTER),
-          OperandTypes.NUMERIC_INTEGER);
+      // Note: The order of operands matter for implicit casting
+      OperandTypes.NUMERIC
+          .or(OperandTypes.DATETIME)
+          .or(OperandTypes.CHARACTER)
+          .or(OperandTypes.NUMERIC_INTEGER)
+          .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER));
 
   /** Returns the operator table, creating it if necessary. */
   public static synchronized CastingOperatorTable instance() {
@@ -109,7 +106,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           // For conversion to boolean, snowflake allows a string or numeric expr.
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          OperandTypes.NUMERIC.or(OperandTypes.STRING),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
@@ -124,7 +121,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           // For conversion to boolean, snowflake allows a string or numeric expr.
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          OperandTypes.NUMERIC.or(OperandTypes.STRING),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
@@ -143,13 +140,10 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // numeric,
           // datetime/timestamp, or binary, then an optional format string is allowed as a second
           // argument.
-          OperandTypes.or(
-              OperandTypes.ANY,
-              OperandTypes.or(
-                  OperandTypes.family(SqlTypeFamily.NUMERIC, SqlTypeFamily.STRING),
-                  OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.STRING),
-                  OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.STRING),
-                  OperandTypes.family(SqlTypeFamily.BINARY, SqlTypeFamily.STRING))),
+          OperandTypes.ANY
+              .or(OperandTypes.family(SqlTypeFamily.NUMERIC, SqlTypeFamily.CHARACTER))
+              .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.CHARACTER))
+              .or(OperandTypes.family(SqlTypeFamily.BINARY, SqlTypeFamily.STRING)),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
@@ -168,13 +162,10 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // numeric,
           // datetime/timestamp, or binary, then an optional format string is allowed as a second
           // argument.
-          OperandTypes.or(
-              OperandTypes.ANY,
-              OperandTypes.or(
-                  OperandTypes.family(SqlTypeFamily.NUMERIC, SqlTypeFamily.STRING),
-                  OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.STRING),
-                  OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.STRING),
-                  OperandTypes.family(SqlTypeFamily.BINARY, SqlTypeFamily.STRING))),
+          OperandTypes.ANY
+              .or(OperandTypes.family(SqlTypeFamily.NUMERIC, SqlTypeFamily.CHARACTER))
+              .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.CHARACTER))
+              .or(OperandTypes.family(SqlTypeFamily.BINARY, SqlTypeFamily.STRING)),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
@@ -187,14 +178,10 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // For conversion to date, snowflake allows a string, datetime, or integer.
           // If the first argument is string, an optional format string is allowed
           // as a second argument.
-          OperandTypes.or(
-              OperandTypes.or(
-                  OperandTypes.STRING,
-                  OperandTypes.DATETIME,
-                  OperandTypes.DATE,
-                  OperandTypes.TIMESTAMP,
-                  OperandTypes.INTEGER),
-              OperandTypes.STRING_STRING),
+          OperandTypes.DATETIME
+              .or(OperandTypes.INTEGER)
+              .or(OperandTypes.STRING)
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TRY_TO_DATE =
@@ -206,14 +193,10 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // For conversion to date, snowflake allows a string, datetime, or integer.
           // If the first argument is string, an optional format string is allowed
           // as a second argument.
-          OperandTypes.or(
-              OperandTypes.or(
-                  OperandTypes.STRING,
-                  OperandTypes.DATETIME,
-                  OperandTypes.DATE,
-                  OperandTypes.TIMESTAMP,
-                  OperandTypes.INTEGER),
-              OperandTypes.STRING_STRING),
+          OperandTypes.DATETIME
+              .or(OperandTypes.INTEGER)
+              .or(OperandTypes.STRING)
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           SqlFunctionCategory.TIMEDATE);
 
   /**
@@ -358,7 +341,9 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // For conversion to double, snowflake allows a string, numeric, or variant expr.
           // If the first argument is string, an optional format string is allowed as a second
           // argument.
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC, OperandTypes.STRING_STRING),
+          OperandTypes.NUMERIC
+              .or(OperandTypes.STRING)
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
@@ -375,7 +360,9 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // For conversion to double, snowflake allows a string, numeric, or variant expr.
           // If the first argument is string, an optional format string is allowed as a second
           // argument.
-          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC, OperandTypes.STRING_STRING),
+          OperandTypes.NUMERIC
+              .or(OperandTypes.STRING)
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 

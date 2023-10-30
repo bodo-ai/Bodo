@@ -233,11 +233,17 @@ SELECT A FROM table1 WHERE B > 4
 
 ### ORDER BY
 
-The `#!sql ORDER BY` keyword sorts the resulting dataframe in ascending
-or descending order, with `NULL` values either at the start or end
-of the column. By default, it sorts the records in ascending order
-with null values at the end. For descending order and nulls at the
-front, the `#!sql DESC` and `#!sql NULLS FIRST` keywords can be used:
+The `#!sql ORDER BY` keyword sorts the resulting DataFrame in ascending
+or descending order. By default, it sorts the records in ascending order.
+NULLs are sorted in accordance with the optional `#!sql NULLS FIRST` or
+`#!sql NULLS LAST` keywords.
+
+If the null ordering is not provided, then the default ordering depends
+on if the column is ascending or descending. For ascending order, by
+default NULL values are returned at the end, while for descending order
+nulls are returned at the front. If the order of nulls matter we strongly
+recommend explicitly providing either `#!sql NULLS FIRST` or
+`#!sql NULLS LAST`.
 
 ```sql
 SELECT <COLUMN_NAMES>
@@ -247,7 +253,7 @@ ORDER BY <ORDERED_COLUMN_NAMES> [ASC|DESC] [NULLS FIRST|LAST]
 
 For Example:
 ```sql
-SELECT A, B FROM table1 ORDER BY B, A DESC NULLS FIRST
+SELECT A, B FROM table1 ORDER BY B, A DESC NULLS LAST
 ```
 
 ***Example Usage***
