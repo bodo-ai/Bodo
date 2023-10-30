@@ -89,6 +89,7 @@ def gen_vectorized(
     array_is_scalar=False,
     dict_encoding_state_name=None,
     func_id_name=None,
+    are_arrays=None,
 ):
     """Creates an impl for a column compute function that has several inputs
        that could all be scalars, nulls, or arrays by broadcasting appropriately.
@@ -152,6 +153,8 @@ def gen_vectorized(
             is available.
         func_id_name (Optional[str]): Variable name to use for a func_id with dictionary
             encoding caching in streaming.
+        are_arrays (Optional[list[bool]]): List of bools of length args, when passed it is used
+            to specify whether to treat the corresponding arg as an array
 
     Returns:
         function: a broadcasted version of the calculation described by
@@ -210,10 +213,11 @@ def gen_vectorized(
         res_list and support_dict_encoding
     ), "Cannot use res_list with support_dict_encoding"
 
-    if array_is_scalar:
-        are_arrays = [is_array_item_array(typ) for typ in arg_types]
-    else:
-        are_arrays = [bodo.utils.utils.is_array_typ(typ, True) for typ in arg_types]
+    if are_arrays is None:
+        if array_is_scalar:
+            are_arrays = [is_array_item_array(typ) for typ in arg_types]
+        else:
+            are_arrays = [bodo.utils.utils.is_array_typ(typ, True) for typ in arg_types]
     all_scalar = not any(are_arrays)
     out_null = any(
         [propagate_null[i] for i in range(len(arg_types)) if arg_types[i] == bodo.none]
@@ -282,7 +286,7 @@ def gen_vectorized(
 
     # If all the inputs are scalar, either output None immediately or
     # compute a single scalar computation without the loop
-    if all_scalar and array_override == None:
+    if all_scalar and array_override is None:
         if out_null:
             func_text += "   return None"
         else:
@@ -606,7 +610,6 @@ def gen_vectorized(
         else:
             func_text += "   return res"
     loc_vars = {}
-
     exec_globals = {
         "bodo": bodo,
         "math": math,

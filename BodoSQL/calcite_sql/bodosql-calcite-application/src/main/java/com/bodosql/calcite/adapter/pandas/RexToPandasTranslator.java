@@ -1276,6 +1276,37 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     return visitGeneralContextFunction(fnOperation, true);
   }
 
+  /**
+   * Implementation for functions that use nested arrays.
+   *
+   * @param fnName The name of the function.
+   * @param operands The arguments to the function.
+   * @param isSingleRow Are we in a single row context?
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The generated expression.
+   */
+  protected Expr visitNestedArrayFunc(
+      String fnName,
+      List<Expr> operands,
+      boolean isSingleRow,
+      List<Pair<String, Expr>> streamingNamedArgs) {
+    switch (fnName) {
+      case "ARRAY_SIZE":
+        Expr isSingleRowLiteral = new Expr.BooleanLiteral(isSingleRow);
+        List<Expr> all_operands = new ArrayList<>(operands);
+        all_operands.add(isSingleRowLiteral);
+        return ExprKt.BodoSQLKernel("array_size", all_operands, List.of());
+      default:
+        throw new BodoSQLCodegenException(
+            String.format(Locale.ROOT, "Unsupported nested Array function: %s", fnName));
+    }
+  }
+
+  protected Expr visitNestedArrayFunc(String fnName, List<Expr> operands, boolean isSingleRow) {
+    return visitNestedArrayFunc(fnName, operands, isSingleRow, List.of());
+  }
+
   protected Expr visitGenericFuncOp(RexCall fnOperation, boolean isSingleRow) {
     String fnName = fnOperation.getOperator().toString();
     // Handle functions that do not care about nulls separately
@@ -1824,6 +1855,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "REGR_VALX":
           case "REGR_VALY":
             return getCondFuncCode(fnName, operands);
+          case "ARRAY_SIZE":
+            return visitNestedArrayFunc(fnName, operands, isSingleRow);
         }
       default:
         throw new BodoSQLCodegenException(
