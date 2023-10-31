@@ -290,4 +290,29 @@ bodo::tests::suite memory_budget_tests([] {
 
         comptroller->Reset();
     });
+
+    bodo::tests::test("test_join_only_used_in_2_pipelines", [] {
+        auto comptroller = OperatorComptroller::Default();
+        comptroller->Initialize();
+        for (int64_t p_id = 0; p_id < 6; p_id++) {
+            comptroller->SetPipelineMemoryBudget(p_id, 2 * 1024 * 1024);
+        }
+        comptroller->RegisterOperator(0, OperatorType::JOIN, 0, 5,
+                                      1.5 * 1024 * 1024);
+        comptroller->RegisterOperator(1, OperatorType::JOIN, 1, 2, 5 * 1024);
+        comptroller->RegisterOperator(3, OperatorType::JOIN, 2, 3, 5 * 1024);
+        comptroller->ComputeSatisfiableBudgets();
+
+        // Operators 1 and 3 shouldn't be affected by op-0 since the pipelines
+        // are separate. If we were to assume op-0 is "alive" in all 6 pipelines
+        // (since min max is 0, 5), operators 1 and 3 would have a much lower
+        // budget
+        bodo::tests::check(comptroller->GetOperatorBudget(1) == 1024 * 1024);
+        bodo::tests::check(comptroller->GetOperatorBudget(3) == 1024 * 1024);
+        // Operator 0 should get the entire budget.
+        bodo::tests::check(comptroller->GetOperatorBudget(0) ==
+                           2 * 1024 * 1024);
+
+        comptroller->Reset();
+    });
 });
