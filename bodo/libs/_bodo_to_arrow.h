@@ -44,7 +44,10 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
  * @brief Convert Arrow array to Bodo array_info with zero-copy.
  * The output Bodo array holds references to the Arrow array's buffers and
  * releases them when deleted. Currently, only string, dict-encoded string,
- * and numeric arrays are zero-copied.
+ * and numeric arrays are zero-copied. For decimal arrays if the result
+ * we get from arrow is not 16 byte aligned then the result isn't zero-copied.
+ * This has occasionally happened with decimal arrays that are the result of
+ * the Snowflake connector and can lead to undefined behavior in other kernels.
  *
  * @param arrow_arr Input Arrow array
  * @param array_id Identifier for an array to say two arrays are equivalent.

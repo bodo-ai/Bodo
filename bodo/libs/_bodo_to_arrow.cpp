@@ -802,21 +802,37 @@ std::shared_ptr<array_info> arrow_list_array_to_bodo(
  * buffers and releases them when deleted.
  *
  * @param arrow_decimal_arr Input Arrow Decimal128Array
+ * @param force_aligned Whether to force a 16 byte alignment
+ * for the underlying data. If this is set and the data is not 16 byte aligned
+ * this will not be zero-copy. This can occur when we get the arrow data from
+ * the Snowflake connector and is necessary because an accessing an pointer that
+ * is not properly aligned can lead to undefined behavior in other kernels,
+ * sometimes resulting in a segfault.
  * @return std::shared_ptr<array_info> Output Bodo array
  * (NULLABLE_INT_BOOL/DECIMAL type)
  */
 std::shared_ptr<array_info> arrow_decimal_array_to_bodo(
-    std::shared_ptr<arrow::Decimal128Array> arrow_decimal_arr) {
+    std::shared_ptr<arrow::Decimal128Array> arrow_decimal_arr,
+    bool force_aligned) {
     int64_t n = arrow_decimal_arr->length();
-
     // Pass Arrow null bitmap and data buffer to Bodo
     std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
         arrow_decimal_arr->null_bitmap(), arrow_decimal_arr->null_bitmap_data(),
         arrow_decimal_arr->offset(), arrow_decimal_arr->null_count(), n);
-    std::shared_ptr<BodoBuffer> data_buf_buffer = arrow_buffer_to_bodo(
-        arrow_decimal_arr->values(), (void *)arrow_decimal_arr->raw_values(),
-        n * numpy_item_size[Bodo_CTypes::DECIMAL], Bodo_CTypes::DECIMAL);
-
+    const uint8_t *raw_data = arrow_decimal_arr->raw_values();
+    int64_t n_bytes = n * numpy_item_size[Bodo_CTypes::DECIMAL];
+    std::shared_ptr<BodoBuffer> data_buf_buffer;
+    if (force_aligned && (reinterpret_cast<uintptr_t>(raw_data) % 16 != 0)) {
+        // Allocate a new 16 byte aligned buffer (default alignment is 64B, so
+        // it should always be 16B aligned)
+        data_buf_buffer = AllocateBodoBuffer(n_bytes, Bodo_CTypes::DECIMAL);
+        // Copy the data into the new buffer.
+        memcpy(data_buf_buffer->mutable_data(), raw_data, n_bytes);
+    } else {
+        data_buf_buffer =
+            arrow_buffer_to_bodo(arrow_decimal_arr->values(), (void *)raw_data,
+                                 n_bytes, Bodo_CTypes::DECIMAL);
+    }
     // get precision/scale info
     std::shared_ptr<arrow::Decimal128Type> dtype =
         std::static_pointer_cast<arrow::Decimal128Type>(
@@ -1034,7 +1050,8 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 dicts_ref_arr);
         case arrow::Type::DECIMAL128:
             return arrow_decimal_array_to_bodo(
-                std::static_pointer_cast<arrow::Decimal128Array>(arrow_arr));
+                std::static_pointer_cast<arrow::Decimal128Array>(arrow_arr),
+                /*force_aligned*/ true);
         case arrow::Type::DOUBLE:
             return arrow_numeric_array_to_bodo<arrow::DoubleArray>(
                 std::static_pointer_cast<arrow::DoubleArray>(arrow_arr),
