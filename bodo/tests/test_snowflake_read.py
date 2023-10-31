@@ -257,6 +257,57 @@ def test_array_metadata_handling_err(cursor):
 
 
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_map_metadata_handling(cursor):
+    """
+    Test that Object Columns are Properly Typed in Map
+    """
+
+    pa_fields = bodo.io.snowflake.get_schema_from_metadata(
+        cursor,
+        """
+        select null as A
+        union all
+        select OBJECT_CONSTRUCT_KEEP_NULL('a', CURRENT_DATE(), 'b', '1980-01-05'::date, 'c', null) as A
+        """,
+        None,
+        None,
+        True,
+        False,
+        False,
+    )[0]
+
+    assert len(pa_fields) == 1
+    assert pa_fields[0].equals(
+        pa.field("A", pa.map_(pa.large_string(), pa.date32()), nullable=True)
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_map_metadata_handling_err(cursor):
+    """
+    Test that an error is raised when a variant or semi-structured map
+    column has multiple types that are incompatible
+    """
+
+    with pytest.raises(
+        BodoError, match=r"has multiple value types \['DATE', 'VARCHAR'\]"
+    ):
+        bodo.io.snowflake.get_schema_from_metadata(
+            cursor,
+            """
+            select null as A
+            union all
+            select OBJECT_CONSTRUCT_KEEP_NULL('a', CURRENT_DATE(), 'b', '1980-01-05', 'c', null) as A
+            """,
+            None,
+            None,
+            True,
+            False,
+            False,
+        )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
 def test_float_array_metadata_handling(cursor):
     """
     Test that Numeric Array Columns, that may contain Integers, Floats, and Decimals
@@ -332,7 +383,10 @@ def test_float_array_metadata_handling(cursor):
     ],
 )
 def test_snowflake_runtime_upcasting_int_to_int(
-    mocker: "MockerFixture", bodo_schema, pa_schema, memory_leak_check
+    mocker: "MockerFixture",
+    bodo_schema,
+    pa_schema,
+    memory_leak_check,
 ):
     """
     Test that Bodo can handles a scenario where the compile-time
@@ -411,7 +465,10 @@ def test_snowflake_runtime_upcasting_int_to_int(
     ],
 )
 def test_snowflake_runtime_upcasting_int_to_decimal(
-    mocker: "MockerFixture", bodo_schema, pa_schema, memory_leak_check
+    mocker: "MockerFixture",
+    bodo_schema,
+    pa_schema,
+    memory_leak_check,
 ):
     """
     Test that Bodo can handles a scenario where the compile-time
@@ -740,6 +797,53 @@ def test_read_numeric_array_col(memory_leak_check):
     )
 
     check_func(impl, (query, conn), py_output=py_output)
+
+
+def test_read_map_col(memory_leak_check):
+    """
+    Basic test of reading an map of floats column from Snowflake
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
+    query = """
+    SELECT * FROM (
+        select null as A
+        union all
+        select OBJECT_CONSTRUCT_KEEP_NULL('int', 10, 'whole_dec', 10.0, 'null', null) as A
+        union all
+        select OBJECT_CONSTRUCT_KEEP_NULL('null2', null, 'float', 12.4, 'neg_float', -0.57) as A
+        union all
+        select OBJECT_CONSTRUCT_KEEP_NULL('\\u2912', '-inf'::float, 'inf\\"ity', 'inf'::float, '/\\\\/\\\\', 'nan'::float) as A
+        union all
+        select OBJECT_CONSTRUCT_KEEP_NULL('int20', 12345678901234567890, 'null3', null) as A
+        union all
+        select OBJECT_CONSTRUCT_KEEP_NULL('neg_int', -1235, 'dec', 0.01234567890123456789) as A
+    )
+    ORDER BY A
+    """
+    py_output = pd.DataFrame(
+        {
+            "a": [
+                {"int20": 12345678901234567890.0, "null3": np.nan},
+                {"int": 10.0, "whole_dec": 10.0, "null": np.nan},
+                {"null2": np.nan, "float": 12.4, "neg_float": -0.57},
+                {"neg_int": -1235.0, "dec": 0.01234567890123456789},
+                {"\u2912": -np.inf, 'inf"ity': np.inf, "/\\/\\": np.nan},
+                np.nan,
+            ]
+        }
+    )
+
+    check_func(
+        impl,
+        (query, conn),
+        py_output=py_output,
+        use_map_arrays=True,
+    )
 
 
 def test_snowflake_bodo_read_as_dict_no_table(memory_leak_check):

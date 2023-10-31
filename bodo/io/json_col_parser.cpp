@@ -346,7 +346,7 @@ void Tokenizer::skipWhitespace() {
     }
 }
 
-// --------------------------- JSON to Array Reader ---------------------------
+// -------------------------- JSON to Array Builder --------------------------
 
 /**
  * @brief Consume output from a tokenizer for an input JSON and
@@ -563,6 +563,288 @@ void parse_to_list(std::shared_ptr<arrow::ArrayBuilder> value_builder,
     }
 }
 
+/**
+ * @brief Consume output from a tokenizer for an input JSON and
+ * insert into the ArrayBuilder for the values of a single element in a
+ * MapArray
+ *
+ * @param key_builder ArrayBuilder for keys to insert output into
+ * @param value_builder ArrayBuilder for values to insert output into
+ * @param tokenizer Tokenizer to read from. Should be at the start of an array
+ * @param value_type Type of MapArray value-size contents
+ */
+void parse_to_map(std::shared_ptr<arrow::LargeStringBuilder> key_builder,
+                  std::shared_ptr<arrow::ArrayBuilder> value_builder,
+                  Tokenizer& tokenizer,
+                  const std::shared_ptr<arrow::DataType>& value_type) {
+    assert(tokenizer.current() == Token::ObjectStart);
+    auto value_id = value_type->id();
+    bool expectFieldName = true;
+
+    while (true) {
+        Token token = tokenizer.next();
+        switch (token) {
+            // Hit the end of the main array we're currently parsing
+            case Token::ObjectEnd:
+                return;
+            case Token::_Comma:
+                continue;
+            case Token::End: {
+                throw std::runtime_error(
+                    "Unexpected end of input when parsing a map column "
+                    "row: " +
+                    std::string(tokenizer.source));
+                break;
+            }
+            case Token::FieldName: {
+                if (!expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a field name when parsing a map column "
+                        "row, but expected a value: " +
+                        std::string(tokenizer.source));
+                }
+
+                arrow::Status status;
+
+                // If key has an escaped character, unescape it, write results
+                // to tokenizer.value_str and use that. Else, use source slice
+                // directly
+                if (tokenizer.value_has_unescape) {
+                    tokenizer.stringValue(tokenizer.value_str);
+                    status = key_builder->Append(tokenizer.value_str);
+                } else {
+                    status = key_builder->Append(tokenizer.value());
+                }
+
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        "Failure while parsing a key from a map element:\n" +
+                        std::string(tokenizer.source) + "\nWith error:\n" +
+                        status.ToString());
+                }
+                expectFieldName = false;
+                break;
+            }
+            case Token::Null: {
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a NULL when parsing a map column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+                auto status = value_builder->AppendNull();
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        "Failure while parsing NULL from a map element:\n" +
+                        std::string(tokenizer.source) + "\nWith error:\n" +
+                        status.ToString());
+                }
+                expectFieldName = true;
+                break;
+            }
+            case Token::True:
+            case Token::False: {
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a boolean when parsing a map column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+                if (value_id != arrow::Type::BOOL) {
+                    throw std::runtime_error(
+                        "Found an unexpected boolean value when parsing a "
+                        "map[string, " +
+                        value_type->ToString() + "] element:\n" +
+                        std::string(tokenizer.source));
+                }
+                auto bool_builder =
+                    std::static_pointer_cast<arrow::BooleanBuilder>(
+                        value_builder);
+
+                auto status = bool_builder->Append(token == Token::True);
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        "Failure while parsing a boolean from a list "
+                        "element:\n" +
+                        std::string(tokenizer.source) + "\nWith error:\n" +
+                        status.ToString());
+                }
+                expectFieldName = true;
+                break;
+            }
+            case Token::NaN:
+            case Token::Infinity:
+            case Token::NegInfinity:
+            case Token::Float: {
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a float when parsing a map column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+                if (value_id != arrow::Type::DOUBLE) {
+                    throw std::runtime_error(
+                        "Found an unexpected float value when parsing a "
+                        "map[string, " +
+                        value_type->ToString() + "] element:\n" +
+                        std::string(tokenizer.source));
+                }
+                auto double_builder =
+                    std::static_pointer_cast<arrow::DoubleBuilder>(
+                        value_builder);
+
+                auto status = double_builder->Append(tokenizer.floatValue());
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        "Failure while parsing a float from a list element:\n" +
+                        std::string(tokenizer.source) + "\nWith error:\n" +
+                        status.ToString());
+                }
+                expectFieldName = true;
+                break;
+            }
+            case Token::Integer: {
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found an integer when parsing a map column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+                if (value_id == arrow::Type::INT64) {
+                    auto int_builder =
+                        std::static_pointer_cast<arrow::Int64Builder>(
+                            value_builder);
+                    auto status = int_builder->Append(tokenizer.intValue());
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while parsing an integer from a "
+                            "map[string, int] "
+                            "element:\n" +
+                            std::string(tokenizer.source) + "\nWith error:\n" +
+                            status.ToString());
+                    }
+                } else if (value_id == arrow::Type::DOUBLE) {
+                    auto double_builder =
+                        std::static_pointer_cast<arrow::DoubleBuilder>(
+                            value_builder);
+                    auto status =
+                        double_builder->Append(tokenizer.floatValue());
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while parsing a integer from a "
+                            "map[string, float] element:\n" +
+                            std::string(tokenizer.source) + "\nWith error:\n" +
+                            status.ToString());
+                    }
+                } else {
+                    throw std::runtime_error(
+                        "Found an unexpected integer value when parsing a "
+                        "map[string, " +
+                        value_type->ToString() + "] element:\n" +
+                        std::string(tokenizer.source));
+                }
+                expectFieldName = true;
+                break;
+            }
+            case Token::String: {
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a string when parsing a map column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+                if (value_id == arrow::Type::DATE32) {
+                    auto date_builder =
+                        std::static_pointer_cast<arrow::Date32Builder>(
+                            value_builder);
+                    auto parsed =
+                        arrow::Scalar::Parse(value_type, tokenizer.value())
+                            .ValueOrDie();
+                    auto status = date_builder->AppendScalar(*parsed);
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while parsing a date from a map "
+                            "element:\n" +
+                            std::string(tokenizer.source) + "\nWith error:\n" +
+                            status.ToString());
+                    }
+                } else if (value_id == arrow::Type::TIMESTAMP) {
+                    auto timestamp_builder =
+                        std::static_pointer_cast<arrow::TimestampBuilder>(
+                            value_builder);
+                    auto parsed =
+                        arrow::Scalar::Parse(value_type, tokenizer.value())
+                            .ValueOrDie();
+                    auto status = timestamp_builder->AppendScalar(*parsed);
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while parsing a timestamp from a map "
+                            "element:\n" +
+                            std::string(tokenizer.source) + "\nWith error:\n" +
+                            status.ToString());
+                    }
+                } else if (value_id == arrow::Type::LARGE_STRING ||
+                           value_id == arrow::Type::STRING) {
+                    auto string_builder =
+                        std::static_pointer_cast<arrow::LargeStringBuilder>(
+                            value_builder);
+
+                    arrow::Status status;
+                    if (tokenizer.value_has_unescape) {
+                        tokenizer.stringValue(tokenizer.value_str);
+                        status = string_builder->Append(tokenizer.value_str);
+                    } else {
+                        status = string_builder->Append(tokenizer.value());
+                    }
+
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while parsing a string from a map "
+                            "element:\n" +
+                            std::string(tokenizer.source) + "\nWith error:\n" +
+                            status.ToString());
+                    }
+                } else {
+                    throw std::runtime_error(
+                        "Found an unexpected string value when parsing a "
+                        "map[string, " +
+                        value_type->ToString() + "] element:\n" +
+                        std::string(tokenizer.source));
+                }
+                expectFieldName = true;
+                break;
+            }
+            // TODO: Handle Nested Arrays
+            case Token::ArrayStart: {
+                throw std::runtime_error(
+                    "Found a nested array when parsing a MapArray column");
+                break;
+            }
+            // TODO: Handle Nested Objects
+            case Token::ObjectStart: {
+                throw std::runtime_error(
+                    "Found a nested object when parsing a MapArray column");
+                break;
+            }
+            case Token::Error: {
+                std::string error_msg(ErrorCodeStr[tokenizer.error()]);
+                throw std::runtime_error(
+                    "Found an error when parsing a ListArray column: " +
+                    error_msg + "\n\t" + std::string(tokenizer.source) +
+                    " at offset " + std::to_string(tokenizer.offset));
+                break;
+            }
+            default: {
+                throw std::runtime_error(
+                    "Found an invalid token when parsing a MapArray "
+                    "column:\n\t" +
+                    std::string(tokenizer.source));
+                break;
+            }
+        }
+    }
+}
+
 std::shared_ptr<arrow::Array> string_to_list_arr(
     std::shared_ptr<arrow::StringArray> in_arr,
     std::shared_ptr<arrow::DataType> in_type) {
@@ -603,4 +885,48 @@ std::shared_ptr<arrow::Array> string_to_list_arr(
     }
 
     return list_builder->Finish().ValueOrDie();
+}
+
+std::shared_ptr<arrow::Array> string_to_map_arr(
+    std::shared_ptr<arrow::StringArray> in_arr,
+    std::shared_ptr<arrow::DataType> in_type) {
+    // Extract List Types from DataType
+    // Shouldn't be a list type if constructed in Bodo
+    assert(in_type->id() == arrow::Type::MAP);
+
+    auto map_type = std::static_pointer_cast<arrow::MapType>(in_type);
+    auto value_type = map_type->item_type();
+
+    auto key_builder = std::make_shared<arrow::LargeStringBuilder>(
+        bodo::BufferPool::DefaultPtr());
+    std::shared_ptr<arrow::ArrayBuilder> value_builder =
+        arrow::MakeBuilder(value_type, bodo::BufferPool::DefaultPtr())
+            .ValueOrDie();
+    auto map_builder = std::make_unique<arrow::MapBuilder>(
+        bodo::BufferPool::DefaultPtr(), key_builder, value_builder, in_type);
+
+    Tokenizer tokenizer;
+
+    // Iterate over StringArray, Parse JSON, Validate, and Insert
+    // TODO: Is there an Iterator over StringArray contents?
+    for (int64_t i = 0; i < in_arr->length(); i++) {
+        if (in_arr->IsNull(i)) {
+            auto status = map_builder->AppendNull();
+            continue;
+        }
+
+        auto json_str = in_arr->GetView(i);
+        auto status = map_builder->Append();
+        if (!status.ok()) {
+            throw std::runtime_error("Failure while appending map: " +
+                                     status.ToString());
+        }
+
+        tokenizer.reset(json_str);
+        [[maybe_unused]] auto start_token = tokenizer.next();
+        assert(start_token == Token::ObjectStart);
+        parse_to_map(key_builder, value_builder, tokenizer, value_type);
+    }
+
+    return map_builder->Finish().ValueOrDie();
 }

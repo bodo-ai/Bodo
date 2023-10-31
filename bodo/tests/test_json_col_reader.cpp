@@ -432,6 +432,14 @@ static bodo::tests::suite tests([] {
         bodo::tests::check(list_arr->Equals(exp_list_arr));
     });
 
+    bodo::tests::test("test_string_array_invalid_unescaped_unicode", [] {
+        auto out_type = arrow::large_list(arrow::large_utf8());
+        auto arr = const_str_arr({"[\"\\u26c4\"]"});
+        bodo::tests::check_exception(
+            [&] { string_to_list_arr(arr, out_type); },
+            "Found Unescaped Unicode In Snowflake JSON String");
+    });
+
     bodo::tests::test("test_int_array", [] {
         auto arr = const_str_arr({
             // Null Outer Array
@@ -627,5 +635,117 @@ static bodo::tests::suite tests([] {
 
         auto exp_list_arr = list_builder.Finish().ValueOrDie();
         bodo::tests::check(list_arr->Equals(exp_list_arr));
+    });
+
+    // ------------------------------ Map Tests ------------------------------
+    // Note we will assume that the map code is
+    // similar to array and mainly test differences, especially around the
+    // fields
+
+    bodo::tests::test("test_empty_map", [] {
+        auto in_type = arrow::map(arrow::large_utf8(), arrow::null());
+        auto arr = const_str_arr({
+            // Null Outer Map
+            std::nullopt,
+            // Empty Map,
+            "{}",
+            // With Spacing
+            "{\n\t\n}",
+            // Only Null Inside
+            "{\"null\": null}",
+        });
+        auto map_arr = string_to_map_arr(arr, in_type);
+
+        auto key_builder = std::make_shared<arrow::LargeStringBuilder>();
+        auto value_builder = std::make_shared<arrow::NullBuilder>();
+        auto map_builder =
+            arrow::MapBuilder(bodo::BufferPool::DefaultPtr(), key_builder,
+                              value_builder, in_type);
+
+        // Null Outer Array
+        bodo::tests::check(map_builder.AppendNull().ok());
+        // Empty Outer Array
+        bodo::tests::check(map_builder.Append().ok());
+        // Empty with Spacing
+        bodo::tests::check(map_builder.Append().ok());
+        // Only Null Inside
+        bodo::tests::check(map_builder.Append().ok());
+        bodo::tests::check(key_builder->Append("null").ok());
+        bodo::tests::check(value_builder->AppendNull().ok());
+
+        auto exp_map_arr = map_builder.Finish().ValueOrDie();
+        bodo::tests::check(map_arr->Equals(exp_map_arr));
+    });
+
+    bodo::tests::test("test_mixed_map_invalid", [] {
+        // Tests that Map Doesn't Contain Multiple Inner Datatypes
+        auto arr1 = const_str_arr(
+            {"{\"test1\"  : true, \"test10\": 10, \"test24\": \"hello\"}"});
+        bodo::tests::check_exception(
+            [&] {
+                string_to_map_arr(
+                    arr1, arrow::map(arrow::large_utf8(), arrow::boolean()));
+            },
+            "Found an unexpected integer value");
+    });
+
+    bodo::tests::test("test_invalid_map_key", [] {
+        // Tests that Map Doesn't Contain a non-string Key
+        // Should be invalid in Snowflake
+        auto arr1 = const_str_arr({"{10: true}"});
+        bodo::tests::check_exception(
+            [&] {
+                string_to_map_arr(
+                    arr1, arrow::map(arrow::large_utf8(), arrow::boolean()));
+            },
+            "Found an integer when parsing a map column row, but expected a "
+            "field name");
+    });
+
+    bodo::tests::test("test_utf8_string_keys_map", [] {
+        auto out_type = arrow::map(arrow::large_utf8(), arrow::large_utf8());
+
+        auto arr = const_str_arr({
+            // Simple Test Case
+            "{\"id10\": \"id11\", \"id5\": \"id20\"}",
+            // Unicode
+            "{\"\041\": \"\", \"\x21\": \"\", \"\u26c4\": \"\", \"❄é\": \"\"}",
+            // Escape Characters
+            R"({"\"": "", "\t\n": "", "\\": ""})",
+        });
+        auto map_arr = string_to_map_arr(arr, out_type);
+
+        auto key_builder = std::make_shared<arrow::LargeStringBuilder>();
+        auto value_builder = std::make_shared<arrow::LargeStringBuilder>();
+        auto map_builder =
+            arrow::MapBuilder(bodo::BufferPool::DefaultPtr(), key_builder,
+                              value_builder, out_type);
+
+        bodo::tests::check(map_builder.Append().ok());
+        bodo::tests::check(key_builder->Append("id10").ok());
+        bodo::tests::check(value_builder->Append("id11").ok());
+        bodo::tests::check(key_builder->Append("id5").ok());
+        bodo::tests::check(value_builder->Append("id20").ok());
+
+        bodo::tests::check(map_builder.Append().ok());
+        bodo::tests::check(key_builder->Append("\041").ok());
+        bodo::tests::check(value_builder->Append("").ok());
+        bodo::tests::check(key_builder->Append("\x21").ok());
+        bodo::tests::check(value_builder->Append("").ok());
+        bodo::tests::check(key_builder->Append("\u26c4").ok());
+        bodo::tests::check(value_builder->Append("").ok());
+        bodo::tests::check(key_builder->Append("❄é").ok());
+        bodo::tests::check(value_builder->Append("").ok());
+
+        bodo::tests::check(map_builder.Append().ok());
+        bodo::tests::check(key_builder->Append("\"").ok());
+        bodo::tests::check(value_builder->Append("").ok());
+        bodo::tests::check(key_builder->Append("\t\n").ok());
+        bodo::tests::check(value_builder->Append("").ok());
+        bodo::tests::check(key_builder->Append("\\").ok());
+        bodo::tests::check(value_builder->Append("").ok());
+
+        auto exp_map_arr = map_builder.Finish().ValueOrDie();
+        bodo::tests::check(map_arr->Equals(exp_map_arr));
     });
 });

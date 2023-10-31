@@ -48,11 +48,9 @@ class SnowflakeReader : public ArrowReader {
                 std::make_shared<DictionaryBuilder>(dict, false);
         }
 
-        auto [arr_c_types, arr_array_types] =
-            get_dtypes_arr_types_from_table(get_empty_out_table());
-
+        auto empty_table = get_empty_out_table();
         this->out_batches = std::make_shared<ChunkedTableBuilder>(
-            arr_c_types, arr_array_types, dict_builders, (size_t)batch_size);
+            empty_table->schema(), dict_builders, (size_t)batch_size);
     }
 
     virtual ~SnowflakeReader() { Py_XDECREF(sf_conn); }
