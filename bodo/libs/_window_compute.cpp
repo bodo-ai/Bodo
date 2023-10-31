@@ -81,9 +81,22 @@ void min_row_number_filter_window_computation_no_sort(
         // create array to store min/max value
         std::shared_ptr<array_info> data_col = alloc_array_top_level(
             num_groups, 1, 1, orderby_arr->arr_type, orderby_arr->dtype);
-        // Initialize the index column. This is 0 initialized and will
-        // not initialize the null values.
-        aggfunc_output_initialize(idx_col, Bodo_FTypes::count, use_sql_rules);
+        // Initialize the index column.
+        if (ftype == Bodo_FTypes::idxmin || ftype == Bodo_FTypes::idxmax) {
+            // Initialize indices to first row in group to handle all NA case in
+            // idxmin/idxmax.
+            for (size_t group_idx = 0; group_idx < idx_col->length;
+                 group_idx++) {
+                getv<int64_t>(idx_col, group_idx) =
+                    grp_info.group_to_first_row[group_idx];
+            }
+        } else {
+            // This is 0 initialized and will not initialize the null values.
+            // idxmin_na_first/idxmax_na_first handle the all NA case during
+            // computation.
+            aggfunc_output_initialize(idx_col, Bodo_FTypes::count,
+                                      use_sql_rules);
+        }
         std::vector<std::shared_ptr<array_info>> aux_cols = {idx_col};
         // Initialize the min/max column
         if (ftype == Bodo_FTypes::idxmax ||
