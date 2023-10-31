@@ -39,6 +39,7 @@ def test_window_df():
     O: Time array.
     P: Nullable uint8 array which when grouped by D will have an all-null partition.
     Q: Nullable float array which when grouped by D will have a partition containing NaNs.
+    R: Nullable float array with all NA values to test all NA corner cases.
     """
     return pd.DataFrame(
         {
@@ -91,6 +92,9 @@ def test_window_df():
                 dtype=pd.UInt8Dtype(),
             ),
             "Q": nullable_float_arr_maker(list(range(15)), [12, 14], [5, 7]),
+            "R": nullable_float_arr_maker(
+                list(range(15)), list(range(15)), list(range(15))
+            ),
         }
     )
 
@@ -155,6 +159,21 @@ def permute_df_and_answer(df, answer):
                 ),
             ),
             id="min_row_number_filter",
+        ),
+        pytest.param(
+            (
+                ["A"],
+                (("min_row_number_filter",),),
+                ("R",),
+                (False,),
+                ("last",),
+                pd.DataFrame(
+                    {
+                        "AGG_OUTPUT_0": [True] * 3 + [False] * 12,
+                    }
+                ),
+            ),
+            id="min_row_number_filter_all_NA",
         ),
         pytest.param(
             (
@@ -1056,7 +1075,10 @@ def test_window(test_window_df, window_args, memory_leak_check):
 
     # Shuffle the order of the rows and the answer (can disable during local testing
     # for convenience of debugging)
-    test_window_df, answer = permute_df_and_answer(test_window_df, answer)
+    # Avoid shuffling for min_row_number_filter_all_NA test since answer won't be
+    # consistent
+    if not (funcs == (("min_row_number_filter",),) and orderby == ("R",)):
+        test_window_df, answer = permute_df_and_answer(test_window_df, answer)
 
     check_func(
         impl,
