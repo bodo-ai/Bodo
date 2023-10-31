@@ -17,26 +17,18 @@ from bodo.libs.array import (
     delete_table,
     py_data_to_cpp_table,
 )
-from bodo.libs.null_arr_ext import null_array_type
 from bodo.utils.typing import (
     BodoError,
     MetaType,
+    dtype_to_array_type,
     error_on_nested_arrays,
-    get_common_bodosql_integer_arr_type,
+    get_common_scalar_dtype,
     get_overload_const_bool,
-    is_bodosql_integer_arr_type,
-    is_nullable,
+    is_nullable_ignore_sentinals,
     is_overload_bool,
     is_overload_none,
-    to_nullable_type,
     unwrap_typeref,
 )
-
-
-def _use_nullable_arr(
-    arr_type: types.ArrayCompatible, use_nullable: bool
-) -> types.ArrayCompatible:
-    return to_nullable_type(arr_type) if use_nullable else arr_type
 
 
 class UnionStateType(types.Type):
@@ -122,15 +114,11 @@ class UnionStateType(types.Type):
             in_col_types = [
                 in_table_type.arr_types[i] for in_table_type in self.in_table_types
             ]
-            is_nullable_col = any(
-                col_type == null_array_type or is_nullable(col_type)
+            is_nullable_out_col = any(
+                col_type == bodo.null_array_type
+                or is_nullable_ignore_sentinals(col_type)
                 for col_type in in_col_types
             )
-            in_col_types = [
-                _use_nullable_arr(col_type, is_nullable_col)
-                for col_type in in_col_types
-                if col_type != null_array_type
-            ]
 
             if len(in_col_types) == 0:
                 out_arr_types.append(bodo.null_array_type)
@@ -150,18 +138,16 @@ class UnionStateType(types.Type):
                         )
                 out_arr_types.append(bodo.dict_str_arr_type)
 
-            elif all(is_bodosql_integer_arr_type(t) for t in in_col_types):
-                out_arr_types.append(
-                    _use_nullable_arr(
-                        get_common_bodosql_integer_arr_type(in_col_types),
-                        is_nullable_col,
-                    )
-                )
-
             else:
-                raise BodoError(
-                    f"Unable to union table with columns of incompatible types. Found types {in_col_types} in column {i}."
+                dtype, _ = get_common_scalar_dtype(
+                    [t.dtype for t in in_col_types], allow_downcast=True
                 )
+                if dtype is None:
+                    raise BodoError(
+                        f"Unable to union table with columns of incompatible types. Found types {in_col_types} in column {i}."
+                    )
+
+                out_arr_types.append(dtype_to_array_type(dtype, is_nullable_out_col))
 
         return TableType(tuple(out_arr_types))
 

@@ -1378,8 +1378,10 @@ def get_common_broadcasted_type(arg_types, func_name):
         if len(scalar_dtypes) == 0:
             return bodo.none
 
-        common_dtype, success = bodo.utils.typing.get_common_scalar_dtype(scalar_dtypes)
-        if not success:
+        common_dtype, _ = bodo.utils.typing.get_common_scalar_dtype(
+            scalar_dtypes, allow_downcast=True
+        )
+        if common_dtype is None:
             raise_bodo_error(
                 f"Cannot call {func_name} on columns with different dtypes"
             )

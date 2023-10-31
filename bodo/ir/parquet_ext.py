@@ -35,11 +35,7 @@ from bodo.io.fs_io import (
     get_storage_options_pyobject,
     storage_options_dict_type,
 )
-from bodo.io.helpers import (
-    is_nullable,
-    numba_to_pyarrow_schema,
-    pyarrow_schema_type,
-)
+from bodo.io.helpers import numba_to_pyarrow_schema, pyarrow_schema_type
 from bodo.io.parquet_pio import (
     ParquetFileInfo,
     get_filters_pyobject,
@@ -59,7 +55,11 @@ from bodo.transforms.table_column_del_pass import (
     remove_dead_column_extensions,
 )
 from bodo.utils.transform import get_const_value
-from bodo.utils.typing import BodoError, FilenameType
+from bodo.utils.typing import (
+    BodoError,
+    FilenameType,
+    is_nullable_ignore_sentinals,
+)
 from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
     inlined_check_and_propagate_cpp_exception,
@@ -690,9 +690,9 @@ def pq_reader_params(
     # this, we first need to determine the index of each selected column in the original
     # type and check if that type is nullable.
     nullable_cols = [
-        int(is_nullable(out_types[col_indices_map[col_in_idx]]))
+        int(is_nullable_ignore_sentinals(out_types[col_indices_map[col_in_idx]]))
         if col_in_idx != index_column_index
-        else int(is_nullable(index_column_type))
+        else int(is_nullable_ignore_sentinals(index_column_type))
         for col_in_idx in selected_cols
     ]
 

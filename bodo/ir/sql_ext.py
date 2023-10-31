@@ -39,11 +39,7 @@ from bodo import objmode
 from bodo.hiframes.table import Table, TableType
 from bodo.io import arrow_cpp
 from bodo.io.arrow_reader import ArrowReaderType
-from bodo.io.helpers import (
-    is_nullable,
-    map_cpp_to_py_table_column_idxs,
-    pyarrow_schema_type,
-)
+from bodo.io.helpers import map_cpp_to_py_table_column_idxs, pyarrow_schema_type
 from bodo.io.parquet_pio import ParquetPredicateType
 from bodo.ir.filter import Filter, supported_funcs_map
 from bodo.libs.array import (
@@ -63,6 +59,7 @@ from bodo.transforms.table_column_del_pass import (
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_str,
+    is_nullable_ignore_sentinals,
     is_overload_constant_str,
 )
 from bodo.utils.utils import (
@@ -113,10 +110,12 @@ class SnowflakeReadParams(NamedTuple):
             if col_typs[i] == dict_str_arr_type
         ]
 
-        nullable_cols = [int(is_nullable(col_typs[i])) for i in out_used_cols]
+        nullable_cols = [
+            int(is_nullable_ignore_sentinals(col_typs[i])) for i in out_used_cols
+        ]
         # Handle if we need to append an index
         if index_column_name:
-            nullable_cols.append(int(is_nullable(index_column_type)))
+            nullable_cols.append(int(is_nullable_ignore_sentinals(index_column_type)))
         snowflake_dict_cols_array = np.array(snowflake_dict_cols, dtype=np.int32)
         nullable_cols_array = np.array(nullable_cols, dtype=np.int32)
 
@@ -1406,7 +1405,9 @@ def _gen_iceberg_reader_chunked_py(
     selected_cols: List[int] = [
         pyarrow_schema.get_field_index(col_names[i]) for i in out_used_cols
     ]
-    nullable_cols = [int(is_nullable(col_typs[i])) for i in selected_cols]
+    nullable_cols = [
+        int(is_nullable_ignore_sentinals(col_typs[i])) for i in selected_cols
+    ]
 
     # pass indices to C++ of the selected string columns that are to be read
     # in dictionary-encoded format
@@ -1610,7 +1611,9 @@ def _gen_sql_reader_py(
             if i != merge_into_row_id_col_idx
         ]
         selected_cols_map = {c: i for i, c in enumerate(selected_cols)}
-        nullable_cols = [int(is_nullable(col_typs[i])) for i in selected_cols]
+        nullable_cols = [
+            int(is_nullable_ignore_sentinals(col_typs[i])) for i in selected_cols
+        ]
 
         # pass indices to C++ of the selected string columns that are to be read
         # in dictionary-encoded format

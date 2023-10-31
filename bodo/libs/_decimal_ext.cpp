@@ -4,12 +4,19 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
 #include <iostream>
+
 #include "_bodo_common.h"
 #include "arrow/util/bit_util.h"
 #include "arrow/util/decimal.h"
 
 // using scale 18 when converting from Python Decimal objects (same as Spark)
 #define PY_DECIMAL_SCALE 18
+
+#pragma pack(1)
+struct decimal_value {
+    int64_t low;
+    int64_t high;
+};
 
 std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
                                   int const& scale) {
@@ -45,10 +52,24 @@ std::string int128_decimal_to_std_string(__int128 const& val,
     return decimal_to_std_string(arrow_decimal, scale);
 }
 
-double decimal_to_double(__int128 const& val) {
-    int scale = 18;
-    std::string str = int128_decimal_to_std_string(val, scale);
-    return std::stod(str);
+double decimal_to_double(__int128 const& val, uint8_t scale) {
+    // TODO: Zero-copy (cast __int128 to int64[2] for Decimal128 constructor)
+    // Can't figure out how to do this in C++
+    arrow::Decimal128 dec((int64_t)(val >> 64), (int64_t)(val));
+    return dec.ToDouble(scale);
+}
+
+double decimal_to_double_py_entry(decimal_value val, uint8_t scale) {
+    auto high = static_cast<uint64_t>(val.high);
+    auto low = static_cast<uint64_t>(val.low);
+    return decimal_to_double((static_cast<__int128>(high) << 64) | low, scale);
+}
+
+decimal_value int64_to_decimal(int64_t value) {
+    arrow::Decimal128 dec(value);
+    auto low_bits = dec.low_bits();
+    auto high_bits = dec.high_bits();
+    return {static_cast<int64_t>(low_bits), high_bits};
 }
 
 void* box_decimal_array(int64_t n, const uint8_t* data,
@@ -56,12 +77,6 @@ void* box_decimal_array(int64_t n, const uint8_t* data,
 void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
                          uint8_t* null_bitmap);
 void unbox_decimal(PyObject* obj, uint8_t* data);
-
-#pragma pack(1)
-struct decimal_value {
-    int64_t low;
-    int64_t high;
-};
 
 void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
                     int64_t* len_ptr, int scale);
@@ -106,8 +121,12 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, box_decimal_array);
     SetAttrStringFromVoidPtr(m, unbox_decimal_array);
     SetAttrStringFromVoidPtr(m, unbox_decimal);
+
     SetAttrStringFromVoidPtr(m, decimal_to_str);
     SetAttrStringFromVoidPtr(m, str_to_decimal);
+    SetAttrStringFromVoidPtr(m, decimal_to_double_py_entry);
+    SetAttrStringFromVoidPtr(m, int64_to_decimal);
+
     SetAttrStringFromVoidPtr(m, decimal_cmp_eq);
     SetAttrStringFromVoidPtr(m, decimal_cmp_ne);
     SetAttrStringFromVoidPtr(m, decimal_cmp_gt);

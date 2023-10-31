@@ -79,6 +79,12 @@ def is_nullable(typ):
     )
 
 
+def is_nullable_ignore_sentinals(typ) -> bool:
+    return bodo.utils.utils.is_array_typ(typ, False) and (
+        not isinstance(typ, types.Array)
+    )
+
+
 def is_str_arr_type(t):
     """check if 't' is a regular or dictionary-encoded string array type
     TODO(ehsan): add other string types like np str array when properly supported
@@ -1738,14 +1744,40 @@ def is_common_scalar_dtype(scalar_types):
     """Returns True if a list of scalar types share a common
     Numpy type or are equal.
     """
-    (_, found_common_typ) = get_common_scalar_dtype(scalar_types)
-    return found_common_typ
+    common_type, _ = get_common_scalar_dtype(scalar_types)
+    return common_type is not None
 
 
-def get_common_scalar_dtype(scalar_types):
+# Number of significant digits in every major integer size
+# Keys are Numba integer scalar types
+# Values are the number of significant digits (in base 10) that always fit
+# in the specified integer type
+# Always assuming signed integers
+SIGS_IN_INT = {
+    types.int64: 18,
+    types.int32: 9,
+    types.int16: 4,
+    types.int8: 2,
+}
+
+
+def get_common_scalar_dtype(
+    scalar_types: list[types.Type],
+    allow_downcast: bool = False,
+) -> tuple[Optional[types.Type], bool]:
     """
-    Attempts to unify the list of passed in dtypes. Returns the tuple (common_type, True) on succsess,
-    and (None, False) on failure."""
+    Attempts to unify the list of passed in dtypes, notifying if a downcast
+    has occurred.
+
+    Args:
+        scalar_types: All dtypes to unify
+        allow_downcast: Whether to allow for downcasts, notifying if it occurs.
+            If false, will not allow downcasts and just return None, False
+
+    Returns:
+        types.Type | None: Unified Dtype or None if not possible
+        bool: Whether a downcast has occurred or not (always False when allow_downcast=False)
+    """
     scalar_types = [types.unliteral(a) for a in scalar_types]
 
     if len(scalar_types) == 0:
@@ -1753,7 +1785,7 @@ def get_common_scalar_dtype(scalar_types):
             "Internal error, length of argument passed to get_common_scalar_dtype scalar_types is 0"
         )
     if all(t == bodo.null_dtype for t in scalar_types):
-        return (bodo.null_dtype, True)
+        return (bodo.null_dtype, False)
     # bodo.null_dtype can be cast to any type so remove it from the list.
     scalar_types = [t for t in scalar_types if t != bodo.null_dtype]
     try:
@@ -1763,7 +1795,7 @@ def get_common_scalar_dtype(scalar_types):
         # If we get an object dtype we do not have a common type.
         # Otherwise, the types can be used together
         if common_dtype != object:
-            return (numba.np.numpy_support.from_dtype(common_dtype), True)
+            return (numba.np.numpy_support.from_dtype(common_dtype), False)
 
     # If we have a Bodo or Numba type that isn't implemented in
     # Numpy, we will get a NumbaNotImplementedError
@@ -1781,7 +1813,7 @@ def get_common_scalar_dtype(scalar_types):
         )
         for t in scalar_types
     ):
-        return (bodo.pd_datetime_tz_naive_type, True)
+        return (bodo.pd_datetime_tz_naive_type, False)
 
     if all(
         t
@@ -1791,21 +1823,76 @@ def get_common_scalar_dtype(scalar_types):
         )
         for t in scalar_types
     ):
-        return (bodo.timedelta64ns, True)
+        return (bodo.timedelta64ns, False)
 
-    # If one of the types is Decimal128Type, then all values must be integers/floats
-    if any([isinstance(t, bodo.Decimal128Type) for t in scalar_types]):
-        if all(
-            [isinstance(t, (types.Number, bodo.Decimal128Type)) for t in scalar_types]
+    # If all are Numeric types and one is Decimal128Type, then:
+    # - We attempt to combine lossless-ly and reduce to closest non-Decimal type
+    # - If too large, we default to closes Decimal128 type expecting lossy conversion
+    if any(isinstance(t, bodo.Decimal128Type) for t in scalar_types):
+        if any(
+            not isinstance(t, (types.Number, bodo.Decimal128Type)) for t in scalar_types
         ):
-            return (bodo.Decimal128Type(38, 18), True)
-        return (None, False)
+            return None, False
+
+        # First, determine the max # of digits needed to store the
+        # digits before and after the decimal place
+        # Only for Decimal and Integers, Floats are handled after
+        max_float = None
+        num_before_digits = 0
+        scale = 0
+
+        for t in scalar_types:
+            if isinstance(t, types.Float):
+                max_float = t if max_float is None else max(max_float, t)
+            elif isinstance(t, types.Integer):
+                num_before_digits = max(num_before_digits, SIGS_IN_INT[t])
+            else:
+                assert isinstance(t, bodo.Decimal128Type)
+                num_before_digits = max(num_before_digits, t.precision - t.scale)
+                scale = max(scale, t.scale)
+
+        precision = num_before_digits + scale
+        # Precision can be at most 38
+        # TODO: What to do if precision > 38. For example, with input Decimal128(38, 0) and Decimal128(38, 18)
+        if precision > 38:
+            out = (
+                types.float64
+                if max_float is not None
+                else bodo.Decimal128Type(38, scale)
+            )
+            return (out, True) if allow_downcast else (None, False)
+        elif precision <= 18 and scale == 0:
+            if precision <= 2:
+                base_out = types.int8
+            elif precision <= 4:
+                base_out = types.int16
+            elif precision <= 9:
+                base_out = types.int32
+            else:
+                base_out = types.int64
+        # 23 bits for float32 mantissa -> 6 sig figs
+        elif precision <= 6:
+            base_out = types.float32
+        # 52 bits for float64 mantissa -> 15 sig figs
+        elif precision <= 15:
+            base_out = types.float64
+        else:
+            base_out = bodo.Decimal128Type(precision, scale)
+
+        if max_float is None:
+            return (base_out, False)
+
+        if allow_downcast and isinstance(base_out, bodo.Decimal128Type):
+            return (types.float64, True)
+
+        # Combine max_float (float) and base_out (float or int) types
+        return get_common_scalar_dtype([max_float, base_out])
 
     # If we don't have a common type, then all types need to be equal.
     # See: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-identical
     grouped_types = itertools.groupby(scalar_types)
     if next(grouped_types, True) and not next(grouped_types, False):
-        return (scalar_types[0], True)
+        return (scalar_types[0], False)
 
     return (None, False)
 
@@ -2294,7 +2381,7 @@ def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
     are manually supported.
     """
     # TODO: Support more types
-    # All tests excpet lhs: date are currently marked as slow
+    # All tests except lhs: date are currently marked as slow
     if lhs_scalar_typ == types.unicode_type:  # pragma: no cover
         # Cast is supported between string and timestamp
         return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)

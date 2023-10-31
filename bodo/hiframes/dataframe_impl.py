@@ -4760,8 +4760,8 @@ def overload_dataframe_melt(
     value_dtypes = [frame.data[i].dtype for i in value_idxs]
     value_idxs = np.array(value_idxs, dtype=np.int64)
     id_idxs = np.array(id_idxs, dtype=np.int64)
-    _, can_unify = bodo.utils.typing.get_common_scalar_dtype(value_dtypes)
-    if not can_unify:
+    unified, _ = bodo.utils.typing.get_common_scalar_dtype(value_dtypes)
+    if unified is None:
         raise BodoError(
             "DataFrame.melt(): columns selected in 'value_vars' must have a unifiable type."
         )

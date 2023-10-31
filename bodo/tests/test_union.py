@@ -97,11 +97,7 @@ def test_union_nullable_boolean(memory_leak_check):
 
     def impl(df1):
         # Create df2 in JIT so we keep the type as a non-nullable boolean.
-        df2 = pd.DataFrame(
-            {
-                "A": np.zeros(6, dtype="bool"),
-            }
-        )
+        df2 = pd.DataFrame({"A": np.zeros(6, dtype="bool")})
         return bodo.hiframes.pd_dataframe_ext.union_dataframes(
             (df1, df2), False, new_cols_tup
         )
@@ -132,28 +128,145 @@ def test_stream_union_integer_promotion(memory_leak_check):
     - Non-null Integer Promotion
     - Null and non-null Integer Promotion
     - Non-null, nullable, and null array with promotion
+
+    Logic is based on investigation from:
+    https://bodo.atlassian.net/wiki/spaces/B/pages/1474134034/Numeric+Casting+Investigation+for+Union
     """
 
-    non_null_int8_arr = types.Array(types.int8, 1, "C")
+    nn_int8_arr = types.Array(types.int8, 1, "C")
     null_int8_arr = bodo.IntegerArrayType(types.int8)
-    non_null_int32_arr = types.Array(types.int32, 1, "C")
+    nn_int32_arr = types.Array(types.int32, 1, "C")
     null_int32_arr = bodo.IntegerArrayType(types.int32)
-    non_null_int64_arr = types.Array(types.int64, 1, "C")
+    nn_int64_arr = types.Array(types.int64, 1, "C")
     null_int64_arr = bodo.IntegerArrayType(types.int64)
 
     state = UnionStateType(
         in_table_types=(
-            TableType((non_null_int32_arr, null_int8_arr, non_null_int64_arr)),
-            TableType((non_null_int8_arr, non_null_int32_arr, bodo.null_array_type)),
-            TableType((non_null_int64_arr, null_int8_arr, null_int32_arr)),
+            TableType((nn_int32_arr, null_int8_arr, nn_int64_arr)),
+            TableType((nn_int8_arr, nn_int32_arr, bodo.null_array_type)),
+            TableType((nn_int64_arr, null_int8_arr, null_int32_arr)),
         )
     )
 
     assert state.out_table_type == TableType(
         (
-            non_null_int64_arr,
+            nn_int64_arr,
             null_int32_arr,
             null_int64_arr,
+        )
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only run on 1 rank")
+def test_stream_union_float_promotion(memory_leak_check):
+    """
+    Test Union Casting between:
+    - Floats
+    - Integer and Float
+
+    Logic is based on investigation from:
+    https://bodo.atlassian.net/wiki/spaces/B/pages/1474134034/Numeric+Casting+Investigation+for+Union
+    but assuming float == Snowflake Float != Snowflake Number
+    so can never cast float => decimal
+    """
+
+    # Float and Integer + Float Tests
+    nn_int8_arr = types.Array(types.int8, 1, "C")
+    null_int32_arr = bodo.IntegerArrayType(types.int32)
+    null_int64_arr = bodo.IntegerArrayType(types.int64)
+    nn_f32_arr = types.Array(types.float32, 1, "C")
+    null_f64_arr = bodo.FloatingArrayType(types.float64)
+
+    state = UnionStateType(
+        in_table_types=(
+            TableType((nn_f32_arr, nn_f32_arr, nn_f32_arr, null_f64_arr)),
+            TableType((null_f64_arr, nn_int8_arr, null_int32_arr, null_int64_arr)),
+        )
+    )
+
+    assert state.out_table_type == TableType(
+        (
+            null_f64_arr,
+            nn_f32_arr,
+            null_f64_arr,
+            null_f64_arr,
+        )
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only run on 1 rank")
+def test_stream_union_decimal_promotion(memory_leak_check):
+    """
+    Test Union Casting between:
+    - Decimal
+    - Integer and Decimal
+    - Integer, Float, and Decimal
+
+    Logic is based on investigation from:
+    https://bodo.atlassian.net/wiki/spaces/B/pages/1474134034/Numeric+Casting+Investigation+for+Union
+    but assuming:
+    - float == Snowflake Float != Snowflake Number
+        In general, cast float => decimal is unsafe
+        (since float can have values outside decimals range)
+    - Truncation of integer + decimal => float allowed
+        Decimal has at most 38 sig-figs, float has up to 15, integer 18
+    """
+
+    state = UnionStateType(
+        in_table_types=(
+            TableType(
+                (
+                    bodo.DecimalArrayType(12, 5),
+                    bodo.DecimalArrayType(15, 6),
+                    bodo.DecimalArrayType(16, 0),
+                    bodo.IntegerArrayType(types.int32),
+                    types.Array(types.float32, 1, "C"),
+                    bodo.FloatingArrayType(types.float64),
+                )
+            ),
+            TableType(
+                (
+                    bodo.DecimalArrayType(15, 6),
+                    bodo.DecimalArrayType(12, 5),
+                    bodo.IntegerArrayType(types.int64),
+                    bodo.DecimalArrayType(26, 0),
+                    bodo.DecimalArrayType(15, 6),
+                    bodo.DecimalArrayType(38, 18),
+                )
+            ),
+            TableType(
+                (
+                    bodo.DecimalArrayType(25, 0),
+                    bodo.DecimalArrayType(15, 14),
+                    types.Array(types.int32, 1, "C"),
+                    types.Array(types.int8, 1, "C"),
+                    bodo.IntegerArrayType(types.int32),
+                    bodo.DecimalArrayType(38, 4),
+                )
+            ),
+        )
+    )
+
+    assert state.out_table_type == TableType(
+        (
+            # All sources are decimal, so continue as decimal
+            # Max Scale=6, Max Non-Scale=25
+            bodo.DecimalArrayType(31, 6),
+            # All sources are decimal, so continue as decimal
+            # This is not converted to float64 for Numeric safety
+            bodo.DecimalArrayType(23, 14),
+            # All are decimal with 0 scale or integer
+            # Scale=0, Max Non-Scale=16 => int64
+            bodo.IntegerArrayType(types.int64),
+            # All are decimal with 0 scale or integer
+            # Scale=0, Max Non-Scale=26 which is above max int size
+            bodo.DecimalArrayType(26, 0),
+            # Merging a float, so must cast to float at end
+            # Max Precision=15 => float64
+            bodo.FloatingArrayType(types.float64),
+            # Merging a float, so must cast to float at end
+            # Max Precision=38 => overflow but truncate to float64
+            bodo.FloatingArrayType(types.float64),
         )
     )
 
