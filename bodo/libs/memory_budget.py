@@ -16,9 +16,6 @@ ll.add_symbol("register_operator", memory_budget_cpp.register_operator)
 ll.add_symbol(
     "compute_satisfiable_budgets", memory_budget_cpp.compute_satisfiable_budgets
 )
-ll.add_symbol(
-    "delete_operator_comptroller", memory_budget_cpp.delete_operator_comptroller
-)
 ll.add_symbol("reduce_operator_budget", memory_budget_cpp.reduce_operator_budget)
 ll.add_symbol("increase_operator_budget", memory_budget_cpp.increase_operator_budget)
 
@@ -132,26 +129,6 @@ def compute_satisfiable_budgets(typingctx):
         )
         fn_typ = cgutils.get_or_insert_function(
             builder.module, fnty, name="compute_satisfiable_budgets"
-        )
-        builder.call(fn_typ, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return
-
-    sig = types.none()
-    return sig, codegen
-
-
-@intrinsic
-def delete_operator_comptroller(typingctx):
-    """Wrapper for delete_operator_comptroller in _memory_budget.cpp"""
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [],
-        )
-        fn_typ = cgutils.get_or_insert_function(
-            builder.module, fnty, name="delete_operator_comptroller"
         )
         builder.call(fn_typ, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)

@@ -19,7 +19,6 @@ def test_memory_budget(memory_leak_check):
         bodo.libs.memory_budget.compute_satisfiable_budgets()
         bodo.libs.memory_budget.reduce_operator_budget(0, 0)
         bodo.libs.memory_budget.increase_operator_budget(1)
-        bodo.libs.memory_budget.delete_operator_comptroller()
 
     # This test doesn't assert anything, and just checks for compilation right
     # now.

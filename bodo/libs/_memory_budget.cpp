@@ -75,19 +75,19 @@ std::string BytesToHumanReadableString(size_t bytes) {
 
 void OperatorComptroller::Initialize() {
     this->current_pipeline_id = 0;
+
+    this->debug_level = 0;
     if (char* debug_level_env_ =
             std::getenv("BODO_MEMORY_BUDGETS_DEBUG_LEVEL")) {
         this->debug_level = static_cast<size_t>(std::stoi(debug_level_env_));
     }
+
+    this->memory_usage_fraction = BODO_MEMORY_BUDGET_DEFAULT_USAGE_FRACTION;
     if (char* mem_percent_env_ =
             std::getenv("BODO_MEMORY_BUDGETS_USAGE_PERCENT")) {
         this->memory_usage_fraction =
             static_cast<double>(std::stoi(mem_percent_env_) / 100.0);
     }
-}
-
-void OperatorComptroller::Reset() {
-    this->current_pipeline_id = UNINITIALIZED_PIPELINE_ID;
 
     this->pipeline_remaining_budget.clear();
     this->pipeline_to_remaining_operator_ids.clear();
@@ -97,8 +97,6 @@ void OperatorComptroller::Reset() {
 
     this->num_pipelines = 0;
     this->num_operators = 0;
-    this->debug_level = 0;
-    this->memory_usage_fraction = BODO_MEMORY_BUDGET_DEFAULT_USAGE_FRACTION;
 }
 
 void OperatorComptroller::SetPipelineMemoryBudget(int64_t pipeline_id,
@@ -661,8 +659,6 @@ void compute_satisfiable_budgets() {
     OperatorComptroller::Default()->ComputeSatisfiableBudgets();
 }
 
-void delete_operator_comptroller() { OperatorComptroller::Default()->Reset(); }
-
 PyMODINIT_FUNC PyInit_memory_budget_cpp(void) {
     PyObject* m;
     MOD_DEF(m, "memory_budget", "No docs", NULL);
@@ -677,6 +673,5 @@ PyMODINIT_FUNC PyInit_memory_budget_cpp(void) {
     SetAttrStringFromVoidPtr(m, reduce_operator_budget);
     SetAttrStringFromVoidPtr(m, increase_operator_budget);
     SetAttrStringFromVoidPtr(m, compute_satisfiable_budgets);
-    SetAttrStringFromVoidPtr(m, delete_operator_comptroller);
     return m;
 }

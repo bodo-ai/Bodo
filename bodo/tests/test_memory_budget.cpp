@@ -7,19 +7,9 @@ bodo::tests::suite memory_budget_tests([] {
     bodo::tests::after_each([] { unsetenv("BODO_USE_MEMORY_BUDGETS"); });
 
     bodo::tests::test("test_exception_if_increment_called_before_init", [] {
-        auto comptroller = OperatorComptroller::Default();
-        bodo::tests::check_exception(
-            [&] { comptroller->IncrementPipelineID(); },
-            "Initialize() was not called");
-    });
-    bodo::tests::test("test_exception_if_increment_called_after_reset", [] {
-        auto comptroller = OperatorComptroller::Default();
-        comptroller->Initialize();
-        comptroller->IncrementPipelineID();
-        comptroller->Reset();
-        bodo::tests::check_exception(
-            [&] { comptroller->IncrementPipelineID(); },
-            "Initialize() was not called");
+        OperatorComptroller comptroller;
+        bodo::tests::check_exception([&] { comptroller.IncrementPipelineID(); },
+                                     "Initialize() was not called");
     });
     bodo::tests::test("test_exception_if_invalid_start_end_pipeline_range", [] {
         auto comptroller = OperatorComptroller::Default();
@@ -40,7 +30,6 @@ bodo::tests::suite memory_budget_tests([] {
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 100);
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 100);
-        comptroller->Reset();
     });
 
     bodo::tests::test("test_1_op_unsatisfiable_estimate", [] {
@@ -50,7 +39,6 @@ bodo::tests::suite memory_budget_tests([] {
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 200);
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 100);
-        comptroller->Reset();
     });
 
     bodo::tests::test("test_2_ops_equal_unsatisfiable_estimates", [] {
@@ -62,7 +50,6 @@ bodo::tests::suite memory_budget_tests([] {
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
         bodo::tests::check(comptroller->GetOperatorBudget(1) == 50);
-        comptroller->Reset();
     });
     bodo::tests::test("test_2_ops_unequal_satisfiable_estimates", [] {
         auto comptroller = OperatorComptroller::Default();
@@ -73,7 +60,6 @@ bodo::tests::suite memory_budget_tests([] {
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 75);
         bodo::tests::check(comptroller->GetOperatorBudget(1) == 25);
-        comptroller->Reset();
     });
     bodo::tests::test("test_1_ops_2_pipelines_satisfiable", [] {
         auto comptroller = OperatorComptroller::Default();
@@ -83,7 +69,6 @@ bodo::tests::suite memory_budget_tests([] {
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 100);
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 100);
-        comptroller->Reset();
     });
     bodo::tests::test("test_1_ops_2_pipelines_unsatisfiable", [] {
         auto comptroller = OperatorComptroller::Default();
@@ -93,7 +78,6 @@ bodo::tests::suite memory_budget_tests([] {
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 1, 100);
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
-        comptroller->Reset();
     });
 
     bodo::tests::test("test_2_ops_2_pipelines_unsatisfiable", [] {
@@ -106,7 +90,6 @@ bodo::tests::suite memory_budget_tests([] {
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
         bodo::tests::check(comptroller->GetOperatorBudget(1) == 50);
-        comptroller->Reset();
     });
 
     bodo::tests::test("test_reduce_budget", [] {
@@ -122,8 +105,6 @@ bodo::tests::suite memory_budget_tests([] {
         // Check that increasing the budget via ReduceOperatorBudget is illegal
         comptroller->ReduceOperatorBudget(0, 75);
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
-
-        comptroller->Reset();
     });
 
     bodo::tests::test("test_increase_budget", [] {
@@ -135,7 +116,6 @@ bodo::tests::suite memory_budget_tests([] {
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
         comptroller->IncreaseOperatorBudget(0);
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 100);
-        comptroller->Reset();
     });
 
     bodo::tests::test(
@@ -152,7 +132,6 @@ bodo::tests::suite memory_budget_tests([] {
             comptroller->IncreaseOperatorBudget(1);
             bodo::tests::check(comptroller->GetOperatorBudget(0) == 25);
             bodo::tests::check(comptroller->GetOperatorBudget(1) == 75);
-            comptroller->Reset();
         });
 
     bodo::tests::test("test_join_groupby_write", [] {
@@ -193,7 +172,6 @@ bodo::tests::suite memory_budget_tests([] {
         // Operator 12 (WRITE) doesn't share its memory with anything. But it's
         // an absolute estimate, so it should get what it asked for and no more.
         bodo::tests::check(comptroller->GetOperatorBudget(12) == 400 * 1024);
-        comptroller->Reset();
     });
 
     bodo::tests::test("test_abs_rel_same_pipeline_sufficient_abs", [] {
@@ -217,8 +195,6 @@ bodo::tests::suite memory_budget_tests([] {
         bodo::tests::check(comptroller->GetOperatorBudget(2) == 616 * 1024);
         bodo::tests::check(comptroller->GetOperatorBudget(3) == 100 * 1024);
         bodo::tests::check(comptroller->GetOperatorBudget(4) == 100 * 1024);
-
-        comptroller->Reset();
     });
 
     bodo::tests::test("test_abs_rel_same_pipeline_insufficient_abs", [] {
@@ -248,8 +224,6 @@ bodo::tests::suite memory_budget_tests([] {
         bodo::tests::check(comptroller->GetOperatorBudget(3) < 410.0 * 1024);
         bodo::tests::check(comptroller->GetOperatorBudget(4) > 409.0 * 1024);
         bodo::tests::check(comptroller->GetOperatorBudget(4) < 410.0 * 1024);
-
-        comptroller->Reset();
     });
 
     bodo::tests::test("test_abs_rel_same_pipeline_insufficient_abs_2", [] {
@@ -287,8 +261,6 @@ bodo::tests::suite memory_budget_tests([] {
         // pipelines
         bodo::tests::check(comptroller->GetOperatorBudget(2) == 500 * 1024);
         bodo::tests::check(comptroller->GetOperatorBudget(3) == 500 * 1024);
-
-        comptroller->Reset();
     });
 
     bodo::tests::test("test_join_only_used_in_2_pipelines", [] {
@@ -312,7 +284,5 @@ bodo::tests::suite memory_budget_tests([] {
         // Operator 0 should get the entire budget.
         bodo::tests::check(comptroller->GetOperatorBudget(0) ==
                            2 * 1024 * 1024);
-
-        comptroller->Reset();
     });
 });
