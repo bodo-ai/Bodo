@@ -1575,6 +1575,29 @@ def dateadd_df():
     }
 
 
+@pytest.fixture
+def dateadd_fractional_df():
+    """Returns the context used by test_snowflake_dateadd_fractional"""
+    return {
+        "table1": pd.DataFrame(
+            {
+                "col_int": pd.Series(
+                    [10.2, 0.5, None, -9.5, 99.8], dtype=pd.Float32Dtype()
+                ),
+                "col_dt": pd.Series(
+                    [
+                        None,
+                        pd.Timestamp("2013-10-27"),
+                        pd.Timestamp("2015-4-1 12:00:15"),
+                        pd.Timestamp("2020-2-3 05:15:12.501"),
+                        pd.Timestamp("2021-12-13 23:15:06.025999500"),
+                    ]
+                ),
+            }
+        )
+    }
+
+
 @pytest.fixture(
     params=[
         pytest.param(
@@ -1808,6 +1831,30 @@ def test_snowflake_dateadd(dateadd_df, dateadd_queries, memory_leak_check):
     check_query(
         query,
         dateadd_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answers,
+        only_jit_1DVar=True,
+    )
+
+
+def test_snowflake_dateadd_fractional(
+    dateadd_fractional_df, dateadd_queries, memory_leak_check
+):
+    """Tests the Snowflake version of DATEADD with inputs (unit, amount, dt_val).
+    Currently takes in the unit as a scalar string instead of a DT unit literal.
+    Does not currently support quarter, or check any of the alternative
+    abbreviations of these units."""
+    query_fmt, units, answers = dateadd_queries
+    selects = []
+    for unit in units:
+        selects.append(query_fmt.format(unit))
+    query = "SELECT " + ", ".join(selects) + " FROM table1"
+
+    check_query(
+        query,
+        dateadd_fractional_df,
         None,
         check_names=False,
         check_dtype=False,
