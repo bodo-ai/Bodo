@@ -123,11 +123,23 @@ if "--profile" in sys.argv:
         debug_flag = "-g"
     sys.argv.remove("--profile")
 
-address_sanitizer_flag = []
+sanitizer_flags = []
 if "--address-sanitizer" in sys.argv:
     sys.argv.remove("--address-sanitizer")
-    address_sanitizer_flag = ["-fsanitize=address"]
+    sanitizer_flags.append("address")
     opt_flag = "-O1"
+
+if "--undefined-sanitizer" in sys.argv:
+    sys.argv.remove("--undefined-sanitizer")
+    sanitizer_flags.append("undefined")
+    opt_flag = "-O1"
+
+if sanitizer_flags:
+    comma_args = ",".join(sanitizer_flags)
+    sanitizer_flag = [f"-fsanitize={comma_args}"]
+else:
+    sanitizer_flag = []
+
 
 if is_win:
     eca = ["/std:c++20", "/O2"]
@@ -136,7 +148,7 @@ if is_win:
 else:
     if is_mac:
         # Mac on CI can't support AVX2
-        eca = ["-std=c++20", debug_flag, opt_flag] + address_sanitizer_flag
+        eca = ["-std=c++20", debug_flag, opt_flag] + sanitizer_flag
     else:
         # -march=haswell is used to enable AVX2 support (required by SIMD bloom
         # filter implementation)
@@ -147,7 +159,7 @@ else:
                 opt_flag,
                 "-march=haswell",
             ]
-            + address_sanitizer_flag
+            + sanitizer_flag
             + profile_flag
         )
     eca_c = [debug_flag, opt_flag] + profile_flag
