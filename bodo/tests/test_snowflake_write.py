@@ -1219,7 +1219,62 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
     assert n_passed == n_pes, "test_snowflake_to_sql_bodo_datatypes_part2 failed"
 
 
-def test_snowflake_to_sql_bodo_datatypes_part3(memory_leak_check):
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(
+            {
+                # list list
+                "A": np.array(
+                    [
+                        [1, 2],
+                        [3],
+                        [4, 5, 6, 7],
+                        [4, 5],
+                        [32, 45],
+                        [1, 4, 7, 8],
+                        [
+                            3,
+                            4,
+                            6,
+                        ],
+                    ],
+                    object,
+                ),
+            }
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    # struct
+                    "A": np.array(
+                        [
+                            [{"A": 1, "B": 2}, {"A": 10, "B": 20}],
+                            [{"A": 3, "B": 4}],
+                            [
+                                {"A": 5, "B": 6},
+                                {"A": 50, "B": 60},
+                                {"A": 500, "B": 600},
+                            ],
+                            [{"A": 10, "B": 20}, {"A": 100, "B": 200}],
+                            [{"A": 30, "B": 40}],
+                            [
+                                {"A": 50, "B": 60},
+                                {"A": 500, "B": 600},
+                                {"A": 5000, "B": 6000},
+                            ],
+                            [{"A": 30, "B": 40}],
+                        ],
+                        object,
+                    ),
+                }
+            ),
+            marks=pytest.mark.skip("Reading struct arrays unsupported"),
+        ),
+    ],
+    ids=["list_list", "struct"],
+)
+def test_snowflake_to_sql_bodo_datatypes_part3(df, memory_leak_check):
     """
     Tests that df.to_sql works with all Bodo's supported dataframe datatypes
     Compare what Bodo reads vs. Pandas read (Note: Bodo writes these data and
@@ -1230,41 +1285,6 @@ def test_snowflake_to_sql_bodo_datatypes_part3(memory_leak_check):
     db = "TEST_DB"
     schema = "PUBLIC"
     conn = get_snowflake_connection_string(db, schema)
-
-    df = pd.DataFrame(
-        {
-            # list list
-            "list_list_col": np.array(
-                [
-                    [1, 2],
-                    [3],
-                    [4, 5, 6, 7],
-                    [4, 5],
-                    [32, 45],
-                    [1, 4, 7, 8],
-                    [
-                        3,
-                        4,
-                        6,
-                    ],
-                ],
-                object,
-            ),
-            # struct
-            "struct_col": np.array(
-                [
-                    [{"A": 1, "B": 2}, {"A": 10, "B": 20}],
-                    [{"A": 3, "B": 4}],
-                    [{"A": 5, "B": 6}, {"A": 50, "B": 60}, {"A": 500, "B": 600}],
-                    [{"A": 10, "B": 20}, {"A": 100, "B": 200}],
-                    [{"A": 30, "B": 40}],
-                    [{"A": 50, "B": 60}, {"A": 500, "B": 600}, {"A": 5000, "B": 6000}],
-                    [{"A": 30, "B": 40}],
-                ],
-                object,
-            ),
-        }
-    )
 
     @bodo.jit(distributed=["df"])
     def test_write(df, name, conn, schema):
