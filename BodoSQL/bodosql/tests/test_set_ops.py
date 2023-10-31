@@ -2,6 +2,9 @@
 """
 Test correctness of SQL set like operations, namely UNION, INTERSECT, and EXCEPT
 """
+from decimal import Decimal
+
+import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
@@ -15,7 +18,7 @@ pytestmark = pytest_slow_unless_codegen
 
 @pytest.fixture(
     params=[
-        pytest.param("UNION", id="union_op", marks=pytest.mark.slow),
+        pytest.param("UNION", id="union_op"),
         pytest.param("UNION DISTINCT", id="union_distinct", marks=pytest.mark.slow),
         pytest.param("UNION ALL", id="union_all"),
     ]
@@ -116,11 +119,6 @@ def null_set_dfs(request):
             "table1": pd.DataFrame({"A": [1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5]}),
             "table2": pd.DataFrame({"B": [1, 1, 2, 2, 3, 3, 3, 4, 4, 4, 6]}),
         },
-        {
-            # Integer Promotion
-            "table1": pd.DataFrame({"A": pd.Series([3, 1, 2, 2, 3, 4], dtype="int32")}),
-            "table2": pd.DataFrame({"B": pd.Series([5, 1, 2, 2], dtype="Int8")}),
-        },
     ]
 )
 def set_ops_dfs(request):
@@ -142,6 +140,120 @@ def make_tz_aware_df(tz):
 
 
 # ===== Set Ops Tests
+
+
+@pytest.mark.parametrize(
+    "numeric_dfs",
+    [
+        # Integer
+        {
+            "table1": pd.DataFrame({"A": pd.Series([3, 1, 2, 2, 3, 4], dtype="int32")}),
+            "table2": pd.DataFrame({"B": pd.Series([5, 1, 2, 2], dtype="Int8")}),
+        },
+        # Float
+        {
+            "table1": pd.DataFrame(
+                {"A": pd.Series([3.0, 1.0, 2.0, 2.0, 3.0, 4.0], dtype="float64")}
+            ),
+            "table2": pd.DataFrame(
+                {"B": pd.Series([5.0, 1.0, 2.0, 2.0], dtype="Float32")}
+            ),
+        },
+        # Float <-> Integer
+        {
+            "table1": pd.DataFrame(
+                {"A": pd.Series([3.0, 1.0, 2.0, 2.0, 3.0, 4.0], dtype="float64")}
+            ),
+            "table2": pd.DataFrame({"B": pd.Series([5, 1, 2, 2], dtype="Int64")}),
+        },
+        # Decimal
+        {
+            "table1": pd.DataFrame(
+                {
+                    "A": np.array(
+                        [
+                            Decimal("1.6"),
+                            None,
+                            Decimal("-0.222"),
+                            Decimal("1111.316"),
+                            Decimal("1234.00046"),
+                            Decimal("5.1"),
+                            Decimal("-11131.0056"),
+                            Decimal("0.0"),
+                        ]
+                    )
+                }
+            ),
+            "table2": pd.DataFrame(
+                {
+                    "B": np.array(
+                        [
+                            Decimal("1.6"),
+                            None,
+                            Decimal("200.78"),
+                            Decimal("-0.222"),
+                            Decimal("-15.78"),
+                            Decimal("1111.316"),
+                        ]
+                    )
+                }
+            ),
+        },
+        # Decimal <-> Float
+        {
+            "table1": pd.DataFrame(
+                {"A": pd.Series([3.0, 1.0, 2.0, 2.0, 3.0, 4.0], dtype="float64")}
+            ),
+            "table2": pd.DataFrame(
+                {
+                    "B": np.array(
+                        [
+                            Decimal("1.6"),
+                            None,
+                            Decimal("200.78"),
+                            Decimal("3.000"),
+                            Decimal("-15.78"),
+                            Decimal("1111.316"),
+                        ]
+                    )
+                }
+            ),
+        },
+        # Decimal <-> Integer
+        {
+            "table1": pd.DataFrame(
+                {
+                    "A": np.array(
+                        [
+                            Decimal("1.0"),
+                            None,
+                            Decimal("200.78"),
+                            Decimal("-3.000"),
+                            Decimal("-15.78"),
+                            Decimal("1111.316"),
+                        ]
+                    )
+                }
+            ),
+            "table2": pd.DataFrame(
+                {"B": pd.Series([5, 1, 2, pd.NA, 2], dtype="Int64")}
+            ),
+        },
+    ],
+)
+def test_union_numeric_cols(numeric_dfs, union_cmds, spark_info, memory_leak_check):
+    """
+    Test that UNION works for a single numeric column
+
+    Union Casting Logic is based on investigation from:
+    https://bodo.atlassian.net/wiki/spaces/B/pages/1474134034/Numeric+Casting+Investigation+for+Union
+    but assuming:
+    - float == Snowflake Float != Snowflake Number
+        so can never cast float => decimal
+    - Truncation of float + decimal => float allowed
+    """
+    query = f"SELECT A FROM table1 {union_cmds} SELECT B FROM table2"
+    check_query(query, numeric_dfs, spark_info, check_dtype=False, check_names=False)
 
 
 @pytest.mark.slow

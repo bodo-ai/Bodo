@@ -276,6 +276,13 @@ def get_sql_column_type(arr_type, col_name):
     elif isinstance(arr_type, bodo.TimeArrayType):
         # Time array types have their own special handling for precision
         return construct_time_column_type(arr_type, col_name, nullable)
+    elif isinstance(arr_type, bodo.DecimalArrayType):
+        # For now, treat Decimal like float64 in BodoSQL planning
+        warnings.warn(
+            f"Column '{col_name}' with type {arr_type} is not properly supported from a Python + Pandas Dataframe. BodoSQL will implicitly treat this column as a float64, which may lead to unexpected conversion errors. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
+        )
+        col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Float64.value)
+        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
     elif isinstance(arr_type, bodo.ArrayItemArrayType):
         # TODO: [BSE-560] Make get_sql_column_type recursive for semi-structured data
         return construct_array_column_type(arr_type, col_name)

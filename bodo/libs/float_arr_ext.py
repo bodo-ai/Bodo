@@ -349,7 +349,6 @@ def init_float_array(typingctx, data, null_bitmap=None):  # pragma: no cover
 
 @lower_constant(FloatingArrayType)
 def lower_constant_float_arr(context, builder, typ, pyval):  # pragma: no cover
-
     n = len(pyval)
     data_arr = np.empty(n, pyval.dtype.type)
     nulls_arr = np.empty((n + 7) >> 3, np.uint8)
@@ -434,6 +433,7 @@ numba.core.ir_utils.alias_func_extensions[
     ("get_float_arr_bitmap", "bodo.libs.float_arr_ext")
 ] = alias_ext_dummy_func
 
+
 # high-level allocation function for float arrays
 @numba.njit(no_cpython_wrapper=True)
 def alloc_float_array(n, dtype):  # pragma: no cover
@@ -513,7 +513,6 @@ def float_arr_setitem(A, idx, val):  # pragma: no cover
 
     # scalar case
     if isinstance(idx, types.Integer):
-
         if is_scalar:
 
             def impl_scalar(A, idx, val):  # pragma: no cover
@@ -521,6 +520,14 @@ def float_arr_setitem(A, idx, val):  # pragma: no cover
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
 
             return impl_scalar
+
+        elif isinstance(val, bodo.Decimal128Type):
+
+            def impl_decimal(A, idx, val):  # pragma: no cover
+                A._data[idx] = float(val)
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
+
+            return impl_decimal
 
         else:
             raise BodoError(typ_err_msg)

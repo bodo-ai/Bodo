@@ -34,13 +34,10 @@ def test_coalesce_cols_basic(spark_info, basic_df, memory_leak_check):
     check_query(query, basic_df, spark_info, check_dtype=False, check_names=False)
 
 
-@pytest.mark.parametrize(
-    "scalar", [pytest.param("1", id="integer"), pytest.param("-0.1", id="float")]
-)
-def test_coalesce_128(spark_info, scalar, memory_leak_check):
-    """tests the coalesce function with a NUMBER(38, 18) column and integer/float
+def test_coalesce_128_int(spark_info, memory_leak_check):
+    """tests the coalesce function with a NUMBER(38, 18) column and integer
     scalars."""
-    query = f"select COALESCE(A, {scalar}) from table1"
+    query = f"select COALESCE(A, 1) from table1"
 
     @bodo.jit
     def make_d128_df():
@@ -63,6 +60,44 @@ def test_coalesce_128(spark_info, scalar, memory_leak_check):
     ctx = {"table1": make_d128_df()}
 
     check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
+
+
+def test_coalesce_128_float(memory_leak_check):
+    """tests the coalesce function with a NUMBER(38, 18) column and float
+    scalars."""
+    query = f"select COALESCE(A, -0.1) from table1"
+
+    @bodo.jit
+    def make_d128_df():
+        A = pd.Series(
+            [
+                Decimal(0),
+                None,
+                Decimal(2),
+                None,
+                Decimal((2**33 - 1) / 13),
+                None,
+                Decimal((2**65 - 1) / 4),
+                None,
+                Decimal((2**97 - 1) / 100),
+                None,
+            ]
+        )
+        return pd.DataFrame({"A": A})
+
+    ctx = {"table1": make_d128_df()}
+    expected_out = pd.DataFrame(
+        {"A": [0.0, -0.1, 2.0, -0.1, 660764199.307692, -0.1, -0.25, -0.1, -0.01, -0.1]}
+    )
+
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_out,
+    )
 
 
 def test_coalesce_timestamp_date(memory_leak_check):

@@ -45,7 +45,11 @@ from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils import tracing
-from bodo.utils.typing import BodoError, raise_bodo_error
+from bodo.utils.typing import (
+    BodoError,
+    is_nullable_ignore_sentinals,
+    raise_bodo_error,
+)
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -95,12 +99,6 @@ def lower_pyarrow_table_schema(context, builder, ty, pyval):
     # pyval = pyval.remove_metadata()
     pyapi = context.get_python_api(builder)
     return pyapi.unserialize(pyapi.serialize_object(pyval))
-
-
-def is_nullable(typ):
-    return bodo.utils.utils.is_array_typ(typ, False) and (
-        not isinstance(typ, types.Array)  # or is_dtype_nullable(typ.dtype)
-    )
 
 
 # Create an mpi4py reduction function.
@@ -325,7 +323,7 @@ def is_nullable_arrow_out(numba_type: types.ArrayCompatible) -> bool:
     """
 
     return (
-        is_nullable(numba_type)
+        is_nullable_ignore_sentinals(numba_type)
         or isinstance(numba_type, bodo.DatetimeArrayType)
         or (
             isinstance(numba_type, types.Array)
