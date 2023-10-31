@@ -674,9 +674,24 @@ def create_add_interval_func_overload(unit):  # pragma: no cover
                 )
 
         func_text = "def impl(amount, start_dt):\n"
-        func_text += f"  return bodo.libs.bodosql_array_kernels.add_interval_{unit}_util(amount, start_dt)"
+        if is_valid_float_arg(amount) and amount != types.none:
+            func_text += f"  sign_ = np.sign(amount)\n"
+            func_text += f"  abs_amount = np.abs(amount)\n"
+            func_text += f"  whole = sign_ * np.floor(abs_amount)\n"
+            func_text += f"  frac = amount - whole\n"
+            # if -1 < x < 1, sign(sign(|x| - 0.5) + 1) is 1 if |x| >= 0.5, and 0
+            # otherwise. We can use this to implement the same rounding as snowflake
+            # where 1.5 -> 2, and -1.5 -> -2 (half rounds up).
+            func_text += (
+                f"  frac_rounds_up = np.sign(np.sign(np.abs(frac) - 0.5) + 1)\n"
+            )
+            func_text += f"  rounded_value = bodo.libs.bodosql_array_kernels.cast_int64(whole + sign_ * frac_rounds_up)\n"
+            func_text += f"  return bodo.libs.bodosql_array_kernels.add_interval_{unit}_util(rounded_value, start_dt)"
+        else:
+            verify_int_arg(amount, "add_interval_" + unit, "amount")
+            func_text += f"  return bodo.libs.bodosql_array_kernels.add_interval_{unit}_util(amount, start_dt)"
         loc_vars = {}
-        exec(func_text, {"bodo": bodo}, loc_vars)
+        exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
 
         return loc_vars["impl"]
 
@@ -697,7 +712,6 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
     """
 
     def overload_add_datetime_interval_util(amount, start_dt):
-        verify_int_arg(amount, "add_interval_" + unit, "amount")
         if unit in (
             "hours",
             "minutes",

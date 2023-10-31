@@ -1822,6 +1822,12 @@ BodoSQL currently supports the following Timestamp functions:
     Equivalent to `#!sql DATEADD`.
 
 
+#### TIMESTAMPADD
+-   `#!sql TIMESTAMPADD(unit, amount, timestamp_val)`
+
+    Equivalent to `#!sql DATEADD`.
+
+
 #### DATE_ADD
 -   `#!sql DATE_ADD(timestamp_val, interval)`
 
