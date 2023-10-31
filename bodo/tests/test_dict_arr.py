@@ -1446,6 +1446,7 @@ def test_str_extractall(memory_leak_check):
     assert dist_IR_contains(f_ir, "str_extractall_multi")
 
 
+@pytest.mark.parquet
 def test_concat(memory_leak_check):
     """test pd.concat() for dict arrays"""
     A1 = pa.array(

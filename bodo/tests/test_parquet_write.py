@@ -27,6 +27,8 @@ from bodo.tests.utils import (
 from bodo.utils.testing import ensure_clean2, ensure_clean_dir
 from bodo.utils.typing import BodoError
 
+pytestmark = pytest.mark.parquet
+
 
 @pytest.mark.parametrize(
     "df",

@@ -1655,6 +1655,7 @@ def _check_filenotfound(fname, func):
     assert "Pseudo-exception" not in str(err_track)
 
 
+@pytest.mark.parquet
 def test_file_not_found(memory_leak_check):
     """Test removal Pseduo-exception with FileNotFoundError"""
 

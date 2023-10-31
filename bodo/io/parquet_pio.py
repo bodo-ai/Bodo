@@ -334,7 +334,7 @@ def get_parquet_dataset(
     get_row_counts: bool = True,
     dnf_filters=None,
     expr_filters=None,
-    storage_options=None,
+    storage_options: Optional[dict] = None,
     read_categories: bool = False,
     is_parallel=False,  # only used with get_row_counts=True
     tot_rows_to_read: Optional[int] = None,
@@ -376,6 +376,11 @@ def get_parquet_dataset(
     # to know if this is runtime
     if get_row_counts:
         ev = tracing.Event("get_parquet_dataset")
+
+    # We add dummy parameter in _gen_pq_reader_py for Numba typing
+    # but it can get in the way of other Filesystem builders
+    if storage_options:
+        storage_options.pop("bodo_dummy", None)
 
     import time
 
@@ -421,13 +426,47 @@ def get_parquet_dataset(
         # We don't need a try-catch in case its not installed
         import fsspec
 
+    if (
+        protocol == "s3"
+        and storage_options
+        and ("anon" not in storage_options or len(storage_options) > 1)
+    ):
+        try:
+            import s3fs
+        except ImportError:
+            raise BodoError(
+                "Couldn't import s3fs, which is required for certain types of S3 access."
+                " s3fs can be installed by calling"
+                " 'conda install -c conda-forge s3fs>=2022.1.0'.\n"
+            )
+
+        if s3fs.__version__ < "2022.1":
+            raise BodoError(
+                "s3fs version must be >=2022.1.0. Please upgrade s3fs by calling"
+                " 'conda install -c conda-forge s3fs>=2022.1.0'.\n"
+            )
+
     fs = []
 
     def getfs(parallel=False):
         # NOTE: add remote filesystems to REMOTE_FILESYSTEMS
         if len(fs) == 1:
             return fs[0]
-        if protocol == "s3":
+        if (
+            protocol == "s3"
+            and storage_options
+            and ("anon" not in storage_options or len(storage_options) > 1)
+        ):
+            # "anon" is the only storage_options supported by PyArrow
+            # If other storage_options fields are given,
+            # we need to use S3Fs to read instead
+            sopts = storage_options.copy()
+            if "AWS_S3_ENDPOINT" in os.environ and "endpoint_url" not in sopts:
+                sopts["endpoint_url"] = os.environ["AWS_S3_ENDPOINT"]
+            s3_fs = s3fs.S3FileSystem(**sopts)
+            fs.append(PyFileSystem(FSSpecHandler(s3_fs)))
+            return fs[0]
+        elif protocol == "s3":
             fs.append(
                 get_s3_fs_from_path(
                     fpath, parallel=parallel, storage_options=storage_options
@@ -437,7 +476,14 @@ def get_parquet_dataset(
                     fpath[0], parallel=parallel, storage_options=storage_options
                 )
             )
-        elif protocol in {"gcs", "gs"}:
+            return fs[0]
+
+        if storage_options is not None and len(storage_options) > 0:
+            raise BodoError(
+                f"ParquetReader: `storage_options` is not supported for protocol {protocol}"
+            )
+
+        if protocol in {"gcs", "gs"}:
             # TODO pass storage_options to GCSFileSystem
             google_fs = gcsfs.GCSFileSystem(token=None)
             fs.append(PyFileSystem(FSSpecHandler(google_fs)))
@@ -940,13 +986,13 @@ def get_scanner_batches(
         # file, not the first row group, so we need to communicate this back to C++
         start_offset = start_row_first_rg
 
-    scanner = dataset.scanner(
+    rb_reader = dataset.scanner(
         columns=selected_names,
         filter=expr_filters,
         batch_size=batch_size or 128 * 1024,
         use_threads=True,
-    )
-    return scanner, start_offset
+    ).to_reader()
+    return rb_reader, start_offset
 
 
 # XXX Move this to ParquetDataset class?

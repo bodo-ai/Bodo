@@ -55,6 +55,7 @@ def parquet_filepaths(request, datapath):
     return datapath(request.param)
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 def test_table_path_lower_constant(dummy_table_paths, memory_leak_check):
     """
@@ -67,6 +68,7 @@ def test_table_path_lower_constant(dummy_table_paths, memory_leak_check):
     check_func(impl, ())
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 def test_table_path_boxing(dummy_table_paths, memory_leak_check):
     """
@@ -80,6 +82,7 @@ def test_table_path_boxing(dummy_table_paths, memory_leak_check):
 
 
 @pytest.mark.parametrize("reorder_io", [True, False, None])
+@pytest.mark.parquet
 @pytest.mark.slow
 def test_table_path_pq_constructor(reorder_io, memory_leak_check):
     """
@@ -94,6 +97,7 @@ def test_table_path_pq_constructor(reorder_io, memory_leak_check):
 
 @pytest.mark.parametrize("reorder_io", [True, False, None])
 @pytest.mark.slow
+@pytest.mark.parquet
 def test_table_path_pq_bodosqlContext_python(
     reorder_io, parquet_filepaths, memory_leak_check
 ):
@@ -127,6 +131,7 @@ def test_table_path_pq_bodosqlContext_python(
     )
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 @pytest.mark.parametrize("reorder_io", [True, False, None])
 def test_table_path_pq_bodosqlContext_jit(
@@ -214,6 +219,7 @@ def test_table_path_sql_bodosqlContext_jit(memory_leak_check):
     )
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 def test_table_path_avoid_unused_table_jit(
     parquet_filepaths, datapath, memory_leak_check
@@ -242,6 +248,7 @@ def test_table_path_avoid_unused_table_jit(
     check_num_parquet_readers(bodo_func, 1)
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 @pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_table_path_avoid_unused_table_python(
@@ -279,6 +286,7 @@ def test_table_path_avoid_unused_table_python(
     # TODO: Check the IR from Python.
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 @pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_table_path_categorical_unused_table_jit(datapath, memory_leak_check):
@@ -306,6 +314,7 @@ def test_table_path_categorical_unused_table_jit(datapath, memory_leak_check):
     check_num_parquet_readers(bodo_func, 1)
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 @pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_table_path_categorical_unused_table_python(datapath, memory_leak_check):
@@ -342,6 +351,7 @@ def test_table_path_categorical_unused_table_python(datapath, memory_leak_check)
     # TODO: Check the IR from Python.
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 @pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 def test_table_path_timing_debug_message(datapath, memory_leak_check):

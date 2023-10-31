@@ -16,6 +16,8 @@ from bodo.tests.conftest import (  # pragma: no cover
 )
 from bodo.utils.typing import BodoError
 
+pytestmark = pytest.mark.iceberg
+
 
 @pytest.mark.slow
 def test_iceberg_tablepath_errors(iceberg_database, iceberg_table_conn):
@@ -140,7 +142,6 @@ def test_iceberg_tablepath_DNE(iceberg_database, iceberg_table_conn):
         BodoError,
         match=".*" + re.escape("No such Iceberg table found") + ".*",
     ):
-
         # Note, need to actually use the bodosqlContext, otherwise the error is not raised
         @bodo.jit()
         def test_func(conn, db_schema):

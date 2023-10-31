@@ -2,7 +2,7 @@ channels:
   - conda-forge
 dependencies:
   - scipy
-  - s3fs
+  - s3fs>=2022.1.0
   - matplotlib<=3.6.1
   - openjdk=11
   - cmake

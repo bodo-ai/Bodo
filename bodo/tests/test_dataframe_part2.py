@@ -431,6 +431,7 @@ def test_set_column_table_format(memory_leak_check):
     check_func(impl, (df, "E", "abc"), only_seq=True)
 
 
+@pytest.mark.parquet
 def test_set_table_data_replace(memory_leak_check):
     """Test for adding an array to a table block after a previous array was removed
     from it (BE-1635).
