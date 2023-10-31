@@ -4,6 +4,7 @@
 // functionality that is specific to reading parquet datasets
 
 #include "parquet_reader.h"
+#include <arrow/python/pyarrow.h>
 #include <span>
 #include "../libs/_array_utils.h"
 
@@ -201,10 +202,8 @@ void ParquetReader::init_pq_scanner() {
     }
 
     // PyTuple_GetItem returns a borrowed reference
-    PyObject* scanner = PyTuple_GetItem(scanner_batches_tup, 0);
-    this->reader = pyarrow_unwrap_scanner_bodo((c_ScannerBodo*)scanner)
-                       ->ToRecordBatchReader()
-                       .ValueOrDie();
+    this->reader = PyTuple_GetItem(scanner_batches_tup, 0);
+    Py_INCREF(this->reader);  // call incref to keep the reference
 
     this->rows_to_skip = PyLong_AsLong(PyTuple_GetItem(scanner_batches_tup, 1));
     this->rows_left_cur_piece = pieces_nrows[0];
@@ -261,10 +260,22 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
                                    0);
         }
 
-        auto batch_res = this->reader->Next();
+        PyObject* batch_py =
+            PyObject_CallMethod(this->reader, "read_next_batch", NULL);
+        if (batch_py == NULL && PyErr_Occurred() &&
+            PyErr_ExceptionMatches(PyExc_StopIteration)) {
+            // StopIteration is raised at the end of iteration.
+            // An iterator would clear this automatically, but we are
+            // not using an interator, so we have to clear it manually
+            PyErr_Clear();
+        } else if (batch_py == NULL && PyErr_Occurred()) {
+            throw std::runtime_error("python");
+        }
+
+        auto batch_res = arrow::py::unwrap_batch(batch_py);
         if (!batch_res.ok()) {
             throw std::runtime_error(
-                "ParquetReader::read_batch(): Error reading the next batch: " +
+                "ParquetReader::read_batch(): Error unwrapping batch: " +
                 batch_res.status().ToString());
         }
         auto batch = batch_res.ValueOrDie();
@@ -330,6 +341,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
         }
         rows_left_to_emit -= length;
         bool is_last = rows_left_to_emit <= 0;
+        Py_DECREF(batch_py);
         return std::make_tuple(out_table, is_last, length);
     }
 
@@ -348,9 +360,10 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
     size_t cur_piece = 0;
     int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
 
-    for (auto batch_iter = this->reader->begin();
-         batch_iter != this->reader->end(); ++batch_iter) {
-        auto batch = (*batch_iter).ValueOrDie();
+    PyObject* batch_py = NULL;
+    while ((batch_py =
+                PyObject_CallMethod(this->reader, "read_next_batch", NULL))) {
+        auto batch = arrow::py::unwrap_batch(batch_py).ValueOrDie();
         int64_t batch_offset = std::min(rows_to_skip, batch->num_rows());
         int64_t length =
             std::min(rows_left_to_read, batch->num_rows() - batch_offset);
@@ -386,6 +399,21 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
             }
         }
         rows_to_skip -= batch_offset;
+        Py_DECREF(batch_py);
+    }
+
+    if (batch_py == NULL && PyErr_Occurred() &&
+        PyErr_ExceptionMatches(PyExc_StopIteration)) {
+        // StopIteration is raised at the end of iteration.
+        // An iterator would clear this automatically, but we are
+        // not using an interator, so we have to clear it manually
+        PyErr_Clear();
+    } else if (batch_py == NULL && PyErr_Occurred()) {
+        // If there was a Python error, use the special string "python"
+        // `py_entry` functions check for this string to avoid
+        // overwriting the global Python exception
+        // TODO: Replace with custom exception class
+        throw std::runtime_error("python");
     }
 
     if (this->input_file_name_col) {

@@ -788,7 +788,7 @@ def _gen_pq_reader_py(
     # PyObject to pass to C++. C++ just passes it through to parquet_pio.py::get_parquet_dataset()
     func_text += "    fname_py = get_fname_pyobject(fname)\n"
 
-    # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
+    # Add a dummy variable to the dict (empty dicts are not yet supported in Numba).
     storage_options["bodo_dummy"] = "dummy"
     func_text += f"    storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
 

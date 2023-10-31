@@ -704,8 +704,7 @@ File Systems {#File Systems}
 Reading and writing [CSV][csv-section], [Parquet][parquet-section], [JSON][json-section], and
 [Numpy binary][numpy-binary-section] files from and to Amazon S3 is supported.
 
-The `fsspec` package must be available, and the file path should start
-with `s3://`:
+The file path should start with `s3://`:
 
 ```py
 @bodo.jit
@@ -728,8 +727,13 @@ environment variables (listed in order of precedence):
 - `HTTP_PROXY`
 - `HTTPS_PROXY`
 
-Bodo uses [Apache Arrow](https://arrow.apache.org/) internally for read
-and write of data on S3.
+By default, Bodo uses [Apache Arrow](https://arrow.apache.org/) internally for read
+and write of data on S3. If additional `storage_options` are provided to `pd.read_parquet`
+that Arrow does not support, then S3FS will be used instead. It can be optionally installed via:
+
+``` shell
+conda install -c conda-forge "s3fs>=2022.1.0"
+```
 
 ### Google Cloud Storage {#GCS}
 

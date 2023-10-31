@@ -12,6 +12,7 @@ from bodo.utils.testing import ensure_clean2
 pytestmark = pytest.mark.hdfs
 
 
+@pytest.mark.parquet
 def test_partition_cols(hdfs_datapath):
     """Test hdfs to_parquet partition_cols."""
     bd_fname = hdfs_datapath("bd_file.pq")
@@ -29,6 +30,7 @@ def test_partition_cols(hdfs_datapath):
     pd.testing.assert_frame_equal(bd_out, pd_out, check_column_type=False)
 
 
+@pytest.mark.parquet
 def test_hdfs_write_parquet_no_empty_files(hdfs_datapath, memory_leak_check):
     """Test that when a rank has no data, it doesn't write a file"""
     # The test is most useful when run with multiple ranks
@@ -63,6 +65,7 @@ def test_hdfs_write_parquet_no_empty_files(hdfs_datapath, memory_leak_check):
         assert len(file_stats) == 1
 
 
+@pytest.mark.parquet
 def test_hdfs_pq_groupby3(datapath, hdfs_datapath):
     """
     test hdfs read_parquet
@@ -79,6 +82,7 @@ def test_hdfs_pq_groupby3(datapath, hdfs_datapath):
     check_func(test_impl, (hdfs_fname,), py_output=py_output)
 
 
+@pytest.mark.parquet
 def test_hdfs_pq_asof1(datapath, hdfs_datapath):
     """
     test hdfs read_parquet
@@ -95,6 +99,7 @@ def test_hdfs_pq_asof1(datapath, hdfs_datapath):
     check_func(test_impl, (hdfs_fname,), py_output=py_output)
 
 
+@pytest.mark.parquet
 def test_hdfs_pq_int_nulls_multi(datapath, hdfs_datapath):
     """
     test hdfs read_parquet of a directory containing multiple files

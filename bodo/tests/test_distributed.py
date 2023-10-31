@@ -1908,6 +1908,7 @@ def check_dist_meta(df, dist):
     )
 
 
+@pytest.mark.parquet
 def test_bodo_meta(memory_leak_check, datapath):
     """Test Bodo metadata on data structures returned from JIT functions"""
     fname = datapath("example.parquet")

@@ -45,6 +45,7 @@ def test_read_csv_cache(fn_distribution, is_cached, datapath, memory_leak_check)
     check_caching(impl, (), is_cached, fn_distribution)
 
 
+@pytest.mark.parquet
 @pytest.mark.smoke
 def test_read_parquet_cache(fn_distribution, is_cached, datapath, memory_leak_check):
     """
@@ -58,6 +59,7 @@ def test_read_parquet_cache(fn_distribution, is_cached, datapath, memory_leak_ch
     check_caching(impl, (fname,), is_cached, fn_distribution)
 
 
+@pytest.mark.parquet
 def test_read_parquet_cache_fname_arg(
     fn_distribution, is_cached, datapath, memory_leak_check
 ):
@@ -78,6 +80,7 @@ def test_read_parquet_cache_fname_arg(
     check_caching(impl, (fname,), is_cached, fn_distribution, py_output=py_out)
 
 
+@pytest.mark.parquet
 def test_read_parquet_cache_fname_arg2(
     fn_distribution, is_cached, datapath, memory_leak_check
 ):
@@ -103,6 +106,7 @@ def test_read_parquet_cache_fname_arg2(
     check_caching(impl, (fname,), is_cached, fn_distribution, py_output=py_out)
 
 
+@pytest.mark.parquet
 def test_read_parquet_cache_fname_arg_list_files(
     fn_distribution, is_cached, datapath, memory_leak_check
 ):

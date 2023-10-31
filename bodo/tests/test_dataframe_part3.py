@@ -1326,6 +1326,7 @@ def test_empty_dataframe_creation(memory_leak_check):
     check_func(impl, (), check_dtype=False)
 
 
+@pytest.mark.parquet
 def test_unify_dict_string_dataframes():
     """
     Tests unifying DataFrames when the inputs consist of

@@ -67,7 +67,10 @@ class ParquetReader : public ArrowReader {
         this->init_pq_scanner();
     }
 
-    virtual ~ParquetReader() {}
+    virtual ~ParquetReader() {
+        // Remove after reader is finished or on error
+        Py_XDECREF(this->reader);
+    }
 
     /// a piece is a single parquet file in the context of parquet
     virtual size_t get_num_pieces() const override { return file_paths.size(); }
@@ -150,10 +153,10 @@ class ParquetReader : public ArrowReader {
      */
     void init_pq_scanner();
 
-    // -------------- Streaming Specific Parameters --------------
-
     // Arrow Batched Reader to get next table iteratively
-    std::shared_ptr<arrow::RecordBatchReader> reader;
+    PyObject* reader;
+
+    // -------------- Streaming Specific Parameters --------------
 
     // Number of remaining rows to skip outputting
     int64_t rows_to_skip = -1;

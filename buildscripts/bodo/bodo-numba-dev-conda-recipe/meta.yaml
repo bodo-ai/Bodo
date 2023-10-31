@@ -64,6 +64,9 @@ requirements:
     - numpy >=1.23
   run_constrained:
     - scikit-learn =1.1.*
+  run_constrained:
+    - s3fs >=2022.1.0
+
 
 test:
   imports:
