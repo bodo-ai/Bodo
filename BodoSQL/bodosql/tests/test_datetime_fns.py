@@ -4400,11 +4400,11 @@ def test_timestamp_from_parts_datetime_overload(
         query = f"SELECT CASE WHEN {fn_call} > DATE '2211-01-01' THEN DATE '2211-01-01' ELSE {fn_call} END as t from table1"
     df = pd.DataFrame(
         {
-            "date": ["1999/1/12", "2000/2/1", "2010/5/4"],
-            "hours": [0, 1, 12],
-            "minutes": [0, 2, 30],
-            "seconds": [0, 3, 55],
-            "nanoseconds": [0, 40001003, 550001004],
+            "date": ["1999/1/12", "2000/2/1", "2010/5/4", "2011/3/1", "2023/8/3"],
+            "hours": [0, 1, 12, 6, 9],
+            "minutes": [0, 2, 30, 50, 10],
+            "seconds": [0, 3, 55, 20, 30],
+            "nanoseconds": [0, 40001003, 550001004, 1234, 1200300],
         }
     )
     ctx = {"table1": df}
