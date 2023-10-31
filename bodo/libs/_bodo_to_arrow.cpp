@@ -763,15 +763,14 @@ std::shared_ptr<array_info> arrow_struct_array_to_bodo(
 }
 
 /**
- * @brief Convert Arrow list array to Bodo array_info (ARRAY_ITEM/LIST_STRING
- * type) with zero-copy. The output Bodo array holds references to the Arrow
- * array's buffers and releases them when deleted.
+ * @brief Convert Arrow list array to Bodo array item array with zero-copy. The
+ * output Bodo array holds references to the Arrow array's buffers and releases
+ * them when deleted.
  *
  * @param arrow_list_arr Input Arrow LargeListArray
  * @param dicts_ref_arr Array used for setting dictionaries if provided. Should
  * have the same structure as input (i.e. child array type)
- * @return std::shared_ptr<array_info> Output Bodo array (ARRAY_ITEM/LIST_STRING
- * type)
+ * @return std::shared_ptr<array_info> Output Bodo array
  */
 std::shared_ptr<array_info> arrow_list_array_to_bodo(
     std::shared_ptr<arrow::LargeListArray> arrow_list_arr,
@@ -790,16 +789,8 @@ std::shared_ptr<array_info> arrow_list_array_to_bodo(
         arrow_list_arr->values(), -1,
         dicts_ref_arr == nullptr ? nullptr : dicts_ref_arr->child_arrays[0]);
 
-    bodo_array_type::arr_type_enum array_type = bodo_array_type::ARRAY_ITEM;
-    Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::LIST;
-    if (inner_arr->arr_type == bodo_array_type::STRING &&
-        inner_arr->dtype == Bodo_CTypes::STRING) {
-        array_type = bodo_array_type::LIST_STRING;
-        dtype = Bodo_CTypes::LIST_STRING;
-    }
-
     return std::make_shared<array_info>(
-        array_type, dtype, n,
+        bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST, n,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {offset_buffer, null_bitmap_buffer}),
         std::vector<std::shared_ptr<array_info>>({inner_arr}));

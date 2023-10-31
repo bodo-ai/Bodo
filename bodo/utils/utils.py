@@ -125,8 +125,8 @@ _numba_to_c_type_map = {
 class CArrayTypeEnum(Enum):
     NUMPY = 0
     STRING = 1
-    NULLABLE_INT_BOOL = 2  # nullable int or bool
-    LIST_STRING = 3  # list_string_array_type
+    NULLABLE_INT_BOOL = 2
+    # NOTE: 3 is used by LIST_STRING in bodo_common.h
     STRUCT = 4
     CATEGORICAL = 5
     ARRAY_ITEM = 6
@@ -257,12 +257,6 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:  # pragma: no
         ),
     ):
         return CArrayTypeEnum.NULLABLE_INT_BOOL.value
-    elif isinstance(arr_type, bodo.ArrayItemArrayType) and (
-        arr_type.dtype == bodo.string_array_type
-        or arr_type.dtype == bodo.binary_array_type
-    ):
-        # Special case for list of strings
-        return CArrayTypeEnum.LIST_STRING.value
     elif isinstance(arr_type, bodo.CategoricalArrayType):
         return CArrayTypeEnum.CATEGORICAL.value
     elif isinstance(arr_type, bodo.IntervalArrayType):
