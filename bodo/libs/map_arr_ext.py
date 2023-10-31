@@ -90,7 +90,7 @@ class MapArrayType(types.ArrayCompatible):
         return self.__class__.__name__, (self._code,)
 
 
-def _get_map_arr_data_type(map_type):
+def _get_map_arr_data_type(map_type: MapArrayType) -> ArrayItemArrayType:
     """get array(struct) array data type for underlying data array of map type"""
     struct_arr_type = StructArrayType(
         (map_type.key_arr_type, map_type.value_arr_type), ("key", "value")

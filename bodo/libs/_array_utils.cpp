@@ -2458,8 +2458,9 @@ void DEBUG_PrintColumn(std::ostream& os,
         os << "\n";
     }
     bodo::vector<std::string> LStr = GetColumn_as_ListString(arr);
-    for (int i_row = 0; i_row < n_rows; i_row++)
+    for (int i_row = 0; i_row < n_rows; i_row++) {
         os << "i_row=" << i_row << " S=" << LStr[i_row] << "\n";
+    }
 }
 
 /**

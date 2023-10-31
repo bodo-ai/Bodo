@@ -1,6 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #pragma once
 
+#include <memory>
 #if defined(__GNUC__)
 #define __UNUSED__ __attribute__((unused))
 #else
@@ -1157,6 +1158,21 @@ struct array_info {
         }
         return not_na;
     }
+
+    std::unique_ptr<bodo::DataType> data_type() {
+        if (arr_type == bodo_array_type::ARRAY_ITEM) {
+            auto inner = child_arrays[0]->data_type();
+            return std::make_unique<bodo::ArrayType>(inner);
+        } else if (arr_type == bodo_array_type::STRUCT) {
+            std::vector<std::unique_ptr<bodo::DataType>> child_types;
+            for (auto const& child : child_arrays) {
+                child_types.push_back(child->data_type());
+            }
+            return std::make_unique<bodo::StructType>(child_types);
+        } else {
+            return std::make_unique<bodo::DataType>(arr_type, dtype);
+        }
+    }
 };
 
 /**
@@ -1476,6 +1492,17 @@ struct table_info {
     std::shared_ptr<array_info> operator[](size_t idx) { return columns[idx]; }
     const std::shared_ptr<array_info> operator[](size_t idx) const {
         return columns[idx];
+    }
+
+    /// @brief Extract a bodo::Schema from a table_info
+    std::unique_ptr<bodo::Schema> schema() {
+        std::vector<std::unique_ptr<bodo::DataType>> column_types;
+        for (size_t i = 0; i < columns.size(); i++) {
+            auto col = columns[i];
+            column_types.push_back(col->data_type());
+        }
+
+        return std::make_unique<bodo::Schema>(std::move(column_types));
     }
 
     void pin() {

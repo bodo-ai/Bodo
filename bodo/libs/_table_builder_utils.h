@@ -4,6 +4,22 @@
 /// Helper functions
 
 /**
+ * @brief Allocate an empty table with provided column types
+ *
+ * @param schema bodo::Schema of the table to create
+ * bodo_array_type format)
+ * @param pool IBufferPool to use for allocating the underlying data
+ * buffers.
+ * @param mm MemoryManager for the 'pool'.
+ * @return std::shared_ptr<table_info> allocated table
+ */
+std::shared_ptr<table_info> alloc_table(
+    const std::unique_ptr<bodo::Schema>& schema,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
+/**
  * @brief allocate an empty table with provided column types
  *
  * @param arr_c_types vector of ints for column dtypes (in Bodo_CTypes format)

@@ -41,6 +41,7 @@ from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
@@ -184,11 +185,11 @@ def get_arrow_timestamp_type(pa_ts_typ):
 
 def _get_numba_typ_from_pa_typ(
     pa_typ: pa.Field,
-    is_index,
+    is_index: bool,
     nullable_from_metadata,
     category_info,
-    str_as_dict=False,
-):
+    str_as_dict: bool = False,
+) -> tuple[types.ArrayCompatible, bool]:
     """
     Return Bodo array type from pyarrow Field (column type) and if the type is supported.
     If a type is not support but can be adequately typed, we return that it isn't supported
@@ -202,6 +203,15 @@ def _get_numba_typ_from_pa_typ(
             pa_typ.type.value_field, is_index, nullable_from_metadata, category_info
         )
         return ArrayItemArrayType(arr_typ), supported
+
+    if pa.types.is_map(pa_typ.type):
+        key_type, key_sup = _get_numba_typ_from_pa_typ(
+            pa_typ.type.key_field, is_index, nullable_from_metadata, category_info
+        )
+        value_type, value_sup = _get_numba_typ_from_pa_typ(
+            pa_typ.type.item_field, is_index, nullable_from_metadata, category_info
+        )
+        return MapArrayType(key_type, value_type), key_sup and value_sup
 
     if isinstance(pa_typ.type, pa.StructType):
         child_types = []

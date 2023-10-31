@@ -14,7 +14,6 @@ from typing import (
     List,
     Literal,
     Optional,
-    Set,
     Tuple,
     Union,
 )
@@ -172,7 +171,7 @@ def type_code_to_arrow_type(
         return pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale])
     # Object -> Map / Struct - Connector doesn't support pa.struct
     elif code == 9:
-        return pa.string()
+        return UnknownSnowflakeType.OBJECT
     # List - Connector doesn't support pa.list
     elif code == 10:
         return UnknownSnowflakeType.LIST
@@ -777,6 +776,63 @@ def get_number_types_from_metadata(
     return new_col_info, None
 
 
+def snowflake_type_str_to_pyarrow_datatype(
+    types: set[str], col_to_check: str, tz: str
+) -> Optional[pa.DataType]:
+    """
+    Convert a Set of Snowflake Type Strings to a PyArrow type
+    """
+
+    # Always assume output is nullable for now
+    types.discard("NULL_VALUE")
+
+    # DOUBLE is floating-point (including NaN, Inf, ...)
+    # DECIMAL is most non-integer numbers without explicit cast
+    # INTEGER is whole numbers without explicit cast
+    # For our case, we treat all decimal-point values as float64
+    if "DOUBLE" in types:
+        types.discard("DOUBLE")
+        types.add("DECIMAL")
+    # Snowflake auto-deletes zero value after decimal point, treating as integer
+    # So we upcast to Float / Decimal, even across Integer -> Float
+    if types == {"INTEGER", "DECIMAL"}:
+        types = {"DECIMAL"}
+    # Use TIMESTAMP_LTZ, even with TIMESTAMP_TZ
+    elif types == {"TIMESTAMP_LTZ", "TIMESTAMP_TZ"}:
+        types = {"TIMESTAMP_LTZ"}
+
+    if len(types) > 1:
+        return None
+
+    value_type = types.pop()
+    if value_type == "DECIMAL":
+        return pa.float64()
+    elif value_type == "INTEGER":
+        return pa.int64()
+    elif value_type == "VARCHAR":
+        return pa.large_string()
+    elif value_type == "BINARY":
+        return pa.binary()
+    elif value_type == "BOOL":
+        return pa.bool_()
+    elif value_type == "DATE":
+        return pa.date32()
+    elif value_type == "TIMESTAMP_NTZ":
+        # TODO: Properly derive timestamp precision if necessary
+        return pa.timestamp("ns")
+    elif value_type in ("TIMESTAMP_TZ", "TIMESTAMP_LTZ"):
+        # TODO: Properly derive timestamp precision if necessary
+        return pa.timestamp("ns", tz=tz)
+
+    elif value_type in ("VARIANT", "OBJECT", "ARRAY"):
+        raise BodoError(
+            f"Bodo does not support reading nested semi-structured data in col `{col_to_check}`"
+        )
+
+    else:
+        raise BodoError(f"Unknown Snowflake Type String: {value_type}")
+
+
 def get_list_type_from_metadata(
     cursor: "SnowflakeCursor", sql_query: str, col_to_check: str, tz: str
 ):
@@ -801,27 +857,12 @@ def get_list_type_from_metadata(
             f"Snowflake Probe Query Failed or Timed out While Testing the Type of List Column {col_to_check} in the Source:\n{sql_query}"
         )
 
-    value_types: Set[str] = set(types_df["VALUES_TYPE"].to_list())
-    value_types.discard("NULL_VALUE")
+    value_types: set[str] = set(types_df["VALUES_TYPE"].to_list())
+    pa_type = snowflake_type_str_to_pyarrow_datatype(value_types, col_to_check, tz)
 
-    # DOUBLE is floating-point (including NaN, Inf, ...)
-    # DECIMAL is most non-integer numbers without explicit cast
-    # INTEGER is whole numbers without explicit cast
-    # For our case, we treat all decimal-point values as float64
-    if "DOUBLE" in value_types:
-        value_types.discard("DOUBLE")
-        value_types.add("DECIMAL")
-    # Snowflake auto-deletes zero value after decimal point, treating as integer
-    # So we upcast to Float / Decimal, even across Integer -> Float
-    if value_types == {"INTEGER", "DECIMAL"}:
-        value_types = {"DECIMAL"}
-    # Use TIMESTAMP_LTZ, even with TIMESTAMP_TZ
-    elif value_types == {"TIMESTAMP_LTZ", "TIMESTAMP_TZ"}:
-        value_types = {"TIMESTAMP_LTZ"}
-
-    if len(value_types) > 1:
+    if pa_type is None:
         raise BodoError(
-            f"Snowflake Probe determined that Array Column {col_to_check} in query or table:\n"
+            f"Snowflake Probe determined that List Column {col_to_check} in query or table:\n"
             f"{sql_query}\n"
             f"has multiple value types {sorted(value_types)}. This indicated that {col_to_check} is either:\n"
             "  - A variant / union column with multiple datatypes\n"
@@ -829,35 +870,49 @@ def get_list_type_from_metadata(
             "Bodo currently does not support either column types"
         )
 
-    value_type = value_types.pop()
-    if value_type == "DECIMAL":
-        value_datatype = pa.float64()
-    elif value_type == "INTEGER":
-        value_datatype = pa.int64()
-    elif value_type == "VARCHAR":
-        value_datatype = pa.large_string()
-    elif value_type == "BINARY":
-        value_datatype = pa.binary()
-    elif value_type == "BOOL":
-        value_datatype = pa.bool_()
-    elif value_type == "DATE":
-        value_datatype = pa.date32()
-    elif value_type == "TIMESTAMP_NTZ":
-        # TODO: Properly derive timestamp precision if necessary
-        value_datatype = pa.timestamp("ns")
-    elif value_type in ("TIMESTAMP_TZ", "TIMESTAMP_LTZ"):
-        # TODO: Properly derive timestamp precision if necessary
-        value_datatype = pa.timestamp("ns", tz=tz)
+    return pa.large_list(pa_type)
 
-    elif value_type in ("VARIANT", "OBJECT", "ARRAY"):
+
+def get_map_type_from_metadata(
+    cursor: "SnowflakeCursor", sql_query: str, col_to_check: str, tz: str
+):
+    """
+    Determine a precise output type for Map Columns from Snowflake
+    """
+
+    # TODO: Improve potential performance of query
+    probe_query = f"""\
+        WITH in_table AS (SELECT * FROM ({sql_query}) SAMPLE (1000 ROWS))
+        SELECT DISTINCT TYPEOF(out.value) as VALUES_TYPE
+        FROM in_table,
+        LATERAL FLATTEN(input => {col_to_check}) out
+    """
+
+    probe_res = execute_query(
+        cursor,
+        probe_query,
+        timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
+    )
+
+    if probe_res is None or len(types_df := probe_res.fetch_pandas_all()) == 0:
         raise BodoError(
-            f"Bodo does not Support Reading Nested Semi-Structured Data. Found col `{col_to_check}` of type list[{value_type}]"
+            f"Snowflake Probe Query Failed or Timed out While Testing the Type of Map Column {col_to_check} in the Source:\n{sql_query}"
         )
 
-    else:
-        raise BodoError(f"Unknown Snowflake Type String: {value_type}")
+    value_types: set[str] = set(types_df["VALUES_TYPE"].to_list())
+    pa_type = snowflake_type_str_to_pyarrow_datatype(value_types, col_to_check, tz)
 
-    return pa.large_list(value_datatype)
+    if pa_type is None:
+        raise BodoError(
+            f"Snowflake Probe determined that Map Column {col_to_check} in query or table:\n"
+            f"{sql_query}\n"
+            f"has multiple value types {sorted(value_types)}. This indicated that {col_to_check} is either:\n"
+            "  - A variant / union column with multiple datatypes\n"
+            "  - A struct column with a common schema across rows\n"
+            "Bodo currently does not support either column types"
+        )
+
+    return pa.map_(pa.large_string(), pa_type)
 
 
 def get_schema_from_metadata(
@@ -911,9 +966,16 @@ def get_schema_from_metadata(
             field_meta.type_code, field_meta, tz, is_select_query
         )
 
-        # For any LIST columns, fetch metadata to get internal
-        if dtype == UnknownSnowflakeType.LIST:
-            dtype = get_list_type_from_metadata(cursor, sql_query, field_meta.name, tz)
+        # For any UnknownSnowflakeType columns, fetch metadata to get internal
+        if isinstance(dtype, UnknownSnowflakeType):
+            if dtype == UnknownSnowflakeType.LIST:
+                dtype = get_list_type_from_metadata(
+                    cursor, sql_query, field_meta.name, tz
+                )
+            elif dtype == UnknownSnowflakeType.OBJECT:
+                dtype = get_map_type_from_metadata(
+                    cursor, sql_query, field_meta.name, tz
+                )
 
         assert isinstance(
             dtype, pa.DataType
@@ -945,7 +1007,7 @@ def get_schema_from_metadata(
             )
 
     # By this point, we should have fixed data types for all columns
-    arrow_fields: List[pa.Field] = []
+    arrow_fields: list[pa.Field] = []
     for name, d, nullable in arrow_dtypes:
         arrow_fields.append(pa.field(name, d, nullable))
 
@@ -1125,7 +1187,6 @@ def _detect_column_dict_encoding(
         # and deterministically time out, so this branch
         # isn't tested in the unit tests.
         dict_encode_timeout_info = (probe_limit, list(undetermined_str_cols))
-
         if SF_READ_DICT_ENCODING_IF_TIMEOUT:
             for i in string_col_ind:
                 col_types[i] = dict_str_arr_type

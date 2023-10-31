@@ -480,7 +480,16 @@ ChunkedTableBuilder::ChunkedTableBuilder(
     const std::vector<int8_t>& arr_array_types,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     size_t chunk_size, size_t max_resize_count_for_variable_size_dtypes_)
-    : active_chunk(alloc_table(arr_c_types, arr_array_types)),
+    : ChunkedTableBuilder(
+          bodo::Schema::Deserialize(arr_array_types, arr_c_types),
+          dict_builders, chunk_size,
+          max_resize_count_for_variable_size_dtypes_) {}
+
+ChunkedTableBuilder::ChunkedTableBuilder(
+    const std::unique_ptr<bodo::Schema>& schema,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    size_t chunk_size, size_t max_resize_count_for_variable_size_dtypes_)
+    : active_chunk(alloc_table(schema)),
       active_chunk_capacity(chunk_size),
       max_resize_count_for_variable_size_dtypes(
           max_resize_count_for_variable_size_dtypes_) {
@@ -491,6 +500,7 @@ ChunkedTableBuilder::ChunkedTableBuilder(
             this->active_chunk->columns[i]->child_arrays[0] =
                 dict_builders[i]->dict_buff->data_array;
         }
+
         this->active_chunk_array_builders.emplace_back(
             this->active_chunk->columns[i], dict_builders[i],
             this->active_chunk_capacity,

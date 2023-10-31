@@ -2145,7 +2145,37 @@ def test_string_array_read(test_db_snowflake_catalog, memory_leak_check):
         py_output=py_output,
         sort_output=True,
         reset_index=True,
-        only_seq=True,
+    )
+
+
+def test_map_read(test_db_snowflake_catalog, memory_leak_check):
+    """Test reading a map of float column from Snowflake"""
+
+    def impl(bc):
+        return bc.sql("SELECT idx, a FROM OBJECT_FLOAT_TEST ORDER BY idx")
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    py_output = pd.DataFrame(
+        {
+            "idx": pd.Series([1, 2, 3, 4, 5, 6], dtype="Int8"),
+            "a": pd.Series(
+                [
+                    np.nan,
+                    {"int": 10.0, "whole_dec": 10.0, "null": np.nan},
+                    {"null2": np.nan, "float": 12.4, "neg_float": -0.57},
+                    {"\\u2912": -np.inf, 'inf\\"ity': np.inf, "/\\\\/\\\\": np.nan},
+                    {"int20": 12345678901234567890.0, "null3": np.nan},
+                    {"neg_int": -1235.0, "dec": 0.01234567890123456789},
+                ],
+                dtype="object",
+            ),
+        }
+    )
+    check_func(
+        impl,
+        (bc,),
+        py_output=py_output,
+        use_map_arrays=True,
     )
 
 
