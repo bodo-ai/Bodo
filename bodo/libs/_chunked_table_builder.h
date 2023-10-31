@@ -1162,6 +1162,24 @@ struct ChunkedTableBuilder {
             DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
 
     /**
+     * @brief Construct a new Chunked Table with the given bodo::Schema.
+     *
+     * @param schema Data types of the columns as a bodo::Schema
+     * @param dict_builders Dictionary builders to use for DICT arrays.
+     * @param chunk_size Max number of rows allowed in each chunk.
+     * @param max_resize_count_for_variable_size_dtypes How many times are
+     * we allowed to resize (grow by 2x) buffers for variable size
+     * data types like strings. 0 means resizing is not allowed. 2 means
+     * that the final size could be 4x of the original.
+     */
+    ChunkedTableBuilder(
+        const std::unique_ptr<bodo::Schema>& schema,
+        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+        size_t chunk_size,
+        size_t max_resize_count_for_variable_size_dtypes =
+            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
+
+    /**
      * @brief Finalize the active chunk and create a new active chunk.
      * This will call Finalize on all the arrays in this chunk, and then
      * insert the resulting table_info into this->chunks.

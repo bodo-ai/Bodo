@@ -1015,6 +1015,7 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                 dicts_ref_arr);
         // convert 32-bit offset array to 64-bit offset array to match Bodo data
         // layout
+        case arrow::Type::MAP:
         case arrow::Type::LIST: {
             static_assert(OFFSET_BITWIDTH == 64);
             auto res = arrow::compute::Cast(

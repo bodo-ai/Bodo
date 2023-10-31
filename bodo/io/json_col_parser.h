@@ -159,3 +159,13 @@ struct Tokenizer {
 std::shared_ptr<arrow::Array> string_to_list_arr(
     std::shared_ptr<arrow::StringArray> in_arr,
     std::shared_ptr<arrow::DataType> in_type);
+
+/**
+ * @brief Parses a String Array containing JSON-encoded arrays into a MapArray
+ * @param in_arr The String Array containing the JSON array values
+ * @param in_type The type of the output MapArray
+ * @return A MapArray containing the parsed JSON arrays
+ */
+std::shared_ptr<arrow::Array> string_to_map_arr(
+    std::shared_ptr<arrow::StringArray> in_arr,
+    std::shared_ptr<arrow::DataType> in_type);

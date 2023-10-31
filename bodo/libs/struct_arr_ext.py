@@ -59,6 +59,9 @@ ll.add_symbol("np_array_from_struct_array", array_ext.np_array_from_struct_array
 class StructArrayType(types.ArrayCompatible):
     """Data type for arrays of structs"""
 
+    data: tuple[types.ArrayCompatible, ...]
+    names: tuple[str, ...]
+
     def __init__(self, data, names=None):
         # data is tuple of Array types
         # names is a tuple of field names
@@ -74,7 +77,7 @@ class StructArrayType(types.ArrayCompatible):
                 and len(names) == len(data)
             )
         else:
-            names = tuple("f{}".format(i) for i in range(len(data)))
+            names = tuple(f"f{i}" for i in range(len(data)))
 
         self.data = data
         self.names = names
@@ -1181,6 +1184,7 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
             ]
             val_tup = cgutils.pack_array(builder, data_vals)
             names_tup = cgutils.pack_array(builder, names_consts)
+
             # TODO: support NA values as optional type?
             def impl(names, vals):
                 d = {}
@@ -1347,7 +1351,6 @@ def struct_arr_setitem(arr, ind, val):
         return
 
     if isinstance(ind, types.Integer):
-
         n_fields = len(arr.data)
         func_text = "def impl(arr, ind, val):\n"
         func_text += "  data = get_data(arr)\n"

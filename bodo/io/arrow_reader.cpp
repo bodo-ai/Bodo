@@ -1340,7 +1340,7 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
             new_cols.push_back(col);
         }
 
-        // Parse Array of JSON Strings into Map Array
+        // Parse Array of JSON Strings into List Array
         else if ((act_type->id() == Type::STRING ||
                   act_type->id() == Type::LARGE_STRING) &&
                  (exp_type->id() == Type::LIST ||
@@ -1351,6 +1351,22 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
                 std::back_inserter(chunks),
                 [exp_type](std::shared_ptr<arrow::Array> chunk) {
                     return string_to_list_arr(
+                        std::dynamic_pointer_cast<arrow::StringArray>(chunk),
+                        exp_type);
+                });
+            new_cols.push_back(std::make_shared<arrow::ChunkedArray>(chunks));
+        }
+
+        // Parse Array of JSON Strings into Map Array
+        else if ((act_type->id() == Type::STRING ||
+                  act_type->id() == Type::LARGE_STRING) &&
+                 exp_type->id() == Type::MAP) {
+            std::vector<std::shared_ptr<arrow::Array>> chunks;
+            std::transform(
+                col->chunks().begin(), col->chunks().end(),
+                std::back_inserter(chunks),
+                [exp_type](std::shared_ptr<arrow::Array> chunk) {
+                    return string_to_map_arr(
                         std::dynamic_pointer_cast<arrow::StringArray>(chunk),
                         exp_type);
                 });
