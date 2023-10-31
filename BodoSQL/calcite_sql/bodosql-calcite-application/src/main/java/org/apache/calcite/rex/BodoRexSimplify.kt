@@ -19,6 +19,8 @@ import org.apache.calcite.util.DateString
 import org.apache.calcite.util.TimeString
 import org.apache.calcite.util.TimestampString
 import java.math.BigDecimal
+import java.math.MathContext
+import java.math.RoundingMode
 import java.util.*
 import java.util.regex.Pattern
 
@@ -722,7 +724,7 @@ class BodoRexSimplify(
             return e
         }
         val unitLiteral = e.operands[0] as RexLiteral
-        val offset = (e.operands[1] as RexLiteral).getValueAs(BigDecimal::class.java)!!.toLong()
+        val offset = (e.operands[1] as RexLiteral).getValueAs(BigDecimal::class.java)!!.setScale(0, RoundingMode.HALF_UP).toLong()
         val base = e.operands[2] as RexLiteral
 
         // Extract the time unit, either as a unit literal or a string literal.

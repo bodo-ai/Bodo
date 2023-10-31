@@ -381,7 +381,7 @@ public class BodoSqlTimestampAddFunction extends SqlFunction {
         SqlKind.TIMESTAMP_ADD,
         RETURN_TYPE_INFERENCE,
         null,
-        OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.INTEGER, SqlTypeFamily.DATETIME),
+        OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.NUMERIC, SqlTypeFamily.DATETIME),
         SqlFunctionCategory.TIMEDATE);
   }
 }

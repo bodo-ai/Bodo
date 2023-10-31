@@ -164,7 +164,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           OperandTypes.sequence(
                   "DATEADD(UNIT, VALUE, DATETIME)",
                   OperandTypes.ANY,
-                  OperandTypes.INTEGER,
+                  OperandTypes.NUMERIC,
                   OperandTypes.DATETIME)
               .or(OperandTypes.DATETIME_INTERVAL)
               .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER))
@@ -181,7 +181,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           OperandTypes.sequence(
               "TIMEADD(UNIT, VALUE, TIME)",
               OperandTypes.ANY,
-              OperandTypes.INTEGER,
+              OperandTypes.NUMERIC,
               OperandTypes.DATETIME),
           SqlFunctionCategory.TIMEDATE);
 
