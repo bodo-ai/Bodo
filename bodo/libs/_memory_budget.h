@@ -34,6 +34,7 @@ struct OperatorRequest {
     OperatorType operator_type;
     int64_t min_pipeline_id;
     int64_t max_pipeline_id;
+    std::vector<int64_t> pipeline_ids;
     size_t original_estimate;
     size_t rem_estimate;
 
@@ -43,7 +44,31 @@ struct OperatorRequest {
           min_pipeline_id(min_pipeline_id_),
           max_pipeline_id(max_pipeline_id_),
           original_estimate(estimate_),
-          rem_estimate(estimate_) {}
+          rem_estimate(estimate_) {
+        if (this->operator_type == OperatorType::JOIN) {
+            // All Join partitions are completely spillable/unpinnable.
+            // Therefore, we should not block memory allocation in pipelines
+            // other than their build and probe pipelines.
+            // e.g. Say a join does its build phase in pipeline 0 and its
+            // probe phase in pipeline 10. Other Joins or Groupby operators
+            // that exist between pipelines 1 and 9 shouldn't be assigned a
+            // lower budget and forced to re-partition to allow this join to
+            // stay in memory. Pinning the join in pipeline 10 when it's
+            // actually needed will lead to better utilization of memory in
+            // general. If the other operators don't end up using the extra
+            // memory, there's no side-effects since the join state will just
+            // stay in memory.
+            this->pipeline_ids.push_back(this->min_pipeline_id);
+            this->pipeline_ids.push_back(this->max_pipeline_id);
+        } else {
+            this->pipeline_ids.reserve(this->max_pipeline_id -
+                                       this->min_pipeline_id + 1);
+            for (int64_t p_id = this->min_pipeline_id;
+                 p_id <= this->max_pipeline_id; p_id++) {
+                this->pipeline_ids.push_back(p_id);
+            }
+        }
+    }
 
     // Default constructor for implicitly created operators.
     // We set the pipeline ids as -1 so that they're not

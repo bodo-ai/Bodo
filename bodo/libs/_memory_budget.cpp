@@ -182,8 +182,7 @@ void OperatorComptroller::ReduceOperatorBudget(int64_t operator_id,
     // Add the freed budget back to pipeline_remaining_budget so that operators
     // that call IncreaseOperatorBudget can take advantage of it.
     // Remove the operator from its pipelines remaining operator ids list.
-    for (int64_t pipeline_id = req.min_pipeline_id;
-         pipeline_id <= req.max_pipeline_id; pipeline_id++) {
+    for (const int64_t pipeline_id : req.pipeline_ids) {
         this->pipeline_remaining_budget[pipeline_id] += delta;
         this->pipeline_to_remaining_operator_ids[pipeline_id].erase(
             operator_id);
@@ -197,8 +196,7 @@ void OperatorComptroller::IncreaseOperatorBudget(int64_t operator_id) {
     const auto& req = this->requests_per_operator[operator_id];
     size_t max_update = std::numeric_limits<size_t>::max();
     // Determine the largest amount of budget we can allocate for this operator
-    for (int64_t pipeline_id = req.min_pipeline_id;
-         pipeline_id <= req.max_pipeline_id; pipeline_id++) {
+    for (const int64_t pipeline_id : req.pipeline_ids) {
         max_update =
             std::min(max_update, this->pipeline_remaining_budget[pipeline_id]);
     }
@@ -206,8 +204,7 @@ void OperatorComptroller::IncreaseOperatorBudget(int64_t operator_id) {
     // If we are able to increase the budget, then do so.
     if (max_update) {
         this->operator_allocated_budget[operator_id] += max_update;
-        for (int64_t pipeline_id = req.min_pipeline_id;
-             pipeline_id <= req.max_pipeline_id; pipeline_id++) {
+        for (const int64_t pipeline_id : req.pipeline_ids) {
             this->pipeline_remaining_budget[pipeline_id] -= max_update;
         }
     }
@@ -219,8 +216,7 @@ void OperatorComptroller::assignAdditionalBudgetToOperator(
     /// Perform verification checks before making any changes to the state.
 
     // 1. Verify that all pipelines have required budget
-    for (int64_t pipeline_id = req.min_pipeline_id;
-         pipeline_id <= req.max_pipeline_id; pipeline_id++) {
+    for (const int64_t pipeline_id : req.pipeline_ids) {
         if (this->pipeline_remaining_budget[pipeline_id] < addln_budget) {
             throw std::runtime_error(
                 "OperatorComptroller::assignAdditionalBudgetToOperator: "
@@ -254,8 +250,7 @@ void OperatorComptroller::assignAdditionalBudgetToOperator(
         req.rem_estimate -= addln_budget;
     }
 
-    for (int64_t pipeline_id = req.min_pipeline_id;
-         pipeline_id <= req.max_pipeline_id; pipeline_id++) {
+    for (const int64_t pipeline_id : req.pipeline_ids) {
         // Mark memory as used in all pipelines with this operator
         this->pipeline_remaining_budget[pipeline_id] -= addln_budget;
         // If this request is completely satisfied, remove it from
@@ -320,8 +315,7 @@ void OperatorComptroller::refreshPipelineToRemainingOperatorIds() {
          op_id++) {
         const auto& req = this->requests_per_operator[op_id];
         if (req.rem_estimate > 0) {
-            for (int64_t pipeline_id = req.min_pipeline_id;
-                 pipeline_id <= req.max_pipeline_id; pipeline_id++) {
+            for (const int64_t pipeline_id : req.pipeline_ids) {
                 this->pipeline_to_remaining_operator_ids[pipeline_id].insert(
                     op_id);
             }
@@ -463,8 +457,7 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
             // Calculate minimum available allocation for the operator across
             // all its pipelines:
             size_t available_allocation = std::numeric_limits<size_t>::max();
-            for (int64_t pipeline_id = req.min_pipeline_id;
-                 pipeline_id <= req.max_pipeline_id; pipeline_id++) {
+            for (const int64_t pipeline_id : req.pipeline_ids) {
                 available_allocation = std::min(
                     avail_budget_for_ops_in_pipelines[pipeline_id][op_id],
                     available_allocation);
@@ -560,8 +553,7 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
         }
 
         size_t available_allocation = std::numeric_limits<size_t>::max();
-        for (int64_t pipeline_id = req.min_pipeline_id;
-             pipeline_id <= req.max_pipeline_id; pipeline_id++) {
+        for (const int64_t pipeline_id : req.pipeline_ids) {
             available_allocation =
                 std::min(this->pipeline_remaining_budget[pipeline_id],
                          available_allocation);
@@ -569,7 +561,12 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
         this->assignAdditionalBudgetToOperator(op_id, available_allocation);
     }
 
-    if (this->debug_level >= 1) {
+    int myrank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    // Only print on rank-0 if debug level is 1. If debug level is higher than
+    // or equal to 2, print it on every rank.
+    if (((this->debug_level == 1) && (myrank == 0)) ||
+        (this->debug_level >= 2)) {
         std::cerr << "[DEBUG] OperatorComptroller::ComputeSatisfiableBudgets: "
                      "Final budget allocation:"
                   << std::endl;
@@ -600,6 +597,12 @@ void OperatorComptroller::PrintBudgetAllocations(std::ostream& os) {
                 // This is wasteful, but fine for now.
                 continue;
             }
+            if ((req.operator_type == OperatorType::JOIN) &&
+                (req.min_pipeline_id != static_cast<int64_t>(pipeline_id)) &&
+                (req.max_pipeline_id != static_cast<int64_t>(pipeline_id))) {
+                // Special case for join.
+                continue;
+            }
             // "- <OPERATOR_TYPE> (Operator ID: <OPERATOR_ID>, Original
             // Estimate: <ORIGINAL_ESTIMATE>, Allocated Budget:
             // <ALLOCATED_BUDGET>)"
@@ -612,9 +615,15 @@ void OperatorComptroller::PrintBudgetAllocations(std::ostream& os) {
                       this->operator_allocated_budget[op_id])
                << ")" << std::endl;
             if (req.min_pipeline_id != req.max_pipeline_id) {
-                os << "   - Min Pipeline ID: " << req.min_pipeline_id
-                   << ", Max Pipeline ID: " << req.max_pipeline_id << "."
-                   << std::endl;
+                if (req.operator_type == OperatorType::JOIN) {
+                    os << "   - Build Pipeline ID: " << req.min_pipeline_id
+                       << ", Probe Pipeline ID: " << req.max_pipeline_id << "."
+                       << std::endl;
+                } else {
+                    os << "   - Min Pipeline ID: " << req.min_pipeline_id
+                       << ", Max Pipeline ID: " << req.max_pipeline_id << "."
+                       << std::endl;
+                }
             }
         }
         os << std::endl;
