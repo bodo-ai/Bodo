@@ -176,7 +176,6 @@ def test_time_parsing(time_str, answer):
     ],
 )
 def test_time_constructor(impl, memory_leak_check):
-
     check_func(impl, ())
 
 
@@ -210,6 +209,7 @@ def test_time_extraction(impl, memory_leak_check):
     check_func(impl, (t,))
 
 
+@pytest.mark.parquet
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "precision,dtype",

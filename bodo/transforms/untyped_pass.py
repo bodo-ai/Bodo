@@ -2614,7 +2614,7 @@ class UntypedPass:
             raise BodoError(
                 "read_parquet() arguments {} not supported yet".format(unsupported_args)
             )
-        _check_storage_options(storage_options, "read_parquet", rhs)
+        _check_storage_options(storage_options, "read_parquet", rhs, check_fields=False)
 
         if engine not in ("auto", "pyarrow"):
             raise BodoError("read_parquet: only pyarrow engine supported")
@@ -3644,12 +3644,19 @@ def _get_sql_df_type_from_db(
     )
 
 
-def _check_storage_options(storage_options, func_name, rhs):
+def _check_storage_options(
+    storage_options, func_name: str, rhs, check_fields: bool = True
+):
     """
     Error checking for storage_options usage in read_parquet/json/csv
     """
 
     if isinstance(storage_options, dict):
+        # Early exit when allowing for more storage_options.
+        # Used only in pd.read_parquet for now
+        if not check_fields:
+            return
+
         supported_storage_options = ("anon",)
         unsupported_storage_options = set(storage_options.keys()) - set(
             supported_storage_options

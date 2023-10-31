@@ -38,6 +38,8 @@ from bodo.tests.utils import (
 from bodo.utils.testing import ensure_clean, ensure_clean2
 from bodo.utils.typing import BodoError, BodoWarning
 
+pytestmark = pytest.mark.parquet
+
 
 # ---------------------------- Test Different DataTypes ---------------------------- #
 @pytest.mark.parametrize(
@@ -2223,7 +2225,7 @@ def test_read_parquet_unsupported_arg(memory_leak_check):
 
 def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
     """
-    test that an error is raised when unsupported arg for storage_options is passed.
+    test that an error is raised when storage_options is passed for local FS
     """
 
     def test_impl1():
@@ -2242,13 +2244,13 @@ def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match=r"read_parquet\(\) arguments {'invalid_arg'} for 'storage_options' not supported yet",
+        match="ParquetReader: `storage_options` is not supported for protocol",
     ):
         bodo.jit(distributed=["df"])(test_impl1)()
 
     with pytest.raises(
         BodoError,
-        match=r"read_parquet\(\) arguments {'invalid_arg'} for 'storage_options' not supported yet",
+        match="ParquetReader: `storage_options` is not supported for protocol",
     ):
         bodo.jit(distributed=["df"])(test_impl2)()
 
@@ -2273,7 +2275,7 @@ def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
     with pytest.raises(
         BodoError,
         match=re.escape(
-            "read_parquet(): 'anon' in 'storage_options' must be a constant boolean value"
+            "ParquetReader: `storage_options` is not supported for protocol"
         ),
     ):
         bodo.jit(distributed=["df"])(test_impl)()

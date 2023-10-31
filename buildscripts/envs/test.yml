@@ -16,7 +16,9 @@ dependencies:
   # IO
   - boto3
   - botocore
-  - s3fs
+  # Min bound is necessary. Otherwise s3fs will occasionally install v0.4.2
+  # Due to s3fs pinning aiobotocore and not regularly updating
+  - s3fs>=2022.1
   - gcsfs>=2022.1
 
   # Databases

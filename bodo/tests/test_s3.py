@@ -14,6 +14,29 @@ from bodo.utils.typing import BodoError
 pytestmark = pytest.mark.s3
 
 
+@pytest.mark.parquet
+def test_no_use_ssl(datapath, minio_server, s3_bucket):
+    _, _, address = minio_server
+
+    def test_impl(address, fpath):
+        return pd.read_parquet(
+            fpath,
+            storage_options={"anon": False, "endpoint_url": address, "use_ssl": False},
+        )
+
+    py_output = pd.read_parquet(datapath("example.parquet"))
+
+    check_func(
+        test_impl,
+        (
+            f"http://{address}/",
+            f"s3://{s3_bucket}/example.parquet",
+        ),
+        py_output=py_output,
+        convert_to_nullable_float=False,
+    )
+
+
 # Memory leak check is disabled because to_parquet lowers a
 # constant, which has a leak
 # TODO: Readd memory_leak_check

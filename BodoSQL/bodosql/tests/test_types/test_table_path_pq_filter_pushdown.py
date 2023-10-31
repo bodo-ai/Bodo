@@ -24,6 +24,8 @@ from bodo.tests.utils import (
     check_func,
 )
 
+pytestmark = pytest.mark.parquet
+
 
 @pytest.mark.skip(reason="[BSE-787] TODO: support categorical read cast on tables")
 @pytest.mark.slow

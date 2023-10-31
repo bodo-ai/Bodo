@@ -24,6 +24,8 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import check_func, sync_dtypes
 
+pytestmark = pytest.mark.iceberg
+
 
 @pytest.mark.slow
 @pytest.mark.parametrize(

@@ -18,6 +18,7 @@ from bodo.utils.typing import BodoError, BodoWarning
 
 def test_unsupported_error_checking(memory_leak_check):
     """make sure BodoError is raised for unsupported call"""
+
     # test an example I/O call
     def test_impl():
         return pd.read_spss("data.dat")
@@ -91,6 +92,7 @@ def test_read_csv_incorrect_s3_credentials(memory_leak_check):
     numba.core.config.DEVELOPER_MODE = default_mode
 
 
+@pytest.mark.parquet
 def test_io_error_nested_calls(memory_leak_check):
     """Test with passing incorrect filename from bodo to bodo call
     with local file"""
@@ -161,6 +163,7 @@ def test_csv_infer_type_error(datapath):
             bodo.jit(lambda: pd.read_csv(filepath), distributed=False)()
 
 
+@pytest.mark.parquet
 def test_pseudo_exception(datapath, memory_leak_check):
     """Test removal of ForceLiteralArg message"""
 
