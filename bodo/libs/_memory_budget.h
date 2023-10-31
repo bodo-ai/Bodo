@@ -140,8 +140,6 @@ class OperatorComptroller {
 
     // Called by init_operator_comptroller
     void Initialize();
-    // Called by delete_operator_comptroller
-    void Reset();
 
     /**
      * @brief Set the total memory budget for a pipeline.

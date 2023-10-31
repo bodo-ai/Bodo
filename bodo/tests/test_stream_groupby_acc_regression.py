@@ -212,7 +212,6 @@ def impl(conn_str):  # Codegen change: add conn_str
     df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T4,), index_1, global_6)
     concat_time += time.time() - t_concat
     bodo.user_logging.log_message("RELNODE_TIMING", f"Concat Time: {concat_time}")
-    bodo.libs.memory_budget.delete_operator_comptroller()
     # Codegen change: print overall execution time
     print(f"Finished executing the query. It took {time.time() - t0} seconds.")
     print("Output shape: ", df1.shape)

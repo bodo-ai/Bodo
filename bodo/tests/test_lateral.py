@@ -300,7 +300,6 @@ def test_lateral_streaming(memory_leak_check):
         )
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T4), 1, None)
         df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T4,), index_1, global_4)
-        bodo.libs.memory_budget.delete_operator_comptroller()
         return df2
 
     df = pd.DataFrame(

@@ -66,14 +66,9 @@ class StreamingStateScope {
         return inits
     }
 
-    fun genOpComptrollerFinalize(): Op {
-        return Op.Stmt(Expr.Call("bodo.libs.memory_budget.delete_operator_comptroller"))
-    }
-
     fun addToFrame(frame: Frame) {
         if (operators.size > 0) {
             frame.prependAll(genOpComptrollerInit())
-            frame.addBeforeReturn(genOpComptrollerFinalize())
         }
     }
 }

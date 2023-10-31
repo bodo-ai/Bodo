@@ -582,7 +582,6 @@ internal object WindowAggregateApplyFuncTable {
         override fun add(op: Op) = throw NotImplementedError()
         override fun addAll(ops: List<Op>) = throw NotImplementedError()
         override fun append(code: String) = throw NotImplementedError()
-        override fun addBeforeReturn(op: Op) = throw NotImplementedError()
         override fun prependAll(ops: List<Op>) = throw NotImplementedError()
     }
 }
