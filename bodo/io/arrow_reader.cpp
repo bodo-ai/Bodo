@@ -961,11 +961,6 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                 dtype = Bodo_CTypes::BINARY;
             }
             columns.push_back(std::make_unique<StringBuilder>(dtype));
-        } else if (type == arrow::Type::LIST &&
-                   arrow::is_binary_like(
-                       field->type()->field(0)->type()->id())) {
-            columns.push_back(
-                std::make_unique<ListStringBuilder>());  // list of string
         } else if (type == arrow::Type::NA) {
             columns.push_back(std::make_unique<AllNullsBuilder>(num_rows));
         } else {

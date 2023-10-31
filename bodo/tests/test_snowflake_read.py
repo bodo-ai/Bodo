@@ -649,7 +649,6 @@ def test_snowflake_runtime_downcasting_decimal(mocker: "MockerFixture"):
     )
 
 
-@pytest.mark.skip(reason="Need to fix ARRAY ITEM ARRAY in general first")
 def test_read_string_array_col(memory_leak_check):
     """
     Basic test of reading an array of strings column from Snowflake
