@@ -472,6 +472,13 @@ public final class SqlParserUtil {
         case "yrs":
           unit = TimeUnit.YEAR;
           break;
+        case "quarter":
+        case "quarters":
+        case "qtr":
+        case "qtrs":
+        case "q":
+          unit = TimeUnit.QUARTER;
+          break;
         case "month":
         case "months":
         case "mm":
