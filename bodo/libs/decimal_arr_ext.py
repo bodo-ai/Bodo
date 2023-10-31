@@ -40,6 +40,8 @@ ll.add_symbol("unbox_decimal", decimal_ext.unbox_decimal)
 ll.add_symbol("unbox_decimal_array", decimal_ext.unbox_decimal_array)
 ll.add_symbol("decimal_to_str", decimal_ext.decimal_to_str)
 ll.add_symbol("str_to_decimal", decimal_ext.str_to_decimal)
+ll.add_symbol("decimal_to_double", decimal_ext.decimal_to_double_py_entry)
+ll.add_symbol("int64_to_decimal", decimal_ext.int64_to_decimal)
 ll.add_symbol("decimal_cmp_eq", decimal_ext.decimal_cmp_eq)
 ll.add_symbol("decimal_cmp_ne", decimal_ext.decimal_cmp_ne)
 ll.add_symbol("decimal_cmp_gt", decimal_ext.decimal_cmp_gt)
@@ -217,7 +219,7 @@ def str_to_decimal(typingctx, val, precision_tp, scale_tp=None):
 # regarding the strings between decimal.
 # If you write Decimal("4.0"), Decimal("4.00"), or Decimal("4")
 # their python output is "4.0", "4.00", and "4"
-# but for Bodo thei output is always "4"
+# but for Bodo the output is always "4"
 @overload_method(Decimal128Type, "__str__")
 def overload_str_decimal(val):
     def impl(val):  # pragma: no cover
@@ -319,13 +321,58 @@ def decimal_constructor_overload(value="0", context=None):
 @overload(bool, no_unliteral=True)
 def decimal_to_bool(dec):
     """
-    Check if the underlying interger value is 0
+    Check if the underlying integer value is 0
     """
     if not isinstance(dec, Decimal128Type):  # pragma: no cover
         return
 
     def impl(dec):  # pragma: no cover
         return bool(decimal128type_to_int128(dec))
+
+    return impl
+
+
+def decimal_to_float64_codegen(context, builder, signature, args, scale):
+    (val,) = args
+    scale = context.get_constant(types.int8, scale)
+
+    fnty = lir.FunctionType(
+        lir.DoubleType(),
+        [
+            lir.IntType(128),
+            lir.IntType(8),
+        ],
+    )
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="decimal_to_double")
+    ret = builder.call(fn, [val, scale])
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return ret
+
+
+@intrinsic
+def decimal_to_float64(typingctx, val_t):
+    """convert decimal128 to float"""
+    assert isinstance(val_t, Decimal128Type)
+
+    def codegen(context, builder, signature, args):
+        return decimal_to_float64_codegen(
+            context, builder, signature, args, val_t.scale
+        )
+
+    return types.float64(val_t), codegen
+
+
+@overload(float, no_unliteral=True)
+def overload_float_ctor_from_dec(dec):
+    """
+    Convert a decimal value to a float value
+    TODO: Make Numba native for compiler benefits
+    """
+    if not isinstance(dec, Decimal128Type):  # pragma: no cover
+        return
+
+    def impl(dec):  # pragma: no cover
+        return decimal_to_float64(dec)
 
     return impl
 

@@ -5283,8 +5283,8 @@ def overload_np_select(condlist, choicelist, default=0):
                 )
             typs.append(dtyp)
 
-        (unified_scalar_typ, found_unified_typ) = get_common_scalar_dtype(typs)
-        if not found_unified_typ:
+        unified_scalar_typ, _ = get_common_scalar_dtype(typs)
+        if unified_scalar_typ is None:
             raise BodoError("Internal error in overload_np_select")
         unified_array_typ = dtype_to_array_type(unified_scalar_typ)
 

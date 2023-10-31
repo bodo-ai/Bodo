@@ -151,11 +151,9 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
     # check that the provided array types are comparable
     lhs_scalar_type = arr_to_check.dtype if is_array_typ(arr_to_check) else arr_to_check
     rhs_scalar_type = arr_search_vals.dtype
-    (common_scalar_typ, exists_common_scalar_typ) = get_common_scalar_dtype(
-        [lhs_scalar_type, rhs_scalar_type]
-    )
+    common_scalar_typ, _ = get_common_scalar_dtype([lhs_scalar_type, rhs_scalar_type])
     assert (
-        exists_common_scalar_typ
+        common_scalar_typ is not None
     ), "Internal error in is_in_util: arguments do not have a common scalar dtype"
 
     needs_nullable_conversion = is_nullable(arr_to_check) or is_nullable(

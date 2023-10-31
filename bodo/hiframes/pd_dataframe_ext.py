@@ -86,6 +86,7 @@ from bodo.utils.typing import (
     create_unsupported_overload,
     decode_if_dict_array,
     dtype_to_array_type,
+    error_on_nested_arrays,
     get_castable_arr_dtype,
     get_common_scalar_dtype,
     get_index_data_arr_types,
@@ -5217,11 +5218,14 @@ def overload_union_dataframes(
 ):  # pragma: no cover
     # Step 1: Verify that all DataFrames have the same number of columns.
     # We don't care about the index or the names.
-    df_types = df_tup.types
+    df_types: tuple[DataFrameType, ...] = df_tup.types
     if len(df_types) == 0:
         raise BodoError(
             "union_distinct_dataframes must be called with at least one DataFrame"
         )
+
+    for in_table_type in df_types:
+        error_on_nested_arrays(in_table_type.table_type)
 
     num_cols = -1
     col_types = None
@@ -5262,10 +5266,8 @@ def overload_union_dataframes(
                 else:
                     col_dtype = col_typ.dtype
                     other_col_dtype = other_col_typ.dtype
-                    new_dtype, success = get_common_scalar_dtype(
-                        [col_dtype, other_col_dtype]
-                    )
-                    if not success:
+                    new_dtype, _ = get_common_scalar_dtype([col_dtype, other_col_dtype])
+                    if new_dtype is None:
                         raise BodoError(
                             f"Unable to union table with columns of incompatible types. Found types {col_dtype} and {other_col_dtype} in column {i}."
                         )

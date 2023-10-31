@@ -698,6 +698,25 @@ def overload_int_arr_astype(A, dtype, copy=True):
             bodo.libs.int_arr_ext.get_int_arr_bitmap(A).copy(),
         )
 
+    if isinstance(dtype, bodo.Decimal128Type):
+        precision = dtype.precision
+        scale = dtype.scale
+
+        def impl_dec(A, dtype, copy=True):  # pragma: no cover
+            data = bodo.libs.int_arr_ext.get_int_arr_data(A)
+            n = len(data)
+            B_data = np.empty(n, dtype=bodo.libs.decimal_arr_ext.int128_type)
+            B_nulls = bodo.libs.int_arr_ext.get_int_arr_bitmap(A).copy()
+            B = bodo.libs.decimal_arr_ext.init_decimal_array(
+                B_data, B_nulls, precision, scale
+            )
+            for i in numba.parfors.parfor.internal_prange(n):
+                if not bodo.libs.array_kernels.isna(A, i):
+                    B[i] = data[i]
+            return B
+
+        return impl_dec
+
     # numpy dtypes
     nb_dtype = parse_dtype(dtype, "IntegerArray.astype")
     # NA positions are assigned np.nan for float output

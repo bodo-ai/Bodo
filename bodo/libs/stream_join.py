@@ -245,7 +245,7 @@ class JoinStateType(types.Type):
 
     @staticmethod
     def _derive_common_key_type(
-        input_types: List[types.ArrayCompatible],
+        input_types: list[types.ArrayCompatible],
     ) -> types.ArrayCompatible:
         """Derive a common key type for a list of array input types.
         This is used for unifying the build/probe key types and for
