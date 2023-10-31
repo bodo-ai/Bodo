@@ -11,14 +11,14 @@ def test_memory_budget(memory_leak_check):
     def test():
         bodo.libs.memory_budget.init_operator_comptroller()
         bodo.libs.memory_budget.register_operator(
-            0, bodo.libs.memory_budget.OperatorType.JOIN, 0, 1, 1
+            0, bodo.libs.memory_budget.OperatorType.JOIN, 0, 1, -1
         )
         bodo.libs.memory_budget.register_operator(
-            0, bodo.libs.memory_budget.OperatorType.JOIN, 0, 1, 1
+            1, bodo.libs.memory_budget.OperatorType.JOIN, 0, 1, -1
         )
         bodo.libs.memory_budget.compute_satisfiable_budgets()
         bodo.libs.memory_budget.reduce_operator_budget(0, 0)
-        bodo.libs.memory_budget.increase_operator_budget(0)
+        bodo.libs.memory_budget.increase_operator_budget(1)
         bodo.libs.memory_budget.delete_operator_comptroller()
 
     # This test doesn't assert anything, and just checks for compilation right

@@ -4,6 +4,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -12,7 +13,7 @@
 // TODO(aneesh) explore better values for this constant
 /// Fraction of the total available memory that the memory budgeting system will
 /// use.
-#define BODO_MEMORY_BUDGET_USAGE_FRACTION 0.85
+#define BODO_MEMORY_BUDGET_DEFAULT_USAGE_FRACTION 0.85
 
 /// All supported streaming operator types. The order here must match the order
 /// in _memory_budget.py's OperatorType.
@@ -24,6 +25,73 @@ enum class OperatorType {
     UNION,
     ACCUMULATE_TABLE,
 };
+
+/**
+ * @brief Struct to keep track of operators' budget estimates and requests.
+ *
+ */
+struct OperatorRequest {
+    OperatorType operator_type;
+    int64_t min_pipeline_id;
+    int64_t max_pipeline_id;
+    size_t original_estimate;
+    size_t rem_estimate;
+
+    OperatorRequest(OperatorType operator_type_, int64_t min_pipeline_id_,
+                    int64_t max_pipeline_id_, size_t estimate_)
+        : operator_type(operator_type_),
+          min_pipeline_id(min_pipeline_id_),
+          max_pipeline_id(max_pipeline_id_),
+          original_estimate(estimate_),
+          rem_estimate(estimate_) {}
+
+    // Default constructor for implicitly created operators.
+    // We set the pipeline ids as -1 so that they're not
+    // included in any pipelines during budget calculations.
+    OperatorRequest()
+        : operator_type(OperatorType::UNKNOWN),
+          min_pipeline_id(-1),
+          max_pipeline_id(-1),
+          original_estimate(0),
+          rem_estimate(0) {}
+
+    /**
+     * @brief Is the estimate a relative one.
+     * Currently only Snowflake Write asks for an absolute budget.
+     * We treat UNKNOWN as an absolute estimate for testing purposes.
+     * The rest provide a relative estimate and need to be treated as such.
+     *
+     * @return true
+     * @return false
+     */
+    inline bool estimate_is_relative() const {
+        return (this->operator_type != OperatorType::SNOWFLAKE_WRITE) &&
+               (this->operator_type != OperatorType::UNKNOWN);
+    }
+
+    /**
+     * @brief Is this a single pipeline operator.
+     *
+     * @return true
+     * @return false
+     */
+    inline bool is_single_pipeline_op() const {
+        return this->min_pipeline_id == this->max_pipeline_id;
+    }
+};
+
+/**
+ * @brief
+ * - Set of operator IDs with absolute estimates.
+ * - Set of operator IDs with relative estimates.
+ * - Sum of estimates of operators with absolute estimates.
+ * - Sum of estimates of operators with relative estimates.
+ */
+typedef std::tuple</*abs_req_op_ids*/ std::set<int64_t>,
+                   /*rel_req_op_ids*/ std::set<int64_t>,
+                   /*abs_req_sum*/ size_t,
+                   /*rel_req_sum*/ size_t>
+    abs_rel_split_info;
 
 /**
  * @brief Class that manages operator memory budget
@@ -45,13 +113,14 @@ class OperatorComptroller {
         return enabled;
     }
 
-    // TODO: To be called by init_operator_comptroller
+    // Called by init_operator_comptroller
     void Initialize();
-    // TODO: To be called by delete_operator_comptroller
+    // Called by delete_operator_comptroller
     void Reset();
 
     /**
-     * @brief Set the total memory budget for a pipeline
+     * @brief Set the total memory budget for a pipeline.
+     * Only used for unit testing purposes.
      * @param pipeline_id Pipeline to modify
      * @param budget total budget to set (in bytes)
      */
@@ -65,6 +134,7 @@ class OperatorComptroller {
                           int64_t min_pipeline_id, int64_t max_pipeline_id,
                           size_t estimate);
 
+    // XXX Not sure if it's really needed.
     /**
      * @brief Increment the id of the current pipeline. This represents the
      * program beginning execution of the next pipeline.
@@ -77,10 +147,10 @@ class OperatorComptroller {
      * If the operator_id is invalid (< 0), returns -1 to signify unlimited
      * budget
      */
-    int64_t GetOperatorBudget(int64_t operator_id);
+    int64_t GetOperatorBudget(int64_t operator_id) const;
 
     /**
-     * @brief Reduce the budget for an operator, note that the new budget must
+     * @brief Reduce the budget for an operator. Note that the new budget must
      * be <= the old budget
      * @param operator_id The operator to modify
      * @param budget The new budget
@@ -88,7 +158,7 @@ class OperatorComptroller {
     void ReduceOperatorBudget(int64_t operator_id, size_t budget);
 
     /**
-     * @brief Increase the budget for a given operator to the maximum possible
+     * @brief Increase the budget for a given operator to the maximum possible.
      * @param operator_id The operator to modify
      */
     void IncreaseOperatorBudget(int64_t operator_id);
@@ -99,33 +169,97 @@ class OperatorComptroller {
      */
     void ComputeSatisfiableBudgets();
 
+    /**
+     * @brief Utility function to print the budget allocation state.
+     *
+     * @param os The stream to print to.
+     */
+    void PrintBudgetAllocations(std::ostream& os);
+
    private:
     static constexpr size_t UNINITIALIZED_PIPELINE_ID =
         std::numeric_limits<size_t>::max();
 
+    // XXX Not sure if it's really needed. Not being initialized could just be a
+    // flag.
     size_t current_pipeline_id = UNINITIALIZED_PIPELINE_ID;
 
     std::vector<size_t> pipeline_remaining_budget;
-    std::vector<size_t> pipeline_remaining_operators;
+    std::vector<std::set<int64_t>> pipeline_to_remaining_operator_ids;
     std::vector<int64_t> operator_allocated_budget;
 
-    struct OperatorRequest {
-        OperatorType operator_type;
-        int64_t min_pipeline_id;
-        int64_t max_pipeline_id;
-        size_t estimate;
-
-        inline bool estimate_is_relative() {
-            // Currently only Snowflake Write asks for an absolute budget.
-            // The rest provide a relative estimate and need to be treated
-            // as such.
-            return this->operator_type != OperatorType::SNOWFLAKE_WRITE;
-        }
-    };
     std::vector<OperatorRequest> requests_per_operator;
 
-    int64_t num_pipelines = 0;
-    int64_t num_operators = 0;
+    size_t num_pipelines = 0;
+    size_t num_operators = 0;
+
+    size_t debug_level = 0;
+    double memory_usage_fraction = BODO_MEMORY_BUDGET_DEFAULT_USAGE_FRACTION;
+
+    /// Helpers for ComputeSatisfiableBudgets:
+
+    /**
+     * @brief Assign an additional 'addln_budget' bytes of budget to
+     * operator with operator-id 'op_id'.
+     *
+     * This will increase operator_allocated_budget[op_id],
+     * decrease pipeline_remaining_budget for all pipelines that this
+     * operator is in and update requests_per_operator[op_id].rem_estimate
+     * if the estimate is absolute. For absolute requests, if the request is now
+     * completely fulfilled, it will also remove op_id from
+     * pipeline_to_remaining_operator_ids for all pipelines that this
+     * operator is in.
+     *
+     * @param op_id Operator ID to assign additional budget to.
+     * @param addln_budget Additional budget (in bytes) to assign to this
+     * operator.
+     */
+    void assignAdditionalBudgetToOperator(int64_t op_id, size_t addln_budget);
+
+    /**
+     * @brief Reset and re-populate this->pipeline_to_remaining_operator_ids
+     * based on the current request and allocation state.
+     *
+     */
+    void refreshPipelineToRemainingOperatorIds();
+
+    /**
+     * @brief Helper function to split the operators in the pipeline with id
+     * 'pipline_id' into those that have relative estimates and those that have
+     * absolute estimates. Note that we only return operators whose requests
+     * haven't been completely fulfilled yet.
+     *
+     * @param pipeline_id Pipeline ID of the pipeline to get this information
+     * for.
+     * @return abs_rel_split_info
+     */
+    abs_rel_split_info splitRemainingOperatorsIntoAbsoluteAndRelative(
+        int64_t pipeline_id) const;
+
+    /**
+     * @brief Same as splitRemainingOperatorsIntoAbsoluteAndRelative, except
+     * we only consider operators that only exist in pipeline with id
+     * 'pipeline_id'.
+     *
+     * @param pipeline_id Pipeline ID of the pipeline to get this information
+     * for.
+     * @return abs_rel_split_info
+     */
+    abs_rel_split_info
+    splitRemainingSinglePipelineOperatorsIntoAbsoluteAndRelative(
+        int64_t pipeline_id) const;
+
+    /**
+     * @brief Assign 'budget' many bytes among the operators (corresponding to
+     * 'op_ids') proportional to their remaining estimates.
+     *
+     * @param op_ids Operators to distribute the budget between.
+     * @param ops_rem_est_sum Sum of the remaining estimates of the operators.
+     * @param budget Budget to distribute between the operators.
+     */
+    inline void assignBudgetProportionalToRemEstimate(std::set<int64_t> op_ids,
+                                                      size_t ops_rem_est_sum,
+                                                      size_t budget);
 
     static bool memoryBudgetsEnabledHelper() {
         char* use_mem_budget_env_ = std::getenv("BODO_USE_MEMORY_BUDGETS");
