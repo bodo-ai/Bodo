@@ -388,11 +388,11 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               SqlTypeFamily.INTEGER,
               SqlTypeFamily.INTEGER,
               SqlTypeFamily.STRING)
-          .or(
-              OperandTypes.sequence(
-                  "TIMESTAMP_FROM_PARTS(DATE, TIME)",
-                  OperandTypes.DATETIME,
-                  OperandTypes.DATETIME));
+          .or(OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.TIME))
+          .or(OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.TIMESTAMP))
+          .or(OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.TIMESTAMP))
+          .or(OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.TIME));
+
   public static final SqlFunction TIMESTAMP_FROM_PARTS =
       new SqlFunction(
           "TIMESTAMP_FROM_PARTS",
