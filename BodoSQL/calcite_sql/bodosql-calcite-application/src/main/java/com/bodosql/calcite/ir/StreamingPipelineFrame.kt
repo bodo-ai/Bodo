@@ -79,15 +79,6 @@ class StreamingPipelineFrame(private var exitCond: Variable, private var iterVar
     }
 
     /**
-     * Adds the list of operations just before the return statement in the active Frame.
-     * If there is no return statement yet, just add op to the end of the frame.
-     * @param ops Operations to add to the active Frame.
-     */
-    override fun addBeforeReturn(op: Op) {
-        code.addBeforeReturn(op)
-    }
-
-    /**
      * This simulates appending code directly to a StringBuilder.
      * It is primarily meant as a way to support older code
      * and shouldn't be used anymore.
