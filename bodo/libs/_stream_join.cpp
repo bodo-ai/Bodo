@@ -1933,8 +1933,8 @@ bool join_build_consume_batch(HashJoinState* join_state,
                                                   join_state->build_parallel);
             }
         }
-        mpi_comm_info comm_info_table(shuffle_table->columns);
-        comm_info_table.set_counts(shuffle_hashes, join_state->build_parallel);
+        mpi_comm_info comm_info_table(shuffle_table->columns, shuffle_hashes,
+                                      join_state->build_parallel);
         std::shared_ptr<table_info> new_data =
             shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
                                  comm_info_table, join_state->build_parallel);
@@ -2203,8 +2203,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             }
         }
 
-        mpi_comm_info comm_info_table(shuffle_table->columns);
-        comm_info_table.set_counts(shuffle_hashes, /*is_parallel*/ true);
+        mpi_comm_info comm_info_table(shuffle_table->columns, shuffle_hashes,
+                                      /*is_parallel*/ true);
         std::shared_ptr<table_info> new_data =
             shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
                                  comm_info_table, /*is_parallel*/ true);

@@ -119,10 +119,9 @@ void array_isin_py_entry(array_info* p_out_arr, array_info* p_in_arr,
         std::shared_ptr<table_info> shuf_table_in_values =
             shuffle_table(std::move(table_in_values), num_keys, is_parallel);
         // we need the comm_info and hashes for the reverse shuffling
-        mpi_comm_info comm_info(table_in_arr->columns);
         std::shared_ptr<uint32_t[]> hashes =
             hash_keys_table(table_in_arr, 1, SEED_HASH_PARTITION, is_parallel);
-        comm_info.set_counts(hashes, is_parallel);
+        mpi_comm_info comm_info(table_in_arr->columns, hashes, is_parallel);
         std::shared_ptr<table_info> shuf_table_in_arr = shuffle_table_kernel(
             std::move(table_in_arr), hashes, comm_info, is_parallel);
         // Creation of the output array.
@@ -521,8 +520,7 @@ std::shared_ptr<table_info> sort_values_table(
     bounds.reset();
 
     // Now shuffle all the data
-    mpi_comm_info comm_info(local_sort->columns);
-    comm_info.set_counts(hashes, parallel);
+    mpi_comm_info comm_info(local_sort->columns, hashes, parallel);
     ev_hashes.finalize();
     ev_sample.finalize();
     std::shared_ptr<table_info> collected_table = shuffle_table_kernel(
@@ -1070,8 +1068,8 @@ std::shared_ptr<table_info> sort_table_for_interval_join(
     // 2. Shuffle data
     //
 
-    mpi_comm_info comm_info_table(table_to_send->columns);
-    comm_info_table.set_counts(table_to_send_hashes, parallel);
+    mpi_comm_info comm_info_table(table_to_send->columns, table_to_send_hashes,
+                                  parallel);
     // NOTE: shuffle_table_kernel decrefs input arrays
     std::shared_ptr<table_info> collected_table =
         shuffle_table_kernel(std::move(table_to_send), table_to_send_hashes,
