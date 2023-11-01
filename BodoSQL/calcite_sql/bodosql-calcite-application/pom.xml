@@ -451,8 +451,6 @@
                                         <exclude>org/apache/calcite/sql2rel/RelStructuredTypeFlattener$RewriteRexShuttle.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/RelStructuredTypeFlattener$SelfFlatteningRel.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/RelStructuredTypeFlattener.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/SqlNodeToRexConverterImpl$1.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/SqlNodeToRexConverterImpl.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$1.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$2.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$3.class</exclude>
