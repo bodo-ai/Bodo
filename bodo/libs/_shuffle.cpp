@@ -14,10 +14,10 @@
 #include "_distributed.h"
 
 /**
- * @brief Template used to handle the unmatchable rows in
- * mpi_comm_info::set_counts. This is used in two cases:
- * - A bloom filter is provided for additional filtering and we
- * need to decide what to do with the misses.
+ * @brief Template used to handle the unmatchable rows in mpi_comm_info. This is
+ * used in two cases:
+ * - A bloom filter is provided for additional filtering and we need to decide
+ * what to do with the misses.
  * - A null bitmask is provided (only provided when nulls don't match with each
  * other, e.g. SQL joins), and we need to decide what to do with the nulls.
  *
@@ -90,100 +90,11 @@ bodo::vector<int> get_inner_array_row_dest(
     return row_dest_inner;
 }
 
-mpi_comm_info::mpi_comm_info(
-    const std::vector<std::shared_ptr<array_info>>& arrays)
-    : has_nulls(false), n_null_bytes(0), row_dest(arrays[0]->length, -1) {
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    for (const std::shared_ptr<array_info>& arr_info : arrays) {
-        if (arr_info->null_bitmask() != nullptr) {
-            has_nulls = true;
-            break;
-        }
-    }
-    // init counts
-    send_count.resize(n_pes);
-    recv_count.resize(n_pes);
-    send_disp.resize(n_pes);
-    recv_disp.resize(n_pes);
-    if (has_nulls) {
-        send_count_null.resize(n_pes);
-        recv_count_null.resize(n_pes);
-        send_disp_null.resize(n_pes);
-        recv_disp_null.resize(n_pes);
-    }
-}
-
-mpi_comm_info::mpi_comm_info(const std::shared_ptr<array_info>& parent_arr,
-                             const mpi_comm_info& parent_comm_info)
-    : myrank(parent_comm_info.myrank),
-      n_pes(parent_comm_info.n_pes),
-      has_nulls(parent_arr->child_arrays[0]->null_bitmask() != nullptr),
-      send_count(n_pes),
-      recv_count(n_pes),
-      send_disp(n_pes),
-      recv_disp(n_pes),
-      n_null_bytes(parent_comm_info.n_null_bytes),
-      // NOTE: get_inner_array_row_dest implicitly verifies that the parent
-      // array is an array-item array.
-      row_dest(get_inner_array_row_dest(parent_arr, parent_comm_info.row_dest)),
-      filtered(parent_comm_info.filtered) {
-    // send counts
-    for (int i : row_dest) {
-        if (i != -1) {
-            send_count[i]++;
-        }
-    }
-    // get recv count
-    MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
-                 MPI_INT64_T, MPI_COMM_WORLD);
-    // get displacements
-    calc_disp(send_disp, send_count);
-    calc_disp(recv_disp, recv_count);
-
-    n_rows_send =
-        std::accumulate(send_count.begin(), send_count.end(), int64_t(0));
-    n_rows_recv =
-        std::accumulate(recv_count.begin(), recv_count.end(), int64_t(0));
-
-    if (has_nulls) {
-        send_count_null.resize(n_pes);
-        recv_count_null.resize(n_pes);
-        send_disp_null.resize(n_pes);
-        recv_disp_null.resize(n_pes);
-        // get null counts
-        for (size_t i = 0; i < send_count.size(); i++) {
-            send_count_null[i] = (send_count[i] + 7) >> 3;
-            recv_count_null[i] = (recv_count[i] + 7) >> 3;
-        }
-        calc_disp(send_disp_null, send_count_null);
-        calc_disp(recv_disp_null, recv_count_null);
-        // inner array's n_null_bytes should always be great than or equal to
-        // parent array's since we don't what to resize down the null bytes
-        // vector
-        n_null_bytes =
-            std::max(std::accumulate(recv_count_null.begin(),
-                                     recv_count_null.end(), size_t(0)),
-                     n_null_bytes);
-    }
-}
-
 template <bool keep_nulls_and_filter_misses>
-void mpi_comm_info::set_counts(
-    const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
-    SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
-    const uint8_t* null_bitmask) {
-    tracing::Event ev("set_counts", is_parallel);
-    const size_t n_rows = row_dest.size();
-    ev.add_attribute("n_rows", n_rows);
-    ev.add_attribute("g_using_filter", filter != nullptr);
-    ev.add_attribute("g_keep_filter_misses", keep_nulls_and_filter_misses);
-    ev.add_attribute("g_using_hash_null_bitmask", null_bitmask != nullptr);
-    ev.add_attribute("g_keep_nulls_local", ((null_bitmask != nullptr) &&
-                                            keep_nulls_and_filter_misses));
-    ev.add_attribute("g_drop_nulls", ((null_bitmask != nullptr) &&
-                                      !keep_nulls_and_filter_misses));
-    // get send count
+void mpi_comm_info::set_send_count(
+    const std::shared_ptr<uint32_t[]>& hashes,
+    const SimdBlockFilterFixed<::hashing::SimpleMixSplit>*& filter,
+    const uint8_t*& null_bitmask, const uint64_t& n_rows) {
     if (filter == nullptr) {
         if (null_bitmask == nullptr) {
             for (size_t i = 0; i < n_rows; i++) {
@@ -234,8 +145,9 @@ void mpi_comm_info::set_counts(
                     const uint32_t& hash = hashes[i];
                     if (!filter->Find(static_cast<uint64_t>(hash))) {
                         // if not in filter: keep the row on this rank if
-                        // keep_nulls_and_filter_misses=true, or drop entirely
-                        // otherwise (i.e. leave row_dest[i] as -1).
+                        // keep_nulls_and_filter_misses=true, or drop
+                        // entirely otherwise (i.e. leave row_dest[i] as
+                        // -1).
                         handle_unmatchable_rows<keep_nulls_and_filter_misses>(
                             row_dest, send_count, i, this->myrank);
                     } else {
@@ -247,12 +159,54 @@ void mpi_comm_info::set_counts(
             }
         }
     }
+}
+
+mpi_comm_info::mpi_comm_info(
+    const std::vector<std::shared_ptr<array_info>>& arrays,
+    const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
+    const SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
+    const uint8_t* null_bitmask, bool keep_nulls_and_filter_misses)
+    : has_nulls(false), n_null_bytes(0), row_dest(arrays[0]->length, -1) {
+    tracing::Event ev("mpi_comm_info", is_parallel);
+    const uint64_t& n_rows = arrays[0]->length;
+    ev.add_attribute("n_rows", n_rows);
+    ev.add_attribute("g_using_filter", filter != nullptr);
+    ev.add_attribute("g_keep_filter_misses", keep_nulls_and_filter_misses);
+    ev.add_attribute("g_using_hash_null_bitmask", null_bitmask != nullptr);
+    ev.add_attribute("g_keep_nulls_local", ((null_bitmask != nullptr) &&
+                                            keep_nulls_and_filter_misses));
+    ev.add_attribute("g_drop_nulls", ((null_bitmask != nullptr) &&
+                                      !keep_nulls_and_filter_misses));
+
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    for (const std::shared_ptr<array_info>& arr_info : arrays) {
+        if (arr_info->null_bitmask() != nullptr) {
+            has_nulls = true;
+            break;
+        }
+    }
+
+    // init counts
+    send_count.resize(n_pes);
+    recv_count.resize(n_pes);
+    send_disp.resize(n_pes);
+    recv_disp.resize(n_pes);
+
+    if (keep_nulls_and_filter_misses) {
+        this->set_send_count<true>(hashes, filter, null_bitmask, n_rows);
+    } else {
+        this->set_send_count<false>(hashes, filter, null_bitmask, n_rows);
+    }
+
     // Rows can get filtered if either a bloom-filter or a null filter is
     // provided
     this->filtered = (null_bitmask != nullptr) || (filter != nullptr);
     // get recv count
     MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
                  MPI_INT64_T, MPI_COMM_WORLD);
+
     n_rows_send =
         std::accumulate(send_count.begin(), send_count.end(), int64_t(0));
     n_rows_recv =
@@ -262,18 +216,77 @@ void mpi_comm_info::set_counts(
         ev.add_attribute("nrows_filtered", n_rows - n_rows_send);
         ev.add_attribute("filtered", filtered);
     }
+
     // get displacements
     calc_disp(send_disp, send_count);
     calc_disp(recv_disp, recv_count);
+
     if (has_nulls) {
-        for (size_t i = 0; i < size_t(n_pes); i++) {
-            send_count_null[i] = (send_count[i] + 7) >> 3;
-            recv_count_null[i] = (recv_count[i] + 7) >> 3;
+        send_count_null.reserve(n_pes);
+        recv_count_null.reserve(n_pes);
+        send_disp_null.resize(n_pes);
+        recv_disp_null.resize(n_pes);
+        for (int i = 0; i < n_pes; i++) {
+            send_count_null.push_back((send_count[i] + 7) >> 3);
+            recv_count_null.push_back((recv_count[i] + 7) >> 3);
         }
         calc_disp(send_disp_null, send_count_null);
         calc_disp(recv_disp_null, recv_count_null);
         n_null_bytes = std::accumulate(recv_count_null.begin(),
                                        recv_count_null.end(), size_t(0));
+    }
+}
+
+mpi_comm_info::mpi_comm_info(const std::shared_ptr<array_info>& parent_arr,
+                             const mpi_comm_info& parent_comm_info)
+    : myrank(parent_comm_info.myrank),
+      n_pes(parent_comm_info.n_pes),
+      has_nulls(parent_arr->child_arrays[0]->null_bitmask() != nullptr),
+      send_count(n_pes),
+      recv_count(n_pes),
+      send_disp(n_pes),
+      recv_disp(n_pes),
+      n_null_bytes(parent_comm_info.n_null_bytes),
+      // NOTE: get_inner_array_row_dest implicitly verifies that the parent
+      // array is an array-item array.
+      row_dest(get_inner_array_row_dest(parent_arr, parent_comm_info.row_dest)),
+      filtered(parent_comm_info.filtered) {
+    // send counts
+    for (int i : row_dest) {
+        if (i != -1) {
+            send_count[i]++;
+        }
+    }
+    // get recv count
+    MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
+                 MPI_INT64_T, MPI_COMM_WORLD);
+    // get displacements
+    calc_disp(send_disp, send_count);
+    calc_disp(recv_disp, recv_count);
+
+    n_rows_send =
+        std::accumulate(send_count.begin(), send_count.end(), int64_t(0));
+    n_rows_recv =
+        std::accumulate(recv_count.begin(), recv_count.end(), int64_t(0));
+
+    if (has_nulls) {
+        send_count_null.reserve(n_pes);
+        recv_count_null.reserve(n_pes);
+        send_disp_null.resize(n_pes);
+        recv_disp_null.resize(n_pes);
+        for (int i = 0; i < n_pes; i++) {
+            send_count_null.push_back((send_count[i] + 7) >> 3);
+            recv_count_null.push_back((recv_count[i] + 7) >> 3);
+        }
+        calc_disp(send_disp_null, send_count_null);
+        calc_disp(recv_disp_null, recv_count_null);
+        // inner array's n_null_bytes should always be great than or equal
+        // to parent array's since we don't what to resize down the null
+        // bytes vector
+        n_null_bytes =
+            std::max(std::accumulate(recv_count_null.begin(),
+                                     recv_count_null.end(), size_t(0)),
+                     n_null_bytes);
     }
 }
 
@@ -1672,10 +1685,9 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
 }
 
 /*
-  A prerequisite for the function to run correctly is that the set_counts
-  method has been used and set correctly. It determines which sizes go to
-  each processor. It performs a determination of the the sending and
-  receiving arrays.
+  A prerequisite for the function to run correctly is that the comm_info is
+  set correctly. It determines which sizes go to each processor. It performs
+  a determination of the the sending and receiving arrays.
   ---
   1) The first step is to accumulate the sizes from each processors.
   2) Then for each row a number of operations are done:
@@ -2188,8 +2200,6 @@ std::shared_ptr<table_info> shuffle_table(std::shared_ptr<table_info> in_table,
     }
 
     const bool delete_hashes = bool(hashes);
-    std::shared_ptr<mpi_comm_info> comm_info =
-        std::make_shared<mpi_comm_info>(in_table->columns);
 
     // For any dictionary arrays that have local dictionaries, convert their
     // dictionaries to global now (since it's needed for the shuffle) and if
@@ -2212,7 +2222,8 @@ std::shared_ptr<table_info> shuffle_table(std::shared_ptr<table_info> in_table,
         hashes =
             hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION, is_parallel);
     }
-    comm_info->set_counts(hashes, is_parallel);
+    std::shared_ptr<mpi_comm_info> comm_info =
+        std::make_shared<mpi_comm_info>(in_table->columns, hashes, is_parallel);
 
     std::shared_ptr<table_info> table = shuffle_table_kernel(
         std::move(in_table), hashes, *comm_info, is_parallel);
@@ -2299,7 +2310,6 @@ std::shared_ptr<table_info> coherent_shuffle_table(
         return nullptr;
     }
     const bool delete_hashes = bool(hashes);
-    mpi_comm_info comm_info(in_table->columns);
 
     // For any dictionary arrays that have local dictionaries, convert their
     // dictionaries to global now (since it's needed for the shuffle) and if
@@ -2324,11 +2334,8 @@ std::shared_ptr<table_info> coherent_shuffle_table(
     // coherent_shuffle_table only called in join with parallel options.
     // is_parallel = true
     // Prereq to calling shuffle_table_kernel
-    if (keep_nulls_and_filter_misses) {
-        comm_info.set_counts<true>(hashes, true, filter, null_bitmask);
-    } else {
-        comm_info.set_counts<false>(hashes, true, filter, null_bitmask);
-    }
+    mpi_comm_info comm_info(in_table->columns, hashes, true, filter,
+                            null_bitmask, keep_nulls_and_filter_misses);
     std::shared_ptr<table_info> table =
         shuffle_table_kernel(std::move(in_table), hashes, comm_info, true);
     if (delete_hashes) {
@@ -3602,8 +3609,7 @@ std::shared_ptr<table_info> shuffle_renormalization_group(
         }
     }
     //
-    mpi_comm_info comm_info(in_table->columns);
-    comm_info.set_counts(hashes, parallel);
+    mpi_comm_info comm_info(in_table->columns, hashes, parallel);
     std::shared_ptr<table_info> ret_table =
         shuffle_table_kernel(std::move(in_table), hashes, comm_info, parallel);
     if (random) {
