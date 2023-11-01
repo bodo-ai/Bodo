@@ -311,8 +311,8 @@ class GroupbyPipeline {
             // std::shared_ptr<table_info> in_table = shuffle_table(in_table,
             // num_keys) We do this more complicated construction because we may
             // need the hashes and comm_info later.
-            comm_info_ptr = std::make_shared<mpi_comm_info>(in_table->columns);
-            comm_info_ptr->set_counts(hashes, is_parallel);
+            comm_info_ptr = std::make_shared<mpi_comm_info>(
+                in_table->columns, hashes, is_parallel);
             in_table = shuffle_table_kernel(std::move(in_table), hashes,
                                             *comm_info_ptr, is_parallel);
             has_reverse_shuffle = cumulative_op || shift_op || transform_op ||

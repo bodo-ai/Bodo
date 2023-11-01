@@ -2209,8 +2209,8 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
                 make_dictionary_global_and_unique(arr, groupby_state->parallel);
             }
         }
-        mpi_comm_info comm_info_table(shuffle_table->columns);
-        comm_info_table.set_counts(shuffle_hashes, groupby_state->parallel);
+        mpi_comm_info comm_info_table(shuffle_table->columns, shuffle_hashes,
+                                      groupby_state->parallel);
         std::shared_ptr<table_info> new_data =
             shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
                                  comm_info_table, groupby_state->parallel);
@@ -2377,8 +2377,8 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
                 make_dictionary_global_and_unique(arr, groupby_state->parallel);
             }
         }
-        mpi_comm_info comm_info_table(shuffle_table->columns);
-        comm_info_table.set_counts(shuffle_hashes, groupby_state->parallel);
+        mpi_comm_info comm_info_table(shuffle_table->columns, shuffle_hashes,
+                                      groupby_state->parallel);
         std::shared_ptr<table_info> new_data =
             shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
                                  comm_info_table, groupby_state->parallel);
