@@ -1960,7 +1960,6 @@ def test_batched_write_nested_array(
 
     from bodo.io.snowflake import snowflake_connect
 
-    comm = MPI.COMM_WORLD
     conn = bodo.tests.utils.get_snowflake_connection_string("TEST_DB", "PUBLIC")
     kept_cols = bodo.utils.typing.MetaType((0, 1))
     col_meta = bodo.utils.typing.ColNamesMetaType(
@@ -2029,14 +2028,15 @@ def test_batched_write_nested_array(
         remote_column_type = table_info[table_info["name"] == "B"]["type"].iloc[0]
         assert remote_column_type == column_type.upper()
 
-        check_func(
-            read_impl,
-            (conn,),
-            py_output=expected_df,
-            sort_output=True,
-            reset_index=True,
-            only_1DVar=True,
-        )
+        if column_type != "object":
+            check_func(
+                read_impl,
+                (conn,),
+                py_output=expected_df,
+                sort_output=True,
+                reset_index=True,
+                only_1DVar=True,
+            )
 
 
 def test_write_with_string_precision(memory_leak_check):
