@@ -154,7 +154,7 @@ class ParquetReader : public ArrowReader {
     void init_pq_scanner();
 
     // Arrow Batched Reader to get next table iteratively
-    PyObject* reader;
+    PyObject* reader = nullptr;
 
     // -------------- Streaming Specific Parameters --------------
 
