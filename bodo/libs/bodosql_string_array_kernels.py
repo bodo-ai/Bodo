@@ -1447,7 +1447,7 @@ def position_util(substr, source, start, dict_encoding_state, func_id):
 
     is_str = verify_string_binary_arg(substr, "POSITION", "substr")
     if is_str != verify_string_binary_arg(source, "POSITION", "source") and not (
-        is_overload_none(substr) or is_overload_none(is_str)
+        is_overload_none(substr) or is_overload_none(source)
     ):  # pragma: no cover
         raise BodoError("Substring and source must be both strings or both binary")
     verify_int_arg(start, "POSITION", "start")
@@ -1568,7 +1568,6 @@ def reverse_util(arr, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function REVERSE which takes in a string
        (or string column) and reverses it
 
-
     Args:
         arr (string array/series/scalar): the strings(s) to be reversed
 
@@ -1583,7 +1582,6 @@ def reverse_util(arr, dict_encoding_state, func_id):
     propagate_null = [True] + [False] * 2
     scalar_text = "res[i] = arg0[::-1]"
 
-    out_dtype = bodo.string_array_type
     out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
