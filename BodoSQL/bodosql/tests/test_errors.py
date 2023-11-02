@@ -9,7 +9,6 @@ import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.utils import BodoSQLWarning
 
 import bodo
 from bodo.utils.typing import BodoError
@@ -133,9 +132,9 @@ def test_unsupported_format_str_jit(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_unsupported_types(memory_leak_check):
+def test_unsupported_decimal(memory_leak_check):
     """
-    Checks unsupported types throw an exception in Python.
+    Checks reading DecimalArrayType raises a warning in Python.
     """
 
     def impl(df):
@@ -147,8 +146,8 @@ def test_unsupported_types(memory_leak_check):
     df = pd.DataFrame({"A": [1, 2, 3, 4], "B": [Decimal(1.2)] * 4})
     if bodo.get_rank() == 0:
         with pytest.warns(
-            BodoSQLWarning,
-            match="DataFrame column 'B' with type DecimalArrayType\\(38, 18\\) not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types:.*",
+            UserWarning,
+            match="DecimalArrayType\\(38, 18\\) is not properly supported from a Python \+ Pandas Dataframe. BodoSQL will implicitly treat this column as a float64",
         ):
             impl(df)
     else:
@@ -156,9 +155,9 @@ def test_unsupported_types(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_unsupported_types_jit(memory_leak_check):
+def test_unsupported_decimal_jit(memory_leak_check):
     """
-    Checks unsupported types throw an exception in JIT.
+    Checks reading DecimalArrayType raises a warning in JIT.
     """
 
     @bodo.jit
@@ -170,8 +169,8 @@ def test_unsupported_types_jit(memory_leak_check):
     df = pd.DataFrame({"A": [1, 2, 3, 4], "B": [Decimal(1.2)] * 4})
     if bodo.get_rank() == 0:
         with pytest.warns(
-            BodoSQLWarning,
-            match="DataFrame column 'B' with type DecimalArrayType\\(38, 18\\) not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types:.*",
+            UserWarning,
+            match="DecimalArrayType\\(38, 18\\) is not properly supported from a Python \+ Pandas Dataframe. BodoSQL will implicitly treat this column as a float64",
         ):
             impl(df)
     else:
