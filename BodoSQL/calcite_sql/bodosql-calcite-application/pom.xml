@@ -349,12 +349,6 @@
                                         <exclude>org/apache/calcite/sql/ddl/SqlCreateTable.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlCoalesceFunction.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlQuantifyOperator.class</exclude>
-                                        <exclude>org/apache/calcite/sql/parser/SqlAbstractParserImpl$1.class</exclude>
-                                        <exclude>org/apache/calcite/sql/parser/SqlAbstractParserImpl$ExprContext.class</exclude>
-                                        <exclude>org/apache/calcite/sql/parser/SqlAbstractParserImpl$LexicalState.class</exclude>
-                                        <exclude>org/apache/calcite/sql/parser/SqlAbstractParserImpl$Metadata.class</exclude>
-                                        <exclude>org/apache/calcite/sql/parser/SqlAbstractParserImpl$MetadataImpl.class</exclude>
-                                        <exclude>org/apache/calcite/sql/parser/SqlAbstractParserImpl.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$Format.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$MalformedUnicodeEscape.class</exclude>
