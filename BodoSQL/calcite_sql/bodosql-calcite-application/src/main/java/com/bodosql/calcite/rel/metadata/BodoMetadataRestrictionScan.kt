@@ -85,7 +85,7 @@ class BodoMetadataRestrictionScan {
          * would return null since there is no one column we can use to infer the
          * metadata of +($0, $2). If we called it on the third term it would return
          * 5 since the distinctness of the entire term could potentially be inferred
-         * just the knowing hte distinctness of column $5.
+         * just the knowing the distinctness of column $5.
          *
          * @param node The RexNode being searched for a column from the input RelNode
          * that should have its metadata requested.

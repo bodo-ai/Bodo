@@ -794,7 +794,7 @@ def make_add_interval_tz_test(amount, start, target, is_vector):
 def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_check):
     """Tests the add_interval_xxx kernels on timezone data. All the vector
     tests use a starting date right before the spring daylight savings jump
-    of 2020, and all the scalar tests use a starting date right before hte
+    of 2020, and all the scalar tests use a starting date right before the
     fall daylight savings jump of 2020.
 
     Current expected behavior: daylight savings behavior ignored."""

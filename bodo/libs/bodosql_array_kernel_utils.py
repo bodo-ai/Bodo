@@ -1387,7 +1387,7 @@ def get_common_broadcasted_type(arg_types, func_name):
         )
         if common_dtype is None:
             raise_bodo_error(
-                f"Cannot call {func_name} on columns with different dtypes"
+                f"Cannot call {func_name} on columns with different dtypes: {scalar_dtypes}"
             )
         return bodo.utils.typing.to_nullable_type(
             bodo.utils.typing.dtype_to_array_type(common_dtype)

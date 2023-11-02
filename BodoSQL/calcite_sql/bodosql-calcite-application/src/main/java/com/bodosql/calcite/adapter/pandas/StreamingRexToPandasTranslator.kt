@@ -61,8 +61,8 @@ class StreamingRexToPandasTranslator(
         return visitSubstringScan(node, genDictEncodingArgs())
     }
 
-    override fun visitNullIgnoringGenericFunc(fnOperation: RexCall, isSingleRow: Boolean): Expr {
-        return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, genDictEncodingArgs())
+    override fun visitNullIgnoringGenericFunc(fnOperation: RexCall, isSingleRow: Boolean, argScalars: List<Boolean>): Expr {
+        return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, genDictEncodingArgs(), argScalars)
     }
 
     override fun visitDynamicCast(

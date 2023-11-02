@@ -3,6 +3,7 @@
 """
 
 import datetime
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -1269,4 +1270,798 @@ def test_row_number(test, memory_leak_check):
         py_output=pd.DataFrame({"ROW_NUMBER": res}),
         check_dtype=False,
         reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args, scalar_tup, use_map_arrays, answer",
+    [
+        pytest.param(
+            (
+                pd.Series(
+                    [1, None, 4, None, 16, None, 64, None, 256], dtype=pd.Int64Dtype()
+                ),
+            ),
+            (False,),
+            False,
+            pd.Series([[1], [None], [4], [None], [16], [None], [64], [None], [256]]),
+            id="integer-1",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [1, None, 4, None, 16, None, 64, None, 256], dtype=pd.Int32Dtype()
+                ),
+                np.int8(-1),
+            ),
+            (False, True),
+            False,
+            pd.Series(
+                [
+                    [1, -1],
+                    [None, -1],
+                    [4, -1],
+                    [None, -1],
+                    [16, -1],
+                    [None, -1],
+                    [64, -1],
+                    [None, -1],
+                    [256, -1],
+                ]
+            ),
+            id="integer-2",
+        ),
+        pytest.param(
+            (
+                None,
+                pd.Series([1, 2, 1, 2, 1], dtype=pd.UInt32Dtype()),
+                np.uint16(3),
+                np.array([4, 5, -6, 7, 8], dtype=np.int8),
+            ),
+            (True, False, True, False),
+            False,
+            pd.Series(
+                [
+                    [None, 1, 3, 4],
+                    [None, 2, 3, 5],
+                    [None, 1, 3, -6],
+                    [None, 2, 3, 7],
+                    [None, 1, 3, 8],
+                ]
+            ),
+            id="integer-4",
+        ),
+        pytest.param(
+            ("",),
+            (True,),
+            False,
+            pd.array([""]),
+            id="string_scalar-1",
+        ),
+        pytest.param(
+            (pd.Series(["", None, "A", None, "AB", None, "ABC"] * 3),),
+            (False,),
+            False,
+            pd.Series([[""], [None], ["A"], [None], ["AB"], [None], ["ABC"]] * 3),
+            id="string-1",
+        ),
+        pytest.param(
+            (pd.Series(["", None, "A", None, "AB", None, "ABC"] * 3), "foo"),
+            (False, True),
+            False,
+            pd.Series(
+                [
+                    ["", "foo"],
+                    [None, "foo"],
+                    ["A", "foo"],
+                    [None, "foo"],
+                    ["AB", "foo"],
+                    [None, "foo"],
+                    ["ABC", "foo"],
+                ]
+                * 3
+            ),
+            id="string-2",
+        ),
+        pytest.param(
+            (
+                "K",
+                pd.Series(["1", None, "2", None, "3"]),
+                None,
+                pd.Series(["", "A", "BC", "DEF", "GHIJ"]),
+            ),
+            (True, False, True, False),
+            False,
+            pd.Series(
+                [
+                    ["K", "1", None, ""],
+                    ["K", None, None, "A"],
+                    ["K", "2", None, "BC"],
+                    ["K", None, None, "DEF"],
+                    ["K", "3", None, "GHIJ"],
+                ]
+            ),
+            id="string-4",
+        ),
+        pytest.param(
+            (
+                b"1",
+                pd.Series([b"23", None, b"456", None, b""] * 2),
+            ),
+            (True, False),
+            False,
+            pd.Series(
+                [[b"1", b"23"], [b"1", None], [b"1", b"456"], [b"1", None], [b"1", b""]]
+                * 2
+            ),
+            id="binary-2",
+            marks=pytest.mark.skip(
+                reason="[BSE-1776] TODO: support array_construct when inputs are binary"
+            ),
+        ),
+        pytest.param(
+            (
+                np.array([True, False, True, False] * 2, dtype=np.bool_),
+                pd.Series([True, False, None, True] * 2, dtype=pd.BooleanDtype()),
+            ),
+            (False, False),
+            False,
+            pd.Series([[True, True], [False, False], [True, None], [False, True]] * 2),
+            id="boolean-2",
+        ),
+        pytest.param(
+            (
+                np.float64(3.14),
+                pd.Series([-1.0, 0.0, None, 2.71828] * 2, dtype=pd.Float32Dtype()),
+            ),
+            (True, False),
+            False,
+            pd.Series([[3.14, -1.0], [3.14, 0.0], [3.14, None], [3.14, 2.71828]] * 2),
+            id="float-2",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        Decimal("0.0"),
+                        None,
+                        Decimal("-1024.2048"),
+                        None,
+                        Decimal("1.23456789"),
+                    ]
+                ),
+                Decimal("0.025"),
+            ),
+            (False, True),
+            False,
+            pd.Series(
+                [
+                    [Decimal("0.0"), Decimal("0.025")],
+                    [None, Decimal("0.025")],
+                    [Decimal("-1024.2048"), Decimal("0.025")],
+                    [None, Decimal("0.025")],
+                    [Decimal("1.23456789"), Decimal("0.025")],
+                ]
+            ),
+            id="decimal-2",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        Decimal("0.0"),
+                        None,
+                        Decimal("-1024.2048"),
+                        None,
+                        Decimal("1.23456789"),
+                    ]
+                ),
+                np.int64(0),
+            ),
+            (False, True),
+            False,
+            pd.Series(
+                [
+                    [Decimal("0.0"), Decimal("0.0")],
+                    [None, Decimal("0.0")],
+                    [Decimal("-1024.2048"), Decimal("0.0")],
+                    [None, Decimal("0.0")],
+                    [Decimal("1.23456789"), Decimal("0.0")],
+                ]
+            ),
+            id="decimal_int-2-upcasting",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        Decimal("0.0"),
+                        None,
+                        Decimal("-1024.2048"),
+                        None,
+                        Decimal("1.23456789"),
+                    ]
+                ),
+                np.float64(3.1415),
+            ),
+            (False, True),
+            False,
+            pd.Series(
+                [
+                    [0.0, 3.1415],
+                    [None, 3.1415],
+                    [-1024.2048, 3.1415],
+                    [None, 3.1415],
+                    [1.23456789, 3.1415],
+                ]
+            ),
+            id="decimal_float-2-upcasting",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        datetime.date(2023, 10, 25),
+                        None,
+                        datetime.date(1999, 12, 31),
+                        None,
+                        datetime.date(2008, 4, 1),
+                    ]
+                ),
+                datetime.date(1999, 12, 31),
+            ),
+            (False, True),
+            False,
+            pd.Series(
+                [
+                    [datetime.date(2023, 10, 25), datetime.date(1999, 12, 31)],
+                    [None, datetime.date(1999, 12, 31)],
+                    [datetime.date(1999, 12, 31), datetime.date(1999, 12, 31)],
+                    [None, datetime.date(1999, 12, 31)],
+                    [datetime.date(2008, 4, 1), datetime.date(1999, 12, 31)],
+                ]
+            ),
+            id="date-2",
+        ),
+        pytest.param(
+            (
+                pd.Timestamp("2015-3-14 9:26:53.59"),
+                pd.Series(
+                    [
+                        pd.Timestamp("2023-1-1"),
+                        None,
+                        pd.Timestamp("1999-12-31 23:59:59.999250"),
+                        None,
+                        pd.Timestamp("2024-7-4 6:30:00"),
+                    ]
+                ),
+            ),
+            (True, False),
+            False,
+            pd.Series(
+                [
+                    [pd.Timestamp("2015-3-14 9:26:53.59"), pd.Timestamp("2023-1-1")],
+                    [pd.Timestamp("2015-3-14 9:26:53.59"), None],
+                    [
+                        pd.Timestamp("2015-3-14 9:26:53.59"),
+                        pd.Timestamp("1999-12-31 23:59:59.999250"),
+                    ],
+                    [pd.Timestamp("2015-3-14 9:26:53.59"), None],
+                    [
+                        pd.Timestamp("2015-3-14 9:26:53.59"),
+                        pd.Timestamp("2024-7-4 6:30:00"),
+                    ],
+                ]
+            ),
+            id="timestamp_ntz-2",
+        ),
+        pytest.param(
+            (
+                pd.Timestamp("2015-3-14 9:26:53.59", tz="US/Pacific"),
+                pd.Series(
+                    [
+                        pd.Timestamp("2023-1-1", tz="US/Pacific"),
+                        None,
+                        pd.Timestamp("1999-12-31 23:59:59.999250", tz="US/Pacific"),
+                        None,
+                        pd.Timestamp("2024-7-4 6:30:00", tz="US/Pacific"),
+                    ]
+                ),
+            ),
+            (True, False),
+            False,
+            pd.Series(
+                [
+                    [
+                        pd.Timestamp("2015-3-14 9:26:53.59", tz="US/Pacific"),
+                        pd.Timestamp("2023-1-1", tz="US/Pacific"),
+                    ],
+                    [pd.Timestamp("2015-3-14 9:26:53.59", tz="US/Pacific"), None],
+                    [
+                        pd.Timestamp("2015-3-14 9:26:53.59", tz="US/Pacific"),
+                        pd.Timestamp("1999-12-31 23:59:59.999250", tz="US/Pacific"),
+                    ],
+                    [pd.Timestamp("2015-3-14 9:26:53.59", tz="US/Pacific"), None],
+                    [
+                        pd.Timestamp("2015-3-14 9:26:53.59", tz="US/Pacific"),
+                        pd.Timestamp("2024-7-4 6:30:00", tz="US/Pacific"),
+                    ],
+                ]
+            ),
+            id="timestamp_ltz-2",
+            marks=pytest.mark.skip(
+                reason="[BSE-1777] TODO: fix array_construct when inputs are tz-aware timestamps, specifically when mixing vectors with scalars"
+            ),
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        pd.Timestamp("2024-7-4 6:30:00"),
+                        None,
+                        pd.Timestamp("1999-12-31 23:59:59.999250"),
+                        pd.Timestamp("2023-1-1"),
+                        None,
+                    ]
+                ),
+                pd.Series(
+                    [
+                        pd.Timestamp("2023-1-1", tz="US/Pacific"),
+                        None,
+                        pd.Timestamp("1999-12-31 23:59:59.999250", tz="US/Pacific"),
+                        None,
+                        pd.Timestamp("2024-7-4 6:30:00", tz="US/Pacific"),
+                    ]
+                ),
+            ),
+            (False, False),
+            False,
+            pd.Series(
+                [
+                    [
+                        pd.Timestamp("2024-7-4 6:30:00", tz="US/Pacific"),
+                        pd.Timestamp("2023-1-1", tz="US/Pacific"),
+                    ],
+                    [None, None],
+                    [
+                        pd.Timestamp("1999-12-31 23:59:59.999250", tz="US/Pacific"),
+                        pd.Timestamp("1999-12-31 23:59:59.999250", tz="US/Pacific"),
+                    ],
+                    [None, None],
+                    [
+                        pd.Timestamp("2024-7-4 6:30:00", tz="US/Pacific"),
+                        pd.Timestamp("2023-1-1", tz="US/Pacific"),
+                    ],
+                ]
+            ),
+            id="timestamp_mixed-2",
+            marks=pytest.mark.skip(
+                reason="[BSE-1778] TODO: fix array_construct when inputs are tz-naive and tz-aware timestamps"
+            ),
+        ),
+        pytest.param(
+            (pd.Series([[1], [2, None], [], None, [5, 6], []] * 3),),
+            (False,),
+            False,
+            pd.Series([[[1]], [[2, None]], [[]], [None], [[5, 6]], [[]]] * 3),
+            id="nested_integer-1",
+        ),
+        pytest.param(
+            (pd.Series([["A"], ["BC", None], [], None, ["DEF", "", "GH"], []] * 3),),
+            (False,),
+            False,
+            pd.Series(
+                [[["A"]], [["BC", None]], [[]], [None], [["DEF", "", "GH"]], [[]]] * 3
+            ),
+            id="nested_string-1",
+        ),
+        pytest.param(
+            (
+                pd.Series([[1], [2, None], [], None, [5, 6], []] * 3),
+                pd.Series([[], [], [7], [8], [None, 10], [11, 12]] * 3),
+            ),
+            (False, False),
+            False,
+            pd.Series(
+                [
+                    [[1], []],
+                    [[2, None], []],
+                    [[], [7]],
+                    [None, [8]],
+                    [[5, 6], [None, 10]],
+                    [[], [11, 12]],
+                ]
+                * 3
+            ),
+            id="nested_integer-2",
+            marks=pytest.mark.skip(
+                reason="[BSE-1780] TODO: fix array_construct when inputs are multiple arrays"
+            ),
+        ),
+        pytest.param(
+            (
+                pd.Series([["A"], ["BC", None], [], None, ["DEF", "", "GH"], []] * 3),
+                pd.Series([["A", "BC"], [], ["DEF", ""], [None], None, ["GH"]] * 3),
+            ),
+            (False, False),
+            False,
+            pd.Series(
+                [
+                    [["A"], ["A", "BC"]],
+                    [["BC", None], []],
+                    [[], ["DEF", ""]],
+                    [None, [None]],
+                    [["DEF", "", "GH"], None],
+                    [[], ["GH"]],
+                ]
+                * 3
+            ),
+            id="nested_string-2",
+            marks=pytest.mark.skip(
+                reason="[BSE-1780] TODO: fix array_construct when inputs are multiple arrays"
+            ),
+        ),
+        pytest.param(
+            (
+                np.array(
+                    [
+                        {"X": 1, "Y": 3.1},
+                        {"X": -2, "Y": 2.2},
+                        None,
+                        {"X": 3, "Y": -1.3},
+                        {"X": 4, "Y": 0.4},
+                    ]
+                    * 3
+                ),
+                np.array(
+                    [
+                        {"X": 5, "Y": 10.1},
+                        None,
+                        {"X": None, "Y": 10.2},
+                        {"X": 7, "Y": 10.3},
+                        {"X": -8, "Y": 10.4},
+                    ]
+                    * 3
+                ),
+            ),
+            (False, False),
+            False,
+            pd.Series(
+                [
+                    [{"X": 1, "Y": 3.1}, {"X": 5, "Y": 10.1}],
+                    [{"X": -2, "Y": 2.2}, None],
+                    [None, {"X": None, "Y": 10.2}],
+                    [{"X": 3, "Y": -1.3}, {"X": 7, "Y": 10.3}],
+                    [{"X": 4, "Y": 0.4}, {"X": -8, "Y": 10.4}],
+                ]
+                * 3
+            ),
+            id="struct_array-int_float-2",
+        ),
+        pytest.param(
+            (
+                np.array(
+                    [
+                        {"name": "Daenerys", "house": "Targaryen"},
+                        {"name": "Sansa", "house": "Stark"},
+                        None,
+                        {"name": "Tyrion", "house": "Lannister"},
+                        {"name": "Arya", "house": "Stark"},
+                    ]
+                    * 3
+                ),
+                None,
+                None,
+                np.array(
+                    [
+                        {"name": "Jaime", "house": "Lannister"},
+                        {"name": "Jon", "house": None},
+                        None,
+                        {"name": "Olenna", "house": "Tyrell"},
+                        None,
+                    ]
+                    * 3
+                ),
+            ),
+            (False, True, True, False),
+            False,
+            pd.Series(
+                [
+                    [
+                        {"name": "Daenerys", "house": "Targaryen"},
+                        None,
+                        None,
+                        {"name": "Jaime", "house": "Lannister"},
+                    ],
+                    [
+                        {"name": "Sansa", "house": "Stark"},
+                        None,
+                        None,
+                        {"name": "Jon", "house": None},
+                    ],
+                    [None, None, None, None],
+                    [
+                        {"name": "Tyrion", "house": "Lannister"},
+                        None,
+                        None,
+                        {"name": "Olenna", "house": "Tyrell"},
+                    ],
+                    [{"name": "Arya", "house": "Stark"}, None, None, None],
+                ]
+                * 3
+            ),
+            id="struct_array_without-scalars-strings-4",
+        ),
+        pytest.param(
+            (
+                np.array(
+                    [
+                        {"name": "Daenerys", "house": "Targaryen"},
+                        {"name": "Sansa", "house": "Stark"},
+                        None,
+                        {"name": "Tyrion", "house": "Lannister"},
+                        {"name": "Arya", "house": "Stark"},
+                    ]
+                    * 3
+                ),
+                None,
+                {"name": "Cersei", "house": "Lannister"},
+                np.array(
+                    [
+                        {"name": "Bran", "house": "Stark"},
+                        {"name": "Jaime", "house": "Lannister"},
+                        None,
+                        {"name": "Olenna", "house": "Tyrell"},
+                        None,
+                    ]
+                    * 3
+                ),
+            ),
+            (False, True, True, False),
+            False,
+            pd.Series(
+                [
+                    [
+                        {"name": "Daenerys", "house": "Targaryen"},
+                        None,
+                        {"name": "Cersei", "house": "Lannister"},
+                        {"name": "Bran", "house": "Stark"},
+                    ],
+                    [
+                        {"name": "Sansa", "house": "Stark"},
+                        None,
+                        {"name": "Cersei", "house": "Lannister"},
+                        {"name": "Jaime", "house": "Lannister"},
+                    ],
+                    [None, None, {"name": "Cersei", "house": "Lannister"}, None],
+                    [
+                        {"name": "Tyrion", "house": "Lannister"},
+                        None,
+                        {"name": "Cersei", "house": "Lannister"},
+                        {"name": "Olenna", "house": "Tyrell"},
+                    ],
+                    [
+                        {"name": "Arya", "house": "Stark"},
+                        None,
+                        {"name": "Cersei", "house": "Lannister"},
+                        None,
+                    ],
+                ]
+                * 3
+            ),
+            id="struct_array_with_scalars-strings-4",
+            marks=pytest.mark.skip(
+                reason="[BSE-1781] TODO: fix array_construct and array_position when inputs are mix of struct arrays and scalars"
+            ),
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        {"O": "A"},
+                        {"P": "B", "Q": "C", "R": "D"},
+                        None,
+                        {},
+                        {"S": "", "T": "EFGH", "U": "IJ"},
+                    ]
+                    * 3
+                ).values,
+            ),
+            (False,),
+            True,
+            pd.Series(
+                [
+                    [{"O": "A"}],
+                    [{"P": "B", "Q": "C", "R": "D"}],
+                    [None],
+                    [{}],
+                    [{"S": "", "T": "EFGH", "U": "IJ"}],
+                ]
+                * 3
+            ),
+            id="map_array-string-1",
+            marks=pytest.mark.skip(
+                reason="[BSE-1782] TODO: fix array_construct when inputs are map arrays with simple keys"
+            ),
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        {0: 9},
+                        {1: 10, 2: 7, 3: 5},
+                        None,
+                        {},
+                        {4: 6, 5: 6},
+                    ]
+                    * 3
+                ),
+                pd.Series(
+                    [
+                        {6: 8},
+                        None,
+                        {7: 8, 8: 6, 9: 5},
+                        {10: 7},
+                        {},
+                    ]
+                    * 3
+                ),
+            ),
+            (False, False),
+            True,
+            pd.Series(
+                [
+                    [{0: 9}, {6: 8}],
+                    [{1: 10, 2: 7, 3: 5}, None],
+                    [None, {7: 8, 8: 6, 9: 5}],
+                    [{}, {10: 7}],
+                    [{4: 6, 5: 6}, {}],
+                ]
+                * 3
+            ),
+            id="map_array-int_int-2",
+            marks=pytest.mark.skip(
+                reason="[BSE-1782] TODO: fix array_construct when inputs are map arrays with simple keys"
+            ),
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        {b"nyc": 9},
+                        {b"sf": 10, b"la": 7, b"sac": 5},
+                        None,
+                        {},
+                        {b"pit": 6, b"phi": 6},
+                    ]
+                    * 3
+                ),
+                pd.Series(
+                    [
+                        {b"chi": 8},
+                        None,
+                        {b"aus": 8, b"dal": 6, b"hou": 5},
+                        {b"atl": 7},
+                        {},
+                    ]
+                    * 3
+                ),
+            ),
+            (False, False),
+            True,
+            pd.Series(
+                [
+                    [{b"nyc": 9}, {b"chi": 8}],
+                    [{b"sf": 10, b"la": 7, b"sac": 5}, None],
+                    [None, {b"aus": 8, b"dal": 6, b"hou": 5}],
+                    [{}, {b"atl": 7}],
+                    [{b"pit": 6, b"phi": 6}, {}],
+                ]
+                * 3
+            ),
+            id="map_array-binary_int-2",
+            marks=pytest.mark.skip(
+                reason="[BSE-1783] TODO: fix array_construct when inputs are map arrays with binary keys"
+            ),
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        {0: 9},
+                        {1: 10, 2: 7, 3: 5},
+                        None,
+                        {},
+                        {4: 6, 5: 6},
+                    ]
+                    * 3
+                ),
+                {0: 1, 2: 3},
+            ),
+            (False, True),
+            True,
+            pd.Series(
+                [
+                    [{0: 9}, {0: 1, 2: 3}],
+                    [{1: 10, 2: 7, 3: 5}, {0: 1, 2: 3}],
+                    [None, {0: 1, 2: 3}],
+                    [{}, {0: 1, 2: 3}],
+                    [{4: 6, 5: 6}, {0: 1, 2: 3}],
+                ]
+                * 3
+            ),
+            id="map_array_with_scalars-int_int-2",
+            marks=pytest.mark.skip(
+                reason="[BSE-1782] TODO: fix array_construct when inputs are map arrays with simple keys"
+            ),
+        ),
+    ],
+)
+def test_array_construct(args, scalar_tup, use_map_arrays, answer, memory_leak_check):
+    def impl_scalar(A):
+        return bodo.libs.bodosql_array_kernels.array_construct((A,), scalar_tup)
+
+    def impl1(A):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.array_construct((A,), scalar_tup)
+        )
+
+    def impl2(A, B):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.array_construct((A, B), scalar_tup)
+        )
+
+    def impl4(A, B, C, D):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.array_construct((A, B, C, D), scalar_tup)
+        )
+
+    if len(args) == 1 and not isinstance(args[0], pd.Series):
+        impl = impl_scalar
+        is_out_distributed = False
+    else:
+        implementations = {
+            1: impl1,
+            2: impl2,
+            4: impl4,
+        }
+        impl = implementations[len(args)]
+        is_out_distributed = None
+
+    check_func(
+        impl,
+        args,
+        is_out_distributed=is_out_distributed,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        use_map_arrays=use_map_arrays,
+    )
+
+
+@pytest.mark.parametrize(
+    "is_none_0, is_none_1",
+    [
+        pytest.param(False, False, id="scalar-scalar"),
+        pytest.param(True, False, id="null-scalar"),
+        pytest.param(False, True, id="scalar-null"),
+        pytest.param(True, True, id="null-null"),
+    ],
+)
+def test_array_construct_optional(is_none_0, is_none_1, memory_leak_check):
+    def impl(A, B, is_none_0, is_none_1):
+        arg0 = None if is_none_0 else A
+        arg1 = None if is_none_1 else B
+        return bodo.libs.bodosql_array_kernels.array_construct(
+            (arg0, arg1), (True, True)
+        )
+
+    answer = pd.array([None if is_none_0 else "A", None if is_none_1 else "B"])
+
+    check_func(
+        impl,
+        ("A", "B", is_none_0, is_none_1),
+        py_output=answer,
+        check_dtype=False,
+        dist_test=False,
     )

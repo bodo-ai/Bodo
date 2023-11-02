@@ -452,7 +452,7 @@ def test_matrix_multiply(r0, c0, r1, c1, already_matrix, memory_leak_check):
     element-wise multiplication, numpy matrices will do matrix multiplication as if we
     were using the @ operator.
 
-    If already_matrix is True, converts the input to a matrix before calling hte function.
+    If already_matrix is True, converts the input to a matrix before calling the function.
     If False, leaves the inputs as 2D numpy arrays and has the function do the conversion.
     """
 

@@ -14,12 +14,21 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.List;
 
+import static com.bodosql.calcite.application.operatorTables.ArrayOperatorTable.toArrayReturnType;
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCharset;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCollation;
 import static org.apache.calcite.util.Static.RESOURCE;
 
 public class BodoReturnTypes {
+
+    /**
+     * Convert type XXX to type XXX ARRAY
+     */
+    public static final SqlTypeTransform TYPE_TO_ARRAY =
+            (opBinding, typeToTransform) ->
+                    toArrayReturnType(opBinding)
+                    ;
 
     /**
      * Convert a given type to have an unknown precision. This should
