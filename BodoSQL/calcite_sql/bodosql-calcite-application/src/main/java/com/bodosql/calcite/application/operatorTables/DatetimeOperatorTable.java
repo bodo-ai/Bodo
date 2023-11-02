@@ -14,6 +14,7 @@ import javax.annotation.Nullable;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
@@ -638,7 +639,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           OperandTypes.sequence(
-              "DATEDIFF(UNIT, TIMESTAMP/DATE/TIME, TIMESTAMP/DATE/TIME)",
+              "TIMEDIFF(UNIT, TIMESTAMP/DATE/TIME, TIMESTAMP/DATE/TIME)",
               OperandTypes.ANY,
               OperandTypes.DATETIME,
               OperandTypes.DATETIME),
@@ -801,38 +802,17 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction DAYOFWEEKISO =
       new SqlDatePartFunction("DAYOFWEEKISO", TimeUnit.ISODOW);
 
-  public static final SqlFunction MONTHNAME =
-      new SqlFunction(
+  public static final SqlBasicFunction MONTHNAME =
+      SqlBasicFunction.create(
           "MONTHNAME",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // MONTHNAME always return a 3 character month abbreviation
           BodoReturnTypes.VARCHAR_3_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction MONTH_NAME =
-      new SqlFunction(
-          "MONTH_NAME",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // MONTH_NAME always return a 3 character month abbreviation
-          BodoReturnTypes.VARCHAR_3_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.DATETIME,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
-
+  public static final SqlFunction MONTH_NAME = MONTHNAME.withName("MONTH_NAME");
   public static final SqlFunction MONTHS_BETWEEN =
       new SqlFunction(
           "MONTHS_BETWEEN",
