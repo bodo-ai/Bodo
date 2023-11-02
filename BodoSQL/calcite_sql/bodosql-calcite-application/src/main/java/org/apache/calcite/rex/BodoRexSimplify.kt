@@ -19,7 +19,6 @@ import org.apache.calcite.util.DateString
 import org.apache.calcite.util.TimeString
 import org.apache.calcite.util.TimestampString
 import java.math.BigDecimal
-import java.math.MathContext
 import java.math.RoundingMode
 import java.util.*
 import java.util.regex.Pattern
