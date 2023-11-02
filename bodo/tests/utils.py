@@ -1888,6 +1888,24 @@ def gen_random_arrow_struct_struct(span, n):
     return e_list
 
 
+def gen_random_arrow_struct_string(string_size, n):
+    return [
+        {
+            "A": "".join(
+                random.choices(string.ascii_uppercase + string.digits, k=string_size)
+            ),
+            "B": "".join(
+                random.choices(string.ascii_uppercase + string.digits, k=string_size)
+            ),
+        }
+        for _ in range(n)
+    ]
+
+
+def gen_random_arrow_array_struct_string(string_size, num_structs, n):
+    return [gen_random_arrow_struct_string(string_size, num_structs) for _ in range(n)]
+
+
 def gen_nonascii_list(num_strings):
     """
     Generate list of num_strings number of non-ASCII strings
