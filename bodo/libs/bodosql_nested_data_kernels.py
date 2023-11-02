@@ -120,6 +120,143 @@ def to_array_util(arr, dtype, dict_encoding_state, func_id):
 
 
 @numba.generated_jit(nopython=True)
+def arrays_overlap(array_0, array_1, is_scalar_0=False, is_scalar_1=False):
+    """
+    Handles cases where ARRAYS_OVERLAP receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    args = [array_0, array_1]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.arrays_overlap",
+                ["array_0", "array_1", "is_scalar_0", "is_scalar_1"],
+                i,
+                default_map={"is_scalar_0": False, "is_scalar_1": False},
+            )
+
+    def impl(
+        array_0, array_1, is_scalar_0=False, is_scalar_1=False
+    ):  # pragma: no cover
+        return arrays_overlap_util(array_0, array_1, is_scalar_0, is_scalar_1)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def arrays_overlap_util(array_0, array_1, is_scalar_0, is_scalar_1):
+    """
+    A dedicated kernel for the SQL function ARRAYS_OVERLAP which takes in two
+    arrays (or columns of arrays) and returns whether they have overlap
+
+    Args:
+        arr (array scalar/array item array): the first array(s) to compare
+        arr (array scalar/array item array): the second array(s) to compare
+        is_single_row (boolean): if true, treats the inputs as scalar arrays
+
+    Returns:
+        boolean scalar/vector: whether the arrays have any common elements
+    """
+    is_scalar_0_bool = get_overload_const_bool(is_scalar_0)
+    is_scalar_1_bool = get_overload_const_bool(is_scalar_1)
+    arg_names = ["array_0", "array_1", "is_scalar_0", "is_scalar_1"]
+    arg_types = [array_0, array_1, is_scalar_0, is_scalar_1]
+    propagate_null = [True, True, False, False]
+    out_dtype = bodo.boolean_array_type
+    scalar_text = "has_overlap = False\n"
+    scalar_text += "for idx0 in range(len(arg0)):\n"
+    scalar_text += "   null0 = bodo.libs.array_kernels.isna(arg0, idx0)\n"
+    scalar_text += "   for idx1 in range(len(arg1)):\n"
+    scalar_text += "      null1 = bodo.libs.array_kernels.isna(arg1, idx1)\n"
+    scalar_text += "      if (null0 and null1) or ((not null0) and (not null1) and bodo.libs.bodosql_array_kernels.semi_safe_equals(arg0[idx0], arg1[idx1])):\n"
+    scalar_text += "         has_overlap = True\n"
+    scalar_text += "         break\n"
+    scalar_text += "   if has_overlap: break\n"
+    scalar_text += "res[i] = has_overlap"
+    are_arrays = [not is_scalar_0_bool, not is_scalar_1_bool, False, False]
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=are_arrays,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def array_position(elem, container, is_scalar_0=False, is_scalar_1=False):
+    """
+    Handles cases where ARRAYS_OVERLAP receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    args = [elem, container, is_scalar_0, is_scalar_1]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.array_position",
+                ["elem", "container", "is_scalar_0", "is_scalar_1"],
+                i,
+                default_map={"is_scalar_0": False, "is_scalar_1": False},
+            )
+
+    def impl(elem, container, is_scalar_0=False, is_scalar_1=False):  # pragma: no cover
+        return array_position_util(elem, container, is_scalar_0, is_scalar_1)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def array_position_util(elem, container, elem_is_scalar, container_is_scalar):
+    """
+    A dedicated kernel for the SQL function ARRAY_POSITION which takes in an
+    element and an array (or column of arrays) and returns the zero-indexed
+    position of the first occurrence of the element in the array (including nulls).
+
+    Args:
+        elem (array scalar/array item array): the element(s) to look for
+        container (array scalar/array item array): the array(s) to search through
+        elem_is_scalar (boolean): if true, treats the first argument as a scalar even if it is an array.
+        container_is_scalar (boolean): if true, treats the second argument as a scalar even if it is an array.
+
+    Returns:
+        integer scalar/vector: the index of the first match to elem in container
+        (zero-indexed), or null if there is no match.
+    """
+    elem_is_scalar_bool = get_overload_const_bool(elem_is_scalar)
+    container_is_scalar_bool = get_overload_const_bool(container_is_scalar)
+    arg_names = ["elem", "container", "elem_is_scalar", "container_is_scalar"]
+    arg_types = [elem, container, elem_is_scalar, container_is_scalar]
+    propagate_null = [False, True, False]
+    out_dtype = bodo.IntegerArrayType(types.int32)
+    are_arrays = [not elem_is_scalar_bool, not container_is_scalar_bool, False, False]
+    scalar_text = "match = -1\n"
+    if elem == bodo.none:
+        scalar_text += "null0 = True\n"
+    elif are_arrays[0]:
+        scalar_text += "null0 = bodo.libs.array_kernels.isna(elem, i)\n"
+    else:
+        scalar_text += "null0 = False\n"
+    scalar_text += "for idx1 in range(len(arg1)):\n"
+    scalar_text += "   null1 = bodo.libs.array_kernels.isna(arg1, idx1)\n"
+    scalar_text += "   if (null0 and null1) or ((not null0) and (not null1) and bodo.libs.bodosql_array_kernels.semi_safe_equals(arg0, arg1[idx1])):\n"
+    scalar_text += "         match = idx1\n"
+    scalar_text += "         break\n"
+    scalar_text += "if match == -1:\n"
+    scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+    scalar_text += "else:\n"
+    scalar_text += "   res[i] = match"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=are_arrays,
+    )
+
+
+@numba.generated_jit(nopython=True)
 def array_to_string(arr, separator):
     """
     Handles cases where ARRAY_TO_STRING receives optional arguments and

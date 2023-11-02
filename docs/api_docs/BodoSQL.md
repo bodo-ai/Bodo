@@ -2952,6 +2952,33 @@ BodoSQL currently supports the following JSON functions:
 ### Array Functions
 Bodo currently supports the following functions that operate on columns of arrays:
 
+
+#### ARRAY_CONSTRUCT
+-   `#!sql ARRAY_CONSTRUCT(A, B, C, ...)`
+
+    Takes in a variable number of arguments and produces an array containing
+    all of those values (including any null values).
+
+    Note: Snowflake allows any number of arguments (even zero arguments) of any
+    type. BodoSQL currently requires 1+ arguments, and requires all arguments
+    to be easily reconciled into a common type. 
+
+
+#### ARRAYS_OVERLAP
+-   `#!sql ARRAYS_OVERLAP(arr0, arr1)`
+
+    Returns true if the two array arguments `arr0` and `arr1` have at least 1 element
+    in common (including `NULL`).
+
+
+#### ARRAYS_POSITION
+-   `#!sql ARRAYS_OVERLAP(elem, arr)`
+
+    Returns the index of the first occurrence of `elem` in `arr` (using zero indexing), or
+    `NULL` if there are no occurrences. The input `elem` can be `NULL`, in which case the funciton
+    will look for the first `NULL` in the array input.
+
+
 #### ARRAY_SIZE
 -   `#!sql ARRAY_SIZE(array)`
 

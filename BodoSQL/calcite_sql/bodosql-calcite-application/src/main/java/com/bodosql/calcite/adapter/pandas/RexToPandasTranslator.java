@@ -88,6 +88,7 @@ import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.utils.BodoCtx;
+import com.bodosql.calcite.application.utils.IsScalar;
 import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.FrameTripleQuotedString;
@@ -302,6 +303,14 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   }
 
   /**
+   * @param operand
+   * @return True if the operand is a scalar
+   */
+  protected Boolean isOperandScalar(RexNode operand) {
+    return IsScalar.isScalar(operand);
+  }
+
+  /**
    * Generate the code for a Binary operation.
    *
    * @param operation The operation from which to generate the expression.
@@ -314,16 +323,20 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     SqlOperator binOp = operation.getOperator();
     // Store the argument types for TZ-Aware data
     List<RelDataType> argDataTypes = new ArrayList<>();
+    // Store whether the arguments were scalars vs columns
+    List<Boolean> argScalars = new ArrayList<>();
     for (RexNode operand : operation.operands) {
       Expr exprCode = operand.accept(this);
       args.add(exprCode);
       argDataTypes.add(operand.getType());
+      argScalars.add(isOperandScalar(operand));
     }
     if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
       // Support the concat operator by using the concat array kernel.
       return generateConcatCode(args, streamingNamedArgs);
     }
-    return generateBinOpCode(args, binOp, argDataTypes, this.builder, streamingNamedArgs);
+    return generateBinOpCode(
+        args, binOp, argDataTypes, this.builder, streamingNamedArgs, argScalars);
   }
 
   private Expr visitPostfixOpScan(RexCall operation) {
@@ -806,8 +819,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     return visitGenericFuncOp(fnOperation, false);
   }
 
-  protected Expr visitNullIgnoringGenericFunc(RexCall fnOperation, boolean isSingleRow) {
-    return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, List.of());
+  protected Expr visitNullIgnoringGenericFunc(
+      RexCall fnOperation, boolean isSingleRow, List<Boolean> argScalars) {
+    return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, List.of(), argScalars);
   }
 
   /**
@@ -817,10 +831,14 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    * @param isSingleRow Does the data operate on/output a single row?
    * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
    *     we aren't in a streaming context.
+   * @param argScalars Whether each argument is a scalar or a column
    * @return The generated expression.
    */
   protected Expr visitNullIgnoringGenericFunc(
-      RexCall fnOperation, boolean isSingleRow, List<Pair<String, Expr>> streamingNamedArgs) {
+      RexCall fnOperation,
+      boolean isSingleRow,
+      List<Pair<String, Expr>> streamingNamedArgs,
+      List<Boolean> argScalars) {
     List<Expr> codeExprs = new ArrayList<>();
     for (RexNode operand : fnOperation.operands) {
       Expr operandInfo = operand.accept(this);
@@ -845,7 +863,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         result = getCondFuncCode(fnName, codeExprs);
         break;
       case "EQUAL_NULL":
-        result = getCondFuncCodeOptimized(fnName, codeExprs, streamingNamedArgs);
+        result = getCondFuncCodeOptimized(fnName, codeExprs, streamingNamedArgs, argScalars);
         break;
       case "COALESCE":
       case "ZEROIFNULL":
@@ -853,6 +871,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "NVL":
       case "DECODE":
         result = visitVariadic(fnName, codeExprs, streamingNamedArgs);
+        break;
+      case "ARRAY_CONSTRUCT":
+        result = visitArrayConstruct(codeExprs, isSingleRow, argScalars);
         break;
       case "HASH":
         result = visitHash(fnName, codeExprs);
@@ -1281,7 +1302,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    *
    * @param fnName The name of the function.
    * @param operands The arguments to the function.
-   * @param isSingleRow Are we in a single row context?
+   * @param argScalars Indicates which arguments are scalars
    * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
    *     we aren't in a streaming context.
    * @return The generated expression.
@@ -1289,30 +1310,63 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   protected Expr visitNestedArrayFunc(
       String fnName,
       List<Expr> operands,
-      boolean isSingleRow,
+      List<Boolean> argScalars,
       List<Pair<String, Expr>> streamingNamedArgs) {
     switch (fnName) {
+      case "ARRAYS_OVERLAP":
+      case "ARRAY_POSITION":
+        Expr isScalar0 = new Expr.BooleanLiteral(argScalars.get(0));
+        Expr isScalar1 = new Expr.BooleanLiteral(argScalars.get(0));
+        ArrayList<Pair<String, Expr>> kwargs = new ArrayList();
+        kwargs.add(new Pair<String, Expr>("is_scalar_0", isScalar0));
+        kwargs.add(new Pair<String, Expr>("is_scalar_1", isScalar1));
+        return ExprKt.BodoSQLKernel(fnName.toLowerCase(Locale.ROOT), operands, kwargs);
       case "ARRAY_SIZE":
-        Expr isSingleRowLiteral = new Expr.BooleanLiteral(isSingleRow);
+        Expr isSingleRowLiteral = new Expr.BooleanLiteral(argScalars.get(0));
         List<Expr> all_operands = new ArrayList<>(operands);
         all_operands.add(isSingleRowLiteral);
-        return ExprKt.BodoSQLKernel("array_size", all_operands, List.of());
+        return ExprKt.BodoSQLKernel(fnName.toLowerCase(Locale.ROOT), all_operands, List.of());
       default:
         throw new BodoSQLCodegenException(
             String.format(Locale.ROOT, "Unsupported nested Array function: %s", fnName));
     }
   }
 
-  protected Expr visitNestedArrayFunc(String fnName, List<Expr> operands, boolean isSingleRow) {
-    return visitNestedArrayFunc(fnName, operands, isSingleRow, List.of());
+  /**
+   * Constructs the Expression to make a call to the variadic function ARRAY_CONSTRUCT.
+   *
+   * @param codeExprs the Python expressions to calculate the arguments
+   * @param isSingleRow Does the data operate on/output a single row?
+   * @param argScalars Whether each argument is a scalar or a column
+   * @return Expr containing the code generated for the relational expression.
+   */
+  public static Expr visitArrayConstruct(
+      List<Expr> codeExprs, boolean isSingleRow, List<Boolean> argScalars) {
+    ArrayList<Expr> scalarExprs = new ArrayList();
+    for (Boolean isScalar : argScalars) {
+      scalarExprs.add(new Expr.BooleanLiteral(isScalar));
+    }
+    return new Expr.Call(
+        "bodo.libs.bodosql_array_kernels.array_construct",
+        List.of(new Expr.Tuple(codeExprs), new Expr.Tuple(scalarExprs)));
+  }
+
+  protected Expr visitNestedArrayFunc(
+      String fnName, List<Expr> operands, List<Boolean> argScalars) {
+    return visitNestedArrayFunc(fnName, operands, argScalars, List.of());
   }
 
   protected Expr visitGenericFuncOp(RexCall fnOperation, boolean isSingleRow) {
     String fnName = fnOperation.getOperator().toString();
+    ArrayList<Boolean> argScalars = new ArrayList();
+    for (RexNode operand : fnOperation.operands) {
+      argScalars.add(isOperandScalar(operand));
+    }
     // Handle functions that do not care about nulls separately
     if (fnName == "COALESCE"
         || fnName == "NVL"
         || fnName == "NVL2"
+        || fnName == "ARRAY_CONSTRUCT"
         || fnName == "BOOLAND"
         || fnName == "BOOLOR"
         || fnName == "BOOLXOR"
@@ -1324,7 +1378,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         || fnName == "IFF"
         || fnName == "DECODE"
         || fnName == "HASH") {
-      return visitNullIgnoringGenericFunc(fnOperation, isSingleRow);
+      return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, argScalars);
     }
 
     // Extract all inputs to the current function.
@@ -1855,8 +1909,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "REGR_VALX":
           case "REGR_VALY":
             return getCondFuncCode(fnName, operands);
+          case "ARRAY_POSITION":
+          case "ARRAYS_OVERLAP":
           case "ARRAY_SIZE":
-            return visitNestedArrayFunc(fnName, operands, isSingleRow);
+            return visitNestedArrayFunc(fnName, operands, argScalars);
         }
       default:
         throw new BodoSQLCodegenException(
@@ -1947,6 +2003,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     @Override
     protected Expr visitCastScan(RexCall operation) {
       return visitCastScan(operation, true, List.of());
+    }
+
+    protected Boolean isOperandScalar(RexNode operand) {
+      return true;
     }
 
     /**

@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import kotlin.Pair;
@@ -63,10 +64,14 @@ public class CondOpCodeGen {
    * @param codeExprs the Python expressions to calculate the arguments
    * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
    *     we aren't in a streaming context.
+   * @param argScalars Whether each argument is a scalar or a column
    * @return Expr containing the code generated for the relational expression.
    */
   public static Expr getCondFuncCodeOptimized(
-      String fnName, List<Expr> codeExprs, List<Pair<String, Expr>> streamingNamedArgs) {
+      String fnName,
+      List<Expr> codeExprs,
+      List<Pair<String, Expr>> streamingNamedArgs,
+      List<Boolean> argScalars) {
 
     String kernelName;
     if (equivalentFnMap.containsKey(fnName)) {
@@ -75,7 +80,11 @@ public class CondOpCodeGen {
       // If we made it here, something has gone very wrong
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
-    return new Expr.Call(kernelName, codeExprs, streamingNamedArgs);
+    ArrayList<Pair<String, Expr>> kwargs = new ArrayList();
+    kwargs.add(new Pair<String, Expr>("is_scalar_a", new Expr.BooleanLiteral(argScalars.get(0))));
+    kwargs.add(new Pair<String, Expr>("is_scalar_b", new Expr.BooleanLiteral(argScalars.get(1))));
+    kwargs.addAll(streamingNamedArgs);
+    return new Expr.Call(kernelName, codeExprs, kwargs);
   }
 
   /**
