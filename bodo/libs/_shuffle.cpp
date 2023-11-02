@@ -690,7 +690,7 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
                     (uint8_t*)send_arr->null_bitmask(),
                     (uint8_t*)in_arr->null_bitmask(), comm_info.send_disp_null,
                     comm_info.n_pes, n_rows, comm_info.row_dest);
-            } else {
+            } else if (in_arr->arr_type != bodo_array_type::DICT) {
                 throw std::runtime_error(
                     "Invalid data type for fill_send_array: " +
                     GetDtype_as_string(in_arr->dtype));
@@ -1025,19 +1025,6 @@ std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
                                           bool is_parallel) {
     tracing::Event ev("shuffle_array", is_parallel);
 
-    std::shared_ptr<array_info> dict_array;
-    if (in_arr->arr_type == bodo_array_type::DICT) {
-        if (!in_arr->child_arrays[0]->is_globally_replicated) {
-            throw std::runtime_error(
-                "shuffle_array: input dictionary array doesn't have a "
-                "global dictionary");
-        }
-        // in_arr <- indices array, to simplify code below
-        // TODO[BSE-1374]: Make dict array recursive
-        dict_array = in_arr;
-        in_arr = in_arr->child_arrays[1];
-    }
-
     mpi_str_comm_info str_comm_info(in_arr, comm_info);
 
     std::shared_ptr<array_info> send_arr = alloc_array_top_level(
@@ -1195,6 +1182,18 @@ std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
                            MPI_COMM_WORLD);
             break;
         }
+        case bodo_array_type::DICT: {
+            if (!in_arr->child_arrays[0]->is_globally_replicated) {
+                throw std::runtime_error(
+                    "shuffle_array: input dictionary array doesn't have a "
+                    "global dictionary");
+            }
+            out_arr = create_dict_string_array(
+                in_arr->child_arrays[0],
+                shuffle_array(in_arr->child_arrays[1], comm_info,
+                              tmp_null_bytes, is_parallel));
+            break;
+        }
         case bodo_array_type::ARRAY_ITEM: {
             // offsets
             // NOTE: While the offset could be 64 or 32 bit integer, length is
@@ -1258,9 +1257,7 @@ std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
                 GetArrType_as_string(in_arr->arr_type));
     }
 
-    return dict_array != nullptr
-               ? create_dict_string_array(dict_array->child_arrays[0], out_arr)
-               : out_arr;
+    return out_arr;
 }
 
 /*
