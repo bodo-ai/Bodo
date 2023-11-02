@@ -22,7 +22,6 @@ import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEl
 import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.RexSimplificationRule
 import com.bodosql.calcite.application.logicalRules.TrivialProjectJoinTransposeRule
-import com.bodosql.calcite.application.logicalRules.VolcanoAcceptingAggregateProjectPullUpConstantsRule
 import com.bodosql.calcite.prepare.MultiJoinRules.FILTER_MULTI_JOIN_MERGE
 import com.bodosql.calcite.prepare.MultiJoinRules.JOIN_TO_MULTI_JOIN
 import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_BOTH_PROJECT
@@ -45,6 +44,7 @@ import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateJoinTransposeRule
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule
+import org.apache.calcite.rel.rules.AggregateProjectPullUpConstantsRule
 import org.apache.calcite.rel.rules.FilterJoinRule
 import org.apache.calcite.rel.rules.JoinCommuteRule
 import org.apache.calcite.rel.rules.LoptOptimizeJoinRule
@@ -426,11 +426,9 @@ object BodoRules {
 
     /**
      * Pull up Constants used in Aggregates.
-     * TODO: Move to hep step so we can replace this rule with
-     * the calcite version as the metadata is very expensive.
      */
     @JvmField
-    val AGGREGATE_CONSTANT_PULL_UP_RULE: RelOptRule = VolcanoAcceptingAggregateProjectPullUpConstantsRule.Config.DEFAULT
+    val AGGREGATE_CONSTANT_PULL_UP_RULE: RelOptRule = AggregateProjectPullUpConstantsRule.Config.DEFAULT
         .withOperandFor(BodoLogicalAggregate::class.java, RelNode::class.java)
         .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
         .toRule()
@@ -529,13 +527,8 @@ object BodoRules {
         REX_SIMPLIFICATION_RULE,
         PROJECT_REDUCE_EXPRESSIONS_RULE,
         FILTER_REDUCE_EXPRESSIONS_RULE,
-
-    )
-
-    /**
-     * These are rules that pull constants or computer higher into the plan
-     */
-    val COMPUTE_PULL_UP_RUlES: List<RelOptRule> = listOf(
+        // simplifies constants after aggregates
+        // This is needed to take advantage of constant prop done by the above rules
         AGGREGATE_CONSTANT_PULL_UP_RULE,
     )
 
@@ -674,7 +667,6 @@ object BodoRules {
         REX_SIMPLIFICATION_RULE,
         JOIN_COMMUTE_RULE,
         LOPT_OPTIMIZE_JOIN_RULE,
-        AGGREGATE_CONSTANT_PULL_UP_RULE,
         UNION_MERGE_RULE,
     )
 }
