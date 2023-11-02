@@ -870,7 +870,7 @@ def is_valid_binary_arg(arg):  # pragma: no cover
     returns: False if the argument is not binary data
     """
     return not (
-        arg != bodo.bytes_type
+        arg not in (types.none, bodo.bytes_type)
         and not (
             bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.bytes_type
         )

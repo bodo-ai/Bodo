@@ -925,6 +925,16 @@ def test_concat_ws_fusion(memory_leak_check):
     assert concat_ws_calls == 3, f"Expected 3 concat_ws call, got {concat_ws_calls}"
 
 
+def test_concat_ws_binary(memory_leak_check):
+    def impl(A, B):
+        return pd.Series(bodo.libs.bodosql_array_kernels.concat_ws((A, B), b"_"))
+
+    A = pd.Series([b"A", b"B", None, b"C", b"D"] * 2)
+    B = pd.Series([b"E", b"F", b"G", None, b"H"] * 2)
+    expected_output = pd.Series([b"A_E", b"B_F", None, None, b"D_H"] * 2)
+    check_func(impl, (A, B), py_output=expected_output, check_dtype=False)
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "args, answer",

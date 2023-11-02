@@ -343,6 +343,14 @@ abstract class Expr {
     }
 
     /**
+     * Represents a Binary literal wrapped in double quotes for binary strings.
+     * @param arg The body of the binary.
+     */
+    class BinaryLiteral(val arg: String) : Expr() {
+        override fun emit(): String = "b\"$arg\""
+    }
+
+    /**
      * Represents a Boolean Literal.
      * @param arg The value of the literal.
      */

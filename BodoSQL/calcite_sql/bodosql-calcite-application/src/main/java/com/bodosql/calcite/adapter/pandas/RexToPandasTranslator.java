@@ -333,7 +333,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
     if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
       // Support the concat operator by using the concat array kernel.
-      return generateConcatCode(args, streamingNamedArgs);
+      return generateConcatCode(args, streamingNamedArgs, operation.getType());
     }
     return generateBinOpCode(
         args, binOp, argDataTypes, this.builder, streamingNamedArgs, argScalars);
@@ -1687,7 +1687,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             expectScalarArgument(fnOperation.operands.get(1), "UNIFORM", "hi");
             return generateUniformFnInfo(operands);
           case "CONCAT":
-            return generateConcatCode(operands, List.of());
+            return generateConcatCode(operands, List.of(), fnOperation.operands.get(0).getType());
           case "CONCAT_WS":
             assert operands.size() >= 2;
             return generateConcatWSCode(

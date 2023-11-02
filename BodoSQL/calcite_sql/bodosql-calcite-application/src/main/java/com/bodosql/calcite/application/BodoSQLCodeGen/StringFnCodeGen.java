@@ -11,7 +11,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import kotlin.Pair;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 
 public class StringFnCodeGen {
@@ -148,8 +150,11 @@ public class StringFnCodeGen {
    * @return The Expr generated that matches the Concat expression.
    */
   public static Expr generateConcatCode(
-      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
-    Expr separatorInfo = new Expr.StringLiteral("");
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs, RelDataType dataType) {
+    Expr separatorInfo =
+        SqlTypeFamily.CHARACTER.contains(dataType)
+            ? new Expr.StringLiteral("")
+            : new Expr.BinaryLiteral("");
     return generateConcatWSCode(separatorInfo, operands, streamingNamedArgs);
   }
 
