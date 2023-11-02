@@ -982,13 +982,17 @@ def verify_string_binary_arg(arg, f_name, a_name):  # pragma: no cover
         f_name (string): the name of the function being checked
         a_name (string): the name of the argument being checked
     raises: BodoError if the argument is not binary data, string, string column or null
-    returns: True if the argument is a string, False if the argument is binary data
+    returns: True if the argument is a string, False if the argument is binary data, and None if the argument is both string and binary i.e. NoneType
     """
     is_string = is_valid_string_arg(arg)
     is_binary = is_valid_binary_arg(arg)
 
-    if is_string or is_binary:
-        return is_string
+    if is_string and is_binary:
+        return None
+    elif is_string:
+        return True
+    elif is_binary:
+        return False
     else:
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a binary data, string, string column, or null"
