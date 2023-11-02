@@ -14,6 +14,8 @@ from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     get_common_scalar_dtype,
     get_overload_const_list,
+    get_overload_const_tuple,
+    is_bin_arr_type,
     is_overload_constant_list,
     is_overload_none,
     is_str_arr_type,
@@ -656,6 +658,7 @@ def overload_concat_ws_util(A, sep, dict_encoding_state, func_id):
 
     concat_args = ",".join([f"arg{i}" for i in range(len(A))])
     scalar_text = f"  res[i] = arg{len(A)}.join([{concat_args}])\n"
+
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
@@ -936,3 +939,105 @@ def overload_row_number(df, by, ascending, na_position):
     impl = loc_vars["impl"]
 
     return impl
+
+
+def array_construct(A, scalar_tup):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(array_construct, no_unliteral=True)
+def overload_array_construct(A, scalar_tup):
+    """A dedicated kernel for the SQL function ARRAY_CONSTRUCT which takes in a variable
+       number of arguments and turns them into a single array. The arguments should ideally
+       be of compatible types. This kernel has no un-optionalizing wrapper due to the way
+       it handles optional types.
+
+    Note: ARRAY_CONSTRUCT(x) is not the same as TO_ARRAY(x) because of different null rules.
+    ARRAY_CONSTRUCT will construct a singleton array containing null. TO_ARRAY will return null.
+
+    Args:
+        A (any array/scalar tuple): the tuple of values to be placed into an array together
+        scalar_tup (boolean tuple): tuple indicating which arguments correspond to scalars
+
+    Returns:
+        (any array array/scalar): the values combined into an array
+    """
+
+    # Currently cannot support the zero-length case since its type is unknown
+    if len(A) == 0:
+        raise_bodo_error("ARRAY_CONSTRUCT with no arguments not currently supported")
+
+    arg_names = []
+    arg_types = []
+    optionals = []
+
+    are_scalars = get_overload_const_tuple(scalar_tup)
+
+    for i, arr_typ in enumerate(A):
+        arg_name = f"A{i}"
+        arg_names.append(arg_name)
+        if isinstance(arr_typ, types.Optional):
+            arg_types.append(arr_typ.type)
+            optionals.append(True)
+        else:
+            arg_types.append(arr_typ)
+            optionals.append(False)
+
+    # Create the mapping from the tuple to the local variable.
+    arg_string = "A, scalar_tup"
+    arg_sources = {f"A{i}": f"A[{i}]" for i in range(len(A))}
+
+    propagate_null = [False] * len(arg_names)
+
+    inner_arr_type = get_common_broadcasted_type(arg_types, "ARRAY_CONSTRUCT")
+    # Currently not able to support writing a dictionary encoded inner array
+    # [BSE-1831] TODO: see if we can optimize ARRAY_CONSTRUCT for dictionary encoding
+    if inner_arr_type == bodo.dict_str_arr_type:
+        inner_arr_type = bodo.string_array_type
+    if inner_arr_type == bodo.none:
+        inner_arr_type = bodo.null_array_type
+    out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(inner_arr_type)
+
+    extra_globals = {"inner_arr_type": inner_arr_type}
+
+    if is_str_arr_type(inner_arr_type):
+        scalar_text = (
+            f"inner_arr = bodo.libs.str_arr_ext.pre_alloc_string_array({len(A)}, -1)\n"
+        )
+    elif is_bin_arr_type(inner_arr_type):
+        scalar_text = f"inner_arr = bodo.libs.binary_arr_ext.pre_alloc_binary_array({len(A)}, -1)\n"
+    else:
+        scalar_text = f"inner_arr = bodo.utils.utils.alloc_type({len(A)}, inner_arr_type, (-1,))\n"
+    for i, typ in enumerate(arg_types):
+        if bodo.hiframes.pd_series_ext.is_series_type(typ):
+            typ = typ.data
+        if not are_scalars[i]:
+            scalar_text += f"if bodo.libs.array_kernels.isna(A{i}, i):\n"
+            scalar_text += f"   bodo.libs.array_kernels.setna(inner_arr, {i})\n"
+            scalar_text += "else:\n"
+            scalar_text += f"   inner_arr[{i}] = arg{i}\n"
+        elif typ == bodo.none:
+            scalar_text += f"bodo.libs.array_kernels.setna(inner_arr, {i})\n"
+        elif optionals[i]:
+            scalar_text += f"if arg{i} is None:\n"
+            scalar_text += f"   bodo.libs.array_kernels.setna(inner_arr, {i})\n"
+            scalar_text += f"else:\n"
+            scalar_text += f"   inner_arr[{i}] = arg{i}\n"
+        else:
+            scalar_text += f"inner_arr[{i}] = arg{i}\n"
+    scalar_text += f"res[i] = inner_arr"
+
+    are_arrays = [not is_scalar for is_scalar in are_scalars]
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        arg_string,
+        arg_sources,
+        extra_globals=extra_globals,
+        are_arrays=are_arrays,
+    )

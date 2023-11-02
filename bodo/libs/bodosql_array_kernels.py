@@ -14,6 +14,7 @@ from bodo.libs.bodosql_nested_data_kernels import *  # noqa
 from bodo.libs.bodosql_numeric_array_kernels import *  # noqa
 from bodo.libs.bodosql_other_array_kernels import *  # noqa
 from bodo.libs.bodosql_regexp_array_kernels import *  # noqa
+from bodo.libs.bodosql_semi_structured_array_kernels import *  # noqa
 from bodo.libs.bodosql_snowflake_conversion_array_kernels import *  # noqa
 from bodo.libs.bodosql_special_handling_array_kernels import *  # noqa
 from bodo.libs.bodosql_string_array_kernels import *  # noqa
@@ -41,6 +42,8 @@ broadcasted_fixed_arg_functions = {
     "add_interval_years",
     "add_months",
     "add_numeric",
+    "arrays_overlap",
+    "array_position",
     "array_size",
     "asin",
     "asinh",
@@ -263,4 +266,11 @@ broadcasted_fixed_arg_functions = {
 }
 
 
-broadcasted_variadic_functions = {"coalesce", "decode", "sql_hash", "greatest", "least"}
+broadcasted_variadic_functions = {
+    "array_construct",
+    "coalesce",
+    "decode",
+    "sql_hash",
+    "greatest",
+    "least",
+}

@@ -1360,7 +1360,7 @@ def test_dict_initcap(args):
     "func", ["equal_null", "not_equal_null", "startswith", "endswith"]
 )
 @pytest.mark.parametrize(
-    "args, answers",
+    "args, is_scalar_a, is_scalar_b, answers",
     [
         pytest.param(
             (
@@ -1378,6 +1378,8 @@ def test_dict_initcap(args):
                 ),
                 "wonder",
             ),
+            False,
+            True,
             {
                 "equal_null": np.array([False, True, False, False, False, False] * 2),
                 "not_equal_null": np.array([True, False, True, True, True, True] * 2),
@@ -1406,6 +1408,8 @@ def test_dict_initcap(args):
                 ),
                 None,
             ),
+            False,
+            True,
             {
                 "equal_null": np.array([False, False, True, False, True, False] * 2),
                 "not_equal_null": np.array([True, True, False, True, False, True] * 2),
@@ -1428,6 +1432,8 @@ def test_dict_initcap(args):
                 ),
                 pd.Series(["wonderlust", "wonder"] * 3 + [None] * 6),
             ),
+            False,
+            False,
             {
                 "equal_null": np.array([True, True] + [False] * 6 + [True, False] * 2),
                 "not_equal_null": np.array(
@@ -1446,12 +1452,16 @@ def test_dict_initcap(args):
         ),
     ],
 )
-def test_dict_str2bool(args, answers, func):
+def test_dict_str2bool(args, is_scalar_a, is_scalar_b, answers, func):
     def impl1(s, t):
-        return bodo.libs.bodosql_array_kernels.equal_null(s, t)
+        return bodo.libs.bodosql_array_kernels.equal_null(
+            s, t, is_scalar_a, is_scalar_b
+        )
 
     def impl2(s, t):
-        return bodo.libs.bodosql_array_kernels.not_equal_null(s, t)
+        return bodo.libs.bodosql_array_kernels.not_equal_null(
+            s, t, is_scalar_a, is_scalar_b
+        )
 
     def impl3(s, t):
         return pd.Series(bodo.libs.bodosql_array_kernels.startswith(s, t))

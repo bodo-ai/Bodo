@@ -9,6 +9,7 @@ import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Op.Assign;
 import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.Sets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import kotlin.Pair;
@@ -35,6 +36,7 @@ public class BinOpCodeGen {
    *     intermediate variables.
    * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
    *     we aren't in a streaming context.
+   * @param argScalars Whether each argument is a scalar or a column
    * @return The code generated for the BinOp call.
    */
   public static Expr generateBinOpCode(
@@ -42,7 +44,8 @@ public class BinOpCodeGen {
       SqlOperator binOp,
       List<RelDataType> argDataTypes,
       Builder builder,
-      List<Pair<String, Expr>> streamingNamedArgs) {
+      List<Pair<String, Expr>> streamingNamedArgs,
+      List<Boolean> argScalars) {
     SqlKind binOpKind = binOp.getKind();
     // Handle the Datetime functions that are either tz-aware or tz-naive
     if (argDataTypes.size() == 2
@@ -109,7 +112,7 @@ public class BinOpCodeGen {
         return genIntervalMultiplyCode(args, isArg0Interval);
       }
     }
-    return generateBinOpCodeHelper(args, binOpKind, builder, streamingNamedArgs);
+    return generateBinOpCodeHelper(args, binOpKind, builder, streamingNamedArgs, argScalars);
   }
   /**
    * Helper function that returns the necessary generated code for a BinOp Call. This function may
@@ -121,16 +124,19 @@ public class BinOpCodeGen {
    * @param builder The build for intermediate variables.
    * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
    *     we aren't in a streaming context.
+   * @param argScalars Whether the arguments are scalars or columns.
    * @return The code generated for the BinOp call.
    */
   public static Variable generateBinOpCodeHelper(
       List<Expr> args,
       SqlKind binOpKind,
       Builder builder,
-      List<Pair<String, Expr>> streamingNamedArgs) {
+      List<Pair<String, Expr>> streamingNamedArgs,
+      List<Boolean> argScalars) {
     final String fn;
     // Does the function support additional streaming arguments.
     boolean supportsStreamingArgs = false;
+    boolean requiresScalarInfo = false;
     switch (binOpKind) {
       case EQUALS:
         fn = "bodo.libs.bodosql_array_kernels.equal";
@@ -139,10 +145,12 @@ public class BinOpCodeGen {
       case IS_NOT_DISTINCT_FROM:
       case NULL_EQUALS:
         fn = "bodo.libs.bodosql_array_kernels.equal_null";
+        requiresScalarInfo = true;
         supportsStreamingArgs = true;
         break;
       case IS_DISTINCT_FROM:
         fn = "bodo.libs.bodosql_array_kernels.not_equal_null";
+        requiresScalarInfo = true;
         supportsStreamingArgs = true;
         break;
       case NOT_EQUALS:
@@ -190,13 +198,18 @@ public class BinOpCodeGen {
     /** Create the function calls */
     Expr prevVar = args.get(0);
     Variable outputVar = null;
+
     for (int i = 1; i < args.size(); i++) {
       // Generate the function call. Pass in the additional streaming arguments if supported.
-      Expr callExpr =
-          new Expr.Call(
-              fn,
-              List.of(prevVar, args.get(i)),
-              supportsStreamingArgs ? streamingNamedArgs : List.of());
+      ArrayList<Pair<String, Expr>> kwargs = new ArrayList();
+      if (requiresScalarInfo) {
+        kwargs.add(
+            new Pair<String, Expr>("is_scalar_a", new Expr.BooleanLiteral(argScalars.get(i - 1))));
+        kwargs.add(
+            new Pair<String, Expr>("is_scalar_b", new Expr.BooleanLiteral(argScalars.get(i))));
+      }
+      if (supportsStreamingArgs) kwargs.addAll(streamingNamedArgs);
+      Expr callExpr = new Expr.Call(fn, List.of(prevVar, args.get(i)), kwargs);
       // Generate a new variable
       outputVar = builder.getSymbolTable().genGenericTempVar();
       Op.Assign assign = new Assign(outputVar, callExpr);

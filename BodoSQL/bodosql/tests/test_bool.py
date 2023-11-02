@@ -294,37 +294,76 @@ def test_boolnot(args, numeric_truthy_df, spark_info, memory_leak_check):
     ],
 )
 @pytest.mark.parametrize(
-    "dtype, val1, val2",
+    "dtype, val1, val2, use_symbol",
     [
-        pytest.param(str, "A", "B", id="string"),
-        pytest.param(str, b"yay", b"boo", id="binary"),
-        pytest.param(pd.Int32Dtype(), -1, 500, id="int32"),
+        pytest.param(str, "A", "B", True, id="string"),
+        pytest.param(str, b"yay", b"boo", False, id="binary", marks=pytest.mark.slow),
+        pytest.param(pd.Int32Dtype(), -1, 500, True, id="int32"),
         pytest.param(
             None,
             pd.Timestamp("2023-1-30 6:00:00"),
             pd.Timestamp("2024-2-29 9:30:00"),
+            False,
             id="timestamp",
         ),
-        pytest.param(None, True, False, id="bool"),
+        pytest.param(None, True, False, True, id="bool", marks=pytest.mark.slow),
         pytest.param(
-            None, Time(12, 30, 0), Time(16, 59, 30, nanosecond=999999999), id="time"
+            None,
+            Time(12, 30, 0),
+            Time(16, 59, 30, nanosecond=999999999),
+            False,
+            id="time",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
-            None, datetime.date(2000, 1, 1), datetime.date(2023, 12, 31), id="date"
+            None,
+            datetime.date(2000, 1, 1),
+            datetime.date(2023, 12, 31),
+            True,
+            id="date",
+        ),
+        pytest.param(None, [1, 2, 3], [], False, id="integer_array"),
+        pytest.param(
+            None,
+            {"A": 0, "B": "foo", "C": True},
+            {"A": 0, "B": "bar", "C": True},
+            False,
+            id="struct",
         ),
     ],
 )
-def test_equal_null(dtype, val1, val2, use_case, memory_leak_check):
+def test_equal_null(dtype, val1, val2, use_case, use_symbol, memory_leak_check):
     """Tests EQUAL_NULL on multiple dtypes by parametrizing the values used
-    from each dtype."""
-    A = pd.Series([val1, val2, None] * 3, dtype=dtype)
-    B = pd.Series([val1] * 3 + [val2] * 3 + [None] * 3, dtype=dtype)
-    result = pd.Series([True, False, False, False, True, False, False, False, True])
+    from each dtype.
+
+    If use_symbol is true, uses <=> instead of EQUAL_NULL.
+    If use_case is true, makes the call inside of a case statement.
+    """
+    A = pd.Series([val1, val2, None] * 9, dtype=dtype)
+    B = pd.Series(
+        [val1] * 3
+        + [val2] * 3
+        + [None] * 3
+        + [val1] * 3
+        + [val2] * 3
+        + [None] * 3
+        + [val1] * 3
+        + [val2] * 3
+        + [None] * 3,
+        dtype=dtype,
+    )
+    result = pd.Series([True, False, False, False, True, False, False, False, True] * 3)
     if use_case:
-        query = "SELECT CASE WHEN EQUAL_NULL(A, B) THEN 'T' ELSE 'F' END AS are_equal FROM TABLE1"
+        if use_symbol:
+            query = "SELECT CASE WHEN A <=> B THEN 'T' ELSE 'F' END AS are_equal FROM TABLE1"
+        else:
+            query = "SELECT CASE WHEN EQUAL_NULL(A, B) THEN 'T' ELSE 'F' END AS are_equal FROM TABLE1"
         result = result.astype(str).str[0]
     else:
-        query = "SELECT EQUAL_NULL(A, B) AS are_equal FROM TABLE1"
+        if use_symbol:
+            query = "SELECT A <=> B AS are_equal FROM TABLE1"
+        else:
+            query = "SELECT EQUAL_NULL(A, B) AS are_equal FROM TABLE1"
     ctx = {"table1": pd.DataFrame({"A": A, "B": B})}
     check_query(
         query,

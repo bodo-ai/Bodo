@@ -715,7 +715,7 @@ class BodoRexSimplify(
     /**
      * @param e A call to DATEADD or an equivalent function in 3-argument form
      * @return If the call has all-literal arguments, returns the result of
-     * the corresponding date arithmetic. Otherwise, returns hte original call.
+     * the corresponding date arithmetic. Otherwise, returns the original call.
      * For example: DATEADD(YEAR, 2, DATE '2023-9-27') -> DATE '2025-9-27'
      */
     private fun simplifySnowflakeDateaddOp(e: RexCall): RexNode {

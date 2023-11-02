@@ -19,6 +19,7 @@ import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.util.Optionality;
@@ -38,6 +39,22 @@ public class ArrayOperatorTable implements SqlOperatorTable {
     }
     return instance;
   }
+
+  public static final SqlFunction ARRAY_CONSTRUCT =
+      new SqlFunction(
+          "ARRAY_CONSTRUCT",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.LEAST_RESTRICTIVE.andThen(BodoReturnTypes.TYPE_TO_ARRAY),
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // The input can be any data type, any number of times.
+          OperandTypes.VARIADIC,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction TO_ARRAY =
       new SqlFunction(
@@ -96,6 +113,38 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           .withGroupOrder(Optionality.OPTIONAL)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
+  public static final SqlFunction ARRAYS_OVERLAP =
+      new SqlFunction(
+          "ARRAYS_OVERLAP",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.BOOLEAN_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // The input can be any data type.
+          OperandTypes.family(SqlTypeFamily.ARRAY, SqlTypeFamily.ARRAY),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlFunction ARRAY_POSITION =
+      new SqlFunction(
+          "ARRAY_POSITION",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.INTEGER_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // The input can be any data type.
+          OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ARRAY),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction ARRAY_SIZE =
       new SqlFunction(
           "ARRAY_SIZE",
@@ -113,7 +162,14 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   private List<SqlOperator> functionList =
-      Arrays.asList(TO_ARRAY, ARRAY_TO_STRING, ARRAY_AGG, ARRAY_SIZE);
+      Arrays.asList(
+          TO_ARRAY,
+          ARRAY_CONSTRUCT,
+          ARRAY_TO_STRING,
+          ARRAY_AGG,
+          ARRAY_SIZE,
+          ARRAYS_OVERLAP,
+          ARRAY_POSITION);
 
   @Override
   public void lookupOperatorOverloads(

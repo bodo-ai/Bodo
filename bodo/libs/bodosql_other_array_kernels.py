@@ -13,7 +13,11 @@ from numba.extending import intrinsic, overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import is_overload_none, raise_bodo_error
+from bodo.utils.typing import (
+    get_overload_const_bool,
+    is_overload_none,
+    raise_bodo_error,
+)
 
 
 @numba.generated_jit(nopython=True)
@@ -119,7 +123,9 @@ def nvl2(arr, not_null_branch, null_branch):
 
 
 @numba.generated_jit(nopython=True)
-def equal_null(A, B, dict_encoding_state=None, func_id=-1):
+def equal_null(
+    A, B, is_scalar_a=False, is_scalar_b=False, dict_encoding_state=None, func_id=-1
+):
     """Handles cases where EQUAL_NULL receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [A, B]
@@ -127,19 +133,37 @@ def equal_null(A, B, dict_encoding_state=None, func_id=-1):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.equal_null",
-                ["A", "B", "dict_encoding_state", "func_id"],
+                [
+                    "A",
+                    "B",
+                    "is_scalar_a",
+                    "is_scalar_b",
+                    "dict_encoding_state",
+                    "func_id",
+                ],
                 i,
-                default_map={"dict_encoding_state": None, "func_id": -1},
+                default_map={
+                    "is_scalar_a": False,
+                    "is_scalar_b": False,
+                    "dict_encoding_state": None,
+                    "func_id": -1,
+                },
             )
 
-    def impl(A, B, dict_encoding_state=None, func_id=-1):  # pragma: no cover
-        return equal_null_util(A, B, dict_encoding_state, func_id)
+    def impl(
+        A, B, is_scalar_a=False, is_scalar_b=False, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return equal_null_util(
+            A, B, is_scalar_a, is_scalar_b, dict_encoding_state, func_id
+        )
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def not_equal_null(A, B, dict_encoding_state=None, func_id=-1):
+def not_equal_null(
+    A, B, is_scalar_a=False, is_scalar_b=False, dict_encoding_state=None, func_id=-1
+):
     """Handles cases where NOT_EQUAL_NULL receives optional arguments and forwards
     to the appropriate version of the real implementation. This is implemented
     by calling NOT on EQUAL_NULL"""
@@ -148,14 +172,30 @@ def not_equal_null(A, B, dict_encoding_state=None, func_id=-1):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.not_equal_null",
-                ["A", "B", "dict_encoding_state", "func_id"],
+                [
+                    "A",
+                    "B",
+                    "is_scalar_a",
+                    "is_scalar_b",
+                    "dict_encoding_state",
+                    "func_id",
+                ],
                 i,
-                default_map={"dict_encoding_state": None, "func_id": -1},
+                default_map={
+                    "is_scalar_a": False,
+                    "is_scalar_b": False,
+                    "dict_encoding_state": None,
+                    "func_id": -1,
+                },
             )
 
-    def impl(A, B, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+    def impl(
+        A, B, is_scalar_a=False, is_scalar_b=False, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
         return bodo.libs.bodosql_array_kernels.boolnot(
-            equal_null_util(A, B, dict_encoding_state, func_id)
+            equal_null_util(
+                A, B, is_scalar_a, is_scalar_b, dict_encoding_state, func_id
+            )
         )
 
     return impl
@@ -586,7 +626,7 @@ def nvl2_util(arr, not_null_branch, null_branch):
 
 
 @numba.generated_jit(nopython=True)
-def equal_null_util(A, B, dict_encoding_state, func_id):
+def equal_null_util(A, B, is_scalar_a, is_scalar_b, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function EQUAL_NULL which takes in two values
     (or columns) and returns True if they are equal (where NULL is treated as
     a known value)
@@ -594,16 +634,33 @@ def equal_null_util(A, B, dict_encoding_state, func_id):
     Args:
         A (any array/series/scalar): the first value(s) being compared
         B (any array/series/scalar): the second value(s) being compared
+        is_scalar_a (boolean): True if A should be treated as a scalar
+        is_scalar_b (boolean): True if B should be treated as a scalar
 
     Returns:
         boolean series/scalar: whether the number(s) are equal, or both null
     """
+    is_scalar_a = get_overload_const_bool(is_scalar_a)
+    is_scalar_b = get_overload_const_bool(is_scalar_b)
 
-    get_common_broadcasted_type([A, B], "EQUAL_NULL")
+    are_arrays = [not is_scalar_a, not is_scalar_b, False, False, False, False]
+    typ_a = A.data if bodo.hiframes.pd_series_ext.is_series_type(A) else A
+    typ_b = B.data if bodo.hiframes.pd_series_ext.is_series_type(B) else B
+    dtype_a = typ_a if is_scalar_a else typ_a.dtype
+    dtype_b = typ_b if is_scalar_b else typ_b.dtype
 
-    arg_names = ["A", "B", "dict_encoding_state", "func_id"]
-    arg_types = [A, B, dict_encoding_state, func_id]
-    propagate_null = [False, False, False, False]
+    get_common_broadcasted_type([dtype_a, dtype_b], "EQUAL_NULL")
+
+    arg_names = [
+        "A",
+        "B",
+        "is_scalar_a",
+        "is_scalar_b",
+        "dict_encoding_state",
+        "func_id",
+    ]
+    arg_types = [A, B, is_scalar_a, is_scalar_b, dict_encoding_state, func_id]
+    propagate_null = [False] * 6
 
     if A == bodo.none:
         # A = scalar null, B = scalar null
@@ -611,7 +668,7 @@ def equal_null_util(A, B, dict_encoding_state, func_id):
             scalar_text = "res[i] = True"
 
         # A = scalar null, B is a vector
-        elif bodo.utils.utils.is_array_typ(B, True):
+        elif are_arrays[1]:
             scalar_text = "res[i] = bodo.libs.array_kernels.isna(B, i)"
 
         # A = scalar null, B = non-null scalar
@@ -620,41 +677,40 @@ def equal_null_util(A, B, dict_encoding_state, func_id):
 
     elif B == bodo.none:
         # A is a vector, B = null
-        if bodo.utils.utils.is_array_typ(A, True):
+        if are_arrays[0]:
             scalar_text = "res[i] = bodo.libs.array_kernels.isna(A, i)"
 
         # A = non-null scalar, B = null
         else:
             scalar_text = "res[i] = False"
 
-    elif bodo.utils.utils.is_array_typ(A, True):
+    elif are_arrays[0]:
         # A & B are both vectors
-        if bodo.utils.utils.is_array_typ(B, True):
+        if are_arrays[1]:
             scalar_text = "if bodo.libs.array_kernels.isna(A, i) and bodo.libs.array_kernels.isna(B, i):\n"
             scalar_text += "   res[i] = True\n"
             scalar_text += "elif bodo.libs.array_kernels.isna(A, i) or bodo.libs.array_kernels.isna(B, i):\n"
             scalar_text += "   res[i] = False\n"
             scalar_text += "else:\n"
-            scalar_text += "   res[i] = arg0 == arg1"
+            scalar_text += "   res[i] = semi_safe_equals(arg0, arg1)"
 
         # A is a vector, B is a non-null scalar
         else:
-            scalar_text = (
-                "res[i] = (not bodo.libs.array_kernels.isna(A, i)) and arg0 == arg1"
-            )
+            scalar_text = "res[i] = (not bodo.libs.array_kernels.isna(A, i)) and semi_safe_equals(arg0, arg1)"
 
     # B is a vector, A is a non-null scalar
-    elif bodo.utils.utils.is_array_typ(B, True):
-        scalar_text = (
-            "res[i] = (not bodo.libs.array_kernels.isna(B, i)) and arg0 == arg1"
-        )
+    elif are_arrays[1]:
+        scalar_text = "res[i] = (not bodo.libs.array_kernels.isna(B, i)) and semi_safe_equals(arg0, arg1)"
 
     # A and B are both non-null scalars
     else:
-        scalar_text = "res[i] = arg0 == arg1"
+        scalar_text = "res[i] = semi_safe_equals(arg0, arg1)"
 
     out_dtype = bodo.libs.bool_arr_ext.boolean_array_type
     use_dict_caching = not is_overload_none(dict_encoding_state)
+    extra_globals = {
+        "semi_safe_equals": bodo.libs.bodosql_array_kernels.semi_safe_equals
+    }
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -664,6 +720,8 @@ def equal_null_util(A, B, dict_encoding_state, func_id):
         # Add support for dict encoding caching with streaming.
         dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
         func_id_name="func_id" if use_dict_caching else None,
+        extra_globals=extra_globals,
+        are_arrays=are_arrays,
     )
 
 
