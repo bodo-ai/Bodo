@@ -3118,17 +3118,6 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
 std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                                          bool all_gather, bool is_parallel,
                                          int mpi_root, int n_pes, int myrank) {
-    bool is_dict_array = false;
-    std::shared_ptr<array_info> dict_array;
-    if (in_arr->arr_type == bodo_array_type::DICT) {
-        // Note: We need to revisit if gather_table should be a no-op if
-        // is_parallel=False
-        make_dictionary_global_and_unique(in_arr, true);
-        is_dict_array = true;
-        // Make a copy of in_arr
-        dict_array = in_arr;
-        in_arr = in_arr->child_arrays[1];
-    }
     int64_t n_rows = in_arr->length;
     int64_t n_sub_elems = in_arr->n_sub_elems();
     int64_t n_sub_sub_elems = in_arr->n_sub_sub_elems();
@@ -3385,6 +3374,16 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                     index_offsets_o[pos] + n_strings_tot[pos];
             }
         }
+    } else if (arr_type == bodo_array_type::DICT) {
+        // Note: We need to revisit if gather_table should be a no-op if
+        // is_parallel=False
+        make_dictionary_global_and_unique(in_arr, true);
+        out_arr = gather_array(in_arr->child_arrays[1], all_gather, is_parallel,
+                               mpi_root, n_pes, myrank);
+        if (all_gather || myrank == mpi_root) {
+            out_arr =
+                create_dict_string_array(in_arr->child_arrays[0], out_arr);
+        }
     } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
         int64_t n_rows_tot = 0;
         for (int i_p = 0; i_p < n_pes; i_p++) {
@@ -3404,19 +3403,15 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                        rows_disps.data(), mpi_typ64, mpi_root, MPI_COMM_WORLD,
                        all_gather);
         // Gathering inner array
+        out_arr = gather_array(in_arr->child_arrays.front(), all_gather,
+                               is_parallel, mpi_root, n_pes, myrank);
         if (myrank == mpi_root || all_gather) {
-            out_arr = alloc_array_item(
-                n_rows_tot,
-                gather_array(in_arr->child_arrays.front(), all_gather,
-                             is_parallel, mpi_root, n_pes, myrank));
+            out_arr = alloc_array_item(n_rows_tot, out_arr);
             offset_t* offsets_o = (offset_t*)out_arr->data1();
             offsets_o[0] = 0;
             for (int64_t pos = 0; pos < n_rows_tot; pos++) {
                 offsets_o[pos + 1] = offsets_o[pos] + list_count_tot[pos];
             }
-        } else {
-            gather_array(in_arr->child_arrays.front(), all_gather, is_parallel,
-                         mpi_root, n_pes, myrank);
         }
     } else if (arr_type == bodo_array_type::STRUCT) {
         if (myrank == mpi_root || all_gather) {
@@ -3439,9 +3434,8 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             }
         }
     } else {
-        throw std::runtime_error(
-            "Unexpected array type in gather_array(). Array type: " +
-            GetArrType_as_string(arr_type));
+        throw std::runtime_error("Unexpected array type in gather_array: " +
+                                 GetArrType_as_string(arr_type));
     }
     if (arr_type == bodo_array_type::STRING ||
         arr_type == bodo_array_type::LIST_STRING ||
@@ -3467,10 +3461,6 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             copy_gathered_null_bytes((uint8_t*)null_bitmask_o, tmp_null_bytes,
                                      recv_count_null, rows_counts);
         }
-    }
-    if (is_dict_array && (all_gather || myrank == mpi_root)) {
-        out_arr =
-            create_dict_string_array(dict_array->child_arrays[0], out_arr);
     }
 
     return out_arr;
