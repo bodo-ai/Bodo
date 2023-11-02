@@ -2593,18 +2593,6 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
                                             int myrank) {
     int64_t arr_bcast[7];
     if (myrank == mpi_root) {
-        if (in_arr->arr_type == bodo_array_type::DICT) {
-            if (!in_arr->child_arrays[0]->is_globally_replicated) {
-                throw std::runtime_error(
-                    "broadcast_array: not supported for DICT arrays without "
-                    "global dictionary.");
-            }
-            // In case of dictionary encoded string arrays,
-            // we assume that the dictionary is global.
-            // Which means we just need to broadcast the indices
-            // array, which is the same logic as NULLABLE_INT_BOOL.
-            in_arr = in_arr->child_arrays[1];
-        }
         arr_bcast[0] = in_arr->length;
         arr_bcast[1] = in_arr->dtype;
         arr_bcast[2] = in_arr->arr_type;
@@ -2688,6 +2676,20 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
         int n_sub_bytes = (n_sub_elems + 7) >> 3;
         MPI_Bcast(out_arr->sub_null_bitmask(), n_sub_bytes, mpi_typ, mpi_root,
                   MPI_COMM_WORLD);
+    } else if (arr_type == bodo_array_type::DICT) {
+        if (myrank == mpi_root &&
+            !in_arr->child_arrays[0]->is_globally_replicated) {
+            throw std::runtime_error(
+                "broadcast_array: not supported for DICT arrays without "
+                "global dictionary.");
+        }
+        // Create a DICT out_arr
+        out_arr = create_dict_string_array(
+            ref_arr->child_arrays[0],
+            broadcast_array(
+                ref_arr->child_arrays[1],
+                myrank == mpi_root ? in_arr->child_arrays[1] : nullptr,
+                is_parallel, mpi_root, myrank));
     } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
         MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
         if (myrank == mpi_root) {
@@ -2713,6 +2715,10 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
                 ref_arr->child_arrays[i], out_arr->child_arrays[i], is_parallel,
                 mpi_root, myrank);
         }
+    } else {
+        throw std::runtime_error(
+            "Unsupported array type for broadcast_array: " +
+            GetArrType_as_string(arr_type));
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
         arr_type == bodo_array_type::STRING ||
@@ -2724,17 +2730,6 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
         int n_bytes = (n_rows + 7) >> 3;
         MPI_Bcast(out_arr->null_bitmask(), n_bytes, mpi_typ, mpi_root,
                   MPI_COMM_WORLD);
-    }
-
-    // Handle the case that input arr is DICT (we changed reference of in_arr to
-    // the indices portion earlier).
-    // At this point out_arr is a NULLABLE_INT_BOOL array and contains the
-    // indices.
-    // We assume the ref_table has the correct global dictionary that can be
-    // used for the final dictionary output array.
-    if (ref_arr->arr_type == bodo_array_type::DICT) {
-        // Create a DICT out_arr
-        out_arr = create_dict_string_array(ref_arr->child_arrays[0], out_arr);
     }
 
     return out_arr;
