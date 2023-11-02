@@ -10,7 +10,11 @@ import itertools
 import datetime
 import pandas as pd
 import numpy as np
-from typing import Optional, Any, Tuple
+from typing import Optional, Any, Tuple, Dict, TYPE_CHECKING
+
+# Imports for typechecking
+if TYPE_CHECKING:  # pragma: no cover
+    from snowflake.connector import SnowflakeConnection
 
 import numba
 from numba.core import ir, ir_utils, types
@@ -114,6 +118,7 @@ class UntypedPass:
         self._return_varnames = set()
         # Is code executing independently on each rank?
         self._is_independent = is_independent
+        self._snowflake_conn_cache = {}
 
     def run(self):
         """run untyped pass transform"""
@@ -186,7 +191,9 @@ class UntypedPass:
                     f"replicated. Ignoring the flag for variables: {extra_vars}."
                 )
             )
-        return
+
+        # clear connection cache to close connections
+        self._snowflake_conn_cache.clear()
 
     def _run_assign(self, assign, label):
         lhs = assign.target.name
@@ -1053,6 +1060,7 @@ class UntypedPass:
             _bodo_downcast_decimal_to_double,
             _bodo_orig_table_name_const,
             _bodo_orig_table_indices_const,
+            snowflake_conn_cache=self._snowflake_conn_cache,
         )
 
         if chunksize is not None and db_type != "snowflake":  # pragma: no cover
@@ -3286,6 +3294,7 @@ def _get_sql_types_arr_colnames(
     downcast_decimal_to_double: bool = False,
     orig_table_const: Optional[str] = None,
     orig_table_indices_const: Optional[Tuple[int]] = None,
+    snowflake_conn_cache: Optional[Dict[str, "SnowflakeConnection"]] = None,
 ):
     """
     Wrapper function to determine the db_type, column names,
@@ -3375,6 +3384,7 @@ def _get_sql_types_arr_colnames(
         downcast_decimal_to_double,
         orig_table_const,
         orig_table_indices_const,
+        snowflake_conn_cache=snowflake_conn_cache,
     )
     dtypes = df_type.data
     dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
@@ -3417,6 +3427,7 @@ def _get_sql_df_type_from_db(
     downcast_decimal_to_double: bool,
     orig_table_const: Optional[str] = None,
     orig_table_indices_const: Optional[Tuple[int]] = None,
+    snowflake_conn_cache: Optional[Dict[str, "SnowflakeConnection"]] = None,
 ):
     """access the database to find df type for read_sql() output.
     Only rank zero accesses the database, then broadcasts.
@@ -3489,7 +3500,18 @@ def _get_sql_df_type_from_db(
                 from bodo.io.snowflake import (
                     get_schema,
                     SF_READ_DICT_ENCODING_IF_TIMEOUT,
+                    snowflake_connect,
                 )
+
+                # Use Snowflake connection cache if available
+                if snowflake_conn_cache is not None:
+                    if con_const in snowflake_conn_cache:
+                        conn = snowflake_conn_cache[con_const]
+                    else:
+                        conn = snowflake_connect(con_const)
+                        snowflake_conn_cache[con_const] = conn
+                else:
+                    conn = snowflake_connect(con_const)
 
                 (
                     df_type,
@@ -3500,7 +3522,7 @@ def _get_sql_df_type_from_db(
                     schema_timeout_info,
                     dict_encode_timeout,
                 ) = get_schema(
-                    con_const,
+                    conn,
                     sql_const,
                     is_select_query,
                     is_table_input,

@@ -1215,7 +1215,7 @@ def _detect_column_dict_encoding(
 
 
 def get_schema(
-    conn_str: str,
+    conn: "SnowflakeConnection",
     sql_query: str,
     is_select_query: bool,
     is_table_input: bool,
@@ -1226,7 +1226,7 @@ def get_schema(
 ):  # pragma: no cover
     """
     Args:
-        con_const (str): The connection string being used to connect to the database.
+        conn (SnowflakeConnection): The connection being used to connect to the database
         sql_query (str): read query or Snowflake table name
         is_select_query (bool): TODO: document this
         is_table_input (bool): read query is a table name
@@ -1238,7 +1238,6 @@ def get_schema(
     Returns:
         A large tuple containing: (#TODO: document this)
     """
-    conn = snowflake_connect(conn_str)
     cursor = conn.cursor()
 
     (
