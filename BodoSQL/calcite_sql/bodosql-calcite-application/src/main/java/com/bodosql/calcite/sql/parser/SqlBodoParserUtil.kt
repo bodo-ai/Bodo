@@ -1,6 +1,8 @@
 package com.bodosql.calcite.sql.parser
 
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
+import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
+import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlUtil
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
@@ -72,6 +74,25 @@ class SqlBodoParserUtil {
                 else -> throw SqlUtil.newContextException(
                     pos,
                     BODO_SQL_RESOURCE.illegalDatePartTimeUnit(funcName, intervalName),
+                )
+            }
+        }
+
+        @JvmStatic
+        fun createLastDayFunction(pos: SqlParserPos, intervalName: String, args: List<SqlNode>): SqlNode {
+            when (intervalName.uppercase(Locale.ROOT)) {
+                "YEAR", "YEARS", "Y", "YY", "YYY", "YYYY", "YR", "YRS",
+                "MONTH", "MONTHS", "MM", "MON", "MONS",
+                "WEEK", "WEEKS", "W", "WK", "WEEKOFYEAR", "WOY", "WY",
+                "QUARTER", "Q", "QTR", "QTRS", "QUARTERS",
+                -> {
+                    val timeArg = SqlLiteral.createCharString(intervalName, pos)
+                    val new_args = args.plus(timeArg)
+                    return SqlBodoOperatorTable.LAST_DAY.createCall(pos, new_args)
+                }
+                else -> throw SqlUtil.newContextException(
+                    pos,
+                    BODO_SQL_RESOURCE.illegalLastDayTimeUnit(intervalName),
                 )
             }
         }
