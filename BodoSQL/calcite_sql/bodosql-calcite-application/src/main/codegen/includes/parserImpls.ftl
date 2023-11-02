@@ -714,7 +714,7 @@ SqlNode DatePartFunctionCall() :
 {
     <DATE_PART> { s = span(); }
     <LPAREN>
-    interval = DatePartInterval(args)
+    interval = SnowflakeDateTimeInterval()
     <COMMA>
     e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
     <RPAREN> {
@@ -722,7 +722,35 @@ SqlNode DatePartFunctionCall() :
     }
 }
 
-String DatePartInterval(final List<SqlNode> args) :
+String SnowflakeDateInterval() : {
+    final String e;
+}
+{
+    (
+        e = SimpleStringLiteral()
+    |
+        e = SnowflakeDateUnquotedInterval()
+    )
+    {
+        return e;
+    }
+}
+
+String SnowflakeTimeInterval() : {
+    final String e;
+}
+{
+    (
+        e = SimpleStringLiteral()
+    |
+        e = SnowflakeTimeUnquotedInterval()
+    )
+    {
+        return e;
+    }
+}
+
+String SnowflakeDateTimeInterval() :
 {
     final String e;
 }
@@ -730,7 +758,7 @@ String DatePartInterval(final List<SqlNode> args) :
     (
         e = SimpleStringLiteral()
     |
-        e = DatePartUnquotedInterval()
+        e = SnowflakeDateTimeUnquotedInterval()
     )
     {
         return e;
@@ -744,11 +772,23 @@ String DatePartInterval(final List<SqlNode> args) :
  *
  * See: https://docs.snowflake.com/sql-reference/functions-date-time#label-supported-date-time-parts
  */
-String DatePartUnquotedInterval() :
+String SnowflakeDateTimeUnquotedInterval() :
 {
-    final String intervalString;
+    final String e;
 }
 {
+    (
+        e = SnowflakeDateUnquotedInterval()
+    |
+        e = SnowflakeTimeUnquotedInterval()
+    )
+    {
+        return e;
+    }
+}
+
+String SnowflakeDateUnquotedInterval() : {
+}{
     <YEAR> { return "YEAR"; }
     | <Y> { return "YEAR"; }
     | <YY> { return "YEAR"; }
@@ -796,7 +836,11 @@ String DatePartUnquotedInterval() :
     | <QUARTERS> { return "QUARTER"; }
     | <YEAROFWEEK> { return "YEAROFWEEK"; }
     | <YEAROFWEEKISO> { return "YEAROFWEEKISO"; }
-    | <HOUR> { return "HOUR"; }
+}
+
+String SnowflakeTimeUnquotedInterval() : {
+}{
+    <HOUR> { return "HOUR"; }
     | <H> { return "HOUR"; }
     | <HH> { return "HOUR"; }
     | <HR> { return "HOUR"; }
@@ -834,4 +878,22 @@ String DatePartUnquotedInterval() :
     | <TZH> { return "TIMEZONE_HOUR"; }
     | <TIMEZONE_MINUTE> { return "TIMEZONE_MINUTE"; }
     | <TZM> { return "TIMEZONE_MINUTE"; }
+}
+
+SqlNode LastDayFunctionCall() :
+{
+    final Span s;
+    final SqlNode e;
+    final String interval;
+    final List<SqlNode> args = new ArrayList<SqlNode>();
+}
+{
+    <LAST_DAY> { s = span(); }
+    <LPAREN>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <COMMA>
+    interval = SnowflakeDateInterval()
+    <RPAREN> {
+        return SqlBodoParserUtil.createLastDayFunction(s.end(this), interval, args);
+    }
 }

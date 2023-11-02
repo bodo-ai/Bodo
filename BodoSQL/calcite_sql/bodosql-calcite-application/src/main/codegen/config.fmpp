@@ -110,6 +110,7 @@ data: {
       "COPY",
       "GRANTS",
       "TIMESTAMP_LTZ",
+      "LAST_DAY",
       # Tokens for Date/Time Intervals
       "Y",
       "YY",
@@ -374,6 +375,7 @@ data: {
         "EPOCH_NANOSECONDS",
         "TZH",
         "TZM",
+        "LAST_DAY",
     ]
 
     # List of additional join types. Each is a method with no arguments.
@@ -386,6 +388,7 @@ data: {
     # Example: "DateFunctionCall()".
     builtinFunctionCallMethods: [
         "DatePartFunctionCall()",
+        "LastDayFunctionCall()",
     ]
 
     # List of methods for parsing extensions to "CREATE [OR REPLACE]" calls.
