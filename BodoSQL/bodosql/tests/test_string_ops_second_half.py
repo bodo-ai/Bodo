@@ -151,6 +151,70 @@ def test_concat_ws_cols(bodosql_string_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
+def test_concat_ws_scalars(bodosql_string_types, spark_info, memory_leak_check):
+    """Checks that the concat_ws function is working for scalar values"""
+    query = "select CASE WHEN A > 'A' THEN CONCAT_WS(' case1 ', B, C, A) ELSE CONCAT_WS(A,B,C) END from table1"
+    spark_query = "select CASE WHEN A > 'A' THEN CONCAT(B, ' case1 ', C, ' case1 ', A) ELSE CONCAT(B, A, C) END from table1"
+    check_query(
+        query,
+        bodosql_string_types,
+        spark_info,
+        check_names=False,
+        equivalent_spark_query=spark_query,
+    )
+
+
+@pytest.mark.slow
+def test_concat_ws_single_arg_binary(
+    bodosql_binary_types, spark_info, memory_leak_check
+):
+    """Checks that the concat_ws function is working for a single argument"""
+    query = "select CONCAT_WS(B, A) from table1"
+    spark_query = "select CONCAT(A) from table1"
+    check_query(
+        query,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        equivalent_spark_query=spark_query,
+    )
+
+
+@pytest.mark.slow
+def test_concat_cols_binary(bodosql_binary_types, spark_info, memory_leak_check):
+    """Checks that the concat_ws function is working for columns"""
+    query = (
+        "select CONCAT(B, C) as A0, CONCAT_WS(A, B, C) as A1, A || B as A2 from table1"
+    )
+    spark_query = (
+        "select CONCAT(B, C) as A0, CONCAT(B, A, C) as A1, A || B as A2 from table1"
+    )
+    check_query(
+        query,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        equivalent_spark_query=spark_query,
+        convert_columns_bytearray=["A0", "A1", "A2"],
+    )
+
+
+@pytest.mark.slow
+def test_concat_ws_scalars_binary(bodosql_binary_types, spark_info, memory_leak_check):
+    """Checks that the concat_ws function is working for scalar values"""
+    query = "SELECT CASE WHEN A IS NOT NULL THEN CONCAT_WS(TO_BINARY('2c'), C, A) ELSE CONCAT_WS(A, B, C) END AS A0 FROM table1"
+    spark_query = "SELECT CASE WHEN A IS NOT NULL THEN CONCAT(C, TO_BINARY('2c'), A) ELSE CONCAT(B, A, C) END AS A0 FROM table1"
+    check_query(
+        query,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        equivalent_spark_query=spark_query,
+        convert_columns_bytearray=["A0"],
+    )
+
+
 def test_string_fns_cols(
     spark_info, bodosql_string_fn_testing_df, string_fn_info, memory_leak_check
 ):
@@ -174,20 +238,6 @@ def test_string_fns_cols(
         spark_info,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
-    )
-
-
-@pytest.mark.slow
-def test_concat_ws_scalars(bodosql_string_types, spark_info, memory_leak_check):
-    """Checks that the concat_ws function is working for scalar values"""
-    query = "select CASE WHEN A > 'A' THEN CONCAT_WS(' case1 ', B, C, A) ELSE CONCAT_WS(A,B,C) END from table1"
-    spark_query = "select CASE WHEN A > 'A' THEN CONCAT(B, ' case1 ', C, ' case1 ', A) ELSE CONCAT(B, A, C) END from table1"
-    check_query(
-        query,
-        bodosql_string_types,
-        spark_info,
-        check_names=False,
         equivalent_spark_query=spark_query,
     )
 

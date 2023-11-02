@@ -634,23 +634,31 @@ def overload_concat_ws_util(A, sep, dict_encoding_state, func_id):
     if len(A) == 0:
         raise_bodo_error("Cannot concatenate 0 columns")
 
+    # Determine the output dtype. Note: we don't keep data dictionary encoded because there are too many possible combinations.
+    out_dtype = verify_string_binary_arg(sep, "CONCAT_WS", "sep")
+
     arg_names = []
     arg_types = []
-    # Verify that every argument is a string array.
+    # Verify that all arguments are string or binary arrays and the same type as sep.
     for i, arr_typ in enumerate(A):
         arg_name = f"A{i}"
-        # TODO: Allow all binary data as well.
-        verify_string_arg(arr_typ, "CONCAT_WS", arg_name)
+        if out_dtype is None:
+            out_dtype = verify_string_binary_arg(sep, "CONCAT_WS", "sep")
+        elif out_dtype:
+            verify_string_arg(arr_typ, "CONCAT_WS", arg_name)
+        else:
+            verify_binary_arg(arr_typ, "CONCAT_WS", arg_name)
         arg_names.append(arg_name)
         arg_types.append(arr_typ)
-    # Verify sep
+
     arg_names.append("sep")
-    verify_string_arg(sep, "CONCAT_WS", "sep")
     arg_types.append(sep)
     propagate_null = [True] * len(arg_names)
-    # Determine the output dtype. Note: we don't keep data dictionary
-    # encoded because there are too many possible combinations.
-    out_dtype = bodo.string_array_type
+    out_dtype = (
+        bodo.string_array_type
+        if out_dtype is None or out_dtype is True
+        else bodo.binary_array_type
+    )
 
     # Create the mapping from the tuple to the local variable.
     arg_string = "A, sep, dict_encoding_state, func_id"
