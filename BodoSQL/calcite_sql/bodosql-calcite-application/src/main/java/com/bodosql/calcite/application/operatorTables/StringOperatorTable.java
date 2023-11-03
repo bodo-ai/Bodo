@@ -53,8 +53,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this, so we set it to None.
           null,
-          // What Input Types does the function accept. This function accepts a collection
-          OperandTypes.repeat(SqlOperandCountRanges.from(1), OperandTypes.STRING),
+          OperandTypes.repeat(SqlOperandCountRanges.from(1), OperandTypes.BINARY)
+              .or(OperandTypes.repeat(SqlOperandCountRanges.from(1), OperandTypes.CHARACTER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
@@ -73,8 +73,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          // What Input Types does the function accept. This function accepts a collection
-          OperandTypes.repeat(SqlOperandCountRanges.from(2), OperandTypes.STRING),
+          OperandTypes.repeat(SqlOperandCountRanges.from(2), OperandTypes.BINARY)
+              .or(OperandTypes.repeat(SqlOperandCountRanges.from(2), OperandTypes.CHARACTER)),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction MID =
