@@ -1335,8 +1335,12 @@ def test_option_bool_fns(memory_leak_check):
             bodo.libs.bodosql_array_kernels.boolor(arg0, arg1),
             bodo.libs.bodosql_array_kernels.boolxor(arg0, arg1),
             bodo.libs.bodosql_array_kernels.boolnot(arg0),
-            bodo.libs.bodosql_array_kernels.equal_null(arg0, arg1),
-            bodo.libs.bodosql_array_kernels.not_equal_null(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.equal_null(
+                arg0, arg1, is_scalar_a=True, is_scalar_b=True
+            ),
+            bodo.libs.bodosql_array_kernels.not_equal_null(
+                arg0, arg1, is_scalar_a=True, is_scalar_b=True
+            ),
         )
 
     for A in [0, 16]:
