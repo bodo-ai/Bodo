@@ -1716,22 +1716,26 @@ def test_row_number(test, memory_leak_check):
                 np.array(
                     [
                         {"X": 1, "Y": 3.1},
-                        {"X": -2, "Y": 2.2},
-                        None,
                         {"X": 3, "Y": -1.3},
                         {"X": 4, "Y": 0.4},
                     ]
-                    * 3
+                    * 10
+                    + [
+                        {"X": -2, "Y": 2.2},
+                        None,
+                    ]
                 ),
                 np.array(
                     [
                         {"X": 5, "Y": 10.1},
-                        None,
-                        {"X": None, "Y": 10.2},
                         {"X": 7, "Y": 10.3},
                         {"X": -8, "Y": 10.4},
                     ]
-                    * 3
+                    * 10
+                    + [
+                        None,
+                        {"X": None, "Y": 10.2},
+                    ]
                 ),
             ),
             (False, False),
@@ -1739,12 +1743,11 @@ def test_row_number(test, memory_leak_check):
             pd.Series(
                 [
                     [{"X": 1, "Y": 3.1}, {"X": 5, "Y": 10.1}],
-                    [{"X": -2, "Y": 2.2}, None],
-                    [None, {"X": None, "Y": 10.2}],
                     [{"X": 3, "Y": -1.3}, {"X": 7, "Y": 10.3}],
                     [{"X": 4, "Y": 0.4}, {"X": -8, "Y": 10.4}],
                 ]
-                * 3
+                * 10
+                + [[{"X": -2, "Y": 2.2}, None], [None, {"X": None, "Y": 10.2}]]
             ),
             id="struct_array-int_float-2",
         ),
