@@ -205,37 +205,16 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction TO_TIME =
-      new SqlFunction(
+  public static final SqlBasicFunction TO_TIME =
+      SqlBasicFunction.create(
           "TO_TIME",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
           ReturnTypes.TIME_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           OperandTypes.DATETIME
               .or(OperandTypes.CHARACTER)
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
-          // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction TIME =
-      new SqlFunction(
-          "TIME",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.TIME_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          OperandTypes.DATETIME
-              .or(OperandTypes.CHARACTER)
-              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
+  public static final SqlFunction TIME = TO_TIME.withName("TIME");
 
   public static final SqlFunction TRY_TO_TIME =
       new SqlFunction(
@@ -253,16 +232,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction TIMEFROMPARTS =
-      new SqlFunction(
+  public static final SqlBasicFunction TIMEFROMPARTS =
+      SqlBasicFunction.create(
           "TIMEFROMPARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
           ReturnTypes.TIME_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           OperandTypes.sequence(
                   "TIMEFROMPARTS(HOUR, MINUTE, SECOND)",
                   OperandTypes.INTEGER,
@@ -275,33 +248,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
                       OperandTypes.INTEGER,
                       OperandTypes.INTEGER,
                       OperandTypes.INTEGER)),
-          // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction TIME_FROM_PARTS =
-      new SqlFunction(
-          "TIME_FROM_PARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.TIME_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          OperandTypes.sequence(
-                  "TIME_FROM_PARTS(HOUR, MINUTE, SECOND)",
-                  OperandTypes.INTEGER,
-                  OperandTypes.INTEGER,
-                  OperandTypes.INTEGER)
-              .or(
-                  OperandTypes.sequence(
-                      "TIME_FROM_PARTS(HOUR, MINUTE, SECOND, NANOSECOND)",
-                      OperandTypes.INTEGER,
-                      OperandTypes.INTEGER,
-                      OperandTypes.INTEGER,
-                      OperandTypes.INTEGER)),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
+  public static final SqlFunction TIME_FROM_PARTS = TIMEFROMPARTS.withName("TIME_FROM_PARTS");
 
   /**
    * Generate the return type for TO_TIMESTAMP_TZ, TRY_TO_TIMESTAMP_TZ, TO_TIMESTAMP_LTZ and
@@ -394,72 +343,30 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           .or(OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.TIMESTAMP))
           .or(OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.TIME));
 
-  public static final SqlFunction TIMESTAMP_FROM_PARTS =
-      new SqlFunction(
+  public static final SqlBasicFunction TIMESTAMP_FROM_PARTS =
+      SqlBasicFunction.create(
           "TIMESTAMP_FROM_PARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
           opBinding -> timestampConstructionOutputType(opBinding, true),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER,
-          // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIMESTAMPFROMPARTS =
-      new SqlFunction(
-          "TIMESTAMPFROMPARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          opBinding -> timestampConstructionOutputType(opBinding, true),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
+      TIMESTAMP_FROM_PARTS.withName("TIMESTAMPFROMPARTS");
 
-  public static final SqlFunction TIMESTAMP_NTZ_FROM_PARTS =
-      new SqlFunction(
+  public static final SqlBasicFunction TIMESTAMP_NTZ_FROM_PARTS =
+      SqlBasicFunction.create(
           "TIMESTAMP_NTZ_FROM_PARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
+          opBinding -> timestampConstructionOutputType(opBinding, true),
           OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER,
-          // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIMESTAMPNTZFROMPARTS =
-      new SqlFunction(
-          "TIMESTAMPNTZFROMPARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
+      TIMESTAMP_NTZ_FROM_PARTS.withName("TIMESTAMPNTZFROMPARTS");
 
-  public static final SqlFunction TIMESTAMP_LTZ_FROM_PARTS =
-      new SqlFunction(
+  public static final SqlBasicFunction TIMESTAMP_LTZ_FROM_PARTS =
+      SqlBasicFunction.create(
           "TIMESTAMP_LTZ_FROM_PARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
           opBinding -> timestampConstructionOutputType(opBinding, false),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           argumentRange(
               6,
               SqlTypeFamily.INTEGER,
@@ -469,30 +376,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               SqlTypeFamily.INTEGER,
               SqlTypeFamily.INTEGER,
               SqlTypeFamily.INTEGER),
-          // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIMESTAMPLTZFROMPARTS =
-      new SqlFunction(
-          "TIMESTAMPLTZFROMPARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          opBinding -> timestampConstructionOutputType(opBinding, false),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          argumentRange(
-              6,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
+      TIMESTAMP_LTZ_FROM_PARTS.withName("TIMESTAMPLTZFROMPARTS");
 
   public static final SqlFunction TIMESTAMP_TZ_FROM_PARTS =
       new SqlFunction(
@@ -540,46 +427,17 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction DATE_SUB =
-      new SqlFunction(
+  public static final SqlBasicFunction DATE_SUB =
+      SqlBasicFunction.create(
           "DATE_SUB",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
           opBinding -> mySqlDateaddReturnType(opBinding),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept. This function accepts only
-          // (Datetime/String, Interval/Integer)
           OperandTypes.DATETIME_INTERVAL
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME_INTERVAL))
               .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER))
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
-          // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction SUBDATE =
-      new SqlFunction(
-          "SUBDATE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          opBinding -> mySqlDateaddReturnType(opBinding),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept. This function accepts only
-          // (Datetime/String, Interval/Integer)
-          OperandTypes.DATETIME_INTERVAL
-              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME_INTERVAL))
-              .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER))
-              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER)),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
-
+  public static final SqlFunction SUBDATE = DATE_SUB.withName("SUBDATE");
   public static final SqlFunction ADDDATE =
       new SqlFunction(
           "ADDDATE",
