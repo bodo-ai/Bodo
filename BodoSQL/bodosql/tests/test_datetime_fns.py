@@ -4561,7 +4561,7 @@ def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
     if unit == "day":
         with pytest.raises(
             Exception,
-            match=f'"{day_part_strings}" is not a valid time unit for LAST_DAY',
+            match=f'Unsupported date/time unit "{day_part_strings}" for function LAST_DAY',
         ):
             check_query(
                 query,
