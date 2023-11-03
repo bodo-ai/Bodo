@@ -4587,7 +4587,7 @@ def test_last_day_time_part(date_df, time_part_strings, memory_leak_check):
     query = f"SELECT LAST_DAY(B, '{time_part_strings}') as output from table1"
     with pytest.raises(
         Exception,
-        match=f'"{time_part_strings}" is not a valid time unit for LAST_DAY',
+        match=f'Unsupported date/time unit "{time_part_strings}" for function LAST_DAY',
     ):
         check_query(
             query,
