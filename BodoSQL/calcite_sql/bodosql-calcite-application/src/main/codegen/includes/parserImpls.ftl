@@ -891,9 +891,14 @@ SqlNode LastDayFunctionCall() :
     <LAST_DAY> { s = span(); }
     <LPAREN>
     e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+(
     <COMMA>
     interval = SnowflakeDateInterval()
-    <RPAREN> {
+    <RPAREN>
+|
+    <RPAREN> { return SqlBodoOperatorTable.LAST_DAY.createCall(s.end(this), args); }
+)
+    {
         return SqlBodoParserUtil.createLastDayFunction(s.end(this), interval, args);
     }
 }
