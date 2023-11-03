@@ -51,9 +51,9 @@ public interface BodoSQLResource {
    @Resources.BaseMessage("Invalid time unit input for {0}: {1}")
    Resources.ExInst<SqlValidatorException> wrongTimeUnit(String fnName, String msg);
 
-   @Resources.BaseMessage("Unsupported date/time unit '{1}' for function {0}")
+   @Resources.BaseMessage("Unsupported date/time unit \"{1}\" for function {0}")
    Resources.ExInst<SqlValidatorException> illegalDatePartTimeUnit(String functionName, String dateTimeUnit);
 
-   @Resources.BaseMessage("Unsupported date/time unit '{0}' for function LAST_DAY")
+   @Resources.BaseMessage("Unsupported date/time unit \"{0}\" for function LAST_DAY")
    Resources.ExInst<SqlValidatorException> illegalLastDayTimeUnit(String dateTimeUnit);
 }
