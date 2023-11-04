@@ -16,8 +16,11 @@ import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexUtil.getSelectivity
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.util.Util
+import java.lang.Math.pow
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 class BodoRelMdRowCount : RelMdRowCount() {
 
@@ -87,49 +90,39 @@ class BodoRelMdRowCount : RelMdRowCount() {
      * calculated the row count, so we need to isolate this to Join's row count.
      */
     override fun getRowCount(rel: Join, mq: RelMetadataQuery): Double? {
+        val origLeft = mq.getRowCount(rel.left)
+        val origRight = mq.getRowCount(rel.right)
+        if (origLeft == null || origRight == null) {
+            return null
+        }
+        // Row count estimates of < 1 will be rounded up to 1.
+        val left = max(origLeft, 1.0)
+        val right = max(origRight, 1.0)
         if (!rel.joinType.projectsRight() || mq !is BodoRelMetadataQuery) {
-            // Fall back to the default implementation for cases we don't support
-            // or possible configuration issues.
-            // TODO(njriasan): Update the no stats version of Join to be a more
-            // reasonable estimate, such as taking the max like Dremio does
-            // for hash join.
-            return super.getRowCount(rel, mq)
+            // Note: Bodo doesn't support semi or anti joins (which is this
+            // path). As a placeholder we opt to match the default case we have.
+            //
+            // Match the dremio default of selecting the larger table.
+            return max(origLeft, origRight)
         } else {
             // Note: Most of this is copied from RelMdUtil.getJoinRowCount
-            // Row count estimates of 0 will be rounded up to 1.
-            // So, use maxRowCount where the product is very small.
-            // Row count estimates of 0 will be rounded up to 1.
-            // So, use maxRowCount where the product is very small.
-            val left = mq.getRowCount(rel.getLeft())
-            val right = mq.getRowCount(rel.getRight())
-            if (left == null || right == null) {
-                return null
-            }
+            // Use maxRowCount where the product is very small.
             if (left <= 1.0 || right <= 1.0) {
                 val max = mq.getMaxRowCount(rel)
                 if (max != null && max <= 1.0) {
                     return max
                 }
             }
-
-            val selectivity = getJoinColumnDistinctCountBasedSelectivity(rel, mq, rel.condition)
-
-            val innerRowCount = left * right * selectivity
-            return when (rel.joinType) {
-                JoinRelType.INNER -> innerRowCount
-                JoinRelType.LEFT -> left * (1.0 - selectivity) + innerRowCount
-                JoinRelType.RIGHT -> right * (1.0 - selectivity) + innerRowCount
-                JoinRelType.FULL -> (left + right) * (1.0 - selectivity) + innerRowCount
-                else -> throw Util.unexpected<JoinRelType>(rel.joinType)
+            // If we have a cross join just return the cross product.
+            if (rel.condition == null || rel.condition.isAlwaysTrue) {
+                return left * right
             }
+
+            return getDistinctnessBasedJoinRowCount(rel, mq, left, right)
         }
     }
 
     // Implementation of the join calculation.
-
-    // Constant parameter to define what percent of estimated total groups we expect
-    // each equality filter to keep in a Join.
-    private val GROUP_SELECTIVITY_CONSTANT = 0.9
 
     /**
      * Determine if the predicate being used as a portion of the Join condition
@@ -179,62 +172,143 @@ class BodoRelMdRowCount : RelMdRowCount() {
     }
 
     /**
-     * Compute the selectivity for a Join based on the
-     * ColumnDistinctCount query. This query attempts to compute
-     * if any columns are guaranteed to be unique and otherwise
-     * attempts to compute the approx_distinct_count() query
-     * on each column in Snowflake.
+     * Compute the expected row count for a Join based on the
+     * ColumnDistinctCount query. The function creates a distinction between the
+     * equijoin case and the non-equijoin case. For the non-equijoin case, while
+     * there may be some exceptions involving OR, we generally expect as a HEURISTIC
+     * the total join size will grow. In contrast, when we have an equijoin we
+     * expect the total join size to be no bigger than the larger table (the join should
+     * be filtering) unless we have information directly rejected this.
      *
-     * See https://bodo.atlassian.net/wiki/spaces/B/pages/1420722189/Join+Row+Count+Estimates
-     * for the selectivity calculation.
+     * In this function we implement the functionality defined here:
+     * https://bodo.atlassian.net/wiki/spaces/B/pages/1420722189/Join+Row+Count+Estimates
+     *
+     * At a high level we determine the uniqueness of each column by querying the
+     * mq.getColumnDistinctCount() information to estimate the number of possible values for
+     * the join. Then we use the information to estimate the number of matches and the resulting
+     * output size. This information also contains special handling for when we don't have this
+     * information for one or both tables, so please consult the design doc for more information.
+     *
+     * For functions with multiple filters we cap the impact of the distinctness results once
+     * we reach the maximum number of distinct rows possible for a table (no larger than the size).
+     * Beyond this threshold we apply a heuristic fixed sized filter to account for how we generally
+     * expect having more filters to result in a smaller output size.
+     *
+     * @param rel The join whose size we are estimating.
+     * @param mq The metadata query used to determine column uniqueness.
+     * @param leftSize The expected number of rows in the left table.
+     * @param rightSize The expected number of rows in the right table.
+     * @return The expected row count for the output of the join.
      */
-    private fun getJoinColumnDistinctCountBasedSelectivity(
+    private fun getDistinctnessBasedJoinRowCount(
         rel: Join,
         mq: BodoRelMetadataQuery,
-        predicate: RexNode?,
+        leftSize: Double,
+        rightSize: Double,
     ): Double {
-        // If there is no predicate this is a cross join.
-        if (predicate == null) {
-            return 1.0
-        }
-        // If we have an AND fetch the operands. In any other case we can
-        // only look at a single comparison. We do not add any insights for join.
-        val comparisons: List<RexNode> = if (predicate.kind == SqlKind.AND) {
-            (predicate as RexCall).operands
+        // Look at all the clauses in the condition. In the future we may only want to look
+        // at individual keys but this ensures we keep each equality clause.
+        val comparisons: List<RexNode> = if (rel.condition.kind == SqlKind.AND) {
+            (rel.condition as RexCall).operands
         } else {
-            listOf(predicate)
+            listOf(rel.condition)
         }
-        // Selectivity for which we don't use any data
-        var unsupportedSelectivity: Double = 1.0
-        // Selectivity for which we use data
-        var supportedSelectivity: Double = 1.0
-        // Value to use to track the percent of groups we expect to keep.
-        // We cap the maximum filter but not group selectivity.
-        var groupSelectivity = 1.0
+        // Selectivity impact of non equality conditions
+        var nonEqualitySelectivity = 1.0
+        // Determine the number of distinct entries. We use a list
+        // so we can determine the "most impactful filter"
+        var leftDistinctList: MutableList<Double> = ArrayList()
+        var rightDistinctList: MutableList<Double> = ArrayList()
+        // Track how many equality conditions lack any stats.
+        var equalityNoStatsCount = 0
         for (comparison in comparisons) {
-            // Generate the selectivity if we used the Calcite default.
-            val defaultSelectivity = mq.getSelectivity(rel, comparison) ?: 1.0
-            val (leftDistinctCount, rightDistinctCount) = generateDistinctCountEstimate(rel, mq, comparison)
-            if (leftDistinctCount == null && rightDistinctCount == null) {
-                // The comparison is not supported or we have no usable
-                unsupportedSelectivity *= defaultSelectivity
-            } else {
-                val leftDistinctNonNull = leftDistinctCount ?: 1.0
-                val rightDistinctNonNull = rightDistinctCount ?: 1.0
-                val proposedSelectivity = 1.0 / max(leftDistinctNonNull, rightDistinctNonNull)
-                if ((leftDistinctCount == null || rightDistinctCount == null) && proposedSelectivity > defaultSelectivity) {
-                    // If we only have data from one side of the table we only use it if it gives us a more restrictive
-                    // estimate than the default. If its not then we assume the null info might be more restrictive.
-                    unsupportedSelectivity *= defaultSelectivity
+            if (comparison.kind == SqlKind.EQUALS) {
+                val (leftDistinctCount, rightDistinctCount) = generateDistinctCountEstimate(rel, mq, comparison)
+                // Compute a calculation if we have information about either table.
+                if (leftDistinctCount != null || rightDistinctCount != null) {
+                    val leftDistinctNonNull = leftDistinctCount ?: computeDefaultUniqueCount(leftSize)
+                    val rightDistinctNonNull = rightDistinctCount ?: computeDefaultUniqueCount(rightSize)
+                    leftDistinctList.add(leftDistinctNonNull)
+                    rightDistinctList.add(rightDistinctNonNull)
                 } else {
-                    supportedSelectivity *= proposedSelectivity
-                    groupSelectivity *= GROUP_SELECTIVITY_CONSTANT
+                    equalityNoStatsCount += 1
                 }
+            } else {
+                // For non-equijoin just use the calcite default estimate.
+                nonEqualitySelectivity *= mq.getSelectivity(rel, comparison) ?: 1.0
             }
         }
-        val maxSize = max(mq.getRowCount(rel.left), mq.getRowCount(rel.right))
-        // Never let the selectivity drop below the smaller table,
-        // and cap the selectivity to [0, 1.0]
-        return min(max(supportedSelectivity * unsupportedSelectivity, 1.0 / maxSize) * groupSelectivity, 1.0)
+        if (equalityNoStatsCount > 0) {
+            // If there is a comparison for which we have no information assume the table should be no larger than the larger
+            // table, so we add this computation to our result.
+            val noStatsDistinctCount = min(leftSize, rightSize)
+            leftDistinctList.add(noStatsDistinctCount)
+            rightDistinctList.add(noStatsDistinctCount)
+            // Track that we have added this filter.
+            equalityNoStatsCount -= 1
+        }
+        // Order by most impactful filters
+        val jointDistinct = leftDistinctList.zip(rightDistinctList)
+        // The formula for applying a single filter is:
+        // EXPECTED_OVERLAP_FACTOR * min(left_distinct, right_distinct) * leftSize * rightSize / (left_distinct * right_distinct)
+        // For sorting purposes, EXPECTED_OVERLAP_FACTOR, leftSize and rightSize are all constants, so we can just compute
+        // min(left_distinct, right_distinct) / (left_distinct * right_distinct)
+        // which is equivalent to 1 / max(left_distinct, right_distinct)
+        val sortedJoinDistinct = jointDistinct.sortedByDescending { vals -> 1 / max(vals.first, vals.second) }
+        // Apply the impact of each filter until either table has the maximum distinctness.
+        var leftDistinctTotal = 1.0
+        var rightDistinctTotal = 1.0
+        var matchingDistinctTotal = 1.0
+        var numFiltersApplied = 0
+        val minTableSize = min(leftSize, rightSize)
+        for (i in sortedJoinDistinct.indices) {
+            numFiltersApplied += 1
+            val distinctParts = sortedJoinDistinct[i]
+            val leftDistinct = distinctParts.first
+            val rightDistinct = distinctParts.second
+            val matchingDistinct = min(leftDistinct, rightDistinct)
+            leftDistinctTotal = min(leftDistinctTotal * leftDistinct, leftSize)
+            rightDistinctTotal = min(rightDistinctTotal * rightDistinct, rightSize)
+            matchingDistinctTotal = min(matchingDistinctTotal * matchingDistinct, minTableSize)
+            // Cap the distinct values at the size of the table.
+            if (leftDistinctTotal >= leftSize || rightDistinctTotal >= rightSize) {
+                break
+            }
+        }
+
+        // Determine the impact of all other filters
+        val extraEqualitySelectivity =
+            NO_STATS_EQUALITY_COMPARISON_FACTOR.pow(((sortedJoinDistinct.size - numFiltersApplied) + equalityNoStatsCount).toDouble())
+        val innerRowCount = EXPECTED_OVERLAP_FACTOR * matchingDistinctTotal * leftSize * rightSize * extraEqualitySelectivity * nonEqualitySelectivity / (leftDistinctTotal * rightDistinctTotal)
+        // Now estimate a left and right selectivity for outer join.
+        // For non-equality or comparisons for which we have no stats assume both tables are equally impacted.
+        val leftSelectivity = (matchingDistinctTotal / leftDistinctTotal) * sqrt(EXPECTED_OVERLAP_FACTOR) * sqrt(nonEqualitySelectivity) * sqrt(extraEqualitySelectivity)
+        val rightSelectivity = (matchingDistinctTotal / rightDistinctTotal) * sqrt(EXPECTED_OVERLAP_FACTOR) * sqrt(nonEqualitySelectivity) * sqrt(extraEqualitySelectivity)
+        return when (rel.joinType) {
+            JoinRelType.INNER -> innerRowCount
+            JoinRelType.LEFT -> leftSize * (1.0 - leftSelectivity) + innerRowCount
+            JoinRelType.RIGHT -> rightSize * (1.0 - rightSelectivity) + innerRowCount
+            JoinRelType.FULL -> leftSize * (1.0 - leftSelectivity) + rightSize * (1.0 - rightSelectivity) + innerRowCount
+            else -> throw Util.unexpected(rel.joinType)
+        }
+    }
+
+    // Constant parameter to define what percent of estimated total groups we expect
+    // to keep for the final join.
+    private val EXPECTED_OVERLAP_FACTOR = 0.90
+
+    // Constant parameter to check the impact of additional equality comparisons for
+    // which we have no statistics or are not dominant.
+    private val NO_STATS_EQUALITY_COMPARISON_FACTOR = 0.70
+
+    /**
+     * Compute the default assumed unique count for a table without uniqueness estimates
+     * but a given expected total size.
+     *
+     * Currently, we just assume the average group has size 1000.
+     */
+    private fun computeDefaultUniqueCount(tableSize: Double): Double {
+        val defaultGroupSize = 1000.0
+        return max(1.0, tableSize / defaultGroupSize)
     }
 }

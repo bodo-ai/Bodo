@@ -2,6 +2,7 @@ package com.bodosql.calcite.rel.metadata
 
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.metadata.MetadataHandlerProvider
+import org.apache.calcite.rel.metadata.RelMdUtil
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 
 /**
@@ -27,7 +28,10 @@ class BodoRelMetadataQuery(provider: MetadataHandlerProvider) : RelMetadataQuery
         // revise, but I copied the pattern to be conservative.
         while (true) {
             try {
-                return columnDistinctCountHandler.getColumnDistinctCount(r, this, column)
+                val result = columnDistinctCountHandler.getColumnDistinctCount(r, this, column)
+                // Note: This ensures the result is >= 1 and not inf, but it does not ensure the distinct
+                // count is less than or equal to the row count.
+                return RelMdUtil.validateResult(result)
             } catch (e: MetadataHandlerProvider.NoHandler) {
                 columnDistinctCountHandler = revise(ColumnDistinctCount.Handler::class.java)
             }
