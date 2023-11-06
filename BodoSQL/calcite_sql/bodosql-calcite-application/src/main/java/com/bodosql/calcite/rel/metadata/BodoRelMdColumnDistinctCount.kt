@@ -194,15 +194,24 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             }
             // 1.0 if the join can create nulls in this column, otherwise 0.0.
             val extraValue =
-                if ((isLeftInput && rel.getJoinType().generatesNullsOnLeft()) ||
-                    (!isLeftInput && rel.getJoinType().generatesNullsOnRight())
+                if ((isLeftInput && rel.joinType.generatesNullsOnLeft()) ||
+                    (!isLeftInput && rel.joinType.generatesNullsOnRight())
                 ) { 1.0 } else { 0.0 }
-            // Assume the ratio remains the same after filtering with the caveat that the number
-            // of distinct rows cannot increase as a result of joining, except for one new value
-            // that could be introduced as the result of creating nulls.
+
             val distinctInput = (mq as BodoRelMetadataQuery).getColumnDistinctCount(input, inputColumn)
-            val ratio = minOf(mq.getRowCount(rel) / mq.getRowCount(input), 1.0)
-            return distinctInput?.let { maxOf(distinctInput.times(ratio), 1.0) + extraValue }
+            val expectedRowCount = mq.getRowCount(rel)
+            // If we have an outer join you cannot decrease the number of distinct values
+            // unless you add NULL.
+            return if ((isLeftInput && rel.joinType.generatesNullsOnRight()) || (!isLeftInput && rel.joinType.generatesNullsOnLeft())) {
+                // Note: Add a sanity check that we never exceed the expected row count.
+                distinctInput?.let { minOf(distinctInput + extraValue, expectedRowCount) }
+            } else {
+                // Assume the ratio remains the same after filtering with the caveat that the number
+                // of distinct rows cannot increase as a result of joining, except for one new value
+                // that could be introduced as the result of creating nulls.
+                val ratio = minOf(expectedRowCount / mq.getRowCount(input), 1.0)
+                distinctInput?.let { maxOf(distinctInput.times(ratio), 1.0) + extraValue }
+            }
         }
     }
 
