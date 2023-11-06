@@ -345,4 +345,20 @@ public class BodoReturnTypes {
     public static final SqlReturnTypeInference SMALLINT = ReturnTypes.explicit(SqlTypeName.SMALLINT);
 
     public static final SqlReturnTypeInference SMALLINT_NULLABLE = SMALLINT.andThen(SqlTypeTransforms.TO_NULLABLE);
+
+    public static final SqlReturnTypeInference VARBINARY_NULLABLE = ReturnTypes.explicit(SqlTypeName.VARBINARY, RelDataType.PRECISION_NOT_SPECIFIED).andThen(SqlTypeTransforms.TO_NULLABLE);
+
+    public static final SqlReturnTypeInference VARBINARY_FORCE_NULLABLE= ReturnTypes.explicit(SqlTypeName.VARBINARY).andThen(SqlTypeTransforms.FORCE_NULLABLE);
+
+    public static final SqlReturnTypeInference VARBINARY_NULLABLE_UNKNOWN_PRECISION = VARBINARY_NULLABLE.andThen(TO_UNDEFINED_PRECISION);
+
+    public static final SqlReturnTypeInference VARBINARY_FORCE_NULLABLE_UNKNOWN_PRECISION = VARBINARY_FORCE_NULLABLE.andThen(TO_UNDEFINED_PRECISION);
+
+
+    public static final SqlReturnTypeInference DATE_FORCE_NULLABLE = ReturnTypes.DATE.andThen(SqlTypeTransforms.FORCE_NULLABLE);
+
+    public static final SqlReturnTypeInference TIMESTAMP_FORCE_NULLABLE = ReturnTypes.TIMESTAMP.andThen(SqlTypeTransforms.FORCE_NULLABLE);
+
+    public static final SqlReturnTypeInference DOUBLE_FORCE_NULLABLE = ReturnTypes.DOUBLE.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 }
+
