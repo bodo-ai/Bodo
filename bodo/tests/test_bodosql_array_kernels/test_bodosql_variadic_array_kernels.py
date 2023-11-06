@@ -1757,23 +1757,23 @@ def test_row_number(test, memory_leak_check):
                     [
                         {"name": "Daenerys", "house": "Targaryen"},
                         {"name": "Sansa", "house": "Stark"},
-                        None,
                         {"name": "Tyrion", "house": "Lannister"},
                         {"name": "Arya", "house": "Stark"},
                     ]
                     * 3
+                    + [None]
                 ),
                 None,
                 None,
                 np.array(
                     [
                         {"name": "Jaime", "house": "Lannister"},
-                        {"name": "Jon", "house": None},
-                        None,
                         {"name": "Olenna", "house": "Tyrell"},
-                        None,
+                        {"name": "Jaime", "house": "Lannister"},
+                        {"name": "Olenna", "house": "Tyrell"},
                     ]
                     * 3
+                    + [{"name": "Jon", "house": None}]
                 ),
             ),
             (False, True, True, False),
@@ -1790,18 +1790,23 @@ def test_row_number(test, memory_leak_check):
                         {"name": "Sansa", "house": "Stark"},
                         None,
                         None,
-                        {"name": "Jon", "house": None},
+                        {"name": "Olenna", "house": "Tyrell"},
                     ],
-                    [None, None, None, None],
                     [
                         {"name": "Tyrion", "house": "Lannister"},
                         None,
                         None,
+                        {"name": "Jaime", "house": "Lannister"},
+                    ],
+                    [
+                        {"name": "Arya", "house": "Stark"},
+                        None,
+                        None,
                         {"name": "Olenna", "house": "Tyrell"},
                     ],
-                    [{"name": "Arya", "house": "Stark"}, None, None, None],
                 ]
                 * 3
+                + [[None, None, None, {"name": "Jon", "house": None}]]
             ),
             id="struct_array_without-scalars-strings-4",
         ),
