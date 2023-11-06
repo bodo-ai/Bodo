@@ -275,7 +275,7 @@ def gen_vectorized(
     if arg_string is None:
         arg_string = ", ".join(arg_names)
 
-    func_text = f"def impl({arg_string}):\n"
+    func_text = f"def impl_gen_vectorized({arg_string}):\n"
 
     # Extract each argument name from the arg_string. Currently this is used for
     # a tuple input for variadic functions, but this use case may expand in the
@@ -629,9 +629,9 @@ def gen_vectorized(
         exec_globals,
         loc_vars,
     )
-    impl = loc_vars["impl"]
+    impl_gen_vectorized = loc_vars["impl_gen_vectorized"]
 
-    return impl
+    return impl_gen_vectorized
 
 
 def unopt_argument(

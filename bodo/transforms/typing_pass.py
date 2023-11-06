@@ -704,27 +704,53 @@ class TypingTransforms:
             # NOTE: not passing "self" since target type may change
             return nodes + compile_func_single_block(impl, [target, idx], assign.target)
 
-        # detect if filter pushdown is possible and transform
-        # e.g. df = pd.read_parquet(...); df = df[df.A > 3]
-        index_def = guard(get_definition, self.func_ir, rhs.index)
-        # BodoSQL generates wrappers around exprs like Series.values that need removed
-        index_def = self._remove_series_wrappers_from_def(index_def)
-        value_def = guard(get_definition, self.func_ir, rhs.value)
         # If we have a constant filter it cannot be a boolean filter.
         if not isinstance(rhs.index, ir.Var):
             return nodes + [assign]
-        index_typ = self.typemap.get(rhs.index.name, None)
+
+        # detect if filter pushdown is possible and transform
+        # e.g. df = pd.read_parquet(...); df = df[df.A > 3]
+        self._try_apply_filter_pushdown(assign, label)
+
+        nodes.append(assign)
+        return nodes
+
+    def _try_apply_filter_pushdown(self, assign, label):
+        """Apply filter pushdown to filter statement if possible
+
+        Args:
+            assign (ir.Assign): input filter statement (getitem or table_filter)
+            label (int): block label
+        """
+
+        rhs = assign.value
+
+        if is_expr(rhs, "getitem"):
+            in_table_var = rhs.value
+            index_var = rhs.index
+        else:
+            assert is_call(rhs), "_try_apply_filter_pushdown call expected"
+            in_table_var = rhs.args[0]
+            index_var = rhs.args[1]
+
+        index_typ = self.typemap.get(index_var.name, None)
         # If we cannot determine the type we will try again later.
         if index_typ in (None, types.unknown, types.undefined):
             self.needs_transform = True
-            return nodes + [assign]
+            return
+
+        index_def = guard(get_definition, self.func_ir, index_var)
+        # BodoSQL generates wrappers around exprs like Series.values that need removed
+        index_def = self._remove_series_wrappers_from_def(index_def)
+        value_def = guard(get_definition, self.func_ir, in_table_var)
+
         # If our filter is a boolean array or series then we can perform filter pushdown.
         if (
             bodo.utils.utils.is_array_typ(index_typ, True)
             and index_typ.dtype == types.boolean
         ):
             pushdown_results = guard(
-                self._follow_patterns_to_table_def, assign, self.func_ir
+                self._follow_patterns_to_table_def, in_table_var, self.func_ir
             )
             if pushdown_results is not None:
                 value_def, used_dfs, skipped_vars = pushdown_results
@@ -749,11 +775,8 @@ class TypingTransforms:
                     if working_body is not None:
                         self._working_body = working_body
 
-        nodes.append(assign)
-        return nodes
-
     def _follow_patterns_to_table_def(
-        self, assign: ir.Assign, func_ir: ir.FunctionIR
+        self, in_table_var: ir.Var, func_ir: ir.FunctionIR
     ) -> Tuple[ir.Inst, Dict[str, ir.Inst], Set[str]]:
         """
         Takes an ir.Assign that creates a DataFrame/Table used in filter pushdown and
@@ -778,8 +801,8 @@ class TypingTransforms:
         called skipped_vars. These are variables that can be explicitly skipped because we know some strong invariant.
 
         Args:
-            assign (ir.Assign): _description_
-            func_ir (ir.FunctionIR): _description_
+            in_table_var (ir.Assign): Input table/dataframe variable
+            func_ir (ir.FunctionIR): Function IR
 
         Returns:
             Tuple[ir.Inst, Dict[str, ir.Inst], Set[str]]: Tuple of values collected. These are:
@@ -788,11 +811,10 @@ class TypingTransforms:
                 - ir Variables to skip. These require a VERY specific pattern.
         """
         # TODO(Nick): Refactor the code in this function with clearer variable names and explicit IR examples.
-        rhs = assign.value
-        value_def = get_definition(func_ir, rhs.value)
+        value_def = get_definition(func_ir, in_table_var)
         # Intermediate DataFrames that need to be checked.
         # Maps dataframe names to their definitions
-        used_dfs = {rhs.value.name: value_def}
+        used_dfs = {in_table_var.name: value_def}
         skipped_vars = set()
 
         # If we have any df.loc calls that load all rows, they will appear
@@ -977,7 +999,8 @@ class TypingTransforms:
             lhs_def = None
             rhs_def = None
 
-        df_var = assign.value.value
+        # assign could be getitem or table_filter()
+        df_var = assign.value.args[0] if is_call_assign(assign) else assign.value.value
         new_ir_assigns = []
         filters = self._get_partition_filters(
             index_def,
@@ -1078,7 +1101,10 @@ class TypingTransforms:
         )
         if not keep_filter:
             # remove filtering code since not necessary anymore
-            assign.value = assign.value.value
+            # assign could be getitem or table_filter()
+            assign.value = (
+                assign.value.args[0] if is_call_assign(assign) else assign.value.value
+            )
             self.rerun_after_dce = True
 
         # Mark the IR as changed if modified the IR or filters at all.
@@ -3178,6 +3204,9 @@ class TypingTransforms:
 
         if func_mod == "bodo.io.snowflake_write":
             return self._run_call_stream_write(assign, rhs, func_name, label)
+
+        if fdef == ("table_filter", "bodo.hiframes.table"):
+            self._try_apply_filter_pushdown(assign, label)
 
         return [assign]
 

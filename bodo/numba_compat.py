@@ -4778,6 +4778,7 @@ def BaseNativeLowering_run_pass(self, state):
 
         # Save the LLVM pass timings
         metadata["llvm_pass_timings"] = library.recorded_timings
+
     return True
 
 
@@ -6439,3 +6440,54 @@ if _check_numba_change:  # pragma: no cover
 
 
 numba.core.inline_closurecall.InlineWorker.inline_ir = inline_ir
+
+
+# Bodo change: avoid errors for global arrays
+def compile_subroutine(self, builder, impl, sig, locals={}, flags=None, caching=True):
+    """
+    Compile the function *impl* for the given *sig* (in nopython mode).
+    Return an instance of CompileResult.
+
+    If *caching* evaluates True, the function keeps the compiled function
+    for reuse in *.cached_internal_func*.
+    """
+    cache_key = (impl.__code__, sig, type(self.error_model))
+    if not caching:
+        cached = None
+    else:
+        if impl.__closure__:
+            # XXX This obviously won't work if a cell's value is
+            # unhashable.
+            # Bodo change: convert global arrays to tuples to make them hashable and
+            # avoid errors. This is safe because arrays are "frozen" when compiled.
+            import numpy as np
+
+            cache_key += tuple(
+                tuple(c.cell_contents)
+                if isinstance(c.cell_contents, np.ndarray)
+                else c.cell_contents
+                for c in impl.__closure__
+            )
+        cached = self.cached_internal_func.get(cache_key)
+    if cached is None:
+        cres = self._compile_subroutine_no_cache(
+            builder, impl, sig, locals=locals, flags=flags
+        )
+        self.cached_internal_func[cache_key] = cres
+
+    cres = self.cached_internal_func[cache_key]
+    # Allow inlining the function inside callers.
+    self.active_code_library.add_linking_library(cres.library)
+    return cres
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.base.BaseContext.compile_subroutine)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "232faaf0f405cab5622a7d0222e1567e78799d19ea446f0db5948a5cf899128c"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.base.BaseContext.compile_subroutine has changed")
+
+
+numba.core.base.BaseContext.compile_subroutine = compile_subroutine
