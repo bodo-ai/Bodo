@@ -90,12 +90,14 @@ def create_comparison_operators_func_overload(func_name):
                     default_map={"dict_encoding_state": None, "func_id": -1},
                 )
 
-        func_text = "def impl(arr0, arr1, dict_encoding_state=None, func_id=-1):\n"
+        func_text = (
+            "def impl_cmp_kernel(arr0, arr1, dict_encoding_state=None, func_id=-1):\n"
+        )
         func_text += f"  return bodo.libs.bodosql_array_kernels.{func_name}_util(arr0, arr1, dict_encoding_state, func_id)"
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
 
-        return loc_vars["impl"]
+        return loc_vars["impl_cmp_kernel"]
 
     return overload_func
 

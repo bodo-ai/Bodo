@@ -11,7 +11,12 @@ import numba
 import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
-from numba.extending import intrinsic, models, register_model
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    infer_global,
+    signature,
+)
+from numba.extending import intrinsic, lower_builtin, models, register_model
 
 import bodo
 from bodo.ext import stream_join_cpp
@@ -20,6 +25,7 @@ from bodo.libs.array import (
     delete_table,
     py_data_to_cpp_table,
 )
+from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
@@ -1039,7 +1045,7 @@ def init_join_state(
 
         return impl_nonequi
 
-    def impl(
+    def impl_init_join_state(
         operator_id,
         build_key_inds,
         probe_key_inds,
@@ -1068,7 +1074,7 @@ def init_join_state(
             probe_parallel,
         )
 
-    return impl
+    return impl_init_join_state
 
 
 @intrinsic
@@ -1098,8 +1104,11 @@ def _join_build_consume_batch(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def join_build_consume_batch(join_state, table, is_last):
+    pass
+
+
+def gen_join_build_consume_batch_impl(join_state, table, is_last):
     """Consume a build table batch in streaming join (insert into hash table)
 
     Args:
@@ -1115,14 +1124,34 @@ def join_build_consume_batch(join_state, table, is_last):
     if cast_table_type == types.unknown:
         cast_table_type = table
 
-    def impl(join_state, table, is_last):  # pragma: no cover
+    def impl_join_build_consume_batch(join_state, table, is_last):  # pragma: no cover
         cast_table = bodo.utils.table_utils.table_astype(
             table, cast_table_type, False, False
         )
         cpp_table = py_data_to_cpp_table(cast_table, (), in_col_inds, n_table_cols)
         return _join_build_consume_batch(join_state, cpp_table, is_last)
 
-    return impl
+    return impl_join_build_consume_batch
+
+
+@infer_global(join_build_consume_batch)
+class JoinBuildConsumeBatchInfer(AbstractTemplate):
+    """Typer for join_build_consume_batch that returns bool as output type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(join_build_consume_batch)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(types.bool_, *folded_args).replace(pysig=pysig)
+
+
+JoinBuildConsumeBatchInfer._no_unliteral = True
+
+
+@lower_builtin(join_build_consume_batch, types.VarArg(types.Any))
+def lower_join_build_consume_batch(context, builder, sig, args):
+    """lower join_build_consume_batch() using gen_join_build_consume_batch_impl above"""
+    impl = gen_join_build_consume_batch_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 @intrinsic
@@ -1199,8 +1228,17 @@ def _join_probe_consume_batch(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def join_probe_consume_batch(
+    join_state,
+    table,
+    is_last,
+    produce_output,
+    used_cols=None,
+):
+    pass
+
+
+def gen_join_probe_consume_batch_impl(
     join_state,
     table,
     is_last,
@@ -1237,7 +1275,7 @@ def join_probe_consume_batch(
         out_cols_arr,
     ) = join_state.get_output_live_col_arrs(used_cols)
 
-    def impl(
+    def impl_join_probe_consume_batch(
         join_state, table, is_last, produce_output, used_cols=None
     ):  # pragma: no cover
         cast_table = bodo.utils.table_utils.table_astype(
@@ -1265,7 +1303,39 @@ def join_probe_consume_batch(
         delete_table(out_cpp_table)
         return out_table, out_is_last, request_input
 
-    return impl
+    return impl_join_probe_consume_batch
+
+
+@infer_global(join_probe_consume_batch)
+class JoinProbeConsumeBatchInfer(AbstractTemplate):
+    """Typer for join_probe_consume_batch that returns (output_table_type, bool, bool)
+    as output type.
+    """
+
+    def generic(self, args, kws):
+        kws = dict(kws)
+        join_state = get_call_expr_arg(
+            "join_probe_consume_batch", args, kws, 0, "join_state"
+        )
+        out_table_type = join_state.output_type
+        # Output is (out_table, out_is_last, request_input)
+        output_type = types.BaseTuple.from_types(
+            (out_table_type, types.bool_, types.bool_)
+        )
+
+        pysig = numba.core.utils.pysignature(join_probe_consume_batch)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(output_type, *folded_args).replace(pysig=pysig)
+
+
+JoinProbeConsumeBatchInfer._no_unliteral = True
+
+
+@lower_builtin(join_probe_consume_batch, types.VarArg(types.Any))
+def lower_join_probe_consume_batch(context, builder, sig, args):
+    """lower join_probe_consume_batch() using gen_join_probe_consume_batch_impl above"""
+    impl = gen_join_probe_consume_batch_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 @intrinsic

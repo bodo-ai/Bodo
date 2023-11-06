@@ -1869,7 +1869,7 @@ def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t
     #     if array_ind in output_inds:
     #       output_list[out_ind] = array_to_info(block[array_ind])
 
-    func_text = "def impl(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t):\n"
+    func_text = "def impl_py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t):\n"
     func_text += (
         f"  cpp_arr_list = alloc_empty_list_type({len(in_col_inds)}, array_info_type)\n"
     )
@@ -1925,7 +1925,7 @@ def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
-    return loc_vars["impl"]
+    return loc_vars["impl_py_data_to_cpp_table"]
 
 
 delete_info = types.ExternalFunction(

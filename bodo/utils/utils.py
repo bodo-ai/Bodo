@@ -1728,3 +1728,12 @@ def dict_add_multimap(d, k, v):
         d[k].append(v)
     else:
         d[k] = [v]
+
+
+@numba.njit(no_cpython_wrapper=True)
+def set_wrapper(a):
+    """wrapper around set() constructor to reduce compilation time.
+    This makes sure set (e.g. of int array) is compiled once versus lower_builtin in
+    Numba compiling it every time.
+    """
+    return set(a)

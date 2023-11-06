@@ -14,7 +14,11 @@ from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed, lower_constant
 from numba.core.ir_utils import guard
-from numba.core.typing.templates import signature
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    infer_global,
+    signature,
+)
 from numba.cpython.listobj import ListInstance
 from numba.extending import (
     NativeValue,
@@ -37,6 +41,7 @@ import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.templates import OverloadedKeyAttributeTemplate
+from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
@@ -55,6 +60,7 @@ from bodo.utils.utils import (
     is_whole_slice,
     numba_to_c_array_type,
     numba_to_c_type,
+    set_wrapper,
 )
 
 
@@ -1414,8 +1420,11 @@ def overload_get_idx_num_true(idx, n):
     return impl
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def table_filter(T, idx, used_cols=None):
+    pass
+
+
+def gen_table_filter_impl(T, idx, used_cols=None):
     """Function that filters table using input boolean array or slice.
        If used_cols is passed, only used columns are written in output.
 
@@ -1441,6 +1450,7 @@ def table_filter(T, idx, used_cols=None):
         "alloc_list_like": alloc_list_like,
         "_get_idx_num_true": _get_idx_num_true,
         "ensure_contig_if_np": ensure_contig_if_np,
+        "set_wrapper": set_wrapper,
     }
     if not is_overload_none(used_cols):
         # Get the MetaType from the TypeRef
@@ -1466,7 +1476,7 @@ def table_filter(T, idx, used_cols=None):
         return loc_vars["table_filter_func"]
 
     if used_cols_data is not None:
-        func_text += f"  used_set = set(used_cols_vals)\n"
+        func_text += f"  used_set = set_wrapper(used_cols_vals)\n"
     for blk in T.type_to_blk.values():
         func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
         func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, len(arr_list_{blk}), False)\n"
@@ -1493,7 +1503,28 @@ def table_filter(T, idx, used_cols=None):
     return loc_vars["table_filter_func"]
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, inline="never")
+@infer_global(table_filter)
+class TableFilterInfer(AbstractTemplate):
+    """Typer for table_filter"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(table_filter)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # output has same type as input
+        out_type = folded_args[0]
+        return signature(out_type, *folded_args).replace(pysig=pysig)
+
+
+TableFilterInfer._no_unliteral = True
+
+
+@lower_builtin(table_filter, types.VarArg(types.Any))
+def lower_table_filter(context, builder, sig, args):
+    """lower table_filter() using gen_table_filter_impl above"""
+    impl = gen_table_filter_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
 def table_local_filter(T, idx, used_cols=None):
     """
     Function that filters table using input boolean array or slice
@@ -1501,14 +1532,34 @@ def table_local_filter(T, idx, used_cols=None):
     See table_filter for argument and return types.
     """
 
-    def impl(T, idx, used_cols=None):
-        return table_filter(T, idx, used_cols=used_cols)
 
-    return impl
+@infer_global(table_local_filter)
+class TableLocalFilterInfer(AbstractTemplate):
+    """Typer for table_local_filter"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(table_local_filter)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        # output has same type as input
+        out_type = folded_args[0]
+        return signature(out_type, *folded_args).replace(pysig=pysig)
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+TableLocalFilterInfer._no_unliteral = True
+
+
+@lower_builtin(table_local_filter, types.VarArg(types.Any))
+def lower_table_local_filter(context, builder, sig, args):
+    """lower table_local_filter() using gen_table_filter_impl above"""
+    impl = gen_table_filter_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
 def table_subset(T, idx, copy_arrs, used_cols=None):
+    pass
+
+
+def gen_table_subset_impl(T, idx, copy_arrs, used_cols=None):
     """Selects a subset of arrays/columns
     from a table using a list of integer column numbers.
     To minimize the size of the IR the integers are passed
@@ -1537,6 +1588,7 @@ def table_subset(T, idx, copy_arrs, used_cols=None):
         "set_table_len": set_table_len,
         "alloc_list_like": alloc_list_like,
         "out_table_typ": out_table_typ,
+        "set_wrapper": set_wrapper,
     }
     # Determine which columns to prune if used_cols is included.
     # Note these are the column numbers of the output table, not
@@ -1567,7 +1619,7 @@ def table_subset(T, idx, copy_arrs, used_cols=None):
 
     if skip_cols:
         # Create a set for filtering
-        func_text += f"  kept_cols_set = set(kept_cols)\n"
+        func_text += f"  kept_cols_set = set_wrapper(kept_cols)\n"
 
     # Use the output table to only generate code per output
     # type. Here we iterate over the output type and list of
@@ -1646,6 +1698,31 @@ def table_subset(T, idx, copy_arrs, used_cols=None):
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     return loc_vars["table_subset"]
+
+
+@infer_global(table_subset)
+class TableSubsetInfer(AbstractTemplate):
+    """Typer for table_subset"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(table_subset)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        T = folded_args[0]
+        idx = folded_args[1]
+        cols_subset = list(unwrap_typeref(idx).meta)
+        out_arr_typs = tuple(np.array(T.arr_types, dtype=object)[cols_subset])
+        out_table_type = TableType(out_arr_typs)
+        return signature(out_table_type, *folded_args).replace(pysig=pysig)
+
+
+TableSubsetInfer._no_unliteral = True
+
+
+@lower_builtin(table_subset, types.VarArg(types.Any))
+def lower_table_subset(context, builder, sig, args):
+    """lower table_subset() using gen_table_subset_impl above"""
+    impl = gen_table_subset_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 def table_filter_equiv(self, scope, equiv_set, loc, args, kws):
@@ -2007,8 +2084,18 @@ def _to_arr_if_series(t):
     return t.data if isinstance(t, SeriesType) else t
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def logical_table_to_table(
+    in_table_t,
+    extra_arrs_t,
+    in_col_inds_t,
+    n_table_cols_t,
+    out_table_type_t=None,
+    used_cols=None,
+):
+    pass
+
+
+def gen_logical_table_to_table_impl(
     in_table_t,
     extra_arrs_t,
     in_col_inds_t,
@@ -2049,7 +2136,7 @@ def logical_table_to_table(
         in_table_t, (TableType, types.BaseTuple, types.NoneType)
     ), "logical_table_to_table: input table must be a TableType or tuple of arrays or None (for dead table)"
 
-    glbls = {}
+    glbls = {"set_wrapper": set_wrapper}
     # prune columns if used_cols is provided
     if not is_overload_none(used_cols):
         kept_cols = set(used_cols.instance_type.meta)
@@ -2104,10 +2191,11 @@ def logical_table_to_table(
             "init_table": init_table,
             "set_table_len": set_table_len,
             "out_table_type": out_table_type,
+            "set_wrapper": set_wrapper,
         }
     )
 
-    func_text = "def impl(in_table_t, extra_arrs_t, in_col_inds_t, n_table_cols_t, out_table_type_t=None, used_cols=None):\n"
+    func_text = "def impl_logical_table_to_table(in_table_t, extra_arrs_t, in_col_inds_t, n_table_cols_t, out_table_type_t=None, used_cols=None):\n"
     if any(isinstance(t, SeriesType) for t in extra_arrs_t.types):
         func_text += f"  extra_arrs_t = {extra_arrs_no_series}\n"
     func_text += f"  T1 = in_table_t\n"
@@ -2119,11 +2207,11 @@ def logical_table_to_table(
         func_text += f"  return T2\n"
         loc_vars = {}
         exec(func_text, glbls, loc_vars)
-        return loc_vars["impl"]
+        return loc_vars["impl_logical_table_to_table"]
 
     # Create a set for column filtering
     if skip_cols:
-        func_text += f"  kept_cols_set = set(kept_cols)\n"
+        func_text += f"  kept_cols_set = set_wrapper(kept_cols)\n"
 
     for typ, blk in out_table_type.type_to_blk.items():
         glbls[f"arr_list_typ_{blk}"] = types.List(typ)
@@ -2188,7 +2276,7 @@ def logical_table_to_table(
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
-    return loc_vars["impl"]
+    return loc_vars["impl_logical_table_to_table"]
 
 
 def _logical_tuple_table_to_table_codegen(
@@ -2297,6 +2385,78 @@ def _logical_tuple_table_to_table_codegen(
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     return loc_vars["impl"]
+
+
+@infer_global(logical_table_to_table)
+class LogicalTableToTableInfer(AbstractTemplate):
+    """Typer for logical_table_to_table"""
+
+    def generic(self, args, kws):
+        kws = dict(kws)
+        out_table_type_t = get_call_expr_arg(
+            "logical_table_to_table",
+            args,
+            kws,
+            4,
+            "out_table_type_t",
+            default=types.none,
+        )
+        # out_table_type is provided in table column del pass after optimization
+        if is_overload_none(out_table_type_t):
+            in_table_t = get_call_expr_arg(
+                "logical_table_to_table", args, kws, 0, "in_table_t"
+            )
+            extra_arrs_t = get_call_expr_arg(
+                "logical_table_to_table", args, kws, 1, "extra_arrs_t"
+            )
+            in_col_inds_t = get_call_expr_arg(
+                "logical_table_to_table", args, kws, 2, "in_col_inds_t"
+            )
+            n_table_cols_t = get_call_expr_arg(
+                "logical_table_to_table", args, kws, 3, "n_table_cols_t"
+            )
+            in_col_inds = unwrap_typeref(in_col_inds_t).meta
+            # handle array-only input data
+            if isinstance(in_table_t, (types.BaseTuple, types.NoneType)):
+                n_in_table_arrs = (
+                    get_overload_const_int(n_table_cols_t)
+                    if is_overload_constant_int(n_table_cols_t)
+                    else len(in_table_t.types)
+                )
+                out_table_type = TableType(
+                    tuple(
+                        in_table_t.types[i]
+                        if i < n_in_table_arrs
+                        else _to_arr_if_series(extra_arrs_t.types[i - n_in_table_arrs])
+                        for i in in_col_inds
+                    )
+                )
+            else:
+                n_in_table_arrs = len(in_table_t.arr_types)
+                out_table_type = TableType(
+                    tuple(
+                        in_table_t.arr_types[i]
+                        if i < n_in_table_arrs
+                        else _to_arr_if_series(extra_arrs_t.types[i - n_in_table_arrs])
+                        for i in in_col_inds
+                    )
+                )
+        else:
+            out_table_type = unwrap_typeref(out_table_type_t)
+
+        pysig = numba.core.utils.pysignature(logical_table_to_table)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(out_table_type, *folded_args).replace(pysig=pysig)
+
+
+LogicalTableToTableInfer._no_unliteral = True
+
+
+@lower_builtin(logical_table_to_table, types.VarArg(types.Any))
+def lower_logical_table_to_table(context, builder, sig, args):
+    """lower logical_table_to_table() using gen_logical_table_to_table_impl above"""
+    impl = gen_logical_table_to_table_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 def logical_table_to_table_equiv(self, scope, equiv_set, loc, args, kws):

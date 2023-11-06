@@ -106,8 +106,8 @@ class PandasFilter(
                 filter
             }
         }
-        // Generate the filter df1[df2] operation and assign to the destination.
-        return ctx.returns(Expr.GetItem(input, conditionExpr))
+        // Generate the filter table_filter(T, cond) operation and assign to the destination.
+        return ctx.returns(Expr.Call("bodo.hiframes.table.table_filter", input, conditionExpr))
     }
 
     /**
