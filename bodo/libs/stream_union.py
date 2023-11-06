@@ -8,7 +8,12 @@ from typing import Optional, Tuple
 import numba
 import numpy as np
 from numba.core import types
-from numba.extending import models, register_model
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    infer_global,
+    signature,
+)
+from numba.extending import lower_builtin, models, register_model
 
 import bodo
 from bodo.hiframes.table import TableType
@@ -17,6 +22,7 @@ from bodo.libs.array import (
     delete_table,
     py_data_to_cpp_table,
 )
+from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
@@ -260,8 +266,11 @@ def _union_cast_batch(union_state: UnionStateType, table: TableType):
     return impl
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def union_consume_batch(union_state, table, is_last):
+    pass
+
+
+def gen_union_consume_batch_impl(union_state, table, is_last):
     """
     Consume a table batch in streaming union. Will cast the table
     and then process depending on type of union.
@@ -309,8 +318,31 @@ def union_consume_batch(union_state, table, is_last):
     return impl
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@infer_global(union_consume_batch)
+class UnionConsumeBatchInfer(AbstractTemplate):
+    """Typer for union_consume_batch that returns bool as output type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(union_consume_batch)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(types.bool_, *folded_args).replace(pysig=pysig)
+
+
+UnionConsumeBatchInfer._no_unliteral = True
+
+
+@lower_builtin(union_consume_batch, types.VarArg(types.Any))
+def lower_union_consume_batch(context, builder, sig, args):
+    """lower union_consume_batch() using gen_union_consume_batch_impl above"""
+    impl = gen_union_consume_batch_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
 def union_produce_batch(union_state, produce_output=True):
+    pass
+
+
+def gen_union_produce_batch_impl(union_state, produce_output=True):
     """
     Return a chunk of data from UNION internal state
 
@@ -376,6 +408,36 @@ def union_produce_batch(union_state, produce_output=True):
             return out_table, out_is_last
 
     return impl
+
+
+@infer_global(union_produce_batch)
+class UnionProduceOutputInfer(AbstractTemplate):
+    """Typer for union_produce_batch that returns (output_table_type, bool)
+    as output type.
+    """
+
+    def generic(self, args, kws):
+        kws = dict(kws)
+        union_state = get_call_expr_arg(
+            "union_produce_batch", args, kws, 0, "union_state"
+        )
+        out_table_type = union_state.out_table_type
+        # Output is (out_table, out_is_last)
+        output_type = types.BaseTuple.from_types((out_table_type, types.bool_))
+
+        pysig = numba.core.utils.pysignature(union_produce_batch)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(output_type, *folded_args).replace(pysig=pysig)
+
+
+UnionProduceOutputInfer._no_unliteral = True
+
+
+@lower_builtin(union_produce_batch, types.VarArg(types.Any))
+def lower_union_produce_batch(context, builder, sig, args):
+    """lower union_produce_batch() using gen_union_produce_batch_impl above"""
+    impl = gen_union_produce_batch_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)

@@ -9,9 +9,15 @@ from llvmlite import ir as lir
 from mpi4py import MPI
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    infer_global,
+    signature,
+)
 from numba.extending import (
     box,
     intrinsic,
+    lower_builtin,
     models,
     overload,
     register_model,
@@ -30,6 +36,7 @@ from bodo.libs.array import array_to_info, py_table_to_cpp_table
 from bodo.libs.str_ext import unicode_to_utf8
 from bodo.libs.table_builder import TableBuilderStateType
 from bodo.utils import tracing
+from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     ColNamesMetaType,
@@ -362,8 +369,82 @@ def begin_write_transaction(cursor, location, sf_schema, if_exists, table_type):
         raise err
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def snowflake_writer_init(
+    operator_id,
+    conn,
+    table_name,
+    schema,
+    if_exists,
+    table_type,
+    expected_state_type=None,
+    input_dicts_unified=False,
+    _is_parallel=False,
+):  # pragma: no cover
+    pass
+
+
+def _get_schema_str(schema):  # pragma: no cover
+    pass
+
+
+@overload(_get_schema_str)
+def overload_get_schema_str(schema):
+    """return schema as string if not None"""
+
+    if not is_overload_none(schema):
+        return lambda schema: '"' + schema + '".'  # pragma: no cover
+
+    return lambda schema: ""  # pragma: no cover
+
+
+def connect_and_get_upload_info_jit(conn):  # pragma: no cover
+    pass
+
+
+@overload(connect_and_get_upload_info_jit)
+def overload_connect_and_get_upload_info_jit(conn):
+    """JIT version of connect_and_get_upload_info which wraps objmode (isolated to avoid Numba objmode bugs)"""
+
+    def impl(conn):
+        with bodo.objmode(
+            cursor="snowflake_connector_cursor_type",
+            tmp_folder="temporary_directory_type",
+            stage_name="unicode_type",
+            stage_path="unicode_type",
+            upload_using_snowflake_put="boolean",
+            old_creds="DictType(unicode_type, unicode_type)",
+            azure_stage_direct_upload="boolean",
+            old_core_site="unicode_type",
+            old_sas_token="unicode_type",
+        ):
+            (
+                cursor,
+                tmp_folder,
+                stage_name,
+                stage_path,
+                upload_using_snowflake_put,
+                old_creds,
+                azure_stage_direct_upload,
+                old_core_site,
+                old_sas_token,
+            ) = bodo.io.snowflake.connect_and_get_upload_info(conn)
+
+        return (
+            cursor,
+            tmp_folder,
+            stage_name,
+            stage_path,
+            upload_using_snowflake_put,
+            old_creds,
+            azure_stage_direct_upload,
+            old_core_site,
+            old_sas_token,
+        )
+
+    return impl
+
+
+def gen_snowflake_writer_init_impl(
     operator_id,
     conn,
     table_name,
@@ -384,80 +465,123 @@ def snowflake_writer_init(
         snowflake_writer_type.input_table_type
     )
 
-    func_text = (
-        "def impl(operator_id, conn, table_name, schema, if_exists, table_type, expected_state_type=None, input_dicts_unified=False, _is_parallel=False):\n"
-        "    ev = tracing.Event('snowflake_writer_init', is_parallel=_is_parallel)\n"
-        "    location = ''\n"
-    )
-
-    if not is_overload_none(schema):
-        func_text += "    location += '\"' + schema + '\".'\n"
-
-    func_text += (
-        "    location += table_name\n"
+    def impl_snowflake_writer_init(
+        operator_id,
+        conn,
+        table_name,
+        schema,
+        if_exists,
+        table_type,
+        expected_state_type=None,
+        input_dicts_unified=False,
+        _is_parallel=False,
+    ):
+        ev = tracing.Event("snowflake_writer_init", is_parallel=_is_parallel)
+        location = _get_schema_str(schema)
+        location += table_name
         # Initialize writer
-        "    writer = sf_writer_alloc(expected_state_type)\n"
-        "    writer['conn'] = conn\n"
-        "    writer['location'] = location\n"
-        "    writer['if_exists'] = if_exists\n"
-        "    writer['table_type'] = table_type\n"
-        "    writer['parallel'] = _is_parallel\n"
-        "    writer['finished'] = False\n"
-        "    writer['file_count_local'] = 0\n"
-        "    writer['file_count_global'] = 0\n"
-        "    writer['copy_into_prev_sfqid'] = ''\n"
-        "    writer['file_count_global_prev'] = 0\n"
-        "    writer['upload_threads_exists'] = False\n"
-        "    writer['batches'] = bodo.libs.table_builder.init_table_builder_state(operator_id, table_builder_state_type, input_dicts_unified=input_dicts_unified)\n"
+        writer = sf_writer_alloc(expected_state_type)
+        writer["conn"] = conn
+        writer["location"] = location
+        writer["if_exists"] = if_exists
+        writer["table_type"] = table_type
+        writer["parallel"] = _is_parallel
+        writer["finished"] = False
+        writer["file_count_local"] = 0
+        writer["file_count_global"] = 0
+        writer["copy_into_prev_sfqid"] = ""
+        writer["file_count_global_prev"] = 0
+        writer["upload_threads_exists"] = False
+        writer["batches"] = bodo.libs.table_builder.init_table_builder_state(
+            operator_id,
+            table_builder_state_type,
+            input_dicts_unified=input_dicts_unified,
+        )
         # Connect to Snowflake on rank 0 and get internal stage credentials
         # Note: Identical to the initialization code in df.to_sql()
-        "    with bodo.objmode(\n"
-        "        cursor='snowflake_connector_cursor_type',\n"
-        "        tmp_folder='temporary_directory_type',\n"
-        "        stage_name='unicode_type',\n"
-        "        stage_path='unicode_type',\n"
-        "        upload_using_snowflake_put='boolean',\n"
-        "        old_creds='DictType(unicode_type, unicode_type)',\n"
-        "        azure_stage_direct_upload='boolean',\n"
-        "        old_core_site='unicode_type',\n"
-        "        old_sas_token='unicode_type',\n"
-        "    ):\n"
-        "        cursor, tmp_folder, stage_name, stage_path, upload_using_snowflake_put, old_creds, azure_stage_direct_upload, old_core_site, old_sas_token = bodo.io.snowflake.connect_and_get_upload_info(conn)\n"
-        "    writer['cursor'] = cursor\n"
-        "    writer['tmp_folder'] = tmp_folder\n"
-        "    writer['stage_name'] = stage_name\n"
-        "    writer['stage_path'] = stage_path\n"
-        "    writer['upload_using_snowflake_put'] = upload_using_snowflake_put\n"
-        "    writer['old_creds'] = old_creds\n"
-        "    writer['azure_stage_direct_upload'] = azure_stage_direct_upload\n"
-        "    writer['old_core_site'] = old_core_site\n"
-        "    writer['old_sas_token'] = old_sas_token\n"
+        (
+            cursor,
+            tmp_folder,
+            stage_name,
+            stage_path,
+            upload_using_snowflake_put,
+            old_creds,
+            azure_stage_direct_upload,
+            old_core_site,
+            old_sas_token,
+        ) = connect_and_get_upload_info_jit(conn)
+        writer["cursor"] = cursor
+        writer["tmp_folder"] = tmp_folder
+        writer["stage_name"] = stage_name
+        writer["stage_path"] = stage_path
+        writer["upload_using_snowflake_put"] = upload_using_snowflake_put
+        writer["old_creds"] = old_creds
+        writer["azure_stage_direct_upload"] = azure_stage_direct_upload
+        writer["old_core_site"] = old_core_site
+        writer["old_sas_token"] = old_sas_token
         # Barrier ensures that internal stage exists before we upload files to it
-        "    bodo.barrier()\n"
+        bodo.barrier()
         # Force reset the existing hadoop filesystem instance, to use new SAS token.
         # See to_sql() for more detailed comments
-        "    if azure_stage_direct_upload:\n"
-        "        bodo.libs.distributed_api.disconnect_hdfs_njit()\n"
+        if azure_stage_direct_upload:
+            bodo.libs.distributed_api.disconnect_hdfs_njit()
         # Compute bucket region
-        "    writer['bucket_region'] = bodo.io.fs_io.get_s3_bucket_region_njit(stage_path, _is_parallel)\n"
+        writer["bucket_region"] = bodo.io.fs_io.get_s3_bucket_region_njit(
+            stage_path, _is_parallel
+        )
         # Set up internal stage directory for COPY INTO
-        "    writer['copy_into_dir'] = make_new_copy_into_dir(\n"
-        "        upload_using_snowflake_put, stage_path, _is_parallel\n"
-        "    )\n"
-        "    ev.finalize()\n"
-        "    return writer\n"
-    )
+        writer["copy_into_dir"] = make_new_copy_into_dir(
+            upload_using_snowflake_put, stage_path, _is_parallel
+        )
+        ev.finalize()
+        return writer
 
-    # Passing in all globals is for some reason required for caching.
-    glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
-    glbls["table_builder_state_type"] = table_builder_state_type
-    l = {}
-    exec(func_text, glbls, l)
-    return l["impl"]
+    return impl_snowflake_writer_init
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def snowflake_writer_append_table(
+@infer_global(snowflake_writer_init)
+class SnowflakeWriterInitInfer(AbstractTemplate):
+    """Typer for snowflake_writer_init that returns writer type"""
+
+    def generic(self, args, kws):
+        kws = dict(kws)
+        expected_state_type = get_call_expr_arg(
+            "snowflake_writer_init",
+            args,
+            kws,
+            6,
+            "expected_state_type",
+            default=types.none,
+        )
+        expected_state_type = unwrap_typeref(expected_state_type)
+        if is_overload_none(expected_state_type):
+            snowflake_writer_type = SnowflakeWriterType()
+        else:
+            snowflake_writer_type = expected_state_type
+
+        pysig = numba.core.utils.pysignature(snowflake_writer_init)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(snowflake_writer_type, *folded_args).replace(pysig=pysig)
+
+
+SnowflakeWriterInitInfer._no_unliteral = True
+
+
+@lower_builtin(snowflake_writer_init, types.VarArg(types.Any))
+def lower_snowflake_writer_init(context, builder, sig, args):
+    """lower snowflake_writer_init() using gen_snowflake_writer_init_impl above"""
+    impl = gen_snowflake_writer_init_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def snowflake_writer_append_table_inner(
+    writer, table, col_names_meta, is_last, iter, col_precisions_meta
+):  # pragma: no cover
+    pass
+
+
+@overload(snowflake_writer_append_table_inner)
+def gen_snowflake_writer_append_table_impl_inner(
     writer, table, col_names_meta, is_last, iter, col_precisions_meta
 ):  # pragma: no cover
     if not isinstance(writer, SnowflakeWriterType):  # pragma: no cover
@@ -525,7 +649,7 @@ def snowflake_writer_append_table(
     # This is because we only execute COPY INTO commands from rank 0, so
     # all ranks must finish writing their respective files to Snowflake
     # internal stage and sync with rank 0 before it issues COPY INTO.
-    def impl(
+    def impl_snowflake_writer_append_table(
         writer, table, col_names_meta, is_last, iter, col_precisions_meta
     ):  # pragma: no cover
         if writer["finished"]:
@@ -766,7 +890,42 @@ def snowflake_writer_append_table(
         ev.finalize()
         return is_last
 
-    return impl
+    return impl_snowflake_writer_append_table
+
+
+def snowflake_writer_append_table(
+    writer, table, col_names_meta, is_last, iter, col_precisions_meta
+):  # pragma: no cover
+    pass
+
+
+@infer_global(snowflake_writer_append_table)
+class SnowflakeWriterAppendInfer(AbstractTemplate):
+    """Typer for snowflake_writer_append_table that returns bool as output type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(snowflake_writer_append_table)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(types.bool_, *folded_args).replace(pysig=pysig)
+
+
+SnowflakeWriterAppendInfer._no_unliteral = True
+
+
+# Using a wrapper to keep snowflake_writer_append_table_inner as overload and avoid
+# Numba objmode bugs (e.g. leftover ir.Del in IR leading to errors)
+def impl_wrapper(
+    writer, table, col_names_meta, is_last, iter, col_precisions_meta
+):  # pragma: no cover
+    return snowflake_writer_append_table_inner(
+        writer, table, col_names_meta, is_last, iter, col_precisions_meta
+    )
+
+
+@lower_builtin(snowflake_writer_append_table, types.VarArg(types.Any))
+def lower_snowflake_writer_append_table(context, builder, sig, args):
+    """lower snowflake_writer_append_table() using gen_snowflake_writer_append_table_impl above"""
+    return context.compile_internal(builder, impl_wrapper, sig, args)
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
