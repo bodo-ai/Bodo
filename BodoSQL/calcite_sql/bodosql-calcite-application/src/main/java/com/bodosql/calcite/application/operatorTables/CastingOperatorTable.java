@@ -67,7 +67,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> opBinding.getTypeFactory().createSqlType(SqlTypeName.VARBINARY),
+          BodoReturnTypes.VARBINARY_NULLABLE_UNKNOWN_PRECISION,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -83,7 +83,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> opBinding.getTypeFactory().createSqlType(SqlTypeName.VARBINARY),
+          BodoReturnTypes.VARBINARY_FORCE_NULLABLE_UNKNOWN_PRECISION,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -116,7 +116,9 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.BOOLEAN_NULLABLE,
+          // TRY_TO_BOOLEAN will return null for invalid conversions, so we have to force the output
+          // to be nullable
+          ReturnTypes.BOOLEAN_FORCE_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -173,7 +175,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "TO_DATE",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.DATE,
+          ReturnTypes.DATE_NULLABLE,
           null,
           // For conversion to date, snowflake allows a string, datetime, or integer.
           // If the first argument is string, an optional format string is allowed
@@ -188,7 +190,9 @@ public class CastingOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "TRY_TO_DATE",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.DATE,
+          // TRY_TO_X functions can create null outputs for non-null inputs if the conversion is
+          // invalid
+          BodoReturnTypes.DATE_FORCE_NULLABLE,
           null,
           // For conversion to date, snowflake allows a string, datetime, or integer.
           // If the first argument is string, an optional format string is allowed
@@ -252,7 +256,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "TO_TIMESTAMP",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.TIMESTAMP,
+          ReturnTypes.TIMESTAMP_NULLABLE,
           null,
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
@@ -262,7 +266,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "TRY_TO_TIMESTAMP",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.TIMESTAMP,
+          BodoReturnTypes.TIMESTAMP_FORCE_NULLABLE,
           null,
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
@@ -272,7 +276,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "TO_TIMESTAMP_NTZ",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.TIMESTAMP,
+          ReturnTypes.TIMESTAMP_NULLABLE,
           null,
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
@@ -282,7 +286,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "TRY_TO_TIMESTAMP_NTZ",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.TIMESTAMP,
+          BodoReturnTypes.TIMESTAMP_FORCE_NULLABLE,
           null,
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
@@ -353,7 +357,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.DOUBLE_NULLABLE,
+          BodoReturnTypes.DOUBLE_FORCE_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
