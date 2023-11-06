@@ -536,8 +536,8 @@ def test_array_construct(data_values, use_case, use_map, memory_leak_check):
             return None
         return [None if idx is None else data_values[idx] for idx in L]
 
-    pattern_a = [0] * 5 + [1] * 5 + [None] * 5 + [2] * 5 + [3] * 5
-    pattern_b = [0, 1, None, 2, 3] * 5
+    pattern_a = [0] * 5 + [1] * 5 + [2] * 5 + [3] * 5 + [None] * 5
+    pattern_b = [0, 1, 2, 3, None] * 5
     pattern_answer = [[a, b] for a, b in zip(pattern_a, pattern_b)]
     vals_a = make_vals(pattern_a)
     vals_b = make_vals(pattern_b)
@@ -854,12 +854,13 @@ def test_arrays_overlap(data_values, use_case, memory_leak_check):
         return [None if idx is None else data_values[idx] for idx in L]
 
     pattern_a = (
-        [[0, 1, 2]] * 6
+        [[0]] * 100
+        + [[0, 1, 2]] * 6
         + [[0, 3, 6, None]] * 6
         + [None] * 3
         + [[7, 5, 3, 1, 3, 5, 7]] * 6
     )
-    pattern_b = [
+    pattern_b = [[0]] * 100 + [
         [0],
         [],
         [1],
@@ -894,7 +895,8 @@ def test_arrays_overlap(data_values, use_case, memory_leak_check):
         )
     }
     answer = pd.Series(
-        [True, False, True, False, True, False]
+        [True] * 100
+        + [True, False, True, False, True, False]
         + [True, True, True, True, False, True]
         + [None, None, None]
         + [False, False, True, True, True, False]
@@ -1002,9 +1004,10 @@ def test_array_position(data_values, use_case, memory_leak_check):
             return None
         return [None if idx is None else data_values[idx] for idx in L]
 
-    pattern_a = [0, 1, 2, None] * 4
+    pattern_a = [0] * 40 + [0, 1, 2, None] * 4
     pattern_b = (
-        [[0, 1, 2, None]] * 4
+        [[0]] * 40
+        + [[0, 1, 2, None]] * 4
         + [[0, None] * 3] * 4
         + [[]] * 4
         + [[2, 1, None, 1, 2, None, None, 0]] * 4
@@ -1021,7 +1024,11 @@ def test_array_position(data_values, use_case, memory_leak_check):
         )
     }
     answer = pd.Series(
-        [0, 1, 2, 3] + [0, None, None, 1] + [None, None, None, None] + [7, 1, 0, 2],
+        [0] * 40
+        + [0, 1, 2, 3]
+        + [0, None, None, 1]
+        + [None, None, None, None]
+        + [7, 1, 0, 2],
         dtype=pd.Int32Dtype(),
     )
     check_query(
