@@ -10,7 +10,12 @@ import numba
 import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
-from numba.extending import intrinsic, models, register_model
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    infer_global,
+    signature,
+)
+from numba.extending import intrinsic, lower_builtin, models, register_model
 
 import bodo
 from bodo.ext import stream_groupby_cpp
@@ -21,6 +26,7 @@ from bodo.libs.array import (
     py_data_to_cpp_table,
 )
 from bodo.libs.array import table_type as cpp_table_type
+from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
@@ -465,7 +471,7 @@ def init_groupby_state(
     f_in_cols_arr = np.array(output_type.f_in_cols, np.int32)
     n_funcs = len(output_type.fnames)
 
-    def impl(
+    def impl_init_groupby_state(
         operator_id,
         key_inds,
         fnames,
@@ -489,7 +495,7 @@ def init_groupby_state(
             parallel,
         )
 
-    return impl
+    return impl_init_groupby_state
 
 
 @intrinsic
@@ -519,8 +525,11 @@ def _groupby_build_consume_batch(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def groupby_build_consume_batch(groupby_state, table, is_last):
+    pass
+
+
+def gen_groupby_build_consume_batch_impl(groupby_state, table, is_last):
     """Consume a build table batch in streaming groupby (insert into hash table and
     update running values)
 
@@ -534,11 +543,33 @@ def groupby_build_consume_batch(groupby_state, table, is_last):
     in_col_inds = MetaType(groupby_state.build_indices)
     n_table_cols = groupby_state.num_build_input_arrs
 
-    def impl(groupby_state, table, is_last):  # pragma: no cover
+    def impl_groupby_build_consume_batch(
+        groupby_state, table, is_last
+    ):  # pragma: no cover
         cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
         return _groupby_build_consume_batch(groupby_state, cpp_table, is_last)
 
-    return impl
+    return impl_groupby_build_consume_batch
+
+
+@infer_global(groupby_build_consume_batch)
+class GroupbyBuildConsumeBatchInfer(AbstractTemplate):
+    """Typer for groupby_build_consume_batch that returns bool as output type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(groupby_build_consume_batch)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(types.bool_, *folded_args).replace(pysig=pysig)
+
+
+GroupbyBuildConsumeBatchInfer._no_unliteral = True
+
+
+@lower_builtin(groupby_build_consume_batch, types.VarArg(types.Any))
+def lower_groupby_build_consume_batch(context, builder, sig, args):
+    """lower groupby_build_consume_batch() using gen_groupby_build_consume_batch_impl above"""
+    impl = gen_groupby_build_consume_batch_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 @intrinsic
@@ -574,8 +605,11 @@ def _groupby_produce_output_batch(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def groupby_produce_output_batch(groupby_state, produce_output):
+    pass
+
+
+def gen_groupby_produce_output_batch_impl(groupby_state, produce_output):
     """Produce output batches of groupby operation
 
     Args:
@@ -595,7 +629,7 @@ def groupby_produce_output_batch(groupby_state, produce_output):
         num_cols = len(out_table_type.arr_types)
         out_cols_arr = np.array(range(num_cols), dtype=np.int64)
 
-    def impl(
+    def impl_groupby_produce_output_batch(
         groupby_state,
         produce_output,
     ):  # pragma: no cover
@@ -608,7 +642,37 @@ def groupby_produce_output_batch(groupby_state, produce_output):
         delete_table(out_cpp_table)
         return out_table, out_is_last
 
-    return impl
+    return impl_groupby_produce_output_batch
+
+
+@infer_global(groupby_produce_output_batch)
+class GroupbyProduceOutputInfer(AbstractTemplate):
+    """Typer for groupby_produce_output_batch that returns (output_table_type, bool)
+    as output type.
+    """
+
+    def generic(self, args, kws):
+        kws = dict(kws)
+        groupby_state = get_call_expr_arg(
+            "groupby_produce_output_batch", args, kws, 0, "groupby_state"
+        )
+        out_table_type = groupby_state.out_table_type
+        # Output is (out_table, out_is_last)
+        output_type = types.BaseTuple.from_types((out_table_type, types.bool_))
+
+        pysig = numba.core.utils.pysignature(groupby_produce_output_batch)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(output_type, *folded_args).replace(pysig=pysig)
+
+
+GroupbyProduceOutputInfer._no_unliteral = True
+
+
+@lower_builtin(groupby_produce_output_batch, types.VarArg(types.Any))
+def lower_groupby_produce_output_batch(context, builder, sig, args):
+    """lower groupby_produce_output_batch() using gen_groupby_produce_output_batch_impl above"""
+    impl = gen_groupby_produce_output_batch_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 @intrinsic

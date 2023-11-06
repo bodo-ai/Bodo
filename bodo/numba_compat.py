@@ -6442,6 +6442,20 @@ if _check_numba_change:  # pragma: no cover
 numba.core.inline_closurecall.InlineWorker.inline_ir = inline_ir
 
 
+def _sanitize_cell_contents(c):
+    """Make cell contents in function closure hashable for compilation cache key below"""
+    import numpy as np
+    import pandas as pd
+
+    if isinstance(c, (np.ndarray, pd.arrays.StringArray)):
+        return tuple(c)
+
+    if isinstance(c, dict):
+        return tuple(c.items())
+
+    return c
+
+
 # Bodo change: avoid errors for global arrays
 def compile_subroutine(self, builder, impl, sig, locals={}, flags=None, caching=True):
     """
@@ -6460,13 +6474,8 @@ def compile_subroutine(self, builder, impl, sig, locals={}, flags=None, caching=
             # unhashable.
             # Bodo change: convert global arrays to tuples to make them hashable and
             # avoid errors. This is safe because arrays are "frozen" when compiled.
-            import numpy as np
-
             cache_key += tuple(
-                tuple(c.cell_contents)
-                if isinstance(c.cell_contents, np.ndarray)
-                else c.cell_contents
-                for c in impl.__closure__
+                _sanitize_cell_contents(c.cell_contents) for c in impl.__closure__
             )
         cached = self.cached_internal_func.get(cache_key)
     if cached is None:
