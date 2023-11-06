@@ -281,10 +281,9 @@ struct Bodo_CTypes {
         DATETIME = 15,
         TIMEDELTA = 16,
         INT128 = 17,
-        LIST_STRING = 18,
-        LIST = 19,    // for nested data structures, maps to Arrow List
-        STRUCT = 20,  // for nested data structures, maps to Arrow Struct
-        BINARY = 21,
+        LIST = 18,    // for nested data structures, maps to Arrow List
+        STRUCT = 19,  // for nested data structures, maps to Arrow Struct
+        BINARY = 20,
         _numtypes
     };
 };
@@ -428,13 +427,12 @@ struct bodo_array_type {
     enum arr_type_enum {
         NUMPY = 0,
         STRING = 1,
-        NULLABLE_INT_BOOL = 2,  // nullable int or bool
-        LIST_STRING = 3,        // list_string_array_type
-        STRUCT = 4,
-        CATEGORICAL = 5,
-        ARRAY_ITEM = 6,
-        INTERVAL = 7,
-        DICT = 8,  // dictionary-encoded string array
+        NULLABLE_INT_BOOL = 2,
+        STRUCT = 3,
+        CATEGORICAL = 4,
+        ARRAY_ITEM = 5,
+        INTERVAL = 6,
+        DICT = 7,  // dictionary-encoded string array
         // string_array_split_view_type, etc.
 
         // Used to fallback to runtime type checks
@@ -482,8 +480,7 @@ struct DataType {
     bool is_primitive() {
         return array_type != bodo_array_type::STRUCT &&
                array_type != bodo_array_type::ARRAY_ITEM &&
-               array_type != bodo_array_type::DICT &&
-               array_type != bodo_array_type::LIST_STRING;
+               array_type != bodo_array_type::DICT;
     }
 
     /// @brief Is the Array a Nested Array?
@@ -620,12 +617,6 @@ inline void SetBitTo(std::vector<uint8_t, Alloc>& V, int64_t i,
  * --- is_locally_sorted is true if the array
  *     is sorted on the current rank. This is used when
  *     the array is a dictionary for a DICT array.
- * Case of LIST_STRING:
- * --- The length is the number of rows.
- * --- data1 is the characters
- * --- data2 is for the data_offsets
- * --- data3 is for the index_offsets
- * --- null_bitmask for whether the data is missing or not.
  * case of DICT:
  * --- child_arrays[0] is the string array for the dictionary.
  * --- child_arrays[1] is a Int32 array for the indices. This array and
@@ -726,8 +717,6 @@ struct array_info {
             case bodo_array_type::INTERVAL:
             case bodo_array_type::ARRAY_ITEM:
                 return (char*)this->buffers[0]->mutable_data() + this->offset;
-            case bodo_array_type::LIST_STRING:
-                return this->child_arrays[0]->data1();
             case bodo_array_type::DICT:
             case bodo_array_type::STRUCT:
             default:
@@ -751,8 +740,6 @@ struct array_info {
             case bodo_array_type::INTERVAL:
             case bodo_array_type::ARRAY_ITEM:
                 return (char*)this->buffers[0]->mutable_data() + this->offset;
-            case bodo_array_type::LIST_STRING:
-                return this->child_arrays[0]->data1();
             case bodo_array_type::DICT:
             case bodo_array_type::STRUCT:
             default:
@@ -773,8 +760,6 @@ struct array_info {
             case bodo_array_type::STRING:
             case bodo_array_type::INTERVAL:
                 return (char*)this->buffers[1]->mutable_data();
-            case bodo_array_type::LIST_STRING:
-                return this->child_arrays[0]->data2();
             case bodo_array_type::DICT:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
@@ -799,58 +784,6 @@ struct array_info {
             case bodo_array_type::STRING:
             case bodo_array_type::INTERVAL:
                 return (char*)this->buffers[1]->mutable_data();
-            case bodo_array_type::LIST_STRING:
-                return this->child_arrays[0]->data2();
-            case bodo_array_type::DICT:
-            case bodo_array_type::ARRAY_ITEM:
-            case bodo_array_type::STRUCT:
-            case bodo_array_type::NULLABLE_INT_BOOL:
-            case bodo_array_type::NUMPY:
-            case bodo_array_type::CATEGORICAL:
-            default:
-                return nullptr;
-        }
-    }
-
-    /**
-     * @brief returns the third data pointer for the array if any.
-     *
-     * @return char* data pointer
-     */
-    template <
-        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
-        requires(arr_type == bodo_array_type::UNKNOWN)
-    char* data3() const {
-        switch (this->arr_type) {
-            case bodo_array_type::LIST_STRING:
-                return (char*)this->buffers[0]->mutable_data();
-            case bodo_array_type::STRING:
-            case bodo_array_type::INTERVAL:
-            case bodo_array_type::DICT:
-            case bodo_array_type::ARRAY_ITEM:
-            case bodo_array_type::STRUCT:
-            case bodo_array_type::NULLABLE_INT_BOOL:
-            case bodo_array_type::NUMPY:
-            case bodo_array_type::CATEGORICAL:
-            default:
-                return nullptr;
-        }
-    }
-
-    /**
-     * @brief returns the third data pointer for the array if any.
-     *
-     * @return char* data pointer
-     */
-    template <
-        bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
-        requires(arr_type != bodo_array_type::UNKNOWN)
-    char* data3() const {
-        switch (arr_type) {
-            case bodo_array_type::LIST_STRING:
-                return (char*)this->buffers[0]->mutable_data();
-            case bodo_array_type::STRING:
-            case bodo_array_type::INTERVAL:
             case bodo_array_type::DICT:
             case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::STRUCT:
@@ -873,7 +806,6 @@ struct array_info {
     char* null_bitmask() const {
         switch (this->arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL:
-            case bodo_array_type::LIST_STRING:
             case bodo_array_type::ARRAY_ITEM:
                 return (char*)this->buffers[1]->mutable_data();
             case bodo_array_type::STRING:
@@ -902,7 +834,6 @@ struct array_info {
     char* null_bitmask() const {
         switch (arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL:
-            case bodo_array_type::LIST_STRING:
             case bodo_array_type::ARRAY_ITEM:
                 return (char*)this->buffers[1]->mutable_data();
             case bodo_array_type::STRING:
@@ -913,29 +844,6 @@ struct array_info {
             case bodo_array_type::STRUCT:
                 return (char*)this->buffers[0]->mutable_data();
             case bodo_array_type::INTERVAL:
-            case bodo_array_type::NUMPY:
-            case bodo_array_type::CATEGORICAL:
-            default:
-                return nullptr;
-        }
-    }
-
-    /**
-     * @brief returns the pointer to null bitmask buffer for the nested array if
-     * any.
-     *
-     * @return char* null bitmask pointer of nested array
-     */
-    char* sub_null_bitmask() const {
-        switch (arr_type) {
-            case bodo_array_type::LIST_STRING:
-                return this->child_arrays[0]->null_bitmask();
-            case bodo_array_type::STRING:
-            case bodo_array_type::DICT:
-            case bodo_array_type::NULLABLE_INT_BOOL:
-            case bodo_array_type::INTERVAL:
-            case bodo_array_type::ARRAY_ITEM:
-            case bodo_array_type::STRUCT:
             case bodo_array_type::NUMPY:
             case bodo_array_type::CATEGORICAL:
             default:
@@ -956,26 +864,6 @@ struct array_info {
         if (arr_type == bodo_array_type::STRING) {
             offset_t* offsets = (offset_t*)data2();
             return offsets[length];
-        }
-        if (arr_type == bodo_array_type::LIST_STRING) {
-            offset_t* offsets = (offset_t*)data3();
-            return offsets[length];
-        }
-        return -1;
-    }
-
-    /**
-     * @brief return number of sub-sub-elements for two-level nested arrays
-     * (only list of strings supported now): number of characters for list of
-     * strings arrays, -1 for other arrays.
-     *
-     * @return int64_t number of sub-elements
-     */
-    int64_t n_sub_sub_elems() {
-        if (arr_type == bodo_array_type::LIST_STRING) {
-            int64_t n_strings = n_sub_elems();
-            offset_t* offsets = (offset_t*)data2();
-            return offsets[n_strings];
         }
         return -1;
     }
@@ -1040,7 +928,6 @@ struct array_info {
                 }
                 break;
             case bodo_array_type::DICT:
-            case bodo_array_type::LIST_STRING:
                 for (auto& arr : this->child_arrays) {
                     arr->pin();
                 }
@@ -1077,11 +964,6 @@ struct array_info {
                     arr->unpin();
                 }
                 break;
-            case bodo_array_type::LIST_STRING:
-                for (auto& arr : this->child_arrays) {
-                    arr->unpin();
-                }
-                break;
             default:
                 for (auto& buffer : this->buffers) {
                     buffer->unpin();
@@ -1102,7 +984,6 @@ struct array_info {
      */
     bool can_contain_na() {
         switch (arr_type) {
-            case bodo_array_type::LIST_STRING:
             case bodo_array_type::STRING:
             case bodo_array_type::DICT:
             case bodo_array_type::NULLABLE_INT_BOOL:
@@ -1127,7 +1008,6 @@ struct array_info {
     bodo::vector<bool> get_notna_vector() {
         bodo::vector<bool> not_na(length, true);
         switch (arr_type) {
-            case bodo_array_type::LIST_STRING:
             case bodo_array_type::STRING:
             case bodo_array_type::DICT:
             case bodo_array_type::NULLABLE_INT_BOOL:
@@ -1241,20 +1121,6 @@ std::unique_ptr<array_info> alloc_string_array(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
-std::unique_ptr<array_info> alloc_list_string_array(
-    int64_t n_lists, std::shared_ptr<array_info> string_arr,
-    int64_t extra_null_bytes,
-    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
-    std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
-
-std::unique_ptr<array_info> alloc_list_string_array(
-    int64_t n_lists, int64_t n_strings, int64_t n_chars,
-    int64_t extra_null_bytes,
-    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
-    std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
-
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
@@ -1292,16 +1158,13 @@ std::unique_ptr<array_info> create_string_array(
  * @param list_list_pair The vector of list of strings. The list of strings
  * is a pair of string and a boolean. The boolean is true if the list entry is
  * null.
- * @param use_arr_item_type Flag to indicate the output array should be
- * ARRAY_ITEM type
  * @return std::shared_ptr<array_info> A list of strings type array info
  * constructed from the vector.
  */
 std::unique_ptr<array_info> create_list_string_array(
     bodo::vector<uint8_t> const& null_bitmap,
     bodo::vector<bodo::vector<std::pair<std::string, bool>>> const&
-        list_list_pair,
-    bool use_arr_item_type = false);
+        list_list_pair);
 
 /**
  * @brief Create a dict string array object from the underlying data array and
@@ -1324,10 +1187,6 @@ std::unique_ptr<array_info> create_dict_string_array(
  * In the case of STRING:
  * -- length is the number of rows (= number of strings)
  * -- n_sub_elems is the total number of characters.
- * In the case of LIST_STRING:
- * -- length is the number of rows.
- * -- n_sub_elems is the number of strings.
- * -- n_sub_sub_elems is the total number of characters.
  * In the case of DICT:
  * -- length is the number of rows (same as the number of indices)
  * -- n_sub_elems is the number of keys in the dictionary
@@ -1454,17 +1313,11 @@ struct mpi_comm_info {
 
 struct mpi_str_comm_info {
     int64_t n_sub_send = 0, n_sub_recv = 0;
-    int64_t n_sub_sub_send = 0, n_sub_sub_recv = 0;
     // counts required for string arrays
     std::vector<int64_t> send_count_sub;
     std::vector<int64_t> recv_count_sub;
     std::vector<int64_t> send_disp_sub;
     std::vector<int64_t> recv_disp_sub;
-    // counts required for string list arrays (will deprecate soon)
-    std::vector<int64_t> send_count_sub_sub;
-    std::vector<int64_t> recv_count_sub_sub;
-    std::vector<int64_t> send_disp_sub_sub;
-    std::vector<int64_t> recv_disp_sub_sub;
 
     /**
      * @brief Initialize mpi_str_comm_info based on the array type

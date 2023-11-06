@@ -87,10 +87,9 @@ class CTypeEnum(Enum):
     # NOTE: currently, only used for handling decimal array's data array for scatterv
     # since it handles the data array inside decimal array separately
     Int128 = 17
-    # NOTE: 18 is used by LIST_STRING in bodo_common.h
-    LIST = 19
-    STRUCT = 20
-    BINARY = 21
+    LIST = 18
+    STRUCT = 19
+    BINARY = 20
 
 
 _numba_to_c_type_map = {
@@ -126,12 +125,11 @@ class CArrayTypeEnum(Enum):
     NUMPY = 0
     STRING = 1
     NULLABLE_INT_BOOL = 2
-    # NOTE: 3 is used by LIST_STRING in bodo_common.h
-    STRUCT = 4
-    CATEGORICAL = 5
-    ARRAY_ITEM = 6
-    INTERVAL = 7
-    DICT = 8  # dictionary-encoded string array
+    STRUCT = 3
+    CATEGORICAL = 4
+    ARRAY_ITEM = 5
+    INTERVAL = 6
+    DICT = 7  # dictionary-encoded string array
 
 
 # silence Numba error messages for now

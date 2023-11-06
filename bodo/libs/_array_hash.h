@@ -323,63 +323,6 @@ struct multi_col_key {
                     }
                 }
                     continue;
-                case bodo_array_type::LIST_STRING: {
-                    uint8_t* c1_null_bitmask = (uint8_t*)c1->null_bitmask();
-                    uint8_t* c2_null_bitmask = (uint8_t*)c2->null_bitmask();
-                    if (GetBit(c1_null_bitmask, row) !=
-                        GetBit(c2_null_bitmask, other.row)) {
-                        return false;
-                    }
-                    uint8_t* c1_sub_null_bitmask =
-                        (uint8_t*)c1->sub_null_bitmask();
-                    uint8_t* c2_sub_null_bitmask =
-                        (uint8_t*)c2->sub_null_bitmask();
-                    offset_t* c1_index_offsets = (offset_t*)c1->data3();
-                    offset_t* c2_index_offsets = (offset_t*)c2->data3();
-                    offset_t* c1_data_offsets = (offset_t*)c1->data2();
-                    offset_t* c2_data_offsets = (offset_t*)c2->data2();
-                    // Comparing the number of strings.
-                    offset_t c1_index_len =
-                        c1_index_offsets[row + 1] - c1_index_offsets[row];
-                    offset_t c2_index_len = c2_index_offsets[other.row + 1] -
-                                            c2_index_offsets[other.row];
-                    if (c1_index_len != c2_index_len) {
-                        return false;
-                    }
-                    // comparing the length of the strings.
-                    for (offset_t u = 0; u < c1_index_len; u++) {
-                        offset_t size_data1 =
-                            c1_data_offsets[c1_index_offsets[row] + u + 1] -
-                            c1_data_offsets[c1_index_offsets[row] + u];
-                        offset_t size_data2 =
-                            c2_data_offsets[c2_index_offsets[other.row] + u +
-                                            1] -
-                            c2_data_offsets[c2_index_offsets[other.row] + u];
-                        if (size_data1 != size_data2) {
-                            return false;
-                        }
-                        bool str_bit1 = GetBit(c1_sub_null_bitmask,
-                                               c1_index_offsets[row] + u);
-                        bool str_bit2 = GetBit(c2_sub_null_bitmask,
-                                               c2_index_offsets[other.row] + u);
-                        if (str_bit1 != str_bit2) {
-                            return false;
-                        }
-                    }
-                    // Now comparing the strings. Their length is the same since
-                    // we pass above check
-                    offset_t common_len =
-                        c1_data_offsets[c1_index_offsets[row + 1]] -
-                        c1_data_offsets[c1_index_offsets[row]];
-                    char* c1_strB =
-                        c1->data1() + c1_data_offsets[c1_index_offsets[row]];
-                    char* c2_strB =
-                        c2->data1() +
-                        c2_data_offsets[c2_index_offsets[other.row]];
-                    if (memcmp(c1_strB, c2_strB, common_len) != 0)
-                        return false;
-                    continue;
-                }
                 default: {
                     throw std::runtime_error(
                         "multi_col_key_hash : Unsupported type");
@@ -1006,15 +949,6 @@ inline constexpr decltype(auto) type_dispatcher(
                 default:
                     throw std::runtime_error(
                         "invalid dtype for categorical arrays " +
-                        std::to_string(dtype));
-            }
-        case bodo_array_type::LIST_STRING:
-            switch (dtype) {
-                DISPATCH_CASE(bodo_array_type::LIST_STRING,
-                              Bodo_CTypes::LIST_STRING);
-                default:
-                    throw std::runtime_error(
-                        "invalid dtype for list string arrays " +
                         std::to_string(dtype));
             }
         case bodo_array_type::ARRAY_ITEM:

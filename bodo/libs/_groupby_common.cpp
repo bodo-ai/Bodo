@@ -18,7 +18,7 @@
  * min: max dtype value, or quiet_NaN if float (so that result is nan if all
  * input values are nan) max: min dtype value, or quiet_NaN if float (so that
  * result is nan if all input values are nan)
- * Arrays of type STRING, LIST_STRING, STRUCT, and ARRAY_ITEM are always
+ * Arrays of type STRING, STRUCT, and ARRAY_ITEM are always
  * initalized to all NULL
  *
  * @param output column
@@ -76,7 +76,6 @@ void aggfunc_output_initialize_kernel(
     }
 
     if (out_col->arr_type == bodo_array_type::STRING ||
-        out_col->arr_type == bodo_array_type::LIST_STRING ||
         out_col->arr_type == bodo_array_type::STRUCT ||
         out_col->arr_type == bodo_array_type::ARRAY_ITEM) {
         InitializeBitMask((uint8_t*)out_col->null_bitmask(), out_col->length,
@@ -329,9 +328,6 @@ void aggfunc_output_initialize_kernel(
                 case Bodo_CTypes::BINARY:
                     // Nothing to initilize with in the case of strings.
                     return;
-                case Bodo_CTypes::LIST_STRING:
-                    // Nothing to initilize with in the case of list strings.
-                    return;
                 default:
                     Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
                     return;
@@ -423,9 +419,6 @@ void aggfunc_output_initialize_kernel(
                 case Bodo_CTypes::STRING:
                 case Bodo_CTypes::BINARY:
                     // nothing to initialize in the case of strings
-                    return;
-                case Bodo_CTypes::LIST_STRING:
-                    // nothing to initialize in the case of list strings
                     return;
                 default:
                     Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
@@ -721,70 +714,6 @@ void alloc_init_keys(
                 new_key_col->set_null_bit(j, bit);
             }
             out_offsets[num_groups] = pos;
-        }
-        if (key_col->arr_type == bodo_array_type::LIST_STRING) {
-            // new key col will have num_groups rows containing the
-            // list string for each group
-            int64_t n_strings = 0;  // total number of strings of all keys
-                                    // for this column
-            int64_t n_chars = 0;    // total number of chars of all keys for
-                                    // this column
-            offset_t* in_index_offsets;
-            offset_t* in_data_offsets;
-            for (size_t j = 0; j < num_groups; j++) {
-                std::tie(key_col, key_row) =
-                    find_key_for_group(j, from_tables, i, grp_infos);
-                in_index_offsets = (offset_t*)key_col->data3();
-                in_data_offsets = (offset_t*)key_col->data2();
-                n_strings +=
-                    in_index_offsets[key_row + 1] - in_index_offsets[key_row];
-                n_chars += in_data_offsets[in_index_offsets[key_row + 1]] -
-                           in_data_offsets[in_index_offsets[key_row]];
-            }
-            new_key_col = alloc_array_top_level(
-                num_groups, n_strings, n_chars, key_col->arr_type,
-                key_col->dtype, -1, 0, key_col->num_categories, false, false,
-                false, pool, mm);
-            uint8_t* in_sub_null_bitmask =
-                (uint8_t*)key_col->sub_null_bitmask();
-            uint8_t* out_sub_null_bitmask =
-                (uint8_t*)new_key_col->sub_null_bitmask();
-            offset_t* out_index_offsets = (offset_t*)new_key_col->data3();
-            offset_t* out_data_offsets = (offset_t*)new_key_col->data2();
-            offset_t pos_data = 0;
-            offset_t pos_index = 0;
-            out_data_offsets[0] = 0;
-            out_index_offsets[0] = 0;
-            for (size_t j = 0; j < num_groups; j++) {
-                std::tie(key_col, key_row) =
-                    find_key_for_group(j, from_tables, i, grp_infos);
-                in_index_offsets = (offset_t*)key_col->data3();
-                in_data_offsets = (offset_t*)key_col->data2();
-                offset_t size_index =
-                    in_index_offsets[key_row + 1] - in_index_offsets[key_row];
-                offset_t pos_start = in_index_offsets[key_row];
-                for (offset_t i_str = 0; i_str < size_index; i_str++) {
-                    offset_t len_str = in_data_offsets[pos_start + i_str + 1] -
-                                       in_data_offsets[pos_start + i_str];
-                    pos_index++;
-                    out_data_offsets[pos_index] =
-                        out_data_offsets[pos_index - 1] + len_str;
-                    bool bit = GetBit(in_sub_null_bitmask, pos_start + i_str);
-                    SetBitTo(out_sub_null_bitmask, pos_index, bit);
-                }
-                out_index_offsets[j + 1] = pos_index;
-                // Now the strings themselves
-                offset_t in_start_offset =
-                    in_data_offsets[in_index_offsets[key_row]];
-                offset_t n_chars_o =
-                    in_data_offsets[in_index_offsets[key_row + 1]] -
-                    in_data_offsets[in_index_offsets[key_row]];
-                memcpy(&new_key_col->data1()[pos_data],
-                       &key_col->data1()[in_start_offset], n_chars_o);
-                pos_data += n_chars_o;
-                bool bit = key_col->get_null_bit(key_row);
-                new_key_col->set_null_bit(j, bit);
-            }
         }
         out_table->columns.push_back(std::move(new_key_col));
     }

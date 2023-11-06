@@ -30,77 +30,6 @@ inline int64_t get_group_for_row(const grouping_info& grp_info,
 }
 
 /**
- * @brief Code path for applying the supported aggregation
- * functions to columns containing lists of strings.
- *
- * @tparam ftype The function to execute.
- * @param[in] in_col The input column. This must be a column with a list of
- * strings type.
- * @param[in, out] out_col The output column.
- * @param[in] grp_info The grouping information.
- */
-template <int ftype>
-void apply_to_column_list_string(std::shared_ptr<array_info> in_col,
-                                 std::shared_ptr<array_info> out_col,
-                                 const grouping_info& grp_info) {
-    // for list strings, we are supporting count, sum, max, min, first, last
-    // Optimized implementation for count.
-    if (ftype == Bodo_FTypes::count) {
-        for (size_t i = 0; i < in_col->length; i++) {
-            int64_t i_grp = get_group_for_row(grp_info, i);
-            if ((i_grp != -1) && in_col->get_null_bit(i)) {
-                // Note: int is unused since we would only use an NA check.
-                count_agg<int, Bodo_CTypes::LIST_STRING>::apply(
-                    getv<int64_t>(out_col, i_grp), getv<int>(in_col, i));
-            }
-        }
-        return;
-    }
-    size_t num_groups = grp_info.num_groups;
-    bodo::vector<bodo::vector<std::pair<std::string, bool>>> ListListPair(
-        num_groups);
-    char* data_i = in_col->data1();
-    offset_t* index_offsets_i = (offset_t*)in_col->data3();
-    offset_t* data_offsets_i = (offset_t*)in_col->data2();
-    uint8_t* sub_null_bitmask_i = (uint8_t*)in_col->sub_null_bitmask();
-    // Computing the strings used in output.
-    uint64_t n_bytes = (num_groups + 7) >> 3;
-    bodo::vector<uint8_t> Vmask(n_bytes, 0);
-    for (size_t i = 0; i < in_col->length; i++) {
-        int64_t i_grp = get_group_for_row(grp_info, i);
-        if ((i_grp != -1) && in_col->get_null_bit(i)) {
-            bool out_bit_set = out_col->get_null_bit(i_grp);
-            if (ftype == Bodo_FTypes::first && out_bit_set)
-                continue;
-            offset_t start_offset = index_offsets_i[i];
-            offset_t end_offset = index_offsets_i[i + 1];
-            offset_t len = end_offset - start_offset;
-            bodo::vector<std::pair<std::string, bool>> LStrB(len);
-            for (offset_t i = 0; i < len; i++) {
-                offset_t len_str = data_offsets_i[start_offset + i + 1] -
-                                   data_offsets_i[start_offset + i];
-                offset_t pos_start = data_offsets_i[start_offset + i];
-                std::string val(&data_i[pos_start], len_str);
-                bool str_bit = GetBit(sub_null_bitmask_i, start_offset + i);
-                LStrB[i] = {val, str_bit};
-            }
-            if (out_bit_set) {
-                aggliststring<ftype>::apply(ListListPair[i_grp], LStrB);
-            } else {
-                ListListPair[i_grp] = LStrB;
-                out_col->set_null_bit(i_grp, true);
-            }
-        }
-    }
-    // Allocate the new column. Since these column are immutable
-    // we don't modify the column directly.
-    std::shared_ptr<array_info> new_out_col =
-        create_list_string_array(Vmask, ListListPair);
-    // Copy the contents into out column.
-    *out_col = std::move(*new_out_col);
-}
-
-/**
  * @brief Helper function used to determine the valid groups for the series of
  * idx*** functions. This function needs to be inlined because it is called from
  * a tight loop.
@@ -1742,12 +1671,6 @@ void apply_to_column(
             return apply_to_column_dict<ftype>(in_col, out_col, aux_cols,
                                                grp_info, pool, std::move(mm));
         }
-        case bodo_array_type::LIST_STRING: {
-            // We don't support LIST_STRING in streaming groupby yet,
-            // so we don't need to use the op_pool here.
-            return apply_to_column_list_string<ftype>(in_col, out_col,
-                                                      grp_info);
-        }
         // For the STRING we compute the count, sum, max, min, first, last,
         // idxmin, idxmax, idxmin_na_first, idxmax_na_first
         case bodo_array_type::STRING: {
@@ -1778,8 +1701,7 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
     }
 #endif
     // Handle nested array cases separately
-    if (in_col->arr_type == bodo_array_type::ARRAY_ITEM ||
-        in_col->arr_type == bodo_array_type::LIST_STRING) {
+    if (in_col->arr_type == bodo_array_type::ARRAY_ITEM) {
         switch (ftype) {
             case Bodo_FTypes::first: {
                 return apply_to_column_array_item<Bodo_FTypes::first>(
@@ -1801,7 +1723,6 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
     }
     // Handle string functions where we care about the input separately.
     if (in_col->arr_type == bodo_array_type::STRING ||
-        in_col->arr_type == bodo_array_type::LIST_STRING ||
         in_col->arr_type == bodo_array_type::DICT) {
         switch (ftype) {
             // NOTE: The int template argument is not used in this call to

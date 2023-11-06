@@ -767,7 +767,6 @@ inline bool does_keys_have_nulls(
             key_col->arr_type == bodo_array_type::STRING ||
             key_col->arr_type == bodo_array_type::CATEGORICAL ||
             key_col->arr_type == bodo_array_type::DICT ||
-            key_col->arr_type == bodo_array_type::LIST_STRING ||
             key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             return true;
         }
@@ -787,7 +786,6 @@ inline bool does_row_has_nulls(
                 return true;
             }
         } else if (key_col->arr_type == bodo_array_type::STRING ||
-                   key_col->arr_type == bodo_array_type::LIST_STRING ||
                    key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
                    key_col->arr_type == bodo_array_type::DICT) {
             if (!GetBit((uint8_t*)key_col->null_bitmask(), i)) {
