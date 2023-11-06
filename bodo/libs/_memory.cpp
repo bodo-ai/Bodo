@@ -1,5 +1,8 @@
 #include "_memory.h"
-
+#ifdef __linux__
+// Needed for 'malloc_trim'
+#include <malloc.h>
+#endif
 #include <sys/mman.h>
 #include <algorithm>
 #include <cerrno>
@@ -832,6 +835,12 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         options.debug_mode = !std::strcmp(debug_mode_env_, "1");
     }
 
+    if (const char* malloc_free_trim_threshold_env_ =
+            std::getenv("BODO_BUFFER_POOL_MALLOC_FREE_TRIM_THRESHOLD_MiB")) {
+        options.malloc_free_trim_threshold =
+            std::stoi(malloc_free_trim_threshold_env_) * 1024 * 1024;
+    }
+
     return options;
 }
 
@@ -1378,6 +1387,24 @@ void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
     } else {
         frame_pinned = true;
         ::free(ptr);
+#ifdef __linux__
+        // malloc doesn't always return memory back to the OS after
+        // a 'free'. It may keep the freed memory for use by future
+        // 'malloc' calls. This can have side-effects in certain
+        // situations (e.g. when many small allocations worth GiBs of memory are
+        // free-d without any malloc calls to re-use them). Calling malloc_trim
+        // forces malloc to return unused memory to the OS (assuming it can). We
+        // only call it once every malloc_free_trim_threshold bytes (default:
+        // 100MiB) since calling it after 'free' call can be expensive. See
+        // https://bodo.atlassian.net/browse/BSE-1768 for more context.
+        this->bytes_freed_through_malloc_since_last_trim_ +=
+            (size_aligned >= 0) ? size_aligned : this->malloc_threshold_;
+        if (this->bytes_freed_through_malloc_since_last_trim_ >=
+            this->options_.malloc_free_trim_threshold) {
+            ::malloc_trim(0);
+            this->bytes_freed_through_malloc_since_last_trim_ = 0;
+        }
+#endif
     }
 
     if (size_aligned != -1) {
@@ -1456,6 +1483,10 @@ bool BufferPool::IsPinned(uint8_t* buffer, int64_t size,
 
 uint64_t BufferPool::get_memory_size_bytes() const {
     return this->memory_size_bytes_;
+}
+
+int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {
+    return this->bytes_freed_through_malloc_since_last_trim_;
 }
 
 ::arrow::Status BufferPool::Reallocate(int64_t old_size, int64_t new_size,
