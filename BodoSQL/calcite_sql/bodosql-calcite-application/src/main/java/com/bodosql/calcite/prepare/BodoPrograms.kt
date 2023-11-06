@@ -24,6 +24,7 @@ import org.apache.calcite.plan.RelOptLattice
 import org.apache.calcite.plan.RelOptMaterialization
 import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelOptRule
+import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.plan.hep.HepMatchOrder
 import org.apache.calcite.plan.hep.HepPlanner
@@ -47,6 +48,8 @@ import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexExecutorImpl
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexShuttle
+import org.apache.calcite.sql.SqlExplainFormat
+import org.apache.calcite.sql.SqlExplainLevel
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.tools.Program
 import org.apache.calcite.tools.Programs
@@ -529,6 +532,23 @@ object BodoPrograms {
             materializations: List<RelOptMaterialization>,
             lattices: List<RelOptLattice>,
         ): RelNode = rel
+    }
+
+    /**
+     * Simple program that does nothing but dump the output to stdout.
+     * Should only be used for debugging
+     */
+    class PrintDebugProgram : Program {
+        override fun run(
+            planner: RelOptPlanner?,
+            rel: RelNode,
+            requiredOutputTraits: RelTraitSet?,
+            materializations: MutableList<RelOptMaterialization>?,
+            lattices: MutableList<RelOptLattice>?,
+        ): RelNode {
+            System.out.println(RelOptUtil.dumpPlan("", rel, SqlExplainFormat.TEXT, SqlExplainLevel.NON_COST_ATTRIBUTES))
+            return rel
+        }
     }
 }
 
