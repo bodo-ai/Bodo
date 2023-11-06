@@ -107,10 +107,9 @@ FirstColSet::~FirstColSet() {}
 void FirstColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
-    if (in_col->arr_type == bodo_array_type::ARRAY_ITEM ||
-        in_col->arr_type == bodo_array_type::LIST_STRING) {
-        // For ARRAY_ITEM or LIST_STRING array, allocate a dummy inner array for
-        // now since the true array item array cannot be computed until later.
+    if (in_col->arr_type == bodo_array_type::ARRAY_ITEM) {
+        // For ARRAY_ITEM array, allocate a dummy inner array for now since the
+        // true array item array cannot be computed until later.
         std::shared_ptr<array_info> inner_arr =
             alloc_numpy(0, Bodo_CTypes::INT8, pool, mm);
         std::shared_ptr<array_info> out_col =

@@ -82,9 +82,6 @@ def test_lateral_flatten(
     Tests the lateral_flatten kernel
     """
 
-    if (explode_col == 3 and output_this) or (3 in keep_cols):
-        pytest.skip(reason="TODO: support arrays of strings in replicated columns")
-
     df = pd.DataFrame(
         {
             "a": pd.Series(range(10), dtype=np.int64),

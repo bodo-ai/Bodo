@@ -131,8 +131,6 @@ static const char* arr_type_to_str(bodo_array_type::arr_type_enum arr_type) {
         return "STRING";
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL)
         return "NULLABLE";
-    if (arr_type == bodo_array_type::LIST_STRING)
-        return "LIST_STRING";
     if (arr_type == bodo_array_type::ARRAY_ITEM)
         return "ARRAY_ITEM";
     if (arr_type == bodo_array_type::STRUCT)
@@ -167,8 +165,6 @@ static const char* dtype_to_str(Bodo_CTypes::CTypeEnum dtype) {
         return "FLOAT64";
     if (dtype == Bodo_CTypes::STRING)
         return "STRING";
-    if (dtype == Bodo_CTypes::LIST_STRING)
-        return "LIST_STRING";
     if (dtype == Bodo_CTypes::BINARY)
         return "BINARY";
     if (dtype == Bodo_CTypes::_BOOL)
@@ -633,8 +629,7 @@ std::unique_ptr<array_info> create_string_array(
 std::unique_ptr<array_info> create_list_string_array(
     bodo::vector<uint8_t> const& null_bitmap,
     bodo::vector<bodo::vector<std::pair<std::string, bool>>> const&
-        list_list_pair,
-    bool use_arr_item_type) {
+        list_list_pair) {
     size_t len = list_list_pair.size();
     // Determining the number of characters in output.
     size_t nb_string = 0;
@@ -651,37 +646,20 @@ std::unique_ptr<array_info> create_list_string_array(
         }
         iter++;
     }
-    // Allocation needs to be done through
-    // alloc_list_string_array, which allocates with meminfos
-    // and same data structs that Python uses. We need to
-    // re-allocate here because number of strings and chars has
-    // been determined here (previous out_col was just an empty
-    // dummy allocation).
+    // Allocation needs to be done through alloc_array_item, which allocates
+    // with meminfos and same data structs that Python uses. We need to
+    // re-allocate here because number of strings and chars has been determined
+    // here (previous out_col was just an empty dummy allocation).
 
-    std::unique_ptr<array_info> new_out_col =
-        use_arr_item_type
-            ? alloc_array_item(
-                  len, alloc_string_array(Bodo_CTypes::CTypeEnum::STRING,
-                                          nb_string, nb_char))
-            : alloc_list_string_array(len, nb_string, nb_char, 0);
+    std::unique_ptr<array_info> new_out_col = alloc_array_item(
+        len,
+        alloc_string_array(Bodo_CTypes::CTypeEnum::STRING, nb_string, nb_char));
 
-    offset_t* index_offsets_o;
-    offset_t* data_offsets_o;
-    uint8_t* sub_null_bitmask_o;
-    char* data_o;
-
-    if (use_arr_item_type) {
-        sub_null_bitmask_o =
-            (uint8_t*)new_out_col->child_arrays[0]->null_bitmask();
-        data_o = new_out_col->child_arrays[0]->data1();
-        data_offsets_o = (offset_t*)new_out_col->child_arrays[0]->data2();
-        index_offsets_o = (offset_t*)new_out_col->data1();
-    } else {
-        index_offsets_o = (offset_t*)new_out_col->data3();
-        data_offsets_o = (offset_t*)new_out_col->data2();
-        sub_null_bitmask_o = (uint8_t*)new_out_col->sub_null_bitmask();
-        data_o = new_out_col->data1();
-    }
+    uint8_t* sub_null_bitmask_o =
+        (uint8_t*)new_out_col->child_arrays[0]->null_bitmask();
+    char* data_o = new_out_col->child_arrays[0]->data1();
+    offset_t* data_offsets_o = (offset_t*)new_out_col->child_arrays[0]->data2();
+    offset_t* index_offsets_o = (offset_t*)new_out_col->data1();
 
     // Writing the list_strings in output
     data_offsets_o[0] = 0;
@@ -731,44 +709,6 @@ NRT_MemInfo* alloc_meminfo(int64_t length) {
     return NRT_MemInfo_alloc_safe(length);
 }
 
-std::unique_ptr<array_info> alloc_list_string_array(
-    int64_t length, std::shared_ptr<array_info> string_arr,
-    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm) {
-    std::unique_ptr<BodoBuffer> offsets_buffer =
-        AllocateBodoBuffer(length + 1, Bodo_CType_offset, pool, mm);
-    int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
-    std::unique_ptr<BodoBuffer> null_bitmap_buffer =
-        AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8, pool, std::move(mm));
-    // setting all to non-null to avoid unexpected issues
-    memset(null_bitmap_buffer->mutable_data(), 0xff, n_bytes);
-
-    // set offsets for boundaries
-    offset_t* offsets_ptr = (offset_t*)offsets_buffer->mutable_data();
-    offsets_ptr[0] = 0;
-    offsets_ptr[length] = string_arr->length;
-
-    return std::make_unique<array_info>(
-        bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, length,
-        std::vector<std::shared_ptr<BodoBuffer>>(
-            {std::move(offsets_buffer), std::move(null_bitmap_buffer)}),
-        std::vector<std::shared_ptr<array_info>>({string_arr}));
-}
-
-std::unique_ptr<array_info> alloc_list_string_array(
-    int64_t n_lists, int64_t n_strings, int64_t n_chars,
-    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm) {
-    // allocate string data array
-    std::shared_ptr<array_info> data_arr = alloc_array_top_level(
-        n_strings, n_chars, -1, bodo_array_type::arr_type_enum::STRING,
-        Bodo_CTypes::UINT8, -1, extra_null_bytes, 0, false, false, false, pool,
-        mm);
-
-    return alloc_list_string_array(n_lists, data_arr, extra_null_bytes, pool,
-                                   std::move(mm));
-}
-
 /**
  * @brief allocate a numpy array payload
  *
@@ -808,11 +748,6 @@ std::unique_ptr<array_info> alloc_array_top_level(
     bool is_globally_replicated, bool is_locally_unique, bool is_locally_sorted,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     switch (arr_type) {
-        case bodo_array_type::LIST_STRING:
-            return alloc_list_string_array(length, n_sub_elems, n_sub_sub_elems,
-                                           extra_null_bytes, pool,
-                                           std::move(mm));
-
         case bodo_array_type::STRING:
             return alloc_string_array(dtype, length, n_sub_elems, array_id,
                                       extra_null_bytes, is_globally_replicated,
@@ -961,12 +896,6 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr,
         int64_t n_bytes = ((earr->length + 7) >> 3);
         return earr->n_sub_elems() + sizeof(offset_t) * (earr->length + 1) +
                n_bytes;
-    } else if (earr->arr_type == bodo_array_type::LIST_STRING) {
-        int64_t n_bytes = ((earr->length + 7) >> 3);
-        int64_t n_sub_bytes = ((earr->n_sub_elems() + 7) >> 3);
-        return earr->n_sub_sub_elems() +
-               sizeof(offset_t) * (earr->n_sub_elems() + 1) +
-               sizeof(offset_t) * (earr->length + 1) + n_bytes + n_sub_bytes;
     } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
         return n_bytes + sizeof(offset_t) * (earr->length + 1) +
@@ -1027,8 +956,7 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
         farr = alloc_struct(earr->length, child_arrays);
     } else {
         farr = alloc_array_top_level(
-            earr->length, earr->n_sub_elems(), earr->n_sub_sub_elems(),
-            earr->arr_type, earr->dtype,
+            earr->length, earr->n_sub_elems(), 0, earr->arr_type, earr->dtype,
             earr->arr_type == bodo_array_type::STRING ? earr->array_id : -1, 0,
             earr->num_categories, earr->is_globally_replicated,
             earr->is_locally_unique, earr->is_locally_sorted);
@@ -1058,16 +986,6 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
                sizeof(offset_t) * (earr->length + 1));
         int64_t n_bytes = ((earr->length + 7) >> 3);
         memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
-    } else if (earr->arr_type == bodo_array_type::LIST_STRING) {
-        memcpy(farr->data1(), earr->data1(), earr->n_sub_sub_elems());
-        memcpy(farr->data2(), earr->data2(),
-               sizeof(offset_t) * (earr->n_sub_elems() + 1));
-        memcpy(farr->data3(), earr->data3(),
-               sizeof(offset_t) * (earr->length + 1));
-        int64_t n_bytes = ((earr->length + 7) >> 3);
-        memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
-        int64_t n_sub_bytes = ((earr->n_sub_elems() + 7) >> 3);
-        memcpy(farr->sub_null_bitmask(), earr->sub_null_bitmask(), n_sub_bytes);
     } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
         memcpy(farr->data1(), earr->data1(),
                sizeof(offset_t) * (earr->length + 1));
@@ -1097,7 +1015,6 @@ size_t get_expected_bits_per_entry(int8_t arr_type, int8_t c_type) {
             break;
         case bodo_array_type::STRING:
         case bodo_array_type::NULLABLE_INT_BOOL:
-        case bodo_array_type::LIST_STRING:
         case bodo_array_type::STRUCT:
         case bodo_array_type::ARRAY_ITEM:
             nullable = 1;
@@ -1127,7 +1044,6 @@ size_t get_expected_bits_per_entry(int8_t arr_type, int8_t c_type) {
         case Bodo_CTypes::TIMEDELTA:
             return (nullable + numpy_item_size[c_type]) << 3;
         case Bodo_CTypes::STRING:
-        case Bodo_CTypes::LIST_STRING:
         case Bodo_CTypes::LIST:
         case Bodo_CTypes::STRUCT:
         case Bodo_CTypes::BINARY:

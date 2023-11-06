@@ -239,8 +239,7 @@ array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
 array_info* info_to_array_item_array(array_info* info, int64_t* length,
                                      NRT_MemInfo** offsets_arr,
                                      NRT_MemInfo** null_bitmap_arr) {
-    if (info->arr_type != bodo_array_type::LIST_STRING &&
-        info->arr_type != bodo_array_type::ARRAY_ITEM) {
+    if (info->arr_type != bodo_array_type::ARRAY_ITEM) {
         PyErr_SetString(
             PyExc_RuntimeError,
             "_array.cpp::info_to_array_item_array: info_to_array_item_array "

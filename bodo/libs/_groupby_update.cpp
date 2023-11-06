@@ -58,7 +58,6 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
                               int32_t const& ftype, bool const& skipna) {
     size_t num_group = grp_info.group_to_first_row.size();
     if (arr->arr_type == bodo_array_type::STRING ||
-        arr->arr_type == bodo_array_type::LIST_STRING ||
         arr->arr_type == bodo_array_type::DICT) {
         throw std::runtime_error(
             "There is no cumulative operation for the string or list string "
@@ -167,15 +166,12 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
  * @param[in]  grp_info: groupby information
  * @param[in]  ftype: for list of strings only cumsum is supported
  * @param[in]  skipna: Whether to skip NA values.
- * @param[in]  use_arr_item: Whether input and output should be ARRAY_ITEM or
- * LIST_STRING
  */
 void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
                                         std::shared_ptr<array_info> out_arr,
                                         grouping_info const& grp_info,
                                         int32_t const& ftype,
-                                        bool const& skipna,
-                                        bool use_arr_item = false) {
+                                        bool const& skipna) {
     if (ftype != Bodo_FTypes::cumsum) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "So far only cumulative sums for list-strings");
@@ -190,17 +186,10 @@ void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
     offset_t* data_offsets;
     offset_t* index_offsets;
 
-    if (arr->arr_type == bodo_array_type::LIST_STRING) {
-        sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask();
-        data = arr->data1();
-        data_offsets = (offset_t*)arr->data2();
-        index_offsets = (offset_t*)arr->data3();
-    } else {
-        sub_null_bitmask = (uint8_t*)arr->child_arrays[0]->null_bitmask();
-        data = arr->child_arrays[0]->data1();
-        data_offsets = (offset_t*)arr->child_arrays[0]->data2();
-        index_offsets = (offset_t*)arr->data1();
-    }
+    sub_null_bitmask = (uint8_t*)arr->child_arrays[0]->null_bitmask();
+    data = arr->child_arrays[0]->data1();
+    data_offsets = (offset_t*)arr->child_arrays[0]->data2();
+    index_offsets = (offset_t*)arr->data1();
 
     auto get_entry = [&](int64_t i) -> T {
         bool isna = !GetBit(null_bitmask, i);
@@ -254,7 +243,7 @@ void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
         ListListPair[i] = null_bit_val_vec[i].second;
     }
     std::shared_ptr<array_info> new_out_col =
-        create_list_string_array(Vmask, ListListPair, use_arr_item);
+        create_list_string_array(Vmask, ListListPair);
     *out_arr = std::move(*new_out_col);
 }
 
@@ -441,15 +430,12 @@ void cumulative_computation(std::shared_ptr<array_info> arr,
     } else if (arr->arr_type == bodo_array_type::DICT) {
         return cumulative_computation_dict_encoded_string(
             arr, out_arr, grp_info, ftype, skipna, pool, std::move(mm));
-
-    } else if (arr->arr_type == bodo_array_type::LIST_STRING ||
-               (arr->arr_type == bodo_array_type::ARRAY_ITEM &&
-                arr->child_arrays[0]->arr_type == bodo_array_type::STRING)) {
+    } else if (arr->arr_type == bodo_array_type::ARRAY_ITEM &&
+               arr->child_arrays[0]->arr_type == bodo_array_type::STRING) {
         // We don't support LIST_STRING in streaming yet, so we don't
         // need to pass the Op-Pool here.
-        return cumulative_computation_list_string(
-            arr, out_arr, grp_info, ftype, skipna,
-            !(arr->arr_type == bodo_array_type::LIST_STRING));
+        return cumulative_computation_list_string(arr, out_arr, grp_info, ftype,
+                                                  skipna);
     } else {
         switch (dtype) {
             case Bodo_CTypes::INT8:
@@ -728,8 +714,7 @@ void median_computation(std::shared_ptr<array_info> arr,
     size_t siztype = numpy_item_size[arr->dtype];
     std::string error_msg = std::string("There is no median for the ") +
                             std::string(GetDtype_as_string(arr->dtype));
-    if (arr->arr_type == bodo_array_type::STRING ||
-        arr->arr_type == bodo_array_type::LIST_STRING) {
+    if (arr->arr_type == bodo_array_type::STRING) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
         return;
     }
@@ -1416,46 +1401,6 @@ void nunique_computation(std::shared_ptr<array_info> arr,
             while (true) {
                 char* ptr = arr->data1() + (i * siztype);
                 if (!isnan_entry(ptr)) {
-                    eset.insert(i);
-                } else {
-                    HasNullRow = true;
-                }
-                i = grp_info.next_row_in_group[i];
-                if (i == -1)
-                    break;
-            }
-            int64_t size = eset.size();
-            if (HasNullRow && !dropna)
-                size++;
-            out_arr->at<int64_t>(igrp) = size;
-        }
-    } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
-        offset_t* in_index_offsets = (offset_t*)arr->data3();
-        offset_t* in_data_offsets = (offset_t*)arr->data2();
-        uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask();
-        const uint32_t seed = SEED_HASH_CONTAINER;
-
-        HashNuniqueComputationListString hash_fct{arr, in_index_offsets,
-                                                  in_data_offsets, seed};
-        KeyEqualNuniqueComputationListString equal_fct{
-            arr, in_index_offsets, in_data_offsets, sub_null_bitmask, seed};
-        bodo::unord_set_container<int64_t, HashNuniqueComputationListString,
-                                  KeyEqualNuniqueComputationListString>
-            eset({}, hash_fct, equal_fct, pool);
-        eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
-        eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
-
-        for (size_t igrp = 0; igrp < num_group; igrp++) {
-            int64_t i = grp_info.group_to_first_row[igrp];
-            // with nunique mode=2 some groups might not be present in the
-            // nunique table
-            if (i < 0) {
-                continue;
-            }
-            eset.clear();
-            bool HasNullRow = false;
-            while (true) {
-                if (arr->get_null_bit<bodo_array_type::LIST_STRING>(i)) {
                     eset.insert(i);
                 } else {
                     HasNullRow = true;
