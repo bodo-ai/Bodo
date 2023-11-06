@@ -104,7 +104,7 @@ public class BodoReturnTypes {
 
     /**
      * Type-inference strategy whereby the result type of a call is an integer
-     * if both operands ares.
+     * if both operands are date.
      */
     public static final SqlReturnTypeInference DATE_SUB = opBinding -> {
         RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
@@ -157,6 +157,9 @@ public class BodoReturnTypes {
             };
 
     public static final SqlReturnTypeInference VARIANT_NULLABLE =
+            VARIANT.andThen(SqlTypeTransforms.TO_NULLABLE);
+
+    public static final SqlReturnTypeInference VARIANT_FORCE_NULLABLE =
             VARIANT.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
     /**

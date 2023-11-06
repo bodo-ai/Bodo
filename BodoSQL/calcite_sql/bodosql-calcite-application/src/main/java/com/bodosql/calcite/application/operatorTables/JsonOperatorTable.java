@@ -42,7 +42,7 @@ public final class JsonOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "GET_PATH",
           SqlKind.OTHER_FUNCTION,
-          BodoReturnTypes.VARIANT_NULLABLE,
+          BodoReturnTypes.VARIANT_FORCE_NULLABLE,
           null,
           OperandTypes.sequence(
               "GET_PATH(SEMI_STRUCTURED, STRING_LITERAL)", SEMI_STRUCTURED, OperandTypes.CHARACTER),
