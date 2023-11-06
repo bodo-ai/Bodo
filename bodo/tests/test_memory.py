@@ -1,6 +1,7 @@
 import math
 import mmap
 import re
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -50,6 +51,7 @@ def test_default_buffer_pool_options():
             "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
             "BODO_BUFFER_POOL_ENFORCE_MAX_ALLOCATION_LIMIT": None,
             "BODO_BUFFER_POOL_DEBUG_MODE": None,
+            "BODO_BUFFER_POOL_MALLOC_FREE_TRIM_THRESHOLD_MiB": None,
         }
     ):
         options = BufferPoolOptions.defaults()
@@ -58,6 +60,7 @@ def test_default_buffer_pool_options():
         assert options.max_num_size_classes == 23
         assert not options.enforce_max_limit_during_allocation
         assert not options.debug_mode
+        assert options.malloc_free_trim_threshold == 100 * 1024 * 1024
 
     # Check that specifying the memory explicitly works as
     # expected.
@@ -117,6 +120,21 @@ def test_default_buffer_pool_options():
         options = BufferPoolOptions.defaults()
         assert options.memory_size > 0
         assert not options.enforce_max_limit_during_allocation
+
+    # Check that specifying malloc_free_trim_threshold
+    # through env vars works as expected
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
+            "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
+            "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+            "BODO_BUFFER_POOL_MALLOC_FREE_TRIM_THRESHOLD_MiB": "20",
+        }
+    ):
+        options = BufferPoolOptions.defaults()
+        assert options.memory_size > 0
+        assert options.malloc_free_trim_threshold == 20 * 1024 * 1024
 
 
 def test_default_memory_options(tmp_path: Path):
@@ -3139,6 +3157,87 @@ def test_move_on_unpin_spill_case(tmp_path: Path):
     pool.free(allocation)
 
     pool.cleanup()
+    del pool
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"), reason="malloc_trim is a Linux only feature"
+)
+def test_malloc_trim():
+    """
+    Test that the malloc_trim functionality works as expected.
+    """
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(
+        memory_size=16,
+        min_size_class=256,
+        max_num_size_classes=5,
+        # Set a 1MiB threshold for malloc_trim being called
+        malloc_free_trim_threshold=1024 * 1024,
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Make allocations through malloc (<192KiB)
+    allocation1: BufferPoolAllocation = pool.allocate(150 * 1024)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+    allocation2: BufferPoolAllocation = pool.allocate(150 * 1024)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+    allocation3: BufferPoolAllocation = pool.allocate(150 * 1024)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+    allocation4: BufferPoolAllocation = pool.allocate(150 * 1024)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+    allocation5: BufferPoolAllocation = pool.allocate(150 * 1024)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+    allocation6: BufferPoolAllocation = pool.allocate(150 * 1024)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+    allocation7: BufferPoolAllocation = pool.allocate(150 * 1024)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+    allocation8: BufferPoolAllocation = pool.allocate(150 * 1024)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+
+    # Make allocations through mmap (>192KiB) -- we will use them to
+    # verify that bytes_freed_through_malloc_since_last_trim doesn't
+    # increase when non-malloc allocations are freed.
+    non_malloc_allocation1: BufferPoolAllocation = pool.allocate(512 * 1024)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+    non_malloc_allocation2: BufferPoolAllocation = pool.allocate(512 * 1024)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+    non_malloc_allocation3: BufferPoolAllocation = pool.allocate(512 * 1024)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+
+    # Start free-ing the allocations and check that
+    # bytes_freed_through_malloc_since_last_trim is as expected after each.
+    # It should reset after 1MiB worth of malloc allocations.
+    pool.free(allocation1)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 150 * 1024
+    pool.free(allocation2)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 300 * 1024
+    pool.free(allocation3)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 450 * 1024
+    # Free-ing a non-malloc allocation shouldn't increase
+    # bytes_freed_through_malloc_since_last_trim
+    pool.free(non_malloc_allocation1)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 450 * 1024
+    pool.free(allocation4)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 600 * 1024
+    pool.free(allocation5)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 750 * 1024
+    pool.free(allocation6)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 900 * 1024
+    pool.free(non_malloc_allocation2)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 900 * 1024
+    # This free will take it over 1MiB, so bytes_freed_through_malloc_since_last_trim
+    # should get reset to 0.
+    pool.free(allocation7)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+    pool.free(non_malloc_allocation3)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 0
+    # It should go up again now.
+    pool.free(allocation8)
+    assert pool.bytes_freed_through_malloc_since_last_trim() == 150 * 1024
+
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
     del pool
 
 

@@ -296,6 +296,7 @@ bool nested_loop_join_probe_consume_batch(
     if (is_last) {
         // Finalize the probe side
         join_state->FinalizeProbe();
+        // XXX Could free the build table, etc. here?
     }
     join_state->probe_iter++;
     return is_last;

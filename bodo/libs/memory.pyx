@@ -358,7 +358,8 @@ cdef class BufferPoolOptions(_Weakrefable):
                  storage_options=None,
                  spill_on_unpin=None,
                  move_on_unpin=None,
-                 debug_mode=None):
+                 debug_mode=None,
+                 malloc_free_trim_threshold=None):
         """
         Constructor for BufferPoolOptions.
         If the attributes are not provided, they default
@@ -382,6 +383,8 @@ cdef class BufferPoolOptions(_Weakrefable):
             self.options.move_on_unpin = move_on_unpin
         if debug_mode is not None:
             self.options.debug_mode = debug_mode
+        if malloc_free_trim_threshold is not None:
+            self.options.malloc_free_trim_threshold = malloc_free_trim_threshold
 
     cdef void c_add_storage(self, StorageOptions option):
         self.options.storage_options.push_back(option.options)
@@ -433,6 +436,10 @@ cdef class BufferPoolOptions(_Weakrefable):
     @property
     def debug_mode(self):
         return self.options.debug_mode
+    
+    @property
+    def malloc_free_trim_threshold(self):
+        return self.options.malloc_free_trim_threshold
 
     @staticmethod
     def defaults():
@@ -556,6 +563,14 @@ cdef class BufferPool(IBufferPool):
         NOP in this case
         """
         pass
+
+    def bytes_freed_through_malloc_since_last_trim(self) -> int:
+        """
+        Get the number of bytes freed through malloc since
+        the last time malloc_trim was called.
+        NOTE: Only applicable on Linux.
+        """
+        return deref(self.c_pool).get_bytes_freed_through_malloc_since_last_trim()
 
     @property
     def backend_name(self) -> str:
