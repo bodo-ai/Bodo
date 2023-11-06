@@ -8,7 +8,18 @@ import numba
 import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
-from numba.extending import intrinsic, models, overload, register_model
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    infer_global,
+    signature,
+)
+from numba.extending import (
+    intrinsic,
+    lower_builtin,
+    models,
+    overload,
+    register_model,
+)
 
 import bodo
 from bodo.ext import table_builder_cpp
@@ -371,8 +382,11 @@ def _table_builder_nbytes(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def table_builder_append(builder_state, table):
+    pass
+
+
+def gen_table_builder_append_impl(builder_state, table):
     """Append a table to the builder"""
     n_table_cols = builder_state.num_input_arrs
     in_col_inds = MetaType(tuple(range(n_table_cols)))
@@ -390,6 +404,26 @@ def table_builder_append(builder_state, table):
             _table_builder_append(builder_state, cpp_table)
 
     return impl
+
+
+@infer_global(table_builder_append)
+class TableBuilderAppendInfer(AbstractTemplate):
+    """Typer for table_builder_append that returns none"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(table_builder_append)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(types.none, *folded_args).replace(pysig=pysig)
+
+
+TableBuilderAppendInfer._no_unliteral = True
+
+
+@lower_builtin(table_builder_append, types.VarArg(types.Any))
+def lower_table_builder_append(context, builder, sig, args):
+    """lower table_builder_append() using gen_table_builder_append_impl above"""
+    impl = gen_table_builder_append_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 def table_builder_nbytes(builder_state):
