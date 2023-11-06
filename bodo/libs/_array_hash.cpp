@@ -150,143 +150,6 @@ static void hash_array_inner(const hashes_t& out_hashes, T* data, size_t n_rows,
 }
 
 /**
- * Computation of the hashes for the case of list of strings array column.
- * Covers LIST_STRING
- *
- * @param out_hashes: The hashes on output.
- * @param data: the strings
- * @param data_offsets: the data offsets (that separates the strings)
- * @param index_offsets: the index offsets (for separating the block of strings)
- * @param null_bitmap: the bitmap array for the values.
- * @param n_rows: Number of rows to hash starting from start_row_offset, i.e. we
- * will hash rows at indices [start_row_offset, start_row_offset + n_rows - 1].
- * @param start_row_offset Index of the first row to hash. Defaults to 0. This
- * is useful in streaming hash join when we want to compute hashes incrementally
- * on the tables.
- *
- * The hash is computed in 3 stages:
- * 1) The hash of the concatenated strings
- * 2) The hash of the string length
- * 3) The hash of the bitmask
- */
-template <typename hashes_t>
-    requires(hashes_arr_type<hashes_t>)
-static void combine_hash_array_list_string(
-    const hashes_t& out_hashes, char* data, offset_t* data_offsets,
-    offset_t* index_offsets, uint8_t* null_bitmask, uint8_t* sub_null_bitmask,
-    size_t n_rows, size_t start_row_offset = 0) {
-    offset_t start_index_offset = index_offsets[start_row_offset];
-    for (size_t i = 0; i < n_rows; i++) {
-        uint32_t hash1, hash2, hash3;
-        // First the hash from the strings.
-        offset_t end_index_offset = index_offsets[start_row_offset + i + 1];
-        offset_t len1 =
-            data_offsets[end_index_offset] - data_offsets[start_index_offset];
-        const char* val_chars1 = &data[data_offsets[start_index_offset]];
-        // Use existing hash as seed for next hashing step, hence
-        // "combining" the hashes
-        uint32_t seed = out_hashes[i];
-        hash_string_32(val_chars1, (const int)len1, seed, &hash1);
-        // Second the hash from the length of strings (approx that most strings
-        // have less than 256 characters)
-        offset_t len2 = end_index_offset - start_index_offset;
-        // This vectors encodes the length of the strings
-        bodo::vector<char> V(len2);
-        // This vector encodes the bitmask of the strings and the bitmask of the
-        // list itself
-        bodo::vector<char> V2(len2 + 1);
-        for (size_t j = 0; j < len2; j++) {
-            offset_t n_chars = data_offsets[start_index_offset + j + 1] -
-                               data_offsets[start_index_offset + j];
-            V[j] = (char)n_chars;
-            V2[j + 1] = GetBit(sub_null_bitmask, start_index_offset + j);
-        }
-        hash_string_32(V.data(), (const int)len2, hash1, &hash2);
-        // Third the hash from whether it is missing or not
-        V2[0] = GetBit(null_bitmask, start_row_offset + i);
-        hash_string_32(V2.data(), len2 + 1, hash2, &hash3);
-        out_hashes[i] = hash3;
-        start_index_offset = end_index_offset;
-    }
-}
-
-/**
- * Computation of the hashes for the case of list of strings array column.
- * Covers LIST_STRING
- *
- * @param out_hashes: The hashes on output.
- * @param data: the strings
- * @param data_offsets: the data offsets (that separates the strings)
- * @param index_offsets: the index offsets (for separating the block of strings)
- * @param null_bitmap: the bitmap array for the values.
- * @param n_rows: Number of rows to hash starting from start_row_offset, i.e. we
- * will hash rows at indices [start_row_offset, start_row_offset + n_rows - 1].
- * @param seed: the seed of the computation.
- * @param use_murmurhash: use murmurhash3_x86_32 hashes (used by Iceberg).
- * Default: false
- * @param start_row_offset Index of the first row to hash. Defaults to 0. This
- * is useful in streaming hash join when we want to compute hashes incrementally
- * on the tables.
- *
- * The hash is computed in 3 stages:
- * 1) The hash of the concatenated strings
- * 2) The hash of the string length
- * 3) The hash of the bitmask
- */
-template <typename hashes_t>
-    requires(hashes_arr_type<hashes_t>)
-static void hash_array_list_string(
-    const hashes_t& out_hashes, char* data, offset_t* data_offsets,
-    offset_t* index_offsets, uint8_t* null_bitmask, uint8_t* sub_null_bitmask,
-    size_t n_rows, const uint32_t seed, bool use_murmurhash = false,
-    size_t start_row_offset = 0) {
-    offset_t start_index_offset = index_offsets[start_row_offset];
-    for (size_t i = 0; i < n_rows; i++) {
-        uint32_t hash1, hash2, hash3;
-        // First the hash from the strings.
-        offset_t end_index_offset = index_offsets[start_row_offset + i + 1];
-        offset_t len1 =
-            data_offsets[end_index_offset] - data_offsets[start_index_offset];
-        const char* val_chars1 = &data[data_offsets[start_index_offset]];
-        if (use_murmurhash) {
-            hash_string_murmurhash3_x86_32(val_chars1, (const int)len1, seed,
-                                           &hash1);
-        } else {
-            hash_string_32(val_chars1, (const int)len1, seed, &hash1);
-        }
-        // Second the hash from the length of strings (approx that most strings
-        // have less than 256 characters)
-        offset_t len2 = end_index_offset - start_index_offset;
-        // This vectors encodes the length of the strings
-        bodo::vector<char> V(len2);
-        // This vector encodes the bitmask of the strings and the bitmask of the
-        // list itself
-        bodo::vector<char> V2(len2 + 1);
-        for (size_t j = 0; j < len2; j++) {
-            offset_t n_chars = data_offsets[start_index_offset + j + 1] -
-                               data_offsets[start_index_offset + j];
-            V[j] = (char)n_chars;
-            V2[j + 1] = GetBit(sub_null_bitmask, start_index_offset + j);
-        }
-        if (use_murmurhash) {
-            hash_string_murmurhash3_x86_32(V.data(), (const int)len2, hash1,
-                                           &hash2);
-        } else {
-            hash_string_32(V.data(), (const int)len2, hash1, &hash2);
-        }
-        // Third the hash from whether it is missing or not
-        V2[0] = GetBit(null_bitmask, start_row_offset + i);
-        if (use_murmurhash) {
-            hash_string_murmurhash3_x86_32(V2.data(), len2 + 1, hash2, &hash3);
-        } else {
-            hash_string_32(V2.data(), len2 + 1, hash2, &hash3);
-        }
-        out_hashes[i] = hash3;
-        start_index_offset = end_index_offset;
-    }
-}
-
-/**
  * Computation of the NA string hash
  * @param seed: the seed of the computation.
  * @param[out] hash_value: The hashes on output.
@@ -665,13 +528,6 @@ void hash_array(const hashes_t& out_hashes, std::shared_ptr<array_info> array,
                 "with unique values in this context");
         }
     }
-    if (array->arr_type == bodo_array_type::LIST_STRING) {
-        return hash_array_list_string(
-            out_hashes, (char*)array->data1(), (offset_t*)array->data2(),
-            (offset_t*)array->data3(), (uint8_t*)array->null_bitmask(),
-            (uint8_t*)array->sub_null_bitmask(), n_rows, seed, use_murmurhash,
-            start_row_offset);
-    }
     if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
         array->dtype == Bodo_CTypes::_BOOL) {
         return hash_array_inner_nullable_boolean(
@@ -977,12 +833,6 @@ void hash_array_combine(const hashes_t& out_hashes,
                 "with unique values in this context");
         }
     }
-    if (array->arr_type == bodo_array_type::LIST_STRING) {
-        return combine_hash_array_list_string(
-            out_hashes, (char*)array->data1(), (offset_t*)array->data2(),
-            (offset_t*)array->data3(), (uint8_t*)array->null_bitmask(),
-            (uint8_t*)array->sub_null_bitmask(), n_rows, start_row_offset);
-    }
     if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
         array->dtype == Bodo_CTypes::_BOOL) {
         return hash_array_combine_inner_nullable_boolean(
@@ -1209,8 +1059,7 @@ void coherent_hash_array(const hashes_t& out_hashes,
     // For those types, no type conversion is ever needed.
     if (array->arr_type == bodo_array_type::STRUCT ||
         array->arr_type == bodo_array_type::ARRAY_ITEM ||
-        array->arr_type == bodo_array_type::STRING ||
-        array->arr_type == bodo_array_type::LIST_STRING) {
+        array->arr_type == bodo_array_type::STRING) {
         return hash_array(out_hashes, array, n_rows, seed, is_parallel, true);
     }
     // Now we are in NUMPY / NULLABLE_INT_BOOL. Getting into hot waters.
@@ -1401,8 +1250,7 @@ void coherent_hash_array_combine(const hashes_t& out_hashes,
     // For those types, no type conversion is ever needed.
     if (array->arr_type == bodo_array_type::STRUCT ||
         array->arr_type == bodo_array_type::ARRAY_ITEM ||
-        array->arr_type == bodo_array_type::STRING ||
-        array->arr_type == bodo_array_type::LIST_STRING) {
+        array->arr_type == bodo_array_type::STRING) {
         return hash_array_combine(out_hashes, array, n_rows, seed, true,
                                   is_parallel);
     }

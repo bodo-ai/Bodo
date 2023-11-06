@@ -764,84 +764,6 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         0;  // total number of chars in the inner dict array
 };
 
-/// Column builder for list of string arrays
-class ListStringBuilder : public TableBuilder::BuilderColumn {
-   public:
-    ListStringBuilder() {
-        string_builder = new StringBuilder(Bodo_CTypes::STRING);
-    }
-
-    virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
-        // get child (StringArray) chunks and pass them to StringBuilder
-        arrow::ArrayVector child_chunks;
-        for (auto arr : chunked_arr->chunks()) {
-            std::shared_ptr<arrow::ListArray> list_array =
-                std::dynamic_pointer_cast<arrow::ListArray>(arr);
-            // propagate slice information to child (string) arrays
-            auto values_offset = list_array->raw_value_offsets()[0];
-            auto values_length =
-                list_array->raw_value_offsets()[list_array->length()] -
-                values_offset;
-            child_chunks.push_back(
-                list_array->values()->Slice(values_offset, values_length));
-        }
-        string_builder->append(
-            std::make_shared<arrow::ChunkedArray>(child_chunks));
-        arrays.insert(arrays.end(), chunked_arr->chunks().begin(),
-                      chunked_arr->chunks().end());
-    }
-
-    virtual std::shared_ptr<array_info> get_output() {
-        if (out_array != nullptr) {
-            return out_array;
-        }
-
-        // get output Bodo string array
-        std::shared_ptr<array_info> out_str_array =
-            string_builder->get_output();
-        int64_t total_n_strings = out_str_array->length;
-        delete string_builder;
-        int64_t total_n_lists = 0;
-        for (auto arr : arrays)
-            total_n_lists += arr->length();
-
-        // allocate Bodo list of string array with preexisting string array
-        // alloc_list_string_array deletes the string array_info struct
-        std::unique_ptr<array_info> out_array =
-            alloc_list_string_array(total_n_lists, out_str_array, 0);
-
-        // copy list offsets and null bitmap
-        int64_t n_lists_copied = 0;
-        offset_t* out_offsets = (offset_t*)out_array->data3();  // list offsets
-        out_offsets[0] = 0;
-        for (auto arr : arrays) {
-            auto list_arr = std::dynamic_pointer_cast<arrow::ListArray>(arr);
-            const int64_t n_lists = list_arr->length();
-            const int64_t list_start_offset = list_arr->data()->offset;
-            const uint32_t* in_offsets =
-                (uint32_t*)list_arr->value_offsets()->data();
-            for (int64_t i = 0; i < n_lists; i++) {
-                out_offsets[n_lists_copied + i + 1] =
-                    out_offsets[n_lists_copied + i] +
-                    in_offsets[list_start_offset + i + 1] -
-                    in_offsets[list_start_offset + i];
-                if (!list_arr->IsNull(i)) {
-                    SetBitTo((uint8_t*)out_array->null_bitmask(),
-                             n_lists_copied + i, true);
-                }
-            }
-            n_lists_copied += n_lists;
-        }
-        out_offsets[total_n_lists] = static_cast<offset_t>(total_n_strings);
-        arrays.clear();  // free Arrow memory
-        return out_array;
-    }
-
-   private:
-    StringBuilder* string_builder;
-    arrow::ArrayVector arrays;
-};
-
 /**
  * Column builder for general nested Arrow arrays:
  * https://github.com/apache/arrow/blob/02e1da410cf24950b7ddb962de6598308690e369/cpp/src/arrow/type_traits.h#L1014
@@ -997,8 +919,6 @@ std::shared_ptr<arrow::DataType> bodo_arr_type_to_arrow_dtype(
     } else if (arr->arr_type == bodo_array_type::STRING) {
         return arr->dtype == Bodo_CTypes::STRING ? arrow::large_utf8()
                                                  : arrow::large_binary();
-    } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
-        return arrow::large_list(arrow::large_utf8());
     } else if (arr->arr_type == bodo_array_type::NUMPY ||
                arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         switch (arr->dtype) {
@@ -1078,8 +998,6 @@ TableBuilder::TableBuilder(std::shared_ptr<table_info> table,
                 std::make_unique<DictionaryEncodedStringBuilder>(num_rows));
         } else if (arr->arr_type == bodo_array_type::STRING) {
             columns.push_back(std::make_unique<StringBuilder>(arr->dtype));
-        } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
-            columns.push_back(std::make_unique<ListStringBuilder>());
         } else if (arr->arr_type == bodo_array_type::STRUCT ||
                    arr->arr_type == bodo_array_type::ARRAY_ITEM) {
             columns.push_back(std::make_unique<ArrowBuilder>(

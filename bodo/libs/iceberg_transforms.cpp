@@ -275,8 +275,7 @@ std::shared_ptr<array_info> array_transform_bucket_N(
             // in case of int32, we need to cast to int64 before hashing
             // (https://iceberg.apache.org/spec/#appendix-b-32-bit-hash-requirements)
             std::shared_ptr<array_info> int64_arr =
-                alloc_array_top_level(in_arr->length, in_arr->n_sub_elems(),
-                                      in_arr->n_sub_sub_elems(),
+                alloc_array_top_level(in_arr->length, in_arr->n_sub_elems(), 0,
                                       in_arr->arr_type, Bodo_CTypes::INT64);
             if (in_arr->null_bitmask()) {
                 // Copy the null bitmask if it exists for the arr type

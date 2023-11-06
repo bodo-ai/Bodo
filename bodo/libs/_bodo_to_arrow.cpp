@@ -440,62 +440,6 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
             null_count_, /*offset=*/0);
         *out = arrow::MakeArray(arr_data);
 
-    } else if (array->arr_type == bodo_array_type::LIST_STRING) {
-        // Track statuses of arrow operations.
-        arrow::Status arrowOpStatus;
-
-        // TODO: Try to have Arrow reuse Bodo buffers instead of copying to
-        // new buffers
-        ret_type = arrow::large_list(arrow::large_utf8());
-
-        int64_t num_lists = array->length;
-        char *chars = (char *)array->data1();
-        int64_t *char_offsets = (int64_t *)array->data2();
-        int64_t *string_offsets = (int64_t *)array->data3();
-        arrow::LargeListBuilder list_builder(
-            pool, std::make_shared<arrow::LargeStringBuilder>(pool));
-        arrow::LargeStringBuilder &string_builder =
-            *(static_cast<arrow::LargeStringBuilder *>(
-                list_builder.value_builder()));
-        bool failed = false;
-
-        const uint8_t *null_bitmask = (uint8_t *)array->null_bitmask();
-        const uint8_t *sub_null_bitmask = (uint8_t *)array->sub_null_bitmask();
-        for (int64_t i = 0; i < num_lists; i++) {
-            bool is_null = !GetBit(null_bitmask, i);
-            if (is_null) {
-                arrowOpStatus = list_builder.AppendNull();
-                failed = failed || !arrowOpStatus.ok();
-            } else {
-                arrowOpStatus = list_builder.Append();
-                failed = failed || !arrowOpStatus.ok();
-                int64_t l_string = string_offsets[i];
-                int64_t r_string = string_offsets[i + 1];
-                for (int64_t j = l_string; j < r_string; j++) {
-                    bool is_null = !GetBit(sub_null_bitmask, j);
-                    if (is_null) {
-                        arrowOpStatus = string_builder.AppendNull();
-                    } else {
-                        int64_t l_char = char_offsets[j];
-                        int64_t r_char = char_offsets[j + 1];
-                        int64_t length = r_char - l_char;
-                        arrowOpStatus = string_builder.Append(
-                            (uint8_t *)(chars + l_char), length);
-                    }
-                    failed = failed || !arrowOpStatus.ok();
-                }
-            }
-        }
-
-        std::shared_ptr<arrow::Array> result;
-        arrowOpStatus = list_builder.Finish(&result);
-        failed = failed || !arrowOpStatus.ok();
-        if (failed) {
-            throw std::runtime_error(
-                "Error occured while creating arrow string list array");
-        }
-
-        *out = result;
     } else if (array->arr_type == bodo_array_type::CATEGORICAL) {
         // convert Bodo categorical array to corresponding Arrow dictionary
         // array. array_info doesn't store category values right now so we just
