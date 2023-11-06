@@ -53,6 +53,7 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         c_bool spill_on_unpin
         c_bool move_on_unpin
         c_bool debug_mode
+        int64_t malloc_free_trim_threshold
 
         CBufferPoolOptions()
         
@@ -88,6 +89,7 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         c_bool is_spilling_enabled()
         CSizeClass* GetSizeClass_Unsafe(uint64_t idx)
         uint64_t GetSmallestSizeClassSize()
+        int64_t get_bytes_freed_through_malloc_since_last_trim() const
 
         @staticmethod
         shared_ptr[CBufferPool] Default()

@@ -32,6 +32,9 @@
 // through malloc.
 #define MALLOC_THRESHOLD_RATIO 0.75
 
+// Call malloc_trim after every 100MiB have been freed through malloc:
+#define MALLOC_FREE_TRIM_DEFAULT_THRESHOLD 100 * 1024 * 1024
+
 namespace bodo {
 
 // Copied from Velox
@@ -156,6 +159,15 @@ struct BufferPoolOptions {
     /// this will print some warnings in evict_handler when
     /// enforce_max_limit_during_allocation is false.
     bool debug_mode = false;
+
+    /// @brief Number of bytes free-d through malloc after which
+    /// we call malloc_trim.
+    /// NOTE: This is only applicable on Linux since malloc_trim
+    /// is only available on Linux.
+    /// This is part of BufferOptions purely for unit-testing
+    /// purposes. The 100MiB default should work well for
+    /// practical use cases.
+    int64_t malloc_free_trim_threshold = MALLOC_FREE_TRIM_DEFAULT_THRESHOLD;
 
     static BufferPoolOptions Defaults();
 };
@@ -800,6 +812,13 @@ class BufferPool final : public IBufferPool {
      */
     uint64_t get_memory_size_bytes() const;
 
+    /**
+     * @brief Getter for bytes_freed_through_malloc_since_last_trim_.
+     *
+     * @return int64_t
+     */
+    int64_t get_bytes_freed_through_malloc_since_last_trim() const;
+
    protected:
     /// @brief Options that were used for building the BufferPool.
     BufferPoolOptions options_;
@@ -841,6 +860,11 @@ class BufferPool final : public IBufferPool {
     /// threading during IO, etc., so the BufferPool needs to be thread safe.
     /// TODO: Expand the mutex to allow for more flexible threading
     std::mutex mtx_;
+
+    /// @brief Number of bytes that have been freed through malloc
+    /// since the last time malloc_trim was called.
+    /// NOTE: This is only used on Linux.
+    int64_t bytes_freed_through_malloc_since_last_trim_ = 0;
 
     /**
      * @brief Helper function for initializing
