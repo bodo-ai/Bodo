@@ -115,7 +115,10 @@ from bodo.utils.typing import (
     is_literal_type,
     is_overload_constant_str,
     is_overload_constant_tuple,
+    is_overload_false,
+    is_overload_none,
     is_str_arr_type,
+    unwrap_typeref,
 )
 from bodo.utils.utils import (
     find_build_tuple,
@@ -2696,6 +2699,39 @@ class SeriesPass:
             loc_vars = {}
             exec(func_text, globals(), loc_vars)
             return replace_func(self, loc_vars["impl"], rhs.args)
+
+        # Optimize out trivial table_astype() to avoid corner case in
+        # test_table_astype_copy_false_bug
+        if fdef == ("table_astype", "bodo.utils.table_utils"):
+            kws = dict(rhs.kws)
+            in_table_var = get_call_expr_arg("table_astype", rhs.args, kws, 0, "table")
+            new_table_typ_var = get_call_expr_arg(
+                "table_astype", rhs.args, kws, 1, "new_table_typ"
+            )
+            copy_var = get_call_expr_arg("table_astype", rhs.args, kws, 2, "copy")
+            _bodo_nan_to_str_var = get_call_expr_arg(
+                "table_astype", rhs.args, kws, 3, "_bodo_nan_to_str"
+            )
+            used_cols_var = get_call_expr_arg(
+                "table_astype", rhs.args, kws, 4, "used_cols", default=types.none
+            )
+            used_cols_type = (
+                self.typemap[used_cols_var.name]
+                if isinstance(used_cols_var, ir.Var)
+                else used_cols_var
+            )
+
+            in_table_type = self.typemap[in_table_var.name]
+            new_table_type = unwrap_typeref(self.typemap[new_table_typ_var.name])
+
+            if (
+                in_table_type == new_table_type
+                and is_overload_false(self.typemap[copy_var.name])
+                and is_overload_false(self.typemap[_bodo_nan_to_str_var.name])
+                and is_overload_none(used_cols_type)
+            ):
+                assign.value = in_table_var
+                return [assign]
 
         # inline np.where() for 3 arg case with 1D input
         if (

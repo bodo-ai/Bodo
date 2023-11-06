@@ -25,6 +25,7 @@ from bodo.utils.typing import (
     raise_bodo_error,
     unwrap_typeref,
 )
+from bodo.utils.utils import set_wrapper
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
@@ -83,7 +84,12 @@ def generate_mappable_table_func(
         col_typ_tuple = tuple([out_typ] * num_cols)
         table_typ = TableType(col_typ_tuple)
     # Set the globals
-    glbls = {"bodo": bodo, "lst_dtype": out_typ, "table_typ": table_typ}
+    glbls = {
+        "bodo": bodo,
+        "lst_dtype": out_typ,
+        "table_typ": table_typ,
+        "set_wrapper": set_wrapper,
+    }
 
     func_text = "def impl(table, func_name, out_arr_typ, is_method, used_cols=None):\n"
     if keep_input_typ:
@@ -103,7 +109,7 @@ def generate_mappable_table_func(
         used_cols_data = np.array(used_cols_type.meta, dtype=np.int64)
         glbls["used_cols_glbl"] = used_cols_data
         kept_blks = set([table.block_nums[i] for i in used_cols_data])
-        func_text += f"  used_cols_set = set(used_cols_glbl)\n"
+        func_text += f"  used_cols_set = set_wrapper(used_cols_glbl)\n"
     else:
         func_text += f"  used_cols_set = None\n"
         used_cols_data = None
@@ -315,6 +321,7 @@ def concat_tables(in_tables, used_cols=None):
         "set_table_len": bodo.hiframes.table.set_table_len,
         "alloc_list_like": bodo.hiframes.table.alloc_list_like,
         "table_type": table_type,
+        "set_wrapper": set_wrapper,
     }
     if not is_overload_none(used_cols):
         used_cols_type = used_cols.instance_type
@@ -339,7 +346,7 @@ def concat_tables(in_tables, used_cols=None):
         return loc_vars["table_concat_func"]
 
     if used_cols_data is not None:
-        func_text += f"  used_set = set(used_cols_vals)\n"
+        func_text += f"  used_set = set_wrapper(used_cols_vals)\n"
 
     for blk in table_type.type_to_blk.values():
         # allocate output block array list
@@ -410,7 +417,18 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
     """
 
     # Get the underlying type for the typeref
-    new_table_typ = new_table_typ.instance_type
+    new_table_typ = unwrap_typeref(new_table_typ)
+
+    # Optimized path for common case of no type change (used in streaming operators)
+    if (
+        table == new_table_typ
+        and is_overload_false(copy)
+        and is_overload_false(_bodo_nan_to_str)
+        and is_overload_none(used_cols)
+    ):
+        return (
+            lambda table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None: table
+        )  # pragma: no cover
 
     # Determine if we can avoid the copy
     may_copy = not is_overload_false(copy)
@@ -418,7 +436,7 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
 
     # Define the globals for this kernel. These
     # will be updated throughout codegen.
-    glbls: Dict[str, Any] = {"bodo": bodo}
+    glbls: Dict[str, Any] = {"bodo": bodo, "set_wrapper": set_wrapper}
 
     # Compute the types that must be copied. Every column
     # should be updated in the same location.
@@ -440,9 +458,7 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
             changed_types[new_typ].add(old_typ)
 
     # Generate the code
-    func_text = (
-        "def impl(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):\n"
-    )
+    func_text = "def impl_table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):\n"
 
     # Allocate the new table and set its length
     func_text += f"  out_table = bodo.hiframes.table.init_table(new_table_typ, False)\n"
@@ -491,10 +507,10 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
             glbls[f"cast_cols_{orig_block_num}_{new_block_num}"] = np.array(
                 list(list_of_vals), dtype=np.int64
             )
-            func_text += f"  cast_cols_{orig_block_num}_{new_block_num}_set = set(cast_cols_{orig_block_num}_{new_block_num})\n"
+            func_text += f"  cast_cols_{orig_block_num}_{new_block_num}_set = set_wrapper(cast_cols_{orig_block_num}_{new_block_num})\n"
 
     glbls["copied_cols"] = np.array(list(copied_cols), dtype=np.int64)
-    func_text += f"  copied_cols_set = set(copied_cols)\n"
+    func_text += f"  copied_cols_set = set_wrapper(copied_cols)\n"
     # Generate the initial blocks for the output table.
     for new_table_array_typ, new_table_blk in new_table_typ.type_to_blk.items():
         glbls[f"typ_list_{new_table_blk}"] = types.List(new_table_array_typ)
@@ -569,7 +585,7 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
     func_text += "  return out_table\n"
     local_vars = {}
     exec(func_text, glbls, local_vars)
-    return local_vars["impl"]
+    return local_vars["impl_table_astype"]
 
 
 def table_astype_equiv(self, scope, equiv_set, loc, args, kws):
