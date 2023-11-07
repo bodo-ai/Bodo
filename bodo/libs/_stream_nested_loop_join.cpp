@@ -294,9 +294,16 @@ bool nested_loop_join_probe_consume_batch(
         }
     }
     if (is_last) {
+        // Free the build table
+        join_state->build_table_buffer.reset();
+        // Release memory used by the matched bitmask
+        auto build_table_matched_pin(
+            bodo::pin(join_state->build_table_matched));
+        build_table_matched_pin->resize(0);
+        build_table_matched_pin->shrink_to_fit();
+
         // Finalize the probe side
         join_state->FinalizeProbe();
-        // XXX Could free the build table, etc. here?
     }
     join_state->probe_iter++;
     return is_last;
