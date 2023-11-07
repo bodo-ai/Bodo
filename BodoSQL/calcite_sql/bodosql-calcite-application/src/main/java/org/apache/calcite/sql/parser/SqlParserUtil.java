@@ -525,6 +525,28 @@ public final class SqlParserUtil {
         case "secs":
           unit = TimeUnit.SECOND;
           break;
+        case "millisecond":
+        case "milliseconds":
+        case "ms":
+        case "msec":
+          unit = TimeUnit.MILLISECOND;
+          break;
+        case "microsecond":
+        case "microseconds":
+        case "us":
+        case "usec":
+          unit = TimeUnit.MICROSECOND;
+          break;
+        case "nanosecond":
+        case "nanoseconds":
+        case "ns":
+        case "nsec":
+        case "nanosec":
+        case "nanosecs":
+        case "nsecond":
+        case "nseconds":
+          unit = TimeUnit.NANOSECOND;
+          break;
         default:
           throw SqlUtil.newContextException(pos,
               RESOURCE.illegalIntervalLiteral(s, pos.toString()));
@@ -558,16 +580,18 @@ public final class SqlParserUtil {
    * @param interval Interval
    * @return a long value that represents millisecond equivalent of the
    * interval value.
+   *
+   * Bodo Change: intervalToMillis has been replaced by intervalToNanos.
    */
-  public static long intervalToMillis(
+  public static long intervalToNanos(
       SqlIntervalLiteral.IntervalValue interval, RelDataTypeSystem typeSystem) {
-    return intervalToMillis(
+    return intervalToNanos(
         interval.getIntervalLiteral(),
         interval.getIntervalQualifier(),
         typeSystem);
   }
 
-  public static long intervalToMillis(
+  public static long intervalToNanos(
       String literal,
       SqlIntervalQualifier intervalQualifier, RelDataTypeSystem typeSystem) {
     Preconditions.checkArgument(!intervalQualifier.isYearMonth(),
@@ -582,8 +606,9 @@ public final class SqlParserUtil {
           + literal, e);
     }
     long l = 0;
-    long[] conv = new long[5];
-    conv[4] = 1; // millisecond
+    long[] conv = new long[6];
+    conv[5] = 1; // nanosecond
+    conv[4] = 1000000; // millisecond
     conv[3] = conv[4] * 1000; // second
     conv[2] = conv[3] * 60; // minute
     conv[1] = conv[2] * 60; // hour
