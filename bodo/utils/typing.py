@@ -2656,8 +2656,8 @@ def get_common_bodosql_integer_arr_type(
     return arr_typ
 
 
-def error_on_nested_arrays(table_type):
-    """Raises an error if input table type has nested arrays
+def error_on_unsupported_nested_arrays(table_type):
+    """Raises an error if input table type has unsupported (Interval) nested arrays
 
     Args:
         table_type (TableType|unknown): input table type or unknown
@@ -2671,7 +2671,7 @@ def error_on_nested_arrays(table_type):
 
     assert isinstance(
         table_type, bodo.TableType
-    ), "error_on_nested_arrays: TableType expected"
+    ), "error_on_unsupported_nested_arrays: TableType expected"
 
     for arr_type in table_type.arr_types:
         if isinstance(arr_type, bodo.IntervalArrayType):

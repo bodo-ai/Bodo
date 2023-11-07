@@ -414,3 +414,222 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
         reset_index=True,
         check_dtype=False,
     )
+
+
+@pytest.mark.parametrize(
+    "df,use_map_arrays",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "a": np.arange(50),
+                    "b": [
+                        [
+                            1,
+                        ],
+                        [3],
+                        None,
+                        [4, 5, None],
+                        [6, 7, 8, 9],
+                    ]
+                    * 10,
+                }
+            ),
+            False,
+            id="nested_array",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "a": np.arange(50),
+                    "b": [
+                        {"1": 38.7, "2": "xyz"},
+                        {"1": 11.0, "2": "pqr"},
+                        None,
+                        {"1": 329.1, "2": "abc"},
+                        {"1": 329.1, "2": "abc"},
+                    ]
+                    * 10,
+                }
+            ),
+            False,
+            id="struct_array",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "a": np.arange(50),
+                    "b": [
+                        {"1": 38.7, "2": 33.2},
+                        {"3": 11.0},
+                        None,
+                        {"abc": 398.21, "jakasf": None},
+                        {},
+                    ]
+                    * 10,
+                }
+            ),
+            True,
+            id="map_array",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {"a": np.arange(50), "b": [(1, 2), None, (3, 4), (2, 9), None] * 10}
+            ),
+            False,
+            id="tuple_array",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "a": np.arange(50),
+                    "b": [[[1, 2]], [[3, 4]], [[2, 9]]] * 16 + [[[]], None],
+                }
+            ),
+            False,
+            id="nested_nested_array",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "a": np.arange(50),
+                    "b": [
+                        [
+                            {"1": 38.7, "2": "xyz"},
+                            {"1": 11.0, "2": "pqr"},
+                        ],
+                        [
+                            {"1": 38.7, "2": "xyz"},
+                            {"1": 11.0, "2": "pqr"},
+                        ],
+                        None,
+                        [{"1": 2819.2, "2": "abc"}],
+                        None,
+                    ]
+                    * 10,
+                }
+            ),
+            False,
+            id="nested_struct_array",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "a": np.arange(50),
+                    "b": [
+                        [{"1": 38.7, "2": 33.2}, None],
+                        [{"3": 11.0}],
+                        [{"abc": 398.21, "jakasf": None}],
+                        [],
+                        None,
+                    ]
+                    * 10,
+                }
+            ),
+            True,
+            id="nested_map_array",
+            marks=pytest.mark.skip(
+                "Boxing map arrays inside of nested arrays is not supported yet"
+            ),
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "a": np.arange(50),
+                    "b": [
+                        [["a", "b", "c"], ["d", "e", "f"]],
+                        [["g", "h", "i"]],
+                        [["j", "k", "l"], ["m", "n", "o"]],
+                    ]
+                    * 16
+                    + [[[]], None],
+                }
+            ),
+            False,
+            marks=pytest.mark.skip(
+                "Check func can't compare doubly nested string arrays yet"
+            ),
+            id="nested_string_array",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "a": np.arange(50),
+                    "b": [
+                        {"1": "38.7", "2": "33.2"},
+                        {"1": "11.0", "2": "oarnsio"},
+                        {"1": "398.21", "2": "pqr"},
+                        None,
+                        None,
+                    ]
+                    * 10,
+                }
+            ),
+            False,
+            id="struct_string_array",
+        ),
+    ],
+)
+@pytest.mark.parametrize("all", [True, False])
+def test_nested_array_stream_union(all, df, use_map_arrays, memory_leak_check):
+    if not all:
+        pytest.skip("Nested Arrays don't support equality yet")
+    global_1 = ColNamesMetaType(("a", "b"))
+    global_2 = MetaType((0, 1))
+
+    def impl(df):
+        is_last1 = False
+        _iter_1 = 0
+        state_2 = bodo.libs.stream_union.init_union_state(-1, all=all)
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df), (), global_2, 1
+        )
+        while not is_last1:
+            T3 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * 3), ((_iter_1 + 1) * 3))
+            )
+            bodo.libs.stream_union.union_consume_batch(state_2, T3, False)
+            _iter_1 = _iter_1 + 1
+            is_last1 = (_iter_1 * 3) >= len(T1)
+
+        is_last2 = False
+        _iter_2 = 0
+        _temp1 = False
+        while not _temp1:
+            T5 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_2 * 3), ((_iter_2 + 1) * 3))
+            )
+            _iter_2 = _iter_2 + 1
+            is_last2 = (_iter_2 * 3) >= len(T1)
+            _temp1 = bodo.libs.stream_union.union_consume_batch(state_2, T5, is_last2)
+
+        is_last3 = False
+        _iter_3 = 0
+        table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        while not is_last3:
+            T6, is_last3 = bodo.libs.stream_union.union_produce_batch(state_2, True)
+            bodo.libs.table_builder.table_builder_append(table_builder, T6)
+            _iter_3 = _iter_3 + 1
+
+        bodo.libs.stream_union.delete_union_state(state_2)
+        T7 = bodo.libs.table_builder.table_builder_finalize(table_builder)
+        index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T7), 1, None)
+        df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T7,), index_1, global_1)
+        # Sort for testing equality, can't use check_func's sort
+        # because not implemented for nested arrays
+        df1 = df1.sort_values(by="a")
+
+        return df1
+
+    py_output = pd.concat([df, df], ignore_index=True)
+    if not all:
+        py_output = py_output.drop_duplicates()
+    py_output = py_output.sort_values(by="a").reset_index(drop=True)
+    check_func(
+        impl,
+        (df,),
+        py_output=py_output,
+        reset_index=True,
+        check_dtype=False,
+        use_map_arrays=use_map_arrays,
+    )

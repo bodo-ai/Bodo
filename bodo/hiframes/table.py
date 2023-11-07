@@ -58,8 +58,8 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import (
     is_whole_slice,
-    numba_to_c_array_type,
-    numba_to_c_type,
+    numba_to_c_array_types,
+    numba_to_c_types,
     set_wrapper,
 )
 
@@ -225,11 +225,11 @@ class TableType(types.ArrayCompatible):
 
     @cached_property
     def c_array_types(self) -> List[int]:
-        return [numba_to_c_array_type(arr_type) for arr_type in self.arr_types]
+        return numba_to_c_array_types(self.arr_types)
 
     @cached_property
     def c_dtypes(self) -> List[int]:
-        return [numba_to_c_type(arr_type.dtype) for arr_type in self.arr_types]
+        return numba_to_c_types(self.arr_types)
 
 
 @typeof_impl.register(Table)
