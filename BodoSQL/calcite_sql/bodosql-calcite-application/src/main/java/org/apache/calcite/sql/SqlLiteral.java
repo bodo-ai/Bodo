@@ -45,6 +45,7 @@ import org.apache.calcite.util.Util;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.Charset;
 import java.nio.charset.UnsupportedCharsetException;
 import java.util.Calendar;
@@ -390,10 +391,17 @@ public class SqlLiteral extends SqlNode {
           (SqlIntervalLiteral.IntervalValue) value;
       qualifier = valTime.getIntervalQualifier();
       if (clazz == Long.class) {
-        return clazz.cast(valTime.getSign()
-            * SqlParserUtil.intervalToMillis(valTime, typeSystem));
+        return clazz.cast(getValueAs(BigDecimal.class, typeSystem).longValue());
       } else if (clazz == BigDecimal.class) {
-        return clazz.cast(BigDecimal.valueOf(getValueAs(Long.class, typeSystem)));
+        long timeInNanos = valTime.getSign() * SqlParserUtil.intervalToNanos(valTime, typeSystem);
+        BigDecimal factor = BigDecimal.ONE.scaleByPowerOfTen(6);
+        BigDecimal timeInMillis = null;
+        if (typeName != SqlTypeName.INTERVAL_SECOND) {
+          timeInMillis = BigDecimal.valueOf(timeInNanos).divide(factor, RoundingMode.DOWN);
+        } else {
+          timeInMillis = BigDecimal.valueOf(timeInNanos).divide(factor);
+        }
+        return clazz.cast(timeInMillis);
       } else if (clazz == TimeUnitRange.class) {
         return clazz.cast(qualifier.timeUnitRange);
       } else if (clazz == TimeUnit.class) {
@@ -481,7 +489,7 @@ public class SqlLiteral extends SqlNode {
       case INTERVAL_DAY_TIME:
         final SqlIntervalLiteral.IntervalValue valTime =
             literal.getValueAs(SqlIntervalLiteral.IntervalValue.class);
-        return valTime.getSign() * SqlParserUtil.intervalToMillis(valTime, typeSystem);
+        return valTime.getSign() * SqlParserUtil.intervalToNanos(valTime, typeSystem);
       default:
         break;
       }

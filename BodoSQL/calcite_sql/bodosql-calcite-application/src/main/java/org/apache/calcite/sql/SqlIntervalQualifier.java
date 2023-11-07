@@ -13,6 +13,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Bodo changes:
+ *  The resolution of intervals has been changed from milliseconds to nanoseconds
  */
 package org.apache.calcite.sql;
 
@@ -33,6 +36,7 @@ import org.apache.calcite.util.Util;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -483,15 +487,17 @@ public class SqlIntervalQualifier extends SqlNode {
       BigDecimal hour,
       BigDecimal minute,
       BigDecimal second,
-      BigDecimal secondFrac) {
-    int[] ret = new int[6];
+      BigDecimal millisecond,
+      BigDecimal nanosecond) {
+    int[] ret = new int[7];
 
     ret[0] = sign;
     ret[1] = day.intValue();
     ret[2] = hour.intValue();
     ret[3] = minute.intValue();
     ret[4] = second.intValue();
-    ret[5] = secondFrac.intValue();
+    ret[5] = millisecond.intValue();
+    ret[6] = nanosecond.intValue();
 
     return ret;
   }
@@ -676,7 +682,7 @@ public class SqlIntervalQualifier extends SqlNode {
       BigDecimal day = week.multiply(DAYS_IN_WEEK);
 
       // package values up for return
-      return fillIntervalValueArray(sign, day, ZERO, ZERO, ZERO, ZERO);
+      return fillIntervalValueArray(sign, day, ZERO, ZERO, ZERO, ZERO, ZERO);
     } else {
       throw invalidValueException(pos, originalValue);
     }
@@ -711,7 +717,7 @@ public class SqlIntervalQualifier extends SqlNode {
       checkLeadFieldInRange(typeSystem, sign, day, TimeUnit.DAY, pos);
 
       // package values up for return
-      return fillIntervalValueArray(sign, day, ZERO, ZERO, ZERO, ZERO);
+      return fillIntervalValueArray(sign, day, ZERO, ZERO, ZERO, ZERO, ZERO);
     } else {
       throw invalidValueException(pos, originalValue);
     }
@@ -751,7 +757,7 @@ public class SqlIntervalQualifier extends SqlNode {
       }
 
       // package values up for return
-      return fillIntervalValueArray(sign, day, hour, ZERO, ZERO, ZERO);
+      return fillIntervalValueArray(sign, day, hour, ZERO, ZERO, ZERO, ZERO);
     } else {
       throw invalidValueException(pos, originalValue);
     }
@@ -794,7 +800,7 @@ public class SqlIntervalQualifier extends SqlNode {
       }
 
       // package values up for return
-      return fillIntervalValueArray(sign, day, hour, minute, ZERO, ZERO);
+      return fillIntervalValueArray(sign, day, hour, minute, ZERO, ZERO, ZERO);
     } else {
       throw invalidValueException(pos, originalValue);
     }
@@ -870,7 +876,8 @@ public class SqlIntervalQualifier extends SqlNode {
           hour,
           minute,
           second,
-          secondFrac);
+          secondFrac,
+              ZERO);
     } else {
       throw invalidValueException(pos, originalValue);
     }
@@ -905,7 +912,7 @@ public class SqlIntervalQualifier extends SqlNode {
       checkLeadFieldInRange(typeSystem, sign, hour, TimeUnit.HOUR, pos);
 
       // package values up for return
-      return fillIntervalValueArray(sign, ZERO, hour, ZERO, ZERO, ZERO);
+      return fillIntervalValueArray(sign, ZERO, hour, ZERO, ZERO, ZERO, ZERO);
     } else {
       throw invalidValueException(pos, originalValue);
     }
@@ -946,7 +953,7 @@ public class SqlIntervalQualifier extends SqlNode {
       }
 
       // package values up for return
-      return fillIntervalValueArray(sign, ZERO, hour, minute, ZERO, ZERO);
+      return fillIntervalValueArray(sign, ZERO, hour, minute, ZERO, ZERO, ZERO);
     } else {
       throw invalidValueException(pos, originalValue);
     }
@@ -1020,7 +1027,7 @@ public class SqlIntervalQualifier extends SqlNode {
           hour,
           minute,
           second,
-          secondFrac);
+          secondFrac, ZERO);
     } else {
       throw invalidValueException(pos, originalValue);
     }
@@ -1055,7 +1062,7 @@ public class SqlIntervalQualifier extends SqlNode {
       checkLeadFieldInRange(typeSystem, sign, minute, TimeUnit.MINUTE, pos);
 
       // package values up for return
-      return fillIntervalValueArray(sign, ZERO, ZERO, minute, ZERO, ZERO);
+      return fillIntervalValueArray(sign, ZERO, ZERO, minute, ZERO, ZERO, ZERO);
     } else {
       throw invalidValueException(pos, originalValue);
     }
@@ -1125,7 +1132,7 @@ public class SqlIntervalQualifier extends SqlNode {
           ZERO,
           minute,
           second,
-          secondFrac);
+          secondFrac, ZERO);
     } else {
       throw invalidValueException(pos, originalValue);
     }
@@ -1185,9 +1192,76 @@ public class SqlIntervalQualifier extends SqlNode {
         throw invalidValueException(pos, originalValue);
       }
 
+      BigDecimal remainder = secondFrac.remainder(BigDecimal.ONE);
+      BigDecimal ns_part = remainder.multiply(TimeUnit.MILLISECOND.multiplier.divide(TimeUnit.NANOSECOND.multiplier));
+
       // package values up for return
       return fillIntervalValueArray(
-          sign, ZERO, ZERO, ZERO, second, secondFrac);
+          sign, ZERO, ZERO, ZERO, second, secondFrac.subtract(remainder), ns_part);
+    } else {
+      throw invalidValueException(pos, originalValue);
+    }
+  }
+
+  private int[] evaluateIntervalLiteralAsSubsecond(
+          TimeUnit unit,
+          RelDataTypeSystem typeSystem,
+          int sign,
+          String value,
+          String originalValue,
+          SqlParserPos pos) {
+    BigDecimal wholeComponent;
+    BigDecimal fractionalComponent;
+    boolean hasFractionalSecond;
+
+    // we will be representing
+
+    // validate as UNIT(startPrecision, fractionalSecondPrecision)
+    // e.g. 'SS' or 'SS.SSS'
+    // Note: must check two patterns, since fractional second is optional
+    final int fractionalSecondPrecision =
+            getFractionalSecondPrecision(typeSystem);
+    String intervalPatternWithFracSec =
+            "(\\d+)\\.(\\d{1," + fractionalSecondPrecision + "})";
+    String intervalPatternWithoutFracSec =
+            "(\\d+)";
+
+    Matcher m = Pattern.compile(intervalPatternWithFracSec).matcher(value);
+    if (m.matches()) {
+      hasFractionalSecond = true;
+    } else {
+      m = Pattern.compile(intervalPatternWithoutFracSec).matcher(value);
+      hasFractionalSecond = false;
+    }
+
+    if (m.matches()) {
+      // Break out  field values
+      try {
+        wholeComponent = parseField(m, 1);
+      } catch (NumberFormatException e) {
+        throw invalidValueException(pos, originalValue);
+      }
+
+      if (hasFractionalSecond) {
+        fractionalComponent = normalizeSecondFraction(castNonNull(m.group(2)));
+      } else {
+        fractionalComponent = ZERO;
+      }
+
+      // normalizeSecondFraction assumed that it's parsing msec, so divide by thousand so that fractionComponent and wholeComponent are in the same units.
+      fractionalComponent = fractionalComponent.divide(THOUSAND, RoundingMode.DOWN);
+      BigDecimal nanosecondValue = wholeComponent.add(fractionalComponent);
+
+      // Now we need to convert this to ns so that we can supply it as the nanoseconds field.
+      nanosecondValue = nanosecondValue.multiply(unit.multiplier.divide(TimeUnit.NANOSECOND.multiplier));
+
+
+      // Validate individual fields
+      checkLeadFieldInRange(typeSystem, sign, nanosecondValue, TimeUnit.NANOSECOND, pos);
+
+      // package values up for return
+      return fillIntervalValueArray(
+              sign, ZERO, ZERO, ZERO, ZERO, ZERO, nanosecondValue);
     } else {
       throw invalidValueException(pos, originalValue);
     }
@@ -1272,6 +1346,10 @@ public class SqlIntervalQualifier extends SqlNode {
     case SECOND:
       return evaluateIntervalLiteralAsSecond(typeSystem, sign, value, value0,
           pos);
+      case MILLISECOND:
+      case MICROSECOND:
+      case NANOSECOND:
+        return evaluateIntervalLiteralAsSubsecond(timeUnitRange.startUnit, typeSystem, sign, value, value0, pos);
     default:
       throw invalidValueException(pos, value0);
     }
