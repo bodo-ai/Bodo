@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem
+import org.apache.calcite.avatica.util.TimeUnit
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.SqlCall
 import org.apache.calcite.sql.SqlIntervalLiteral
@@ -14,6 +15,7 @@ import org.apache.calcite.sql.`fun`.SqlTrimFunction
 import org.apache.calcite.sql.type.AbstractSqlType
 import org.apache.calcite.sql.type.BodoSqlTypeUtil
 import org.apache.calcite.sql.type.SqlTypeName
+import java.math.BigDecimal
 
 class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
     override fun unparseSqlIntervalLiteral(
@@ -33,7 +35,13 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         // literal and the interval qualifier be
         // wrapped in quotes.
         writer.print("'")
-        writer.literal(interval.intervalLiteral)
+        if (interval.intervalQualifier.startUnit != TimeUnit.SECOND) {
+            // Truncate the interval amount to an integer if the time unit isn't a second.
+            // TODO(aneesh) we should see if it is commonly supported for other time units to also support fractional amounts.
+            writer.literal(BigDecimal(interval.intervalLiteral).setScale(0).toString())
+        } else {
+            writer.literal(interval.intervalLiteral)
+        }
         unparseSqlIntervalQualifier(
             writer,
             interval.intervalQualifier,

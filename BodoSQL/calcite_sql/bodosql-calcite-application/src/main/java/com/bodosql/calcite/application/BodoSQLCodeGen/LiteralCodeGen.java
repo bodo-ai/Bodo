@@ -172,8 +172,9 @@ public class LiteralCodeGen {
           case INTERVAL_SECOND:
           case INTERVAL_DAY:
             // Value is given in milliseconds in these cases
-            String milliseconds = node.getValue().toString();
-            return new Expr.Raw("pd.Timedelta(milliseconds=" + milliseconds + ")");
+            BigDecimal millis = node.getValueAs(BigDecimal.class);
+            long nanoseconds = millis.scaleByPowerOfTen(6).longValue();
+            return new Expr.Raw("pd.Timedelta(" + nanoseconds + ")");
           case INTERVAL_YEAR:
           case INTERVAL_MONTH:
           case INTERVAL_YEAR_MONTH:
