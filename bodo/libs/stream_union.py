@@ -27,7 +27,7 @@ from bodo.utils.typing import (
     BodoError,
     MetaType,
     dtype_to_array_type,
-    error_on_nested_arrays,
+    error_on_unsupported_nested_arrays,
     get_common_scalar_dtype,
     get_overload_const_bool,
     is_nullable_ignore_sentinals,
@@ -48,7 +48,7 @@ class UnionStateType(types.Type):
     ):
         # TODO[BSE-937]: support nested arrays in streaming
         for in_table_type in in_table_types:
-            error_on_nested_arrays(in_table_type)
+            error_on_unsupported_nested_arrays(in_table_type)
 
         self.all = all
         self.in_table_types = in_table_types

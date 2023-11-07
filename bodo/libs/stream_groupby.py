@@ -30,7 +30,7 @@ from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
-    error_on_nested_arrays,
+    error_on_unsupported_nested_arrays,
     is_overload_none,
     unwrap_typeref,
 )
@@ -84,7 +84,7 @@ class GroupbyStateType(types.Type):
         build_table_type=types.unknown,
     ):
         # TODO[BSE-937]: support nested arrays in streaming
-        error_on_nested_arrays(build_table_type)
+        error_on_unsupported_nested_arrays(build_table_type)
 
         self.key_inds = key_inds
         self.fnames = fnames
