@@ -1,5 +1,7 @@
 package com.bodosql.calcite.application.operatorTables;
 
+import static org.apache.calcite.sql.type.BodoReturnTypes.toArrayReturnType;
+
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -15,12 +17,10 @@ import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
-import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlTypeFamily;
-import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.util.Optionality;
 
@@ -47,7 +47,13 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.LEAST_RESTRICTIVE.andThen(BodoReturnTypes.TYPE_TO_ARRAY),
+          // TODO: This function can return an arary with different types, see
+          //  https://docs.snowflake.com/en/sql-reference/functions/array_construct
+          //  I'm not sure how we're handling this, so for now we're just disallowing
+          //  anything that doesn't coerce to a common type
+          // TODO: this function should also be able to accept array inputs to create
+          // nested arrays. See https://bodo.atlassian.net/browse/BSE-1782
+          ReturnTypes.LEAST_RESTRICTIVE.andThen(BodoReturnTypes.WRAP_TYPE_TO_ARRAY),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -89,29 +95,21 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  /**
-   * Determine the return type of the TO_ARRAY function
-   *
-   * @param binding The operand bindings for the function signature.
-   * @return The return type of the function
-   */
-  public static RelDataType toArrayReturnType(SqlOperatorBinding binding) {
-    RelDataTypeFactory typeFactory = binding.getTypeFactory();
-    RelDataType inputType = binding.getOperandType(0);
-    if (inputType.getSqlTypeName().equals(SqlTypeName.NULL))
-      // if the input is null, TO_ARRAY will return NULL, not an array of NULL
-      return inputType;
-    if (inputType instanceof ArraySqlType)
-      // if the input is an array, just return it
-      return inputType;
-    return typeFactory.createArrayType(inputType, -1);
-  }
-
   public static final SqlAggFunction ARRAY_AGG =
       SqlBasicAggFunction.create(
-              "ARRAY_AGG", SqlKind.ARRAY_AGG, ReturnTypes.TO_ARRAY, OperandTypes.ANY)
+              "ARRAY_AGG",
+              SqlKind.ARRAY_AGG,
+              opBinding -> ArrayAggReturnType(opBinding),
+              OperandTypes.ANY)
           .withGroupOrder(Optionality.OPTIONAL)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
+
+  /** Nulls are dropped by arrayAgg, so return a non-null array of the input type. */
+  public static RelDataType ArrayAggReturnType(SqlOperatorBinding binding) {
+    RelDataTypeFactory typeFactory = binding.getTypeFactory();
+    RelDataType inputType = binding.collectOperandTypes().get(0);
+    return typeFactory.createArrayType(typeFactory.createTypeWithNullability(inputType, false), -1);
+  }
 
   public static final SqlFunction ARRAYS_OVERLAP =
       new SqlFunction(
@@ -136,7 +134,9 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.INTEGER_NULLABLE,
+          // return value is null if the value doesn't exist in the array, so FORCE_NULLABLE is
+          // needed
+          BodoReturnTypes.INTEGER_FORCE_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
