@@ -12,14 +12,14 @@ from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.hiframes.time_ext import TimeArrayType, cast_time_to_int
+from bodo.hiframes.time_ext import cast_time_to_int
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     array_to_repeated_array_item_array,
 )
 from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.bool_arr_ext import boolean_dtype
-from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.libs.nullable_tuple_ext import NullableTupleType
 from bodo.libs.str_arr_ext import get_utf8_size
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
@@ -584,32 +584,8 @@ def overload_coerce_to_array(
             data
         )  # pragma: no cover
 
-    if data in (
-        bodo.string_array_type,
-        bodo.dict_str_arr_type,
-        bodo.binary_array_type,
-        bodo.libs.bool_arr_ext.boolean_array_type,
-        bodo.hiframes.datetime_date_ext.datetime_date_array_type,
-        bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
-        bodo.hiframes.split_impl.string_array_split_view_type,
-        bodo.null_array_type,
-    ) or isinstance(
-        data,
-        (
-            bodo.libs.int_arr_ext.IntegerArrayType,
-            bodo.libs.float_arr_ext.FloatingArrayType,
-            bodo.libs.primitive_arr_ext.PrimitiveArrayType,
-            DecimalArrayType,
-            bodo.libs.interval_arr_ext.IntervalArrayType,
-            bodo.libs.tuple_arr_ext.TupleArrayType,
-            bodo.libs.struct_arr_ext.StructArrayType,
-            bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
-            bodo.libs.csr_matrix_ext.CSRMatrixType,
-            bodo.DatetimeArrayType,
-            TimeArrayType,
-            ArrayItemArrayType,
-        ),
-    ):
+    # Return data if already an array and nullable
+    if not isinstance(data, types.Array) and bodo.utils.utils.is_array_typ(data, False):
         return (
             lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None, dict_encode=True: data
         )  # pragma: no cover
