@@ -201,6 +201,16 @@ public class BodoReturnTypes {
     public static final SqlReturnTypeInference VARIANT_FORCE_NULLABLE =
             VARIANT.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
+    public static final SqlReturnTypeInference MAP_VARIANT =
+            new SqlReturnTypeInference() {
+                @Override
+                public @Nullable RelDataType inferReturnType(final SqlOperatorBinding opBinding) {
+                    BodoRelDataTypeFactory typeFactory = (BodoRelDataTypeFactory) opBinding.getTypeFactory();
+                    RelDataType valueType = typeFactory.createVariantSqlType();
+                    return typeFactory.createMapType(typeFactory.createSqlType(SqlTypeName.VARCHAR), valueType);
+                }
+            };
+
     /**
      * Type inference strategy the give the least restrictive between the start
      * index (inclusive) and end index (exclusive).
@@ -402,4 +412,3 @@ public class BodoReturnTypes {
 
     public static final SqlReturnTypeInference INTEGER_FORCE_NULLABLE = ReturnTypes.INTEGER.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 }
-

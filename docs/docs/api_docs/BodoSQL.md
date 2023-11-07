@@ -2481,7 +2481,7 @@ BodoSQL currently supports the following string functions:
 -   `#!sql HEX_ENCODE(msg[, case])`
 
     Encodes the `msg` string into a string using the hex encoding scheme as if
-    it were binary data (or directly encodes binary data). If `#!sql case` 
+    it were binary data (or directly encodes binary data). If `#!sql case`
     (default one) is zero then the alphabetical hex characters are lowercase,
     if it is one then they are uppercase.
     [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/hex_encode).
@@ -2520,11 +2520,11 @@ BodoSQL currently supports the following string functions:
 -   `#!sql BASE64_ENCODE(msg[, max_line_length[, alphabet]])`
 
     Encodes the `msg` string into a string using the base64 encoding scheme as if
-    it were binary data (or directly encodes binary data). If `#!sql max_line_length` 
+    it were binary data (or directly encodes binary data). If `#!sql max_line_length`
     (default zero) is greater than zero, then newline characters will be inserted
     after that many characters to effectively add "text wrapping". If `#!sql alphabet`
     is provided, it specifies substitutes for the usual encoding characters for
-    index 62, index 63, and the padding character. 
+    index 62, index 63, and the padding character.
     [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/base64_encode).
 
 
@@ -2806,6 +2806,20 @@ BodoSQL currently supports the following regex functions:
 
 
 BodoSQL currently supports the following JSON functions:
+
+
+#### OBJECT_CONSTRUCT_KEEP_NULL
+-   `#!sql OBJECT_CONSTRUCT_KEEP_NULL(key1, value1, ...)`
+
+    Takes in a variable number of key-value pairs and combines them
+    into JSON data. BodoSQL currently requires all `key` arguments to 
+    be string literals.
+
+    The full Snowflake specification: https://docs.snowflake.com/en/sql-reference/functions/object_construct_keep_null.html
+
+    BodoSQL supports the syntactic sugar `#!sql OBJECT_CONSTRUCT_KEEP_NULL(*)`
+    which indicates that all columns should be used as key-value pairs, where
+    the column is the value and its column name is the key.
 
 
 #### OBJECT_KEYS
