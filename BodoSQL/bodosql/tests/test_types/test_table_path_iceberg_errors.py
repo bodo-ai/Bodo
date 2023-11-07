@@ -6,10 +6,10 @@ Reuses several fixtures from the engine, but using bodosql's TablePath
 """
 import re
 
-import bodosql
 import pytest
 
 import bodo
+import bodosql
 from bodo.tests.conftest import (  # pragma: no cover
     iceberg_database,
     iceberg_table_conn,

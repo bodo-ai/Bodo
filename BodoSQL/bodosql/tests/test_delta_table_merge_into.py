@@ -16,6 +16,7 @@ import random
 import numpy as np
 import pandas as pd
 import pytest
+
 from bodosql.tests.utils import check_query
 
 """In this file, to create test cases, we manually generate the rows that are
@@ -150,7 +151,6 @@ valid_matched_actions = [matched_action_0, matched_action_1]
 
 
 def apply_matched_action(df, action):
-
     assert action in valid_matched_actions, f"Found impossible matched action: {action}"
     if action == matched_action_0:
         df["B"] = df["Y"]
@@ -231,7 +231,6 @@ def gen_expected_query_and_expected_df(
     matched_conditions_and_actions,
     not_matched_conditions_and_actions,
 ):
-
     matched_rows = matched_rows.copy()
     not_matched_rows = not_matched_rows.copy()
 
@@ -328,7 +327,6 @@ def get_actions(gen_matched_actions=True):
     # Add the test cases that check multiple clauses concurrently
     seen_permutations = set()
     for i in range(num_conditional_permutations + num_non_conditional_permutations):
-
         saw_new_permutation = False
         # Forcibly calculating every possible permutation and then doing random.choices causes
         # my computer to go OOM locally. Since the number of permutations is so large.

@@ -8,8 +8,6 @@ import io
 import random
 
 import pytest
-from bodosql.libs.iceberg_merge_into import *
-from bodosql.tests.named_params_common import *
 
 from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
 from bodo.tests.user_logging_utils import (
@@ -23,6 +21,8 @@ from bodo.tests.utils import (
     gen_random_string_binary_array,
 )
 from bodo.utils.typing import BodoError
+from bodosql.libs.iceberg_merge_into import *
+from bodosql.tests.named_params_common import *
 
 small_df_len = 12
 

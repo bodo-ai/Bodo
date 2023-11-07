@@ -8,6 +8,7 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
+
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 # [BE-3894] TODO: refactor this file like how test_rows.py was refactored

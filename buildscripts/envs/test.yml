@@ -54,7 +54,7 @@ dependencies:
   - pytest-timeout
   - pytest-xdist
   - flaky
-  - flake8
+  - ruff
   - credstash
 
   # For deltalake testing

@@ -3,6 +3,7 @@
 Test correctness of the aggregate join transpose optimization rule used by BodoSQL
 """
 import pytest
+
 from bodosql.tests.utils import check_query
 
 
@@ -55,5 +56,5 @@ def test_aggregate_join_transpose(
         aggregate_join_transpose_queries,
         simple_join_fixture,
         spark_info,
-        check_dtype=False
+        check_dtype=False,
     )

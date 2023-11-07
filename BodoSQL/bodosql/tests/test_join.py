@@ -7,14 +7,13 @@ import copy
 import io
 from datetime import date
 
-import bodosql
 import numba
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_efficient_join, check_query
 
 import bodo
+import bodosql
 from bodo.tests.timezone_common import representative_tz  # noqa
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -22,6 +21,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import pytest_slow_unless_join
+from bodosql.tests.utils import check_efficient_join, check_query
 
 # Skip unless any join-related files were changed
 pytestmark = pytest_slow_unless_join

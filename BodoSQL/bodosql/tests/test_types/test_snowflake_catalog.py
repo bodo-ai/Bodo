@@ -10,21 +10,15 @@ import os
 import random
 import time
 
-import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.test_datetime_fns import compute_valid_times
-from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
-    snowflake_sample_data_conn_str,
-    snowflake_sample_data_snowflake_catalog,
-    test_db_snowflake_catalog,
-)
 from mpi4py import MPI
 from numba.core import types
 from numba.core.ir_utils import find_callname, guard
 
 import bodo
+import bodosql
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -41,6 +35,12 @@ from bodo.tests.utils import (
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_call_assign
+from bodosql.tests.test_datetime_fns import compute_valid_times
+from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
+    snowflake_sample_data_conn_str,
+    snowflake_sample_data_snowflake_catalog,
+    test_db_snowflake_catalog,
+)
 
 pytestmark = pytest_snowflake
 

@@ -7,10 +7,10 @@ from decimal import Decimal
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
 
 from bodo.tests.timezone_common import representative_tz  # noqa
 from bodo.tests.utils import pytest_slow_unless_codegen
+from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
 pytestmark = pytest_slow_unless_codegen

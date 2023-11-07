@@ -3,10 +3,10 @@
     Checks the Library of BodoSQL functions that are used for performing "AND" and "OR"
     operations involving potentially null values
 """
-import bodosql
 import pytest
 
 import bodo
+import bodosql
 
 
 @pytest.mark.slow

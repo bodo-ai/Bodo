@@ -4,10 +4,10 @@ Tests correctness of the 'Greatest' keyword in BodoSQL
 """
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
 
 import bodo
 from bodo.tests.timezone_common import representative_tz  # noqa
+from bodosql.tests.utils import check_query
 
 
 @pytest.fixture(params=["GREATEST", "LEAST"])

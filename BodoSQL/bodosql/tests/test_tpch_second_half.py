@@ -9,6 +9,7 @@ of these variables according to the reference query.
 """
 
 import pytest
+
 from bodosql.tests.utils import check_query, shrink_data
 
 

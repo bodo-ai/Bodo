@@ -3,11 +3,11 @@
 Test correctness of bodosql.libs.null_handling functions
 """
 
-import bodosql
 import numpy as np
 import pytest
 
 import bodo
+import bodosql
 
 
 @pytest.mark.slow

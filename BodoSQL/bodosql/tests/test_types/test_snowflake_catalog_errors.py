@@ -1,9 +1,9 @@
 import os
 
-import bodosql
 import pytest
 
 import bodo
+import bodosql
 from bodo.tests.utils import pytest_snowflake
 from bodo.utils.typing import BodoError
 

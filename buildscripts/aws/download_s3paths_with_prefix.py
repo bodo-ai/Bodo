@@ -6,8 +6,9 @@
 
 # Copied mostly from https://stackoverflow.com/questions/49772151/download-a-folder-from-s3-using-boto3
 import argparse
-import boto3
 import os
+
+import boto3
 
 
 def download_contents(bucketname, prefix):

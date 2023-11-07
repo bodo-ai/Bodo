@@ -5,12 +5,11 @@ direct BodoSQLContext.
 """
 import io
 
-import bodosql
 import pandas as pd
 import pytest
-from bodosql.tests.utils import _check_query_equal, check_num_parquet_readers
 
 import bodo
+import bodosql
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -22,6 +21,7 @@ from bodo.tests.utils import (
     get_snowflake_connection_string,
     pytest_mark_snowflake,
 )
+from bodosql.tests.utils import _check_query_equal, check_num_parquet_readers
 
 
 @pytest.fixture(

@@ -1,8 +1,8 @@
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
 
 from bodo.tests.timezone_common import representative_tz  # noqa
+from bodosql.tests.utils import check_query
 
 
 def test_limit_numeric(bodosql_numeric_types, spark_info, memory_leak_check):

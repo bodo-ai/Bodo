@@ -4,13 +4,12 @@
 
 import datetime
 
-import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
 from pandas.api.types import is_bool_dtype, is_float_dtype
 
+import bodosql
 from bodo import Time
 from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_conversion_array_kernels import (
     _dates,
@@ -19,6 +18,7 @@ from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_conversion_arr
     _timestamps_nans,
     str_to_bool,
 )
+from bodosql.tests.utils import check_query
 
 valid_bool_params = [
     pytest.param(

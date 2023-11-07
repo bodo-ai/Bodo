@@ -9,16 +9,16 @@ of these variables according to the reference query.
 """
 import io
 
-import bodosql
 import pytest
-from bodosql.tests.utils import check_query
 
 import bodo
+import bodosql
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
     set_logging_stream,
 )
+from bodosql.tests.utils import check_query
 
 
 @pytest.mark.slow

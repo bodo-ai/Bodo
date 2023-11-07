@@ -4,12 +4,11 @@ Tests filter pushdown with a parquet TablePath.
 """
 import io
 
-import bodosql
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_num_parquet_readers
 
 import bodo
+import bodosql
 from bodo.ir.parquet_ext import ParquetReader
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -23,6 +22,7 @@ from bodo.tests.utils import (
     _check_for_io_reader_filters,
     check_func,
 )
+from bodosql.tests.utils import check_num_parquet_readers
 
 pytestmark = pytest.mark.parquet
 

@@ -2,14 +2,13 @@
 """
 Test correctness of SQL case queries on BodoSQL
 """
-import bodosql
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
 from numba.core import ir
 from numba.core.ir_utils import find_callname, guard
 
 import bodo
+import bodosql
 from bodo.tests.timezone_common import representative_tz  # noqa
 from bodo.tests.utils import (
     DistTestPipeline,
@@ -17,6 +16,7 @@ from bodo.tests.utils import (
     dist_IR_contains,
     gen_nonascii_list,
 )
+from bodosql.tests.utils import check_query
 
 
 @pytest.fixture(

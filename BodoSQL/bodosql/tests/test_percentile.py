@@ -6,9 +6,9 @@ Test correctness of the PERCENTILE aggregation operations for BodoSQL
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
 
 from bodo.tests.utils import pytest_slow_unless_groupby
+from bodosql.tests.utils import check_query
 
 # Skip unless any groupby-related files were changed
 pytestmark = pytest_slow_unless_groupby

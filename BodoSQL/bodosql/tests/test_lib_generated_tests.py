@@ -5,12 +5,12 @@ These test cases will most likely be removed later
 """
 import operator
 
-import bodosql
 import numpy as np
 import pytest
 from numba import generated_jit
 
 import bodo
+import bodosql
 import buildscripts.python_library_build.generate_library_tests
 
 

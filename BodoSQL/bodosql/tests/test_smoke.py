@@ -6,6 +6,7 @@ Smoke tests for BodoSQL covering each major query feature
 import numpy as np
 import pandas as pd
 import pytest
+
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 

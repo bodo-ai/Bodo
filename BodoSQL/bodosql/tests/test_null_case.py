@@ -6,6 +6,7 @@ Test correctness of SQL case queries involving NULL on BodoSQL
 
 import pandas as pd
 import pytest
+
 from bodosql.tests.utils import check_query
 
 

@@ -79,7 +79,7 @@ else:
     PREFIX_DIR = os.environ["CONDA_PREFIX"]
     # C libraries are in \Library on Windows
     if is_win:
-        PREFIX_DIR += "\Library"
+        PREFIX_DIR += "\\Library"
 
 
 try:

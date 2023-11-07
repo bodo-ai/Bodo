@@ -7,14 +7,13 @@ import os
 import re
 import time
 
-import bodosql
 import numba
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql import BodoSQLContext, SnowflakeCatalog, TablePath
 
 import bodo
+import bodosql
 from bodo.tests.conftest import (  # pragma: no cover
     iceberg_database,
     iceberg_table_conn,
@@ -27,6 +26,7 @@ from bodo.tests.utils import (
     pytest_snowflake,
 )
 from bodo.utils.typing import BodoError
+from bodosql import BodoSQLContext, SnowflakeCatalog, TablePath
 
 
 @pytest.fixture(

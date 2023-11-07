@@ -36,8 +36,11 @@ from bodo.transforms.table_column_del_pass import (
     remove_dead_column_extensions,
 )
 from bodo.utils.typing import BodoError
-from bodo.utils.utils import check_java_installation  # noqa
-from bodo.utils.utils import check_and_propagate_cpp_exception, sanitize_varname
+from bodo.utils.utils import (
+    check_and_propagate_cpp_exception,
+    check_java_installation,  # noqa
+    sanitize_varname,
+)
 
 
 class CsvReader(ir.Stmt):

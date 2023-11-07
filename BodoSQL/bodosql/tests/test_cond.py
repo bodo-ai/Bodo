@@ -9,11 +9,11 @@ from decimal import Decimal
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.string_ops_common import bodosql_string_fn_testing_df  # noqa
-from bodosql.tests.utils import check_query
 from numba.core.utils import PYVERSION
 
 import bodo
+from bodosql.tests.string_ops_common import bodosql_string_fn_testing_df  # noqa
+from bodosql.tests.utils import check_query
 
 
 @pytest.fixture(

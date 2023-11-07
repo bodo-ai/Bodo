@@ -5,10 +5,10 @@ and otherwise return the result of the original function.
 The functions tested in this file are deprecated and will be phased out for bodosql array kernels
 eventually.
 """
-import bodosql
 import pandas as pd
 
 import bodo
+import bodosql
 from bodo.tests.utils import pytest_slow_unless_codegen
 
 # Skip unless any codegen files were changed

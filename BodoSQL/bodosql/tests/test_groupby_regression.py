@@ -4,10 +4,10 @@ There are two test cases, one where every key is unique and one where the number
 """
 import time
 
-import bodosql
 import pandas as pd
 
 import bodo
+import bodosql
 from bodo.tests.utils import pytest_perf_regression
 
 pytestmark = pytest_perf_regression

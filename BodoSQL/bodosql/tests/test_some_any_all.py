@@ -3,10 +3,10 @@
 Test correctness of SQL ANY and ALL clauses.
 """
 import pytest
-from bodosql.tests.string_ops_common import *  # noqa
-from bodosql.tests.utils import check_query
 
 from bodo.tests.utils import pytest_slow_unless_codegen
+from bodosql.tests.string_ops_common import *  # noqa
+from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
 pytestmark = pytest_slow_unless_codegen

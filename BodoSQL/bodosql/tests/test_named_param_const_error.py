@@ -4,11 +4,11 @@ required.
 """
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
-import bodosql
 import pandas as pd
 import pytest
 
 import bodo
+import bodosql
 from bodo.utils.typing import BodoError
 
 

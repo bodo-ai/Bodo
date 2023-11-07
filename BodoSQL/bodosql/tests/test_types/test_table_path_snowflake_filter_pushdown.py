@@ -4,11 +4,11 @@ Tests filter pushdown with a Snowflake SQL TablePath.
 """
 import io
 
-import bodosql
 import pandas as pd
 import pytest
 
 import bodo
+import bodosql
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,

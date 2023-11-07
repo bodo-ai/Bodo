@@ -5,9 +5,9 @@ sequential and parallel code.
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 
-import bodosql
 import numpy as np
 
+import bodosql
 from bodo.tests.caching_tests.caching_tests_common import (  # noqa
     fn_distribution,
 )
