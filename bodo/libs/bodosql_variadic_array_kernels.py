@@ -24,6 +24,93 @@ from bodo.utils.typing import (
 from bodo.utils.utils import is_array_typ
 
 
+def object_construct_keep_null(values, names, scalars):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(object_construct_keep_null)
+def overload_object_construct_keep_null(values, names, scalars):
+    """A dedicated kernel for the SQL function OBJECT_CONSTRUCT_keep_null which
+       takes in a variable number of key-value pairs as arguments and turns them
+       into JSON data.
+
+    Args:
+        values (any tuple): the values for each key-value pair
+        names (string tuple): the names of the JSON fields for each key-value pair
+        scalars (boolean tuple): a boolean for each value indicating if it is a scalar
+
+    Returns:
+        the inputs combined into a JSON value
+    """
+    names = bodo.utils.typing.unwrap_typeref(names).meta
+    scalars = bodo.utils.typing.unwrap_typeref(scalars).meta
+    if len(values) != len(names) or len(values) != len(scalars) or len(values) == 0:
+        raise_bodo_error("object_construct_keep_null: invalid argument lengths")
+
+    arg_names = []
+    arg_types = []
+    scalar_dtypes = []
+    are_arrays = []
+    optionals = []
+    # Extract the underlying types of each element so that the corresponding
+    # struct type can be built.
+    for i, arr_typ in enumerate(values):
+        arg_name = f"v{i}"
+        arg_names.append(arg_name)
+        arg_types.append(arr_typ)
+        is_optional = False
+        if scalars[i]:
+            # Represent null as a dummy type in the struct
+            if arr_typ == bodo.none:
+                arr_typ = bodo.null_array_type
+            if isinstance(arr_typ, types.optional):
+                arr_typ = arr_typ.type
+                is_optional = True
+            scalar_dtypes.append(arr_typ)
+            are_arrays.append(False)
+        else:
+            if bodo.hiframes.pd_series_ext.is_series_type(arr_typ):
+                scalar_dtypes.append((arr_typ.data.dtype))
+            else:
+                scalar_dtypes.append((arr_typ.dtype))
+            are_arrays.append(True)
+        optionals.append(is_optional)
+    out_dtype = bodo.utils.typing.dtype_to_array_type(
+        bodo.libs.struct_arr_ext.StructType(tuple(scalar_dtypes), names)
+    )
+
+    propagate_null = [False] * len(arg_names)
+
+    # Create the mapping from the tuple to the local variable.
+    arg_string = "values, names, scalars"
+    arg_sources = {f"v{i}": f"values[{i}]" for i in range(len(values))}
+
+    data = ", ".join(f"arg{i}" for i in range(len(values)))
+    nulls = []
+    for i in range(len(values)):
+        if values[i] == bodo.none:
+            nulls.append("True")
+        elif are_arrays[i]:
+            nulls.append(f"bodo.libs.array_kernels.isna(v{i}, i)")
+        elif optionals[i]:
+            nulls.append(f"v{i} is None")
+        else:
+            nulls.append("False")
+    scalar_text = f"null_vector = np.array([{', '.join(nulls)}], dtype=np.bool_)\n"
+    scalar_text += f"res[i] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({data},), null_vector, names)"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        arg_string,
+        arg_sources,
+        are_arrays=are_arrays,
+    )
+
+
 def coalesce(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     # Dummy function used for overload
     return

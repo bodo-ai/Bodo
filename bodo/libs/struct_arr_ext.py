@@ -12,6 +12,7 @@ import operator
 import llvmlite.binding as ll
 import numpy as np
 from llvmlite import ir as lir
+from numba import generated_jit
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
 from numba.extending import (
@@ -978,6 +979,41 @@ def init_struct(typingctx, data_typ, names_typ=None):
     return struct_type(data_typ, names_typ), codegen
 
 
+@generated_jit
+def init_struct_with_nulls(values, nulls, names):
+    """
+    Creates a struct and sets certain fields to null.
+
+    Args:
+        values: tuple of data items to pack into a struct
+        nulls: array of booleans where True indicates that the
+        current field is null.
+        names: tuple of the names of each struct field
+
+    Returns:
+        The values packed into a struct with the specified names
+        and the specified indices as nulls.
+    """
+    names_tup = bodo.utils.typing.unwrap_typeref(names).meta
+    func_text = "def impl(values, nulls, names):\n"
+    func_text += f"  s = init_struct(values, {names_tup})\n"
+    for i in range(len(names_tup)):
+        func_text += f"  if nulls[{i}]:\n"
+        func_text += f"    set_struct_field_to_null(s, {i})\n"
+    func_text += "  return s\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "init_struct": init_struct,
+            "set_struct_field_to_null": set_struct_field_to_null,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
 @intrinsic
 def get_struct_data(typingctx, struct_typ=None):
     """get data values of struct as tuple"""
@@ -1028,6 +1064,43 @@ def set_struct_data(typingctx, struct_typ, field_ind_typ, val_typ=None):
         return context.get_dummy_value()
 
     return types.none(struct_typ, field_ind_typ, val_typ), codegen
+
+
+@intrinsic
+def set_struct_field_to_null(typingctx, struct_typ, field_ind_typ):
+    """set a field in struct null."""
+    assert isinstance(struct_typ, StructType) and is_overload_constant_int(
+        field_ind_typ
+    )
+    field_ind = get_overload_const_int(field_ind_typ)
+    null_tup_typ = types.UniTuple(types.int8, len(struct_typ.names))
+    data_tup_typ = types.BaseTuple.from_types(struct_typ.data)
+    zero = lir.Constant(lir.IntType(8), 0)
+
+    def codegen(context, builder, sig, args):
+        (struct, _) = args
+        payload, meminfo_data_ptr = _get_struct_payload(
+            context, builder, struct_typ, struct
+        )
+        old_nulls = payload.null_bitmap
+        new_nulls = builder.insert_value(old_nulls, zero, field_ind)
+        context.nrt.decref(builder, null_tup_typ, old_nulls)
+        context.nrt.incref(builder, null_tup_typ, new_nulls)
+
+        # Decref old data element to avoid memory leak since
+        # destructor ignores null elements
+        old_data = payload.data
+        data_elem_null = context.get_constant_null(data_tup_typ[field_ind])
+        new_data = builder.insert_value(old_data, data_elem_null, field_ind)
+        context.nrt.decref(builder, data_tup_typ, old_data)
+        context.nrt.incref(builder, data_tup_typ, new_data)
+
+        payload.null_bitmap = new_nulls
+        payload.data = new_data
+        builder.store(payload._getvalue(), meminfo_data_ptr)
+        return context.get_dummy_value()
+
+    return types.none(struct_typ, field_ind_typ), codegen
 
 
 def _get_struct_field_ind(struct, ind, op):

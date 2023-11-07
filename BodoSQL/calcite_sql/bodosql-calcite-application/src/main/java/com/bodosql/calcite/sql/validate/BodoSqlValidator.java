@@ -113,14 +113,25 @@ public class BodoSqlValidator extends SqlValidatorImpl {
 
   /**
    * @brief Checks whether a SqlNode is a function call containing a star operand that should be
-   *     expanded to variadic arguments, e.g. HASH(*).
+   *     expanded to variadic arguments, e.g. HASH(*) or OBJECT_CONSTRUCT_KEEP_NULL(*)
    * @param call A SqlCall object being checked for the property.
    * @return True if the node is a call in the desired format.
    */
   @Override
   protected boolean isStarCall(SqlCall call) {
-    if (call.getOperator().getName().equals("HASH")) {
+    String name = call.getOperator().getName();
+    // HASH can have a * as a single operand, or one of several operands
+    if (name.equals("HASH")) {
       for (SqlNode operand : call.getOperandList()) {
+        if (operand instanceof SqlIdentifier && ((SqlIdentifier) operand).isStar()) {
+          return true;
+        }
+      }
+    }
+    // OBJECT_CONSTRUCT_KEEP_NULL only allows a * when it is the only operand
+    else if (name.equals("OBJECT_CONSTRUCT_KEEP_NULL")) {
+      if (call.getOperandList().size() == 1) {
+        SqlNode operand = call.getOperandList().get(0);
         if (operand instanceof SqlIdentifier && ((SqlIdentifier) operand).isStar()) {
           return true;
         }
@@ -134,10 +145,27 @@ public class BodoSqlValidator extends SqlValidatorImpl {
    *     expanded due to the presence of * terms.
    * @param call A SqlCall object being transformed.
    * @param newArgs The expanded arguments to the original SqlCall.
+   * @param newColumnNames The names of the expanded arguments.
    * @return A transformed SqlCall object.
    */
   @Override
-  protected SqlCall rewriteStarCall(SqlCall call, List<SqlNode> newArgs) {
-    return new SqlBasicCall(call.getOperator(), newArgs, call.getParserPosition());
+  protected SqlCall rewriteStarCall(
+      SqlCall call, List<SqlNode> newArgs, List<String> newColumnNames) {
+    String name = call.getOperator().getName();
+    // HASH replaces the * with
+    if (name.equals("HASH")) {
+      return new SqlBasicCall(call.getOperator(), newArgs, call.getParserPosition());
+    }
+    if (name.equals("OBJECT_CONSTRUCT_KEEP_NULL")) {
+      ArrayList<SqlNode> objectArgs = new ArrayList<>();
+      for (int i = 0; i < newArgs.size(); i++) {
+        SqlLiteral key =
+            SqlCharStringLiteral.createCharString(newColumnNames.get(i), call.getParserPosition());
+        objectArgs.add(key);
+        objectArgs.add(newArgs.get(i));
+      }
+      return new SqlBasicCall(call.getOperator(), objectArgs, call.getParserPosition());
+    }
+    return call;
   }
 }

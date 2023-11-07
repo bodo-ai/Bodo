@@ -19,6 +19,7 @@ from bodo.tests.utils import (
     find_nested_dispatcher_and_args,
     pytest_slow_unless_codegen,
 )
+from bodo.utils.typing import ColNamesMetaType, MetaType
 
 # Skip unless any library or BodoSQL codegen or files were changed
 pytestmark = pytest_slow_unless_codegen
@@ -1280,6 +1281,301 @@ def test_row_number(test, memory_leak_check):
         py_output=pd.DataFrame({"ROW_NUMBER": res}),
         check_dtype=False,
         reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "values, keys, scalars, answer",
+    [
+        pytest.param(
+            (pd.Series([1, 2, 3, None, 5, 6, 7]),),
+            ("i",),
+            (False,),
+            pd.Series([{"i": i} for i in [1, 2, 3, None, 5, 6, 7]]),
+            id="1-int_vector",
+        ),
+        pytest.param(
+            (
+                "John",
+                pd.Series(["Smith", "Jones", "Stewart", None, "Irons"]).values,
+            ),
+            ("first", "last"),
+            (True, False),
+            pd.Series(
+                [
+                    {"first": "John", "last": surname}
+                    for surname in ["Smith", "Jones", "Stewart", None, "Irons"]
+                ]
+            ),
+            id="2-string_scalar-string_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series([10, 11, 16] * 10 + [None, 23]).values,
+                pd.Series(
+                    [
+                        {"A": 1, "B": 1},
+                        {"A": 2, "B": 4},
+                        {"A": 5, "B": 25},
+                    ]
+                    * 10
+                    + [None, {"A": 4, "B": None}]
+                ).values,
+            ),
+            ("id", "data"),
+            (False, False),
+            pd.Series(
+                [
+                    {"id": 10, "data": {"A": 1, "B": 1}},
+                    {"id": 11, "data": {"A": 2, "B": 4}},
+                    {"id": 16, "data": {"A": 5, "B": 25}},
+                ]
+                * 10
+                + [{"id": None, "data": None}, {"id": 23, "data": {"A": 4, "B": None}}],
+            ),
+            id="2-int_vector-struct_vector",
+        ),
+        pytest.param(
+            (pd.Series([1, 2, 3, None, 5, 6, 7]), None),
+            ("i", "j"),
+            (False, True),
+            pd.Series([{"i": i, "j": None} for i in [1, 2, 3, None, 5, 6, 7]]),
+            id="2-int_vector-null",
+        ),
+        pytest.param(
+            (
+                pd.Series([[0], None, [1, 2], [], [3, None]]),
+                pd.Series([0, None], dtype=pd.Int32Dtype()).values,
+            ),
+            ("A", "B"),
+            (False, True),
+            pd.Series(
+                [
+                    {"A": [0], "B": [0, None]},
+                    {"A": None, "B": [0, None]},
+                    {"A": [1, 2], "B": [0, None]},
+                    {"A": [], "B": [0, None]},
+                    {"A": [3, None], "B": [0, None]},
+                ]
+            ),
+            id="2-int_array_vector-int_array_scalar",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        {"address": 5000, "street": "Forbes"},
+                        {"address": 4200, "street": "Fifth"},
+                        {"address": 6525, "street": "Penn"},
+                    ]
+                    * 10
+                    + [{"address": 5607, "street": None}, None]
+                ).values,
+                {"lat": 40.44, "lon": -79.99},
+            ),
+            ("data", "metadata"),
+            (False, True),
+            pd.Series(
+                [
+                    {
+                        "data": {"address": 5000, "street": "Forbes"},
+                        "metadata": {"lat": 40.44, "lon": -79.99},
+                    },
+                    {
+                        "data": {"address": 4200, "street": "Fifth"},
+                        "metadata": {"lat": 40.44, "lon": -79.99},
+                    },
+                    {
+                        "data": {"address": 6525, "street": "Penn"},
+                        "metadata": {"lat": 40.44, "lon": -79.99},
+                    },
+                ]
+                * 10
+                + [
+                    {
+                        "data": {"address": 5607, "street": None},
+                        "metadata": {"lat": 40.44, "lon": -79.99},
+                    },
+                    {"data": None, "metadata": {"lat": 40.44, "lon": -79.99}},
+                ]
+            ),
+            id="2-struct_vector-struct_scalar",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        [
+                            {"species": "Tiger", "colors": [None, "orange", "black"]},
+                            {"species": "Lion", "colors": ["yellow"]},
+                        ],
+                        [{"species": "Black Widow", "colors": ["black", "red"]}],
+                        [{"species": "Flamingo", "colors": ["pink"]}, None],
+                        [
+                            {"species": "Ladybug", "colors": ["red", "black"]},
+                            {"species": "grashopper", "colors": None},
+                        ],
+                        [{"species": "Elephant", "colors": ["grey"]}],
+                    ]
+                    * 5
+                    + [[], None]
+                ),
+            ),
+            ("facts",),
+            (False,),
+            pd.Series(
+                [
+                    {
+                        "facts": [
+                            {"species": "Tiger", "colors": [None, "orange", "black"]},
+                            {"species": "Lion", "colors": ["yellow"]},
+                        ],
+                    },
+                    {
+                        "facts": [
+                            {"species": "Black Widow", "colors": ["black", "red"]}
+                        ],
+                    },
+                    {
+                        "facts": [{"species": "Flamingo", "colors": ["pink"]}, None],
+                    },
+                    {
+                        "facts": [
+                            {"species": "Ladybug", "colors": ["red", "black"]},
+                            {"species": "grashopper", "colors": None},
+                        ],
+                    },
+                    {
+                        "facts": [{"species": "Elephant", "colors": ["grey"]}],
+                    },
+                ]
+                * 5
+                + [{"facts": []}, {"facts": None}]
+            ),
+            id="1-struct_array_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [[1, 2, 3], [4, None, 6], [7, 8, 9], None, [13, 14, 15]]
+                ).values,
+                None,
+                pd.Series(
+                    [
+                        ["Alpha", None, "Gamma", "Delta"],
+                        ["Beta"],
+                        None,
+                        ["Epsilon", "Theta"],
+                        ["Pi"],
+                    ]
+                ),
+            ),
+            ("scores", "hash", "letters"),
+            (False, True, False),
+            pd.Series(
+                [
+                    {
+                        "scores": [1, 2, 3],
+                        "hash": None,
+                        "letters": ["Alpha", None, "Gamma", "Delta"],
+                    },
+                    {
+                        "scores": [4, None, 6],
+                        "hash": None,
+                        "letters": ["Beta"],
+                    },
+                    {
+                        "scores": [7, 8, 9],
+                        "hash": None,
+                        "letters": None,
+                    },
+                    {
+                        "scores": None,
+                        "hash": None,
+                        "letters": ["Epsilon", "Theta"],
+                    },
+                    {
+                        "scores": [13, 14, 15],
+                        "hash": None,
+                        "letters": ["Pi"],
+                    },
+                ]
+            ),
+            id="3-int_array_vector-null-string_array_vector",
+        ),
+    ],
+)
+def test_object_construct_keep_null(values, keys, scalars, answer, memory_leak_check):
+    keys_meta = ColNamesMetaType(keys)
+    scalars_meta = MetaType(scalars)
+
+    def impl1(v0):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.object_construct_keep_null(
+                (v0,), keys_meta, scalars_meta
+            )
+        )
+
+    def impl2(v0, v1):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.object_construct_keep_null(
+                (v0, v1), keys_meta, scalars_meta
+            )
+        )
+
+    def impl3(v0, v1, v2):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.object_construct_keep_null(
+                (v0, v1, v2), keys_meta, scalars_meta
+            )
+        )
+
+    mixed_scalar_vector = any(scalars) != all(scalars)
+
+    if len(values) == 1:
+        impl = impl1
+    elif len(values) == 2:
+        impl = impl2
+    elif len(values) == 3:
+        impl = impl3
+
+    check_func(
+        impl,
+        values,
+        check_dtype=False,
+        py_output=answer,
+        dist_test=not mixed_scalar_vector,
+    )
+
+
+@pytest.mark.parametrize(
+    "is_none_0, is_none_1",
+    [
+        pytest.param(False, False, id="scalar-scalar"),
+        pytest.param(True, False, id="null-scalar"),
+        pytest.param(False, True, id="scalar-null"),
+        pytest.param(True, True, id="null-null"),
+    ],
+)
+def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_check):
+    names = ColNamesMetaType(("A", "B"))
+    scalars = MetaType((True, True))
+
+    def impl(A, B, is_none_0, is_none_1):
+        arg0 = None if is_none_0 else A
+        arg1 = None if is_none_1 else B
+        return bodo.libs.bodosql_array_kernels.object_construct_keep_null(
+            (arg0, arg1), names, scalars
+        )
+
+    answer = {"A": None if is_none_0 else 42, "B": None if is_none_1 else True}
+
+    check_func(
+        impl,
+        (42, True, is_none_0, is_none_1),
+        py_output=answer,
+        check_dtype=False,
+        dist_test=False,
     )
 
 
