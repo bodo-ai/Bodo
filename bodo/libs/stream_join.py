@@ -29,7 +29,7 @@ from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
-    error_on_nested_arrays,
+    error_on_unsupported_nested_arrays,
     get_common_bodosql_integer_arr_type,
     get_overload_const_bool,
     get_overload_const_str,
@@ -92,8 +92,8 @@ class JoinStateType(types.Type):
         probe_table_type=types.unknown,
     ):
         # TODO[BSE-937]: support nested arrays in streaming
-        error_on_nested_arrays(build_table_type)
-        error_on_nested_arrays(probe_table_type)
+        error_on_unsupported_nested_arrays(build_table_type)
+        error_on_unsupported_nested_arrays(probe_table_type)
 
         self.build_key_inds = build_key_inds
         self.probe_key_inds = probe_key_inds

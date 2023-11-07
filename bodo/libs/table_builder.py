@@ -31,7 +31,7 @@ from bodo.libs.array import (
 from bodo.libs.array import table_type as cpp_table_type
 from bodo.utils.typing import (
     MetaType,
-    error_on_nested_arrays,
+    error_on_unsupported_nested_arrays,
     get_overload_const_bool,
     is_overload_none,
     unwrap_typeref,
@@ -92,7 +92,7 @@ class TableBuilderStateType(types.Type):
         is_chunked_builder=False,
     ):
         # TODO[BSE-937]: support nested arrays in streaming
-        error_on_nested_arrays(build_table_type)
+        error_on_unsupported_nested_arrays(build_table_type)
         self._build_table_type = build_table_type
         self.is_chunked_builder = is_chunked_builder
         super().__init__(
