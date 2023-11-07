@@ -95,9 +95,6 @@ def spill_on_unpin():
                 # CodeBuild instance used on AWS Nightly comes with 824GB disk space
                 # https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html
                 "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "100",
-                # Disable budgets for now until we fix some bugs
-                # (https://bodo.atlassian.net/browse/BSE-1800).
-                "BODO_USE_MEMORY_BUDGETS": "0",
             }
         )
         yield
@@ -127,9 +124,6 @@ def move_on_unpin():
                 # CodeBuild instance used on AWS Nightly comes with 824GB disk space
                 # https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html
                 "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "100",
-                # Disable budgets for now until we fix some bugs
-                # (https://bodo.atlassian.net/browse/BSE-1800).
-                "BODO_USE_MEMORY_BUDGETS": "0",
             }
         )
         yield
