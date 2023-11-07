@@ -14,6 +14,7 @@ import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
+import org.apache.calcite.sql.type.SameOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
@@ -37,6 +38,9 @@ public final class JsonOperatorTable implements SqlOperatorTable {
 
   public static final SqlSingleOperandTypeChecker SEMI_STRUCTURED =
       SemiStructuredOperandChecker.INSTANCE;
+
+  public static final SameOperandTypeChecker OPERAND_CONSTRUCT_TYPE_CHECKER =
+      ObjectConstructOperandChecker.INSTANCE;
 
   public static final SqlFunction GET_PATH =
       new SqlFunction(
@@ -71,8 +75,17 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           OperandTypes.family(SqlTypeFamily.MAP),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction OBJECT_CONSTRUCT_KEEP_NULL =
+      new SqlFunction(
+          "OBJECT_CONSTRUCT_KEEP_NULL",
+          SqlKind.OTHER_FUNCTION,
+          BodoReturnTypes.MAP_VARIANT,
+          null,
+          OPERAND_CONSTRUCT_TYPE_CHECKER,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   private List<SqlOperator> functionList =
-      Arrays.asList(GET_PATH, JSON_EXTRACT_PATH_TEXT, OBJECT_KEYS);
+      Arrays.asList(GET_PATH, JSON_EXTRACT_PATH_TEXT, OBJECT_KEYS, OBJECT_CONSTRUCT_KEEP_NULL);
 
   @Override
   public void lookupOperatorOverloads(

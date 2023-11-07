@@ -767,9 +767,10 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
    * had its original arguments expanded due to the presence of * terms.
    * @param call A SqlCall object being transformed.
    * @param newArgs The expanded arguments to the original SqlCall.
+   * @param newColumnNames The names of the expanded arguments.
    * @return A transformed SqlCall object.
    */
-  protected SqlCall rewriteStarCall(SqlCall call, List<SqlNode> newArgs) {
+  protected SqlCall rewriteStarCall(SqlCall call, List<SqlNode> newArgs, List<String> newColumnNames) {
     throw new NotImplementedException("Need to implement rewriteStarCall to use star expansion");
   }
 
@@ -777,10 +778,11 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
    * Expands the a "*" term into the columns of all tables in scope, e.g. HASH(*) becomes
    * HASH(T1.A, T1.B, T2.A, T2.E, T2.I, T3.X, T3.Y)
    * @param outList The list where new operands are appended to.
+   * @param outNames The list where new names are appended to.
    * @param scope The scope containing all tables that a "*" term could refer to
    * @param starNode The node being expanded
    */
-  private void expandStarTermWithoutTable(List<SqlNode> outList, ListScope scope, SqlIdentifier starNode) {
+  private void expandStarTermWithoutTable(List<SqlNode> outList, List<String> outNames, ListScope scope, SqlIdentifier starNode) {
     final SqlParserPos startPosition = starNode.getParserPosition();
     for (int c = 0; c < scope.children.size(); c++) {
       final SqlValidatorNamespace fromNs = scope.getChildren().get(c);
@@ -790,6 +792,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
         String columnName = field.getName();
         final SqlIdentifier exp =
                 new SqlIdentifier(ImmutableList.of(fromName, columnName), startPosition);
+        outNames.add(columnName);
         outList.add(exp);
       }
     }
@@ -799,10 +802,11 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
    * Expands the a "t.*" term into the columns of a specified table, e.g. HASH(T1.*) becomes
    * HASH(T1.A, T1.B)
    * @param outList The list where new operands are appended to.
+   * @param outNames The list where new names are appended to.
    * @param scope The scope containing all tables that a "*" term could refer to
    * @param starNode The node being expanded
    */
-  private void expandStarTermWithTable(List<SqlNode> outList, ListScope scope, SqlIdentifier starNode) {
+  private void expandStarTermWithTable(List<SqlNode> outList, List<String> outNames, ListScope scope, SqlIdentifier starNode) {
     final SqlParserPos startPosition = starNode.getParserPosition();
     final SqlIdentifier prefixId = starNode.skipLast(1);
     final SqlValidatorScope.ResolvedImpl resolved = new SqlValidatorScope.ResolvedImpl();
@@ -814,10 +818,12 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     }
     final RelDataType rowType = resolved.only().rowType();
     if (rowType.isDynamicStruct()) {
+      // TODO: add column names in this case
       outList.add(prefixId.plus(DynamicRecordType.DYNAMIC_STAR_PREFIX, startPosition));
     } else if (rowType.isStruct()) {
       for (RelDataTypeField field : rowType.getFieldList()) {
         String columnName = field.getName();
+        outNames.add(columnName);
         outList.add(prefixId.plus(columnName, startPosition));
       }
     } else {
@@ -843,16 +849,17 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     }
     ListScope trueScope = (ListScope) scope;
     List<SqlNode> newArguments = new ArrayList<SqlNode>();
+    List<String> newColumnNames = new ArrayList<>();
     for (SqlNode operand : call.getOperandList()) {
       if ((operand instanceof SqlIdentifier) && ((SqlIdentifier) operand).isStar()) {
         SqlIdentifier starNode = (SqlIdentifier)operand;
         switch (starNode.names.size()) {
           case 1: {
-            expandStarTermWithoutTable(newArguments, trueScope, starNode);
+            expandStarTermWithoutTable(newArguments, newColumnNames, trueScope, starNode);
             break;
           }
           default: {
-            expandStarTermWithTable(newArguments, trueScope, starNode);
+            expandStarTermWithTable(newArguments, newColumnNames, trueScope, starNode);
             break;
           }
         }
@@ -860,7 +867,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
         newArguments.add(operand);
       }
     }
-    return rewriteStarCall(call, newArguments);
+    return rewriteStarCall(call, newArguments, newColumnNames);
   }
 
   private SqlNode maybeCast(SqlNode node, RelDataType currentType,

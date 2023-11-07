@@ -38,6 +38,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.g
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getYearWeekFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.getObjectConstructKeepNullCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.visitJsonFunc;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NestedDataCodeGen.generateToArrayFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.genFloorCeilCode;
@@ -839,7 +840,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       boolean isSingleRow,
       List<Pair<String, Expr>> streamingNamedArgs,
       List<Boolean> argScalars) {
+    String fnName = fnOperation.getOperator().getName();
     List<Expr> codeExprs = new ArrayList<>();
+    if (fnName.equals("OBJECT_CONSTRUCT_KEEP_NULL")) {
+      return getObjectConstructKeepNullCode(fnOperation, argScalars, this, visitor);
+    }
     for (RexNode operand : fnOperation.operands) {
       Expr operandInfo = operand.accept(this);
       // Need to unbox scalar timestamp values.
@@ -850,7 +855,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       }
       codeExprs.add(operandInfo);
     }
-    String fnName = fnOperation.getOperator().getName();
     Expr result;
     switch (fnName) {
       case "IF":
@@ -1377,6 +1381,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         || fnName == "IF"
         || fnName == "IFF"
         || fnName == "DECODE"
+        || fnName == "OBJECT_CONSTRUCT_KEEP_NULL"
         || fnName == "HASH") {
       return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, argScalars);
     }
