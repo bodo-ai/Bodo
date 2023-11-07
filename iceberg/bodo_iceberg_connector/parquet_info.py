@@ -7,11 +7,12 @@ from collections import namedtuple
 from typing import List, Tuple
 from urllib.parse import urlparse
 
+from py4j.protocol import Py4JError
+
 from bodo_iceberg_connector.catalog_conn import _remove_prefix, parse_conn_str
 from bodo_iceberg_connector.errors import IcebergJavaError
 from bodo_iceberg_connector.filter_to_java import convert_expr_to_java_parsable
 from bodo_iceberg_connector.py4j_support import get_java_table_handler
-from py4j.protocol import Py4JError
 
 # Named Tuple for Parquet info
 BodoIcebergParquetInfo = namedtuple("BodoIcebergParquetInfo", "filepath start length")

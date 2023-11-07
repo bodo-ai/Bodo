@@ -3,13 +3,14 @@ from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
 import pyarrow as pa
+from py4j.protocol import Py4JError
+
 from bodo_iceberg_connector.catalog_conn import gen_file_loc, parse_conn_str
 from bodo_iceberg_connector.py4j_support import (
     convert_list_to_java,
     get_java_table_handler,
 )
 from bodo_iceberg_connector.schema_helper import arrow_to_iceberg_schema
-from py4j.protocol import Py4JError
 
 
 @dataclass

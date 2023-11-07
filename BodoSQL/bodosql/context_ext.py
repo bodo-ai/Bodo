@@ -10,18 +10,6 @@ from typing import Any, Dict, Tuple
 import numba
 import numpy as np
 import pandas as pd
-from bodosql.bodosql_types.snowflake_catalog import DatabaseCatalogType
-from bodosql.bodosql_types.table_path import TablePathType
-from bodosql.context import (
-    NAMED_PARAM_TABLE_NAME,
-    BodoSQLContext,
-    RelationalAlgebraGeneratorClass,
-    _PlannerType,
-    compute_df_types,
-    initialize_schema,
-    update_schema,
-)
-from bodosql.utils import java_error_to_msg
 from numba.core import cgutils, types
 from numba.extending import (
     NativeValue,
@@ -47,6 +35,18 @@ from bodo.utils.typing import (
     is_overload_none,
     raise_bodo_error,
 )
+from bodosql.bodosql_types.snowflake_catalog import DatabaseCatalogType
+from bodosql.bodosql_types.table_path import TablePathType
+from bodosql.context import (
+    NAMED_PARAM_TABLE_NAME,
+    BodoSQLContext,
+    RelationalAlgebraGeneratorClass,
+    _PlannerType,
+    compute_df_types,
+    initialize_schema,
+    update_schema,
+)
+from bodosql.utils import java_error_to_msg
 
 
 class BodoSQLContextType(types.Type):

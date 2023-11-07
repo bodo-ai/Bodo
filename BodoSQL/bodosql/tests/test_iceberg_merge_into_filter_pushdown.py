@@ -9,7 +9,6 @@ import io
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql import BodoSQLContext, TablePath
 
 import bodo
 from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
@@ -25,6 +24,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import check_func
+from bodosql import BodoSQLContext, TablePath
 
 pytestmark = [
     pytest.mark.iceberg,

@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
-from bodosql.tests.test_window.window_common import count_window_applies
-from bodosql.tests.utils import check_query
 
 from bodo.tests.utils import pytest_slow_unless_window
+from bodosql.tests.test_window.window_common import count_window_applies
+from bodosql.tests.utils import check_query
 
 # Skip unless any window-related files were changed
 pytestmark = pytest_slow_unless_window

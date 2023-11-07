@@ -6,6 +6,7 @@ Test that Named Parameters can be used in select expressions.
 
 import numpy as np
 import pandas as pd
+
 from bodosql.tests.named_params_common import (  # noqa
     named_params_all_column_types,
 )

@@ -6,11 +6,11 @@ Mostly reuses tests/fixtures from the engine, but using bodosql's TablePath
 """
 import io
 
-import bodosql
 import pandas as pd
 import pytest
 
 import bodo
+import bodosql
 from bodo.tests.conftest import (  # pragma: no cover
     iceberg_database,
     iceberg_table_conn,

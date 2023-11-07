@@ -3,6 +3,7 @@
 Test correctness of TPCxBB Benchmark on BodoSQL
 """
 import pytest
+
 from bodosql.tests.utils import check_query
 
 
@@ -260,7 +261,7 @@ def test_tpcxbb_q24(tpcxbb_data, spark_info, memory_leak_check):
 		) ss
 		ON (ws.ws_item_sk = ss.ss_item_sk and ws.imp_sk = ss.imp_sk)
 		GROUP BY  ws.ws_item_sk
-  	"""
+    """
 
     tpcxbb_data_dict, pyspark_schemas = tpcxbb_data
     check_query(

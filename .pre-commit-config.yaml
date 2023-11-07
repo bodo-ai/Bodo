@@ -2,33 +2,16 @@
 # See https://bodo.atlassian.net/wiki/spaces/B/pages/1415970823/Bodo+s+Calcite+Fork#Managing-the-Fork
 exclude: ^BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/org/apache/calcite/
 repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.3
+    hooks:
+      - id: ruff
+        args: [ --fix, --exit-non-zero-on-fix ]
   - repo: https://github.com/psf/black
-    rev: 23.3.0
+    rev: 23.9.1
     hooks:
       - id: black
         language_version: python3
-  - repo: https://github.com/PyCQA/flake8
-    rev: 6.0.0
-    hooks:
-      - id: flake8
-        language: python
-        additional_dependencies: [flake8-comprehensions>=3.1.0]
-  - repo: https://github.com/PyCQA/isort
-    rev: 5.12.0
-    hooks:
-      - id: isort
-        language: python
-  - repo: https://github.com/myint/autoflake
-    rev: v2.1.1
-    hooks:
-      - id: autoflake
-        args:
-          [
-            "--in-place",
-            "--remove-all-unused-imports",
-            "--exclude",
-            "bodo/__init__.py, iceberg/bodo_iceberg_connector/__init__.py, BodoSQL/bodosql/__init__.py",
-          ]
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
     rev: v2.8.0
     hooks:

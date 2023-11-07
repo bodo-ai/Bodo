@@ -3,11 +3,11 @@ import datetime
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.test_window.window_common import count_window_applies
-from bodosql.tests.utils import check_query
 
 from bodo import Time
 from bodo.tests.utils import nullable_float_arr_maker, pytest_slow_unless_window
+from bodosql.tests.test_window.window_common import count_window_applies
+from bodosql.tests.utils import check_query
 
 # Skip unless any window-related files were changed
 pytestmark = pytest_slow_unless_window

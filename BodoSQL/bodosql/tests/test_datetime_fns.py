@@ -4,13 +4,12 @@ Test correctness of SQL datetime functions with BodoSQL
 """
 import datetime
 
-import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
 
 import bodo
+import bodosql
 from bodo.libs.bodosql_datetime_array_kernels import (
     standardize_snowflake_date_time_part_compile_time,
 )
@@ -34,6 +33,7 @@ from bodo.tests.utils import (
     dist_IR_contains,
     pytest_slow_unless_codegen,
 )
+from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
 pytestmark = pytest_slow_unless_codegen

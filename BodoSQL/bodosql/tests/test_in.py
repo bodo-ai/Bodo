@@ -6,6 +6,7 @@ Tests correctness of the In and Not In operations in BodoSQL
 
 import pandas as pd
 import pytest
+
 from bodosql.tests.utils import check_query
 
 

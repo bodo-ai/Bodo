@@ -2,11 +2,10 @@
 Test example functions that mix SQL and Python inside
 JIT functions.
 """
-import bodosql
-
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import pandas as pd
 
+import bodosql
 from bodo.tests.utils import check_func
 
 

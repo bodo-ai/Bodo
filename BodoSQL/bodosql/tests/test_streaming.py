@@ -4,19 +4,19 @@ Test correctness of BodoSQL operations that handle streaming data.
 """
 import io
 
-import bodosql
 import pytest
-from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
-    snowflake_sample_data_snowflake_catalog,
-)
 
 import bodo
+import bodosql
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
     set_logging_stream,
 )
 from bodo.tests.utils import check_func, pytest_snowflake
+from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
+    snowflake_sample_data_snowflake_catalog,
+)
 
 pytestmark = pytest_snowflake
 

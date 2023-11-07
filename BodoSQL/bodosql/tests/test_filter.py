@@ -4,6 +4,7 @@ Test correctness of SQL filter queries on BodoSQL
 """
 
 import pytest
+
 from bodosql.tests.utils import check_query
 
 

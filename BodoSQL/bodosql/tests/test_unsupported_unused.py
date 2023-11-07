@@ -5,11 +5,11 @@ Tests that check passing an unsupported type to BodoSQL in various
 contexts where the column can be pruned by Bodo
 """
 
-import bodosql
 import pandas as pd
 import pytest
 
 import bodo
+import bodosql
 from bodo.tests.utils import (
     check_func,
     get_snowflake_connection_string,

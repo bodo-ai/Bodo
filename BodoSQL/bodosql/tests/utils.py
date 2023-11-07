@@ -8,13 +8,11 @@ from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-import bodosql
 import numba
 import numpy as np
 import pandas as pd
 import pyspark
 from mpi4py import MPI
-from pyspark.sql.functions import col
 from pyspark.sql.types import (
     ByteType,
     DayTimeIntervalType,
@@ -30,6 +28,7 @@ from pyspark.sql.types import (
 )
 
 import bodo
+import bodosql
 from bodo.tests.utils import (
     _convert_float_to_nullable_float,
     _get_dist_arg,
@@ -341,7 +340,9 @@ def check_query(
                 and table_name in spark_input_cols_to_cast
             ):
                 for colname, typename in spark_input_cols_to_cast[table_name]:
-                    spark_df = spark_df.withColumn(colname, col(colname).cast(typename))
+                    spark_df = spark_df.withColumn(
+                        colname, pyspark.sql.functions.col(colname).cast(typename)
+                    )
             spark_df.createTempView(table_name)
         # Always run Spark on just 1 core for efficiency
         if bodo.get_rank() == 0:

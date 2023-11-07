@@ -3,17 +3,17 @@ import datetime
 import numpy as np
 import pandas as pd
 import pytest
+
+import bodo
+
+# Skip unless any window-related files were changed
+from bodo.tests.utils import pytest_slow_unless_window
 from bodosql.tests.test_window.window_common import (  # noqa
     all_types_window_df,
     all_window_df,
     count_window_applies,
 )
 from bodosql.tests.utils import check_query
-
-import bodo
-
-# Skip unless any window-related files were changed
-from bodo.tests.utils import pytest_slow_unless_window
 
 pytestmark = pytest_slow_unless_window
 

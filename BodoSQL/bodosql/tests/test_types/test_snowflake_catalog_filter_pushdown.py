@@ -6,16 +6,12 @@ import io
 import os
 import re
 
-import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
-    test_db_snowflake_catalog,
-)
-from bodosql.utils import levenshteinDistance
 
 import bodo
+import bodosql
 from bodo.libs.dict_arr_ext import is_dict_encoded
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -29,6 +25,10 @@ from bodo.tests.utils import (
     get_snowflake_connection_string,
     pytest_snowflake,
 )
+from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
+    test_db_snowflake_catalog,
+)
+from bodosql.utils import levenshteinDistance
 
 pytestmark = pytest_snowflake
 

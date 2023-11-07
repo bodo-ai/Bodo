@@ -9,8 +9,9 @@ of these variables according to the reference query.
 """
 
 import pytest
-from bodosql.tests.utils import check_query
 from pyspark.sql.types import IntegerType, StructField, StructType
+
+from bodosql.tests.utils import check_query
 
 
 @pytest.mark.skip("[BS-633] Resolve nightly issues for TPCx-BB")

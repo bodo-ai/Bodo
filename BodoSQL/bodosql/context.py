@@ -10,16 +10,16 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numba
 import numpy as np
 import pandas as pd
-from bodosql.bodosql_types.database_catalog import DatabaseCatalog
-from bodosql.bodosql_types.table_path import TablePath, TablePathType
-from bodosql.py4j_gateway import get_gateway
-from bodosql.utils import BodoSQLWarning, java_error_to_msg
 from numba.core import ir, types
 
 import bodo
 from bodo.ir.sql_ext import parse_dbtype, remove_iceberg_prefix
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError
+from bodosql.bodosql_types.database_catalog import DatabaseCatalog
+from bodosql.bodosql_types.table_path import TablePath, TablePathType
+from bodosql.py4j_gateway import get_gateway
+from bodosql.utils import BodoSQLWarning, java_error_to_msg
 
 # Name for parameter table
 NAMED_PARAM_TABLE_NAME = "__$bodo_named_param_table__"

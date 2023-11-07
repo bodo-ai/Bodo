@@ -21,7 +21,9 @@ export PATH=$HOME/mambaforge/bin:$PATH
 
 # ---- Create Conda Env ----
 # Deactivate if another script has already activated the env
+set +x
 source deactivate || true
+set -x
 
 # Set 5 retries with 1 minute in between to try avoid HTTP errors
 conda config --set remote_max_retries 5
@@ -46,3 +48,4 @@ conda-lock install --mamba -n $CONDA_ENV buildscripts/envs/conda-lock.yml
 # after the environment is created.
 # TODO: Check how long this takes at PR CI runtime
 conda clean -a -y
+mamba install -y -c conda-forge -n $CONDA_ENV sccache 

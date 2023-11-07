@@ -2,6 +2,7 @@ from typing import List
 
 import pyarrow as pa
 import pyarrow.jvm
+
 from bodo_iceberg_connector.errors import IcebergError
 from bodo_iceberg_connector.py4j_support import (
     convert_list_to_java,

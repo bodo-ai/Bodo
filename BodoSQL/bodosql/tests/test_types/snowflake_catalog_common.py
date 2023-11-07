@@ -2,8 +2,9 @@
 """File with common fixtures used for testing snowflake catalog."""
 import os
 
-import bodosql
 import pytest
+
+import bodosql
 
 
 @pytest.fixture(

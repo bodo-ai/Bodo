@@ -3,77 +3,73 @@
 transforms the IR to remove features that Numba's type inference cannot support
 such as non-uniform dictionary input of `pd.DataFrame({})`.
 """
-import types as pytypes
-import sys
-import warnings
-import itertools
 import datetime
-import pandas as pd
-import numpy as np
-from typing import Optional, Any, Tuple, Dict, TYPE_CHECKING
-
-# Imports for typechecking
-if TYPE_CHECKING:  # pragma: no cover
-    from snowflake.connector import SnowflakeConnection
+import itertools
+import sys
+import types as pytypes
+import warnings
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import numba
+import numpy as np
+import pandas as pd
 from numba.core import ir, ir_utils, types
 from numba.core.ir_utils import (
-    mk_unique_var,
-    find_topo_order,
-    dprint_func_ir,
-    find_const,
     GuardException,
-    compile_to_numba_ir,
-    replace_arg_nodes,
-    find_callname,
-    guard,
-    get_definition,
     build_definitions,
+    compile_to_numba_ir,
     compute_cfg_from_blocks,
+    dprint_func_ir,
+    find_callname,
+    find_const,
+    find_topo_order,
+    get_definition,
+    guard,
+    mk_unique_var,
+    replace_arg_nodes,
 )
 from numba.core.registry import CPUDispatcher
 
 import bodo
-import bodo.io
-from bodo.io import h5
-from bodo.utils.utils import is_assign, is_call, is_expr
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.float_arr_ext import FloatingArrayType
-from bodo.libs.bool_arr_ext import boolean_array_type
-from bodo.hiframes.pd_index_ext import RangeIndexType
-from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArrayType
 import bodo.hiframes.pd_dataframe_ext
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
+import bodo.io
 import bodo.ir
 import bodo.ir.aggregate
 import bodo.ir.join
 import bodo.ir.sort
-from bodo.ir import csv_ext
-from bodo.ir import sql_ext
-from bodo.ir import json_ext
-from bodo.ir import parquet_ext
+from bodo.hiframes.pd_categorical_ext import CategoricalArrayType, PDCategoricalDtype
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_index_ext import RangeIndexType
+from bodo.io import h5
+from bodo.ir import csv_ext, json_ext, parquet_ext, sql_ext
+from bodo.libs.bool_arr_ext import boolean_array_type
+from bodo.libs.float_arr_ext import FloatingArrayType
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import string_array_type
+from bodo.numba_compat import mini_dce
 from bodo.utils.transform import (
+    compile_func_single_block,
+    fix_struct_return,
+    get_call_expr_arg,
     get_const_value,
     get_const_value_inner,
-    update_node_list_definitions,
-    compile_func_single_block,
-    get_call_expr_arg,
-    fix_struct_return,
     set_call_expr_arg,
+    update_node_list_definitions,
 )
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
     ColNamesMetaType,
+    FileInfo,
     raise_bodo_error,
     to_nullable_type,
-    FileInfo,
     to_str_arr_if_dict_array,
 )
-from bodo.utils.utils import check_java_installation
-from bodo.numba_compat import mini_dce
+from bodo.utils.utils import check_java_installation, is_assign, is_call, is_expr
+
+# Imports for typechecking
+if TYPE_CHECKING:  # pragma: no cover
+    from snowflake.connector import SnowflakeConnection
 
 
 # dummy sentinel singleton to designate constant value not found for variable
@@ -3498,8 +3494,8 @@ def _get_sql_df_type_from_db(
         try:
             if db_type == "snowflake":  # pragma: no cover
                 from bodo.io.snowflake import (
-                    get_schema,
                     SF_READ_DICT_ENCODING_IF_TIMEOUT,
+                    get_schema,
                     snowflake_connect,
                 )
 

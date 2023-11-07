@@ -4,9 +4,6 @@ Test SQL `time` support (non-constructor functions)
 """
 import pandas as pd
 import pytest
-from bodosql.context import BodoSQLContext
-from bodosql.tests.conftest import timeadd_arguments, timeadd_dataframe  # noqa
-from bodosql.tests.utils import check_query
 
 import bodo
 from bodo.tests.conftest import (  # noqa
@@ -18,6 +15,9 @@ from bodo.tests.test_bodosql_array_kernels.test_bodosql_datetime_array_kernels i
     diff_fn,
 )
 from bodo.tests.utils import pytest_slow_unless_codegen
+from bodosql.context import BodoSQLContext
+from bodosql.tests.conftest import timeadd_arguments, timeadd_dataframe  # noqa
+from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
 pytestmark = pytest_slow_unless_codegen

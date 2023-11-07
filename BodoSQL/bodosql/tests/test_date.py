@@ -4,12 +4,10 @@ Test SQL `date` support
 """
 import datetime
 
-import bodosql
 import pandas as pd
 import pytest
-from bodosql.context import BodoSQLContext
-from bodosql.tests.utils import check_query
 
+import bodosql
 from bodo.tests.conftest import (  # noqa
     date_df,
     day_part_strings,
@@ -20,6 +18,8 @@ from bodo.tests.test_bodosql_array_kernels.test_bodosql_datetime_array_kernels i
 )
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodo.utils.typing import BodoError
+from bodosql.context import BodoSQLContext
+from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
 pytestmark = pytest_slow_unless_codegen

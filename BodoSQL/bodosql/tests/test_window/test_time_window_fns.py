@@ -1,12 +1,12 @@
 import pandas as pd
 import pytest
-from bodosql.tests.test_window.window_common import count_window_applies
-from bodosql.tests.utils import check_query
 
 from bodo import Time
 
 # Skip unless any window-related files were changed
 from bodo.tests.utils import pytest_slow_unless_window
+from bodosql.tests.test_window.window_common import count_window_applies
+from bodosql.tests.utils import check_query
 
 pytestmark = pytest_slow_unless_window
 

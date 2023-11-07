@@ -7,13 +7,13 @@ import json
 import time
 from urllib.parse import urlencode
 
-import bodosql
 import pandas as pd
 from numba import types
 from numba.extending import overload
 
 import bodo
 import bodo.utils.tracing as tracing
+import bodosql
 
 # Turn verbose mode on
 bodo.set_verbose_level(2)

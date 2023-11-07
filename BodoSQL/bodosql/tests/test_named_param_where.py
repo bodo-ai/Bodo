@@ -4,6 +4,7 @@ Test that Named Parameters can be used for where expressions.
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 import pytest
+
 from bodosql.tests.named_params_common import *  # noqa
 from bodosql.tests.utils import check_query
 

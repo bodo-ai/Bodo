@@ -5,6 +5,7 @@ predicates from a join.
 """
 import pandas as pd
 import pytest
+
 from bodosql.tests.utils import check_query
 
 

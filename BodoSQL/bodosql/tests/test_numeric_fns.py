@@ -4,14 +4,14 @@ Test that various numeric builtin functions are properly supported in BODOSQL
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 
-import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
 
 import bodo
+import bodosql
 from bodo.tests.utils import pytest_slow_unless_codegen
+from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
 pytestmark = pytest_slow_unless_codegen
@@ -1090,7 +1090,7 @@ def round_data(request):
     from Snowflake to ensure that the correct rounding behavior is achieved"""
     data, scale, answer = request.param
     ctx = {"table1": pd.DataFrame({"A": data, "S": scale})}
-    scale_str = "" if scale is 0 else ", S"
+    scale_str = "" if isinstance(scale, int) and scale == 0 else ", S"
     return ctx, scale_str, answer
 
 

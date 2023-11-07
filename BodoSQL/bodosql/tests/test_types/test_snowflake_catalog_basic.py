@@ -6,10 +6,10 @@ direct BodoSQLContext. This file does not access Snowflake.
 
 from urllib.parse import urlencode
 
-import bodosql
 import pytest
 
 import bodo
+import bodosql
 from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
 

@@ -5,13 +5,14 @@ Test SQL operations that should produce understandable errors on BodoSQL
 import re
 from decimal import Decimal
 
-import bodosql
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
+import bodosql
 from bodo.utils.typing import BodoError
+from bodosql.utils import BodoSQLWarning
 
 
 @pytest.mark.slow

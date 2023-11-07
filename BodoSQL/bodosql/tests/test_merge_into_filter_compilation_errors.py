@@ -5,11 +5,11 @@ error with a variety of filters that may be pushed down.
 """
 import pandas as pd
 import pytest
-from bodosql import BodoSQLContext
 
 import bodo
 from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
 from bodo.utils.typing import BodoError
+from bodosql import BodoSQLContext
 
 pytestmark = pytest.mark.iceberg
 

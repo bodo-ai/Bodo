@@ -5,14 +5,13 @@ a SQL LIMIT expression.
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import re
 
-import bodosql
 import pandas as pd
 import pytest
-from bodosql.tests.named_params_common import int_named_params  # noqa
-from bodosql.tests.utils import check_query
 
 import bodo
-
+import bodosql
+from bodosql.tests.named_params_common import int_named_params  # noqa
+from bodosql.tests.utils import check_query
 
 
 def test_limit_unsigned(basic_df, spark_info, int_named_params, memory_leak_check):

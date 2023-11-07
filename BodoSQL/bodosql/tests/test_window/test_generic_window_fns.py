@@ -1,5 +1,7 @@
 import pandas as pd
 import pytest
+
+from bodo.tests.utils import pytest_slow_unless_window
 from bodosql.tests.test_window.window_common import (  # noqa
     all_numeric_window_col_names,
     all_numeric_window_df,
@@ -9,8 +11,6 @@ from bodosql.tests.test_window.window_common import (  # noqa
     window_frames,
 )
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
-
-from bodo.tests.utils import pytest_slow_unless_window
 
 # Skip unless any window-related files were changed
 pytestmark = pytest_slow_unless_window

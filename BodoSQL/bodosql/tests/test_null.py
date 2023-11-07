@@ -8,8 +8,9 @@ Also tests that arithmatic and logical operators work with NULL values
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
 from pyspark.sql.functions import lit
+
+from bodosql.tests.utils import check_query
 
 
 # This is mostly copied from bodosql.tests.utils, just needed to

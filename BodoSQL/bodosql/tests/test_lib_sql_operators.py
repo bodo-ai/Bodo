@@ -1,7 +1,7 @@
-import bodo
 import pandas as pd
 import pytest
 
+import bodo
 import bodosql.libs.sql_operators
 
 

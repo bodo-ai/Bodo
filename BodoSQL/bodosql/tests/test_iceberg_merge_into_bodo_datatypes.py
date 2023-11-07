@@ -1,12 +1,12 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 from datetime import date
 
-import bodosql
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
+import bodosql
 from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
 from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,

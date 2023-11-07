@@ -4,13 +4,13 @@ Test correctness of SQL cast queries on BodoSQL
 """
 import datetime
 
-import bodosql
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
 
 import bodo
+import bodosql
 from bodo.tests.utils import pytest_slow_unless_codegen
+from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
 pytestmark = pytest_slow_unless_codegen

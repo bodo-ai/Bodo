@@ -2,11 +2,11 @@
 
 import os
 
-import bodosql
 import pandas as pd
 import pytest
 
 import bodo
+import bodosql
 from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
 from bodo.tests.iceberg_database_helpers.utils import (
     DATABASE_NAME,
@@ -147,7 +147,6 @@ def test_merge_into_non_existing_table(
     )
 
     def impl(bc):
-
         bc.sql(
             f"MERGE INTO I_DO_NOT_EXIST AS t USING source AS s "
             "ON t.id = s.id "
@@ -904,7 +903,6 @@ def test_merge_with_null_action_conditions(
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY v")
 
     def impl2(bc):
-
         bc.sql(
             f"MERGE INTO {table_name} t USING source "
             "ON t.id = source.id "

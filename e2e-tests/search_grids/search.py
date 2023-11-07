@@ -12,11 +12,11 @@ import numba
 import numpy as np
 import pandas as pd
 
-# Local imports
-from tools import search
-
 import bodo
 from bodo import prange
+
+# Local imports
+from tools import search
 
 
 @bodo.jit(cache=True)

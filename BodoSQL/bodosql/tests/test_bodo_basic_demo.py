@@ -1,11 +1,11 @@
 """
 Test using BodoSQL inside Bodo JIT functions
 """
-import bodosql
 import pandas as pd
 
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import bodo
+import bodosql
 
 
 def test_demo1(datapath, memory_leak_check):

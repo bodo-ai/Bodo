@@ -1,12 +1,12 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Tests cross join"""
 
-import bodosql
 import pytest
-from bodosql.tests.utils import check_query
 
+import bodosql
 from bodo.tests.utils import pytest_slow_unless_join, temp_env_override
 from bodo.utils.typing import BodoError
+from bodosql.tests.utils import check_query
 
 # Skip unless any join-related files were changed
 pytestmark = pytest_slow_unless_join
