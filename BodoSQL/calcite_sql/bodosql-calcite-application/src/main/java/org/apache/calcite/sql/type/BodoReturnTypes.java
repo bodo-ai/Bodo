@@ -14,7 +14,6 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.List;
 
-import static com.bodosql.calcite.application.operatorTables.ArrayOperatorTable.toArrayReturnType;
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCharset;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCollation;
@@ -23,11 +22,51 @@ import static org.apache.calcite.util.Static.RESOURCE;
 public class BodoReturnTypes {
 
     /**
+     * Determine the return type of the TO_ARRAY function
+     * @param binding The operand bindings for the function signature.
+     * @return the return type of the function
+     */
+    public static RelDataType toArrayReturnType(SqlOperatorBinding binding) {
+        return toArrayTypeIfNotAlready(binding, binding.getOperandType(0), true);
+    }
+
+    /**
+     * Wraps the input type as an array type, if it isn't already.
+     *
+     * @param binding The operand bindings for the function signature.
+     * @param inputType the type to wrap as an array.
+     * @param innerNullabilityToOuter should the nullability of the input type propagate to the outer type
+     *  IE if innerNullabilityToOuter is true, NULLABLE INT ---> NULLABLE ARRAY(int)
+     *     if innerNullabilityToOuter is false, NULLABLE INT ---> ARRAY(NULLABLE int)
+     *
+     * @return The return type of the function
+     */
+    public static RelDataType toArrayTypeIfNotAlready(SqlOperatorBinding binding,
+                                                      RelDataType inputType, boolean innerNullabilityToOuter) {
+        RelDataTypeFactory typeFactory = binding.getTypeFactory();
+        if (inputType.getSqlTypeName().equals(SqlTypeName.NULL))
+            // if the input is null, TO_ARRAY will return NULL, not an array of NULL
+            return inputType;
+        if (inputType instanceof ArraySqlType)
+            // if the input is an array, just return it
+            return inputType;
+        
+        if (innerNullabilityToOuter) {
+            RelDataType arrayType =
+                    typeFactory.createArrayType(
+                            typeFactory.createTypeWithNullability(inputType, false), -1);
+            return typeFactory.createTypeWithNullability(arrayType, inputType.isNullable());
+        } else {
+            return typeFactory.createArrayType(inputType, -1);
+        }
+    }
+
+    /**
      * Convert type XXX to type XXX ARRAY
      */
-    public static final SqlTypeTransform TYPE_TO_ARRAY =
+    public static final SqlTypeTransform WRAP_TYPE_TO_ARRAY =
             (opBinding, typeToTransform) ->
-                    toArrayReturnType(opBinding)
+                    toArrayTypeIfNotAlready(opBinding, typeToTransform, false)
                     ;
 
     /**
@@ -360,5 +399,7 @@ public class BodoReturnTypes {
     public static final SqlReturnTypeInference TIMESTAMP_FORCE_NULLABLE = ReturnTypes.TIMESTAMP.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
     public static final SqlReturnTypeInference DOUBLE_FORCE_NULLABLE = ReturnTypes.DOUBLE.andThen(SqlTypeTransforms.FORCE_NULLABLE);
+
+    public static final SqlReturnTypeInference INTEGER_FORCE_NULLABLE = ReturnTypes.INTEGER.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 }
 
