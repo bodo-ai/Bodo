@@ -45,9 +45,9 @@ jobs:
 
   - script: |
       set -exo pipefail
-      pip install flake8
-      flake8 bodo
-    displayName: 'Flake8'
+      pip install ruff
+      ruff .
+    displayName: 'Ruff'
 
   - script: |
       set -exo pipefail

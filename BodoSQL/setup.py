@@ -57,7 +57,7 @@ def build_libs(obj):
     try:
         pom_dir = os.path.join("calcite_sql", "pom.xml")
         dmvn_repo = os.path.dirname("bodosql-protocol-mvn/")
-        cmd_list = ["mvn", "clean", "install"]
+        cmd_list = ["mvn", "clean", "install", "--batch-mode"]
         if update_calcite:
             cmd_list.append("-U")
 

@@ -5,6 +5,8 @@ representations (Arrow and Bodo)
 from collections import namedtuple
 from typing import Dict, List, Optional, Tuple
 
+from py4j.protocol import Py4JError
+
 from bodo_iceberg_connector.catalog_conn import (
     gen_table_loc,
     normalize_loc,
@@ -16,7 +18,6 @@ from bodo_iceberg_connector.py4j_support import (
     launch_jvm,
 )
 from bodo_iceberg_connector.schema_helper import arrow_schema_j2py
-from py4j.protocol import Py4JError
 
 # Types I didn't figure out how to test with Spark:
 #   FixedType

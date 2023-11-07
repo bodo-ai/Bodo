@@ -6,9 +6,9 @@ import logging
 import numba
 from numba.core import types
 from numba.core.imputils import lower_constant
-from numba.core.typing.templates import bound_function  # noqa
 from numba.core.typing.templates import (
     AttributeTemplate,
+    bound_function,  # noqa
     infer_getattr,
     signature,
 )

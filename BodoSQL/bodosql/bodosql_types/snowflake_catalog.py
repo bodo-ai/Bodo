@@ -6,8 +6,6 @@ in Java and load relevant schema information.
 from copy import deepcopy
 from typing import Dict, Optional
 
-from bodosql import DatabaseCatalog, DatabaseCatalogType
-from bodosql.context import PropertiesClass, SnowflakeCatalogImplClass
 from numba.core import types
 from numba.core.imputils import lower_constant
 from numba.core.typing import signature
@@ -29,6 +27,8 @@ from bodo.utils.typing import (
     is_literal_type,
     raise_bodo_error,
 )
+from bodosql import DatabaseCatalog, DatabaseCatalogType
+from bodosql.context import PropertiesClass, SnowflakeCatalogImplClass
 
 
 def _validate_constructor_args(

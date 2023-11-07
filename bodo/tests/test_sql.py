@@ -618,7 +618,7 @@ def test_postgres_read_sql_count(memory_leak_check):
     def test_impl(conn):
         sql_request = """
         SELECT staff_id,
-	            COUNT(*)
+                COUNT(*)
         FROM payment
         GROUP BY staff_id
         """
@@ -697,13 +697,13 @@ def test_postgres_read_sql_gb(memory_leak_check):
     def impl(conn):
         sql_request = """
         SELECT
-	        customer_id,
+            customer_id,
             staff_id,
-	        ROUND(AVG(amount), 2) AS Average
+            ROUND(AVG(amount), 2) AS Average
         FROM
-	        payment
+            payment
         GROUP BY
-        	customer_id, staff_id
+            customer_id, staff_id
         """
         frame = pd.read_sql(sql_request, conn)
         return frame
@@ -713,12 +713,12 @@ def test_postgres_read_sql_gb(memory_leak_check):
     def impl2(conn):
         sql_request = """
         SELECT
-	        DATE(payment_date) paid_date,
-	        SUM(amount) sum
+            DATE(payment_date) paid_date,
+            SUM(amount) sum
         FROM
-        	payment
+            payment
         GROUP BY
-        	DATE(payment_date)
+            DATE(payment_date)
         ORDER BY paid_date
         """
         frame = pd.read_sql(sql_request, conn)

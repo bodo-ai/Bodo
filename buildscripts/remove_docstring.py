@@ -1,9 +1,10 @@
 """Remove docstrings from a python file and replace it
 """
-import sys
 import ast
-import astunparse
+import sys
 from pathlib import Path
+
+import astunparse
 
 
 class RemoveDocstring(ast.NodeTransformer):
