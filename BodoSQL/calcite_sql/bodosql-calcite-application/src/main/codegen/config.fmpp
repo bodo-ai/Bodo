@@ -157,6 +157,12 @@ data: {
       "S",
       "SEC",
       "SECS",
+      "MS",
+      "MSEC",
+      "MILLISECONDS",
+      "US",
+      "USEC",
+      "MICROSECONDS",
       "NS",
       "NSEC",
       "NANOSEC",
@@ -276,6 +282,12 @@ data: {
         "MINUTES",
         "SECOND",
         "SECONDS",
+        "MS",
+        "MSEC",
+        "MILLISECONDS",
+        "US",
+        "USEC",
+        "MICROSECONDS",
         # https://docs.snowflake.com/en/sql-reference/reserved-keywords
         # Snowflake doesn't reserve type keywords
         "INTEGER",
@@ -389,6 +401,7 @@ data: {
     builtinFunctionCallMethods: [
         "DatePartFunctionCall()",
         "LastDayFunctionCall()",
+        "TimestampAddFunctionCall()",
     ]
 
     # List of methods for parsing extensions to "CREATE [OR REPLACE]" calls.
