@@ -3,7 +3,7 @@ import sys
 import os
 import glob
 import platform
-from typing import Any, Dict
+import typing as pt
 from setuptools import Extension, find_packages, setup
 from Cython.Build import cythonize
 import numpy as np
@@ -180,7 +180,7 @@ if "BODO_FORCE_COLORED_BUILD" in os.environ:
 
 # Use a single C-extension for all of Bodo
 # Copying ind, lid, eca, and ela to avoid aliasing, as we continue to append
-ext_metadata: Dict[str, Any] = dict(
+ext_metadata: dict[str, pt.Any] = dict(
     name="bodo.ext",
     sources=[],
     depends=[],
@@ -442,22 +442,6 @@ bodo_ext = Extension(**ext_metadata)
 builtin_exts = []
 pyx_builtins = []
 
-ext_arrow = Extension(
-    name="bodo.io.arrow_ext",
-    sources=["bodo/io/arrow_ext.pyx"],
-    include_dirs=np_compile_args["include_dirs"]
-    + ind
-    + pa_compile_args["include_dirs"],
-    define_macros=[],
-    library_dirs=lid + pa_compile_args["library_dirs"],
-    libraries=["arrow", "arrow_python"],
-    extra_compile_args=eca + ["-Wno-unused-variable"],
-    extra_link_args=ela,
-    language="c++",
-)
-builtin_exts.append(ext_arrow)
-pyx_builtins.append(os.path.join("bodo", "io", "arrow_ext.pyx"))
-
 ext_pyfs = Extension(
     name="bodo.io.pyfs",
     sources=["bodo/io/pyfs.pyx"],
@@ -543,13 +527,8 @@ elif develop_mode:
         "Python files from Git."
     )
 elif install_mode:
-    import subprocess
-
-    # rename select files to .pyx for cythonizing
-    subprocess.run([sys.executable, "rename_to_pyx.py"])
-    _cython_ext_mods = [
-        f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f not in pyx_builtins
-    ]
+    _cython_ext_mods = glob.glob("bodo/transforms/*.py", recursive=True)
+    _cython_ext_mods.remove(os.path.join("bodo", "transforms", "__init__.py"))
 else:
     _cython_ext_mods = []
 
@@ -616,7 +595,7 @@ setup(
         + cythonize(
             _cython_ext_mods + builtin_exts,
             compiler_directives={"language_level": "3"},
-            compile_time_env=dict(BODO_DEV_BUILD=develop_mode),
+            compile_time_env={"BODO_DEV_BUILD": develop_mode},
         )
     ),
 )

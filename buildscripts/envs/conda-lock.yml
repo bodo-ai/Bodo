@@ -15,16 +15,16 @@
 version: 1
 metadata:
   content_hash:
-    osx-arm64: c93e696e715cb96f857203907ce9158f8e0838a6db4fc44655b2d64e9c6deb98
-    osx-64: 9645efee572a5af8afe17a9800ab7d681225c942fd24e58bac5fcf625cb27d23
-    linux-64: 0b3c8649c706165bc1058fa7f7668b264010b46c6a39d538693324f07cdf91b4
+    osx-arm64: 3c660d21db3555cf8940a6dadf4d3fc76e618ffa60efc3d65c32eba181d9f245
+    osx-64: 9e39c3e564fe68a6391032208fc0eec10006a446a57bd38cf1af4395853a0cc0
+    linux-64: ef36024ecc878a2c0f7da32d8ac4f88d8df9ed636bc013fb536059390f8341e9
   channels:
   - url: conda-forge
     used_env_vars: []
   platforms:
-  - linux-64
-  - osx-64
   - osx-arm64
+  - osx-64
+  - linux-64
   sources:
   - main.yml
   - build.yml
@@ -2119,7 +2119,7 @@ package:
   category: main
   optional: false
 - name: cython
-  version: 0.29.36
+  version: 3.0.5
   manager: conda
   platform: linux-64
   dependencies:
@@ -2127,10 +2127,10 @@ package:
     libstdcxx-ng: '>=12'
     python: '>=3.11,<3.12.0a0'
     python_abi: 3.11.*
-  url: https://conda.anaconda.org/conda-forge/linux-64/cython-0.29.36-py311hb755f60_1.conda
+  url: https://conda.anaconda.org/conda-forge/linux-64/cython-3.0.5-py311hb755f60_0.conda
   hash:
-    md5: ee1148d39b3b8a095a1502f253a30013
-    sha256: 2789afa4c8fbee199e592115cd04f45396a9244a9c7cdc6154a3751145038a29
+    md5: 25b42509a68f96e612534af3fe2cf033
+    sha256: fd5f55adc60b45404a0c421f4ea7ce52114495e069d16c2e8849e5d629815bbb
   category: main
   optional: false
 - name: dbus
@@ -5995,17 +5995,18 @@ package:
   category: main
   optional: false
 - name: cython
-  version: 0.29.36
+  version: 3.0.5
   manager: conda
   platform: osx-64
   dependencies:
-    libcxx: '>=15.0.7'
+    __osx: '>=10.9'
+    libcxx: '>=16.0.6'
     python: '>=3.11,<3.12.0a0'
     python_abi: 3.11.*
-  url: https://conda.anaconda.org/conda-forge/osx-64/cython-0.29.36-py311hdf8f085_1.conda
+  url: https://conda.anaconda.org/conda-forge/osx-64/cython-3.0.5-py311hd39e593_0.conda
   hash:
-    md5: 00596dc2c4643b5726960a8f40236543
-    sha256: b01d7944b2c0dd4cba57f6d010abdffc48b452d62fcd46c3db073c5e26699f10
+    md5: 91337481c36f2d5404e1600ecf487dc3
+    sha256: 81fa816be4b065d04ead63a256dd0cf2d935e24689a4d662ef05ff8089eb2f13
   category: main
   optional: false
 - name: decorator
@@ -9300,17 +9301,18 @@ package:
   category: main
   optional: false
 - name: cython
-  version: 0.29.36
+  version: 3.0.5
   manager: conda
   platform: osx-arm64
   dependencies:
-    libcxx: '>=15.0.7'
+    __osx: '>=10.9'
+    libcxx: '>=16.0.6'
     python: '>=3.11,<3.12.0a0'
     python_abi: 3.11.*
-  url: https://conda.anaconda.org/conda-forge/osx-arm64/cython-0.29.36-py311ha891d26_1.conda
+  url: https://conda.anaconda.org/conda-forge/osx-arm64/cython-3.0.5-py311hbaf5611_0.conda
   hash:
-    md5: 73a44885e2be91157fa50d4cd7c72218
-    sha256: c659a5483802b03bfed55ef3c556e7a1831da48dfcb374c23314dfef27918ee1
+    md5: faa3564ae909ea060f6229eece68f31d
+    sha256: a013e641d86904865598f13d26cc4530606e4a32498f373cf69b31f76ff41419
   category: main
   optional: false
 - name: decorator

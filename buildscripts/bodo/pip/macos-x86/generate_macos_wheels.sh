@@ -5,11 +5,7 @@ set -exo pipefail
 cd obfuscation
 pip3 install astor
 python3 do_obfuscation.py
-
-# rename to pyx
 cd ..
-
-python3 rename_to_pyx.py
 
 # Amend commit to remove dirty from version
 

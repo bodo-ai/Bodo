@@ -9,10 +9,7 @@ cd /bodo
 # obfuscate
 cd obfuscation
 /opt/python/cp310-cp310/bin/python do_obfuscation.py
-
-# rename to pyx
 cd ..
-/opt/python/cp310-cp310/bin/python rename_to_pyx.py
 
 # Amend commit to remove dirty from version
 
