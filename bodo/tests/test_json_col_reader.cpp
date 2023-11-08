@@ -6,7 +6,11 @@
 #include <string>
 
 #include <arrow/api.h>
+#include <arrow/array/builder_binary.h>
+#include <arrow/array/builder_primitive.h>
+#include <arrow/scalar.h>
 #include <arrow/type.h>
+#include <arrow/type_fwd.h>
 
 #include "../io/json_col_parser.h"
 #include "../libs/_memory.h"
@@ -747,5 +751,144 @@ static bodo::tests::suite tests([] {
 
         auto exp_map_arr = map_builder.Finish().ValueOrDie();
         bodo::tests::check(map_arr->Equals(exp_map_arr));
+    });
+
+    bodo::tests::test("test_empty_struct", [] {
+        auto in_type = std::make_shared<arrow::StructType>(
+            std::vector<std::shared_ptr<arrow::Field>>{
+                arrow::field("null", arrow::null())});
+        auto arr = const_str_arr({
+            // Null Outer Map
+            std::nullopt,
+            // Empty Map,
+            "{}",
+            // With Spacing
+            "{\n\t\n}",
+            // Only Null Inside
+            "{\"null\": null}",
+        });
+        auto struct_arr = string_to_struct_arr(arr, in_type);
+
+        auto null_builder = std::make_shared<arrow::NullBuilder>();
+        auto struct_builder = arrow::StructBuilder(
+            in_type, bodo::BufferPool::DefaultPtr(), {null_builder});
+
+        // Null Outer Array
+        bodo::tests::check(struct_builder.AppendNull().ok());
+        // Empty Outer Array
+        bodo::tests::check(struct_builder.Append().ok());
+        bodo::tests::check(null_builder->AppendNull().ok());
+        // Empty with Spacing
+        bodo::tests::check(struct_builder.Append().ok());
+        bodo::tests::check(null_builder->AppendNull().ok());
+        // Only Null Inside
+        bodo::tests::check(struct_builder.Append().ok());
+        bodo::tests::check(null_builder->AppendNull().ok());
+
+        auto exp_struct_arr = struct_builder.Finish().ValueOrDie();
+        bodo::tests::check(struct_arr->Equals(exp_struct_arr));
+    });
+
+    bodo::tests::test("test_extra_keys", [] {
+        auto in_type = std::make_shared<arrow::StructType>(
+            std::vector<std::shared_ptr<arrow::Field>>{
+                arrow::field("base", arrow::int64())});
+        auto arr = const_str_arr({
+            // Normal Row
+            "{\"base\": 25}",
+            // Empty Map,
+            "{\"base\": 10, \"extra\": null}",
+        });
+        bodo::tests::check_exception(
+            [&] { string_to_struct_arr(arr, in_type); },
+            "Found an unexpected field name");
+    });
+
+    bodo::tests::test("test_different_order_struct", [] {
+        auto in_type = std::make_shared<arrow::StructType>(
+            std::vector<std::shared_ptr<arrow::Field>>{
+                arrow::field("f1", arrow::int64()),
+                arrow::field("f2", arrow::boolean()),
+                arrow::field("f3", arrow::large_utf8())});
+
+        auto arr = const_str_arr({
+            // Normal
+            "{\"f1\": 25, \"f2\": true, \"f3\": \"hello\"}",
+            // Rotate
+            "{\"f2\": true,  \"f3\": \"middle\",  \"f1\": 10}",
+            // Flip All
+            "{\"f3\": \"bye\", \"f2\": false, \"f1\": -5}",
+        });
+        auto struct_arr = string_to_struct_arr(arr, in_type);
+
+        auto f1_builder = std::make_shared<arrow::Int64Builder>();
+        auto f2_builder = std::make_shared<arrow::BooleanBuilder>();
+        auto f3_builder = std::make_shared<arrow::LargeStringBuilder>();
+        auto struct_builder =
+            arrow::StructBuilder(in_type, bodo::BufferPool::DefaultPtr(),
+                                 {f1_builder, f2_builder, f3_builder});
+
+        // Normal
+        bodo::tests::check(struct_builder.Append().ok());
+        bodo::tests::check(f1_builder->Append(25).ok());
+        bodo::tests::check(f2_builder->Append(true).ok());
+        bodo::tests::check(f3_builder->Append("hello").ok());
+        // Rotate
+        bodo::tests::check(struct_builder.Append().ok());
+        bodo::tests::check(f3_builder->Append("middle").ok());
+        bodo::tests::check(f2_builder->Append(true).ok());
+        bodo::tests::check(f1_builder->Append(10).ok());
+        // Flip All
+        bodo::tests::check(struct_builder.Append().ok());
+        bodo::tests::check(f3_builder->Append("bye").ok());
+        bodo::tests::check(f2_builder->Append(false).ok());
+        bodo::tests::check(f1_builder->Append(-5).ok());
+
+        auto exp_struct_arr = struct_builder.Finish().ValueOrDie();
+        bodo::tests::check(struct_arr->Equals(exp_struct_arr));
+    });
+
+    bodo::tests::test("test_missing_keys", [] {
+        auto in_type = std::make_shared<arrow::StructType>(
+            std::vector<std::shared_ptr<arrow::Field>>{
+                arrow::field("f1", arrow::int64()),
+                arrow::field("f2", arrow::boolean()),
+                arrow::field("f3", arrow::large_utf8())});
+
+        auto arr = const_str_arr({
+            // Missing All
+            "{}",
+            // Missing f2
+            "{\"f1\": 10, \"f3\": \"middle\"}",
+            // Missing f3 and f1
+            "{\"f2\": false}",
+        });
+        auto struct_arr = string_to_struct_arr(arr, in_type);
+
+        auto f1_builder = std::make_shared<arrow::Int64Builder>();
+        auto f2_builder = std::make_shared<arrow::BooleanBuilder>();
+        auto f3_builder = std::make_shared<arrow::LargeStringBuilder>();
+        auto struct_builder =
+            arrow::StructBuilder(in_type, bodo::BufferPool::DefaultPtr(),
+                                 {f1_builder, f2_builder, f3_builder});
+
+        // Normal
+        bodo::tests::check(struct_builder.Append().ok());
+        bodo::tests::check(f1_builder->AppendNull().ok());
+        bodo::tests::check(f2_builder->AppendNull().ok());
+        bodo::tests::check(f3_builder->AppendNull().ok());
+        // Rotate
+        bodo::tests::check(struct_builder.Append().ok());
+        bodo::tests::check(f3_builder->Append("middle").ok());
+        bodo::tests::check(f2_builder->AppendNull().ok());
+        bodo::tests::check(f1_builder->Append(10).ok());
+        // Flip All
+        bodo::tests::check(struct_builder.Append().ok());
+        bodo::tests::check(f3_builder->AppendNull().ok());
+        bodo::tests::check(f2_builder->Append(false).ok());
+        bodo::tests::check(f1_builder->AppendNull().ok());
+
+        auto exp_struct_arr = struct_builder.Finish().ValueOrDie();
+        bodo::tests::check(struct_arr->Equals(exp_struct_arr));
     });
 });

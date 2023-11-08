@@ -234,8 +234,8 @@ def test_array_metadata_handling(cursor):
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
 def test_array_metadata_handling_err(cursor):
     """
-    Test that an error is raised when a variant or semi-structured column
-    has multiple types that are incompatible
+    Test that an error is raised when an array item column
+    has multiple value types that are incompatible
     """
 
     with pytest.raises(
@@ -283,21 +283,94 @@ def test_map_metadata_handling(cursor):
 
 
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
-def test_map_metadata_handling_err(cursor):
+def test_struct_metadata_handling(cursor):
     """
-    Test that an error is raised when a variant or semi-structured map
-    column has multiple types that are incompatible
+    Test that Object Columns are Typed in Struct when Map is Invalid
+    Tests the additional scenarios
+    - B: Nulls with other types
+    - C: Only Nulls
+    - D: Different numeric types together (int, decimal, float)
+    - E: Field not in all rows
+    """
+
+    pa_fields = bodo.io.snowflake.get_schema_from_metadata(
+        cursor,
+        """
+        select null as A
+        union all
+        select OBJECT_CONSTRUCT_KEEP_NULL('a', '1980-01-05'::date, 'b', true, 'c', null, 'd', 10, 'e', 'test') as A
+        union all
+        select OBJECT_CONSTRUCT_KEEP_NULL('a', CURRENT_DATE(), 'b', null, 'c', null, 'd', 'nan'::double) as A
+        """,
+        None,
+        None,
+        True,
+        False,
+        False,
+    )[0]
+
+    assert len(pa_fields) == 1
+    assert pa_fields[0].name == "A"
+    assert pa_fields[0].nullable
+
+    stype = pa_fields[0].type
+    assert pa.types.is_struct(stype)
+    for f in (
+        pa.field("a", pa.date32(), nullable=True),
+        pa.field("b", pa.bool_(), nullable=True),
+        pa.field("c", pa.null(), nullable=True),
+        pa.field("d", pa.float64(), nullable=True),
+        pa.field("e", pa.large_string(), nullable=True),
+    ):
+        assert stype.field(stype.get_field_index(f.name)).equals(f)
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_struct_metadata_handling_err_multiple_types(cursor):
+    """
+    Test that an error is raised when a object column has a field
+    with different types in different rows
     """
 
     with pytest.raises(
-        BodoError, match=r"has multiple value types \['DATE', 'VARCHAR'\]"
+        BodoError, match=r"containing multiple types \['DATE', 'INTEGER'\]"
     ):
         bodo.io.snowflake.get_schema_from_metadata(
             cursor,
             """
-            select null as A
+            select OBJECT_CONSTRUCT_KEEP_NULL('a', 10) as A
             union all
             select OBJECT_CONSTRUCT_KEEP_NULL('a', CURRENT_DATE(), 'b', '1980-01-05', 'c', null) as A
+            """,
+            None,
+            None,
+            True,
+            False,
+            False,
+        )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_struct_metadata_handling_err_uncommon_field(cursor):
+    """
+    Test that an error is raised when a object column with heterogenous types
+    is assumed to be a struct, but there is a one-off or very uncommon field
+    implying otherwise.
+    """
+
+    with pytest.raises(BodoError, match=r"contains field d in < 0.5% of non-null rows"):
+        bodo.io.snowflake.get_schema_from_metadata(
+            cursor,
+            """
+            with thousand as (
+                select 
+                    OBJECT_CONSTRUCT_KEEP_NULL('a', CURRENT_DATE(), 'b', '1980-01-05', 'c', null) as A
+                from table(generator(ROWCOUNT=>1000))
+            )
+
+            select OBJECT_CONSTRUCT_KEEP_NULL('a', 10, 'd', 'bad') as A
+            union all
+            select A from thousand
             """,
             None,
             None,
@@ -843,6 +916,81 @@ def test_read_map_col(memory_leak_check):
         (query, conn),
         py_output=py_output,
         use_map_arrays=True,
+    )
+
+
+def test_read_struct_col(memory_leak_check):
+    """
+    Basic test of reading an struct column from Snowflake
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
+    query = """
+    SELECT * FROM (
+        select 1 as idx, null as A
+        union all
+        select 2 as idx, OBJECT_CONSTRUCT_KEEP_NULL(
+            'a', null, 'b', null, 'c', null, 'd', null, 'e', null
+        ) as A
+        union all
+        select 3 as idx, OBJECT_CONSTRUCT_KEEP_NULL(
+            'a', null, 'b', 10, 'c', null, 'd', true, 'e', '2023-11-01'::date
+        ) as A
+        union all
+        select 4 as idx, OBJECT_CONSTRUCT_KEEP_NULL(
+            'a', 'test', 'b', -0.853, 'c', null, 'd', false, 'e', '1980-10-01'::date
+        ) as A
+        union all
+        select 5 as idx, OBJECT_CONSTRUCT_KEEP_NULL(
+            'a', 'once', 'b', 'nan'::float, 'c', null, 'd', null, 'e', null
+        ) as A
+        union all
+        select 6 as idx, OBJECT_CONSTRUCT_KEEP_NULL(
+            'a', 'none', 'b', 1635::float, 'c', null, 'd', null, 'e', '1970-01-01'::date
+        ) as A
+    )
+    ORDER BY idx
+    """
+    py_output = pd.DataFrame(
+        {
+            "idx": [1, 2, 3, 4, 5, 6],
+            "a": [
+                np.nan,
+                {"a": np.nan, "b": np.nan, "c": np.nan, "d": np.nan, "e": np.nan},
+                {
+                    "a": np.nan,
+                    "b": 10.0,
+                    "c": np.nan,
+                    "d": True,
+                    "e": datetime.date(2023, 11, 1),
+                },
+                {
+                    "a": "test",
+                    "b": -0.853,
+                    "c": np.nan,
+                    "d": False,
+                    "e": datetime.date(1980, 10, 1),
+                },
+                {"a": "once", "b": np.nan, "c": np.nan, "d": np.nan, "e": np.nan},
+                {
+                    "a": "none",
+                    "b": 1635.0,
+                    "c": np.nan,
+                    "d": np.nan,
+                    "e": datetime.date(1970, 1, 1),
+                },
+            ],
+        }
+    )
+
+    check_func(
+        impl,
+        (query, conn),
+        py_output=py_output,
     )
 
 

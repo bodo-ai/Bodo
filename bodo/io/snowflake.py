@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import re
@@ -7,16 +8,7 @@ import traceback
 import warnings
 from enum import Enum
 from tempfile import TemporaryDirectory
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    List,
-    Literal,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 from urllib.parse import parse_qsl, urlparse
 from uuid import uuid4
 
@@ -109,7 +101,7 @@ class UnknownSnowflakeType(Enum):
     LIST = "list"
 
 
-SCALE_TO_UNIT_PRECISION: Dict[int, Literal["s", "ms", "us", "ns"]] = {
+SCALE_TO_UNIT_PRECISION: dict[int, Literal["s", "ms", "us", "ns"]] = {
     0: "s",
     3: "ms",
     6: "us",
@@ -486,7 +478,7 @@ def escape_col_name(col_name: str) -> str:
     return '"{}"'.format(col_name.replace('"', '""'))
 
 
-def parse_conn_str(conn_str: str, strict_parsing: bool = False) -> Dict[str, Any]:
+def parse_conn_str(conn_str: str, strict_parsing: bool = False) -> dict[str, Any]:
     """
     Parse a Snowflake Connection URL into Individual Components,
     and save to a dict.
@@ -515,7 +507,7 @@ def parse_conn_str(conn_str: str, strict_parsing: bool = False) -> Dict[str, Any
             - port (optional, usually unspecified)
             - database
             - schema
-            - session_parameters: Dict[str, str] of special preset params
+            - session_parameters: dict[str, str] of special preset params
             - ...
     """
 
@@ -677,9 +669,9 @@ def get_number_types_from_metadata(
     cursor: "SnowflakeCursor",
     sql_query: str,
     orig_table: Optional[str],
-    orig_table_indices: Optional[Tuple[int, ...]],
+    orig_table_indices: Optional[tuple[int, ...]],
     downcast_decimal_to_double: bool,
-    cols_to_check: List[Tuple[int, str, Union[pa.Decimal128Type, pa.Decimal256Type]]],
+    cols_to_check: list[tuple[int, str, Union[pa.Decimal128Type, pa.Decimal256Type]]],
 ):
     """
     Determine the smallest possible integer size for all NUMBER columns
@@ -745,7 +737,7 @@ def get_number_types_from_metadata(
     if probe_res is None or (typing_table := probe_res.fetch_arrow_all()) is None:
         return (cols_to_check, col_names_to_check)
 
-    new_col_info: List[Tuple[int, str, pa.DataType]] = []
+    new_col_info: list[tuple[int, str, pa.DataType]] = []
 
     # Note, this assumes that the output metadata columns are in the
     # same order as the columns we checked in the probe query
@@ -803,6 +795,8 @@ def snowflake_type_str_to_pyarrow_datatype(
 
     if len(types) > 1:
         return None
+    if len(types) == 0:
+        return pa.null()
 
     value_type = types.pop()
     if value_type == "DECIMAL":
@@ -813,7 +807,7 @@ def snowflake_type_str_to_pyarrow_datatype(
         return pa.large_string()
     elif value_type == "BINARY":
         return pa.binary()
-    elif value_type == "BOOL":
+    elif value_type in ("BOOL", "BOOLEAN"):
         return pa.bool_()
     elif value_type == "DATE":
         return pa.date32()
@@ -873,6 +867,72 @@ def get_list_type_from_metadata(
     return pa.large_list(pa_type)
 
 
+def get_struct_type_from_metadata(
+    cursor: "SnowflakeCursor", sql_query: str, col_to_check: str, tz: str
+):
+    """
+    For a potential Struct columns, determine a common set of field names
+    and their internal types from Snowflake
+    """
+
+    # TODO: Improve potential performance of query
+    probe_query = f"""\
+        WITH source AS (
+            SELECT
+                {col_to_check} AS vals,
+                COUNT(A) OVER () as src_cnt
+            FROM ({sql_query}) WHERE vals is not NULL LIMIT 1000
+        ),
+        keys_table AS (
+            SELECT distinct t.key::text as keys
+            FROM source s, lateral flatten(input => vals) t
+        )
+        SELECT
+            keys,
+            COUNT(GET(vals, keys)),
+            ANY_VALUE(src_cnt) as total,
+            ARRAY_AGG(distinct TYPEOF(GET(vals, keys))) as types
+        FROM keys_table, source
+        GROUP BY keys
+    """
+
+    probe_res = execute_query(
+        cursor,
+        probe_query,
+        timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
+    )
+
+    key_types: list[tuple[str, int, int, str]]
+    if probe_res is None or len(key_types := probe_res.fetchall()) == 0:
+        raise BodoError(
+            f"Snowflake Probe Query Failed or Timed out While Testing the Type of Struct Column {col_to_check} in the Source:\n{sql_query}"
+        )
+
+    fields = []
+    for key_name, cnt, total, types_list_str in key_types:
+        # Edge case, only null columns have cnt == 0
+        # Metric ignores null rows
+        if cnt != 0 and cnt / total < 0.005:
+            raise BodoError(
+                f"Snowflake Probe found that Object Column {col_to_check} contains "
+                f"field {key_name} in < 0.5% of non-null rows. This imples {col_to_check} is map column "
+                "with heterogenous values, which Bodo does not currently support."
+            )
+
+        value_types: set[str] = set(json.loads(types_list_str))
+        pa_type = snowflake_type_str_to_pyarrow_datatype(value_types, col_to_check, tz)
+        if pa_type is None:
+            raise BodoError(
+                f"Snowflake Probe determined that Object Column {col_to_check} in query or table:\n"
+                f"{sql_query}\n"
+                f"can't be either a map or struct column. Field {key_name} was found containing multiple types {sorted(value_types)}. Bodo currently does not support heterogenous column types/\n"
+            )
+
+        fields.append(pa.field(key_name, pa_type, nullable=True))
+
+    return pa.struct(fields)
+
+
 def get_map_type_from_metadata(
     cursor: "SnowflakeCursor", sql_query: str, col_to_check: str, tz: str
 ):
@@ -903,14 +963,7 @@ def get_map_type_from_metadata(
     pa_type = snowflake_type_str_to_pyarrow_datatype(value_types, col_to_check, tz)
 
     if pa_type is None:
-        raise BodoError(
-            f"Snowflake Probe determined that Map Column {col_to_check} in query or table:\n"
-            f"{sql_query}\n"
-            f"has multiple value types {sorted(value_types)}. This indicated that {col_to_check} is either:\n"
-            "  - A variant / union column with multiple datatypes\n"
-            "  - A struct column with a common schema across rows\n"
-            "Bodo currently does not support either column types"
-        )
+        return get_struct_type_from_metadata(cursor, sql_query, col_to_check, tz)
 
     return pa.map_(pa.large_string(), pa_type)
 
@@ -919,12 +972,12 @@ def get_schema_from_metadata(
     cursor: "SnowflakeCursor",
     sql_query: str,
     orig_table: Optional[str],
-    orig_table_indices: Optional[Tuple[int]],
+    orig_table_indices: Optional[tuple[int, ...]],
     is_select_query: bool,
     is_table_input: bool,
     downcast_decimal_to_double: bool,
-) -> Tuple[
-    List[pa.Field], List, List[bool], List[int], List[pa.DataType], Optional[List[str]]
+) -> tuple[
+    list[pa.Field], list, list[bool], list[int], list[pa.DataType], Optional[list[str]]
 ]:  # pragma: no cover
     """
     Determine the Arrow schema and Bodo types of the query output
@@ -959,7 +1012,7 @@ def get_schema_from_metadata(
     tz: str = cursor._timezone  # type: ignore
 
     # Equivalent PyArrow Fields
-    arrow_dtypes: List[Tuple[str, pa.DataType, bool]] = []
+    arrow_dtypes: list[tuple[str, pa.DataType, bool]] = []
 
     for i, field_meta in enumerate(query_field_metadata):
         dtype = type_code_to_arrow_type(
@@ -1088,7 +1141,7 @@ def _detect_column_dict_encoding(
             separately so we can find the table if its not in the default schema.
 
     Returns:
-        Optional[Tuple[int, List[str]]]: debug info if the probe query timed out
+        Optional[tuple[int, list[str]]]: debug info if the probe query timed out
     """
     table_name_query = sql_query
     # Recreate the full path to the table if we have passed in the schema
@@ -1096,7 +1149,7 @@ def _detect_column_dict_encoding(
         sql_query = f"{schema_name}.{sql_query}"
 
     # Determine if the string columns are dictionary encoded
-    dict_encode_timeout_info: Optional[Tuple[int, List[str]]] = None
+    dict_encode_timeout_info: Optional[tuple[int, list[str]]] = None
 
     # the limit on the number of rows total to read for the probe
     probe_limit = max(SF_READ_DICT_ENCODING_PROBE_ROW_LIMIT // len(query_args), 1)
@@ -1219,10 +1272,10 @@ def get_schema(
     sql_query: str,
     is_select_query: bool,
     is_table_input: bool,
-    _bodo_read_as_dict: Optional[List[str]],
+    _bodo_read_as_dict: Optional[list[str]],
     downcast_decimal_to_double: bool,
     orig_table: Optional[str] = None,
-    orig_table_indices: Optional[Tuple[int]] = None,
+    orig_table_indices: Optional[tuple[int, ...]] = None,
 ):  # pragma: no cover
     """
     Args:
@@ -1300,7 +1353,7 @@ def get_schema(
         string_col_ind.append(str_col_name_to_ind[snowflake_case_map[name]])
 
     # Determine if the string columns are dictionary encoded
-    dict_encode_timeout_info: Optional[Tuple[int, List[str]]] = None
+    dict_encode_timeout_info: Optional[tuple[int, list[str]]] = None
 
     if len(query_args) != 0 and SF_READ_AUTO_DICT_ENCODE_ENABLED:
         if orig_table != None:
@@ -1335,7 +1388,7 @@ def get_schema(
     # it means it is case insensitive or it was inserted as all
     # uppercase with double quotes. In both of these situations
     # pd.read_sql() returns the name with all lower case
-    final_colnames: List[str] = []
+    final_colnames: list[str] = []
     converted_colnames = set()
     for x in pa_fields:
         if x.name.isupper():
@@ -1360,7 +1413,7 @@ class SnowflakeDataset(object):
     """Store dataset info in the way expected by Arrow reader in C++."""
 
     def __init__(
-        self, batches: List["ResultBatch"], schema, conn: "SnowflakeConnection"
+        self, batches: list["ResultBatch"], schema, conn: "SnowflakeConnection"
     ):
         # pieces, _bodo_total_rows and _bodo_total_rows are the attributes
         # expected by ArrowDataFrameReader, schema is for SnowflakeReader.
@@ -1420,7 +1473,7 @@ def get_dataset(
     is_select_query: bool = True,
     is_parallel: bool = True,
     is_independent: bool = False,
-) -> Tuple[SnowflakeDataset, int]:  # pragma: no cover
+) -> tuple[SnowflakeDataset, int]:  # pragma: no cover
     """Get snowflake dataset info required by Arrow reader in C++ and execute
     the Snowflake query
 
@@ -1521,7 +1574,7 @@ def get_dataset(
             num_rows: int = cur.rowcount  # type: ignore
 
             # Get the list of result batches (this doesn't load data).
-            batches: "List[ResultBatch]" = cur.get_result_batches()  # type: ignore
+            batches: "list[ResultBatch]" = cur.get_result_batches()  # type: ignore
             if len(batches) > 0 and not isinstance(batches[0], ArrowResultBatch):
                 if (
                     not is_select_query
@@ -2046,7 +2099,7 @@ def get_snowflake_stage_info(
     cursor: "SnowflakeCursor",
     stage_name: str,
     tmp_folder: TemporaryDirectory,
-) -> Dict:  # pragma: no cover
+) -> dict:  # pragma: no cover
     """Get parquet path and credentials for a snowflake internal stage.
     This works by using `_execute_helper` to issue a dummy upload query
 

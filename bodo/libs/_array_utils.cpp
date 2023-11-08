@@ -4,6 +4,7 @@
 #include "_array_utils.h"
 #include "_bodo_to_arrow.h"
 
+#include <arrow/type_fwd.h>
 #include <mpi.h>
 #include <iostream>
 #include <span>
@@ -90,6 +91,10 @@ void append_to_primitive(
         (void)typed_builder->AppendValues(
             (uint8_t*)values + BYTES_PER_DECIMAL * offset, length,
             valid_elems.data());
+    } else if (typ == arrow::Type::DATE32) {
+        auto typed_builder = dynamic_cast<arrow::Date32Builder*>(builder);
+        (void)typed_builder->AppendValues((int32_t*)values + offset, length,
+                                          valid_elems.data());
     } else {
         std::string err_msg = "append_to_primitive : Unsupported type " +
                               builder->type()->ToString();

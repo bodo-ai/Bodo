@@ -1,4 +1,5 @@
 #include "_table_builder_utils.h"
+
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 

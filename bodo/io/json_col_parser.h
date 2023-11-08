@@ -169,3 +169,14 @@ std::shared_ptr<arrow::Array> string_to_list_arr(
 std::shared_ptr<arrow::Array> string_to_map_arr(
     std::shared_ptr<arrow::StringArray> in_arr,
     std::shared_ptr<arrow::DataType> in_type);
+
+/**
+ * @brief Parses a String Array containing JSON-encoded arrays into a
+ * StructArray
+ * @param in_arr The String Array containing the JSON array values
+ * @param in_type The type of the output StructArray
+ * @return A StructArray containing the parsed JSON arrays
+ */
+std::shared_ptr<arrow::Array> string_to_struct_arr(
+    std::shared_ptr<arrow::StringArray> in_arr,
+    std::shared_ptr<arrow::DataType> in_type);

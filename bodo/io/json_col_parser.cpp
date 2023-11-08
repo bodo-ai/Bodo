@@ -1,10 +1,16 @@
 #include "json_col_parser.h"
 
+#include <algorithm>
 #include <charconv>
+#include <iterator>
 #include <string>
+#include <unordered_set>
 
 #include <arrow/builder.h>
 #include <arrow/type.h>
+
+#include <boost/algorithm/string/join.hpp>
+#include <boost/iterator/counting_iterator.hpp>
 
 #include "../libs/_bodo_common.h"
 
@@ -845,6 +851,311 @@ void parse_to_map(std::shared_ptr<arrow::LargeStringBuilder> key_builder,
     }
 }
 
+/**
+ * @brief Consume output from a tokenizer for an input JSON and
+ * insert into the ArrayBuilder for the values of a single element in a
+ * MapArray
+ *
+ * @param struct_builder ArrayBuilder for keys to insert output into
+ * @param tokenizer Tokenizer to read from. Should be at the start of an array
+ * @param struct_type Type of MapArray value-size contents
+ */
+void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
+                     Tokenizer& tokenizer,
+                     const std::shared_ptr<arrow::StructType>& struct_type) {
+    assert(tokenizer.current() == Token::ObjectStart);
+    bool expectFieldName = true;
+    int64_t curr_idx = -1;
+
+    std::vector<std::string> field_names;
+    std::transform(struct_type->fields().begin(), struct_type->fields().end(),
+                   std::back_inserter(field_names),
+                   [](const auto& field) { return field->name(); });
+    std::vector<arrow::Type::type> field_types;
+    std::transform(struct_type->fields().begin(), struct_type->fields().end(),
+                   std::back_inserter(field_types),
+                   [](const auto& field) { return field->type()->id(); });
+
+    std::unordered_map<std::string, int64_t, string_hash, std::equal_to<>>
+        field_to_idx;
+    for (int i = 0; i < struct_type->num_fields(); i++) {
+        field_to_idx[struct_type->field(i)->name()] = i;
+    }
+
+    std::unordered_set<int64_t> fields_found;
+
+    while (true) {
+        Token token = tokenizer.next();
+        switch (token) {
+            // Hit the end of the main array we're currently parsing
+            case Token::ObjectEnd: {
+                if (fields_found.size() !=
+                    static_cast<size_t>(struct_type->num_fields())) {
+                    for (int idx = 0; idx < struct_type->num_fields(); idx++) {
+                        if (fields_found.contains(idx)) {
+                            continue;
+                        }
+                        auto status =
+                            struct_builder->child_builder(idx)->AppendNull();
+                        if (!status.ok()) {
+                            throw std::runtime_error(
+                                "Failure while adding NULL from a struct "
+                                "element:\n" +
+                                std::string(tokenizer.source) +
+                                "\nWith error:\n" + status.ToString());
+                        }
+                    }
+                }
+                return;
+            }
+            case Token::_Comma:
+                continue;
+            case Token::End: {
+                throw std::runtime_error(
+                    "Unexpected end of input when parsing a struct column "
+                    "row: " +
+                    std::string(tokenizer.source));
+                break;
+            }
+            case Token::FieldName: {
+                if (!expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a value when parsing a struct column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+
+                if (!field_to_idx.contains(tokenizer.value())) {
+                    throw std::runtime_error(
+                        "Found an unexpected field name when parsing a "
+                        "struct column row: " +
+                        std::string(tokenizer.source));
+                }
+
+                // Replace to use heterogenous lookups
+                curr_idx = field_to_idx[std::string(tokenizer.value())];
+                fields_found.insert(curr_idx);
+                expectFieldName = false;
+                break;
+            }
+            case Token::Null: {
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a NULL when parsing a struct column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+                auto status =
+                    struct_builder->child_builder(curr_idx)->AppendNull();
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        "Failure while parsing NULL from a struct element:\n" +
+                        std::string(tokenizer.source) + "\nWith error:\n" +
+                        status.ToString());
+                }
+                expectFieldName = true;
+                break;
+            }
+            case Token::True:
+            case Token::False: {
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a boolean when parsing a map column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+                if (field_types[curr_idx] != arrow::Type::BOOL) {
+                    throw std::runtime_error(
+                        "Found an unexpected boolean value when parsing a " +
+                        struct_type->ToString() + " element:\n" +
+                        std::string(tokenizer.source));
+                }
+                auto bool_builder =
+                    std::static_pointer_cast<arrow::BooleanBuilder>(
+                        struct_builder->child_builder(curr_idx));
+
+                auto status = bool_builder->Append(token == Token::True);
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        "Failure while parsing a boolean from a list "
+                        "element:\n" +
+                        std::string(tokenizer.source) + "\nWith error:\n" +
+                        status.ToString());
+                }
+                expectFieldName = true;
+                break;
+            }
+            case Token::NaN:
+            case Token::Infinity:
+            case Token::NegInfinity:
+            case Token::Float: {
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a float when parsing a map column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+                if (field_types[curr_idx] != arrow::Type::DOUBLE) {
+                    throw std::runtime_error(
+                        "Found an unexpected float value when parsing a " +
+                        struct_type->ToString() + "] element:\n" +
+                        std::string(tokenizer.source));
+                }
+                auto double_builder =
+                    std::static_pointer_cast<arrow::DoubleBuilder>(
+                        struct_builder->child_builder(curr_idx));
+
+                auto status = double_builder->Append(tokenizer.floatValue());
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        "Failure while parsing a float from a list element:\n" +
+                        std::string(tokenizer.source) + "\nWith error:\n" +
+                        status.ToString());
+                }
+                expectFieldName = true;
+                break;
+            }
+            case Token::Integer: {
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found an integer when parsing a map column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+                if (field_types[curr_idx] == arrow::Type::INT64) {
+                    auto int_builder =
+                        std::static_pointer_cast<arrow::Int64Builder>(
+                            struct_builder->child_builder(curr_idx));
+                    auto status = int_builder->Append(tokenizer.intValue());
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while parsing an integer from a "
+                            "map[string, int] "
+                            "element:\n" +
+                            std::string(tokenizer.source) + "\nWith error:\n" +
+                            status.ToString());
+                    }
+                } else if (field_types[curr_idx] == arrow::Type::DOUBLE) {
+                    auto double_builder =
+                        std::static_pointer_cast<arrow::DoubleBuilder>(
+                            struct_builder->child_builder(curr_idx));
+                    auto status =
+                        double_builder->Append(tokenizer.floatValue());
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while parsing a integer from a "
+                            "map[string, float] element:\n" +
+                            std::string(tokenizer.source) + "\nWith error:\n" +
+                            status.ToString());
+                    }
+                } else {
+                    throw std::runtime_error(
+                        "Found an unexpected integer value when parsing a " +
+                        struct_type->ToString() + "] element:\n" +
+                        std::string(tokenizer.source));
+                }
+                expectFieldName = true;
+                break;
+            }
+            case Token::String: {
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a string when parsing a map column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+                auto value_type = struct_type->field(curr_idx)->type();
+                if (field_types[curr_idx] == arrow::Type::DATE32) {
+                    auto date_builder =
+                        std::static_pointer_cast<arrow::Date32Builder>(
+                            struct_builder->child_builder(curr_idx));
+                    auto parsed =
+                        arrow::Scalar::Parse(value_type, tokenizer.value())
+                            .ValueOrDie();
+                    auto status = date_builder->AppendScalar(*parsed);
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while parsing a date from a map "
+                            "element:\n" +
+                            std::string(tokenizer.source) + "\nWith error:\n" +
+                            status.ToString());
+                    }
+                } else if (field_types[curr_idx] == arrow::Type::TIMESTAMP) {
+                    auto timestamp_builder =
+                        std::static_pointer_cast<arrow::TimestampBuilder>(
+                            struct_builder->child_builder(curr_idx));
+                    auto parsed =
+                        arrow::Scalar::Parse(value_type, tokenizer.value())
+                            .ValueOrDie();
+                    auto status = timestamp_builder->AppendScalar(*parsed);
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while parsing a timestamp from a map "
+                            "element:\n" +
+                            std::string(tokenizer.source) + "\nWith error:\n" +
+                            status.ToString());
+                    }
+                } else if (field_types[curr_idx] == arrow::Type::LARGE_STRING ||
+                           field_types[curr_idx] == arrow::Type::STRING) {
+                    auto string_builder =
+                        std::static_pointer_cast<arrow::LargeStringBuilder>(
+                            struct_builder->child_builder(curr_idx));
+
+                    arrow::Status status;
+                    if (tokenizer.value_has_unescape) {
+                        tokenizer.stringValue(tokenizer.value_str);
+                        status = string_builder->Append(tokenizer.value_str);
+                    } else {
+                        status = string_builder->Append(tokenizer.value());
+                    }
+
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while parsing a string from a struct "
+                            "element:\n" +
+                            std::string(tokenizer.source) + "\nWith error:\n" +
+                            status.ToString());
+                    }
+                } else {
+                    throw std::runtime_error(
+                        "Found an unexpected string value when parsing a " +
+                        struct_type->ToString() + "] element:\n" +
+                        std::string(tokenizer.source));
+                }
+                expectFieldName = true;
+                break;
+            }
+            // TODO: Handle Nested Arrays
+            case Token::ArrayStart: {
+                throw std::runtime_error(
+                    "Found a nested array when parsing a StructArray column");
+                break;
+            }
+            // TODO: Handle Nested Objects
+            case Token::ObjectStart: {
+                throw std::runtime_error(
+                    "Found a nested object when parsing a StructArray column");
+                break;
+            }
+            case Token::Error: {
+                std::string error_msg(ErrorCodeStr[tokenizer.error()]);
+                throw std::runtime_error(
+                    "Found an error when parsing a ListArray column: " +
+                    error_msg + "\n\t" + std::string(tokenizer.source) +
+                    " at offset " + std::to_string(tokenizer.offset));
+                break;
+            }
+            default: {
+                throw std::runtime_error(
+                    "Found an invalid token when parsing a StructArray "
+                    "column:\n\t" +
+                    std::string(tokenizer.source));
+                break;
+            }
+        }
+    }
+}
+
 std::shared_ptr<arrow::Array> string_to_list_arr(
     std::shared_ptr<arrow::StringArray> in_arr,
     std::shared_ptr<arrow::DataType> in_type) {
@@ -929,4 +1240,44 @@ std::shared_ptr<arrow::Array> string_to_map_arr(
     }
 
     return map_builder->Finish().ValueOrDie();
+}
+
+std::shared_ptr<arrow::Array> string_to_struct_arr(
+    std::shared_ptr<arrow::StringArray> in_arr,
+    std::shared_ptr<arrow::DataType> in_type) {
+    // Extract List Types from DataType
+    // Shouldn't be a list type if constructed in Bodo
+    assert(in_type->id() == arrow::Type::STRUCT);
+    auto struct_type = std::static_pointer_cast<arrow::StructType>(in_type);
+
+    std::shared_ptr<arrow::ArrayBuilder> builder =
+        arrow::MakeBuilder(in_type, bodo::BufferPool::DefaultPtr())
+            .ValueOrDie();
+    auto struct_builder =
+        std::static_pointer_cast<arrow::StructBuilder>(builder);
+
+    Tokenizer tokenizer;
+
+    // Iterate over StringArray, Parse JSON, Validate, and Insert
+    // TODO: Is there an Iterator over StringArray contents?
+    for (int64_t i = 0; i < in_arr->length(); i++) {
+        if (in_arr->IsNull(i)) {
+            auto status = struct_builder->AppendNull();
+            continue;
+        }
+
+        auto json_str = in_arr->GetView(i);
+        auto status = struct_builder->Append();
+        if (!status.ok()) {
+            throw std::runtime_error("Failure while appending map: " +
+                                     status.ToString());
+        }
+
+        tokenizer.reset(json_str);
+        [[maybe_unused]] auto start_token = tokenizer.next();
+        assert(start_token == Token::ObjectStart);
+        parse_to_struct(struct_builder, tokenizer, struct_type);
+    }
+
+    return struct_builder->Finish().ValueOrDie();
 }
