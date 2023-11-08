@@ -10,6 +10,7 @@
 #include <arrow/table.h>
 
 #include "_array_utils.h"
+#include "_bodo_common.h"
 #include "_datetime_utils.h"
 
 /**
@@ -666,6 +667,28 @@ std::shared_ptr<BodoBuffer> arrow_null_bitmap_to_bodo(
 }
 
 /**
+ * @brief Helper function to construct a Bodo array from an Arrow NullArray
+ * In Bodo, NullArray is represented as a string array with all nulls
+ * So we have allocate a new string array
+ * @param arrow_null_arr Input Arrow NullArray
+ * @return out_array Output Bodo array
+ */
+std::shared_ptr<array_info> arrow_null_array_to_bodo(
+    std::shared_ptr<arrow::NullArray> arrow_null_arr) {
+    int64_t n = arrow_null_arr->length();
+
+    auto out_array = alloc_array_top_level(n, 0, 0, bodo_array_type::STRING,
+                                           Bodo_CTypes::STRING);
+    // set offsets to zero
+    memset(out_array->data2(), 0, sizeof(offset_t) * (n + 1));
+    // setting all to null
+    int64_t n_null_bytes = ((n + 7) >> 3);
+    memset(out_array->null_bitmask(), 0, n_null_bytes);
+
+    return out_array;
+}
+
+/**
  * @brief Convert Arrow struct array to Bodo array_info (STRUCT
  * type) with zero-copy. The output Bodo array holds references to the Arrow
  * array's buffers and releases them when deleted.
@@ -1051,6 +1074,9 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             return arrow_dictionary_array_to_bodo(
                 std::static_pointer_cast<arrow::DictionaryArray>(arrow_arr),
                 dicts_ref_arr);
+        case arrow::Type::NA:
+            return arrow_null_array_to_bodo(
+                std::static_pointer_cast<arrow::NullArray>(arrow_arr));
         default:
             throw std::runtime_error("arrow_array_to_bodo(): Array type " +
                                      arrow_arr->type()->ToString() +
