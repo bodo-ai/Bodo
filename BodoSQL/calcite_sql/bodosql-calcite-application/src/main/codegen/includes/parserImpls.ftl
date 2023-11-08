@@ -857,6 +857,14 @@ String SnowflakeTimeUnquotedInterval() : {
     | <SEC> { return "SECOND"; }
     | <SECONDS> { return "SECOND"; }
     | <SECS> { return "SECOND"; }
+    | <MS> { return "MILLISECOND"; }
+    | <MSEC> { return "MILLISECOND"; }
+    | <US> { return "MICROSECOND"; }
+    | <USEC> { return "MICROSECOND"; }
+    | <MICROSECOND> { return "MICROSECOND"; }
+    | <MICROSECONDS> { return "MICROSECOND"; }
+    | <MILLISECOND> { return "MILLISECOND"; }
+    | <MILLISECONDS> { return "MILLISECOND"; }
     | <NANOSECOND> { return "NANOSECOND"; }
     | <NS> { return "NANOSECOND"; }
     | <NSEC> { return "NANOSECOND"; }
@@ -900,5 +908,57 @@ SqlNode LastDayFunctionCall() :
 )
     {
         return SqlBodoParserUtil.createLastDayFunction(s.end(this), interval, args);
+    }
+}
+
+/**
+ * Parses a call to TIMESTAMPADD.
+ * Bodo change: Allow parsing all supported snowflake units unquoted
+ */
+SqlCall TimestampAddFunctionCall() :
+{
+    final List<SqlNode> args = new ArrayList<SqlNode>();
+    final Span s;
+    final String interval;
+}
+{
+    <DATEADD> { s = span(); }
+    <LPAREN>
+    (
+        interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+        <COMMA>
+        AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    |
+        AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    )
+    <COMMA>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <RPAREN> {
+        return DatetimeOperatorTable.DATEADD.createCall(
+            s.end(this), args);
+    }
+|
+    <TIMEADD> { s = span(); }
+    <LPAREN>
+    interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+    <COMMA>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <COMMA>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <RPAREN> {
+        return DatetimeOperatorTable.TIMEADD.createCall(
+            s.end(this), args);
+    }
+|
+    <TIMESTAMPADD> { s = span(); }
+    <LPAREN>
+    interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+    <COMMA>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <COMMA>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <RPAREN> {
+        return SqlBodoOperatorTable.TIMESTAMP_ADD.createCall(
+            s.end(this), args);
     }
 }

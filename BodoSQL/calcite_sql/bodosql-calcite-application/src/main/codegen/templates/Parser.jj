@@ -7227,56 +7227,6 @@ SqlCall JsonArrayAggFunctionCall() :
 }
 
 /**
- * Parses a call to TIMESTAMPADD.
- */
-SqlCall TimestampAddFunctionCall() :
-{
-    final List<SqlNode> args = new ArrayList<SqlNode>();
-    final Span s;
-}
-{
-    <DATEADD> { s = span(); }
-    <LPAREN>
-    (
-        QuotedOrUnquotedInterval(args)
-        <COMMA>
-        AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
-    |
-        AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
-    )
-    <COMMA>
-    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
-    <RPAREN> {
-        return DatetimeOperatorTable.DATEADD.createCall(
-            s.end(this), args);
-    }
-|
-    <TIMEADD> { s = span(); }
-    <LPAREN>
-    QuotedOrUnquotedInterval(args)
-    <COMMA>
-    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
-    <COMMA>
-    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
-    <RPAREN> {
-        return DatetimeOperatorTable.TIMEADD.createCall(
-            s.end(this), args);
-    }
-|
-    <TIMESTAMPADD> { s = span(); }
-    <LPAREN>
-    QuotedOrUnquotedInterval(args)
-    <COMMA>
-    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
-    <COMMA>
-    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
-    <RPAREN> {
-        return SqlBodoOperatorTable.TIMESTAMP_ADD.createCall(
-            s.end(this), args);
-    }
-}
-
-/**
  * Parses a call to TIMESTAMPDIFF.
  */
 SqlCall TimestampDiffFunctionCall() :
