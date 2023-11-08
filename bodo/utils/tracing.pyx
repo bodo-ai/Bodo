@@ -21,10 +21,7 @@ from bodo.utils.typing import BodoWarning
 # basic C types allow for code with less overhead compared to using Python objects
 cdef bint TRACING = 0  # 1 if started tracing, else 0
 cdef list traceEvents = []  # list of tracing events
-IF BODO_DEV_BUILD:
-    cdef str trace_filename = "bodo_trace.json"
-ELSE:
-    cdef str trace_filename = "bodo_trace.dat"
+cdef str trace_filename = "bodo_trace.json" if BODO_DEV_BUILD else "bodo_trace.dat"
 cdef object time_start = time.time()  # time at which tracing starts
 
 TRACING_MEM_WARN = "Tracing is still experimental and has been known to have memory related issues. In our testing we have at times seen 1-2 GB be used per rank to support tracing. If you are running out of memory or you are attempted to document the memory footprint for a workload, please disable tracing."
@@ -39,9 +36,9 @@ TRACING_MEM_WARN = "Tracing is still experimental and has been known to have mem
 
 
 cdef inline tracing_supported():
-    IF BODO_DEV_BUILD:
+    if BODO_DEV_BUILD:
         return True
-    ELSE:
+    else:
         key1 = b"{\xd5'*\xc1N\x90\xf1\xf9\xbfy\xc7\xf4\xc0"
         key2 = b'9\x9ace\x9e\x1a\xc2\xb0\xba\xfa&\x83\xb1\x96'
         # bitwise_xor(key1, key2) == b"BODO_TRACE_DEV"
@@ -138,10 +135,10 @@ def dump(fname=None, clear_traces=True):
                 if "MPI" in var or var.startswith("FI_") or var.startswith("BODO"):
                     trace_obj[var] = os.environ[var]
             trace_obj["traceEvents"] = traceEvents
-            IF BODO_DEV_BUILD:
+            if BODO_DEV_BUILD:
                 with open(fname, "w") as f:
                     json.dump(trace_obj, f)
-            ELSE:
+            else:
                 # write obscured traces by compressing with zlib without zlib
                 # header and writing to a binary file (the `file` command will
                 # only identify as "data")

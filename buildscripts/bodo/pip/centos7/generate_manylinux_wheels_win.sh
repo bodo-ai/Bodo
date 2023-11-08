@@ -26,10 +26,7 @@ conda activate
 cd obfuscation
 pip install astor
 python do_obfuscation.py
-
-# rename to pyx
 cd ..
-python rename_to_pyx.py
 
 # Amend commit to remove dirty from version
 

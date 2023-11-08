@@ -57,9 +57,6 @@ jobs:
     displayName: 'Obfuscation'
     condition: and(succeeded(), eq(variables.OBFUSCATE, 1))
 
-  - script: python rename_to_pyx.py
-    displayName: 'Rename .py to .pyx'
-
   - script: |
       set -exo pipefail
       if [[ ! -z $IS_RELEASE ]]; then
