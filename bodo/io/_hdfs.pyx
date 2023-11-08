@@ -1,4 +1,4 @@
-# Copied from https://github.com/apache/arrow/blob/apache-arrow-11.0.0/python/pyarrow/_hdfs.pyx
+# Copied from https://github.com/apache/arrow/blob/apache-arrow-14.0.0/python/pyarrow/_hdfs.pyx
 # See comment in bodo/io/__init__.py for why this is needed.
 # See our modification to this file below where it says "bodo change".
 
@@ -62,6 +62,7 @@ cdef class HadoopFileSystem(FileSystem):
     --------
     >>> from pyarrow import fs
     >>> hdfs = fs.HadoopFileSystem(host, port, user=user, kerb_ticket=ticket_cache_path) # doctest: +SKIP
+
     For usage of the methods see examples for :func:`~pyarrow.fs.LocalFileSystem`.
     """
 

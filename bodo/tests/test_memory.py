@@ -2989,7 +2989,7 @@ def test_spill_on_unpin(tmp_path: Path):
 
     # Pin it back and verify contents
     pool.pin(allocation_1)
-    contents_after_pin_back = allocation_1.read_bytes(3.5 * 1024 * 1024)
+    contents_after_pin_back = allocation_1.read_bytes(int(3.5 * 1024 * 1024))
     assert contents_after_pin_back == write_bytes
 
     pool.free(allocation_1)
@@ -3028,13 +3028,13 @@ def test_move_on_unpin_move_frame_case(tmp_path: Path):
     assert allocation.get_ptr_as_int() == (orig_ptr_alloc + 2 * 1024 * 1024)
     # Verify contents -- this is technically unsafe to do when a frame is
     # unpinned, but in this case we're sure it's still in memory.
-    assert write_bytes == allocation.read_bytes(1.5 * 1024 * 1024)
+    assert write_bytes == allocation.read_bytes(int(1.5 * 1024 * 1024))
 
     # Pin back and verify that it's still at another frame
     pool.pin(allocation)
     assert orig_ptr_alloc != allocation.get_ptr_as_int()
     assert allocation.get_ptr_as_int() == (orig_ptr_alloc + 2 * 1024 * 1024)
-    assert write_bytes == allocation.read_bytes(1.5 * 1024 * 1024)
+    assert write_bytes == allocation.read_bytes(int(1.5 * 1024 * 1024))
 
     pool.free(allocation)
     pool.cleanup()
@@ -3066,7 +3066,7 @@ def test_move_on_unpin_swap_frames_case(tmp_path: Path):
     orig_ptr_alloc_1 = allocation_1.get_ptr_as_int()
     pool.unpin(allocation_1)
     ptr_after_unpin_alloc_1 = allocation_1.get_ptr_as_int()
-    assert write_bytes_1 == allocation_1.read_bytes(3.5 * 1024 * 1024)
+    assert write_bytes_1 == allocation_1.read_bytes(int(3.5 * 1024 * 1024))
     assert ptr_after_unpin_alloc_1 != orig_ptr_alloc_1
     assert ptr_after_unpin_alloc_1 == (orig_ptr_alloc_1 + 4 * 1024 * 1024)
 
@@ -3079,7 +3079,7 @@ def test_move_on_unpin_swap_frames_case(tmp_path: Path):
     ptr_after_unpin_alloc_2 = allocation_2.get_ptr_as_int()
     # Update alloc_1 pointer
     ptr_after_unpin_alloc_1 = allocation_1.get_ptr_as_int()
-    assert write_bytes_2 == allocation_2.read_bytes(3.5 * 1024 * 1024)
+    assert write_bytes_2 == allocation_2.read_bytes(int(3.5 * 1024 * 1024))
     assert ptr_after_unpin_alloc_2 != orig_ptr_alloc_2
     # Confirm the swap
     assert ptr_after_unpin_alloc_1 == orig_ptr_alloc_1 == orig_ptr_alloc_2
@@ -3088,11 +3088,11 @@ def test_move_on_unpin_swap_frames_case(tmp_path: Path):
     # Pin back both and verify addresses and contents
     pool.pin(allocation_1)
     ptr_after_pin_alloc_1 = allocation_1.get_ptr_as_int()
-    assert write_bytes_1 == allocation_1.read_bytes(3.5 * 1024 * 1024)
+    assert write_bytes_1 == allocation_1.read_bytes(int(3.5 * 1024 * 1024))
     assert ptr_after_pin_alloc_1 == ptr_after_unpin_alloc_1
     pool.pin(allocation_2)
     ptr_after_pin_alloc_2 = allocation_2.get_ptr_as_int()
-    assert write_bytes_2 == allocation_2.read_bytes(3.5 * 1024 * 1024)
+    assert write_bytes_2 == allocation_2.read_bytes(int(3.5 * 1024 * 1024))
     assert ptr_after_pin_alloc_2 == ptr_after_unpin_alloc_2
 
     pool.free(allocation_1)

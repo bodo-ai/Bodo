@@ -601,7 +601,7 @@ cdef class BufferPool(IBufferPool):
         size_class.cinit(c_size_class)
         return size_class
 
-    cdef BufferPoolAllocation c_allocate(self, int size, int alignment) except +:
+    cdef BufferPoolAllocation c_allocate(self, int size, int alignment):
         # Create an empty BufferPoolAllocation instance.
         allocation = BufferPoolAllocation()
         # Allocate memory through the BufferPool.
@@ -819,7 +819,7 @@ cdef class OperatorBufferPool(IBufferPool):
     cdef void c_set_error_threshold(self, double error_threshold) except *:
         (deref(self.c_pool)).SetErrorThreshold(error_threshold)
     
-    def set_error_threshold(self, error_threshold: double):
+    def set_error_threshold(self, error_threshold: float):
         """
         Set the error threshold ratio.
         """

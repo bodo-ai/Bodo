@@ -66,12 +66,6 @@ jobs:
     displayName: 'Obfuscation'
 
   - bash: |
-       set -eo pipefail
-       source activate bodo_build
-       python rename_to_pyx.py
-    displayName: 'Rename py to pyx'
-
-  - bash: |
       set -eo pipefail
       if [[ ! -z $IS_RELEASE ]]; then
         ## Remove existing tag if it's a release

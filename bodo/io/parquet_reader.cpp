@@ -4,17 +4,12 @@
 // functionality that is specific to reading parquet datasets
 
 #include "parquet_reader.h"
-#include <arrow/python/pyarrow.h>
+
 #include <span>
+
+#include <arrow/python/pyarrow.h>
+
 #include "../libs/_array_utils.h"
-
-// Silence warnings from including generated code
-PUSH_IGNORED_COMPILER_ERROR("-Wunused-variable")
-#include "arrow_ext.cpp"
-POP_IGNORED_COMPILER_ERROR()
-
-using arrow::Type;
-using parquet::ParquetFileReader;
 
 // -------- Helper functions --------
 
