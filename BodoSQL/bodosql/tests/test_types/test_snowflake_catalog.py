@@ -2179,6 +2179,54 @@ def test_map_read(test_db_snowflake_catalog, memory_leak_check):
     )
 
 
+def test_struct_read(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test reading an struct column from Snowflake
+    """
+
+    def impl(bc):
+        return bc.sql("SELECT * FROM STRUCT_TEST ORDER BY idx")
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    py_output = pd.DataFrame(
+        {
+            "idx": [1, 2, 3, 4, 5, 6],
+            "a": [
+                np.nan,
+                {"a": np.nan, "b": np.nan, "c": np.nan, "d": np.nan, "e": np.nan},
+                {
+                    "a": np.nan,
+                    "b": 10.0,
+                    "c": np.nan,
+                    "d": True,
+                    "e": datetime.date(2023, 11, 1),
+                },
+                {
+                    "a": "test",
+                    "b": -0.853,
+                    "c": np.nan,
+                    "d": False,
+                    "e": datetime.date(1980, 10, 1),
+                },
+                {"a": "once", "b": np.nan, "c": np.nan, "d": np.nan, "e": np.nan},
+                {
+                    "a": "none",
+                    "b": 1635.0,
+                    "c": np.nan,
+                    "d": np.nan,
+                    "e": datetime.date(1970, 1, 1),
+                },
+            ],
+        }
+    )
+
+    check_func(
+        impl,
+        (bc,),
+        py_output=py_output,
+    )
+
+
 @pytest.mark.parametrize(
     "condition, answer",
     [

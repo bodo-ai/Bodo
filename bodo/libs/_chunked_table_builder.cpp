@@ -500,7 +500,6 @@ ChunkedTableBuilder::ChunkedTableBuilder(
             this->active_chunk->columns[i]->child_arrays[0] =
                 dict_builders[i]->dict_buff->data_array;
         }
-
         this->active_chunk_array_builders.emplace_back(
             this->active_chunk->columns[i], dict_builders[i],
             this->active_chunk_capacity,
