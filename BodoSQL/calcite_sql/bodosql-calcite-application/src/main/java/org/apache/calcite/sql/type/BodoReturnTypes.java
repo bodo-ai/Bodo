@@ -25,6 +25,24 @@ import static org.apache.calcite.util.Static.RESOURCE;
 
 public class BodoReturnTypes {
 
+
+
+    /**
+     * Converts the input type to a nullable type if there's a possibility
+     * of an empty group. Based off of Calcite's ARG0_NULLABLE_IF_EMPTY.
+     */
+    public static final SqlTypeTransform FORCE_NULLABLE_IF_EMPTY_GROUP =
+            (opBinding, typeToTransform) -> {
+                if (opBinding.getGroupCount() == 0 || opBinding.hasFilter()) {
+                    return opBinding.getTypeFactory()
+                            .createTypeWithNullability(typeToTransform, true);
+                } else {
+                    return typeToTransform;
+                }
+            };
+
+    public static final SqlReturnTypeInference BOOL_AGG_RET_TYPE = ReturnTypes.BOOLEAN_NULLABLE.andThen(FORCE_NULLABLE_IF_EMPTY_GROUP);
+
     /**
      * Defines the return type for FLATTEN
      */
@@ -90,6 +108,7 @@ public class BodoReturnTypes {
         }
     }
 
+
     /**
      * Convert type XXX to type XXX ARRAY
      */
@@ -97,6 +116,57 @@ public class BodoReturnTypes {
             (opBinding, typeToTransform) ->
                     toArrayTypeIfNotAlready(opBinding, typeToTransform, false)
                     ;
+
+
+    public static final SqlReturnTypeInference DECODE_RETURN_TYPE = opBinding -> decodeReturnType(opBinding);
+
+    // Obtains the least restrictive union of all the argument types
+    // corresponding to outputs in the key-value pairs of arguments
+    // (plus the optional default value argument)
+    public static RelDataType decodeReturnType(SqlOperatorBinding binding) {
+        RelDataTypeFactory typeFactory = binding.getTypeFactory();
+        RelDataType leastRestrictiveType = typeFactory.leastRestrictive(collectOutputTypes(binding));
+
+        // If there is no default, force the output to be nullable, since
+        // the default output is null
+        if (binding.getOperandCount() % 2 == 0) {
+            leastRestrictiveType = typeFactory.createTypeWithNullability(leastRestrictiveType, true);
+        }
+        return leastRestrictiveType;
+    }
+
+    /**
+     * Takes in the arguments to a DECODE call and extracts a subset of the argument types that
+     * correspond to outputs. For example:
+     *
+     * <p>DECODE(A, B, C, D, E) --> [C, E]
+     *
+     * <p>DECODE(A, B, C, D, E, F) --> [C, E, F]
+     *
+     * @param binding a container for all the operands of the DECODE function call
+     * @return a list of all the output types corresponding to output arguments of DECODE
+     */
+    public static List<RelDataType> collectOutputTypes(SqlOperatorBinding binding) {
+        List<RelDataType> operandTypes = binding.collectOperandTypes();
+        List<RelDataType> outputTypes = new ArrayList<RelDataType>();
+        int count = binding.getOperandCount();
+        for (int i = 2; i < count; i++) {
+            if (i % 2 == 0) {
+                outputTypes.add(operandTypes.get(i));
+            }
+        }
+        if (count > 3 && count % 2 == 0) {
+            outputTypes.add(operandTypes.get(count - 1));
+        }
+        return outputTypes;
+    }
+
+    /** Nulls are dropped by arrayAgg, so return a non-null array of the input type. */
+    public static RelDataType ArrayAggReturnType(SqlOperatorBinding binding) {
+        RelDataTypeFactory typeFactory = binding.getTypeFactory();
+        RelDataType inputType = binding.collectOperandTypes().get(0);
+        return typeFactory.createArrayType(typeFactory.createTypeWithNullability(inputType, false), -1);
+    }
 
     /**
      * Convert a given type to have an unknown precision. This should

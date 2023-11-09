@@ -1,17 +1,16 @@
 package com.bodosql.calcite.application.operatorTables;
 
-import java.util.ArrayList;
+import static org.apache.calcite.sql.type.BodoReturnTypes.BOOL_AGG_RET_TYPE;
+
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
-import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
-import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlRankFunction;
 import org.apache.calcite.sql.SqlSyntax;
@@ -88,6 +87,9 @@ public class CondOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // The return type consists of the least restrictive of arguments 1 and 2
           // and if either is null.
+          // null is considered false for this function, so we don't need to consider its
+          // nullability
+          // when determining output nullability
           BodoReturnTypes.leastRestrictiveSubsetNullable(1, 3),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
@@ -107,6 +109,9 @@ public class CondOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // The return type consists of the least restrictive of arguments 1 and 2
           // and if either is null.
+          // null is considered false for this function, so we don't need to consider its
+          // nullability
+          // when determining output nullability
           BodoReturnTypes.leastRestrictiveSubsetNullable(1, 3),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
@@ -157,7 +162,7 @@ public class CondOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "EQUAL_NULL",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BOOLEAN_NULLABLE,
+          ReturnTypes.BOOLEAN,
           null,
           OperandTypes.SAME_SAME,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
@@ -242,7 +247,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // The output type is the same as the input type
-          ReturnTypes.ARG0,
+          ReturnTypes.ARG0.andThen(SqlTypeTransforms.TO_NOT_NULLABLE),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -251,32 +256,6 @@ public class CondOperatorTable implements SqlOperatorTable {
           OperandTypes.NUMERIC,
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
-
-  /**
-   * Takes in the arguments to a DECODE call and extracts a subset of the argument types that
-   * correspond to outputs. For example:
-   *
-   * <p>DECODE(A, B, C, D, E) --> [C, E]
-   *
-   * <p>DECODE(A, B, C, D, E, F) --> [C, E, F]
-   *
-   * @param binding a container for all the operands of the DECODE function call
-   * @return a list of all the output types corresponding to output arguments of DECODE
-   */
-  public static List<RelDataType> collectOutputTypes(SqlOperatorBinding binding) {
-    List<RelDataType> operandTypes = binding.collectOperandTypes();
-    List<RelDataType> outputTypes = new ArrayList<RelDataType>();
-    int count = binding.getOperandCount();
-    for (int i = 2; i < count; i++) {
-      if (i % 2 == 0) {
-        outputTypes.add(operandTypes.get(i));
-      }
-    }
-    if (count > 3 && count % 2 == 0) {
-      outputTypes.add(operandTypes.get(count - 1));
-    }
-    return outputTypes;
-  }
 
   // TODO: Move aggregate function to their own operator table.
 
@@ -293,10 +272,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // Obtains the least restrictive union of all the argument types
-          // corresponding to outputs in the key-value pairs of arguments
-          // (plus the optional default value argument)
-          opBinding -> opBinding.getTypeFactory().leastRestrictive(collectOutputTypes(opBinding)),
+          BodoReturnTypes.DECODE_RETURN_TYPE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -329,6 +305,11 @@ public class CondOperatorTable implements SqlOperatorTable {
   // MIN_ROW_NUMBER_FILTER is an internal function created as an optimization
   // on ROW_NUMBER = 1
   public static final SqlRankFunction MIN_ROW_NUMBER_FILTER =
+      // NOTE: There's a ReturnTypes.BOOLEAN_NOT_NULL and a ReturnTypes.BOOLEAN.
+      // No other type has an equivalent _NOT_NULL return type.
+      // Through reading of the code, we've confirmed that both are functionally equivalent.
+      // I'm going to use ReturnTypes.BOOLEAN_NOT_NULL for maximum safety, and better readability,
+      // but either would be fine here.
       new SqlRankFunction(SqlKind.MIN_ROW_NUMBER_FILTER, ReturnTypes.BOOLEAN_NOT_NULL, true);
 
   //  Returns the logical (boolean) OR value of all non-NULL boolean records in a group.
@@ -340,7 +321,9 @@ public class CondOperatorTable implements SqlOperatorTable {
       SqlBasicAggFunction.create(
               "BOOLOR_AGG",
               SqlKind.OTHER,
-              ReturnTypes.BOOLEAN_NULLABLE,
+              // Spec (https://docs.snowflake.com/en/sql-reference/functions/boolor_agg) says
+              // ...if the group is empty, the function returns NULL.
+              BOOL_AGG_RET_TYPE,
               OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC))
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
@@ -350,7 +333,8 @@ public class CondOperatorTable implements SqlOperatorTable {
       SqlBasicAggFunction.create(
               "BOOLAND_AGG",
               SqlKind.OTHER,
-              ReturnTypes.BOOLEAN_NULLABLE,
+              // see BOOLOR_AGG for nullability note
+              BOOL_AGG_RET_TYPE,
               OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC))
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
@@ -360,7 +344,8 @@ public class CondOperatorTable implements SqlOperatorTable {
       SqlBasicAggFunction.create(
               "BOOLXOR_AGG",
               SqlKind.OTHER,
-              ReturnTypes.BOOLEAN_NULLABLE,
+              // see BOOLXOR_AGG for nullability note
+              BOOL_AGG_RET_TYPE,
               OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC))
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
