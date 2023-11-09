@@ -355,7 +355,7 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
         ),
         pytest.param(
             "TIMESTAMPADD(WEEK, -1, T)",
-            "Invalid time unit input for TIMESTAMPADD: When arg2 is a time, the specified time unit must be smaller than day",
+            "Unsupported TIMESTAMPADD unit for TIME input: WEEK",
             id="timestampadd-week",
             marks=pytest.mark.slow,
         ),
