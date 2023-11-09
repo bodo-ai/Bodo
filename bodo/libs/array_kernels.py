@@ -2742,9 +2742,6 @@ def resize_and_copy(A, new_len):  # pragma: no cover
 @overload(resize_and_copy, no_unliteral=True)
 def overload_resize_and_copy(A, old_size, new_len):
     """allocate a new array (same type as 'A') and copy data of array 'A'"""
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        A, "bodo.resize_and_copy()"
-    )
 
     _dtype = A
 

@@ -790,9 +790,6 @@ def test_array_to_string_scalar(basic_df, input, answer, memory_leak_check):
                 ]
             ],
             id="timestamp_ltz",
-            marks=pytest.mark.skip(
-                reason="[BSE-1830] TODO: Support resize_and_copy on timezone-aware timestamp arrays"
-            ),
         ),
         pytest.param(
             [
@@ -954,9 +951,6 @@ def test_arrays_overlap(data_values, use_case, memory_leak_check):
                 ]
             ],
             id="timestamp_ltz",
-            marks=pytest.mark.skip(
-                reason="[BSE-1830] TODO: Support resize_and_copy on timezone-aware timestamp arrays"
-            ),
         ),
         pytest.param(
             [

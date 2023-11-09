@@ -708,16 +708,24 @@ def overload_setitem(A, ind, val):
                 # using setitem directly instead of copying in loop since
                 # Array setitem checks for memory overlap and copies source
                 A._data[ind] = val._data
+                n = len(A)
+                slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
 
                 # Set the appropriate values in the null bitmap
-                for bitmap_index, val_index in enumerate(
-                    range(*ind.indices(len(val._data)))
-                ):
-                    bodo.libs.int_arr_ext.set_bit_to_arr(
-                        A._null_bitmap,
-                        bitmap_index,
-                        0 if np.isnat(val._data[val_index]) else 1,
+                val_idx = 0
+                val_null_bitmap = val._null_bitmap
+                val_data = val._data
+                arr_null_bitmap = A._null_bitmap
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                        val_null_bitmap, val_idx
                     )
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        arr_null_bitmap,
+                        i,
+                        0 if np.isnat(val_data[val_idx]) else bit,
+                    )
+                    val_idx += 1
 
             return impl_arr
 
