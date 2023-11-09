@@ -43,6 +43,7 @@ public class BodoReturnTypes {
 
     public static final SqlReturnTypeInference BOOL_AGG_RET_TYPE = ReturnTypes.BOOLEAN_NULLABLE.andThen(FORCE_NULLABLE_IF_EMPTY_GROUP);
 
+
     /**
      * Defines the return type for FLATTEN
      */
@@ -118,7 +119,9 @@ public class BodoReturnTypes {
                     ;
 
 
+
     public static final SqlReturnTypeInference DECODE_RETURN_TYPE = opBinding -> decodeReturnType(opBinding);
+
 
     // Obtains the least restrictive union of all the argument types
     // corresponding to outputs in the key-value pairs of arguments
@@ -239,6 +242,12 @@ public class BodoReturnTypes {
      * precision and SqlTypeTransforms.TO_NULLABLE.
      */
     public static final SqlReturnTypeInference VARCHAR_UNKNOWN_PRECISION_NULLABLE = VARCHAR_UNKNOWN_PRECISION.andThen(SqlTypeTransforms.TO_NULLABLE);
+
+    /**
+     * Type-inference strategy whereby the output type is a VARCHAR with an unknown
+     * precision and SqlTypeTransforms.FORCE_NULLABLE.
+     */
+    public static final SqlReturnTypeInference VARCHAR_UNKNOWN_PRECISION_FORCE_NULLABLE = VARCHAR_UNKNOWN_PRECISION.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
     /**
      * Type-inference strategy whereby the result type of a call is an integer
@@ -510,4 +519,28 @@ public class BodoReturnTypes {
     public static final SqlReturnTypeInference DOUBLE_FORCE_NULLABLE = ReturnTypes.DOUBLE.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
     public static final SqlReturnTypeInference INTEGER_FORCE_NULLABLE = ReturnTypes.INTEGER.andThen(SqlTypeTransforms.FORCE_NULLABLE);
+
+    public static final SqlReturnTypeInference TIME_FORCE_NULLABLE = ReturnTypes.TIME.andThen(SqlTypeTransforms.FORCE_NULLABLE);
+
+
+    /**
+     * Handling for specific return types
+     */
+
+    /**
+     * Determine the return type for BITOR_AGG, BITAND_AGG, and BITXOR_AGG. The return type is the
+     * same as the input if it is an integer, otherwise the return type is always int64 (BIGINT).
+     *
+     * @param binding The operand bindings for the function signature.
+     * @return The return type of the function
+     */
+    public static RelDataType bitX_ret_type(SqlOperatorBinding binding) {
+        RelDataType arg0Type = binding.getOperandType(0);
+        SqlTypeFamily arg0TypeFamily = arg0Type.getSqlTypeName().getFamily();
+        if (arg0TypeFamily.equals(SqlTypeFamily.INTEGER)) {
+            return ReturnTypes.ARG0_NULLABLE_IF_EMPTY.inferReturnType(binding);
+        } else {
+            return ReturnTypes.BIGINT_NULLABLE.andThen(BodoReturnTypes.FORCE_NULLABLE_IF_EMPTY_GROUP).inferReturnType(binding);
+        }
+    }
 }
