@@ -10,6 +10,7 @@ import com.bodosql.calcite.application.logicalRules.BodoJoinPushTransitivePredic
 import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule
 import com.bodosql.calcite.application.logicalRules.FilterAggregateTransposeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterExtractCaseRule
+import com.bodosql.calcite.application.logicalRules.FilterFlattenTranspose
 import com.bodosql.calcite.application.logicalRules.FilterJoinRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterMergeRuleNoWindow
 import com.bodosql.calcite.application.logicalRules.FilterProjectTransposeNoCaseRule
@@ -298,6 +299,18 @@ object BodoRules {
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
+    /*
+     * Planner rule that ensures filter is always pushed past flatten if possible.
+     * If only part of a filter can be pushed before the flatten then this node
+     * will split the filter into parts and split the component that can be pushed
+     * down.
+     */
+    @JvmField
+    val FILTER_FLATTEN_TRANSPOSE_RULE: RelOptRule =
+        FilterFlattenTranspose.Config.DEFAULT
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .toRule()
+
     // Prune trivial cross-joins
     @JvmField
     val INNER_JOIN_REMOVE_RULE: RelOptRule =
@@ -529,6 +542,7 @@ object BodoRules {
         FILTER_AGGREGATE_TRANSPOSE_RULE,
         FILTER_INTO_JOIN_RULE,
         FILTER_JOIN_RULE,
+        FILTER_FLATTEN_TRANSPOSE_RULE,
         // Combining filters can simplify filters for pushing
         FILTER_MERGE_RULE,
         // Reordering conditions can lead to greater filter pushing.

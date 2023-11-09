@@ -3538,6 +3538,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       scopes.put(node, parentScope);
       break;
     case OTHER_FUNCTION:
+      // TODO(njriasan): Define a new namespace for Table Functions
       call = (SqlCall) node;
       ProcedureNamespace procNs =
           new ProcedureNamespace(

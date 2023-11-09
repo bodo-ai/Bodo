@@ -1,7 +1,9 @@
 package com.bodosql.calcite.rel.metadata
 
+import com.bodosql.calcite.adapter.pandas.PandasCostEstimator
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
+import com.bodosql.calcite.rel.core.Flatten
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
@@ -48,6 +50,14 @@ class BodoRelMdRowCount : RelMdRowCount() {
 
     fun getRowCount(rel: SnowflakeFilter, mq: RelMetadataQuery?): Double? {
         return rel.tryGetExpectedRowCountFromSFQuery() ?: super.getRowCount(rel, mq)
+    }
+
+    fun getRowCount(rel: Flatten, mq: RelMetadataQuery?): Double? {
+        // For flatten, assume that each row of arrays has a certain number of elements
+        // on average. However, flatten also drops null rows, so assume not every
+        // row is copied over.
+        var inputRowCount = mq?.getRowCount(rel.input)
+        return inputRowCount?.times(PandasCostEstimator.AVG_ARRAY_ENTRIES_PER_ROW)
     }
 
     /**
