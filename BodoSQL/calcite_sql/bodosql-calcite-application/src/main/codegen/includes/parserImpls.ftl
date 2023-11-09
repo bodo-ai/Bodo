@@ -1011,3 +1011,55 @@ SqlCall TimestampAddFunctionCall() :
             s.end(this), args);
     }
 }
+
+/**
+ * Parses a call to TIMESTAMPDIFF.
+ * Bodo change: allow all snowflake supported quoted/unquoted intervals
+ */
+SqlCall TimestampDiffFunctionCall() :
+{
+    final List<SqlNode> args = new ArrayList<SqlNode>();
+    final Span s;
+    final String interval;
+}
+{
+    <DATEDIFF> { s = span(); }
+    <LPAREN>
+    (
+      interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+      <COMMA>
+      AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    |
+      AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    )
+    <COMMA>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <RPAREN> {
+        return DatetimeOperatorTable.DATEDIFF.createCall(
+            s.end(this), args);
+    }
+|
+    <TIMEDIFF> { s = span(); }
+    <LPAREN>
+    interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+    <COMMA>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <COMMA>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <RPAREN> {
+        return DatetimeOperatorTable.TIMEDIFF.createCall(
+            s.end(this), args);
+    }
+|
+    <TIMESTAMPDIFF> { s = span(); }
+    <LPAREN>
+    interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+    <COMMA>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <COMMA>
+    AddExpression(args, ExprContext.ACCEPT_SUB_QUERY)
+    <RPAREN> {
+        return SqlBodoOperatorTable.TIMESTAMP_DIFF.createCall(
+            s.end(this), args);
+    }
+}
