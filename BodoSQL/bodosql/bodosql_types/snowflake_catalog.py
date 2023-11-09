@@ -28,7 +28,10 @@ from bodo.utils.typing import (
     raise_bodo_error,
 )
 from bodosql import DatabaseCatalog, DatabaseCatalogType
-from bodosql.context import PropertiesClass, SnowflakeCatalogImplClass
+from bodosql.imported_java_classes import (
+    PropertiesClass,
+    SnowflakeCatalogImplClass,
+)
 
 
 def _validate_constructor_args(

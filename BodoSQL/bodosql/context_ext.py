@@ -40,12 +40,12 @@ from bodosql.bodosql_types.table_path import TablePathType
 from bodosql.context import (
     NAMED_PARAM_TABLE_NAME,
     BodoSQLContext,
-    RelationalAlgebraGeneratorClass,
     _PlannerType,
     compute_df_types,
     initialize_schema,
     update_schema,
 )
+from bodosql.imported_java_classes import RelationalAlgebraGeneratorClass
 from bodosql.utils import error_to_string
 
 

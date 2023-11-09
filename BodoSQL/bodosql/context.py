@@ -18,57 +18,19 @@ from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
-from bodosql.py4j_gateway import get_gateway
+from bodosql.imported_java_classes import (
+    ArrayListClass,
+    BodoTZInfoClass,
+    ColumnClass,
+    ColumnTypeClass,
+    LocalSchemaClass,
+    LocalTableClass,
+    RelationalAlgebraGeneratorClass,
+)
 from bodosql.utils import BodoSQLWarning, error_to_string
 
 # Name for parameter table
 NAMED_PARAM_TABLE_NAME = "__$bodo_named_param_table__"
-
-
-error = None
-# Based on my understanding of the Py4J Memory model, it should be safe to just
-# Create/use java objects in much the same way as we did with jpype.
-# https://www.py4j.org/advanced_topics.html#py4j-memory-model
-saw_error = False
-msg = ""
-gateway = get_gateway()
-if bodo.get_rank() == 0:
-    try:
-        ArrayClass = gateway.jvm.java.util.ArrayList
-        ColumnTypeClass = (
-            gateway.jvm.com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
-        )
-        ColumnClass = gateway.jvm.com.bodosql.calcite.table.BodoSQLColumnImpl
-        LocalTableClass = gateway.jvm.com.bodosql.calcite.table.LocalTableImpl
-        LocalSchemaClass = gateway.jvm.com.bodosql.calcite.schema.LocalSchemaImpl
-        RelationalAlgebraGeneratorClass = (
-            gateway.jvm.com.bodosql.calcite.application.RelationalAlgebraGenerator
-        )
-        PropertiesClass = gateway.jvm.java.util.Properties
-        SnowflakeCatalogImplClass = (
-            gateway.jvm.com.bodosql.calcite.catalog.SnowflakeCatalogImpl
-        )
-        BodoTZInfoClass = gateway.jvm.org.apache.calcite.sql.type.BodoTZInfo
-        SnowflakeDriver = gateway.jvm.net.snowflake.client.jdbc.SnowflakeDriver
-    except Exception as e:
-        saw_error = True
-        msg = error_to_string(e)
-else:
-    ArrayClass = None
-    ColumnTypeClass = None
-    ColumnClass = None
-    LocalTableClass = None
-    LocalSchemaClass = None
-    RelationalAlgebraGeneratorClass = None
-    PropertiesClass = None
-    SnowflakeCatalogImplClass = None
-    BodoTZInfoClass = None
-    SnowflakeDriver = None
-
-saw_error = bcast_scalar(saw_error)
-msg = bcast_scalar(msg)
-if saw_error:
-    raise BodoError(msg)
 
 
 # NOTE: These are defined in BodoSQLColumnDataType and must match here
@@ -515,7 +477,7 @@ def add_table_type(
             queries.
     """
     assert bodo.get_rank() == 0, "add_table_type should only be called on rank 0."
-    col_arr = ArrayClass()
+    col_arr = ArrayListClass()
     for i, cname in enumerate(df_type.columns):
         column = get_sql_column_type(df_type.data[i], cname)
         col_arr.add(column)
@@ -635,7 +597,7 @@ def _generate_table_read(
 def add_param_table(table_name, schema, param_keys, param_values):
     """get SQL Table type in Java for Numba dataframe type"""
     assert bodo.get_rank() == 0, "add_param_table should only be called on rank 0."
-    param_arr = ArrayClass()
+    param_arr = ArrayListClass()
     literal_params = []
     for i in range(len(param_keys)):
         param_name = param_keys[i]
