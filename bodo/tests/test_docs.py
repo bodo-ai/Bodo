@@ -2,7 +2,10 @@
 import subprocess
 from pathlib import Path
 
+import pytest
 
+
+@pytest.mark.no_cover
 def test_api_docs_generated(memory_leak_check):
     """Verify that `make gen_api` has been run over the current state of the
     docs directory"""
