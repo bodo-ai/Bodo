@@ -188,6 +188,7 @@ data: {
         "SWAP",
         "RENAME",
         "IF",
+        "RECURSIVE",
         "VALUES",
         "VALUE",
         "CORR",
@@ -324,6 +325,7 @@ data: {
         "VARIANT",
         "ARRAY",
         "OBJECT",
+        "FLATTEN",
         # Tokens for Date/Time Intervals
         "Y",
         "YY",
@@ -442,6 +444,13 @@ data: {
 #      "InfixCast",
 #      "NullSafeEqual"
     ]
+
+    # Bodo Change: List of keywords that can be used for argument names
+    # but aren't fully unreserved.
+    argumentNameUnreserveList: [
+        "OUTER",
+    ]
+
 
     # List of files in @includes directory that have parser method
     # implementations for parsing custom SQL statements, literals or types

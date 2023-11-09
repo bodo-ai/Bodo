@@ -4,7 +4,10 @@ import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSyst
 import com.google.common.base.Preconditions;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
+import org.apache.calcite.rel.type.RelRecordType;
 import org.apache.calcite.sql.SqlCollation;
 import org.apache.calcite.sql.SqlOperatorBinding;
 
@@ -12,6 +15,7 @@ import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static java.util.Objects.requireNonNull;
@@ -20,6 +24,31 @@ import static org.apache.calcite.sql.type.NonNullableAccessors.getCollation;
 import static org.apache.calcite.util.Static.RESOURCE;
 
 public class BodoReturnTypes {
+
+    /**
+     * Defines the return type for FLATTEN
+     */
+    public static final SqlReturnTypeInference FLATTEN_RETURN_TYPE =
+            (opBinding) -> {
+                RelDataTypeFactory factory = opBinding.getTypeFactory();
+                RelDataType inputType = opBinding.getOperandType(0);
+                // Flatten returns a table with 6 values.
+                // SEQ : BIGINT NOT NULL
+                // KEY : NULLABLE VARCHAR
+                // PATH : NULLABLE VARCHAR
+                // INDEX: NULLABLE INTEGER
+                // VALUE: INPUT.DTYPE  (NULLABLE)
+                // THIS: INPUT_TYPE
+                RelDataType type0 = factory.createSqlType(SqlTypeName.BIGINT);
+                RelDataType type1 = factory.createTypeWithNullability(factory.createSqlType(SqlTypeName.VARCHAR), true);
+                RelDataType type2 = type1;
+                RelDataType type3 = factory.createTypeWithNullability(factory.createSqlType(SqlTypeName.INTEGER), true);
+                RelDataType type4 = factory.createTypeWithNullability(inputType.getComponentType(), true);
+                RelDataType type5 = inputType;
+                List<RelDataType> types = List.of(type0, type1, type2, type3, type4, type5);
+                List<String> names = List.of("SEQ", "KEY", "PATH", "INDEX", "VALUE", "THIS");
+                return factory.createStructType(types, names);
+            };
 
     /**
      * Determine the return type of the TO_ARRAY function
@@ -50,7 +79,7 @@ public class BodoReturnTypes {
         if (inputType instanceof ArraySqlType)
             // if the input is an array, just return it
             return inputType;
-        
+
         if (innerNullabilityToOuter) {
             RelDataType arrayType =
                     typeFactory.createArrayType(

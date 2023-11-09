@@ -1070,7 +1070,10 @@ void AddArg0(List<SqlNode> list, ExprContext exprContext) :
 }
 {
     (
-        LOOKAHEAD(2) name = SimpleIdentifier() <NAMED_ARGUMENT_ASSIGNMENT>
+        // Bodo Change: Replace SimpleIdentifier() to allow certain keywords that
+        // cannot be made generally available to the parser but can be used as
+        // an argument.
+        LOOKAHEAD(2) name = NamedArgumentIdentifier() <NAMED_ARGUMENT_ASSIGNMENT>
     | { name = null; }
     )
     (
@@ -1097,7 +1100,10 @@ void AddArg(List<SqlNode> list, ExprContext exprContext) :
 }
 {
     (
-        LOOKAHEAD(2) name = SimpleIdentifier() <NAMED_ARGUMENT_ASSIGNMENT>
+        // Bodo Change: Replace SimpleIdentifier() to allow certain keywords that
+        // cannot be made generally available to the parser but can be used as
+        // an argument.
+        LOOKAHEAD(2) name = NamedArgumentIdentifier() <NAMED_ARGUMENT_ASSIGNMENT>
     | { name = null; }
     )
     (
@@ -2689,18 +2695,48 @@ SqlNode TableFunctionCall() :
 {
     final Span s;
     final SqlNode call;
+    final String funcName;
     SqlFunctionCategory funcType = SqlFunctionCategory.USER_DEFINED_TABLE_FUNCTION;
 }
 {
-    <TABLE> { s = span(); } <LPAREN>
-    [
-        <SPECIFIC>
+
+    (
+        // Bodo Change: Add support for FLATTEN as a builtin table function with <TABLE>
+        <FLATTEN> {s = span(); }
         {
-            funcType = SqlFunctionCategory.USER_DEFINED_TABLE_SPECIFIC_FUNCTION;
+            funcName = "FLATTEN";
+            // TODO(njriasan): Determine the proper rules for this
+            final ExprContext exprContext = ExprContext.ACCEPT_CURSOR;
+            final List<SqlNode> list = new ArrayList<SqlNode>();
+            final SqlParserPos pos = getPos();
+            SqlIdentifier name = new SqlIdentifier(List.of(funcName), null, pos, List.of(pos));
         }
-    ]
-    call = NamedRoutineCall(funcType, ExprContext.ACCEPT_CURSOR)
-    <RPAREN>
+        <LPAREN>
+        [
+            AddArg0(list, exprContext)
+            (
+                <COMMA> {
+                    // a comma-list can't appear where only a query is expected
+                    checkNonQueryExpression(exprContext);
+                }
+                AddArg(list, exprContext)
+            )*
+        ]
+        <RPAREN>
+        {
+            call = SqlBodoParserUtil.createBuiltinTableFunction(name, s.end(this), list);
+        }
+    |
+        <TABLE> { s = span(); } <LPAREN>
+        [
+            <SPECIFIC>
+            {
+                funcType = SqlFunctionCategory.USER_DEFINED_TABLE_SPECIFIC_FUNCTION;
+            }
+        ]
+        call = NamedRoutineCall(funcType, ExprContext.ACCEPT_CURSOR)
+        <RPAREN>
+    )
     {
         return SqlStdOperatorTable.COLLECTION_TABLE.createCall(s.end(this), call);
     }
@@ -7787,6 +7823,7 @@ SqlIdentifier ReservedFunctionName() :
     |   <EVERY>
     |   <EXP>
     |   <FIRST_VALUE>
+    |   <FLATTEN>
     |   <FLOOR>
     |   <FUSION>
     |   <INTERSECTION>
@@ -8368,6 +8405,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < FINAL: "FINAL" >
 |   < FIRST: "FIRST" >
 |   < FIRST_VALUE: "FIRST_VALUE">
+|   < FLATTEN: "FLATTEN" >
 |   < FLOAT: "FLOAT" >
 |   < FLOAT4: "FLOAT4" >
 |   < FLOAT8: "FLOAT8" >
