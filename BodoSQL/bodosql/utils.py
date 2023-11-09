@@ -12,9 +12,10 @@ class BodoSQLWarning(Warning):
     """
 
 
-def java_error_to_msg(e):
+def error_to_string(e):
     """
-    Convert a error from our calcite application into a string message.
+    Convert a error from our calcite application into a string message,
+    if the error is a Py4JJavaError. Otherwise, default to "str(e)"
     """
     if isinstance(e, py4j.protocol.Py4JJavaError):
         message = e.java_exception.getMessage()

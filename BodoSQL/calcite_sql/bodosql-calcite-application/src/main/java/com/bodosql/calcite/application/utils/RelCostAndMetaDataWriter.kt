@@ -104,7 +104,13 @@ class RelCostAndMetaDataWriter(pw: PrintWriter, rel: RelNode) : RelWriterImpl(pw
 
         // Add the types of each output column
         newSection(s, "types")
-        val types = rel.rowType.fieldList.map { it.type.toString() }
+        val types = rel.rowType.fieldList.map {
+            val outString = StringBuilder(it.type.toString())
+            if (!it.type.isNullable()) {
+                outString.append(" NOT NULL")
+            }
+            outString
+        }
         s.append(types.joinToString(", "))
         s.append("\n")
 

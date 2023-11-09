@@ -5,6 +5,7 @@ import com.bodosql.calcite.adapter.pandas.PandasJoinRule
 import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilterLockRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeLimitLockRule
+import com.bodosql.calcite.application.logicalRules.BodoAggregateJoinTransposeRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinPushTransitivePredicatesRule
 import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule
 import com.bodosql.calcite.application.logicalRules.FilterAggregateTransposeRuleNoWindow
@@ -42,7 +43,6 @@ import org.apache.calcite.plan.RelRule.OperandTransform
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateJoinRemoveRule
-import org.apache.calcite.rel.rules.AggregateJoinTransposeRule
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule
 import org.apache.calcite.rel.rules.AggregateProjectPullUpConstantsRule
 import org.apache.calcite.rel.rules.FilterJoinRule
@@ -127,7 +127,7 @@ object BodoRules {
      */
     @JvmField
     val AGGREGATE_JOIN_TRANSPOSE_RULE: RelOptRule =
-        AggregateJoinTransposeRule.Config.DEFAULT
+        BodoAggregateJoinTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalAggregate::class.java, BodoLogicalJoin::class.java, true)
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()

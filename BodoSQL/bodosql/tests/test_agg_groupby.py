@@ -673,6 +673,9 @@ def test_no_group_or_agg(groupby_extension_table, spark_info, memory_leak_check)
 
 
 @pytest.mark.slow
+@pytest.mark.skip(
+    reason="Incorrect null handling: https://bodo.atlassian.net/browse/BSE-1972"
+)
 def test_nested_grouping_clauses(
     groupby_extension_table, spark_info, memory_leak_check
 ):

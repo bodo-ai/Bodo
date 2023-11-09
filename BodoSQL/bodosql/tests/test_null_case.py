@@ -310,6 +310,9 @@ def test_null_literal_cond(major_types_nullable, memory_leak_check):
     """
     query = """
         select
+            A,
+            B,
+            C,
             CASE when A IS NULL THEN B ELSE C END as NULL_COL,
             CASE when A IS NOT NULL THEN B ELSE C END as NOT_NULL_COL
         FROM
@@ -331,6 +334,9 @@ def test_null_literal_cond(major_types_nullable, memory_leak_check):
         dtype = None
     py_output = pd.DataFrame(
         {
+            "A": orig_df["A"],
+            "B": orig_df["B"],
+            "C": orig_df["C"],
             "NULL_COL": pd.Series(null_list, dtype=dtype),
             "NOT_NULL_COL": pd.Series(not_null_list, dtype=dtype),
         }
