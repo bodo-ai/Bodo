@@ -187,9 +187,15 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
 
     // Create input with trimmed columns.
     final Set<RelDataTypeField> inputExtraFields = Collections.emptySet();
-    TrimResult trimResult = trimChild(sort, input, inputFieldsUsed.build(), inputExtraFields);
-    RelNode newInput = trimResult.left;
-    final Mapping inputMapping = trimResult.right;
+    final ImmutableBitSet inputFieldsUsedBitSet = inputFieldsUsed.build();
+    TrimResult trimResult = trimChild(sort, input, inputFieldsUsedBitSet, inputExtraFields);
+    // BODO CHANGE:
+    // Make sure we're always completely trimming the input
+    TrimResult completeTrimResult =
+        insertPruningProjection(trimResult, inputFieldsUsedBitSet, inputExtraFields);
+
+    RelNode newInput = completeTrimResult.left;
+    final Mapping inputMapping = completeTrimResult.right;
 
     // If the input is unchanged, and we need to project all columns,
     // there's nothing we can do.

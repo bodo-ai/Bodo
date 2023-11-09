@@ -47,11 +47,13 @@ import org.apache.calcite.rel.rules.AggregateProjectMergeRule
 import org.apache.calcite.rel.rules.AggregateProjectPullUpConstantsRule
 import org.apache.calcite.rel.rules.FilterJoinRule
 import org.apache.calcite.rel.rules.JoinCommuteRule
+import org.apache.calcite.rel.rules.JoinProjectTransposeRule
 import org.apache.calcite.rel.rules.LoptOptimizeJoinRule
 import org.apache.calcite.rel.rules.ProjectAggregateMergeRule
 import org.apache.calcite.rel.rules.ProjectFilterTransposeRule
 import org.apache.calcite.rel.rules.ProjectMergeRule
 import org.apache.calcite.rel.rules.ProjectRemoveRule
+import org.apache.calcite.rel.rules.SortProjectTransposeRule
 import org.apache.calcite.rel.rules.SubQueryRemoveRule
 import org.apache.calcite.rel.rules.UnionMergeRule
 
@@ -331,6 +333,21 @@ object BodoRules {
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
+    // Pushes a sort before a project
+    @JvmField
+    val SORT_PROJECT_TRANSPOSE_RULE: RelOptRule =
+        SortProjectTransposeRule.Config.DEFAULT
+            .withOperandFor(BodoLogicalSort::class.java, BodoLogicalProject::class.java)
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    // Pulls projects above joins when possible
+    @JvmField
+    val JOIN_PROJECT_BOTH_TRANSPOSE_INCLUDE_OUTER: RelOptRule =
+        JoinProjectTransposeRule.Config.OUTER
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
+            .toRule()
+
     // If a column has been repeated or rewritten as a part of another column, possibly
     // due to aliasing, then replace a projection with multiple projections.
     // For example convert:
@@ -477,6 +494,19 @@ object BodoRules {
         SubQueryRemoveRule.Config.FILTER.toRule(),
         SubQueryRemoveRule.Config.PROJECT.toRule(),
         SubQueryRemoveRule.Config.JOIN.toRule(),
+    )
+
+    /**
+     * These are all the rules that allow for pulling a project closer to the root
+     * of the RelTree.
+     *
+     * All of these run during ProjectionPullUpPass. Some of these also run during other volcano passes
+     */
+    val PROJECTION_PULL_UP_RULES: List<RelOptRule> = listOf(
+        FILTER_PROJECT_TRANSPOSE_RULE,
+        LIMIT_PROJECT_TRANSPOSE_RULE,
+        SORT_PROJECT_TRANSPOSE_RULE,
+        JOIN_PROJECT_BOTH_TRANSPOSE_INCLUDE_OUTER,
     )
 
     /**
