@@ -30,16 +30,6 @@ std::unique_ptr<table_info> lateral_flatten(
         }
     }
 
-    // For each column in the table (except the one to be exploded) create
-    // a copy with the rows duplicated the specified number of times and
-    // append it to the output table.
-    for (size_t i = 1; i < in_table->columns.size(); i++) {
-        std::shared_ptr<array_info> old_col = in_table->columns[i];
-        std::shared_ptr<array_info> new_col =
-            RetrieveArray_SingleColumn(old_col, rows_to_copy, false, pool, mm);
-        out_table->columns.push_back(new_col);
-    }
-
     // If we need to output the index, then create a column with the
     // indices within each inner array.
     if (output_index) {
@@ -68,6 +58,16 @@ std::unique_ptr<table_info> lateral_flatten(
     // procedure on the input column
     if (output_this) {
         std::shared_ptr<array_info> old_col = in_table->columns[0];
+        std::shared_ptr<array_info> new_col =
+            RetrieveArray_SingleColumn(old_col, rows_to_copy, false, pool, mm);
+        out_table->columns.push_back(new_col);
+    }
+
+    // For each column in the table (except the one to be exploded) create
+    // a copy with the rows duplicated the specified number of times and
+    // append it to the output table.
+    for (size_t i = 1; i < in_table->columns.size(); i++) {
+        std::shared_ptr<array_info> old_col = in_table->columns[i];
         std::shared_ptr<array_info> new_col =
             RetrieveArray_SingleColumn(old_col, rows_to_copy, false, pool, mm);
         out_table->columns.push_back(new_col);

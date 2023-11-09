@@ -4,6 +4,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.utils.IsScalar
+import com.bodosql.calcite.rel.core.Flatten
 import org.apache.calcite.plan.volcano.RelSubset
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.SingleRel
@@ -242,6 +243,16 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
     fun getColumnDistinctCount(rel: SnowflakeTableScan, mq: RelMetadataQuery, column: Int): Double? {
         val trueCol = rel.keptColumns.nth(column)
         return rel.getCatalogTable().getColumnDistinctCount(trueCol)
+    }
+
+    fun getColumnDistinctCount(rel: Flatten, mq: RelMetadataQuery, column: Int): Double? {
+        val nonNullEstimate = if (rel.rowType.fieldList.get(column).type.isNullable()) { 0.9 } else { 1.0 }
+        val offset = rel.usedColOutputs.cardinality()
+        return if (column >= offset) {
+            (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, rel.repeatColumns.nth(column - offset))?.times(nonNullEstimate)
+        } else {
+            null
+        }
     }
 
     companion object {

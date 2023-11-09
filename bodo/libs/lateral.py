@@ -110,14 +110,14 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
     Returns:
         (TableType): the input table with the rows of the kept columns duplicated
         according to the number of entries in the array from the same row. The
-        returned table has all of the replicated columns first (in the same order
-        as they are in the keep_cols tuple) followed by the output columns (in the
-        same order as they are specified by the outputs argument).
+        returned table has all of the output columns (in the
+        same order as they are specified by the outputs argument) first followed by
+        the replicated columns (in the same order as they are in the keep_cols tuple).
 
         For example, if keep_cols = (2, 5, 3, 6), explode_col=4, and
         outputs = (False, False, False, True, True, False), then the output
-        will have columns 2, 5, 3 and 6 with their rows replicated, followed by
-        the index column, followed by the value column.
+        will have the index column, followed by the value column, followed by
+        columns 2/5/3/6 with their rows replicated.
     """
     assert isinstance(in_table, TableType)
     in_arr_types = in_table.arr_types
@@ -140,12 +140,6 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
         + tuple(i for i in range(len(in_arr_types)) if i in keep_cols_tup)
     )
     n_in_cols = len(in_col_inds.key)
-
-    # Create the tuple of types from the arrays that are to be copied over
-    # during the explosion
-    out_typs = tuple(
-        in_arr_types[i] for i in range(len(in_arr_types)) if i in keep_cols_tup
-    )
 
     outputs_tup = unwrap_typeref(outputs).key
     if not isinstance(outputs_tup, tuple) or len(outputs_tup) != 6:  # pragma: no cover
@@ -177,6 +171,8 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
             f"lateral_flatten outputting value PATH not currently supported"
         )
 
+    out_typs = tuple()
+
     # If the index column is included in the output, add an extra column to store it
     output_index_bool = get_overload_const_bool(output_index)
     if output_index_bool:
@@ -192,6 +188,11 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
     if output_this_bool:  # pragma: no cover
         out_typs += (arr_argument,)
 
+    # Add the arrays that are to be copied over during the explosion
+    out_typs += tuple(
+        in_arr_types[i] for i in range(len(in_arr_types)) if i in keep_cols_tup
+    )
+
     out_col_inds = MetaType(tuple(list(range(len(out_typs)))))
 
     # Create the table type returned by the lateral operation
@@ -202,7 +203,7 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
     def impl(in_table, keep_cols, explode_col, outputs):  # pragma: no cover
         # Create a single-element numpy array that C++ can use to store the number
         # of rows in the output table
-        total_rows = np.array([12], dtype=np.int64)
+        total_rows = np.array([0], dtype=np.int64)
 
         # Invoke the intrinsic to calculate the resulting table
         cpp_table = py_data_to_cpp_table(in_table, (), in_col_inds, n_in_cols)

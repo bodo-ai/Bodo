@@ -25,13 +25,15 @@ def simulate_lateral_flatten(
     keep_cols_idx = df.columns[list(keep_cols)]
     df_subset = df.loc[:, keep_cols_idx]
     column_to_explode = df.iloc[:, explode_col]
-    out_dict = {i: [] for i in range(len(keep_cols))}
+    out_dict = {}
     if output_idx:
         out_dict["idx"] = []
     if output_val:
         out_dict["val"] = []
     if output_this:
         out_dict["this"] = []
+    for i in range(len(keep_cols)):
+        out_dict[i] = []
     for i in range(len(df)):
         sub_arr = column_to_explode.iloc[i]
         explode_length = 0 if sub_arr is None else len(sub_arr)
@@ -203,7 +205,7 @@ def test_lateral_flatten_with_array_agg(memory_leak_check):
     )
     global_1 = MetaType((0, 1))
     global_2 = MetaType((0,))
-    global_3 = ColNamesMetaType(tuple(answer.columns))
+    global_3 = ColNamesMetaType(tuple(answer.columns)[::-1])
     global_4 = MetaType((False, False, False, False, True, False))
 
     def impl(df1):
@@ -264,7 +266,7 @@ def test_lateral_streaming(memory_leak_check):
             False,
         )
     )
-    global_4 = ColNamesMetaType(("A_Rep", "B_Flat"))
+    global_4 = ColNamesMetaType(("B_Flat", "A_Rep"))
     batch_size = 3
 
     def impl(df1):
@@ -318,8 +320,8 @@ def test_lateral_streaming(memory_leak_check):
     )
     answer = pd.DataFrame(
         {
-            "A_Rep": [1, 2, 2, 3, 3, 3, 5, 6, 6, 7, 7, 7, 7, 7, 9],
             "B_Flat": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+            "A_Rep": [1, 2, 2, 3, 3, 3, 5, 6, 6, 7, 7, 7, 7, 7, 9],
         }
     )
 

@@ -28,7 +28,6 @@ open class FlattenBase(cluster: RelOptCluster, traits: RelTraitSet, input: RelNo
     }
 
     override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
-        // TODO: IMPLEMENT PROPERLY
         val rows = mq.getRowCount(this)
         val averageRowSize = mq.getAverageRowSize(this)
         val rowMultiplier = rows ?: 1.0

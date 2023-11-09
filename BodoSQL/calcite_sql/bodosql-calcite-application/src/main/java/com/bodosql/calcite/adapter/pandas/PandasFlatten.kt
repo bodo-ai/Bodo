@@ -1,6 +1,9 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.application.BodoSQLCodegenException
+import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable
 import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.rel.core.FlattenBase
 import org.apache.calcite.plan.RelOptCluster
@@ -8,6 +11,7 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexCall
+import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.util.ImmutableBitSet
 
 class PandasFlatten(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode, call: RexCall, callType: RelDataType, usedColOutputs: ImmutableBitSet, repeatColumns: ImmutableBitSet) : FlattenBase(cluster, traits.replace(PandasRel.CONVENTION), input, call, callType, usedColOutputs, repeatColumns), PandasRel {
@@ -30,7 +34,34 @@ class PandasFlatten(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode,
      * @return the variable that represents this relational expression.
      */
     override fun emit(implementor: PandasRel.Implementor): BodoEngineTable {
-        TODO("Not yet implemented")
+        return implementor::build {
+                ctx ->
+            if (call.operator.name == TableFunctionOperatorTable.FLATTEN.name) {
+                emitFlatten(implementor, ctx, call)
+            } else {
+                throw BodoSQLCodegenException("Flatten node does not currently support codegen for operation $call")
+            }
+        }
+    }
+
+    /**
+     * Emits the code necessary to calculate a call to the FLATTEN function.
+     *
+     * @param implementor implementation handler.
+     * @param ctx the build context
+     * @param flattenCall the function call to FLATTEN
+     * @return the variable that represents this relational expression.
+     */
+    fun emitFlatten(implementor: PandasRel.Implementor, ctx: PandasRel.BuildContext, flattenCall: RexCall): BodoEngineTable {
+        val inputVar = implementor.visitChild(input, 0)
+        val replicatedColsExpresions = repeatColumns.toList().map { idx -> Expr.IntegerLiteral(idx) }
+        val replicatedColsGlobal = ctx.lowerAsGlobal(Expr.Call("MetaType", Expr.Tuple(replicatedColsExpresions)))
+        val columnToExplode = flattenCall.operands[0]
+        val explodeColIdx = if (columnToExplode is RexInputRef) { columnToExplode.index } else { throw Exception("Expected input to FLATTEN to be an input column reference") }
+        val explodeCol = Expr.IntegerLiteral(explodeColIdx)
+        val outputColsExpressions = callType.fieldList.mapIndexed { idx, _ -> Expr.BooleanLiteral(this.usedColOutputs.contains(idx)) }
+        val outputColsGlobal = ctx.lowerAsGlobal(Expr.Call("MetaType", Expr.Tuple(outputColsExpressions)))
+        return ctx.returns(Expr.Call("bodo.libs.lateral.lateral_flatten", listOf(inputVar, replicatedColsGlobal, explodeCol, outputColsGlobal)))
     }
 
     /**

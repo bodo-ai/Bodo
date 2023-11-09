@@ -2,6 +2,7 @@ package com.bodosql.calcite.rel.metadata
 
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter
+import com.bodosql.calcite.rel.core.Flatten
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Aggregate
 import org.apache.calcite.rel.core.Filter
@@ -217,7 +218,8 @@ class BodoMetadataRestrictionScan {
                 }
                 // Find all the columns that will need their metadata requested in order
                 // to infer the output row count of this join
-                val equiJoinCols = getEquiJoinConditions(node.outerJoinConditions) + getEquiJoinConditions(listOf(node.joinFilter))
+                val equiJoinCols =
+                    getEquiJoinConditions(node.outerJoinConditions) + getEquiJoinConditions(listOf(node.joinFilter))
                 val targetCols = equiJoinCols + cols
                 // For each input, recursively repeat the procedure on each element of cols or
                 // equiJoinCols that is in the relevant range of column indices for the input.
@@ -227,6 +229,20 @@ class BodoMetadataRestrictionScan {
                     val subsetOfCols = targetCols.filter { it in lo until hi }.map { it - lo }
                     findColumnsThatCanBeRequested(rel, subsetOfCols.toSet())
                 }
+            } else if (node is Flatten) {
+                // For a flatten, map each column from cols that we want to request
+                // to the corresponding input of the flatten node, omitting any columns
+                // that are produced by the flatten node itself.
+                val newCols: MutableSet<Int> = mutableSetOf()
+                val offset = node.usedColOutputs.cardinality()
+                val usedInputs = node.repeatColumns.toList()
+                usedInputs.mapIndexed {
+                        idx, value ->
+                    if (cols.contains(idx + offset)) {
+                        newCols.add(value)
+                    }
+                }
+                findColumnsThatCanBeRequested(node.inputs[0], newCols)
             } else {
                 // For any other type of RelNode, clear the set of columns to be requested. We still
                 // make the recursive call in case the descendants contain joins, which will re-add
