@@ -90,7 +90,6 @@ public abstract class BodoSqlTable implements ExtensibleTable {
           column.getColumnName(),
           column.convertToSqlType(
               rdtf, column.isNullable(), column.getTZInfo(), column.getPrecision()));
-      builder.nullable(true);
     }
     return builder.build();
   }
