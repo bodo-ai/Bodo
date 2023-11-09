@@ -3,9 +3,15 @@ package com.bodosql.calcite.sql;
 import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 
 import java.math.BigDecimal;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.SqlCall;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNumericLiteral;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlSampleSpec;
 import org.apache.calcite.sql.SqlUtil;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -55,5 +61,41 @@ public class BodoSqlUtil {
     return isRepeatable
         ? SqlSampleSpec.createTableSample(isBernoulli, fRate, repeatableSeed)
         : SqlSampleSpec.createTableSample(isBernoulli, fRate);
+  }
+
+  /**
+   * Return if this OP represents a SQL default value.
+   *
+   * @param op The Sql operator.
+   * @return Is this SqlStdOperatorTable.DEFAULT
+   */
+  public static boolean isDefaultCall(SqlOperator op) {
+    return op == SqlStdOperatorTable.DEFAULT;
+  }
+
+  /**
+   * Return if this SqlNode represents a SQL default value.
+   *
+   * @param node The SqlNode.
+   * @return Is this call the default?
+   */
+  public static boolean isDefaultCall(SqlNode node) {
+    if (node instanceof SqlCall) {
+      return isDefaultCall(((SqlCall) node).getOperator());
+    }
+    return false;
+  }
+
+  /**
+   * Return if this RexNode represents a SQL default value.
+   *
+   * @param node The RexNode.
+   * @return Is this call the default?
+   */
+  public static boolean isDefaultCall(RexNode node) {
+    if (node instanceof RexCall) {
+      return isDefaultCall(((RexCall) node).getOperator());
+    }
+    return false;
   }
 }

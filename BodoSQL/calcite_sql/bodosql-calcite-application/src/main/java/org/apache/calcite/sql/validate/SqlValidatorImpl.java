@@ -44,6 +44,7 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.ModifiableViewTable;
 import org.apache.calcite.sql.JoinConditionType;
 import org.apache.calcite.sql.JoinType;
+import org.apache.calcite.sql.SnowflakeSqlTableFunction;
 import org.apache.calcite.sql.SqlAccessEnum;
 import org.apache.calcite.sql.SqlAccessType;
 import org.apache.calcite.sql.SqlAggFunction;
@@ -4076,7 +4077,27 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     }
   }
 
+  private void checkIfTableFunctionIsPartOfCondition(SqlNode node) {
+    if (node == null) {
+      return;
+    }
+    if (node instanceof SqlBasicCall) {
+      SqlBasicCall call = (SqlBasicCall) node;
+      List<SqlNode> conditionOperands = call.getOperandList();
+      for (SqlNode operand : conditionOperands) {
+        if (operand instanceof SqlBasicCall && ((SqlBasicCall) operand).getOperator() instanceof SqlTableFunction) {
+          SqlBasicCall callOperand = (SqlBasicCall) operand;
+          throw RESOURCE.cannotCallTableFunctionHere(callOperand.getOperator().getName()).ex();
+        }
+        checkIfTableFunctionIsPartOfCondition(operand);
+      }
+    }
+  }
+
   protected void validateJoin(SqlJoin join, SqlValidatorScope scope) {
+    // Bodo Change: Verify a table function is not part of the join condition.
+    checkIfTableFunctionIsPartOfCondition(join.getCondition());
+
     final SqlNode left = join.getLeft();
     final SqlNode right = join.getRight();
     final boolean natural = join.isNatural();
@@ -5039,6 +5060,8 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     if (where == null) {
       return;
     }
+    // Bodo Change: Verify a table function is not part of the where condition.
+    checkIfTableFunctionIsPartOfCondition(where);
     final SqlValidatorScope whereScope = getWhereScope(select);
     final SqlNode expandedWhere = expandWithAlias(where, whereScope, select,
         ExtendedExpanderExprType.whereExpr);
@@ -5079,6 +5102,9 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     if (having == null) {
       return;
     }
+
+    // Bodo Change: Verify a table function is not part of the having condition.
+    checkIfTableFunctionIsPartOfCondition(having);
 
     // If we have an HAVING clause, the select scope can either be an aggregating scope,
     // or a non-aggregate scope, with both having different validation paths.

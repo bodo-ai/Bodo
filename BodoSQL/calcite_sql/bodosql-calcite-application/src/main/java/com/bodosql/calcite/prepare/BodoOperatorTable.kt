@@ -9,6 +9,7 @@ import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
 import com.bodosql.calcite.application.operatorTables.SinceEpochFnTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
+import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable
 import com.bodosql.calcite.application.operatorTables.ThreeOperatorStringTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.google.common.collect.ImmutableList
@@ -29,6 +30,7 @@ object BodoOperatorTable : ChainedSqlOperatorTable(
         CastingOperatorTable.instance(),
         ArrayOperatorTable.instance(),
         ContextOperatorTable.instance(),
+        TableFunctionOperatorTable.instance(),
         SqlAggOperatorTable.instance(),
         // Note: we put SqlStdOperatorTable last so we can override
         // any functions it provides.
