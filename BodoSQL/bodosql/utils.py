@@ -4,6 +4,8 @@ BodoSQL utils used to help construct Python code.
 """
 import py4j
 
+from bodosql.imported_java_classes import CommonsExceptionUtilsClass
+
 
 class BodoSQLWarning(Warning):
     """
@@ -12,13 +14,29 @@ class BodoSQLWarning(Warning):
     """
 
 
-def error_to_string(e):
+def error_to_string(e: Exception) -> str:
     """
-    Convert a error from our calcite application into a string message,
-    if the error is a Py4JJavaError. Otherwise, default to "str(e)"
+    Convert a error from our calcite application into a string message.
+    There is detailed error handling for a Py4JJavaError. Otherwise
+    we default to `str(e)`.
+
+    Args:
+        e (Exception): The Py4j raised exception.
+
+    Returns:
+        str: A string message of the error.
     """
     if isinstance(e, py4j.protocol.Py4JJavaError):
-        message = e.java_exception.getMessage()
+        java_exception = e.java_exception
+        message = java_exception.getMessage()
+        if message is None and CommonsExceptionUtilsClass is not None:
+            # If the message is None, rather than return None we should provide a stack
+            # trace.
+            msg_header = (
+                "No message found for java exception. Displaying stack trace:\n"
+            )
+            msg_body = CommonsExceptionUtilsClass.getStackTrace(java_exception)
+            message = msg_header + msg_body
     elif isinstance(e, py4j.protocol.Py4JNetworkError):
         message = "Unexpected Py4J Network Error: " + str(e)
     elif isinstance(e, py4j.protocol.Py4JError):
