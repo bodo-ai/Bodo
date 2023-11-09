@@ -46,7 +46,7 @@ from bodosql.context import (
     initialize_schema,
     update_schema,
 )
-from bodosql.utils import java_error_to_msg
+from bodosql.utils import error_to_string
 
 
 class BodoSQLContextType(types.Type):
@@ -430,7 +430,7 @@ def _gen_pd_func_text_and_lowered_globals(
                 )
         except Exception as e:
             # Raise BodoError outside except to avoid stack trace
-            func_text_or_error_msg = f"Unable to initialize BodoSQL Tables when parsing SQL Query. Error message: {java_error_to_msg(e)}"
+            func_text_or_error_msg = f"Unable to initialize BodoSQL Tables when parsing SQL Query. Error message: {error_to_string(e)}"
             failed = True
         if not failed:
             try:
@@ -438,7 +438,7 @@ def _gen_pd_func_text_and_lowered_globals(
                 generator.parseQuery(sql_str)
             except Exception as e:
                 # Raise BodoError outside except to avoid stack trace
-                func_text_or_error_msg = f"Failure encountered while parsing SQL Query. Error message: {java_error_to_msg(e)}"
+                func_text_or_error_msg = f"Failure encountered while parsing SQL Query. Error message: {error_to_string(e)}"
                 failed = True
         if not failed:
             try:
@@ -467,7 +467,7 @@ def _gen_pd_func_text_and_lowered_globals(
                 )
             except Exception as e:
                 # Raise BodoError outside except to avoid stack trace
-                func_text_or_error_msg = f"Failure in compiling or validating SQL Query. Error message: {java_error_to_msg(e)}"
+                func_text_or_error_msg = f"Failure in compiling or validating SQL Query. Error message: {error_to_string(e)}"
                 failed = True
             if not failed:
                 args = ",".join(("bodo_sql_context",) + param_keys)

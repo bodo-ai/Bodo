@@ -19,7 +19,7 @@ from bodo.utils.typing import BodoError
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.py4j_gateway import get_gateway
-from bodosql.utils import BodoSQLWarning, java_error_to_msg
+from bodosql.utils import BodoSQLWarning, error_to_string
 
 # Name for parameter table
 NAMED_PARAM_TABLE_NAME = "__$bodo_named_param_table__"
@@ -52,7 +52,7 @@ if bodo.get_rank() == 0:
         SnowflakeDriver = gateway.jvm.net.snowflake.client.jdbc.SnowflakeDriver
     except Exception as e:
         saw_error = True
-        msg = str(e)
+        msg = error_to_string(e)
 else:
     ArrayClass = None
     ColumnTypeClass = None
@@ -269,7 +269,15 @@ def construct_json_column_type(arr_type, col_name):
 def get_sql_column_type(arr_type, col_name):
     """get SQL type for a given array type."""
     warning_msg = f"DataFrame column '{col_name}' with type {arr_type} not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
-    nullable = bodo.utils.typing.is_nullable_type(arr_type)
+    # We currently treat NaN and NaT as nullable in BodoSQL, so for any array that has timestamp/float elements
+    # type, we treat it as nullable.
+    dtype_has_nullable = arr_type.dtype in (
+        types.float64,
+        types.float32,
+        bodo.datetime64ns,
+        bodo.timedelta64ns,
+    )
+    nullable = dtype_has_nullable or bodo.utils.typing.is_nullable_type(arr_type)
     if isinstance(arr_type, bodo.DatetimeArrayType):
         # Timezone-aware Timestamp columns have their own special handling.
         return construct_tz_aware_column_type(arr_type, col_name, nullable)
@@ -716,7 +724,7 @@ class BodoSQLContext:
             self.estimated_row_counts = estimated_row_counts
         except Exception as e:
             failed = True
-            msg = str(e)
+            msg = error_to_string(e)
 
         failed = bcast_scalar(failed)
         msg = bcast_scalar(msg)
@@ -949,7 +957,7 @@ class BodoSQLContext:
                 func_text_or_err_msg += f"{pd_code}\n"
             except Exception as e:
                 failed = True
-                func_text_or_err_msg = str(e)
+                func_text_or_err_msg = error_to_string(e)
 
         failed = bcast_scalar(failed)
         func_text_or_err_msg = bcast_scalar(func_text_or_err_msg)
@@ -1053,7 +1061,7 @@ class BodoSQLContext:
                 self._remove_named_params()
             except Exception as e:
                 failed = True
-                plan_or_err_msg = str(e)
+                plan_or_err_msg = error_to_string(e)
         failed = bcast_scalar(failed)
         plan_or_err_msg = bcast_scalar(plan_or_err_msg)
         if failed:
@@ -1091,7 +1099,7 @@ class BodoSQLContext:
                 self._remove_named_params()
             except Exception as e:
                 failed = True
-                plan_or_err_msg = str(e)
+                plan_or_err_msg = error_to_string(e)
         failed = bcast_scalar(failed)
         plan_or_err_msg = bcast_scalar(plan_or_err_msg)
         if failed:
@@ -1147,7 +1155,7 @@ class BodoSQLContext:
                 pd_code = str(generator.getPandasString(sql, debugDeltaTable))
                 failed = False
             except Exception as e:
-                message = java_error_to_msg(e)
+                message = error_to_string(e)
                 failed = True
             if failed:
                 # Raise BodoError outside except to avoid stack trace
@@ -1161,7 +1169,7 @@ class BodoSQLContext:
                 )
                 failed = False
             except Exception as e:
-                message = java_error_to_msg(e)
+                message = error_to_string(e)
                 failed = True
             if failed:
                 # Raise BodoError outside except to avoid stack trace
