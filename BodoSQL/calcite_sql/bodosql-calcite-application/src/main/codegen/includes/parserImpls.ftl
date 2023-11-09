@@ -15,6 +15,55 @@
 // limitations under the License.
 -->
 
+/**
+ * Argument names that are otherwise reserved but can be used
+ * as the name of an argument for a function call.
+ */
+ SqlIdentifier ArgumentNameUnreservedKeyword() :
+{
+    final String name;
+    final SqlParserPos pos;
+}
+{
+    (
+        <#list (parser.argumentNameUnreserveList!default.parser.argumentNameUnreserveList) as keyword>
+        <#if keyword?index == 0>
+                <${keyword}>
+        <#else>
+            |   <${keyword}>
+        </#if>
+        </#list>
+    )
+    {
+        name = unquotedIdentifier();
+        pos = getPos();
+        return new SqlIdentifier(name, pos);
+    }
+}
+
+/**
+ * Parses a superset of Named Argument to include reserved keywords
+ * that can be used as argument names.
+ */
+SqlIdentifier NamedArgumentIdentifier() :
+{
+    final SqlIdentifier identifier;
+    final String name;
+}
+{
+
+    (
+        identifier = SimpleIdentifier()
+    |
+        identifier = ArgumentNameUnreservedKeyword()
+
+    )
+    {
+        return identifier;
+    }
+}
+
+
 
 boolean OrReplaceOpt() :
 {

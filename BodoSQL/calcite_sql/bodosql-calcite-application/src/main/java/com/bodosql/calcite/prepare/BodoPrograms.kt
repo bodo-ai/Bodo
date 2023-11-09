@@ -10,12 +10,14 @@ import com.bodosql.calcite.prepare.BodoRules.MULTI_JOIN_CONSTRUCTION_RULES
 import com.bodosql.calcite.prepare.BodoRules.SUB_QUERY_REMOVAL_RULES
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
+import com.bodosql.calcite.rel.logical.BodoLogicalFlatten
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import com.bodosql.calcite.rel.logical.BodoLogicalSort
 import com.bodosql.calcite.rel.logical.BodoLogicalUnion
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan
 import com.bodosql.calcite.rel.metadata.BodoRelMetadataProvider
+import com.bodosql.calcite.sql.BodoSqlUtil
 import com.bodosql.calcite.sql2rel.BodoRelDecorrelator
 import com.bodosql.calcite.traits.BatchingPropertyPass
 import com.google.common.collect.Iterables
@@ -41,18 +43,22 @@ import org.apache.calcite.rel.logical.LogicalFilter
 import org.apache.calcite.rel.logical.LogicalJoin
 import org.apache.calcite.rel.logical.LogicalProject
 import org.apache.calcite.rel.logical.LogicalSort
+import org.apache.calcite.rel.logical.LogicalTableFunctionScan
 import org.apache.calcite.rel.logical.LogicalUnion
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
 import org.apache.calcite.rex.RexBuilder
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexExecutorImpl
+import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexShuttle
+import org.apache.calcite.sql.SnowflakeSqlTableFunction
 import org.apache.calcite.sql.SqlExplainFormat
 import org.apache.calcite.sql.SqlExplainLevel
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.tools.Program
 import org.apache.calcite.tools.Programs
+import org.apache.calcite.tools.RelBuilder
 
 /**
  * Holds a collection of programs for Calcite to produce plans.
@@ -208,6 +214,8 @@ object BodoPrograms {
      * removes the correlation nodes that it produces.
      */
     private class PreprocessorProgram : Program by Programs.sequence(
+        // Convert specialized table functions to their appropriate RelNodes
+        ConvertTableFunctionProgram(),
         // Remove subqueries and correlation nodes from the query.
         SubQueryRemoveProgram(),
         FlattenCaseExpressionsProgram,
@@ -458,6 +466,77 @@ object BodoPrograms {
                 val node = visitChildren(other)
                 return mapDigestToRel.computeIfAbsent(node.digest) { node }
             }
+        }
+    }
+
+    /**
+     * Convert any table functions that may have specialized node representations
+     * into their appropriate nodes.
+     */
+    class ConvertTableFunctionProgram : Program {
+        private class Visitor(private var builder: RelBuilder) : RelShuttleImpl() {
+            override fun visit(other: RelNode): RelNode {
+                // Note: LogicalTableFunctionScan doesn't have accept implemented, so we have to match on other.
+                if (other is LogicalTableFunctionScan) {
+                    // LogicalTableFunctionScan can have several arguments. We currently only support 0
+                    // argument inputs.
+                    if (other.call is RexCall && other.inputs.size == 0) {
+                        // Verify we have a Snowflake table call that's a "flatten" node.
+                        val rexCall = other.call as RexCall
+                        if (rexCall.op is SnowflakeSqlTableFunction && rexCall.op.type == SnowflakeSqlTableFunction.FunctionType.FLATTEN) {
+                            // A scan always has no inputs, so first create a dummy LogicalValues.
+                            val fieldName = "DUMMY"
+                            val expr = true
+                            builder.values(arrayOf(fieldName), expr)
+                            // Check the RexCall arguments. We will let any operands with literals be unchanged,
+                            // but all other values should be replaced.
+                            var projectIdx = 0
+                            val projectOperands = ArrayList<RexNode>()
+                            val replaceMap = HashMap<Int, Int>()
+                            for ((idx, value) in rexCall.operands.withIndex()) {
+                                // Skip defaults
+                                if (BodoSqlUtil.isDefaultCall(value)) {
+                                    continue
+                                }
+                                if (value !is RexLiteral) {
+                                    replaceMap[idx] = projectIdx
+                                    projectOperands.add(value)
+                                    projectIdx += 1
+                                }
+                            }
+                            // Add a projection if there are any non-literal nodes
+                            if (projectOperands.isNotEmpty()) {
+                                builder.project(projectOperands)
+                            }
+                            val newOperands = ArrayList<RexNode>()
+                            for ((idx, value) in rexCall.operands.withIndex()) {
+                                if (BodoSqlUtil.isDefaultCall(value)) {
+                                    // Replace default values.
+                                    newOperands.add(rexCall.op.getDefaultValue(builder.rexBuilder, idx))
+                                } else if (replaceMap.contains(idx)) {
+                                    newOperands.add(builder.field(replaceMap[idx]!!))
+                                } else {
+                                    newOperands.add(value)
+                                }
+                            }
+                            val updatedCall = builder.rexBuilder.makeCall(rexCall.op, newOperands) as RexCall
+                            return BodoLogicalFlatten.create(builder.build(), updatedCall, other.getRowType())
+                        }
+                    }
+                }
+                return super.visit(other)
+            }
+        }
+
+        override fun run(
+            planner: RelOptPlanner,
+            rel: RelNode,
+            requiredOutputTraits: RelTraitSet,
+            materializations: MutableList<RelOptMaterialization>,
+            lattices: MutableList<RelOptLattice>,
+        ): RelNode {
+            val builder = com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER.create(rel.cluster, null)
+            return rel.accept(Visitor(builder))
         }
     }
 

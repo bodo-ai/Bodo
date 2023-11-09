@@ -436,6 +436,12 @@ parser: {
   extraBinaryExpressions: [
   ]
 
+  # Bodo Change: List of keywords that can be used for argument names
+  # but aren't fully unreserved.
+  argumentNameUnreserveList: [
+  ]
+
+
   # List of files in @includes directory that have parser method
   # implementations for parsing custom SQL statements, literals or types
   # given as part of "statementParserMethods", "literalParserMethods" or

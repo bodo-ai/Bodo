@@ -1,7 +1,9 @@
 package com.bodosql.calcite.sql.parser
 
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
+import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
+import org.apache.calcite.sql.SqlIdentifier
 import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlUtil
@@ -9,6 +11,7 @@ import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.parser.SqlParserPos
 import org.apache.calcite.sql.parser.SqlParserUtil
 import org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE
+import java.lang.RuntimeException
 import java.util.*
 
 class SqlBodoParserUtil {
@@ -41,6 +44,18 @@ class SqlBodoParserUtil {
                         else -> ch
                     }
                 }
+
+        /**
+         * Returns a call to a builtin Table Function.
+         */
+        @JvmStatic
+        fun createBuiltinTableFunction(name: SqlIdentifier, pos: SqlParserPos, args: List<SqlNode>): SqlNode {
+            if (name.simple == "FLATTEN") {
+                return TableFunctionOperatorTable.FLATTEN.createCall(pos, args)
+            } else {
+                throw RuntimeException("Internal Error: Unexpected builtin table")
+            }
+        }
 
         /**
          * Dispatch a DATE_PART or Extract call to the appropriate individual function.
