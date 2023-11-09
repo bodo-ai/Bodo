@@ -4,11 +4,16 @@ from pathlib import Path
 
 import pytest
 
+import bodo
+
 
 @pytest.mark.no_cover
 def test_api_docs_generated(memory_leak_check):
     """Verify that `make gen_api` has been run over the current state of the
     docs directory"""
+    if bodo.get_size() != 1:
+        # Only run on np=1
+        return
     # Get the repository path
     repo_root = subprocess.check_output(["git", "rev-parse", "--show-toplevel"])
     docs_dir = Path(repo_root.strip().decode()) / "docs"
