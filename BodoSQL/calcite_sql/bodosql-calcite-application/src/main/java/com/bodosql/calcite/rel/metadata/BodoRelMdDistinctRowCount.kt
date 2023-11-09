@@ -1,5 +1,6 @@
 package com.bodosql.calcite.rel.metadata
 
+import com.bodosql.calcite.rel.core.Flatten
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.SingleRel
 import org.apache.calcite.rel.core.Filter
@@ -104,6 +105,15 @@ class BodoRelMdDistinctRowCount : RelMdDistinctRowCount() {
 
     override fun getDistinctRowCount(
         rel: Project,
+        mq: RelMetadataQuery,
+        groupKey: ImmutableBitSet,
+        predicate: RexNode?,
+    ): Double? {
+        return cartesianApproximationDistinctRowCount(rel, mq, groupKey)
+    }
+
+    fun getDistinctRowCount(
+        rel: Flatten,
         mq: RelMetadataQuery,
         groupKey: ImmutableBitSet,
         predicate: RexNode?,

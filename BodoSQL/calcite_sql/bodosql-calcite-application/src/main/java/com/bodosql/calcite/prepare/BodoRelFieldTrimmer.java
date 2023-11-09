@@ -3,6 +3,7 @@ package com.bodosql.calcite.prepare;
 import com.bodosql.calcite.adapter.pandas.PandasRowSample;
 import com.bodosql.calcite.adapter.pandas.PandasSample;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
+import com.bodosql.calcite.rel.core.Flatten;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,6 +29,7 @@ import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeImpl;
+import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
 import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexNode;
@@ -527,5 +529,76 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     // return fields that the consumer didn't ask for, because the filter
     // needs them for its condition.
     return result(relBuilder.build(), inputMapping, filter);
+  }
+
+  public TrimResult trimFields(
+      Flatten flatten, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
+    final RelDataType rowType = flatten.getRowType();
+    final int fieldCount = rowType.getFieldCount();
+    final RexNode flattenExpr = flatten.getCall();
+    final RelNode input = flatten.getInput();
+
+    // We use the fields used by the consumer, plus any fields used in the
+    // flatten expression.
+    final Set<RelDataTypeField> inputExtraFields = new LinkedHashSet<>(extraFields);
+
+    List<Integer> remappedInputIndices = new ArrayList<Integer>();
+    List<Integer> usedColOutputs = flatten.getUsedColOutputs().toList();
+    int nOutColumns = usedColOutputs.size();
+    for (int i : fieldsUsed.toList()) {
+      if (i >= nOutColumns) {
+        remappedInputIndices.add(i - nOutColumns);
+      }
+    }
+
+    RelOptUtil.InputFinder inputFinder =
+        new RelOptUtil.InputFinder(inputExtraFields, ImmutableBitSet.of(remappedInputIndices));
+    flattenExpr.accept(inputFinder);
+    final ImmutableBitSet inputFieldsUsed = inputFinder.build();
+
+    // Create input with trimmed columns.
+    TrimResult incompleteTrimResult = trimChild(flatten, input, inputFieldsUsed, inputExtraFields);
+
+    // Prune all unused input columns
+    final TrimResult trimResult =
+        insertPruningProjection(incompleteTrimResult, inputFieldsUsed, inputExtraFields);
+
+    RelNode newInput = trimResult.left;
+    final Mapping inputMapping = trimResult.right;
+
+    final RexVisitor<RexNode> shuttle = new RexPermuteInputsShuttle(inputMapping, newInput);
+    RexNode newFlattenExpr = flattenExpr.accept(shuttle);
+
+    List<Integer> newUsedColOutputs = new ArrayList<Integer>();
+    List<Integer> newRepeatCols = new ArrayList<Integer>();
+    List<RelDataTypeField> newRowType = new ArrayList<RelDataTypeField>();
+    final Mapping newInputMapping =
+        Mappings.create(MappingType.INVERSE_SURJECTION, fieldCount, fieldsUsed.cardinality());
+    for (int i = 0; i < usedColOutputs.size(); i++) {
+      if (fieldsUsed.get(i)) {
+        Integer outIdx = usedColOutputs.get(i);
+        newUsedColOutputs.add(outIdx);
+        newInputMapping.set(i, newRowType.size());
+        newRowType.add(rowType.getFieldList().get(i));
+      }
+    }
+    for (int i : flatten.getRepeatColumns()) {
+      int outIdx = i + nOutColumns;
+      if (fieldsUsed.get(outIdx)) {
+        newRepeatCols.add(inputMapping.getTarget(i));
+        newInputMapping.set(outIdx, newRowType.size());
+        newRowType.add(rowType.getFieldList().get(outIdx));
+      }
+    }
+    Flatten newFlatten =
+        flatten.copy(
+            flatten.getTraitSet(),
+            newInput,
+            (RexCall) newFlattenExpr,
+            flatten.getCallType(),
+            ImmutableBitSet.of(newUsedColOutputs),
+            ImmutableBitSet.of(newRepeatCols));
+
+    return result(newFlatten, newInputMapping, flatten);
   }
 }

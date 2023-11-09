@@ -166,20 +166,20 @@ static bodo::tests::suite tests([] {
         DEBUG_PrintTable(ss, out_table.release());
         bodo::tests::check(ss.str() ==
                            "Column 0 : arr_type=NUMPY dtype=INT64\n"
-                           "Column 1 : arr_type=STRING dtype=STRING\n"
-                           "Column 2 : arr_type=DICT dtype=STRING\n"
-                           "Column 3 : arr_type=NUMPY dtype=INT64\n"
+                           "Column 1 : arr_type=NUMPY dtype=INT64\n"
+                           "Column 2 : arr_type=STRING dtype=STRING\n"
+                           "Column 3 : arr_type=DICT dtype=STRING\n"
                            "nCol=4 List of number of rows: 10 10 10 10\n"
-                           "0 : 0  ABC Alphabet 0\n"
-                           "1 : 1  DE  NA       1\n"
-                           "2 : 1  DE  NA       2\n"
-                           "3 : 1  DE  NA       3\n"
-                           "4 : 1  DE  NA       4\n"
-                           "5 : 4  NA  Soup     5\n"
-                           "6 : 4  NA  Soup     6\n"
-                           "7 : 16 HIJ Alphabet 7\n"
-                           "8 : 16 HIJ Alphabet 8\n"
-                           "9 : 16 HIJ Alphabet 9\n");
+                           "0 : 0 0  ABC Alphabet\n"
+                           "1 : 1 1  DE  NA      \n"
+                           "2 : 2 1  DE  NA      \n"
+                           "3 : 3 1  DE  NA      \n"
+                           "4 : 4 1  DE  NA      \n"
+                           "5 : 5 4  NA  Soup    \n"
+                           "6 : 6 4  NA  Soup    \n"
+                           "7 : 7 16 HIJ Alphabet\n"
+                           "8 : 8 16 HIJ Alphabet\n"
+                           "9 : 9 16 HIJ Alphabet\n");
     });
 
     bodo::tests::test("test_lateral_array_flatten_with_index", [] {
@@ -204,21 +204,21 @@ static bodo::tests::suite tests([] {
         DEBUG_PrintTable(ss, out_table.release());
         bodo::tests::check(ss.str() ==
                            "Column 0 : arr_type=NUMPY dtype=INT64\n"
-                           "Column 1 : arr_type=STRING dtype=STRING\n"
-                           "Column 2 : arr_type=DICT dtype=STRING\n"
-                           "Column 3 : arr_type=NUMPY dtype=INT64\n"
-                           "Column 4 : arr_type=NUMPY dtype=INT64\n"
+                           "Column 1 : arr_type=NUMPY dtype=INT64\n"
+                           "Column 2 : arr_type=NUMPY dtype=INT64\n"
+                           "Column 3 : arr_type=STRING dtype=STRING\n"
+                           "Column 4 : arr_type=DICT dtype=STRING\n"
                            "nCol=5 List of number of rows: 10 10 10 10 10\n"
-                           "0 : 0  ABC Alphabet 0 0\n"
-                           "1 : 1  DE  NA       0 1\n"
-                           "2 : 1  DE  NA       1 2\n"
-                           "3 : 1  DE  NA       2 3\n"
-                           "4 : 1  DE  NA       3 4\n"
-                           "5 : 4  NA  Soup     0 5\n"
-                           "6 : 4  NA  Soup     1 6\n"
-                           "7 : 16 HIJ Alphabet 0 7\n"
-                           "8 : 16 HIJ Alphabet 1 8\n"
-                           "9 : 16 HIJ Alphabet 2 9\n");
+                           "0 : 0 0 0  ABC Alphabet\n"
+                           "1 : 0 1 1  DE  NA      \n"
+                           "2 : 1 2 1  DE  NA      \n"
+                           "3 : 2 3 1  DE  NA      \n"
+                           "4 : 3 4 1  DE  NA      \n"
+                           "5 : 0 5 4  NA  Soup    \n"
+                           "6 : 1 6 4  NA  Soup    \n"
+                           "7 : 0 7 16 HIJ Alphabet\n"
+                           "8 : 1 8 16 HIJ Alphabet\n"
+                           "9 : 2 9 16 HIJ Alphabet\n");
     });
 
     bodo::tests::test("test_alloc_array_like", [] {
