@@ -588,9 +588,10 @@ public abstract class SqlUtil {
 
     // second pass:  eliminate routines which don't accept the given
     // argument types and parameter names if specified
+    // Bodo Change: Pass the name matcher for case insensitive matching.
     routines =
         filterRoutinesByParameterTypeAndName(typeFactory, sqlSyntax, routines,
-            argTypes, argNames, coerce);
+            argTypes, argNames, coerce, nameMatcher);
 
     // see if we can stop now; this is necessary for the case
     // of builtin functions where we don't have param type info,
@@ -671,12 +672,15 @@ public abstract class SqlUtil {
    * Filters an iterator of routines, keeping only those that have the required
    * argument types and names.
    *
+   * Bodo Change: Pass a nameMatcher for parameter names.
+   *
    * @see Glossary#SQL99 SQL:1999 Part 2 Section 10.4 Syntax Rule 6.b.iii.2.B
    */
   private static Iterator<SqlOperator> filterRoutinesByParameterTypeAndName(
       RelDataTypeFactory typeFactory, SqlSyntax syntax,
       final Iterator<SqlOperator> routines, final List<RelDataType> argTypes,
-      final @Nullable List<String> argNames, final boolean coerce) {
+      final @Nullable List<String> argNames, final boolean coerce,
+      final SqlNameMatcher nameMatcher) {
     if (syntax != SqlSyntax.FUNCTION) {
       return routines;
     }
@@ -700,7 +704,8 @@ public abstract class SqlUtil {
           final List<@Nullable RelDataType> permutedArgTypes;
           if (argNames != null) {
             final List<String> paramNames = operandMetadata.paramNames();
-            permutedArgTypes = permuteArgTypes(paramNames, argNames, argTypes);
+            // Bodo Change: Pass the name matcher.
+            permutedArgTypes = permuteArgTypes(paramNames, argNames, argTypes, nameMatcher);
             if (permutedArgTypes == null) {
               return false;
             }
@@ -726,14 +731,18 @@ public abstract class SqlUtil {
 
   /**
    * Permutes argument types to correspond to the order of parameter names.
+   *
+   * Bodo Change: Pass the SQL name matcher.
+   *
    */
   private static @Nullable List<@Nullable RelDataType> permuteArgTypes(List<String> paramNames,
-      List<String> argNames, List<RelDataType> argTypes) {
+      List<String> argNames, List<RelDataType> argTypes, final SqlNameMatcher nameMatcher) {
     // Arguments passed by name. Make sure that the function has
     // parameters of all of these names.
     Map<Integer, Integer> map = new HashMap<>();
     for (Ord<String> argName : Ord.zip(argNames)) {
-      int i = paramNames.indexOf(argName.e);
+      // Bodo Change: Reuse case sensitivity rules.
+      int i = nameMatcher.indexOf(paramNames, argName.e);
       if (i < 0) {
         return null;
       }
