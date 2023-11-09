@@ -15,9 +15,6 @@ import org.apache.calcite.schema.Schema
 import org.apache.calcite.sql.SqlAggFunction
 import org.apache.calcite.sql.`fun`.SqlAggOperatorTable
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
-import org.apache.calcite.sql.type.ArraySqlType
-import org.apache.calcite.sql.type.MapSqlType
-import org.apache.calcite.sql.type.VariantSqlType
 import org.apache.calcite.util.ImmutableBitSet
 
 /**
@@ -51,27 +48,6 @@ class ExpectedBatchingProperty {
         }
 
         /**
-         * Is the given type a type that cannot be supported in streaming.
-         *
-         * @param type Column type in question.
-         */
-        @JvmStatic
-        private fun isUnsupportedStreamingType(type: RelDataType): Boolean {
-            // We don't support arrays or objects in streaming yet, but we also
-            // do not allow them to be read directly from Snowflake. Since
-            // computations involving columns from the input table with these types
-            // are pushed down to Snowflake, we can still do streaming since they
-            // will not be present after reading from Snowflake.
-            if (type is ArraySqlType) {
-                return !(type.getComponentType() is VariantSqlType)
-            }
-            if (type is MapSqlType) {
-                return !(type.getValueType() is VariantSqlType)
-            }
-            return false
-        }
-
-        /**
          * Get the underlying batching property.
          *
          * @param streaming Does this node want streaming.
@@ -79,8 +55,7 @@ class ExpectedBatchingProperty {
          * All of these must be supported in streaming.
          */
         private fun getBatchingProperty(streaming: Boolean, nodeTypes: List<RelDataType>): BatchingProperty {
-            val canStream = streaming && !nodeTypes.any { type -> isUnsupportedStreamingType(type) }
-            return if (canStream) {
+            return if (streaming) {
                 BatchingProperty.STREAMING
             } else {
                 BatchingProperty.SINGLE_BATCH
