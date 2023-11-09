@@ -222,7 +222,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIME_NULLABLE,
+          BodoReturnTypes.TIME_FORCE_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -465,7 +465,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.BIGINT,
+          ReturnTypes.BIGINT_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -492,7 +492,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.BIGINT,
+          ReturnTypes.BIGINT_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -511,7 +511,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP,
+          // returns null if the string doesn't match the provided format
+          BodoReturnTypes.TIMESTAMP_FORCE_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -678,7 +679,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.DOUBLE,
+          ReturnTypes.DOUBLE_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -694,7 +695,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.ARG0,
+          ReturnTypes.ARG0_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -748,7 +749,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.DATE,
+          ReturnTypes.DATE_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -814,7 +815,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.ARG0,
+          ReturnTypes.ARG0_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -927,7 +928,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "CONVERT_TIMEZONE",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.TIMESTAMP,
+          ReturnTypes.TIMESTAMP_NULLABLE,
           null,
           OperandTypes.CHARACTER_CHARACTER_DATETIME.or(
               OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME)),

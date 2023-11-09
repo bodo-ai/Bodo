@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.operatorTables;
 
 import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.argumentRange;
+import static org.apache.calcite.sql.type.BodoReturnTypes.bitX_ret_type;
 
 import com.bodosql.calcite.sql.func.SqlRandomOperator;
 import java.util.ArrayList;
@@ -15,7 +16,6 @@ import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
-import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
@@ -335,15 +335,24 @@ public final class NumericOperatorTable implements SqlOperatorTable {
 
   public static final SqlBasicAggFunction VARIANCE_POP =
       SqlBasicAggFunction.create(
-          "VARIANCE_POP", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.NUMERIC);
+          "VARIANCE_POP",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER_NULLABLE,
+          OperandTypes.NUMERIC);
 
   public static final SqlBasicAggFunction VARIANCE_SAMP =
       SqlBasicAggFunction.create(
-          "VARIANCE_SAMP", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.NUMERIC);
+          "VARIANCE_SAMP",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER_NULLABLE,
+          OperandTypes.NUMERIC);
 
   public static final SqlBasicAggFunction CORR =
       SqlBasicAggFunction.create(
-          "CORR", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.NUMERIC_NUMERIC);
+          "CORR",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER_NULLABLE,
+          OperandTypes.NUMERIC_NUMERIC);
 
   public static final SqlAggFunction APPROX_PERCENTILE =
       SqlBasicAggFunction.create(
@@ -373,25 +382,10 @@ public final class NumericOperatorTable implements SqlOperatorTable {
       SqlBasicAggFunction.create(
           "RATIO_TO_REPORT",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.DOUBLE_NULLABLE,
+          // Can output null in the case that the sum within the group
+          // evaluates to 0
+          BodoReturnTypes.DOUBLE_FORCE_NULLABLE,
           OperandTypes.NUMERIC);
-
-  /**
-   * Determine the return type for BITOR_AGG, BITAND_AGG, and BITXOR_AGG. The return type is the
-   * same as the input if it is an integer, otherwise the return type is always int64 (BIGINT).
-   *
-   * @param binding The operand bindings for the function signature.
-   * @return The return type of the function
-   */
-  public static RelDataType bitX_ret_type(SqlOperatorBinding binding) {
-    RelDataType arg0Type = binding.getOperandType(0);
-    SqlTypeFamily arg0TypeFamily = arg0Type.getSqlTypeName().getFamily();
-    if (arg0TypeFamily.equals(SqlTypeFamily.INTEGER)) {
-      return ReturnTypes.ARG0_NULLABLE.inferReturnType(binding);
-    } else {
-      return ReturnTypes.BIGINT_NULLABLE.inferReturnType(binding);
-    }
-  }
 
   public static final SqlAggFunction BITOR_AGG =
       SqlBasicAggFunction.create(
@@ -452,7 +446,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "TRY_TO_NUMBER",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BIGINT_NULLABLE,
+          ReturnTypes.BIGINT_FORCE_NULLABLE,
           null,
           OperandTypes.NUMERIC.or(OperandTypes.STRING),
           SqlFunctionCategory.NUMERIC);
@@ -461,7 +455,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "TRY_TO_NUMERIC",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BIGINT_NULLABLE,
+          ReturnTypes.BIGINT_FORCE_NULLABLE,
           null,
           OperandTypes.NUMERIC.or(OperandTypes.STRING),
           SqlFunctionCategory.NUMERIC);
@@ -470,7 +464,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "TRY_TO_DECIMAL",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BIGINT_NULLABLE,
+          ReturnTypes.BIGINT_FORCE_NULLABLE,
           null,
           OperandTypes.NUMERIC.or(OperandTypes.STRING),
           SqlFunctionCategory.NUMERIC);

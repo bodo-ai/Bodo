@@ -46,6 +46,7 @@ public final class JsonOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "GET_PATH",
           SqlKind.OTHER_FUNCTION,
+          // Returns null if path is invalid
           BodoReturnTypes.VARIANT_FORCE_NULLABLE,
           null,
           OperandTypes.sequence(
@@ -57,7 +58,8 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           "JSON_EXTRACT_PATH_TEXT",
           SqlKind.OTHER_FUNCTION,
           // Cannot statically determine the precision
-          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
+          // returns null if path is invalid
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_FORCE_NULLABLE,
           null,
           OperandTypes.STRING_STRING,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
