@@ -1527,6 +1527,24 @@ class DistributedPass:
             out.append(assign)
             return out
 
+        # array_to_repeated_array_item_array() is similar to an allocation and its size
+        # argument needs handled similarly
+        if fdef == (
+            "array_to_repeated_array_item_array",
+            "bodo.libs.array_item_arr_ext",
+        ):
+            out = []
+            size_var = rhs.args[1]
+            if self._is_1D_arr(lhs):
+                rhs.args[1] = self._get_1D_count(size_var, out)
+            elif self._is_1D_Var_arr(lhs):
+                rhs.args[1] = self._get_1D_Var_size(
+                    size_var, equiv_set, avail_vars, out
+                )
+
+            out.append(assign)
+            return out
+
         # numpy direct functions
         if isinstance(func_mod, str) and func_mod == "numpy":
             return self._run_call_np(

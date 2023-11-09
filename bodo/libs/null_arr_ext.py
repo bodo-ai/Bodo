@@ -96,7 +96,6 @@ make_attribute_wrapper(NullArrayType, "length", "_length")
 @intrinsic
 def init_null_array(typingctx, length_t):
     """Create a null array with the provided length."""
-    assert types.unliteral(length_t) == types.int64, "length must be an int64"
 
     def codegen(context, builder, signature, args):
         (length,) = args
@@ -271,3 +270,15 @@ def null_arr_getitem(A, ind):
     raise bodo.utils.typing.BodoError(
         f"getitem for NullArrayType with indexing type {ind} not supported."
     )  # pragma: no cover
+
+
+@overload(operator.setitem, no_unliteral=True)
+def null_arr_setitem(arr, ind, val):
+    """Null array setitem may be called in internal code like trim_excess_data
+    See
+    tests/test_bodosql_array_kernels/test_bodosql_variadic_array_kernels.py::test_object_construct_keep_null"[2-int_vector-null]"
+    """
+    if arr != null_array_type:
+        return
+
+    return lambda arr, ind, val: None  # pragma: no cover
