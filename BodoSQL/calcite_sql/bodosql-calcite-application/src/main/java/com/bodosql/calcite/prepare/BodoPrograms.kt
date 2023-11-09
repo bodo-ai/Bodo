@@ -7,6 +7,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.logicalRules.JoinExtractOverRule
 import com.bodosql.calcite.application.logicalRules.ListAggOptionalReplaceRule
 import com.bodosql.calcite.prepare.BodoRules.MULTI_JOIN_CONSTRUCTION_RULES
+import com.bodosql.calcite.prepare.BodoRules.PROJECTION_PULL_UP_RULES
 import com.bodosql.calcite.prepare.BodoRules.SUB_QUERY_REMOVAL_RULES
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
@@ -84,6 +85,7 @@ object BodoPrograms {
         } else {
             NoopProgram
         },
+
         // Simplification & filter push down step.
         if (optimize) {
             HepOptimizerProgram(Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES, BodoRules.CSE_RULES))
@@ -93,6 +95,12 @@ object BodoPrograms {
         // We eliminate common subexpressions in filters only after all filters have been pushed down.
         if (optimize) {
             HepOptimizerProgram(listOf(BodoRules.CSE_IN_FILTERS_RULE))
+        } else {
+            NoopProgram
+        },
+        // Projection pull up pass
+        if (optimize) {
+            ProjectionPullUpPass()
         } else {
             NoopProgram
         },
@@ -554,6 +562,12 @@ object BodoPrograms {
             }
         }
     }
+
+    private class ProjectionPullUpPass : Program by Programs.hep(
+        PROJECTION_PULL_UP_RULES,
+        true,
+        DefaultRelMetadataProvider.INSTANCE,
+    )
 
     private class SnowflakeColumnPruning : Program by Programs.hep(
         listOf(SnowflakeProjectIntoScanRule.Config.BODO_LOGICAL_CONFIG.toRule()),
