@@ -290,6 +290,7 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         return impl_binary_arr
 
+    # ArrayItemArrayType
     if isinstance(arr, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
 
         def impl_arr_item(arr, ind, int_nan_const=0):  # pragma: no cover
@@ -300,6 +301,12 @@ def setna_overload(arr, ind, int_nan_const=0):
             bodo.libs.int_arr_ext.set_bit_to_arr(
                 bodo.libs.array_item_arr_ext.get_null_bitmap(arr), ind, 0
             )
+            # Length of the data array has to be set properly after filling the data to
+            # avoid violating assumptions in other parts of the code.
+            # For example, length of string array is used when passed to C++.
+            # See https://bodo.atlassian.net/browse/BSE-1915
+            if ind == (bodo.libs.array_item_arr_ext.get_n_arrays(arr) - 1):
+                bodo.libs.array_item_arr_ext.trim_excess_data(arr)
 
         return impl_arr_item
 

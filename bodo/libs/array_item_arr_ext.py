@@ -1174,6 +1174,12 @@ def array_item_arr_setitem(A, idx, val):
             offsets[idx + 1] = offsets[idx] + n_items
             data[offsets[idx] : offsets[idx + 1]] = val
             bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, idx, 1)
+            # Length of the data array has to be set properly after filling the data to
+            # avoid violating assumptions in other parts of the code.
+            # For example, length of string array is used when passed to C++.
+            # See https://bodo.atlassian.net/browse/BSE-1915
+            if idx == (get_n_arrays(A) - 1):
+                trim_excess_data(A)
 
         return impl_scalar
 
