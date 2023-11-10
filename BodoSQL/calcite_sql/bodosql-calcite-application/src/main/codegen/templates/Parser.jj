@@ -6746,23 +6746,13 @@ SqlNode BuiltinFunctionCall() :
             return SqlStdOperatorTable.TRIM.createCall(s.end(this), args);
         }
     |
-        <DATE_TRUNC> { s = span(); }
-        <LPAREN>
-        QuotedOrUnquotedInterval(args)
-        <COMMA>
-        e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
-        <RPAREN> {
-            return DatetimeOperatorTable.DATE_TRUNC.createCall(
-                s.end(this), args);
-        }
-    |
         node = TimestampAddFunctionCall() { return node; }
     |
         node = TimestampDiffFunctionCall() { return node; }
+    |
+        node = DateTruncFunctionCall() { return node; }
     // Bodo Change: Disable changes to builtin function calls that may conflict
     // with our builtin functions.
-    // |
-    //     node = DateTruncFunctionCall() { return node; }
     // |
     //     node = TimestampDiff3FunctionCall() { return node; }
     // |
@@ -7297,10 +7287,11 @@ SqlCall TimestampDiff3FunctionCall() :
     }
 }
 
+
 /**
  * Parses a call to DATE_TRUNC.
  */
-SqlCall DateTruncFunctionCall() :
+SqlCall CalciteDateTruncFunctionCall() :
 {
     final List<SqlNode> args = new ArrayList<SqlNode>();
     final Span s;
@@ -7323,6 +7314,7 @@ SqlCall DateTruncFunctionCall() :
         return SqlLibraryOperators.DATE_TRUNC.createCall(s.end(this), args);
     }
 }
+
 
 /**
  * Parses a call to TIMESTAMP_TRUNC.
