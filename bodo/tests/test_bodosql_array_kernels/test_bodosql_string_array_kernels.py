@@ -1917,103 +1917,96 @@ def test_strcmp(args, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "args",
+    "args, answer",
     [
         pytest.param(
             (
-                (
-                    pd.Series(
-                        pd.array(
-                            [""] * 4
-                            + ["110,112,122,150\n210,213,251\n451"] * 4
-                            + [None]
-                        )
-                    ),
-                    pd.Series(pd.array(["", "", ",\n ", ",\n "] * 2 + ["a"])),
-                    pd.Series(pd.array([1, 5] * 4 + [2])),
-                ),
                 pd.Series(
                     pd.array(
-                        [
-                            None,
-                            None,
-                            None,
-                            None,
-                            "110,112,122,150\n210,213,251\n451",
-                            None,
-                            "110",
-                            "210",
-                            None,
-                        ]
+                        [""] * 4 + ["110,112,122,150\n210,213,251\n451"] * 4 + [None]
                     )
                 ),
+                pd.Series(pd.array(["", "", ",\n ", ",\n "] * 2 + ["a"])),
+                pd.Series(pd.array([1, 5] * 4 + [2])),
+            ),
+            pd.Series(
+                pd.array(
+                    [
+                        None,
+                        None,
+                        None,
+                        None,
+                        "110,112,122,150\n210,213,251\n451",
+                        None,
+                        "110",
+                        "210",
+                        None,
+                    ]
+                )
             ),
             id="all_vector",
         ),
         pytest.param(
             (
-                (
-                    "Odysseus,Achilles,Diomedes,Ajax,Agamemnon\nParis,Hector,Helen,Aeneas",
-                    "\n,",
-                    pd.Series(pd.array(list(range(-2, 11)))),
-                ),
-                pd.Series(
-                    pd.array(
-                        [
-                            None,
-                            None,
-                            None,
-                            "Odysseus",
-                            "Achilles",
-                            "Diomedes",
-                            "Ajax",
-                            "Agamemnon",
-                            "Paris",
-                            "Hector",
-                            "Helen",
-                            "Aeneas",
-                            None,
-                        ]
-                    )
-                ),
+                "Odysseus,Achilles,Diomedes,Ajax,Agamemnon\nParis,Hector,Helen,Aeneas",
+                "\n,",
+                pd.Series(pd.array(list(range(-2, 11)))),
+            ),
+            pd.Series(
+                pd.array(
+                    [
+                        None,
+                        None,
+                        None,
+                        "Odysseus",
+                        "Achilles",
+                        "Diomedes",
+                        "Ajax",
+                        "Agamemnon",
+                        "Paris",
+                        "Hector",
+                        "Helen",
+                        "Aeneas",
+                        None,
+                    ]
+                )
             ),
             id="scalar_scalar_vector",
         ),
         pytest.param(
             (
-                (
-                    "The quick brown fox jumps over the lazy dog",
-                    pd.Series(pd.array(["aeiou"] * 5 + [" "] * 5)),
-                    pd.Series([1, 2, 4, 8, 16] * 2),
-                ),
-                pd.Series(
-                    pd.array(
-                        [
-                            "Th",
-                            " q",
-                            "wn f",
-                            "r th",
-                            None,
-                            "The",
-                            "quick",
-                            "fox",
-                            "lazy",
-                            None,
-                        ]
-                    )
-                ),
+                "The quick brown fox jumps over the lazy dog",
+                pd.Series(pd.array(["aeiou"] * 5 + [" "] * 5)),
+                pd.Series([1, 2, 4, 8, 16] * 2),
+            ),
+            pd.Series(
+                pd.array(
+                    [
+                        "Th",
+                        " q",
+                        "wn f",
+                        "r th",
+                        None,
+                        "The",
+                        "quick",
+                        "fox",
+                        "lazy",
+                        None,
+                    ]
+                )
             ),
             id="scalar_vector_vector",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (("aaeaaeieaaeioiea", "a", 3), "eioie"),
+            ("aaeaaeieaaeioiea", "a", 3),
+            "eioie",
             id="all_scalar",
             marks=pytest.mark.slow,
         ),
     ],
 )
-def test_strtok(args, memory_leak_check):
+def test_strtok(args, answer, memory_leak_check):
     def impl(source, delim, target):
         return pd.Series(bodo.libs.bodosql_array_kernels.strtok(source, delim, target))
 
@@ -2023,13 +2016,71 @@ def test_strtok(args, memory_leak_check):
             source, delim, target
         )
 
-    args, answer = args
     check_func(
         impl,
         args,
         py_output=answer,
         check_dtype=False,
         reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args, expected",
+    [
+        pytest.param(
+            (
+                "Odysseus,Achilles,Diomedes,Ajax,Agamemnon\nParis,Hector,Helen,Aeneas",
+                pd.Series(["\n,", "", None]),
+            ),
+            pd.Series(
+                [
+                    [
+                        "Odysseus",
+                        "Achilles",
+                        "Diomedes",
+                        "Ajax",
+                        "Agamemnon",
+                        "Paris",
+                        "Hector",
+                        "Helen",
+                        "Aeneas",
+                    ],
+                    [
+                        "Odysseus,Achilles,Diomedes,Ajax,Agamemnon\nParis,Hector,Helen,Aeneas"
+                    ],
+                    None,
+                ],
+            ),
+            id="vector_vector",
+        ),
+        pytest.param(
+            (
+                "",
+                " ",
+            ),
+            pd.array([], dtype="string[pyarrow]"),
+            id="empty_string",
+        ),
+    ],
+)
+def test_strtok_to_array(args, expected, memory_leak_check):
+    def impl(source, delim):
+        return pd.Series(bodo.libs.bodosql_array_kernels.strtok_to_array(source, delim))
+
+    # avoid Series conversion for scalar output
+    if not any(isinstance(arg, pd.Series) for arg in args):
+        impl = lambda source, delim: bodo.libs.bodosql_array_kernels.strtok_to_array(
+            source, delim
+        )
+
+    check_func(
+        impl,
+        args,
+        py_output=expected,
+        check_dtype=False,
+        reset_index=True,
+        dist_test=False,
     )
 
 
@@ -2616,6 +2667,28 @@ def test_option_strtok_split_part(memory_leak_check):
                     py_output=answer,
                     dist_test=False,
                 )
+
+
+@pytest.mark.slow
+def test_option_strtok_to_array(memory_leak_check):
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return bodo.libs.bodosql_array_kernels.strtok_to_array(arg0, arg1)
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = (
+                pd.array(["a", "b", "c"], dtype="string[pyarrow]")
+                if flag0 and flag1
+                else None
+            )
+            check_func(
+                impl,
+                ("a  b  c", " ", flag0, flag1),
+                py_output=answer,
+                dist_test=False,
+            )
 
 
 @pytest.mark.slow

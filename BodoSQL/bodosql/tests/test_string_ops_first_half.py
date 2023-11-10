@@ -1028,6 +1028,178 @@ def test_strtok(args, spark_info, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "query, expected",
+    [
+        pytest.param(
+            "SELECT STRTOK_TO_ARRAY(A) FROM table1",
+            pd.DataFrame(
+                {
+                    0: pd.Series(
+                        [
+                            pd.array(
+                                ["alphabet", "soup", "is", "delicious"],
+                                "string[pyarrow]",
+                            ),
+                            pd.array(["aaeaaeieaaeioiea"], "string[pyarrow]"),
+                            pd.array([".A.BCD.E.FGH.I.JKLMN."], "string[pyarrow]"),
+                            pd.array(
+                                ["415-555-1234,", "412-555-2345,", "937-555-3456"],
+                                "string[pyarrow]",
+                            ),
+                            pd.array(
+                                ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"],
+                                "string[pyarrow]",
+                            ),
+                            pd.array([], "string[pyarrow]"),
+                            None,
+                        ]
+                        * 2,
+                    )
+                }
+            ),
+            id="vector_default",
+        ),
+        pytest.param(
+            "SELECT STRTOK_TO_ARRAY(A, ' .,-') FROM table1",
+            pd.DataFrame(
+                {
+                    0: pd.Series(
+                        [
+                            pd.array(
+                                ["alphabet", "soup", "is", "delicious"],
+                                "string[pyarrow]",
+                            ),
+                            pd.array(["aaeaaeieaaeioiea"], "string[pyarrow]"),
+                            pd.array(
+                                ["A", "BCD", "E", "FGH", "I", "JKLMN"],
+                                "string[pyarrow]",
+                            ),
+                            pd.array(
+                                [
+                                    "415",
+                                    "555",
+                                    "1234",
+                                    "412",
+                                    "555",
+                                    "2345",
+                                    "937",
+                                    "555",
+                                    "3456",
+                                ],
+                                "string[pyarrow]",
+                            ),
+                            pd.array(
+                                ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"],
+                                "string[pyarrow]",
+                            ),
+                            pd.array([], "string[pyarrow]"),
+                            None,
+                        ]
+                        * 2,
+                    )
+                }
+            ),
+            id="vector_symbols",
+        ),
+        pytest.param(
+            "SELECT STRTOK_TO_ARRAY(A, B) FROM table1",
+            pd.DataFrame(
+                {
+                    0: pd.Series(
+                        [
+                            pd.array(
+                                ["alphabet", "soup", "is", "delicious"],
+                                "string[pyarrow]",
+                            ),
+                            pd.array(["aaeaaeieaaeioiea"], "string[pyarrow]"),
+                            pd.array(
+                                ["A", "BCD", "E", "FGH", "I", "JKLMN"],
+                                "string[pyarrow]",
+                            ),
+                            pd.array(
+                                [
+                                    "415",
+                                    "555",
+                                    "1234, 412",
+                                    "555",
+                                    "2345, 937",
+                                    "555",
+                                    "3456",
+                                ],
+                                "string[pyarrow]",
+                            ),
+                            None,
+                            pd.array([], "string[pyarrow]"),
+                            None,
+                        ]
+                        * 2,
+                    )
+                }
+            ),
+            id="vector_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT CASE WHEN INSTR(A, 'a') + INSTR(A, ' ') > 0 THEN STRTOK_TO_ARRAY(A, 'a ') ELSE STRTOK_TO_ARRAY(A, '') END FROM table1",
+            pd.DataFrame(
+                {
+                    0: pd.Series(
+                        [
+                            pd.array(
+                                ["lph", "bet", "soup", "is", "delicious"],
+                                "string[pyarrow]",
+                            ),
+                            pd.array(["e", "eie", "eioie"], "string[pyarrow]"),
+                            pd.array([".A.BCD.E.FGH.I.JKLMN."], "string[pyarrow]"),
+                            pd.array(
+                                ["415-555-1234,", "412-555-2345,", "937-555-3456"],
+                                "string[pyarrow]",
+                            ),
+                            pd.array(
+                                ["b", "c", "d", "e", "f", "g", "h", "i", "j"],
+                                "string[pyarrow]",
+                            ),
+                            pd.array([], "string[pyarrow]"),
+                            None,
+                        ]
+                        * 2,
+                    )
+                }
+            ),
+            id="vector_aspace",
+        ),
+    ],
+)
+def test_strtok_to_array(query, expected, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": [
+                    "alphabet soup is delicious",
+                    "aaeaaeieaaeioiea",
+                    ".A.BCD.E.FGH.I.JKLMN.",
+                    "415-555-1234, 412-555-2345, 937-555-3456",
+                    "a  b     c  d e        f  g     h  i        j ",
+                    "",
+                    None,
+                ]
+                * 2,
+                "B": [" ", "", ".", "-", None, "", "-"] * 2,
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=expected,
+    )
+
+
+@pytest.mark.parametrize(
     "args",
     [
         pytest.param(

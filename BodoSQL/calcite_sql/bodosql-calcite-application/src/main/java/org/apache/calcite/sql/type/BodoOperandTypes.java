@@ -17,4 +17,6 @@ public class BodoOperandTypes {
           OperandTypes.NUMERIC_NUMERIC, OperandTypes.INTERVAL_SAME_SAME, OperandTypes.DATETIME_INTERVAL, DATE_INTEGER,
           DATE_DATE
       );
+
+  public static final SqlSingleOperandTypeChecker CHARACTER_CHARACTER = OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER);
 }

@@ -219,6 +219,7 @@ broadcasted_fixed_arg_functions = {
     "startswith",
     "strcmp",
     "strtok",
+    "strtok_to_array",
     "substring",
     "substring_index",
     "substring_suffix",
