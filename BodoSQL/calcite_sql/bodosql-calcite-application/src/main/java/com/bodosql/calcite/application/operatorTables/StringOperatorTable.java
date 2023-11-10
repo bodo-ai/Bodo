@@ -15,6 +15,7 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
+import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -479,6 +480,15 @@ public final class StringOperatorTable implements SqlOperatorTable {
           OperandTypes.STRING.or(OperandTypes.STRING_STRING).or(OperandTypes.STRING_STRING_INTEGER),
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction STRTOK_TO_ARRAY =
+      new SqlFunction(
+          "STRTOK_TO_ARRAY",
+          SqlKind.OTHER_FUNCTION,
+          BodoReturnTypes.TO_NULLABLE_VARYING_ARRAY,
+          null,
+          OperandTypes.CHARACTER.or(BodoOperandTypes.CHARACTER_CHARACTER),
+          SqlFunctionCategory.STRING);
+
   public static final SqlFunction LTRIM =
       new SqlFunction(
           "LTRIM",
@@ -836,6 +846,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SPLIT,
           SPLIT_PART,
           STRTOK,
+          STRTOK_TO_ARRAY,
           SUBSTRING_INDEX,
           SqlLibraryOperators.TRANSLATE3,
           INITCAP,

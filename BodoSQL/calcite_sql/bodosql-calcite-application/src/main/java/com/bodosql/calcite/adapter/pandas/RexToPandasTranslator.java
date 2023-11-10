@@ -74,6 +74,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.gen
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateReplace;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateSHA2;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateStrtok;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateStrtokToArray;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateSubstringCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateTrimFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.getOptimizedStringFnCode;
@@ -1203,6 +1204,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         return visitPosition(operands, streamingNamedArgs);
       case "STRTOK":
         return generateStrtok(operands, streamingNamedArgs);
+      case "STRTOK_TO_ARRAY":
+        return generateStrtokToArray(operands, streamingNamedArgs);
       case "EDITDISTANCE":
         return generateEditdistance(operands, streamingNamedArgs);
       case "INITCAP":
@@ -1848,6 +1851,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "POSITION":
           case "CHARINDEX":
           case "STRTOK":
+          case "STRTOK_TO_ARRAY":
           case "SPLIT":
           case "EDITDISTANCE":
           case "JAROWINKLER_SIMILARITY":

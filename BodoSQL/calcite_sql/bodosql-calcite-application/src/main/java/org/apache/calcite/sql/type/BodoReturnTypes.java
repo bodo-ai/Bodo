@@ -9,6 +9,7 @@ import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rel.type.RelRecordType;
 import org.apache.calcite.sql.SqlCollation;
+import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlOperatorBinding;
 
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
@@ -534,6 +535,8 @@ public class BodoReturnTypes {
     public static final SqlReturnTypeInference INTEGER_FORCE_NULLABLE = ReturnTypes.INTEGER.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
     public static final SqlReturnTypeInference TIME_FORCE_NULLABLE = ReturnTypes.TIME.andThen(SqlTypeTransforms.FORCE_NULLABLE);
+
+    public static final SqlReturnTypeInference TO_NULLABLE_VARYING_ARRAY = ReturnTypes.ARG0_NULLABLE_VARYING.andThen(SqlTypeTransforms.TO_ARRAY);
 
     public static FamilyOperandTypeChecker CHARACTER_CHARACTER =
             OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER);
