@@ -1,6 +1,8 @@
 package com.bodosql.calcite.application.operatorTables;
 
 import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.argumentRange;
+import static org.apache.calcite.sql.type.BodoReturnTypes.CHARACTER_CHARACTER;
+import static org.apache.calcite.sql.type.BodoReturnTypes.SPLIT_RETURN_TYPE;
 
 import java.util.Arrays;
 import java.util.List;
@@ -119,7 +121,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           // currently, MSQL returns 0 on failure, so I'm doing the same
-          ReturnTypes.BIGINT,
+          ReturnTypes.BIGINT_NULLABLE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -305,6 +307,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           OperandTypes.STRING,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
+
   public static final SqlFunction LENGTH =
       new SqlFunction(
           "LENGTH",
@@ -573,7 +576,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           "REGEXP_SUBSTR",
           SqlKind.OTHER_FUNCTION,
           // Match precision because this is a substring
-          ReturnTypes.ARG0_NULLABLE_VARYING,
+          // returns null if substring DNE
+          BodoReturnTypes.ARG0_FORCE_NULLABLE_VARYING,
           null,
           argumentRange(
               2,
@@ -625,9 +629,10 @@ public final class StringOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "SPLIT",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.TO_ARRAY,
+          // Return type for split is the exact same as TO_ARRAY
+          SPLIT_RETURN_TYPE,
           null,
-          OperandTypes.STRING_STRING,
+          CHARACTER_CHARACTER,
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction SHA2 =
@@ -709,7 +714,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
-          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_FORCE_NULLABLE,
           null,
           OperandTypes.STRING,
           SqlFunctionCategory.STRING);
@@ -720,7 +725,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
-          ReturnTypes.explicit(SqlTypeName.VARBINARY).andThen(SqlTypeTransforms.TO_NULLABLE),
+          BodoReturnTypes.VARBINARY_FORCE_NULLABLE,
           null,
           OperandTypes.STRING,
           SqlFunctionCategory.STRING);
@@ -753,7 +758,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
-          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
+          BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_FORCE_NULLABLE,
           null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
@@ -776,7 +781,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
 
-          ReturnTypes.explicit(SqlTypeName.VARBINARY).andThen(SqlTypeTransforms.TO_NULLABLE),
+          BodoReturnTypes.VARBINARY_FORCE_NULLABLE,
           null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
