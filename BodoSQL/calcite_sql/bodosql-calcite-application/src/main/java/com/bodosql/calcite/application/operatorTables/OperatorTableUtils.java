@@ -7,6 +7,7 @@ import org.apache.calcite.sql.type.SqlOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 
 public class OperatorTableUtils {
+
   /**
    * Helper function to determine output type nullability for functions whose output can only be
    * null if there is a null input.
