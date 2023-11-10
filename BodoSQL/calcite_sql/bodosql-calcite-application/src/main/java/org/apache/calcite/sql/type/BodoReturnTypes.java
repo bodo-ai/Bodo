@@ -21,6 +21,7 @@ import java.util.List;
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCharset;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCollation;
+import static org.apache.calcite.sql.type.ReturnTypes.ARG0_NULLABLE;
 import static org.apache.calcite.util.Static.RESOURCE;
 
 public class BodoReturnTypes {
@@ -486,6 +487,15 @@ public class BodoReturnTypes {
      */
     public static final SqlReturnTypeInference CONCAT_WS_RETURN_TYPE = CONCAT_WS_RETURN_PRECISION.andThen(SqlTypeTransforms.TO_NULLABLE);
 
+    /**
+     * Return type is essentially the same as TO_ARRAY, but we convert the array element type to varying,
+     * since split can create variable sized strings on each row.
+     */
+    public static final SqlReturnTypeInference SPLIT_RETURN_TYPE = ARG0_NULLABLE.andThen(SqlTypeTransforms.TO_VARYING).andThen(
+            (opBinding, typeToTransform) -> {
+                return toArrayTypeIfNotAlready(opBinding, typeToTransform, true);
+            }
+    );
 
     /**
      * Transformation tha converts a SQL type to have an undefined precision. This is meant
@@ -493,6 +503,9 @@ public class BodoReturnTypes {
      */
     public static final SqlTypeTransform TO_UNDEFINED_PRECISION =
             (opBinding, typeToTransform) -> opBinding.getTypeFactory().createTypeWithNullability(opBinding.getTypeFactory().createSqlType(typeToTransform.getSqlTypeName(), RelDataType.PRECISION_NOT_SPECIFIED), typeToTransform.isNullable());
+
+
+    public static final SqlReturnTypeInference ARG0_FORCE_NULLABLE_VARYING = ReturnTypes.ARG0_FORCE_NULLABLE.andThen(SqlTypeTransforms.TO_VARYING);
 
     /**
      * Type Inference strategy that
@@ -522,10 +535,9 @@ public class BodoReturnTypes {
 
     public static final SqlReturnTypeInference TIME_FORCE_NULLABLE = ReturnTypes.TIME.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
+    public static FamilyOperandTypeChecker CHARACTER_CHARACTER =
+            OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER);
 
-    /**
-     * Handling for specific return types
-     */
 
     /**
      * Determine the return type for BITOR_AGG, BITAND_AGG, and BITXOR_AGG. The return type is the

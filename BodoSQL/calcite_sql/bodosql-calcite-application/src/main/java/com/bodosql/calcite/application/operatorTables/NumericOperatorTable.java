@@ -337,21 +337,21 @@ public final class NumericOperatorTable implements SqlOperatorTable {
       SqlBasicAggFunction.create(
           "VARIANCE_POP",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.INTEGER_NULLABLE,
+          ReturnTypes.DOUBLE_NULLABLE,
           OperandTypes.NUMERIC);
 
   public static final SqlBasicAggFunction VARIANCE_SAMP =
       SqlBasicAggFunction.create(
           "VARIANCE_SAMP",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.INTEGER_NULLABLE,
+          ReturnTypes.DOUBLE_NULLABLE,
           OperandTypes.NUMERIC);
 
   public static final SqlBasicAggFunction CORR =
       SqlBasicAggFunction.create(
           "CORR",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.INTEGER_NULLABLE,
+          ReturnTypes.DOUBLE_NULLABLE,
           OperandTypes.NUMERIC_NUMERIC);
 
   public static final SqlAggFunction APPROX_PERCENTILE =
