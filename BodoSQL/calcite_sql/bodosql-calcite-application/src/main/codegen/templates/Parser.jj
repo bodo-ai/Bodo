@@ -5315,13 +5315,11 @@ SqlLiteral IntervalLiteral() :
 
 }
 
-/** Parses an interval literal (e.g. {@code INTERVAL '2:3' HOUR TO MINUTE})
- * or an interval expression (e.g. {@code INTERVAL emp.empno MINUTE}
- * or {@code INTERVAL 3 MONTHS}). */
 SqlNode IntervalLiteralOrExpression() :
 {
     final String p;
     final SqlIntervalQualifier intervalQualifier;
+    final TimeUnit intervalUnit;
     int sign = 1;
     final Span s;
     SqlNode e;
@@ -5337,7 +5335,12 @@ SqlNode IntervalLiteralOrExpression() :
         // literal (with quoted string)
         p = SimpleStringLiteral()
         (
-            intervalQualifier = IntervalQualifier() {
+            (
+                // Bodo change: Support parsing all unquoted snowflake interval literals:
+                intervalQualifier = IntervalQualifier()
+            |
+                intervalQualifier = BodoIntervalQualifier()
+            ) {
                 return SqlParserUtil.parseIntervalLiteral(s.end(intervalQualifier),
                     sign, p, intervalQualifier);
             }
@@ -5358,7 +5361,12 @@ SqlNode IntervalLiteralOrExpression() :
         |
             e = CompoundIdentifier()
         )
-        intervalQualifier = IntervalQualifierStart() {
+        (
+            // Bodo change: Support parsing all unquoted snowflake interval literals:
+            intervalQualifier = IntervalQualifierStart()
+        |
+            intervalQualifier = BodoIntervalQualifier()
+        ) {
             if (sign == -1) {
                 e = SqlStdOperatorTable.UNARY_MINUS.createCall(e.getParserPosition(), e);
             }
