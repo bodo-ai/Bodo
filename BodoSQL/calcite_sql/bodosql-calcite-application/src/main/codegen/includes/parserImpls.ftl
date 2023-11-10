@@ -1064,6 +1064,29 @@ SqlCall TimestampDiffFunctionCall() :
     }
 }
 
+/**
+ * Parses a call to DATE_TRUNC.
+ * Bodo change: allow all snowflake supported quoted/unquoted intervals
+ */
+SqlCall DateTruncFunctionCall() :
+{
+    final List<SqlNode> args = new ArrayList<SqlNode>();
+    final Span s;
+    final String interval;
+    final SqlNode e;
+}
+{
+    <DATE_TRUNC> { s = span(); }
+    <LPAREN>
+    interval = SnowflakeDateTimeInterval() { args.add(SqlLiteral.createCharString(interval, getPos())); }
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <RPAREN> {
+        return DatetimeOperatorTable.DATE_TRUNC.createCall(
+            s.end(this), args);
+    }
+}
+
 TimeUnit BodoTimeUnit() : {
 }{
     <YEAR> { return TimeUnit.YEAR; }
