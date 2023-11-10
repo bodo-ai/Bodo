@@ -59,7 +59,6 @@ public class StringFnCodeGen {
         "SUBSTRING_INDEX", "bodo.libs.bodosql_array_kernels.substring_index");
     equivalentFnMapBroadcast.put("TRANSLATE3", "bodo.libs.bodosql_array_kernels.translate");
     equivalentFnMapBroadcast.put("SPLIT_PART", "bodo.libs.bodosql_array_kernels.split_part");
-    equivalentFnMapBroadcast.put("STRTOK", "bodo.libs.bodosql_array_kernels.strtok");
     equivalentFnMapBroadcast.put("STARTSWITH", "bodo.libs.bodosql_array_kernels.startswith");
     equivalentFnMapBroadcast.put("ENDSWITH", "bodo.libs.bodosql_array_kernels.endswith");
     equivalentFnMapBroadcast.put("INSERT", "bodo.libs.bodosql_array_kernels.insert");
@@ -221,6 +220,24 @@ public class StringFnCodeGen {
     }
     assert args.size() == 3;
     return ExprKt.BodoSQLKernel("strtok", args, streamingNamedArgs);
+  }
+
+  /**
+   * Function that returns the rexInfo for an STRTOK_TO_ARRAY Function Call.
+   *
+   * @param operands the information about the 1-2 arguments
+   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
+   *     we aren't in a streaming context.
+   * @return The Expr corresponding to the function call
+   */
+  public static Expr generateStrtokToArray(
+      List<Expr> operands, List<Pair<String, Expr>> streamingNamedArgs) {
+    List<Expr> args = new ArrayList<>(operands);
+    if (args.size() == 1) {
+      args.add(new Expr.StringLiteral(" "));
+    }
+    assert args.size() == 2;
+    return ExprKt.BodoSQLKernel("strtok_to_array", args, streamingNamedArgs);
   }
 
   /**

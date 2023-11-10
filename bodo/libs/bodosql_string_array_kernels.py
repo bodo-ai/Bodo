@@ -1874,6 +1874,78 @@ def strtok_util(source, delim, part, dict_encoding_state, func_id):
 
 
 @numba.generated_jit(nopython=True)
+def strtok_to_array(
+    source, delim, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
+    """Handles cases where STRTOK_TO_ARRAY receives optional arguments and
+    forwards to the appropriate version of the real implementation"""
+    args = [source, delim]
+    for i, arg in enumerate(args):
+        if isinstance(arg, types.optional):
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.strtok_to_array",
+                ["source", "delim", "dict_encoding_state", "func_id"],
+                i,
+                default_map={"dict_encoding_state": None, "func_id": -1},
+            )
+
+    def impl(source, delim, dict_encoding_state=None, func_id=-1):
+        return strtok_to_array_util(source, delim, dict_encoding_state, func_id)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def strtok_to_array_util(
+    source, delim, dict_encoding_state, func_id
+):  # pragma: no cover
+    """A dedicated kernel for the SQL function STRTOK_TO_ARRAY which tokenizes the given string using the given set of delimiters and returns the tokens as an array.
+
+    - If delim is an empty string, return source.
+    - If source is empty, return an empty array.
+
+    Args:
+        source (string array/series/scalar): the string(s) to be parsed
+        delim (string array/series/scalar): the string(s) to split on
+
+    Returns:
+        An ArrayItemArray of string array: the tokenized string arrays
+    """
+
+    verify_string_arg(source, "STRTOK", "source")
+    verify_string_arg(delim, "STRTOK", "delim")
+    arg_names = ["source", "delim", "dict_encoding_state", "func_id"]
+    arg_types = [source, delim, dict_encoding_state, func_id]
+    propagate_null = [True] * 2 + [False] * 2
+    out_dtype = bodo.ArrayItemArrayType(bodo.string_array_type)
+
+    scalar_text = "tokens = []\n"
+    scalar_text += "buffer = ''\n"
+    scalar_text += "for j in range(len(arg0)):\n"
+    scalar_text += "   if arg0[j] in arg1:\n"
+    scalar_text += "      if buffer != '':"
+    scalar_text += "         tokens.append(buffer)\n"
+    scalar_text += "      buffer = ''\n"
+    scalar_text += "   else:\n"
+    scalar_text += "      buffer += arg0[j]\n"
+    scalar_text += "if buffer != '':\n"
+    scalar_text += "   tokens.append(buffer)\n"
+    scalar_text += "res[i] = bodo.libs.str_arr_ext.str_list_to_array(tokens)"
+
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
+    )
+
+
+@numba.generated_jit(nopython=True)
 def substring_util(arr, start, length, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function SUBSTRING which takes in a string,
        (or string column), and two integers (or integer columns) and returns

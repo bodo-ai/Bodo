@@ -251,6 +251,7 @@ internal class VariantCastTable {
             StringOperatorTable.SPACE to anyArgIntegerCast,
             StringOperatorTable.SPLIT to anyArgVarcharCast,
             StringOperatorTable.STRTOK to varcharVarcharIntegerCast,
+            StringOperatorTable.STRTOK_TO_ARRAY to anyArgVarcharCast,
             StringOperatorTable.SPLIT_PART to varcharVarcharIntegerCast,
             SqlStdOperatorTable.LIKE to anyArgVarcharCast,
             SqlStdOperatorTable.NOT_LIKE to anyArgVarcharCast,
