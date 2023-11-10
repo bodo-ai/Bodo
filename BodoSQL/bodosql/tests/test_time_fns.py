@@ -372,7 +372,7 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
         ),
         pytest.param(
             "DATEDIFF(QUARTER, T, T)",
-            "Unsupported unit for DATEDIFF with TIME input: QUARTER",
+            'Unsupported unit for DATEDIFF with TIME input: "QUARTER"',
             id="datediff-quarter",
         ),
         pytest.param(
@@ -383,7 +383,7 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
         ),
         pytest.param(
             "TIMESTAMPDIFF(DAY, T, T)",
-            "Unsupported unit for TIMESTAMPDIFF with TIME input: DAY",
+            'Unsupported unit for TIMESTAMPDIFF with TIME input: "DAY"',
             id="timestampdiff-day",
         ),
     ],
