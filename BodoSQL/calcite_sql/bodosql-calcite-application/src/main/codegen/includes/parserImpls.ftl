@@ -1063,3 +1063,77 @@ SqlCall TimestampDiffFunctionCall() :
             s.end(this), args);
     }
 }
+
+TimeUnit BodoTimeUnit() : {
+}{
+    <YEAR> { return TimeUnit.YEAR; }
+    | <Y> { return TimeUnit.YEAR; }
+    | <YY> { return TimeUnit.YEAR; }
+    | <YYY> { return TimeUnit.YEAR; }
+    | <YYYY> { return TimeUnit.YEAR; }
+    | <YR> { return TimeUnit.YEAR; }
+    | <YEARS> { return TimeUnit.YEAR; }
+    | <YRS> { return TimeUnit.YEAR; }
+    | <MONTH> { return TimeUnit.MONTH; }
+    | <MM> { return TimeUnit.MONTH; }
+    | <MON> { return TimeUnit.MONTH; }
+    | <MONS> { return TimeUnit.MONTH; }
+    | <MONTHS> { return TimeUnit.MONTH; }
+    | <DAY> { return TimeUnit.DAY; }
+    | <D> { return TimeUnit.DAY; }
+    | <DD> { return TimeUnit.DAY; }
+    | <DAYS> { return TimeUnit.DAY; }
+    | <DAYOFMONTH> { return TimeUnit.DAY; }
+    | <WEEK> { return TimeUnit.WEEK; }
+    | <W> { return TimeUnit.WEEK; }
+    | <WK> { return TimeUnit.WEEK; }
+    | <WEEKOFYEAR> { return TimeUnit.WEEK; }
+    | <WOY> { return TimeUnit.WEEK; }
+    | <WY> { return TimeUnit.WEEK; }
+    | <QUARTER> { return TimeUnit.QUARTER; }
+    | <Q> { return TimeUnit.QUARTER; }
+    | <QTR> { return TimeUnit.QUARTER; }
+    | <QTRS> { return TimeUnit.QUARTER; }
+    | <QUARTERS> { return TimeUnit.QUARTER; }
+    | <HOUR> { return TimeUnit.HOUR; }
+    | <H> { return TimeUnit.HOUR; }
+    | <HH> { return TimeUnit.HOUR; }
+    | <HR> { return TimeUnit.HOUR; }
+    | <HOURS> { return TimeUnit.HOUR; }
+    | <HRS> { return TimeUnit.HOUR; }
+    | <MINUTE> { return TimeUnit.MINUTE; }
+    | <M> { return TimeUnit.MINUTE; }
+    | <MI> { return TimeUnit.MINUTE; }
+    | <MIN> { return TimeUnit.MINUTE; }
+    | <MINUTES> { return TimeUnit.MINUTE; }
+    | <MINS> { return TimeUnit.MINUTE; }
+    | <SECOND> { return TimeUnit.SECOND; }
+    | <S> { return TimeUnit.SECOND; }
+    | <SEC> { return TimeUnit.SECOND; }
+    | <SECONDS> { return TimeUnit.SECOND; }
+    | <SECS> { return TimeUnit.SECOND; }
+    | <MS> { return TimeUnit.MILLISECOND; }
+    | <MSEC> { return TimeUnit.MILLISECOND; }
+    | <MILLISECOND> { return TimeUnit.MILLISECOND; }
+    | <MILLISECONDS> { return TimeUnit.MILLISECOND; }
+    | <US> { return TimeUnit.MICROSECOND; }
+    | <USEC> { return TimeUnit.MICROSECOND; }
+    | <MICROSECOND> { return TimeUnit.MICROSECOND; }
+    | <MICROSECONDS> { return TimeUnit.MICROSECOND; }
+    | <NANOSECOND> { return TimeUnit.NANOSECOND; }
+    | <NS> { return TimeUnit.NANOSECOND; }
+    | <NSEC> { return TimeUnit.NANOSECOND; }
+    | <NANOSEC> { return TimeUnit.NANOSECOND; }
+    | <NSECOND> { return TimeUnit.NANOSECOND; }
+    | <NANOSECONDS> { return TimeUnit.NANOSECOND; }
+    | <NANOSECS> { return TimeUnit.NANOSECOND; }
+    | <NSECONDS> { return TimeUnit.NANOSECOND; }
+}
+
+SqlIntervalQualifier BodoIntervalQualifier() : {
+    final TimeUnit intervalUnit;
+}{
+    intervalUnit = BodoTimeUnit() {
+        return new SqlIntervalQualifier(intervalUnit, null, getPos());
+    }
+}
