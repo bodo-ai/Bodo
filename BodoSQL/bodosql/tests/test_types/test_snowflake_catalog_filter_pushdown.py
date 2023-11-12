@@ -360,7 +360,7 @@ def test_snowflake_catalog_coalesce_not_pushdown(memory_leak_check):
         )
     )
 
-    query = "select C_NAME from TPCH_SF1.CUSTOMER where coalesce(C_MKTSEGMENT, C_COMMENT) = 'hello world'"
+    query = "select c_name from TPCH_SF1.CUSTOMER where coalesce(C_MKTSEGMENT, C_COMMENT) = 'hello world'"
 
     py_output = pd.read_sql(
         query,
@@ -377,7 +377,7 @@ def test_snowflake_catalog_coalesce_not_pushdown(memory_leak_check):
         # Pushdown happens in the planner. Check the timer message instead.
         check_logger_msg(
             stream,
-            f'WHERE COALESCE("C_MKTSEGMENT", "L_SC_COMMENTHIPDATE") > \'hello world\'',
+            'COALESCE("C_MKTSEGMENT", "C_COMMENT") = $$hello world$$',
         )
 
 
