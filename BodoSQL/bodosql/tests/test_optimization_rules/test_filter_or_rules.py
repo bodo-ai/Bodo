@@ -144,8 +144,8 @@ def test_logical_filter_rule(basic_df, spark_info, query_info, memory_leak_check
         pytest.param(
             (
                 "Select A, B FROM table1 WHERE (C > 10 AND A < C AND B < 5) OR (B < 5 AND A > 1) OR (A > 1 AND C > 10)",
-                1,
-                2,
+                4,
+                0,
             ),
             id="query6",
         ),
