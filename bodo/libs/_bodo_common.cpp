@@ -1002,7 +1002,8 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
     return farr;
 }
 
-size_t get_expected_bits_per_entry(int8_t arr_type, int8_t c_type) {
+size_t get_expected_bits_per_entry(bodo_array_type::arr_type_enum arr_type,
+                                   Bodo_CTypes::CTypeEnum c_type) {
     // TODO: Handle nested data structure and categorical data types seperately
     size_t nullable;
     switch (arr_type) {
@@ -1025,7 +1026,7 @@ size_t get_expected_bits_per_entry(int8_t arr_type, int8_t c_type) {
     }
     switch (c_type) {
         case Bodo_CTypes::_BOOL:
-            return arr_type == bodo_array_type::NUMPY ? 8 : nullable + 1;
+            return nullable + (arr_type == bodo_array_type::NUMPY ? 8 : 1);
         case Bodo_CTypes::INT8:
         case Bodo_CTypes::UINT8:
         case Bodo_CTypes::INT16:
@@ -1055,15 +1056,21 @@ size_t get_expected_bits_per_entry(int8_t arr_type, int8_t c_type) {
     }
 }
 
+size_t get_row_bytes(const std::unique_ptr<bodo::Schema>& schema) {
+    size_t row_bits = 0;
+    for (const std::unique_ptr<bodo::DataType>& data_type :
+         schema->column_types) {
+        row_bits += get_expected_bits_per_entry(data_type->array_type,
+                                                data_type->c_type);
+    }
+    return (row_bits + 7) >> 3;
+}
+
 size_t get_row_bytes(const std::vector<int8_t>& arr_array_types,
                      const std::vector<int8_t>& arr_c_types) {
     assert(arr_array_types.size() == arr_c_types.size());
-    size_t row_bits = 0;
-    for (size_t i = 0; i < arr_array_types.size(); i++) {
-        row_bits +=
-            get_expected_bits_per_entry(arr_array_types[i], arr_c_types[i]);
-    }
-    return (row_bits + 7) >> 3;
+    return get_row_bytes(
+        bodo::Schema::Deserialize(arr_array_types, arr_c_types));
 }
 
 /**
