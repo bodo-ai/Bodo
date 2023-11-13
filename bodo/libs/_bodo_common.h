@@ -1478,9 +1478,20 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> arr,
                                        bool shallow_copy_child_arrays = false);
 
 /**
- * Calculate the size of one row
+ * @brief Calculate the (estimated) size of one row for a table with given
+ * the table's schema.
  *
- * @param arr_c_types : the array of types for the row
+ * @param schema Schema of the table.
+ * @return size_t Estimated total size of the row
+ */
+size_t get_row_bytes(const std::unique_ptr<bodo::Schema>& schema);
+
+/**
+ * Calculate the size of one row. The schema is provided in the legacy
+ * serialization format.
+ *
+ * @param arr_array_types : the array of types for the row
+ * @param arr_c_types: the c types of the row
  * @return the total size of the row
  */
 size_t get_row_bytes(const std::vector<int8_t>& arr_array_types,
