@@ -133,6 +133,7 @@ class ExpectedBatchingProperty {
             SqlStdOperatorTable.PERCENTILE_DISC.name,
             SqlStdOperatorTable.MODE.name,
             SqlAggOperatorTable.LISTAGG.name,
+            ArrayOperatorTable.ARRAY_UNIQUE_AGG.name,
             ArrayOperatorTable.ARRAY_AGG.name,
         )
 

@@ -464,7 +464,7 @@ def init_groupby_state(
     ftypes = []
     for fname in output_type.fnames:
         if fname not in supported_agg_funcs:
-            raise BodoError(fname + "is not a supported aggregate function.")
+            raise BodoError(fname + " is not a supported aggregate function.")
         ftypes.append(supported_agg_funcs.index(fname))
     ftypes_arr = np.array(ftypes, np.int32)
     f_in_offsets_arr = np.array(output_type.f_in_offsets, np.int32)
