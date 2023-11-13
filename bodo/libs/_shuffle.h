@@ -26,24 +26,6 @@ static inline int hash_to_rank(uint32_t hash, int n_pes) {
 
 #endif
 
-// Shuffle when streaming shuffle buffers are larger than 50MB
-// TODO(ehsan): tune this parameter
-static char* __env_threshold_str = std::getenv("BODO_SHUFFLE_THRESHOLD");
-const int SHUFFLE_THRESHOLD = __env_threshold_str != nullptr
-                                  ? std::stoi(__env_threshold_str)
-                                  : 50 * 1024 * 1024;
-
-#ifndef DEFAULT_SYNC_ITERS
-// Default number of iterations between syncs
-// NOTE: should be the same as default_stream_loop_sync_iters in __init__.py
-#define DEFAULT_SYNC_ITERS 1000
-#endif
-
-#ifndef SYNC_UPDATE_FREQ
-// Update sync freq every 10 syncs
-#define SYNC_UPDATE_FREQ 10
-#endif
-
 /**
  * @brief shuffle information used to reverse shuffle later
  *
@@ -363,48 +345,3 @@ void make_dictionary_global_and_unique(
 void reverse_shuffle_preallocated_data_array(
     std::shared_ptr<array_info> in_arr, std::shared_ptr<array_info> out_arr,
     std::shared_ptr<uint32_t[]>& hashes, mpi_comm_info const& comm_info);
-
-/**
- * @brief Calculate initial number of iterations between syncs if syncing
- * adaptively. Returns a new value only if this is the first iteration of a
- * streaming operation. Estimates how many iterations it will take to for the
- * shuffle buffer size of any rank to be larger than SHUFFLE_THRESHOLD based on
- * the size of the first input batch.
- *
- * @param in_table input batch
- * @param adaptive_sync_counter how often sync freq is updated (-1 means not
- * adaptive)
- * @param is_parallel parallel flag
- * @param sync_iter current number of iterations between syncs
- * @param n_pes number of ranks
- * @return int64_t updated number of iterations between syncs
- */
-int64_t init_sync_iters(const std::shared_ptr<table_info>& in_table,
-                        int64_t adaptive_sync_counter, bool is_parallel,
-                        int64_t sync_iter, int n_pes);
-
-/**
- * @brief Determine if we should shuffle this iteration.
- * Returns true if this is the last iteration or this is a sync
- * iteration and some rank's shuffle buffer size is larger than
- * SHUFFLE_THRESHOLD. Also returns an estimation of how many iterations it will
- * take until we need to shuffle again (based on current shuffle buffer size and
- * number of iterations from previous shuffle).
- *
- * @param parallel is the table to be shuffled parallel
- * @param is_last is this the last iteration
- * @param shuffle_table the table to test for shuffling
- * @param iter the current iteration
- * @param sync_iter the number of iterations between syncs
- * @param prev_shuffle_iter the previous iteration shuffle called (and shuffle
- * buffers cleared)
- * @param adaptive_sync_counter how often sync freq is updated (-1 means not
- * adaptive)
- * @return std::tuple<bool, uint64_t, int64_t> flag to shuffle now, new sync
- * frequency, and new adaptive_sync_counter
- */
-std::tuple<bool, uint64_t, int64_t> shuffle_this_iter(
-    const bool parallel, const bool is_last,
-    const std::shared_ptr<table_info>& shuffle_table, const uint64_t iter,
-    const uint64_t sync_iter, const uint64_t prev_shuffle_iter,
-    const int64_t adaptive_sync_counter);

@@ -973,6 +973,26 @@ struct TableBuildBuffer {
     /**
      * @brief Constructor for a TableBuildBuffer.
      *
+     * @param schema Schema of the table
+     * @param dict_builders DictBuilders for the columns.
+     * Element corresponding to a column must be provided in the
+     * DICT array case and should be nullptr otherwise.
+     * @param pool IBufferPool to use for allocating the underlying data
+     * buffers.
+     * @param mm MemoryManager for the 'pool'.
+     */
+    TableBuildBuffer(
+        const std::unique_ptr<bodo::Schema>& schema,
+        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager());
+
+    /**
+     * @brief Constructor for a TableBuildBuffer.
+     * Same as the one above, expect the schema is passed
+     * through the legacy serialization format.
+     *
      * @param arr_c_types Data Types for the columns.
      * @param arr_array_types Array Types for the columns.
      * @param dict_builders DictBuilders for the columns.

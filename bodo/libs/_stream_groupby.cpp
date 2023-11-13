@@ -18,12 +18,12 @@ uint32_t HashGroupbyTable<is_local>::operator()(const int64_t iRow) const {
     if (iRow >= 0) {
         const bodo::vector<uint32_t>& build_hashes =
             is_local ? this->groupby_partition->build_table_groupby_hashes
-                     : this->groupby_state->shuffle_table_groupby_hashes;
+                     : this->groupby_shuffle_state->groupby_hashes;
         return build_hashes[iRow];
     } else {
         const std::shared_ptr<uint32_t[]>& in_hashes =
             is_local ? this->groupby_partition->in_table_hashes
-                     : this->groupby_state->in_table_hashes;
+                     : this->groupby_shuffle_state->in_table_hashes;
         return in_hashes[-iRow - 1];
     }
 }
@@ -37,10 +37,10 @@ bool KeyEqualGroupbyTable<is_local>::operator()(const int64_t iRowA,
                                                 const int64_t iRowB) const {
     const std::shared_ptr<table_info>& build_table =
         is_local ? this->groupby_partition->build_table_buffer->data_table
-                 : this->groupby_state->shuffle_table_buffer->data_table;
+                 : this->groupby_shuffle_state->table_buffer->data_table;
     const std::shared_ptr<table_info>& in_table =
         is_local ? this->groupby_partition->in_table
-                 : this->groupby_state->in_table;
+                 : this->groupby_shuffle_state->in_table;
 
     bool is_build_A = iRowA >= 0;
     bool is_build_B = iRowB >= 0;
@@ -1008,6 +1008,95 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
 #pragma endregion  // GroupbyPartition
 /* ------------------------------------------------------------------------ */
 
+/* -------------------- GroupbyIncrementalShuffleState -------------------- */
+#pragma region  // GroupbyIncrementalShuffleState
+
+GroupbyIncrementalShuffleState::GroupbyIncrementalShuffleState(
+    const std::vector<int8_t>& arr_c_types_,
+    const std::vector<int8_t>& arr_array_types_,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
+    const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
+    const bool nunique_only_)
+    : IncrementalShuffleState(arr_c_types_, arr_array_types_, dict_builders_,
+                              n_keys_, curr_iter_, sync_freq_),
+      hash_table(std::make_unique<shuffle_hash_table_t>(
+          0, HashGroupbyTable<false>(nullptr, this),
+          KeyEqualGroupbyTable<false>(nullptr, this, this->n_keys))),
+      nunique_only(nunique_only_) {}
+
+void GroupbyIncrementalShuffleState::Finalize() {
+    this->hash_table.reset();
+    this->groupby_hashes.resize(0);
+    this->groupby_hashes.shrink_to_fit();
+    IncrementalShuffleState::Finalize();
+}
+
+std::tuple<
+    std::shared_ptr<table_info>,
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>,
+    std::shared_ptr<uint32_t[]>>
+GroupbyIncrementalShuffleState::GetShuffleTableAndHashes() {
+    auto [shuffle_table, dict_hashes, shuffle_hashes] =
+        IncrementalShuffleState::GetShuffleTableAndHashes();
+    // drop shuffle table duplicate rows if there are a lot of duplicates
+    // only possible for nunique-only cases
+    if (this->nunique_only) {
+        int64_t shuffle_nrows = shuffle_table->nrows();
+
+        // estimate number of uniques using key/value hashes
+        std::shared_ptr<uint32_t[]> key_value_hashes =
+            std::make_unique<uint32_t[]>(shuffle_nrows);
+        // reusing shuffle_hashes for keys to make the initial check cheaper
+        // for code path without drop duplicates
+        std::memcpy(key_value_hashes.get(), shuffle_hashes.get(),
+                    sizeof(uint32_t) * shuffle_nrows);
+        for (size_t col = this->n_keys; col < shuffle_table->ncols(); col++) {
+            hash_array_combine(key_value_hashes, shuffle_table->columns[col],
+                               shuffle_nrows, SEED_HASH_PARTITION,
+                               /*global_dict_needed=*/false,
+                               /*is_parallel*/ true);
+        }
+        size_t nunique_keyval_hashes = get_nunique_hashes(
+            key_value_hashes, shuffle_nrows, /*is_parallel*/ true);
+
+        // drop duplicates if output will be less than half the size of
+        // input (rough heuristic, TODO: tune)
+        if ((2 * nunique_keyval_hashes) < static_cast<size_t>(shuffle_nrows)) {
+            shuffle_table = drop_duplicates_table_inner(
+                shuffle_table, shuffle_table->ncols(), 0, 1, false, false,
+                /*drop_duplicates_dict=*/false, key_value_hashes);
+            shuffle_hashes = hash_keys_table(
+                shuffle_table, this->n_keys, SEED_HASH_PARTITION,
+                /*is_parallel*/ true, false, dict_hashes);
+        }
+    }
+    return std::make_tuple(shuffle_table, dict_hashes, shuffle_hashes);
+}
+
+void GroupbyIncrementalShuffleState::ResetAfterShuffle() {
+    if (this->hash_table->get_allocator().size() > MAX_SHUFFLE_HASHTABLE_SIZE) {
+        // If the shuffle hash table is too large, reset it.
+        // This shouldn't happen often in practice, but is a safeguard.
+        this->hash_table.reset();
+        this->hash_table = std::make_unique<shuffle_hash_table_t>(
+            0, HashGroupbyTable<false>(nullptr, this),
+            KeyEqualGroupbyTable<false>(nullptr, this, this->n_keys));
+    }
+    if (this->groupby_hashes.get_allocator().size() > MAX_SHUFFLE_TABLE_SIZE) {
+        // If the shuffle hashes vector is too large, reallocate it to the
+        // maximum size
+        this->groupby_hashes.resize(MAX_SHUFFLE_TABLE_SIZE / sizeof(uint32_t));
+        this->groupby_hashes.shrink_to_fit();
+    }
+    this->next_group = 0;
+    this->hash_table->clear();
+    this->groupby_hashes.resize(0);
+    IncrementalShuffleState::ResetAfterShuffle();
+}
+
+#pragma endregion  // GroupbyIncrementalShuffleState
+/* ------------------------------------------------------------------------ */
+
 /* ----------------------------- GroupbyState ----------------------------- */
 #pragma region  // GroupbyState
 
@@ -1037,15 +1126,9 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
       n_keys(n_keys_),
       parallel(parallel_),
       output_batch_size(output_batch_size_),
-      shuffle_hash_table(std::make_unique<shuffle_hash_table_t>(
-          0, HashGroupbyTable<false>(nullptr, this),
-          KeyEqualGroupbyTable<false>(nullptr, this, n_keys_))),
       f_in_offsets(std::move(f_in_offsets_)),
       f_in_cols(std::move(f_in_cols_)),
       sync_iter(sync_iter_),
-      // Update number of sync iterations adaptively based on batch byte
-      // size if sync_iter == -1 (user hasn't specified number of syncs)
-      adaptive_sync_counter(sync_iter == -1 ? 0 : -1),
       groupby_event("Groupby") {
     // Partitioning is enabled by default:
     bool enable_partitioning = true;
@@ -1311,9 +1394,10 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
         build_table_non_key_dict_builders.begin(),
         build_table_non_key_dict_builders.end());
 
-    this->shuffle_table_buffer = std::make_unique<TableBuildBuffer>(
+    this->shuffle_state = std::make_unique<GroupbyIncrementalShuffleState>(
         build_arr_c_types, build_arr_array_types,
-        this->build_table_dict_builders);
+        this->build_table_dict_builders, this->n_keys, this->build_iter,
+        this->sync_iter, this->nunique_only);
 
     this->partitions.emplace_back(std::make_shared<GroupbyPartition>(
         0, 0, build_arr_c_types, build_arr_array_types,
@@ -1621,16 +1705,13 @@ void GroupbyState::UpdateShuffleGroupsAndCombine(
     const std::shared_ptr<uint32_t[]>& partitioning_hashes,
     const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
     const std::vector<bool>& not_append_rows) {
-    // XXX Create a dedicated "ShufflePartition" to consolidate the logic?
-    // Only issue is that we need to *not* use the op-pool.
-
     // set state batch input
-    this->in_table = in_table;
-    this->in_table_hashes = batch_hashes_groupby;
+    this->shuffle_state->in_table = in_table;
+    this->shuffle_state->in_table_hashes = batch_hashes_groupby;
     // Reserve space in buffers for potential new groups.
     // Note that if any of the keys/running values are strings, they always
     // go through the accumulate path.
-    this->shuffle_table_buffer->ReserveTable(in_table);
+    this->shuffle_state->table_buffer->ReserveTable(in_table);
 
     // Fill row group numbers in grouping_info to reuse existing
     // infrastructure.
@@ -1644,27 +1725,29 @@ void GroupbyState::UpdateShuffleGroupsAndCombine(
     // keys which need output data column initialization.
     // update_groups_helper will update this->shuffle_next_group in place,
     // so we need to cache it beforehand.
-    int64_t shuffle_init_start_row = this->shuffle_next_group;
+    int64_t shuffle_init_start_row = this->shuffle_state->next_group;
 
     // Add new groups and get group mappings for input batch
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         if (!not_append_rows[i_row]) {  // double-negative to avoid
                                         // recomputation
             update_groups_helper</*is_local*/ false>(
-                *(this->shuffle_table_buffer),
-                this->shuffle_table_groupby_hashes, *(this->shuffle_hash_table),
-                this->shuffle_next_group, this->n_keys, shuffle_grp_info,
+                *(this->shuffle_state->table_buffer),
+                this->shuffle_state->groupby_hashes,
+                *(this->shuffle_state->hash_table),
+                this->shuffle_state->next_group, this->n_keys, shuffle_grp_info,
                 in_table, batch_hashes_groupby, i_row);
         }
     }
     // Combine existing (and new) keys using the input batch
-    combine_input_table_helper(
-        in_table, shuffle_grp_info, this->shuffle_table_buffer->data_table,
-        this->f_running_value_offsets, this->col_sets, shuffle_init_start_row);
+    combine_input_table_helper(in_table, shuffle_grp_info,
+                               this->shuffle_state->table_buffer->data_table,
+                               this->f_running_value_offsets, this->col_sets,
+                               shuffle_init_start_row);
 
     // Reset temporary references
-    this->in_table.reset();
-    this->in_table_hashes.reset();
+    this->shuffle_state->in_table.reset();
+    this->shuffle_state->in_table_hashes.reset();
 }
 
 void GroupbyState::AppendBuildBatchHelper(
@@ -1895,37 +1978,6 @@ GroupbyState::GetDictionaryHashesForKeys() {
     return dict_hashes;
 }
 
-void GroupbyState::ResetShuffleState() {
-    if (this->shuffle_hash_table->get_allocator().size() >
-        MAX_SHUFFLE_HASHTABLE_SIZE) {
-        // If the shuffle hash table is too large, reset it.
-        // This shouldn't happen often in practice, but is a safeguard.
-        this->shuffle_hash_table.reset();
-        this->shuffle_hash_table = std::make_unique<shuffle_hash_table_t>(
-            0, HashGroupbyTable<false>(nullptr, this),
-            KeyEqualGroupbyTable<false>(nullptr, this, this->n_keys));
-    }
-    this->shuffle_hash_table->clear();
-    if (this->shuffle_table_groupby_hashes.get_allocator().size() >
-        MAX_SHUFFLE_TABLE_SIZE) {
-        // If the shuffle hashes vector is too large, reallocate it to the
-        // maximum size
-        this->shuffle_table_groupby_hashes.resize(MAX_SHUFFLE_TABLE_SIZE /
-                                                  sizeof(uint32_t));
-        this->shuffle_table_groupby_hashes.shrink_to_fit();
-    }
-    this->shuffle_next_group = 0;
-    this->shuffle_table_groupby_hashes.resize(0);
-    this->shuffle_table_buffer->Reset();
-}
-
-void GroupbyState::ClearShuffleState() {
-    this->shuffle_hash_table.reset();
-    this->shuffle_table_groupby_hashes.resize(0);
-    this->shuffle_table_groupby_hashes.shrink_to_fit();
-    this->shuffle_table_buffer.reset();
-}
-
 void GroupbyState::ClearColSetsStates() {
     for (const std::shared_ptr<BasicColSet>& col_set : this->col_sets) {
         col_set->clear();
@@ -1945,7 +1997,7 @@ void GroupbyState::ClearBuildState() {
 
 void GroupbyState::FinalizeBuild() {
     // Clear the shuffle state since it is longer required.
-    this->ClearShuffleState();
+    this->shuffle_state->Finalize();
 
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
         // TODO Add logic to check if partition is too big
@@ -2075,8 +2127,7 @@ uint64_t GroupbyState::op_pool_bytes_allocated() const {
 }
 
 #pragma endregion  // GroupbyState
-/* ------------------------------------------------------------------------
- */
+/* ------------------------------------------------------------------------ */
 
 /**
  * @brief consume build table batch in streaming groupby (insert into hash
@@ -2126,9 +2177,8 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     if (groupby_state->build_iter == 0) {
-        groupby_state->sync_iter = init_sync_iters(
-            in_table, groupby_state->adaptive_sync_counter,
-            groupby_state->parallel, groupby_state->sync_iter, n_pes);
+        groupby_state->shuffle_state->Initialize(in_table,
+                                                 groupby_state->parallel);
     }
 
     // Make is_last global
@@ -2183,56 +2233,23 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     // Reset the bitmask for the next iteration:
     append_row_to_build_table.resize(0);
 
-    auto [shuffle_now, new_sync_iter, new_adaptive_sync_counter] =
-        shuffle_this_iter(groupby_state->parallel, is_last,
-                          groupby_state->shuffle_table_buffer->data_table,
-                          groupby_state->build_iter, groupby_state->sync_iter,
-                          groupby_state->prev_shuffle_iter,
-                          groupby_state->adaptive_sync_counter);
-    groupby_state->sync_iter = new_sync_iter;
-    groupby_state->adaptive_sync_counter = new_adaptive_sync_counter;
+    if (groupby_state->parallel) {
+        std::optional<std::shared_ptr<table_info>> new_data_ =
+            groupby_state->shuffle_state->ShuffleIfRequired(is_last);
+        if (new_data_.has_value()) {
+            std::shared_ptr<table_info> new_data = new_data_.value();
+            dict_hashes = groupby_state->GetDictionaryHashesForKeys();
+            batch_hashes_groupby = hash_keys_table(
+                new_data, groupby_state->n_keys, SEED_HASH_GROUPBY_SHUFFLE,
+                groupby_state->parallel, /*global_dict_needed*/ false);
+            batch_hashes_partition =
+                hash_keys_table(new_data, groupby_state->n_keys,
+                                SEED_HASH_PARTITION, groupby_state->parallel,
+                                /*global_dict_needed*/ false, dict_hashes);
 
-    if (shuffle_now) {
-        groupby_state->prev_shuffle_iter = groupby_state->build_iter;
-
-        // shuffle data of other ranks
-        std::shared_ptr<table_info> shuffle_table =
-            groupby_state->shuffle_table_buffer->data_table;
-
-        std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
-            shuffle_table, groupby_state->n_keys, SEED_HASH_PARTITION,
-            groupby_state->parallel, false, dict_hashes);
-        // make dictionaries global for shuffle
-        for (size_t i = 0; i < shuffle_table->ncols(); i++) {
-            std::shared_ptr<array_info> arr = shuffle_table->columns[i];
-            if (arr->arr_type == bodo_array_type::DICT) {
-                make_dictionary_global_and_unique(arr, groupby_state->parallel);
-            }
+            groupby_state->UpdateGroupsAndCombine(
+                new_data, batch_hashes_partition, batch_hashes_groupby);
         }
-        mpi_comm_info comm_info_table(shuffle_table->columns, shuffle_hashes,
-                                      groupby_state->parallel);
-        std::shared_ptr<table_info> new_data =
-            shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
-                                 comm_info_table, groupby_state->parallel);
-        shuffle_hashes.reset();
-        // Reset shuffle state:
-        groupby_state->ResetShuffleState();
-
-        // unify dictionaries to allow consistent hashing and fast key
-        // comparison using indices
-        new_data = groupby_state->UnifyBuildTableDictionaryArrays(new_data);
-        dict_hashes = groupby_state->GetDictionaryHashesForKeys();
-
-        batch_hashes_groupby = hash_keys_table(
-            new_data, groupby_state->n_keys, SEED_HASH_GROUPBY_SHUFFLE,
-            groupby_state->parallel, /*global_dict_needed*/ false);
-        batch_hashes_partition =
-            hash_keys_table(new_data, groupby_state->n_keys,
-                            SEED_HASH_PARTITION, groupby_state->parallel,
-                            /*global_dict_needed*/ false, dict_hashes);
-
-        groupby_state->UpdateGroupsAndCombine(new_data, batch_hashes_partition,
-                                              batch_hashes_groupby);
     }
 
     if (is_last) {
@@ -2274,9 +2291,8 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     if (groupby_state->build_iter == 0) {
-        groupby_state->sync_iter = init_sync_iters(
-            in_table, groupby_state->adaptive_sync_counter,
-            groupby_state->parallel, groupby_state->sync_iter, n_pes);
+        groupby_state->shuffle_state->Initialize(in_table,
+                                                 groupby_state->parallel);
     }
 
     is_last = stream_sync_is_last(is_last, groupby_state->build_iter,
@@ -2309,105 +2325,38 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
 
     append_row_to_build_table.flip();
     std::vector<bool>& append_row_to_shuffle_table = append_row_to_build_table;
-    groupby_state->shuffle_table_buffer->ReserveTable(in_table);
-    groupby_state->shuffle_table_buffer->UnsafeAppendBatch(
-        in_table, append_row_to_shuffle_table);
+    groupby_state->shuffle_state->AppendBatch(in_table,
+                                              append_row_to_shuffle_table);
 
     // Reset for next iteration:
     append_row_to_build_table.resize(0);
 
-    auto [shuffle_now, new_sync_iter, new_adaptive_sync_counter] =
-        shuffle_this_iter(groupby_state->parallel, is_last,
-                          groupby_state->shuffle_table_buffer->data_table,
-                          groupby_state->build_iter, groupby_state->sync_iter,
-                          groupby_state->prev_shuffle_iter,
-                          groupby_state->adaptive_sync_counter);
-    groupby_state->sync_iter = new_sync_iter;
-    groupby_state->adaptive_sync_counter = new_adaptive_sync_counter;
+    // Shuffle data of other ranks and append received data to local buffer
+    if (groupby_state->parallel) {
+        std::optional<std::shared_ptr<table_info>> new_data_ =
+            groupby_state->shuffle_state->ShuffleIfRequired(is_last);
+        if (new_data_.has_value()) {
+            std::shared_ptr<table_info> new_data = new_data_.value();
+            // Dictionary hashes for the key columns which will be used for
+            // the partitioning hashes:
+            dict_hashes = groupby_state->GetDictionaryHashesForKeys();
 
-    // shuffle data of other ranks and append received data to local buffer
-    if (shuffle_now) {
-        groupby_state->prev_shuffle_iter = groupby_state->build_iter;
-        std::shared_ptr<table_info> shuffle_table =
-            groupby_state->shuffle_table_buffer->data_table;
+            // Append input rows to local or shuffle buffer:
+            batch_hashes_partition = hash_keys_table(
+                new_data, groupby_state->n_keys, SEED_HASH_PARTITION,
+                groupby_state->parallel, false, dict_hashes);
 
-        std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
-            shuffle_table, groupby_state->n_keys, SEED_HASH_PARTITION,
-            groupby_state->parallel, false, dict_hashes);
+            // XXX Technically, we don't need the partition hashes if
+            // there's just one partition. We could move the hash computation
+            // inside AppendBuildBatch and only do it if there are multiple
+            // partitions.
+            groupby_state->AppendBuildBatch(new_data, batch_hashes_partition);
 
-        // drop shuffle table duplicate rows if there are a lot of duplicates
-        // only possible for nunique-only cases
-        if (groupby_state->nunique_only) {
-            int64_t shuffle_nrows = shuffle_table->nrows();
-
-            // estimate number of uniques using key/value hashes
-            std::shared_ptr<uint32_t[]> key_value_hashes =
-                std::make_unique<uint32_t[]>(shuffle_nrows);
-            // reusing shuffle_hashes for keys to make the initial check cheaper
-            // for code path without drop duplicates
-            std::memcpy(key_value_hashes.get(), shuffle_hashes.get(),
-                        sizeof(uint32_t) * shuffle_nrows);
-            for (size_t col = groupby_state->n_keys;
-                 col < shuffle_table->ncols(); col++) {
-                hash_array_combine(
-                    key_value_hashes, shuffle_table->columns[col],
-                    shuffle_nrows, SEED_HASH_PARTITION,
-                    /*global_dict_needed=*/false, groupby_state->parallel);
-            }
-            size_t nunique_keyval_hashes = get_nunique_hashes(
-                key_value_hashes, shuffle_nrows, groupby_state->parallel);
-
-            // drop duplicates if output will be less than half the size of
-            // input (rough heuristic, TODO: tune)
-            if ((2 * nunique_keyval_hashes) <
-                static_cast<size_t>(shuffle_nrows)) {
-                shuffle_table = drop_duplicates_table_inner(
-                    shuffle_table, shuffle_table->ncols(), 0, 1, false, false,
-                    /*drop_duplicates_dict=*/false, key_value_hashes);
-                shuffle_hashes = hash_keys_table(
-                    shuffle_table, groupby_state->n_keys, SEED_HASH_PARTITION,
-                    groupby_state->parallel, false, dict_hashes);
-            }
+            batch_hashes_partition.reset();
         }
-
-        // make dictionaries global for shuffle
-        for (size_t i = 0; i < shuffle_table->ncols(); i++) {
-            std::shared_ptr<array_info> arr = shuffle_table->columns[i];
-            if (arr->arr_type == bodo_array_type::DICT) {
-                make_dictionary_global_and_unique(arr, groupby_state->parallel);
-            }
-        }
-        mpi_comm_info comm_info_table(shuffle_table->columns, shuffle_hashes,
-                                      groupby_state->parallel);
-        std::shared_ptr<table_info> new_data =
-            shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
-                                 comm_info_table, groupby_state->parallel);
-        shuffle_hashes.reset();
-        groupby_state->ResetShuffleState();
-
-        // unify dictionaries to allow consistent hashing and fast key
-        // comparison using indices
-        new_data = groupby_state->UnifyBuildTableDictionaryArrays(new_data);
-
-        // Dictionary hashes for the key columns which will be used for
-        // the partitioning hashes:
-        dict_hashes = groupby_state->GetDictionaryHashesForKeys();
-
-        // Append input rows to local or shuffle buffer:
-        batch_hashes_partition = hash_keys_table(
-            new_data, groupby_state->n_keys, SEED_HASH_PARTITION,
-            groupby_state->parallel, false, dict_hashes);
-
-        // XXX Technically, we don't need the partition hashes if
-        // there's just one partition. We could move the hash computation
-        // inside AppendBuildBatch and only do it if there are multiple
-        // partitions.
-        groupby_state->AppendBuildBatch(new_data, batch_hashes_partition);
-
-        batch_hashes_partition.reset();
     }
 
-    // compute output when all input batches are accumulated
+    // Compute output when all input batches are accumulated
     if (is_last) {
         groupby_state->FinalizeBuild();
     }

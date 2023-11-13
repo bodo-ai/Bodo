@@ -10,6 +10,7 @@
 #include "_operator_pool.h"
 #include "_pinnable.h"
 #include "_shuffle.h"
+#include "_stream_shuffle.h"
 #include "_table_builder.h"
 #include "simd-block-fixed-fpp.h"
 
@@ -591,9 +592,9 @@ class HashJoinState : public JoinState {
     // on total available memory, total disk space, etc.
     const size_t max_partition_depth;
 
-    // Shuffle state
-    std::unique_ptr<TableBuildBuffer> build_shuffle_buffer;
-    std::unique_ptr<TableBuildBuffer> probe_shuffle_buffer;
+    // Shuffle states
+    IncrementalShuffleState build_shuffle_state;
+    IncrementalShuffleState probe_shuffle_state;
 
     // Global bloom-filter. This is built during the build step
     // and used during the probe step.
@@ -617,12 +618,6 @@ class HashJoinState : public JoinState {
     // Same as build_na_counter but for probe NAs
     size_t probe_na_counter = 0;
 
-    // Counter of number of syncs since previous sync freq update.
-    // Set to -1 if not updating adaptively (user has specified sync freq).
-    int64_t adaptive_sync_counter = -1;
-    // The iteration number of last shuffle (used for adaptive sync estimation
-    // in both build and probe)
-    uint64_t prev_shuffle_iter = 0;
     /// @brief Whether we should print debug information
     /// about partitioning such as when a partition is split.
     bool debug_partitioning = false;
@@ -634,7 +629,7 @@ class HashJoinState : public JoinState {
                   uint64_t n_keys_, bool build_table_outer_,
                   bool probe_table_outer_, cond_expr_fn_t cond_func_,
                   bool build_parallel_, bool probe_parallel_,
-                  int64_t output_batch_size_, int64_t sync_iter,
+                  int64_t output_batch_size_, int64_t sync_iter_,
                   // If -1, we'll use 100% of the total buffer
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,
@@ -650,9 +645,9 @@ class HashJoinState : public JoinState {
     std::unique_ptr<BloomFilter> create_bloom_filter() {
         if (bloom_filter_supported()) {
             // Estimate the number of rows to specify based on
-            // the target size in bytes in the env or 1MB
+            // the target size in bytes in the env or 1MiB
             // if not provided.
-            int64_t target_bytes = 1000000;
+            int64_t target_bytes = 1 * 1024 * 1024;
             char* env_target_bytes =
                 std::getenv("BODO_STREAM_JOIN_BLOOM_FILTER_TARGET_BYTES");
             if (env_target_bytes) {

@@ -5,6 +5,7 @@
 #include "_bodo_to_arrow.h"
 #include "_chunked_table_builder.h"
 #include "_operator_pool.h"
+#include "_stream_shuffle.h"
 #include "_table_builder.h"
 
 #include "_groupby.h"
@@ -24,7 +25,7 @@
 #define INACTIVE_PARTITION_TABLE_CHUNK_SIZE 16 * 1024
 
 class GroupbyPartition;
-class GroupbyState;
+class GroupbyIncrementalShuffleState;
 
 template <bool is_local>
 struct HashGroupbyTable {
@@ -48,7 +49,7 @@ struct HashGroupbyTable {
     /// This will be a nullptr when is_local=false
     GroupbyPartition* groupby_partition;
     /// This will be a nullptr when is_local=true
-    GroupbyState* groupby_state;
+    GroupbyIncrementalShuffleState* groupby_shuffle_state;
 };
 
 template <bool is_local>
@@ -75,7 +76,7 @@ struct KeyEqualGroupbyTable {
     /// This will be a nullptr when is_local=false
     GroupbyPartition* groupby_partition;
     /// This will be a nullptr when is_local=true
-    GroupbyState* groupby_state;
+    GroupbyIncrementalShuffleState* groupby_shuffle_state;
     const uint64_t n_keys;
 };
 
@@ -344,6 +345,100 @@ class GroupbyPartition {
     void ClearBuildState();
 };
 
+/**
+ * @brief Extend the general shuffle state for streaming groupby.
+ * In particular, for the incremental aggregation case, we need
+ * to maintain the next-group-id, hash-table and hashes corresponding to the
+ * shuffle-table.
+ * In the nunique-only accumulate-input case, we need a sightly modified shuffle
+ * step where we may call drop-duplicates on the shuffle table before the
+ * shuffle.
+ *
+ */
+class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
+   public:
+    using shuffle_hash_table_t = grpby_hash_table_t</*is_local*/ false>;
+
+    // Current number of groups
+    int64_t next_group = 0;
+    // Map row number to group number
+    std::unique_ptr<shuffle_hash_table_t> hash_table;
+    // Hashes of data in table_buffer
+    bodo::vector<uint32_t> groupby_hashes;
+    // Temporary batch data (used by HashGroupbyTable and KeyEqualGroupbyTable)
+    std::shared_ptr<table_info> in_table = nullptr;
+    std::shared_ptr<uint32_t[]> in_table_hashes = nullptr;
+
+    /**
+     * @brief Constructor. Same as the base class constructor.
+     *
+     * @param arr_c_types_ Array types of the shuffle table.
+     * @param arr_array_types_ CTypes of the shuffle table.
+     * @param dict_builders_ Dictionary builders for the top level columns.
+     * @param n_keys_ Number of key columns (to shuffle based off of).
+     * @param curr_iter_ Reference to the iteration counter from parent
+     * operator. e.g. In Groupby, this is 'build_iter'. For HashJoin, this could
+     * be either 'build_iter' or 'probe_iter' based on whether it's the
+     * build_shuffle_state or probe_shuffle_state, respectively.
+     * @param sync_freq_ Reference to the synchronization frequency variable of
+     * the parent state. This will be modified by this state adaptively (if
+     * enabled).
+     * @param nunique_only_ Whether this is the nunique-only accumulate input
+     * case.
+     */
+    GroupbyIncrementalShuffleState(
+        const std::vector<int8_t>& arr_c_types_,
+        const std::vector<int8_t>& arr_array_types_,
+        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
+        const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
+        const bool nunique_only_);
+
+    virtual ~GroupbyIncrementalShuffleState() = default;
+
+    /**
+     * @brief Clears the "shuffle" state. This releases
+     * the memory of the logical shuffle hash table, i.e.
+     * the shuffle buffer, shuffle hash-table and shuffle
+     * hashes.
+     * This is meant to be called in GroupbyState::FinalizeBuild.
+     */
+    void Finalize() override;
+
+   protected:
+    /**
+     * @brief Helper for ShuffleIfRequired. This is the same implementation as
+     * the base class, except for the nunique-only case. In the nunique-only
+     * case, we may drop-duplicates from the shuffle-table before the shuffle.
+     *
+     * @return std::tuple<
+     * std::shared_ptr<table_info>,
+     * std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>,
+     * std::shared_ptr<uint32_t[]>>
+     */
+    std::tuple<
+        std::shared_ptr<table_info>,
+        std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>,
+        std::shared_ptr<uint32_t[]>>
+    GetShuffleTableAndHashes() override;
+
+    /**
+     * @brief Reset the shuffle state after a shuffle.
+     * This clears the shuffle hash table, resets the shuffle buffer,
+     * clears the shuffle hashes vector and resets shuffle_next_group
+     * back to 0.
+     * Note that this doesn't usually release memory.
+     * If the hash table gets larger than MAX_SHUFFLE_HASHTABLE_SIZE,
+     * we reset it to reduce peak memory. We do the same with the hashes
+     * vector based on MAX_SHUFFLE_TABLE_SIZE.
+     *
+     */
+    void ResetAfterShuffle() override;
+
+   private:
+    /// @brief Whether this is the nunique-only case.
+    const bool nunique_only = false;
+};
+
 class GroupbyState {
    private:
     // NOTE: These need to be declared first so that they are
@@ -356,8 +451,6 @@ class GroupbyState {
     const std::shared_ptr<::arrow::MemoryManager> op_mm;
 
    public:
-    using shuffle_hash_table_t = grpby_hash_table_t</*is_local*/ false>;
-
     // Partitioning information.
     std::vector<std::shared_ptr<GroupbyPartition>> partitions;
     // Partition state: Tuples of the form (num_top_bits, top_bitmask).
@@ -375,15 +468,8 @@ class GroupbyState {
 
     std::vector<std::shared_ptr<BasicColSet>> col_sets;
 
-    // temporary batch data (for the shuffle case)
-    std::shared_ptr<table_info> in_table = nullptr;
-    std::shared_ptr<uint32_t[]> in_table_hashes = nullptr;
-
-    // Shuffle build state
-    int64_t shuffle_next_group = 0;
-    std::unique_ptr<shuffle_hash_table_t> shuffle_hash_table;
-    bodo::vector<uint32_t> shuffle_table_groupby_hashes;
-    std::unique_ptr<TableBuildBuffer> shuffle_table_buffer;
+    // Shuffle state
+    std::unique_ptr<GroupbyIncrementalShuffleState> shuffle_state;
 
     // indices of input columns for each function
     // f_in_offsets contains the offsets into f_in_cols.
@@ -405,13 +491,9 @@ class GroupbyState {
     // table returned by 'get_update_table</*is_acc_case*/ true>'.
     std::vector<int32_t> f_running_value_offsets;
 
-    // The number of iterations between syncs
+    // The number of iterations between syncs (adjusted by
+    // shuffle_state)
     int64_t sync_iter;
-    // Counter of number of syncs since previous sync freq update.
-    // Set to -1 if not updating adaptively (user has specified sync freq).
-    int64_t adaptive_sync_counter = -1;
-    // The iteration number of last shuffle (used for adaptive sync estimation)
-    uint64_t prev_shuffle_iter = 0;
 
     // Current iteration of build steps
     uint64_t build_iter = 0;
@@ -620,17 +702,6 @@ class GroupbyState {
         const std::shared_ptr<table_info>& out_table);
 
     /**
-     * @brief Reset the shuffle state. This is meant to be
-     * called after a shuffle operation.
-     * This clears the shuffle hash table, resets the shuffle buffer,
-     * clears the shuffle hashes vector and resets shuffle_next_group
-     * back to 0.
-     * Note that this doesn't release memory.
-     *
-     */
-    void ResetShuffleState();
-
-    /**
      * @brief Finalize the build step. This will finalize all the partitions,
      * append their outputs to the output buffer, clear the build state and set
      * build_input_finalized to prevent future repetitions of the build step.
@@ -730,17 +801,6 @@ class GroupbyState {
         const std::shared_ptr<uint32_t[]>& partitioning_hashes,
         const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
         const std::vector<bool>& append_rows);
-
-    /**
-     * @brief Clear the "shuffle" state. This releases
-     * the memory of the logical shuffle hash table, i.e.
-     * the shuffle buffer, shuffle hash-table and shuffle
-     * hashes.
-     *
-     * This is meant to be called in FinalizeBuild.
-     *
-     */
-    void ClearShuffleState();
 
     /**
      * @brief Clear the "build" state. This releases

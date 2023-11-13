@@ -700,13 +700,11 @@ void ArrayBuildBuffer::Reset() {
 /* -------------------------- TableBuildBuffer ---------------------------- */
 
 TableBuildBuffer::TableBuildBuffer(
-    const std::vector<int8_t>& arr_c_types,
-    const std::vector<int8_t>& arr_array_types,
+    const std::unique_ptr<bodo::Schema>& schema,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // allocate empty initial table with provided data types
-    this->data_table =
-        alloc_table(arr_c_types, arr_array_types, pool, std::move(mm));
+    this->data_table = alloc_table(schema, pool, std::move(mm));
 
     // initialize array buffer wrappers
     for (size_t i = 0; i < this->data_table->ncols(); i++) {
@@ -719,6 +717,15 @@ TableBuildBuffer::TableBuildBuffer(
                                          dict_builders[i]);
     }
 }
+
+TableBuildBuffer::TableBuildBuffer(
+    const std::vector<int8_t>& arr_c_types,
+    const std::vector<int8_t>& arr_array_types,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm)
+    : TableBuildBuffer(
+          std::move(bodo::Schema::Deserialize(arr_array_types, arr_c_types)),
+          dict_builders, pool, mm) {}
 
 size_t TableBuildBuffer::EstimatedSize() const {
     size_t size = 0;
