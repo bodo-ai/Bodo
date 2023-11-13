@@ -13,6 +13,21 @@ set +x
 source activate $CONDA_ENV
 set -x
 
+# Enable Sccache to use and save C/C++ cache to S3
+export SCCACHE_BUCKET=engine-codebuild-cache
+export SCCACHE_REGION=us-east-2
+export SCCACHE_S3_USE_SSL=true
+export SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
+
+# TODO: Couple of things to Improve
+#   - Use a different role for PR CI or merge roles
+#   - Debug why IMDSv2 in sccache is not working for AWS containers
+ASSUME_ROLE_CREDENTIALS=`aws sts assume-role --role-arn arn:aws:iam::427443013497:role/BodoEngineNightlyRole --role-session-name BodoEnginePRSession`
+export AWS_ACCESS_KEY_ID=`jq -r .Credentials.AccessKeyId <<< "$ASSUME_ROLE_CREDENTIALS"`
+export AWS_SECRET_ACCESS_KEY=`jq -r .Credentials.SecretAccessKey <<< "$ASSUME_ROLE_CREDENTIALS"`
+export AWS_SESSION_TOKEN=`jq -r .Credentials.SessionToken <<< "$ASSUME_ROLE_CREDENTIALS"`
+
+
 # bodo install
 python setup.py develop --no-ccache
 
