@@ -104,6 +104,12 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           .withGroupOrder(Optionality.OPTIONAL)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
+  public static final SqlAggFunction ARRAY_UNIQUE_AGG =
+      SqlBasicAggFunction.create(
+              "ARRAY_UNIQUE_AGG", SqlKind.OTHER_FUNCTION, ReturnTypes.TO_ARRAY, OperandTypes.ANY)
+          .withGroupOrder(Optionality.FORBIDDEN)
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
+
   /** Nulls are dropped by arrayAgg, so return a non-null array of the input type. */
   public static RelDataType ArrayAggReturnType(SqlOperatorBinding binding) {
     RelDataTypeFactory typeFactory = binding.getTypeFactory();
@@ -167,6 +173,7 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           ARRAY_CONSTRUCT,
           ARRAY_TO_STRING,
           ARRAY_AGG,
+          ARRAY_UNIQUE_AGG,
           ARRAY_SIZE,
           ARRAYS_OVERLAP,
           ARRAY_POSITION);

@@ -1659,3 +1659,61 @@ def test_array_agg_distinct(call, answer, memory_leak_check):
         check_dtype=False,
         convert_columns_to_pandas=True,
     )
+
+
+@pytest.mark.parametrize(
+    "call, expected",
+    [
+        pytest.param(
+            "ARRAY_UNIQUE_AGG(D)",
+            [[-2, -1, 0, 1, 2], [-7, -2, -1, 0, 2], [-2, 0, 7]],
+            id="int",
+        ),
+        pytest.param(
+            "ARRAY_UNIQUE_AGG(S)",
+            [
+                ["", "Alphabet", "abet", "habet"],
+                ["", "abet", "lphabet"],
+                ["abet", "habet", "lphabet"],
+            ],
+            id="string",
+        ),
+    ],
+)
+def test_array_unique_agg(call, expected, memory_leak_check):
+    """Tests ARRAY_AGG on integer data with and without a WITHIN GROUP clause containing
+    a single ordering term, with DISTINCT, and accompanied by a GROUP BY.
+    """
+    query = f"SELECT K, {call} FROM table1 GROUP BY K"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "K": pd.Series(list("EIEIO") * 5),
+                "D": pd.Series(
+                    [None if i % 6 > 3 else round(np.tan(i)) for i in range(25)],
+                    dtype=pd.Int32Dtype(),
+                ),
+                "S": pd.Series(
+                    [
+                        None if i % 7 > 4 else "Alphabet"[(i**2) % 13 :]
+                        for i in range(25)
+                    ]
+                ),
+            }
+        )
+    }
+
+    expected = pd.DataFrame(
+        {
+            "K": list("EIO"),
+            "EXPR$1": expected,
+        }
+    )
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected,
+        convert_columns_to_pandas=True,
+    )

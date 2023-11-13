@@ -110,6 +110,7 @@ public class AggCodeGen {
 
     equivalentExtendedNamedAggAggregates.put("LISTAGG", "listagg");
     equivalentExtendedNamedAggAggregates.put("ARRAY_AGG", "array_agg");
+    equivalentExtendedNamedAggAggregates.put("ARRAY_UNIQUE_AGG", "array_unique_agg");
     equivalentExtendedNamedAggAggregates.put("PERCENTILE_CONT", "percentile_cont");
     equivalentExtendedNamedAggAggregates.put("PERCENTILE_DISC", "percentile_disc");
   }
@@ -251,8 +252,8 @@ public class AggCodeGen {
           || aggFunc.equals("bitand_agg")
           || aggFunc.equals("bitxor_agg")) {
         aggExpr = new Expr.Call("bodo.libs.array_kernels." + aggFunc, aggExpr);
-      } else if (aggFunc.equals("array_agg")) {
-        throw new BodoSQLCodegenException("array_agg not supported without a GROUP BY clause");
+      } else if (aggFunc.equals("array_agg") || aggFunc.equals("array_unique_agg")) {
+        throw new BodoSQLCodegenException(aggFunc + " not supported without a GROUP BY clause");
       } else if (aggFunc.equals("percentile_cont") || aggFunc.equals("percentile_disc")) {
         if (a.collation == null) {
           throw new BodoSQLCodegenException(a.getName() + " requires a WITHIN GROUP term");
@@ -475,6 +476,26 @@ public class AggCodeGen {
             .append(", aggfunc=")
             .append(aggFunc)
             .append("),");
+      } else if (aggFunc.equals("\"array_unique_agg\"")) {
+        List<Expr> additionalArgsList = new ArrayList<>();
+        List<Expr.StringLiteral> orderbyList = new ArrayList<>();
+        List<Expr.BooleanLiteral> ascendingList = new ArrayList<>();
+        List<Expr.StringLiteral> nullDirList = new ArrayList<>();
+        orderbyList.add(new Expr.StringLiteral(inputColumnNames.get(a.getArgList().get(0))));
+        ascendingList.add(getAscendingExpr(RelFieldCollation.Direction.ASCENDING));
+        nullDirList.add(getNAPositionStringLiteral(RelFieldCollation.NullDirection.LAST));
+        additionalArgsList.add(new Expr.Tuple(orderbyList));
+        additionalArgsList.add(new Expr.Tuple(ascendingList));
+        additionalArgsList.add(new Expr.Tuple(nullDirList));
+        aggString
+            .append(tempName)
+            .append("=bodo.utils.utils.ExtendedNamedAgg(column=")
+            .append(Utils.makeQuoted(aggCol))
+            .append(", aggfunc=")
+            .append("\"array_agg_distinct\"")
+            .append(", additional_args=")
+            .append((new Expr.Tuple(additionalArgsList)).emit())
+            .append("),");
       } else {
         Expr.Tuple additionalArgs = getAdditionalArgs(a, inputColumnNames);
         // Calcite will think that the percentile amount is the aggregation column and
@@ -624,7 +645,7 @@ public class AggCodeGen {
         return new Expr.Tuple(additionalArgsList);
       default:
         throw new BodoSQLCodegenException(
-            "Internal error in getAdditionalArgs: " + (kind.name()) + "not handled");
+            "Internal error in getAdditionalArgs: " + kind.name() + " not handled");
     }
   }
 
