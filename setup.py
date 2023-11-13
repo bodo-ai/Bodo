@@ -297,6 +297,7 @@ ext_metadata["sources"] += [
     "bodo/libs/_window_aggfuncs.cpp",
     "bodo/libs/_window_compute.cpp",
     "bodo/libs/_stream_dict_encoding.cpp",
+    "bodo/libs/_stream_shuffle.cpp",
 ]
 ext_metadata["depends"] += [
     "bodo/io/_bodo_file_reader.h",
@@ -357,6 +358,7 @@ ext_metadata["depends"] += [
     "bodo/libs/_stream_dict_encoding.h",
     "bodo/libs/_pinnable.h",
     "bodo/libs/_nested_loop_join_impl.h",
+    "bodo/libs/_stream_shuffle.h",
 ]
 
 if is_testing:
