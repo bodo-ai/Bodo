@@ -225,7 +225,7 @@ class UntypedPass:
             and rhs.value.__name__ == "h5py"
             and not bodo.utils.utils.has_supported_h5py()
         ):  # pragma: no cover
-            raise BodoError("Bodo requires HDF5 1.10 for h5py support", rhs.loc)
+            raise BodoError("Bodo requires HDF5 >=1.10 for h5py support", rhs.loc)
 
         if isinstance(rhs, ir.Expr):
             if rhs.op == "call":
