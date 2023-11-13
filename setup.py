@@ -82,19 +82,6 @@ else:
         PREFIX_DIR += "\\Library"
 
 
-try:
-    import h5py  # noqa
-except ImportError:
-    # currently, due to cross compilation, the import fails.
-    # building the extension modules still works though.
-    # TODO: resolve issue with h5py import
-    h5py_version = None
-else:
-    # NOTE: conda-forge does not have MPI-enabled hdf5 for Windows yet
-    # TODO: make sure the available hdf5 library is MPI-enabled automatically
-    h5py_version = h5py.version.hdf5_version_tuple[1]
-
-
 # Define include dirs, library dirs, extra compile args, and extra link args
 ind = [PREFIX_DIR + "/include"]
 lid = [PREFIX_DIR + "/lib"]
@@ -213,16 +200,6 @@ if is_win:
     ext_metadata["define_macros"].append(("H5_BUILT_AS_DYNAMIC_LIB", None))
 
 ext_metadata["libraries"] += mpi_libs + ["hdf5", "arrow", "arrow_python", "parquet"]
-
-# Even though we upgraded to 1.12 which changes the API, these flags keep the
-# 1.10 API. See the example: https://github.com/openmc-dev/openmc/pull/1533
-# This was also verified by looking at the .h files.
-# If we still have version 1.10 these are ignored.
-ext_metadata["extra_compile_args"] += [
-    "-DH5Oget_info_by_name_vers=1",
-    "-DH5Oget_info_vers=1",
-    "-DH5O_info_t_vers=1",
-]
 
 # TODO Windows build fails because ssl.lib not found. Disabling licensing
 # check on windows for now
