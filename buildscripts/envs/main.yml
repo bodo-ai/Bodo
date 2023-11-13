@@ -22,15 +22,13 @@ dependencies:
   - fsspec >=2021.09
 
   # HDFS
-  - hdf5 >=1.10.*,<1.13.0a0=*mpi_mpich_*
+  - hdf5 >=1.14,<1.15.0a0=*mpi_mpich_*
   - h5py
 
   # MPI
   # Using h* to avoid the "external_0.conda" kind
   - mpich *=h*
-  # TODO: Remove version lock after upgrading hdf5
-  # See https://bodo.atlassian.net/browse/BSE-1725
-  - mpi4py ==3.1.4
+  - mpi4py =3.1
 
   # Java
   - openjdk =11

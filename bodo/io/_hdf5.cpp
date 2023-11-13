@@ -103,9 +103,9 @@ hid_t h5_open_dset_or_group_obj(hid_t file_or_group_id, char* obj_name) {
     // handle obj['A'] call, the output can be group or dataset
     // printf("open dset or group: %s\n", obj_name);
     hid_t obj_id = -1;
-    H5O_info_t object_info;
-    herr_t err = H5Oget_info_by_name(file_or_group_id, obj_name, &object_info,
-                                     H5P_DEFAULT);
+    H5O_info2_t object_info;
+    herr_t err = H5Oget_info_by_name3(file_or_group_id, obj_name, &object_info,
+                                      H5O_INFO_BASIC, H5P_DEFAULT);
     CHECK(err != -1, "h5 open dset or group get_info_by_name error");
     if (object_info.type == H5O_TYPE_GROUP) {
         // printf("open group: %s\n", obj_name);
@@ -288,8 +288,8 @@ hid_t get_h5_typ(int typ_enum) {
 }
 
 void h5_close_object(hid_t obj_id) {
-    H5O_info_t object_info;
-    H5Oget_info(obj_id, &object_info);
+    H5O_info2_t object_info;
+    H5Oget_info3(obj_id, &object_info, H5O_INFO_BASIC);
     if (object_info.type == H5O_TYPE_GROUP) {
         // printf("close group %lld\n", obj_id);
         H5Gclose(obj_id);
