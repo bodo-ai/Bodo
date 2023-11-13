@@ -494,6 +494,7 @@ def check_func(
             use_table_format=True if use_table_format is None else use_table_format,
             use_dict_encoded_strings=True,
             convert_to_nullable_float=convert_to_nullable_float,
+            use_map_arrays=use_map_arrays,
         )
         bodo_funcs.update(
             {f"dict-encoding-{name}": func for name, func in inner_funcs.items()}

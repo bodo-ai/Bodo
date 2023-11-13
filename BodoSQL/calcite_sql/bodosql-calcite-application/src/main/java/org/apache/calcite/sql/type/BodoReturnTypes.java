@@ -8,12 +8,17 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rel.type.RelRecordType;
+import org.apache.calcite.runtime.CalciteContextException;
+import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlCollation;
 import org.apache.calcite.sql.SqlFunction;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperatorBinding;
 
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 
+import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.tools.ValidationException;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.ArrayList;
@@ -23,6 +28,7 @@ import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCharset;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCollation;
 import static org.apache.calcite.sql.type.ReturnTypes.ARG0_NULLABLE;
+import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 import static org.apache.calcite.util.Static.RESOURCE;
 
 public class BodoReturnTypes {
@@ -45,7 +51,6 @@ public class BodoReturnTypes {
 
     public static final SqlReturnTypeInference BOOL_AGG_RET_TYPE = ReturnTypes.BOOLEAN_NULLABLE.andThen(FORCE_NULLABLE_IF_EMPTY_GROUP);
 
-
     /**
      * Defines the return type for FLATTEN
      */
@@ -64,7 +69,15 @@ public class BodoReturnTypes {
                 RelDataType type1 = factory.createTypeWithNullability(factory.createSqlType(SqlTypeName.VARCHAR), true);
                 RelDataType type2 = type1;
                 RelDataType type3 = factory.createTypeWithNullability(factory.createSqlType(SqlTypeName.INTEGER), true);
-                RelDataType type4 = factory.createTypeWithNullability(inputType.getComponentType(), true);
+                RelDataType type4;
+                if (inputType instanceof MapSqlType) {
+                    type4 = factory.createTypeWithNullability(inputType.getValueType(), true);
+                } else if (inputType instanceof ArraySqlType) {
+                    type4 = factory.createTypeWithNullability(inputType.getComponentType(), true);
+                } else {
+                    SqlParserPos pos =((SqlCallBinding) opBinding).operand(0).getParserPosition();
+                    throw new CalciteContextException("", BODO_SQL_RESOURCE.requiresArrayOrJson("FLATTEN", "INPUT").ex());
+                }
                 RelDataType type5 = inputType;
                 List<RelDataType> types = List.of(type0, type1, type2, type3, type4, type5);
                 List<String> names = List.of("SEQ", "KEY", "PATH", "INDEX", "VALUE", "THIS");

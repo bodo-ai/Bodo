@@ -59,4 +59,7 @@ public interface BodoSQLResource {
 
    @Resources.BaseMessage("Function \"{0}\" requires a valid literal for argument \"{1}\".")
    Resources.ExInst<SqlValidatorException> invalidLiteral(String fnName, String argName);
+
+   @Resources.BaseMessage("Function \"{0}\" requires a valid array or json value for argument \"{1}\".")
+   Resources.ExInst<SqlValidatorException> requiresArrayOrJson(String fnName, String argName);
 }

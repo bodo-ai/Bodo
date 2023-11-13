@@ -151,7 +151,7 @@ static bodo::tests::suite tests([] {
         int64_t n_rows = 0;
 
         // Call lateral flatten without the index but with the value
-        std::unique_ptr<table_info> out_table = lateral_flatten(
+        std::unique_ptr<table_info> out_table = lateral_flatten_array(
             in_table, &n_rows, false, false, false, false, true, false);
 
         // Check to make sure the lengths match.
@@ -188,7 +188,7 @@ static bodo::tests::suite tests([] {
         int64_t n_rows = 0;
 
         // Call lateral flatten with the index and the value
-        std::unique_ptr<table_info> out_table = lateral_flatten(
+        std::unique_ptr<table_info> out_table = lateral_flatten_array(
             in_table, &n_rows, false, false, false, true, true, false);
 
         // Check to make sure the lengths match.

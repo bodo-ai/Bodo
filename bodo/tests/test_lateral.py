@@ -9,7 +9,7 @@ from bodo.tests.utils import check_func
 from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
-def simulate_lateral_flatten(
+def simulate_lateral_flatten_array(
     df, keep_cols, explode_col, output_idx, output_val, output_this
 ):
     """
@@ -21,6 +21,7 @@ def simulate_lateral_flatten(
         explode_col (integer): which column is the array column that is to be exploded
         output_idx (bool): whether to include the indices within the inner array in the output
         output_val (bool): whether to include the values within the inner array in the output
+        output_this (bool): whether to include the replicated values of the exploded column
     """
     keep_cols_idx = df.columns[list(keep_cols)]
     df_subset = df.loc[:, keep_cols_idx]
@@ -54,6 +55,59 @@ def simulate_lateral_flatten(
     return pd.DataFrame(out_dict)
 
 
+def simulate_lateral_flatten_json(
+    df, keep_cols, explode_col, output_key, output_val, output_this
+):
+    """
+    Generates the expected results for a LATERAL FLATTEN operation on a JSON object.
+
+    Args:
+        df (pd.DataFrame): the DataFrame whose rows are to be exploded
+        keep_cols (Tuple[integer]): the columns that are to be kept during the operation
+        explode_col (integer): which column is the array column that is to be exploded
+        output_key (bool): whether to include the keys from the JSON key-value pairs
+        output_val (bool): whether to include the values from the JSON key-value pairs
+        output_this (bool): whether to include the replicated values of the exploded column
+    """
+    keep_cols_idx = df.columns[list(keep_cols)]
+    df_subset = df.loc[:, keep_cols_idx]
+    column_to_explode = df.iloc[:, explode_col]
+    out_dict = {}
+    if output_key:
+        out_dict["key"] = []
+    if output_val:
+        out_dict["val"] = []
+    if output_this:
+        out_dict["this"] = []
+    for i in range(len(keep_cols)):
+        out_dict[i] = []
+    for i in range(len(df)):
+        json_obj = column_to_explode.iloc[i]
+        keys = []
+        vals = []
+        explode_length = 0
+        if json_obj is not None:
+            explode_length = len(json_obj)
+            for k, v in json_obj.items():
+                keys.append(k)
+                vals.append(v)
+        if explode_length == 0:
+            continue
+        for j in range(len(keep_cols)):
+            val = df_subset.iloc[i, j]
+            for _ in range(explode_length):
+                out_dict[j].append(val)
+        if output_key:
+            out_dict["key"].extend(keys)
+        if output_val:
+            out_dict["val"].extend(vals)
+        if output_this:
+            out_dict["this"].extend([json_obj] * explode_length)
+    for i in range(len(keep_cols)):
+        out_dict[i] = pd.Series(out_dict[i], dtype=df_subset.iloc[:, i].dtype)
+    return pd.DataFrame(out_dict)
+
+
 @pytest.mark.parametrize(
     "output_idx, output_val, output_this",
     [
@@ -77,11 +131,11 @@ def simulate_lateral_flatten(
         pytest.param(3, id="explode_string"),
     ],
 )
-def test_lateral_flatten(
+def test_lateral_flatten_array(
     explode_col, keep_cols, output_idx, output_val, output_this, memory_leak_check
 ):
     """
-    Tests the lateral_flatten kernel
+    Tests the lateral_flatten kernel with exploding array columns.
     """
 
     df = pd.DataFrame(
@@ -121,7 +175,7 @@ def test_lateral_flatten(
             ),
         }
     )
-    answer = simulate_lateral_flatten(
+    answer = simulate_lateral_flatten_array(
         df, keep_cols, explode_col, output_idx, output_val, output_this
     )
     global_1 = MetaType((0, 1, 2, 3, 4))
@@ -145,6 +199,113 @@ def test_lateral_flatten(
         reset_index=True,
         check_dtype=False,
         check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "output_key, output_val, output_this",
+    [
+        pytest.param(True, False, False, id="output_key"),
+        pytest.param(False, True, False, id="output_value"),
+        pytest.param(True, True, True, id="output_all", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "keep_cols",
+    [
+        pytest.param((0,), id="keep_int", marks=pytest.mark.slow),
+        pytest.param((2,), id="keep_string", marks=pytest.mark.slow),
+        pytest.param((0, 1, 2), id="keep_all"),
+    ],
+)
+@pytest.mark.parametrize(
+    "explode_col_values, use_map_arrays",
+    [
+        pytest.param(
+            [
+                {"hex": "c93434", "name": "pomegranate"},
+                {"hex": "00a4b4", "name": "peacock"},
+                {"hex": "ffd700", "name": "gold"},
+                {"hex": "7b6d8d", "name": "ultraviolet"},
+                {"hex": None, "name": "midnight"},
+            ],
+            False,
+            id="explode_struct",
+            marks=pytest.mark.skip(
+                reason="[BSE-2001] Support flatten kernel on JSON data with struct arrays"
+            ),
+        ),
+        pytest.param(
+            [
+                {"A": 65, "D": 68, "G": 71, "J": 74},
+                {"B": 66, "E": None, "H": 72},
+                {"C": 67, "I": 73},
+                {"F": 70},
+                {},
+            ],
+            True,
+            id="explode_map",
+        ),
+    ],
+)
+def test_lateral_flatten_json(
+    explode_col_values,
+    use_map_arrays,
+    keep_cols,
+    output_key,
+    output_val,
+    output_this,
+    memory_leak_check,
+):
+    """
+    Tests the lateral_flatten kernel with exploding array columns.
+    """
+
+    df = pd.DataFrame(
+        {
+            "a": pd.Series(range(10), dtype=np.int64),
+            "b": pd.Series(
+                [
+                    explode_col_values[0],
+                    explode_col_values[1],
+                    explode_col_values[2],
+                    explode_col_values[3],
+                    explode_col_values[2],
+                    explode_col_values[1],
+                    explode_col_values[0],
+                    None,
+                    explode_col_values[3],
+                    explode_col_values[4],
+                ]
+            ),
+            "c": "A,BCD,A,FG,HIJKL,,MNOPQR,S,FG,U".split(","),
+        }
+    )
+    answer = simulate_lateral_flatten_json(
+        df, keep_cols, 1, output_key, output_val, output_this
+    )
+    global_1 = MetaType((0, 1, 2))
+    global_2 = MetaType(keep_cols)
+    global_3 = ColNamesMetaType(tuple(answer.columns))
+    global_4 = MetaType((False, output_key, False, False, output_val, output_this))
+
+    def impl(df1):
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), global_1, 2
+        )
+        T2 = bodo.libs.lateral.lateral_flatten(T1, global_2, 1, global_4)
+        index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T2), 1, None)
+        df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T2,), index_1, global_3)
+        return df2
+
+    check_func(
+        impl,
+        (df,),
+        py_output=answer,
+        reset_index=True,
+        check_dtype=False,
+        check_names=False,
+        use_map_arrays=use_map_arrays,
     )
 
 
