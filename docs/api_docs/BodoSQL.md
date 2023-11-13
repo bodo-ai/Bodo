@@ -3734,10 +3734,10 @@ Bodo currently supports the following functions that produce tables:
     columns:
     
     - `#!sql SEQ`: not currently supported by BodoSQL.
-    - `#!sql KEY`: not currently supported by BodoSQL.
+    - `#!sql KEY`: the individual values from the json data.
     - `#!sql PATH`: not currently supported by BodoSQL.
     - `#!sql INDEX`: the index within the array that the value came from.
-    - `#!sql VALUE`: the individual values from the array.
+    - `#!sql VALUE`: the individual values from the array or json data.
     - `#!sql THIS`: a copy of the input data.
 
     The function has the following named arguments:
@@ -3750,7 +3750,8 @@ Bodo currently supports the following functions that produce tables:
 
     !!! Note: Snowflake supports the input being an array, JSON,
     or variant, and also allows several different input arguments
-    to further control the behavior [(see here for more details)](https://docs.snowflake.com/en/sql-reference/functions/flatten).
+    to further control the behavior [(see here for more details)](https://docs.snowflake.com/en/sql-reference/functions/flatten). BodoSQL has more limited type support; it can handle
+    arrays and JSON with values of the same type.
 
 
     Below is an example of a query using the `#!sql FLATTEN` function with the
@@ -3780,6 +3781,30 @@ Bodo currently supports the following functions that produce tables:
     | 72 | 2   | "B" |
     | 72 | 3   | "D" |
     | 72 | 4   | "C" |
+
+    Below is an example of a query using the `#!sql FLATTEN` function with the
+    `#!sql LATERAL` keyword to explode an JSON column while also
+    replicating another column.
+
+    ```sql
+    SELECT id, lat.key as key, lat.value as val FROM table1, lateral flatten(attributes) lat
+    ```
+
+    If the input data was as follows:
+
+    | id | attributes       |
+    |----|------------------|
+    | 42 | {"A": 0}         |
+    | 50 | {}               |
+    | 64 | {"B": 1, "C": 2} |
+
+    Then the query would produce the following data:
+
+    | id | key | value |
+    |----|-----|-------|
+    | 42 | "A" | 0     |
+    | 64 | "B" | 1     |
+    | 64 | "C" | 2     |
 
 
 

@@ -43,7 +43,7 @@ public class TableFunctionOperatorTable implements SqlOperatorTable {
   private static final SnowflakeNamedOperandMetadataImpl FLATTEN_OPERAND_METADATA =
       SnowflakeNamedOperandMetadataImpl.create(
           List.of(
-              SqlTypeFamily.ARRAY,
+              SqlTypeFamily.ANY,
               SqlTypeFamily.CHARACTER,
               SqlTypeFamily.BOOLEAN,
               SqlTypeFamily.BOOLEAN,

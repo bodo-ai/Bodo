@@ -19,6 +19,8 @@ from bodo.libs.array import (
     table_type,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.map_arr_ext import MapArrayType
+from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.typing import (
     MetaType,
     get_overload_const_bool,
@@ -42,6 +44,7 @@ def _lateral_flatten(
     output_idx_t,
     output_val_t,
     output_this_t,
+    json_mode_t,
 ):
     assert table_t == table_type
 
@@ -51,6 +54,7 @@ def _lateral_flatten(
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),
@@ -72,6 +76,7 @@ def _lateral_flatten(
         table_type(
             table_t,
             types.voidptr,
+            types.bool_,
             types.bool_,
             types.bool_,
             types.bool_,
@@ -128,9 +133,20 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
         raise_bodo_error(
             f"Invalid explode_col value for table with {len(in_arr_types)} columns: {explode_col}"
         )
-    arr_argument = in_arr_types[explode_col]
-    if not isinstance(arr_argument, ArrayItemArrayType):  # pragma: no cover
-        raise_bodo_error(f"Invalid explode_col array type: {arr_argument}")
+    explode_col_arg = in_arr_types[explode_col]
+    array_mode = False
+    struct_mode = False
+    map_mode = False
+    if isinstance(explode_col_arg, ArrayItemArrayType):
+        array_mode = True
+    elif isinstance(explode_col_arg, MapArrayType):
+        map_mode = True
+    elif isinstance(explode_col_arg, StructArrayType):
+        struct_mode = True
+        raise_bodo_error("lateral_flatten: not supported on struct arrays yet")
+
+    if not (array_mode or map_mode or struct_mode):  # pragma: no cover
+        raise_bodo_error(f"Invalid explode_col array type: {explode_col_arg}")
 
     # Create the tuple of columns that need to be kept when converting the input to a C++ table. This
     # includes all columns in keep_cols as well as the column that is to be exploded.
@@ -153,6 +169,8 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
         output_this,
     ) = outputs_tup
 
+    out_typs = tuple()
+
     output_seq_bool = get_overload_const_bool(output_seq)
     if output_seq_bool:  # pragma: no cover
         raise_bodo_error(
@@ -160,18 +178,21 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
         )
 
     output_key_bool = get_overload_const_bool(output_key)
-    if output_key_bool:  # pragma: no cover
-        raise_bodo_error(
-            f"lateral_flatten outputting value KEY not currently supported"
-        )
+    if output_key_bool:
+        if struct_mode:  # pragma: no cover
+            raise_bodo_error("lateral_flatten: not supported on struct arrays yet")
+        elif map_mode:
+            out_typs += (explode_col_arg.key_arr_type,)
+        else:  # pragma: no cover
+            raise_bodo_error(
+                f"lateral_flatten outputting value KEY not currently supported unless using"
+            )
 
     output_path_bool = get_overload_const_bool(output_path)
     if output_path_bool:  # pragma: no cover
         raise_bodo_error(
             f"lateral_flatten outputting value PATH not currently supported"
         )
-
-    out_typs = tuple()
 
     # If the index column is included in the output, add an extra column to store it
     output_index_bool = get_overload_const_bool(output_index)
@@ -181,12 +202,17 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
     # If the value column is included in the output, add an extra column to store it
     output_val_bool = get_overload_const_bool(output_val)
     if output_val_bool:
-        out_typs += (arr_argument.dtype,)
+        if struct_mode:  # pragma: no cover
+            raise_bodo_error("lateral_flatten: not supported on struct arrays yet")
+        elif map_mode:
+            out_typs += (explode_col_arg.value_arr_type,)
+        else:
+            out_typs += (explode_col_arg.dtype,)
 
     # If the 'this' column is included in the output, add an extra column to store it
     output_this_bool = get_overload_const_bool(output_this)
     if output_this_bool:  # pragma: no cover
-        out_typs += (arr_argument,)
+        out_typs += (explode_col_arg,)
 
     # Add the arrays that are to be copied over during the explosion
     out_typs += tuple(
@@ -199,6 +225,8 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
     out_types_0 = TableType(out_typs)
     out_types_1 = bodo.none
     n_out_table_cols = len(out_col_inds)
+
+    json_mode = struct_mode or map_mode
 
     def impl(in_table, keep_cols, explode_col, outputs):  # pragma: no cover
         # Create a single-element numpy array that C++ can use to store the number
@@ -216,6 +244,7 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
             output_index_bool,
             output_val_bool,
             output_this_bool,
+            json_mode,
         )
         bodo.utils.utils.check_and_propagate_cpp_exception()
 
