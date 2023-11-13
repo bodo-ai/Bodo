@@ -20,8 +20,6 @@ phases:
     commands:
       - echo Merging with Develop
       - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/merge_with_develop.sh
-      - echo Entered the Install Phase ...
-      - ./buildscripts/aws/CI_if_changes.sh buildscripts/setup_conda.sh
       - ./buildscripts/aws/export_env.sh
 
   build:

@@ -4,6 +4,8 @@ import os
 import glob
 import platform
 import typing as pt
+import shutil
+
 from setuptools import Extension, find_packages, setup
 from Cython.Build import cythonize
 import numpy as np
@@ -36,10 +38,10 @@ if [develop_mode, clean_mode, install_mode].count(True) != 1:
     raise ValueError(f"Please specify a valid mode [develop | clean | install]")
 
 if develop_mode:
+    use_ccache = False
     if "--no-ccache" not in sys.argv:
-        import shutil
-
         if shutil.which("ccache"):
+            use_ccache = True
             if "ccache" not in os.environ["CC"]:
                 # ccache is very useful when developing C++ code, because on
                 # rebuild it will only recompile the cpp files that have been
@@ -54,17 +56,36 @@ if develop_mode:
                 os.environ["CXX"] = f"ccache {os.environ['CXX']}"
         else:
             print(
-                """
-ccache not found. ccache is strongly recommended when developing
-C++ code to greatly improve recompilation times. Install ccache
-with `conda install ccache -c conda-forge`
-
-Use --no-ccache to build without ccache.
-                """
+                "ccache not found. Make sure you're using the (latest) conda-lock environment.\n"
+                "If this is expected, use --no-ccache to build without ccache."
             )
             exit(1)
     else:
         sys.argv.remove("--no-ccache")
+
+    if "--no-sccache" not in sys.argv:
+        # sccache allows us to save cache between different machines
+        if shutil.which("sccache"):
+            if use_ccache:
+                # When using ccache & sccache
+                os.environ["CCACHE_PREFIX"] = "sccache"
+            elif not use_ccache and "sccache" not in os.environ["CC"]:
+                # Without ccache, we only need to modify the environment variables
+                # CC and CXX during execution of `python setup.py develop`.
+                # With newer compiler versions on Linux, we have to set both CC
+                # and CXX variables for sccache to work, and have to set CC to
+                # the C++ compiler to avoid compile-time and dynamic linking
+                # errors
+                os.environ["CC"] = f"sccache {os.environ['CXX']}"
+                os.environ["CXX"] = f"sccache {os.environ['CXX']}"
+        else:
+            print(
+                "sccache not found. Make sure you're using the (latest) conda-lock environment.\n"
+                "If this is expected, use --no-sccache to build without sccache."
+            )
+            exit(1)
+    else:
+        sys.argv.remove("--no-sccache")
 
 
 def readme():
