@@ -614,6 +614,17 @@ def map_arr_setitem(arr, ind, val):
     typ_tuple = (arr.key_arr_type, arr.value_arr_type)
 
     if isinstance(ind, types.Integer):
+        if isinstance(val, bodo.StructArrayType):
+            if val.data != typ_tuple or val.names != (
+                "key",
+                "value",
+            ):  # pragma: no cover
+                return None
+
+            def map_arr_setitem_impl(arr, ind, val):  # pragma: no cover
+                arr._data[ind] = val
+
+            return map_arr_setitem_impl
 
         def map_arr_setitem_impl(arr, ind, val):  # pragma: no cover
             keys = val.keys()

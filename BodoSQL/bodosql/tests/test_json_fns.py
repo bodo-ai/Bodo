@@ -413,3 +413,134 @@ def test_object_construct_keep_null(query, use_map, answer, memory_leak_check):
         # Can't sort output due to gaps when sorting columns of arrays
         sort_output=False,
     )
+
+
+@pytest.mark.parametrize(
+    "query, df, use_map, answer",
+    [
+        pytest.param(
+            "SELECT OBJECT_DELETE(J, 'id') FROM table1",
+            pd.DataFrame(
+                {
+                    "J": [
+                        {
+                            "id": i,
+                            "tags": [
+                                "abcdefghij"[(i**2) % 10 : (i**3) % 10 + j]
+                                for j in range(1 + (i**2) % 7)
+                            ],
+                            "attrs": {"A": i, "B": str(i), "C": [i]},
+                        }
+                        for i in range(50)
+                    ]
+                    + [
+                        None,
+                        {
+                            "id": None,
+                            "tags": [],
+                            "attrs": {"A": None, "B": None, "C": []},
+                        },
+                        {
+                            "id": -1,
+                            "tags": None,
+                            "attrs": {"A": None, "B": None, "C": None},
+                        },
+                    ]
+                }
+            ),
+            False,
+            [
+                {
+                    "tags": [
+                        "abcdefghij"[(i**2) % 10 : (i**3) % 10 + j]
+                        for j in range(1 + (i**2) % 7)
+                    ],
+                    "attrs": {"A": i, "B": str(i), "C": [i]},
+                }
+                for i in range(50)
+            ]
+            + [
+                None,
+                {"tags": [], "attrs": {"A": None, "B": None, "C": []}},
+                {"tags": None, "attrs": {"A": None, "B": None, "C": None}},
+            ],
+            id="struct-drop_literal-no_case",
+        ),
+        pytest.param(
+            "SELECT OBJECT_DELETE(J, K) FROM table1",
+            pd.DataFrame(
+                {
+                    "J": (
+                        [{"A": 0, "B": 1, "C": 2, "D": 3}] * 4 + [{"A": 4, "C": 5}] * 4
+                    )
+                    * 5
+                    + [
+                        None,
+                        {"A": 6, "B": 7, "C": None, "D": None},
+                        {},
+                        {"A": 8, "B": 9, "C": None, "D": None},
+                    ],
+                    "K": ["A", "B", "C", "D"] * 11,
+                }
+            ),
+            True,
+            [
+                {"B": 1, "C": 2, "D": 3},
+                {"A": 0, "C": 2, "D": 3},
+                {"A": 0, "B": 1, "D": 3},
+                {"A": 0, "B": 1, "C": 2},
+                {"C": 5},
+                {"A": 4, "C": 5},
+                {"A": 4},
+                {"A": 4, "C": 5},
+            ]
+            * 5
+            + [None, {"A": 6, "C": None, "D": None}, {}, {"A": 8, "B": 9, "C": None}],
+            id="map-drop_column-no_case",
+        ),
+        pytest.param(
+            "SELECT OBJECT_DELETE(J, 'D', K, 'E', 'A') FROM table1",
+            pd.DataFrame(
+                {
+                    "J": (
+                        [{"A": 0, "B": 1, "C": 2, "D": 3}] * 4 + [{"A": 4, "C": 5}] * 4
+                    )
+                    * 5
+                    + [
+                        None,
+                        {"A": 6, "B": 7, "C": None, "D": None},
+                        {},
+                        {"A": 8, "B": 9, "C": None, "D": None},
+                    ],
+                    "K": ["A", "B", "C", "D"] * 11,
+                }
+            ),
+            True,
+            [
+                {"B": 1, "C": 2},
+                {"C": 2},
+                {"B": 1},
+                {"B": 1, "C": 2},
+                {"C": 5},
+                {"C": 5},
+                {},
+                {"C": 5},
+            ]
+            * 5
+            + [None, {"C": None}, {}, {"B": 9, "C": None}],
+            id="map-drop_mixed-no_case",
+        ),
+    ],
+)
+def test_object_delete(query, df, use_map, answer, memory_leak_check):
+    check_query(
+        query,
+        {"table1": df},
+        None,
+        expected_output=pd.DataFrame({0: answer}),
+        check_dtype=False,
+        check_names=False,
+        use_map_arrays=use_map,
+        only_jit_1DVar=True,
+        sort_output=False,
+    )

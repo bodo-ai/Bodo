@@ -2829,6 +2829,16 @@ BodoSQL currently supports the following JSON functions:
     as an array of strings.
 
 
+#### OBJECT_DELETE
+-   `#!sql OBJECT_DELETE(data, key1[, key2, ...])`
+
+    Takes in a column of JSON data and 1+ keys and returns the same JSON data but
+    with all of those keys removed.
+
+    !!! note: BodoSQL supports when the keys are passed in as string literals, 
+    but only sometimes supports when they are passed in as columns of strings.
+
+
 #### JSON_EXTRACT_PATH_TEXT
 -   `#!sql JSON_EXTRACT_PATH_TEXT(data, path)`
 
