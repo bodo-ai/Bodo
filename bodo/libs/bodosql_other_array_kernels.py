@@ -1095,3 +1095,69 @@ def uniform_util(lo, hi, gen):
         scalar_text,
         out_dtype,
     )
+
+
+def arr_get(arr, ind, is_scalar_arr=False):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(arr_get, no_unliteral=True)
+def overload_arr_get(arr, ind, is_scalar_arr=False):
+    """Handles cases where GET receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [arr, ind]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.arr_get",
+                ["arr", "ind", "is_scalar_arr"],
+                i,
+                default_map={"is_scalar_arr": False},
+            )
+
+    def impl(arr, ind, is_scalar_arr=False):  # pragma: no cover
+        return arr_get_util(arr, ind, is_scalar_arr)
+
+    return impl
+
+
+def arr_get_util(arr, ind, is_scalar_arr):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(arr_get_util, no_unliteral=True)
+def overload_arr_get_util(arr, ind, is_scalar_arr):
+    """
+    A dedicated kernel for the SQL function GET which takes in an array
+    and an index, and returns the elements at that index of the array
+
+    Args:
+        arr (array/column of arrays): the data array(s)
+        ind (integer/column of integers): the index/indices. Null is returned if ind is negative or out of bounds.
+        is_scalar_arr: if true, treats the inputs as scalar arrays i.e. a single element of an array of arrays
+
+    Returns:
+        arr's inner type/column of inner type: the element at ind of array arr
+    """
+    verify_int_arg(ind, "GET", "ind")
+    is_scalar_arr_bool = get_overload_const_bool(is_scalar_arr)
+    arg_names = ["arr", "ind", "is_scalar_arr"]
+    arg_types = [arr, ind, is_scalar_arr]
+    propagate_null = [True, True, False]
+    out_dtype = bodo.utils.typing.to_nullable_type(
+        arr.data.dtype if bodo.hiframes.pd_series_ext.is_series_type(arr) else arr
+    )
+    scalar_text = "if arg1 < 0 or arg1 >= len(arg0) or bodo.libs.array_kernels.isna(arg0, arg1):\n"
+    scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+    scalar_text += "else:\n"
+    scalar_text += "   res[i] = arg0[arg1]"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=[not is_scalar_arr_bool, bodo.utils.utils.is_array_typ(ind), False],
+    )

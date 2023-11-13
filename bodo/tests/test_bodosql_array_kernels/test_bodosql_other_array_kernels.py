@@ -1436,3 +1436,292 @@ def test_option_is_functions(memory_leak_check):
     for flag in [True, False]:
         answer = (False, True, True, False) if flag else (False, False, True, True)
         check_func(impl, (A, flag), py_output=answer)
+
+
+@pytest.mark.parametrize(
+    "arr, ind, is_scalar_arr, use_map_arrays, expected",
+    [
+        pytest.param(
+            np.array([1, 4, 9, 16, 25]),
+            2,
+            True,
+            False,
+            9,
+            id="int_array-scalar-scalar",
+        ),
+        pytest.param(
+            np.array([1, 2, 3, None, 4]),
+            pd.Series([-1, 0, 1, 2, 3, 4, 5]),
+            True,
+            False,
+            pd.Series([None, 1, 2, 3, None, 4, None], dtype=pd.Int32Dtype()),
+            id="int_array-scalar-vector",
+        ),
+        pytest.param(
+            pd.Series([[1, 2, 3, 4], [5, 6, None]] * 3),
+            0,
+            False,
+            False,
+            pd.Series([1, 5] * 3),
+            id="int_array-vector-scalar",
+        ),
+        pytest.param(
+            pd.Series([[1, 2, 3, None, 4]] * 7),
+            pd.Series([-1, 0, 1, 2, 3, 4, 5]),
+            False,
+            False,
+            pd.Series([None, 1, 2, 3, None, 4, None]),
+            marks=pytest.mark.slow,
+            id="int_array-vector-vector",
+        ),
+        pytest.param(
+            np.array(["abc", "def", "ghi", None] * 2),
+            pd.Series([-1, 0, 1, 2, 3, 4, 8]),
+            True,
+            False,
+            pd.Series(
+                [None, "abc", "def", "ghi", None, "abc", None], dtype=pd.StringDtype()
+            ),
+            id="string_array-scalar-vector",
+        ),
+        pytest.param(
+            pd.Series([[1, 2], [3, 4], [5]] * 2).values,
+            1,
+            True,
+            False,
+            pd.array([3, 4]),
+            id="array_int_array-scalar-scalar",
+        ),
+        pytest.param(
+            pd.Series([[[1, 2], [3, 4], [5]] * 2] * 6),
+            pd.Series([1, 2] * 3),
+            False,
+            False,
+            pd.Series([[3, 4], [5]] * 3),
+            id="array_int_array-vector-vector",
+        ),
+        pytest.param(
+            np.array(
+                [
+                    {
+                        "X": "AB",
+                        "Y": [1.1, 2.2],
+                        "Z": [[1], None, [3, None]],
+                        "W": {"A": 1, "B": "A"},
+                    },
+                    {
+                        "X": "C",
+                        "Y": [1.1],
+                        "Z": [[11], None],
+                        "W": {"A": 1, "B": "ABC"},
+                    },
+                    None,
+                    {
+                        "X": "D",
+                        "Y": [4.0, np.nan],
+                        "Z": [[1], None],
+                        "W": {"A": 1, "B": ""},
+                    },
+                    {
+                        "X": "VFD",
+                        "Y": [1.2],
+                        "Z": [[], [3, 1]],
+                        "W": {"A": 1, "B": "AA"},
+                    },
+                    {
+                        "X": "LMMM",
+                        "Y": [9.0, 1.2, 3.1],
+                        "Z": [[10, 11], [11, 0, -3, -5]],
+                        "W": {"A": 1, "B": "DFG"},
+                    },
+                ]
+                * 2,
+            ),
+            0,
+            True,
+            False,
+            {
+                "X": "AB",
+                "Y": [1.1, 2.2],
+                "Z": [[1], None, [3, None]],
+                "W": {"A": 1, "B": "A"},
+            },
+            id="struct_array-scalar-scalar",
+        ),
+        pytest.param(
+            np.array(
+                [
+                    {
+                        "X": "AB",
+                        "Y": [1.1, 2.2],
+                        "Z": [[1], None, [3, None]],
+                        "W": {"A": 1, "B": "A"},
+                    },
+                    {
+                        "X": "C",
+                        "Y": [1.1],
+                        "Z": [[11], None],
+                        "W": {"A": 1, "B": "ABC"},
+                    },
+                    None,
+                    {
+                        "X": "D",
+                        "Y": [4.0, np.nan],
+                        "Z": [[1], None],
+                        "W": {"A": 1, "B": ""},
+                    },
+                    {
+                        "X": "VFD",
+                        "Y": [1.2],
+                        "Z": [[], [3, 1]],
+                        "W": {"A": 1, "B": "AA"},
+                    },
+                    {
+                        "X": "LMMM",
+                        "Y": [9.0, 1.2, 3.1],
+                        "Z": [[10, 11], [11, 0, -3, -5]],
+                        "W": {"A": 1, "B": "DFG"},
+                    },
+                ]
+                * 2,
+            ),
+            pd.Series([-1, 0, 1, 2, 3, 4]),
+            True,
+            False,
+            pd.Series(
+                [
+                    None,
+                    {
+                        "X": "AB",
+                        "Y": [1.1, 2.2],
+                        "Z": [[1], None, [3, None]],
+                        "W": {"A": 1, "B": "A"},
+                    },
+                    {
+                        "X": "C",
+                        "Y": [1.1],
+                        "Z": [[11], None],
+                        "W": {"A": 1, "B": "ABC"},
+                    },
+                    None,
+                    {
+                        "X": "D",
+                        "Y": [4.0, np.nan],
+                        "Z": [[1], None],
+                        "W": {"A": 1, "B": ""},
+                    },
+                    {
+                        "X": "VFD",
+                        "Y": [1.2],
+                        "Z": [[], [3, 1]],
+                        "W": {"A": 1, "B": "AA"},
+                    },
+                ],
+            ),
+            marks=pytest.mark.slow,
+            id="struct_array-scalar-vector",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {"A": 0, "B": 1},
+                    {"A": 2, "C": 3},
+                ]
+                * 3
+            ).values,
+            0,
+            True,
+            True,
+            {"A": 0, "B": 1},
+            id="map_array-scalar-scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {"A": 0, "B": 1},
+                    {"A": 2, "C": 3},
+                ]
+            ).values,
+            pd.Series([0, 1] * 3),
+            True,
+            True,
+            pd.Series(
+                [
+                    {"A": 0, "B": 1},
+                    {"A": 2, "C": 3},
+                ]
+                * 3,
+            ),
+            marks=pytest.mark.slow,
+            id="map_array-scalar-vector",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [
+                        {"A": 0, "B": 1},
+                        {"A": 2, "C": 3},
+                    ]
+                ]
+                * 6
+            ),
+            pd.Series([0, 1] * 3),
+            False,
+            True,
+            pd.Series(
+                [
+                    {"A": 0, "B": 1},
+                    {"A": 2, "C": 3},
+                ]
+                * 3,
+            ),
+            marks=pytest.mark.skip(
+                reason="[BSE-1962] Support slice index for map array setitem"
+            ),
+            id="map_array-vector-vector",
+        ),
+    ],
+)
+def test_arr_get(arr, ind, is_scalar_arr, use_map_arrays, expected, memory_leak_check):
+    both_scalar = is_scalar_arr and not isinstance(ind, pd.Series)
+    no_scalar = not is_scalar_arr and isinstance(ind, pd.Series)
+    if both_scalar:
+
+        def impl(arr, ind):
+            return bodo.libs.bodosql_array_kernels.arr_get(arr, ind, is_scalar_arr)
+
+    else:
+
+        def impl(arr, ind):
+            return pd.Series(
+                bodo.libs.bodosql_array_kernels.arr_get(arr, ind, is_scalar_arr)
+            )
+
+    check_func(
+        impl,
+        (arr, ind),
+        py_output=expected,
+        check_dtype=False,
+        distributed=no_scalar,
+        is_out_distributed=no_scalar,
+        dist_test=no_scalar,
+        use_map_arrays=use_map_arrays,
+    )
+
+
+@pytest.mark.slow
+def test_option_arr_get(memory_leak_check):
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return bodo.libs.bodosql_array_kernels.arr_get(arg0, arg1, True)
+
+    for flag0 in [True]:
+        for flag1 in [True, False]:
+            answer = 9 if flag0 and flag1 else None
+            check_func(
+                impl,
+                (np.array([1, 4, 9, 16]), 2, flag0, flag1),
+                py_output=answer,
+                dist_test=False,
+            )
