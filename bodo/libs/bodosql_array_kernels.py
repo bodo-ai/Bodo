@@ -42,6 +42,7 @@ broadcasted_fixed_arg_functions = {
     "add_interval_years",
     "add_months",
     "add_numeric",
+    "arr_get",
     "arrays_overlap",
     "array_position",
     "array_size",
