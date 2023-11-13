@@ -1358,6 +1358,17 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         List.of(new Expr.Tuple(codeExprs), new Expr.Tuple(scalarExprs)));
   }
 
+  /**
+   * Constructs the Expression to make a call to the variadic function OBJECT_DELETE.
+   *
+   * @param codeExprs the Python expressions to calculate the arguments
+   * @return Expr containing the code generated for the relational expression.
+   */
+  public static Expr visitObjectDelete(List<Expr> codeExprs) {
+    return new Expr.Call(
+        "bodo.libs.bodosql_array_kernels.object_delete", List.of(new Expr.Tuple(codeExprs)));
+  }
+
   protected Expr visitNestedArrayFunc(
       String fnName, List<Expr> operands, List<Boolean> argScalars) {
     return visitNestedArrayFunc(fnName, operands, argScalars, List.of());
@@ -1809,6 +1820,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "JSON_EXTRACT_PATH_TEXT":
           case "OBJECT_KEYS":
             return visitJsonFunc(fnName, operands);
+          case "OBJECT_DELETE":
+            return visitObjectDelete(operands);
           case "RLIKE":
           case "REGEXP_LIKE":
           case "REGEXP_COUNT":
