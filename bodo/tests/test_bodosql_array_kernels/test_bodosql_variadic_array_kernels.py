@@ -1285,6 +1285,201 @@ def test_row_number(test, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "keys_to_drop, json_data, use_map_arrays, answer",
+    [
+        pytest.param(
+            ("A",),
+            pd.Series(
+                [
+                    {"A": 0, "B": 10, "C": ""},
+                    {"A": 1, "B": 20, "C": "A"},
+                    {"A": 2, "B": 40, "C": "AB"},
+                ]
+                * 10
+                + [
+                    None,
+                    {"A": None, "B": 80, "C": "ABC"},
+                    {"A": 4, "B": None, "C": "A"},
+                    {"A": 5, "B": 320, "C": None},
+                ]
+            ).values,
+            False,
+            pd.Series(
+                [
+                    {"B": 10, "C": ""},
+                    {"B": 20, "C": "A"},
+                    {"B": 40, "C": "AB"},
+                ]
+                * 10
+                + [
+                    None,
+                    {"B": 80, "C": "ABC"},
+                    {"B": None, "C": "A"},
+                    {"B": 320, "C": None},
+                ]
+            ).values,
+            id="struct-drop_literal_string",
+        ),
+        pytest.param(
+            ("D", "E", "a", "b,c"),
+            pd.Series(
+                [
+                    {"A": 0, "B": 10, "C": ""},
+                    {"A": 1, "B": 20, "C": "A"},
+                    {"A": 2, "B": 40, "C": "AB"},
+                ]
+                * 10
+                + [
+                    None,
+                    {"A": None, "B": 80, "C": "ABC"},
+                    {"A": 4, "B": None, "C": "A"},
+                    {"A": 5, "B": 320, "C": None},
+                ]
+            ).values,
+            False,
+            pd.Series(
+                [
+                    {"A": 0, "B": 10, "C": ""},
+                    {"A": 1, "B": 20, "C": "A"},
+                    {"A": 2, "B": 40, "C": "AB"},
+                ]
+                * 10
+                + [
+                    None,
+                    {"A": None, "B": 80, "C": "ABC"},
+                    {"A": 4, "B": None, "C": "A"},
+                    {"A": 5, "B": 320, "C": None},
+                ]
+            ).values,
+            id="struct-drop_nothing",
+        ),
+        pytest.param(
+            ("A",),
+            pd.Series(
+                [
+                    {"A": 0, "B": 1, "C": 2},
+                    {"B": 3, "C": 4},
+                    {"A": 5, "C": 6},
+                    {"A": 7, "B": 8},
+                    {"A": 9},
+                    {"B": 10},
+                    {"C": 11},
+                ]
+                * 10
+                + [
+                    None,
+                    {"A": None, "B": None},
+                    {},
+                    {"A": 16, "B": None},
+                    {"B": 42},
+                    {"A": 42},
+                ]
+            ).values,
+            True,
+            pd.Series(
+                [
+                    {"B": 1, "C": 2},
+                    {"B": 3, "C": 4},
+                    {"C": 6},
+                    {"B": 8},
+                    {},
+                    {"B": 10},
+                    {"C": 11},
+                ]
+                * 10
+                + [None, {"B": None}, {}, {"B": None}, {"B": 42}, {}]
+            ).values,
+            id="map-drop_literal_string",
+        ),
+        pytest.param(
+            (pd.Series(["A", "B"] * 43),),
+            pd.Series(
+                [
+                    {"A": 0, "B": 1, "C": 2},
+                    {"B": 3, "C": 4},
+                    {"A": 5, "C": 6},
+                    {"A": 7, "B": 8},
+                    {"A": 9},
+                    {"B": 10},
+                    {"C": 11},
+                    {"C": 12, "A": 13, "B": 14},
+                ]
+                * 10
+                + [
+                    None,
+                    {"A": None, "B": None},
+                    {},
+                    {"A": 16, "B": None},
+                    {"B": 42},
+                    {"A": 42},
+                ]
+            ).values,
+            True,
+            pd.Series(
+                [
+                    {"B": 1, "C": 2},
+                    {"C": 4},
+                    {"C": 6},
+                    {"A": 7},
+                    {},
+                    {},
+                    {"C": 11},
+                    {"C": 12, "A": 13},
+                ]
+                * 10
+                + [
+                    None,
+                    {"A": None},
+                    {},
+                    {"A": 16},
+                    {"B": 42},
+                    {"A": 42},
+                ]
+            ).values,
+            id="map-drop_column",
+        ),
+        pytest.param(
+            ("C", "A", "E"),
+            {"A": 0, "B": 1, "C": 2, "D": None, "E": 3},
+            False,
+            {"B": 1, "D": None},
+            id="scalar_map-drop_3",
+            marks=pytest.mark.skip(
+                reason="[BSE-1945] TODO: support dict scalars with OBJECT_DELETE"
+            ),
+        ),
+    ],
+)
+def test_object_delete(
+    keys_to_drop, json_data, use_map_arrays, answer, memory_leak_check
+):
+    raw_arg_text = ", ".join(f"arg{i}" for i in range(len(keys_to_drop) + 1))
+    arg_text = ["arg0"]
+    for i in range(len(keys_to_drop)):
+        if isinstance(keys_to_drop[i], str):
+            arg_text.append(repr(keys_to_drop[i]))
+        else:
+            arg_text.append(f"arg{i+1}")
+    func_text = f"def impl({raw_arg_text}):\n"
+    func_text += f"   res = bodo.libs.bodosql_array_kernels.object_delete(({', '.join(arg_text)},))\n"
+    if any(isinstance(arg, pd.Series) for arg in keys_to_drop + (json_data,)):
+        func_text += "   res = pd.Series(res)\n"
+    func_text += "   return res\n"
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "pd": pd}, loc_vars)
+    impl = loc_vars["impl"]
+
+    check_func(
+        impl,
+        (json_data, *keys_to_drop),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        use_map_arrays=use_map_arrays,
+    )
+
+
+@pytest.mark.parametrize(
     "values, keys, scalars, answer",
     [
         pytest.param(

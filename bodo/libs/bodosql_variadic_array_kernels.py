@@ -14,9 +14,11 @@ from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     get_common_scalar_dtype,
     get_overload_const_list,
+    get_overload_const_str,
     get_overload_const_tuple,
     is_bin_arr_type,
     is_overload_constant_list,
+    is_overload_constant_tuple,
     is_overload_none,
     is_str_arr_type,
     raise_bodo_error,
@@ -653,6 +655,184 @@ def decode_util(A, dict_encoding_state, func_id):
         # Add support for dict encoding caching with streaming.
         dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
         func_id_name="func_id" if use_dict_caching else None,
+    )
+
+
+def object_delete(A):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(object_delete, no_unliteral=True)
+def overload_object_delete(A):
+    """Handles cases where OBJECT_DELETE receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if not isinstance(A, (types.Tuple, types.UniTuple)):
+        raise_bodo_error("OBJECT_DELETE argument must be a tuple")
+    for i, val in enumerate(A):
+        if isinstance(val, types.optional):
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.object_delete",
+                ["A"],
+                0,
+                container_arg=i,
+                container_length=len(A),
+            )
+
+    def impl(A):  # pragma: no cover
+        return object_delete_util(A)
+
+    return impl
+
+
+def object_delete_util(A):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(object_delete, no_unliteral=True)
+def overload_object_delete_util(A):
+    """A dedicated kernel for the SQL function OBJECT_DELETE which
+       takes in a variable number of strings and removes the entries
+       whose keys match one of those strings from the data.
+
+    Args:
+        A (tuple): a tuple where the first element is the JSON (or column
+        of JSON values) to modify, and the remaining elements are the
+        key strings to drop.
+    Returns:
+        (json column/scalar) the json data with the specified keys dropped
+    """
+    args_tup = get_overload_const_tuple(A)
+    n_keys_to_drop = len(args_tup) - 1
+    json_data = A[0]
+    json_type = json_data
+    if bodo.hiframes.pd_series_ext.is_series_type(json_type):
+        json_type = json_type.data
+    if isinstance(
+        json_type, (bodo.StructArrayType, bodo.libs.struct_arr_ext.StructType)
+    ):
+        struct_mode = True
+        map_mode = False
+    elif isinstance(json_type, bodo.MapArrayType):
+        struct_mode = False
+        map_mode = True
+    elif isinstance(json_type, types.DictType):
+        struct_mode = False
+        map_mode = False
+    else:
+        raise_bodo_error(f"object_delete: unsupported type for json data '{json_data}'")
+
+    key_names = [f"k{i}" for i in range(n_keys_to_drop)]
+    key_arg_names = [f"arg{i+1}" for i in range(n_keys_to_drop)]
+    arg_names = ["json_data"] + key_names
+    arg_types = list(A)
+
+    # Create the mapping from the tuple to the local variable.
+    arg_string = "A"
+    arg_sources = {f"k{i}": f"A[{i+1}]" for i in range(n_keys_to_drop)}
+    arg_sources["json_data"] = "A[0]"
+
+    propagate_null = [True] * (n_keys_to_drop + 1)
+    extra_globals = {}
+
+    if struct_mode:
+        # Generated code for when the json data is a struct array or struct scalar.
+
+        # 1. extract all of the key names to drop at compile time since this affects
+        # the type of the returned struct. This means all the remaining arguments must
+        # be string literals.
+        keys_to_drop = list(A)[1:]
+        string_names_to_drop = []
+        for k in keys_to_drop:
+            if not is_overload_constant_str(k):
+                raise_bodo_error(
+                    "object_delete unsupported on struct arrays with non-constant keys"
+                )
+            string_names_to_drop.append(get_overload_const_str(k))
+
+        # 2. For each field in the struct, determine if it is kept or dropped at compile
+        # time based on whether the field name matches one of the names to drop.
+        data = []
+        nulls = []
+        names = []
+        dtypes = []
+        n_fields = len(json_type.data)
+        for i in range(n_fields):
+            name = json_type.names[i]
+            if name not in string_names_to_drop:
+                null_check = (
+                    f"bodo.libs.struct_arr_ext.is_field_value_null(arg0, '{name}')"
+                )
+                data.append(f"None if {null_check} else arg0['{name}']")
+                nulls.append(null_check)
+                names.append(name)
+                dtypes.append(json_type.data[i])
+
+        # 3. Use the information from the remaining keys to re-construct the input struct
+        # with the desired subset of fields.
+        scalar_text = f"null_vector = np.array([{', '.join(nulls)}], dtype=np.bool_)\n"
+        scalar_text += f"res[i] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({', '.join(data)},), null_vector, names)"
+        out_dtype = bodo.StructArrayType(tuple(dtypes), tuple(names))
+        extra_globals["names"] = bodo.utils.typing.ColNamesMetaType(tuple(names))
+
+    else:
+        # Generated code for when the json data comes from a MapArray or a scalar dictionary.
+
+        # 1. Generate an array of booleans per key in the dictionary determining whether each
+        # key should be kept or dropped, and sum it to count the total number to be kept.
+        scalar_text = "keys = list(arg0)\n"
+        scalar_text += "pairs_to_keep = np.empty(len(keys), dtype=np.bool_)\n"
+        scalar_text += "for idx, json_key in enumerate(keys):\n"
+        scalar_text += (
+            f"   pairs_to_keep[idx] = json_key not in [{', '.join(key_arg_names)}]\n"
+        )
+        scalar_text += "n_keep = pairs_to_keep.sum()\n"
+        if map_mode:
+            # The rest of the path but specifically for MapArrays:
+
+            # 2. Allocate a struct array to represent the key-value pairs
+            # for each key where pairs_to_keep is True
+            key_type = json_type.key_arr_type
+            val_type = json_type.value_arr_type
+            extra_globals["struct_typ_tuple"] = (key_type, val_type)
+            extra_globals["map_struct_names"] = bodo.utils.typing.ColNamesMetaType(
+                ("key", "value")
+            )
+            scalar_text += "struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(n_keep, (-1,), struct_typ_tuple, ('key', 'value'))\n"
+
+            # 3. For each key-value pair that is to be kept, determine if the
+            # value is null by doing a lookup in the original map array, then
+            # construct a (key, value) struct to place in the array.
+            scalar_text += "write_idx = 0\n"
+            scalar_text += "for read_idx in range(len(pairs_to_keep)):\n"
+            scalar_text += "  if pairs_to_keep[read_idx]:\n"
+            scalar_text += "    key = keys[read_idx]\n"
+            scalar_text += "    value = arg0[keys[read_idx]]\n"
+            scalar_text += "    in_offsets = bodo.libs.array_item_arr_ext.get_offsets(json_data._data)\n"
+            scalar_text += "    in_struct_arr = bodo.libs.array_item_arr_ext.get_data(json_data._data)\n"
+            scalar_text += "    start_offset = in_offsets[np.int64(i)]\n"
+            scalar_text += "    curr_struct = in_struct_arr[start_offset + read_idx]\n"
+            scalar_text += "    val_is_null = bodo.libs.struct_arr_ext.is_field_value_null(curr_struct, 'value')\n"
+            scalar_text += "    struct_arr[write_idx] = bodo.libs.struct_arr_ext.init_struct_with_nulls((key, value), (False, val_is_null), map_struct_names)\n"
+            scalar_text += "    write_idx += 1\n"
+
+            # 4. Store the struct array in the current row of the map array
+            scalar_text += "res[i] = struct_arr\n"
+            out_dtype = json_type
+        else:
+            # Dictionary scalars not supported yet
+            raise_bodo_error("[BSE-1945] TODO: support object_delete on dict scalars")
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        arg_string,
+        arg_sources,
+        extra_globals=extra_globals,
     )
 
 

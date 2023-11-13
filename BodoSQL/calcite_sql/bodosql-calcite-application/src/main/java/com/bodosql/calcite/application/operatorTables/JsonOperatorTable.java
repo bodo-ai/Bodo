@@ -14,6 +14,7 @@ import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
+import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SameOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
@@ -38,6 +39,9 @@ public final class JsonOperatorTable implements SqlOperatorTable {
 
   public static final SqlSingleOperandTypeChecker SEMI_STRUCTURED =
       SemiStructuredOperandChecker.INSTANCE;
+
+  public static final SqlSingleOperandTypeChecker OBJECT_DELETE_TYPE_CHECKER =
+      ObjectDeleteOperandChecker.INSTANCE;
 
   public static final SameOperandTypeChecker OPERAND_CONSTRUCT_TYPE_CHECKER =
       ObjectConstructOperandChecker.INSTANCE;
@@ -64,6 +68,15 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           OperandTypes.STRING_STRING,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction OBJECT_DELETE =
+      new SqlFunction(
+          "OBJECT_DELETE",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0,
+          null,
+          OBJECT_DELETE_TYPE_CHECKER,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction OBJECT_KEYS =
       new SqlFunction(
           "OBJECT_KEYS",
@@ -87,7 +100,8 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   private List<SqlOperator> functionList =
-      Arrays.asList(GET_PATH, JSON_EXTRACT_PATH_TEXT, OBJECT_KEYS, OBJECT_CONSTRUCT_KEEP_NULL);
+      Arrays.asList(
+          GET_PATH, OBJECT_DELETE, JSON_EXTRACT_PATH_TEXT, OBJECT_KEYS, OBJECT_CONSTRUCT_KEEP_NULL);
 
   @Override
   public void lookupOperatorOverloads(

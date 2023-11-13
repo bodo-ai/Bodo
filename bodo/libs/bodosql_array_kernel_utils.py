@@ -620,10 +620,8 @@ def gen_vectorized(
         "pd": pd,
         "datetime": datetime,
     }
-
     if not (extra_globals is None):
         exec_globals.update(extra_globals)
-
     exec(
         func_text,
         exec_globals,

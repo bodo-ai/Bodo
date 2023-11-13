@@ -272,6 +272,7 @@ broadcasted_variadic_functions = {
     "array_construct",
     "coalesce",
     "decode",
+    "object_delete",
     "sql_hash",
     "greatest",
     "least",
