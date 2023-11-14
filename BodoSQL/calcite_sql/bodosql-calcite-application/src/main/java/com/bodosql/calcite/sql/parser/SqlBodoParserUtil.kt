@@ -3,7 +3,10 @@ package com.bodosql.calcite.sql.parser
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
+import org.apache.calcite.avatica.util.TimeUnit
 import org.apache.calcite.sql.SqlIdentifier
+import org.apache.calcite.sql.SqlIntervalLiteral
+import org.apache.calcite.sql.SqlIntervalQualifier
 import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlUtil
@@ -11,8 +14,9 @@ import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.parser.SqlParserPos
 import org.apache.calcite.sql.parser.SqlParserUtil
 import org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE
-import java.lang.RuntimeException
+import org.apache.calcite.util.Static.RESOURCE
 import java.util.*
+import kotlin.collections.ArrayList
 
 class SqlBodoParserUtil {
     companion object {
@@ -110,6 +114,105 @@ class SqlBodoParserUtil {
                     BODO_SQL_RESOURCE.illegalLastDayTimeUnit(intervalName),
                 )
             }
+        }
+
+        /**
+         * Parses an interval literal that is accepted by Snowflake:
+         * https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#interval-constants
+         *
+         * The parser currently removes the quotes.
+         *
+         * TODO: Add proper comma support
+         */
+        @JvmStatic
+        fun parseSnowflakeIntervalLiteral(
+            pos: SqlParserPos,
+            sign: Int,
+            s: String,
+        ): SqlIntervalLiteral {
+            // Collect all the interval strings/qualifiers found in the string
+            val intervalStrings: MutableList<String> = ArrayList()
+            val intervalQualifiers: MutableList<SqlIntervalQualifier> = ArrayList()
+            // Parse the Snowflake interval literal string. This is a comma separated
+            // series of <integer> [ <date_time_part> ]. If any date_time_part is omitted this
+            // defaults to seconds.
+            val splitStrings = s.split(",".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
+            if (splitStrings.size > 1) {
+                // TODO: Support multiple commas. We currently can't represent the
+                // Interval properly.
+                throw SqlUtil.newContextException(
+                    pos,
+                    BODO_SQL_RESOURCE.unsupportedSnowflakeIntervalLiteral(s, pos.toString()),
+                )
+            }
+            for (intervalInfo in splitStrings) {
+                val trimmedStr = intervalInfo.trim { it <= ' ' }
+                val intervalParts = trimmedStr.split("\\s+".toRegex()).dropLastWhile { it.isEmpty() }
+                    .toTypedArray()
+                if (intervalParts.size == 1 || intervalParts.size == 2) {
+                    val intervalAmountStr: String
+                    val timeUnitStr: String
+                    if (intervalParts.size == 1) {
+                        // If we have only 1 part then it may not be space separated (rare but possible).
+                        // For example: Interval '30d'.
+                        // If we so we look for the first non-numeric character and split on that.
+                        var endIdx = -1
+                        val baseStr = intervalParts[0]
+                        for (i in 0 until baseStr.length) {
+                            if (!Character.isDigit(baseStr[i])) {
+                                endIdx = i
+                                break
+                            }
+                        }
+                        if (endIdx == -1) {
+                            // If we only have 1 part the default Interval is seconds.
+                            intervalAmountStr = baseStr
+                            timeUnitStr = "second"
+                        } else {
+                            intervalAmountStr = baseStr.substring(0, endIdx)
+                            timeUnitStr = baseStr.substring(endIdx).lowercase()
+                        }
+                    } else {
+                        intervalAmountStr = intervalParts[0]
+                        timeUnitStr = intervalParts[1].lowercase()
+                    }
+                    intervalStrings.add(intervalAmountStr)
+                    // Parse the second string into the valid time units.
+                    // Here we support the time units supported by the other interval syntax only.
+                    // TODO: Support all interval values supported by Snowflake in both interval paths.
+                    val unit: TimeUnit
+                    unit = when (timeUnitStr) {
+                        "year", "years", "y", "yy", "yyy", "yyyy", "yr", "yrs" -> TimeUnit.YEAR
+                        "quarter", "quarters", "qtr", "qtrs", "q" -> TimeUnit.QUARTER
+                        "month", "months", "mm", "mon", "mons" -> TimeUnit.MONTH
+                        "week", "weeks", "w", "wk", "weekofyear", "woy", "wy" -> TimeUnit.WEEK
+                        "day", "days", "d", "dd", "dayofmonth" -> TimeUnit.DAY
+                        "hour", "hours", "h", "hh", "hr", "hrs" -> TimeUnit.HOUR
+                        "minute", "minutes", "m", "mi", "min", "mins" -> TimeUnit.MINUTE
+                        "second", "seconds", "s", "sec", "secs" -> TimeUnit.SECOND
+                        "millisecond", "milliseconds", "ms", "msec" -> TimeUnit.MILLISECOND
+                        "microsecond", "microseconds", "us", "usec" -> TimeUnit.MICROSECOND
+                        "nanosecond", "nanoseconds", "ns", "nsec", "nanosec", "nanosecs", "nsecond", "nseconds" -> TimeUnit.NANOSECOND
+                        else -> throw SqlUtil.newContextException(
+                            pos,
+                            RESOURCE.illegalIntervalLiteral(s, pos.toString()),
+                        )
+                    }
+                    intervalQualifiers.add(SqlIntervalQualifier(unit, null, pos))
+                } else {
+                    throw SqlUtil.newContextException(
+                        pos,
+                        RESOURCE.illegalIntervalLiteral(s, pos.toString()),
+                    )
+                }
+            }
+            if (intervalStrings.size == 0) {
+                throw SqlUtil.newContextException(
+                    pos,
+                    RESOURCE.illegalIntervalLiteral(s, pos.toString()),
+                )
+            }
+            return SqlLiteral.createInterval(sign, intervalStrings[0], intervalQualifiers[0], pos)
         }
     }
 }

@@ -2123,7 +2123,8 @@ public class RelBuilder {
   public RelBuilder projectNamed(Iterable<? extends RexNode> nodes,
       @Nullable Iterable<? extends @Nullable String> fieldNames, boolean force,
       Iterable<CorrelationId> variablesSet) {
-    @SuppressWarnings("unchecked") final List<? extends RexNode> nodeList =
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    final List<? extends RexNode> nodeList =
         nodes instanceof List ? (List) nodes : ImmutableList.copyOf(nodes);
     final List<@Nullable String> fieldNameList =
         fieldNames == null ? null
@@ -2139,8 +2140,9 @@ public class RelBuilder {
         // Rename columns of child projection if desired field names are given.
         final Frame frame = stack.pop();
         final Project childProject = (Project) frame.rel;
-        final Project newInput = childProject.copy(childProject.getTraitSet(),
-            childProject.getInput(), childProject.getProjects(), rowType);
+        final Project newInput =
+            childProject.copy(childProject.getTraitSet(),
+                childProject.getInput(), childProject.getProjects(), rowType);
         stack.push(new Frame(newInput.attachHints(childProject.getHints()), frame.fields));
       }
       if (input instanceof Values && fieldNameList != null) {
@@ -2700,11 +2702,9 @@ public class RelBuilder {
   public RelBuilder transientScan(String tableName, RelDataType rowType) {
     TransientTable transientTable = new ListTransientTable(tableName, rowType);
     requireNonNull(relOptSchema, "relOptSchema");
-    RelOptTable relOptTable = RelOptTableImpl.create(
-        relOptSchema,
-        rowType,
-        transientTable,
-        ImmutableList.of(tableName));
+    RelOptTable relOptTable =
+        RelOptTableImpl.create(relOptSchema, rowType, transientTable,
+            ImmutableList.of(tableName));
     RelNode scan =
         struct.scanFactory.createScan(
             ViewExpanders.toRelContext(viewExpander, cluster),
@@ -2839,8 +2839,9 @@ public class RelBuilder {
       // Normalize expanded versions IS NOT DISTINCT FROM so that simplifier does not
       // transform the expression to something unrecognizable
       if (condition instanceof RexCall) {
-        condition = RelOptUtil.collapseExpandedIsNotDistinctFromExpr((RexCall) condition,
-            getRexBuilder());
+        condition =
+            RelOptUtil.collapseExpandedIsNotDistinctFromExpr((RexCall) condition,
+                getRexBuilder());
       }
       condition = simplifier.simplifyUnknownAsFalse(condition);
     }
@@ -3067,8 +3068,8 @@ public class RelBuilder {
     final RelDataTypeFactory typeFactory = cluster.getTypeFactory();
     final RelDataTypeFactory.Builder builder = typeFactory.builder();
     Ord.forEach(fieldNames, (fieldName, i) -> {
-      final RelDataType type = typeFactory.leastRestrictive(
-          new AbstractList<RelDataType>() {
+      final RelDataType type =
+          typeFactory.leastRestrictive(new AbstractList<RelDataType>() {
             @Override public RelDataType get(int index) {
               return tupleList.get(index).get(i).getType();
             }

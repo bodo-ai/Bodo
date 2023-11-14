@@ -24,7 +24,7 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <kotlin.compiler.incremental>true</kotlin.compiler.incremental>
         <org.slf4j-version>1.7.29</org.slf4j-version>
-        <org.apache.calcite-version>1.33.0</org.apache.calcite-version>
+        <org.apache.calcite-version>1.34.0</org.apache.calcite-version>
         <org.apache.calcite.avatica-version>1.23.0</org.apache.calcite.avatica-version>
         <com.google.protobuf-version>3.21.5</com.google.protobuf-version>
         <!-- TODO(njriasan): Upgrade to 3.14.1. This changes retry behavior so we need to test -->
@@ -331,8 +331,6 @@
                                         <exclude>org/apache/calcite/sql/SqlMerge.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlNode.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlNodeList.class</exclude>
-                                        <exclude>org/apache/calcite/sql/SqlSelect.class</exclude>
-                                        <exclude>org/apache/calcite/sql/SqlSelectOperator.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTableIdentifierWithID.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTableRefWithID$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTableRefWithID.class</exclude>
@@ -367,7 +365,6 @@
                                         <exclude>org/apache/calcite/sql/validate/DelegatingScope$2.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/DelegatingScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/EmptyScope.class</exclude>
-                                        <exclude>org/apache/calcite/sql/validate/GroupByScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ImmutableSqlValidator$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ImmutableSqlValidator$Config$Builder.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ImmutableSqlValidator$Config$InitShim.class</exclude>
@@ -375,7 +372,6 @@
                                         <exclude>org/apache/calcite/sql/validate/ImmutableSqlValidator.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/OrderByScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/ParameterScope.class</exclude>
-                                        <exclude>org/apache/calcite/sql/validate/QualifyScope.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SchemaNamespace.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlQualified.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlTableIdentifierWithIDQualified.class</exclude>
@@ -392,7 +388,6 @@
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$DmlNamespace.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$Expander.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$ExtendedExpander.class</exclude>
-                                        <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$ExtendedExpanderExprType.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$FunctionParamInfo.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$IdInfo.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$InsertNamespace.class</exclude>
@@ -457,6 +452,7 @@
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$Config.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$CorrelationUse.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$DeferredLookup.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$DuplicateEliminator.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$HistogramShuttle.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$JsonFunctionRexRewriter.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$LookupContext.class</exclude>
