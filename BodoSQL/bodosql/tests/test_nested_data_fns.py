@@ -978,6 +978,124 @@ def test_arrays_overlap(data_values, use_case, memory_leak_check):
         ),
     ],
 )
+def test_array_contains(data_values, use_case, memory_leak_check):
+    """
+    Test ARRAY_CONTAINS works correctly with different data type columns
+    and with/without case statements.
+    Takes in a list of 3 distinct values of the desired type and uses them
+    to construct 2 columns of arrays of these values, then compares them
+    using ARRAYS_OVERLAP. Since the values are always placed in the columns
+    in the same permutations, the answers should always be the same.
+    """
+    if use_case:
+        query = "SELECT I, CASE WHEN I IS NULL THEN ARRAY_CONTAINS(A, B) ELSE ARRAY_CONTAINS(A, B) END FROM table1"
+    else:
+        query = "SELECT I, ARRAY_CONTAINS(A, B) FROM table1"
+
+    def make_vals(L):
+        if L is None:
+            return None
+        return [None if idx is None else data_values[idx] for idx in L]
+
+    pattern_a = [0] * 40 + [0, 1, 2, None] * 3
+    pattern_b = [[0]] * 40 + [[1, None]] * 4 + [[], None, None, []] + [[0, 2]] * 4
+    vals_a = make_vals(pattern_a)
+    vals_b = [make_vals(row) for row in pattern_b]
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "I": list(range(len(vals_a))),
+                "A": vals_a,
+                "B": vals_b,
+            }
+        )
+    }
+    expected = pd.Series(
+        [True] * 40
+        + [False, True, False, True]
+        + [False, None, None, False]
+        + [True, False, True, False],
+        dtype=pd.BooleanDtype(),
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        expected_output=pd.DataFrame(
+            {"I": list(range(len(vals_a))), "EXPR$1": expected}
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "data_values",
+    [
+        pytest.param(
+            [5, 25, 625],
+            id="integers",
+        ),
+        pytest.param(
+            [2.71828, 1024.5, -3.1415],
+            id="floats",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            [
+                pd.Timestamp(s)
+                for s in [
+                    "1999-12-31 23:59:59.99925",
+                    "2023-10-31 18:30:00",
+                    "2018-4-1",
+                ]
+            ],
+            id="timestamp_ntz",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            [
+                pd.Timestamp(s, tz="US/Eastern")
+                for s in [
+                    "2022-2-28",
+                    "2021-11-12 13:14:15",
+                    "2015-3-14 9:26:53",
+                ]
+            ],
+            id="timestamp_ltz",
+        ),
+        pytest.param(
+            [
+                [0],
+                [0, 1, 2],
+                [1, 2],
+            ],
+            id="list_integer",
+        ),
+        pytest.param(
+            [
+                [["A"]],
+                [[]],
+                [],
+            ],
+            id="list_list_string",
+        ),
+        pytest.param(
+            [
+                {"name": "Zuko", "nation": "Fire"},
+                {"name": "Katara", "nation": "Water"},
+                {"name": "Sokka", "nation": "Water"},
+            ],
+            id="struct",
+        ),
+    ],
+)
 def test_array_position(data_values, use_case, memory_leak_check):
     """
     Test ARRAY_POSITION works correctly with different data type columns

@@ -559,6 +559,8 @@ public class BodoReturnTypes {
 
     public static final SqlReturnTypeInference TO_NULLABLE_VARYING_ARRAY = ReturnTypes.ARG0_NULLABLE_VARYING.andThen(SqlTypeTransforms.TO_ARRAY);
 
+    public static final SqlTypeTransform TO_NULLABLE_ARG1 = (opBinding, typeToTransform) -> opBinding.getTypeFactory().createTypeWithNullability(typeToTransform, SqlTypeUtil.containsNullable(opBinding.getOperandType(1)));
+
     /**
      * Determine the return type for BITOR_AGG, BITAND_AGG, and BITXOR_AGG. The return type is the
      * same as the input if it is an integer, otherwise the return type is always int64 (BIGINT).

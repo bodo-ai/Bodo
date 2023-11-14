@@ -187,7 +187,7 @@ def arrays_overlap_util(array_0, array_1, is_scalar_0, is_scalar_1):
 @numba.generated_jit(nopython=True)
 def array_position(elem, container, is_scalar_0=False, is_scalar_1=False):
     """
-    Handles cases where ARRAYS_OVERLAP receives optional arguments and
+    Handles cases where ARRAY_POSITION receives optional arguments and
     forwards to the appropriate version of the real implementation
     """
     args = [elem, container, is_scalar_0, is_scalar_1]
@@ -227,7 +227,7 @@ def array_position_util(elem, container, elem_is_scalar, container_is_scalar):
     container_is_scalar_bool = get_overload_const_bool(container_is_scalar)
     arg_names = ["elem", "container", "elem_is_scalar", "container_is_scalar"]
     arg_types = [elem, container, elem_is_scalar, container_is_scalar]
-    propagate_null = [False, True, False]
+    propagate_null = [False, True, False, False]
     out_dtype = bodo.IntegerArrayType(types.int32)
     are_arrays = [not elem_is_scalar_bool, not container_is_scalar_bool, False, False]
     scalar_text = "match = -1\n"
@@ -246,6 +246,92 @@ def array_position_util(elem, container, elem_is_scalar, container_is_scalar):
     scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
     scalar_text += "else:\n"
     scalar_text += "   res[i] = match"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=are_arrays,
+    )
+
+
+def array_contains(
+    elem, container, is_scalar_0=False, is_scalar_1=False
+):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(array_contains, no_unliteral=True)
+def overload_array_contains(
+    elem, container, is_scalar_0=False, is_scalar_1=False
+):  # pragma: no cover
+    """
+    Handles cases where ARRAY_CONTAINS receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    args = [elem, container]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.array_position",
+                ["elem", "container", "is_scalar_0", "is_scalar_1"],
+                i,
+                default_map={"is_scalar_0": False, "is_scalar_1": False},
+            )
+
+    def impl(elem, container, is_scalar_0=False, is_scalar_1=False):
+        return array_contains_util(elem, container, is_scalar_0, is_scalar_1)
+
+    return impl
+
+
+def array_contains_util(
+    elem, container, elem_is_scalar, container_is_scalar
+):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(array_contains_util, no_unliteral=True)
+def overload_array_contains_util(
+    elem, container, elem_is_scalar, container_is_scalar
+):  # pragma: no cover
+    """
+    A dedicated kernel for the SQL function ARRAY_CONTAINS which takes in an
+    element and an array (or column of arrays) and returns a boolean value
+    indicating if elem is contained in container
+
+    Args:
+        elem (array scalar/array item array): the element(s) to look for
+        container (array scalar/array item array): the array(s) to search through
+        elem_is_scalar (boolean): if true, treats the first argument as a scalar even if it is an array.
+        container_is_scalar (boolean): if true, treats the second argument as a scalar even if it is an array.
+
+    Returns:
+        boolean scalar/vector: if elem is contained in container, and null if container is null.
+    """
+    elem_is_scalar_bool = get_overload_const_bool(elem_is_scalar)
+    container_is_scalar_bool = get_overload_const_bool(container_is_scalar)
+    arg_names = ["elem", "container", "elem_is_scalar", "container_is_scalar"]
+    arg_types = [elem, container, elem_is_scalar, container_is_scalar]
+    propagate_null = [False, True, False, False]
+    out_dtype = bodo.boolean_array_type
+    are_arrays = [not elem_is_scalar_bool, not container_is_scalar_bool, False, False]
+    scalar_text = "found_match = False\n"
+    if elem == bodo.none:
+        scalar_text += "null0 = True\n"
+    elif are_arrays[0]:
+        scalar_text += "null0 = bodo.libs.array_kernels.isna(elem, i)\n"
+    else:
+        scalar_text += "null0 = False\n"
+    scalar_text += "for idx1 in range(len(arg1)):\n"
+    scalar_text += "   null1 = bodo.libs.array_kernels.isna(arg1, idx1)\n"
+    scalar_text += "   if (null0 and null1) or (not null0 and not null1 and bodo.libs.bodosql_array_kernels.semi_safe_equals(arg0, arg1[idx1])):\n"
+    scalar_text += "      found_match = True\n"
+    scalar_text += "      break\n"
+    scalar_text += "res[i] = found_match"
     return gen_vectorized(
         arg_names,
         arg_types,
