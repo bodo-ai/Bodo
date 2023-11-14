@@ -134,7 +134,6 @@ public class BodoReturnTypes {
         }
     }
 
-
     /**
      * Convert type XXX to type XXX ARRAY
      */
