@@ -117,6 +117,15 @@ public class ArrayOperatorTable implements SqlOperatorTable {
     return typeFactory.createArrayType(typeFactory.createTypeWithNullability(inputType, false), -1);
   }
 
+  public static final SqlFunction ARRAY_CONTAINS =
+      new SqlFunction(
+          "ARRAY_CONTAINS",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BOOLEAN.andThen(BodoReturnTypes.TO_NULLABLE_ARG1),
+          null,
+          OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ARRAY),
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction ARRAYS_OVERLAP =
       new SqlFunction(
           "ARRAYS_OVERLAP",
@@ -176,6 +185,7 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           ARRAY_UNIQUE_AGG,
           ARRAY_SIZE,
           ARRAYS_OVERLAP,
+          ARRAY_CONTAINS,
           ARRAY_POSITION);
 
   @Override

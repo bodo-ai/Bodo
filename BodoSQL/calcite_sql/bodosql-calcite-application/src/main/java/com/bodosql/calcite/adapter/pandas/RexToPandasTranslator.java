@@ -1321,6 +1321,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       List<Pair<String, Expr>> streamingNamedArgs) {
     switch (fnName) {
       case "ARRAYS_OVERLAP":
+      case "ARRAY_CONTAINS":
       case "ARRAY_POSITION":
         Expr isScalar0 = new Expr.BooleanLiteral(argScalars.get(0));
         Expr isScalar1 = new Expr.BooleanLiteral(argScalars.get(0));
@@ -1931,6 +1932,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "REGR_VALX":
           case "REGR_VALY":
             return getCondFuncCode(fnName, operands);
+          case "ARRAY_CONTAINS":
           case "ARRAY_POSITION":
           case "ARRAYS_OVERLAP":
           case "ARRAY_SIZE":
