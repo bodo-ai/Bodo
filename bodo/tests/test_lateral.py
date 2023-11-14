@@ -219,7 +219,7 @@ def test_lateral_flatten_array(
     ],
 )
 @pytest.mark.parametrize(
-    "explode_col_values, use_map_arrays",
+    "explode_col_values, use_map_arrays, ban_dictionary",
     [
         pytest.param(
             [
@@ -230,10 +230,53 @@ def test_lateral_flatten_array(
                 {"hex": None, "name": "midnight"},
             ],
             False,
-            id="explode_struct",
-            marks=pytest.mark.skip(
-                reason="[BSE-2001] Support flatten kernel on JSON data with struct arrays"
-            ),
+            False,
+            id="explode_struct_string",
+        ),
+        pytest.param(
+            [
+                {"ratings": [5.0, 5.0, 3.1, 5.0], "scores": [96.3]},
+                {"ratings": [1.0, 4.4], "scores": [45.1, None]},
+                {"ratings": [2.0, 5.0, 2.0], "scores": [88.2, 70.5, 87.5]},
+                {"ratings": [3.0, 1.0], "scores": [94.5]},
+                {"ratings": None, "scores": [None]},
+            ],
+            False,
+            False,
+            id="explode_struct_float_arrays",
+        ),
+        pytest.param(
+            [
+                {
+                    "states": ["CA", "NV", "WA", "OR"],
+                    "cities": ["San Francisco", "Las Vegas", "Seattle"],
+                },
+                {"states": ["IL", None, "MI"], "cities": ["Chicago", "Detroit"]},
+                {
+                    "states": ["NY", "PA", "NJ"],
+                    "cities": ["New York City", "Pittsburgh", "Newark", "Philadelphia"],
+                },
+                {
+                    "states": ["GA", "SC", "TN", "KY"],
+                    "cities": ["Atlanta", "Charleston", "Nashville", "Louisville"],
+                },
+                {"states": [], "cities": ["Omaha"]},
+            ],
+            False,
+            True,  # Array item array of dictionary encoded arrays not well supported in compilation
+            id="explode_struct_string_arrays",
+        ),
+        pytest.param(
+            [
+                {"A": [[0], [], [1, 2]], "B": [[3, 4], [5, 6]]},
+                {"A": [[None, 7]], "B": [[8], [None], [9]]},
+                {"A": [[10, 11, 12], [13]], "B": [[14], [15, 16], [17], [18, 19]]},
+                {"A": [[20]], "B": [[21, 22, None], [23, None, None]]},
+                {"A": [[24], [25], [26], [27]], "B": None},
+            ],
+            False,
+            False,
+            id="explode_struct_double_nested_int_arrays",
         ),
         pytest.param(
             [
@@ -244,6 +287,7 @@ def test_lateral_flatten_array(
                 {},
             ],
             True,
+            False,
             id="explode_map",
         ),
     ],
@@ -251,6 +295,7 @@ def test_lateral_flatten_array(
 def test_lateral_flatten_json(
     explode_col_values,
     use_map_arrays,
+    ban_dictionary,
     keep_cols,
     output_key,
     output_val,
@@ -298,6 +343,8 @@ def test_lateral_flatten_json(
         df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T2,), index_1, global_3)
         return df2
 
+    use_dict_encoded_strings = False if ban_dictionary else None
+
     check_func(
         impl,
         (df,),
@@ -306,6 +353,7 @@ def test_lateral_flatten_json(
         check_dtype=False,
         check_names=False,
         use_map_arrays=use_map_arrays,
+        use_dict_encoded_strings=use_dict_encoded_strings,
     )
 
 

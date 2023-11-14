@@ -3,6 +3,7 @@
 Test correctness of SQL the flatten operation in BodoSQL
 """
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -261,10 +262,77 @@ def test_lateral_flatten_arrays(query, answer, memory_leak_check):
                     ],
                 }
             ),
-            id="flatten_struct-output_key_value-replicate_int",
-            marks=pytest.mark.skip(
-                reason="[BSE-2001] Support flatten kernel on JSON data with struct arrays"
+            id="flatten_struct_nullable_int-output_key_value-replicate_int",
+        ),
+        pytest.param(
+            "SELECT I, lat.key as K, lat.value as V FROM table1, lateral flatten(OBJECT_CONSTRUCT_KEEP_NULL('x-coordinate', I1, 'y-coordinate', I2)) lat",
+            pd.DataFrame(
+                {
+                    "I": [0, 1, 2, 3, 4],
+                    "I1": np.array([1, 2, -4, 8, 16], dtype=np.int8),
+                    "I2": pd.Series([9, 27, 81, None, 729], dtype=pd.UInt16Dtype()),
+                }
             ),
+            False,
+            pd.DataFrame(
+                {
+                    "I": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4],
+                    "K": ["x-coordinate", "y-coordinate"] * 5,
+                    "V": [
+                        1,
+                        9,
+                        2,
+                        27,
+                        -4,
+                        81,
+                        8,
+                        None,
+                        16,
+                        729,
+                    ],
+                }
+            ),
+            id="flatten_struct_numeric_mix-output_key_value-replicate_int",
+        ),
+        pytest.param(
+            "SELECT I, lat.key as K, lat.value as V FROM table1, lateral flatten(OBJECT_CONSTRUCT_KEEP_NULL('S1', S1, 'S2', S2)) lat",
+            pd.DataFrame(
+                {
+                    "I": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                    "S1": ["A", "B", "AB", "A", "B", None, "C", "AB", "A", "B"],
+                    "S2": ["A", "AB", "ABC", "A", "AB", "ABC", "A", "AB", "ABC", None],
+                }
+            ),
+            False,
+            pd.DataFrame(
+                {
+                    "I": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9],
+                    "K": ["S1", "S2"] * 10,
+                    "V": [
+                        "A",
+                        "A",
+                        "B",
+                        "AB",
+                        "AB",
+                        "ABC",
+                        "A",
+                        "A",
+                        "B",
+                        "AB",
+                        None,
+                        "ABC",
+                        "C",
+                        "A",
+                        "AB",
+                        "AB",
+                        "A",
+                        "ABC",
+                        "B",
+                        None,
+                    ],
+                }
+            ),
+            id="flatten_struct_string-output_key_value-replicate_int",
         ),
     ],
 )
