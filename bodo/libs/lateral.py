@@ -33,6 +33,61 @@ from bodo.utils.utils import check_and_propagate_cpp_exception
 ll.add_symbol("lateral_flatten", lateral.lateral_flatten_py_entrypt)
 
 
+def get_combined_type(types):
+    """
+    Takes in a tuple of types representing various field types from a struct array
+    and returns the common array type used when a lateral flatten operation
+    combines all of the fields into one column.
+
+    Args:
+        types (tuple): the array types of the struct fields
+
+    Returns:
+        dtype: the array type used to store the combined values.
+
+    Raise:
+        BodoError: if the types are not able to be harmonized
+    """
+    if len(types) == 0:
+        raise_bodo_error("flatten: must have non-empty types tuple")
+
+    seed_type = types[0]
+
+    # If the first type is a string array or dictionary encoded array,
+    # verify that all of the inputs are one of those two.
+    if bodo.utils.typing.is_str_arr_type(seed_type):
+        if not all(bodo.utils.typing.is_str_arr_type(typ) for typ in types):  # pragma: no cover
+            raise_bodo_error(f"flatten: unsupported mix of types {types}")
+        return bodo.string_array_type
+
+    # If the first type is is an array item array, verify that all of
+    # the other types are also array item arrays and then recursively
+    # repeat the procedure on all of the inner types.
+    if isinstance(seed_type, bodo.ArrayItemArrayType):
+        if not all(isinstance(typ, bodo.ArrayItemArrayType) for typ in types):  # pragma: no cover
+            raise_bodo_error(f"flatten: unsupported mix of types {types}")
+        inner_dtypes = [typ.dtype for typ in types]
+        combined_inner_dtype = get_combined_type(inner_dtypes)
+        return bodo.ArrayItemArrayType(combined_inner_dtype)
+
+    # Struct arrays and map arrays as fields are not currently supported
+    if isinstance(seed_type, (bodo.StructArrayType, bodo.MapArrayType)):
+        raise_bodo_error(f"flatten: unsupported dtype for struct fields {seed_type}")
+
+    # For all other array types, get the common scalar type if possible
+    dtypes = [typ.dtype for typ in types]
+    common_dtype, _ = bodo.utils.typing.get_common_scalar_dtype(dtypes)
+    if common_dtype is None:  # pragma: no cover
+        raise_bodo_error(f"flatten: unsupported mix of types {types}")
+
+    # If any of the inputs are nullable, the output is also nullable
+    common_dtype = bodo.utils.typing.dtype_to_array_type(common_dtype)
+    if any(bodo.utils.typing.is_nullable(typ) for typ in types):
+        common_dtype = bodo.utils.typing.to_nullable_type(common_dtype)
+
+    return common_dtype
+
+
 @intrinsic
 def _lateral_flatten(
     typingctx,
@@ -143,7 +198,6 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
         map_mode = True
     elif isinstance(explode_col_arg, StructArrayType):
         struct_mode = True
-        raise_bodo_error("lateral_flatten: not supported on struct arrays yet")
 
     if not (array_mode or map_mode or struct_mode):  # pragma: no cover
         raise_bodo_error(f"Invalid explode_col array type: {explode_col_arg}")
@@ -179,8 +233,8 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
 
     output_key_bool = get_overload_const_bool(output_key)
     if output_key_bool:
-        if struct_mode:  # pragma: no cover
-            raise_bodo_error("lateral_flatten: not supported on struct arrays yet")
+        if struct_mode:
+            out_typs += (bodo.dict_str_arr_type,)
         elif map_mode:
             out_typs += (explode_col_arg.key_arr_type,)
         else:  # pragma: no cover
@@ -202,8 +256,9 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs):
     # If the value column is included in the output, add an extra column to store it
     output_val_bool = get_overload_const_bool(output_val)
     if output_val_bool:
-        if struct_mode:  # pragma: no cover
-            raise_bodo_error("lateral_flatten: not supported on struct arrays yet")
+        if struct_mode:
+            common_type = get_combined_type(explode_col_arg.data)
+            out_typs += (common_type,)
         elif map_mode:
             out_typs += (explode_col_arg.value_arr_type,)
         else:
