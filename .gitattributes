@@ -1,1 +1,2 @@
 bodo/_version.py export-subst
+buildscripts/envs/conda-lock.yml merge=ours
