@@ -289,6 +289,32 @@ void array_agg_computation(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+// OBJECT_AGG
+
+/**
+ * @brief Takes in a key column and a value column and combines
+ * the key-value pairs within each group into a single json map.
+ *
+ * @param[in] key_col The column to use as the keys.
+ * @param[in] val_col The column to use as the values.
+ * @param[in,out] out_arr The column which contains object_agg results.
+ * @param[in] grp_info The array containing information on how the rows are
+ * organized.
+ * @param[in] is_parallel Is the computation happening in parallel (used for
+ * tracing).
+ * @param pool Memory pool to use for allocations during the execution of this
+ * function.
+ * @param mm Memory manager associated with the pool.
+ */
+void object_agg_computation(
+    const std::shared_ptr<array_info>& key_col,
+    const std::shared_ptr<array_info>& val_col,
+    std::shared_ptr<array_info> out_arr, const grouping_info& grp_info,
+    const bool is_parallel,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
 // NUNIQUE
 
 /**

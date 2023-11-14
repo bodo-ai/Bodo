@@ -1113,6 +1113,55 @@ class ArrayAggColSet : public BasicColSet {
 };
 
 /**
+ * @brief ColSet for OBJECT_AGG.
+ *
+ */
+class ObjectAggColSet : public BasicColSet {
+   public:
+    ObjectAggColSet(std::shared_ptr<array_info> _key_col,
+                    std::shared_ptr<array_info> _val_col, bool _is_parallel);
+
+    ~ObjectAggColSet() override;
+
+    void alloc_running_value_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
+
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+                std::shared_ptr<::arrow::MemoryManager> mm =
+                    bodo::default_buffer_memory_manager()) override;
+
+    const std::vector<std::shared_ptr<array_info>> getOutputColumns() override;
+    virtual void setUpdateCols(
+        std::vector<std::shared_ptr<array_info>> update_cols_) override {
+        throw std::runtime_error(
+            "ObjectAggColSet not implemented for streaming groupby");
+    }
+    virtual void setCombineCols(
+        std::vector<std::shared_ptr<array_info>> combine_cols_) override {
+        throw std::runtime_error(
+            "ObjectAggColSet not implemented for streaming groupby");
+    }
+    virtual void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override {
+        throw std::runtime_error(
+            "ObjectAggColSet not implemented for streaming groupby");
+    }
+    virtual void clear() override {
+        throw std::runtime_error(
+            "ObjectAggColSet not implemented for streaming groupby");
+    }
+
+   private:
+    const std::shared_ptr<array_info> key_col;
+    const std::shared_ptr<array_info> val_col;
+    const bool is_parallel;
+};
+
+/**
  * @brief ColSet for Nunique operations.
  *
  */

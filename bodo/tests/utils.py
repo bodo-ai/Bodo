@@ -488,7 +488,6 @@ def check_func(
             check_categorical,
             atol,
             rtol,
-            use_map_arrays=use_map_arrays,
             # the default case use_table_format=None already tests
             # use_table_format=False above so we just test use_table_format=True for it
             use_table_format=True if use_table_format is None else use_table_format,
