@@ -32,6 +32,7 @@ data: {
       "com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable",
       "com.bodosql.calcite.application.operatorTables.NumericOperatorTable",
       "com.bodosql.calcite.application.operatorTables.JsonOperatorTable",
+      "com.bodosql.calcite.application.operatorTables.StringOperatorTable",
       "com.bodosql.calcite.sql.ddl.SqlCopyIntoTable",
       "com.bodosql.calcite.sql.ddl.SqlCopyIntoLocation",
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeFileFormat",
@@ -326,6 +327,7 @@ data: {
         "ARRAY",
         "OBJECT",
         "FLATTEN",
+        "SPLIT_TO_TABLE",
         # Tokens for Date/Time Intervals
         "Y",
         "YY",

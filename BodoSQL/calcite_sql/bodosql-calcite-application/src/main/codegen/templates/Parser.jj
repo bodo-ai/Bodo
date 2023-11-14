@@ -2701,6 +2701,28 @@ SqlNode TableFunctionCall() :
 {
 
     (
+        <SPLIT_TO_TABLE> { s = span(); }
+        {
+            final ExprContext exprContext = ExprContext.ACCEPT_CURSOR;
+            final List<SqlNode> list = new ArrayList<SqlNode>();
+            final SqlParserPos pos = getPos();
+        }
+        <LPAREN>
+        [
+            AddArg0(list, exprContext)
+            (
+                <COMMA> {
+                    // a comma-list can't appear where only a query is expected
+                    checkNonQueryExpression(exprContext);
+                }
+                AddArg(list, exprContext)
+            )*
+        ]
+        <RPAREN>
+        {
+            return SqlBodoParserUtil.createSplitToTable(pos, s.end(this), list);
+        }
+    |
         // Bodo Change: Add support for FLATTEN as a builtin table function with <TABLE>
         <FLATTEN> {s = span(); }
         {
@@ -2727,12 +2749,34 @@ SqlNode TableFunctionCall() :
             call = SqlBodoParserUtil.createBuiltinTableFunction(name, s.end(this), list);
         }
     |
-        <TABLE> { s = span(); } <LPAREN>
+        <TABLE> { s = span(); }
+        <LPAREN>
         [
             <SPECIFIC>
             {
                 funcType = SqlFunctionCategory.USER_DEFINED_TABLE_SPECIFIC_FUNCTION;
             }
+        ]
+        // The table function SPLIT_TO_TABLE is re-written during parsing to
+        // flatten(split(...))
+        [
+            <SPLIT_TO_TABLE> {
+                final ExprContext exprContext = ExprContext.ACCEPT_CURSOR;
+                final List<SqlNode> list = new ArrayList<SqlNode>();
+                final SqlParserPos pos = getPos();
+            }
+            <LPAREN>
+            [
+                AddArg0(list, exprContext)
+                    (
+                        <COMMA> {
+                            // a comma-list can't appear where only a query is expected
+                            checkNonQueryExpression(exprContext);
+                        }
+                        AddArg(list, exprContext)
+                    )*
+            ]
+            <RPAREN> <RPAREN> { return SqlBodoParserUtil.createSplitToTable(pos, s.end(this), list); }
         ]
         call = NamedRoutineCall(funcType, ExprContext.ACCEPT_CURSOR)
         <RPAREN>
@@ -8872,6 +8916,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < SPECIFIC: "SPECIFIC" >
 |   < SPECIFIC_NAME: "SPECIFIC_NAME" >
 |   < SPECIFICTYPE: "SPECIFICTYPE" >
+|   < SPLIT_TO_TABLE: "SPLIT_TO_TABLE" >
 |   < SQL: "SQL" >
 |   < SQLEXCEPTION: "SQLEXCEPTION" >
 |   < SQLSTATE: "SQLSTATE" >
