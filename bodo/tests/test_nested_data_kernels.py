@@ -623,6 +623,325 @@ def test_array_position(
 
 
 @pytest.mark.parametrize(
+    "elem, container, elem_is_scalar, container_is_scalar, use_map_arrays, expected",
+    [
+        pytest.param(
+            16,
+            np.array([0, 1, 4, 9, 16, 25]),
+            True,
+            True,
+            False,
+            True,
+            id="int-scalars",
+        ),
+        pytest.param(
+            0,
+            pd.Series(
+                [
+                    [],
+                    [0],
+                    [1, 0, 1],
+                    None,
+                    list(range(10, -11, -1)),
+                    [None],
+                    [2, 3, None, 1, 0, 4],
+                ]
+            ).values,
+            True,
+            False,
+            False,
+            pd.Series(
+                [False, True, True, None, True, False, True], dtype=pd.BooleanDtype()
+            ),
+            id="int-scalar_vector",
+        ),
+        pytest.param(
+            pd.Series([1, 2, None] * 2, dtype=pd.Int32Dtype()).values,
+            pd.Series([[3, 1, 4, None, 2, 1]] * 3 + [[2, 4]] * 3).values,
+            False,
+            False,
+            False,
+            pd.Series([True, True, True, False, True, False]),
+            id="int-vector_vector",
+        ),
+        pytest.param(
+            None,
+            pd.Series(
+                [
+                    [None, 0, None],
+                    [None],
+                    [],
+                    list(range(20)) + [None],
+                    None,
+                    [2, 3, None, 1, 0, 4],
+                ]
+            ).values,
+            True,
+            False,
+            False,
+            pd.Series([True, True, False, True, None, True], dtype=pd.BooleanDtype()),
+            id="int-null_vector",
+        ),
+        pytest.param(
+            "foo",
+            pd.Series(
+                [
+                    ["oof", "foo"],
+                    [""] * 3,
+                    [None] * 5,
+                    ["Foo", None, "foo", None] * 2,
+                    None,
+                    ["foo"] * 8,
+                    None,
+                    ["f", "fo", "fooo", "foo", "foooo"],
+                    ["FOO", "fOo", "fo", "oo"],
+                ]
+            ).values,
+            True,
+            False,
+            False,
+            pd.Series(
+                [True, False, False, True, None, True, None, True, False],
+                dtype=pd.BooleanDtype(),
+            ),
+            id="string-scalar_vector",
+        ),
+        pytest.param(
+            np.array([1, 2, 3]),
+            pd.Series([[], [1], [1, 2], [1, 2, 3], [1, 2, 3, 4]]).values,
+            True,
+            True,
+            False,
+            True,
+            id="int_array-scalar_scalar",
+        ),
+        pytest.param(
+            np.array([1, 2, 3]),
+            pd.Series(
+                [
+                    [],
+                    [[], [1], [1, 2], [1, 2, 3], [1, 2, 3, 4]],
+                    [[1, 0, 1], []],
+                    [[3, 2, 1], [1, 3, 2], [2, 1, 3], [3, 1, 2], [2, 3, 1], [1, 2, 3]],
+                    None,
+                    [[1, 2, 3], None],
+                ]
+            ),
+            True,
+            False,
+            False,
+            pd.Series([False, True, False, True, None, True], dtype=pd.BooleanDtype()),
+            id="int_array-scalar_vector",
+        ),
+        pytest.param(
+            pd.Series(
+                [[], [1], [1, 2], [1, 2, 3], [1, 2, 3, 4], [1, 2, 3, 4, 5], None]
+            ).values,
+            pd.Series([[], [1], [1, 2], [1, 2, 3], [1, 2, 3, 4]]).values,
+            False,
+            True,
+            False,
+            pd.Series(
+                [True, True, True, True, True, False, False], dtype=pd.BooleanDtype()
+            ),
+            id="int_array-vector_scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [],
+                    [1],
+                    [1, 2],
+                    [1, 2, 3],
+                    [1, 2, 3, 4],
+                    [1, 2, 3, 4, 5],
+                ]
+            ).values,
+            pd.Series(
+                [
+                    [],
+                    [[0, 1]],
+                    [[], [1], [1, 2], [1, 2, 3]],
+                    [[None], [1, 2, 3], [1, 2, 3]],
+                    [[1, 2, 3, 4], [1, 2, 3], [1, 2], [1]],
+                    [[1, 2, 3, 4], [2, 3, 4, 5]],
+                ]
+            ).values,
+            False,
+            False,
+            False,
+            pd.Series([False, False, True, True, True, False], dtype=pd.BooleanDtype()),
+            id="int_array-vector_vector",
+        ),
+        pytest.param(
+            np.array([["A"]]),
+            pd.Series(
+                [
+                    [[]],
+                    [[["A"]]],
+                    [[["A", "B"], ["A"]], [["B"]], []],
+                    None,
+                    [[["A", "B"]], [["A"], ["A", "C"]], [["A"]]],
+                    [],
+                ]
+            ).values,
+            True,
+            False,
+            False,
+            pd.Series([False, True, False, None, True, False], dtype=pd.BooleanDtype()),
+            id="string_array_array-scalar_vector",
+        ),
+        pytest.param(
+            pd.Series(
+                ([{"A": 0, "B": 1}] * 3 + [{"A": 1, "B": 0}] * 3 + [None] * 3) * 2
+            ),
+            pd.Series(
+                [
+                    [{"A": 0, "B": 0}, {"A": 1, "B": 1}],
+                    [{"A": 0, "B": 1}, None, {"A": 1, "B": 0}, None],
+                    [
+                        {"A": 2, "B": 1},
+                        {"A": 1, "B": 1},
+                        None,
+                        None,
+                        None,
+                        {"A": 0, "B": 0},
+                    ],
+                ]
+                * 6
+            ),
+            False,
+            False,
+            False,
+            pd.Series(
+                [False, True, False, False, True, False, False, True, True] * 2,
+                dtype=pd.BooleanDtype(),
+            ),
+            id="struct-vector_vector",
+        ),
+        pytest.param(
+            {"A": 1, "B": 0},
+            pd.Series(
+                [
+                    [{"A": 0, "B": 0}, {"A": 1, "B": 1}, {"A": 0, "B": 0}],
+                    [{"A": 0, "B": 1}, {"A": 1, "B": 0}, {"A": 1, "B": 0}],
+                    [{"A": 0, "B": 1}, {"A": 1, "B": 1}, {"A": 0, "B": 0}],
+                ]
+                * 5
+            ).values,
+            True,
+            False,
+            False,
+            pd.Series([False, True, False] * 5, dtype=pd.BooleanDtype()),
+            id="struct-scalar_vector",
+            marks=pytest.mark.skip(
+                reason="[BSE-1781] TODO: fix array_contains when inputs are mix of struct arrays and scalars"
+            ),
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {"hex": "660c21", "name": "pomegranate"},
+                    {},
+                    None,
+                    {"hex": "660c21", "name": "ok"},
+                ]
+                * 3
+            ),
+            pd.Series(
+                [
+                    {"name": "pomegranate"},
+                    {},
+                    {"hex": "660c21"},
+                    {"hex": "660c21", "name": "red"},
+                    {"hex": "#660c21", "name": "pomegranate"},
+                    {"hex": "660c21", "name": "pomegranate"},
+                    None,
+                    {"hex": "660c21", "name": "pomegranate"},
+                ],
+            ).values,
+            False,
+            True,
+            True,
+            pd.Series([True, True, True, False] * 3, dtype=pd.BooleanDtype()),
+            id="map-vector_scalar",
+        ),
+        pytest.param(
+            {"hex": "660c21", "name": "pomegranate"},
+            pd.Series(
+                [
+                    {"name": "pomegranate"},
+                    {},
+                    {"hex": "660c21"},
+                    {"hex": "660c21", "name": "red"},
+                    {"hex": "#660c21", "name": "pomegranate"},
+                    {"hex": "660c21", "name": "pomegranate"},
+                    None,
+                    {"hex": "660c21", "name": "pomegranate"},
+                ],
+            ).values,
+            True,
+            True,
+            True,
+            True,
+            id="map-scalar_scalar",
+        ),
+    ],
+)
+def test_array_contains(
+    elem,
+    container,
+    elem_is_scalar,
+    container_is_scalar,
+    use_map_arrays,
+    expected,
+    memory_leak_check,
+):
+    all_scalar = elem_is_scalar and container_is_scalar
+    any_scalar = elem_is_scalar or container_is_scalar
+    if all_scalar:
+
+        def impl(elem, container):
+            return bodo.libs.bodosql_array_kernels.array_contains(
+                elem, container, elem_is_scalar, container_is_scalar
+            )
+
+    else:
+
+        def impl(elem, container):
+            return pd.Series(
+                bodo.libs.bodosql_array_kernels.array_contains(
+                    elem, container, elem_is_scalar, container_is_scalar
+                )
+            )
+
+    check_func(
+        impl,
+        (elem, container),
+        py_output=expected,
+        distributed=not all_scalar,
+        is_out_distributed=not all_scalar,
+        dist_test=not any_scalar,
+        use_map_arrays=use_map_arrays,
+    )
+
+
+@pytest.mark.slow
+def test_option_array_contains(memory_leak_check):
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return bodo.libs.bodosql_array_kernels.array_contains(arg0, arg1, True, True)
+
+    A, B = 1, [0, 1, 4, 9]
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            check_func(
+                impl, (A, B, flag0, flag1), py_output=1 if flag0 and flag1 else None
+            )
+
+
+@pytest.mark.parametrize(
     "array, separator, answer",
     [
         pytest.param(

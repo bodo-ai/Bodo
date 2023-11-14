@@ -44,6 +44,7 @@ broadcasted_fixed_arg_functions = {
     "add_numeric",
     "arr_get",
     "arrays_overlap",
+    "array_contains",
     "array_position",
     "array_size",
     "asin",
