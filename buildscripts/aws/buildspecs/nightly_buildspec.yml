@@ -16,7 +16,6 @@ env:
 phases:
   install:
     commands:
-      - buildscripts/setup_conda.sh
       - buildscripts/aws/export_env.sh
 
   build:
