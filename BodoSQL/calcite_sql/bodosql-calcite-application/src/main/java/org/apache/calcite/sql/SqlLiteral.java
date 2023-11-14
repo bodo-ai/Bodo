@@ -903,7 +903,7 @@ public class SqlLiteral extends SqlNode {
     return createTimestamp(SqlTypeName.TIMESTAMP, ts, precision, pos);
   }
 
-  /** Creates a TIMESTAMP or TIMESTAMP WITH TIME ZONE literal. */
+  /** Creates a TIMESTAMP or TIMESTAMP WITH LOCAL TIME ZONE literal. */
   public static SqlTimestampLiteral createTimestamp(
       SqlTypeName typeName,
       TimestampString ts,
@@ -1108,10 +1108,7 @@ public class SqlLiteral extends SqlNode {
         sb.append(c);
       }
     }
-    ns = new NlsString(
-        sb.toString(),
-        ns.getCharsetName(),
-        ns.getCollation());
+    ns = new NlsString(sb.toString(), ns.getCharsetName(), ns.getCollation());
     return new SqlCharStringLiteral(ns, getParserPosition());
   }
 

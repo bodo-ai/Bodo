@@ -86,6 +86,8 @@ parser: {
     "DATA"
     "DATE"
     "DATABASE"
+    "DATE_DIFF"
+    "DATETIME_DIFF"
     "DATE_TRUNC"
     "DATETIME_INTERVAL_CODE"
     "DATETIME_INTERVAL_PRECISION"
@@ -404,7 +406,7 @@ parser: {
 
   # List of methods for parsing builtin function calls.
   # Return type of method implementation should be "SqlNode".
-  # Example: "DateFunctionCall()".
+  # Example: "DateTimeConstructorCall()".
   builtinFunctionCallMethods: [
   ]
 

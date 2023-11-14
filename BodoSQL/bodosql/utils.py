@@ -4,6 +4,7 @@ BodoSQL utils used to help construct Python code.
 """
 import py4j
 
+from bodo.utils.typing import BodoError
 from bodosql.imported_java_classes import CommonsExceptionUtilsClass
 
 
@@ -26,7 +27,10 @@ def error_to_string(e: Exception) -> str:
     Returns:
         str: A string message of the error.
     """
-    if isinstance(e, py4j.protocol.Py4JJavaError):
+    if isinstance(e, BodoError):
+        # If called from a BodoError we should just return the message
+        message = e.msg
+    elif isinstance(e, py4j.protocol.Py4JJavaError):
         java_exception = e.java_exception
         message = java_exception.getMessage()
         if message is None and CommonsExceptionUtilsClass is not None:

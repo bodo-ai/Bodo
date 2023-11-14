@@ -521,7 +521,8 @@ public class RexSimplify {
                 case GREATER_THAN_OR_EQUAL:
                 case LESS_THAN_OR_EQUAL:
                     // "x = x" simplifies to "null or x is not null" (similarly <= and >=)
-                    newExpr = rexBuilder.makeCall(SqlStdOperatorTable.OR,
+                    newExpr =
+                        rexBuilder.makeCall(SqlStdOperatorTable.OR,
                             rexBuilder.makeNullLiteral(e.getType()),
                             rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL, o0));
                     return simplify(newExpr, unknownAs);
@@ -529,7 +530,8 @@ public class RexSimplify {
                 case LESS_THAN:
                 case GREATER_THAN:
                     // "x != x" simplifies to "null and x is null" (similarly < and >)
-                    newExpr = rexBuilder.makeCall(SqlStdOperatorTable.AND,
+                    newExpr =
+                        rexBuilder.makeCall(SqlStdOperatorTable.AND,
                             rexBuilder.makeNullLiteral(e.getType()),
                             rexBuilder.makeCall(SqlStdOperatorTable.IS_NULL, o0));
                     return simplify(newExpr, unknownAs);
@@ -717,7 +719,8 @@ public class RexSimplify {
             terms.set(i, t2);
             final RexNode inverse =
                     simplify.simplify(isNotTrue(t2), RexUnknownAs.UNKNOWN);
-            final RelOptPredicateList newPredicates = simplify.predicates.union(rexBuilder,
+            final RelOptPredicateList newPredicates =
+                simplify.predicates.union(rexBuilder,
                     RelOptPredicateList.of(rexBuilder, ImmutableList.of(inverse)));
             simplify = simplify.withPredicates(newPredicates);
         }
@@ -1613,7 +1616,8 @@ public class RexSimplify {
                     && comparison.kind != SqlKind.NOT_EQUALS) { // not supported yet
                 final C v0 = comparison.literal.getValueAs(clazz);
                 if (v0 != null) {
-                    final RexNode result = processRange(rexBuilder, terms, rangeTerms,
+                    final RexNode result =
+                        processRange(rexBuilder, terms, rangeTerms,
                             predicate, comparison.ref, v0, comparison.kind);
                     if (result != null) {
                         // Not satisfiable
@@ -1714,7 +1718,8 @@ public class RexSimplify {
                         if (constant == null) {
                             break;
                         }
-                        final RexNode result = processRange(rexBuilder, terms, rangeTerms,
+                        final RexNode result =
+                            processRange(rexBuilder, terms, rangeTerms,
                                 term, comparison.ref, constant, comparison.kind);
                         if (result != null) {
                             // Not satisfiable
@@ -2024,11 +2029,14 @@ public class RexSimplify {
                                         && comparable1.compareTo(comparable2) != 0) {
                                     // X <> A OR X <> B => X IS NOT NULL OR NULL
                                     final RexNode isNotNull =
-                                            rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL, notEqualsComparison.ref);
+                                        rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL,
+                                            notEqualsComparison.ref);
                                     final RexNode constantNull =
-                                            rexBuilder.makeNullLiteral(trueLiteral.getType());
-                                    final RexNode newCondition = simplify(
-                                            rexBuilder.makeCall(SqlStdOperatorTable.OR, isNotNull, constantNull),
+                                        rexBuilder.makeNullLiteral(trueLiteral.getType());
+                                    final RexNode newCondition =
+                                        simplify(
+                                            rexBuilder.makeCall(SqlStdOperatorTable.OR, isNotNull,
+                                                constantNull),
                                             unknownAs);
                                     if (newCondition.isAlwaysTrue()) {
                                         return trueLiteral;
@@ -2387,8 +2395,9 @@ public class RexSimplify {
                                 return rexBuilder.makeLiteral(false);
                             }
                             // a <= x < b OR a < x < b
-                            r = Range.range(r.lowerEndpoint(), r.lowerBoundType(),
-                                    v0, BoundType.OPEN);
+                            r =
+                                Range.range(r.lowerEndpoint(), r.lowerBoundType(), v0,
+                                    BoundType.OPEN);
                         } else {
                             // x < b
                             r = Range.lessThan(v0);
@@ -2421,8 +2430,9 @@ public class RexSimplify {
                                 return rexBuilder.makeLiteral(false);
                             }
                             // a <= x <= b OR a < x <= b
-                            r = Range.range(r.lowerEndpoint(), r.lowerBoundType(),
-                                    v0, BoundType.CLOSED);
+                            r =
+                                Range.range(r.lowerEndpoint(), r.lowerBoundType(), v0,
+                                    BoundType.CLOSED);
                         } else {
                             // x <= b
                             r = Range.atMost(v0);
@@ -2456,8 +2466,9 @@ public class RexSimplify {
                                 return rexBuilder.makeLiteral(false);
                             }
                             // a < x <= b OR a < x < b
-                            r = Range.range(v0, BoundType.OPEN,
-                                    r.upperEndpoint(), r.upperBoundType());
+                            r =
+                                Range.range(v0, BoundType.OPEN, r.upperEndpoint(),
+                                    r.upperBoundType());
                         } else {
                             // x > a
                             r = Range.greaterThan(v0);
@@ -2490,8 +2501,9 @@ public class RexSimplify {
                                 return rexBuilder.makeLiteral(false);
                             }
                             // a <= x <= b OR a <= x < b
-                            r = Range.range(v0, BoundType.CLOSED,
-                                    r.upperEndpoint(), r.upperBoundType());
+                            r =
+                                Range.range(v0, BoundType.CLOSED, r.upperEndpoint(),
+                                    r.upperBoundType());
                         } else {
                             // x >= a
                             r = Range.atLeast(v0);

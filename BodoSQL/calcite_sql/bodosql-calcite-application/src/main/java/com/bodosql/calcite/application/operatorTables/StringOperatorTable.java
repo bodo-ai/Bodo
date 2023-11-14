@@ -1,7 +1,6 @@
 package com.bodosql.calcite.application.operatorTables;
 
 import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.argumentRange;
-import static org.apache.calcite.sql.type.BodoReturnTypes.CHARACTER_CHARACTER;
 import static org.apache.calcite.sql.type.BodoReturnTypes.SPLIT_RETURN_TYPE;
 
 import java.util.Arrays;
@@ -642,7 +641,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // Return type for split is the exact same as TO_ARRAY
           SPLIT_RETURN_TYPE,
           null,
-          CHARACTER_CHARACTER,
+          OperandTypes.CHARACTER_CHARACTER,
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction SHA2 =
