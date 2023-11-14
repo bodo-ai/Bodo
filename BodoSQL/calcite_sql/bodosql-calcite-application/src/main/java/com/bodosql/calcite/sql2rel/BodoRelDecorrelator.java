@@ -2,6 +2,7 @@ package com.bodosql.calcite.sql2rel;
 
 import static java.util.Objects.requireNonNull;
 
+import com.bodosql.calcite.application.logicalRules.BodoFilterCorrelateRule;
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.rel.core.Flatten;
 import java.util.ArrayList;
@@ -13,6 +14,8 @@ import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.plan.hep.HepPlanner;
 import org.apache.calcite.plan.hep.HepProgram;
+import org.apache.calcite.plan.hep.HepProgramBuilder;
+import org.apache.calcite.plan.hep.HepRelVertex;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
 import org.apache.calcite.rel.core.Correlate;
@@ -20,6 +23,10 @@ import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.Values;
+import org.apache.calcite.rel.rules.CoreRules;
+import org.apache.calcite.rel.rules.FilterFlattenCorrelatedConditionRule;
+import org.apache.calcite.rel.rules.FilterJoinRule;
+import org.apache.calcite.rel.rules.FilterProjectTransposeRule;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
@@ -27,14 +34,20 @@ import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexPermuteInputsShuttle;
+import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.sql.SqlExplainFormat;
 import org.apache.calcite.sql.SqlExplainLevel;
+import org.apache.calcite.sql2rel.CorrelateProjectExtractor;
 import org.apache.calcite.sql2rel.RelDecorrelator;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
+import org.apache.calcite.util.mapping.Mapping;
+import org.apache.calcite.util.mapping.MappingType;
+import org.apache.calcite.util.mapping.Mappings;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.immutables.value.Value;
 
@@ -47,6 +60,92 @@ import org.immutables.value.Value;
 public class BodoRelDecorrelator extends RelDecorrelator {
   protected BodoRelDecorrelator(CorelMap cm, Context context, RelBuilder relBuilder) {
     super(cm, context, relBuilder);
+  }
+
+  @Override
+  protected RelNode decorrelate(RelNode root) {
+    // first adjust count() expression if any
+    final RelBuilderFactory f = relBuilderFactory();
+    HepProgram program =
+        HepProgram.builder()
+            .addRuleInstance(AdjustProjectForCountAggregateRule.config(false, this, f).toRule())
+            .addRuleInstance(AdjustProjectForCountAggregateRule.config(true, this, f).toRule())
+            .addRuleInstance(
+                FilterJoinRule.FilterIntoJoinRule.FilterIntoJoinRuleConfig.DEFAULT
+                    .withRelBuilderFactory(f)
+                    .withOperandSupplier(
+                        b0 ->
+                            b0.operand(Filter.class)
+                                .oneInput(b1 -> b1.operand(Join.class).anyInputs()))
+                    .withDescription("FilterJoinRule:filter")
+                    .as(FilterJoinRule.FilterIntoJoinRule.FilterIntoJoinRuleConfig.class)
+                    .withSmart(true)
+                    .withPredicate((join, joinType, exp) -> true)
+                    .as(FilterJoinRule.FilterIntoJoinRule.FilterIntoJoinRuleConfig.class)
+                    .toRule())
+            .addRuleInstance(
+                CoreRules.FILTER_PROJECT_TRANSPOSE
+                    .config
+                    .withRelBuilderFactory(f)
+                    .as(FilterProjectTransposeRule.Config.class)
+                    .withOperandFor(
+                        Filter.class,
+                        filter -> !RexUtil.containsCorrelation(filter.getCondition()),
+                        Project.class,
+                        project -> true)
+                    .withCopyFilter(true)
+                    .withCopyProject(true)
+                    .toRule())
+            // BODO CHANGE: replacing FilterCorrelationRule with BodoFilterCorrelateRule
+            .addRuleInstance(
+                BodoFilterCorrelateRule.BodoConfig.DEFAULT.withRelBuilderFactory(f).toRule())
+            // BODO CHANGE: adding PullFilterAboveFlattenCorrelationRule
+            .addRuleInstance(PullFilterAboveFlattenCorrelationRule.config(this, f).toRule())
+            .addRuleInstance(RemoveCorrelationForFlattenRule.config(this, f).toRule())
+            .addRuleInstance(
+                FilterFlattenCorrelatedConditionRule.Config.DEFAULT
+                    .withRelBuilderFactory(f)
+                    .toRule())
+            .build();
+
+    HepPlanner planner = createPlanner(program);
+
+    planner.setRoot(root);
+    root = planner.findBestExp();
+    if (SQL2REL_LOGGER.isDebugEnabled()) {
+      SQL2REL_LOGGER.debug(
+          "Plan before extracting correlated computations:\n" + RelOptUtil.toString(root));
+    }
+    root = root.accept(new CorrelateProjectExtractor(f));
+    // Necessary to update cm (CorrelMap) since CorrelateProjectExtractor above may modify the plan
+    this.cm = new CorelMapBuilder().build(root);
+    if (SQL2REL_LOGGER.isDebugEnabled()) {
+      SQL2REL_LOGGER.debug(
+          "Plan after extracting correlated computations:\n" + RelOptUtil.toString(root));
+    }
+    // Perform decorrelation.
+    map.clear();
+
+    final Frame frame = getInvoke(root, false, null);
+    if (frame != null) {
+      // has been rewritten; apply rules post-decorrelation
+      final HepProgramBuilder builder =
+          HepProgram.builder()
+              .addRuleInstance(CoreRules.FILTER_INTO_JOIN.config.withRelBuilderFactory(f).toRule())
+              .addRuleInstance(
+                  CoreRules.JOIN_CONDITION_PUSH.config.withRelBuilderFactory(f).toRule());
+      if (!getPostDecorrelateRules().isEmpty()) {
+        builder.addRuleCollection(getPostDecorrelateRules());
+      }
+      final HepProgram program2 = builder.build();
+
+      final HepPlanner planner2 = createPlanner(program2);
+      final RelNode newRoot = frame.r;
+      planner2.setRoot(newRoot);
+      return planner2.findBestExp();
+    }
+
+    return root;
   }
 
   // Copied over from RelDecorrelator since it is static, with minor changes
@@ -448,6 +547,117 @@ public class BodoRelDecorrelator extends RelDecorrelator {
       @Override
       default RemoveCorrelationForFlattenRule toRule() {
         return new RemoveCorrelationForFlattenRule(this);
+      }
+    }
+  }
+
+  /**
+   * Pulls a filter above a flatten node above its corresponding correlation. For example, with the
+   * following input plan:
+   *
+   * <blockquote>
+   *
+   * <pre>
+   *  LogicalCorrelate(...)
+   *    LogicalProject(A=..., B=...)
+   *      ...
+   *    LogicalFilter(IS NOT NULL($0))
+   *       BodoLogicalFlatten(Call=[FLATTEN($0)], ...)
+   *         ...
+   * </pre>
+   *
+   * </blockquote>
+   *
+   * This rule rewrites this structure into a form with the filter pulled up:
+   *
+   * <blockquote>
+   *
+   * <pre>
+   *  LogicalFilter(IS NOT NULL($2))
+   *    LogicalCorrelate(...)
+   *      LogicalProject(A=..., B=...)
+   *        ...
+   *    BodoLogicalFlatten(Call=[FLATTEN($0)], ...)
+   *      ...
+   * </pre>
+   *
+   * </blockquote>
+   */
+  public static final class PullFilterAboveFlattenCorrelationRule
+      extends RelRule<
+          PullFilterAboveFlattenCorrelationRule.PullFilterAboveFlattenCorrelationRuleConfig> {
+    private final BodoRelDecorrelator d;
+
+    public static PullFilterAboveFlattenCorrelationRuleConfig config(
+        BodoRelDecorrelator d, RelBuilderFactory f) {
+      return ImmutablePullFilterAboveFlattenCorrelationRuleConfig.builder()
+          .withRelBuilderFactory(f)
+          .withDecorrelator(d)
+          .withOperandSupplier(
+              b0 ->
+                  b0.operand(Correlate.class)
+                      .inputs(
+                          b1 -> b1.operand(RelNode.class).anyInputs(),
+                          b2 ->
+                              b2.operand(Filter.class)
+                                  .predicate(
+                                      PullFilterAboveFlattenCorrelationRule
+                                          ::isFilterAncestorOfFlatten)
+                                  .oneInput(b3 -> b3.operand(RelNode.class).anyInputs())))
+          .build();
+    }
+
+    /**
+     * Detects cases where a chain of filters leads to a flatten node.
+     *
+     * @param rel The current rel node
+     * @return Whether it is a flatten node or a chain of filters leading to a flatten node.
+     */
+    public static Boolean isFilterAncestorOfFlatten(RelNode rel) {
+      if (rel instanceof Flatten) return true;
+      if (rel instanceof HepRelVertex)
+        return isFilterAncestorOfFlatten(((HepRelVertex) rel).getCurrentRel());
+      if (rel instanceof Filter) return isFilterAncestorOfFlatten(rel.getInput(0));
+      return false;
+    }
+
+    /** Creates a RemoveSingleAggregateRule. */
+    PullFilterAboveFlattenCorrelationRule(
+        PullFilterAboveFlattenCorrelationRule.PullFilterAboveFlattenCorrelationRuleConfig config) {
+      super(config);
+      this.d = (BodoRelDecorrelator) requireNonNull(config.decorrelator());
+    }
+
+    @Override
+    public void onMatch(RelOptRuleCall call) {
+      final Correlate correlate = call.rel(0);
+      final RelNode left = call.rel(1);
+      final Filter filter = call.rel(2);
+      final RelNode child = call.rel(3);
+      Correlate newCorrelate = correlate.copy(correlate.getTraitSet(), List.of(left, child));
+      d.relBuilder.push(newCorrelate);
+      int offset = left.getRowType().getFieldCount();
+      int nFilterFields = filter.getRowType().getFieldCount();
+      Mapping mapping =
+          Mappings.create(
+              MappingType.SURJECTION, nFilterFields, correlate.getRowType().getFieldCount());
+      for (int i = 0; i < nFilterFields; i++) {
+        mapping.set(i, i + offset);
+      }
+      RexNode oldCond = filter.getCondition();
+      RexNode cond = oldCond.accept(new RexPermuteInputsShuttle(mapping, child));
+      d.relBuilder.filter(cond);
+      RelNode result = d.relBuilder.build();
+      call.transformTo(result);
+    }
+
+    /** Rule configuration. */
+    @Value.Immutable(singleton = false)
+    public interface PullFilterAboveFlattenCorrelationRuleConfig
+        extends BodoRelDecorrelator.Config {
+      @Override
+      default PullFilterAboveFlattenCorrelationRule toRule() {
+        return new PullFilterAboveFlattenCorrelationRule(this);
       }
     }
   }

@@ -2575,7 +2575,8 @@ public class RelDecorrelator implements ReflectiveVisitor {
             extends RelRule<AdjustProjectForCountAggregateRule.AdjustProjectForCountAggregateRuleConfig> {
         final RelDecorrelator d;
 
-        static AdjustProjectForCountAggregateRuleConfig config(
+        // BODO CHANGE: made public
+        public static AdjustProjectForCountAggregateRuleConfig config(
                 boolean flavor, RelDecorrelator decorrelator, RelBuilderFactory relBuilderFactory) {
             return ImmutableAdjustProjectForCountAggregateRuleConfig.builder()
                     .withRelBuilderFactory(relBuilderFactory)
@@ -3010,9 +3011,11 @@ public class RelDecorrelator implements ReflectiveVisitor {
 
     /** Frame describing the relational expression after decorrelation
      * and where to find the output fields and correlation variables
-     * among its output fields. */
-    static class Frame {
-        final RelNode r;
+     * among its output fields. BODO CHANGE: made protected
+     * */
+    protected static class Frame {
+        // BODO CHANGE: made public
+        public final RelNode r;
         final ImmutableSortedMap<CorDef, Integer> corDefOutputs;
         final ImmutableSortedMap<Integer, Integer> oldToNewOutputs;
 
