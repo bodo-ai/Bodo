@@ -731,7 +731,9 @@ def get_number_types_from_metadata(
             + f" FROM {orig_table} LIMIT 1"
         )
         probe_res = execute_query(
-            cursor, schema_probe_query, timeout=SF_READ_SCHEMA_PROBE_TIMEOUT
+            cursor,
+            schema_probe_query,
+            timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
         )
 
     if probe_res is None or (typing_table := probe_res.fetch_arrow_all()) is None:
@@ -1550,6 +1552,14 @@ def get_dataset(
             ev_query = tracing.Event("execute_length_query", is_parallel=False)
             ev_query.add_attribute("query", query)
             cur.execute(query)
+            if bodo.user_logging.get_verbose_level() >= 2:
+                bodo.user_logging.log_message(
+                    "Snowflake Query Submission",
+                    "/* execute_length_query */ Snowflake Query ID: "
+                    + cur.sfqid
+                    + "\nSQL Text:\n"
+                    + query,
+                )
             # We are just loading a single row of data so we can just load
             # all of the data.
             arrow_data = cur.fetch_arrow_all()
@@ -1568,6 +1578,14 @@ def get_dataset(
             ev_query.add_attribute("query", query)
             cur = conn.cursor()
             cur.execute(query)
+            if bodo.user_logging.get_verbose_level() >= 2:
+                bodo.user_logging.log_message(
+                    "Snowflake Query Submission",
+                    "/* execute_query */ Snowflake Query ID: "
+                    + cur.sfqid
+                    + "\nSQL Text:\n"
+                    + query,
+                )
             ev_query.finalize()
 
             # Fetch the total number of rows that will be loaded globally
@@ -1923,6 +1941,14 @@ def execute_copy_into(
 
     if synchronous:
         copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()  # type: ignore
+        if bodo.user_logging.get_verbose_level() >= 2:
+            bodo.user_logging.log_message(
+                "Snowflake Query Submission",
+                "/* io.snowflake.execute_copy_into() */ Snowflake Query ID: "
+                + cursor.sfqid
+                + "\nSQL Text:\n"
+                + copy_into_sql,
+            )
         nsuccess, nchunks, nrows, copy_results = decode_copy_into(copy_results)
 
         # Print debug output
