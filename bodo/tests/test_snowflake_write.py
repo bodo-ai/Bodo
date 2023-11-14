@@ -2,6 +2,7 @@
 """
 Tests for writing to Snowflake using Python APIs
 """
+import io
 import os
 import random
 import string
@@ -23,6 +24,11 @@ from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.io.snowflake_write import (
     snowflake_writer_append_table,
     snowflake_writer_init,
+)
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
 )
 from bodo.tests.utils import (
     _get_dist_arg,
@@ -2254,3 +2260,23 @@ def test_decimal_sub_38_precision_write(memory_leak_check):
                 conn,
             )
             assert len(result) == 0, "Unexpected difference in tables"
+
+
+def test_logged_queryid_write(memory_leak_check):
+    """Test query id is printed in write step when verbose logging is set to 2"""
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+
+    def impl(df, table_name, conn):
+        df.to_sql(table_name, conn, if_exists="replace", index=False)
+        return "DONE"
+
+    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        with ensure_clean_snowflake_table(conn) as table_name:
+            bodo.jit(impl)(df, table_name, conn)
+
+        check_logger_msg(stream, "Snowflake Query Submission")

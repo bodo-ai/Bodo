@@ -2588,3 +2588,22 @@ def test_bodo_read_sql_bodo_orig_table_name_arg(memory_leak_check):
     check_func(impl1, (conn,), py_output=False, check_dtype=False, reset_index=True)
     # Expect the read of the entirely duplicate table to be dict encoded
     check_func(impl2, (conn,), py_output=True, check_dtype=False, reset_index=True)
+
+
+def test_logged_queryid_read(memory_leak_check):
+    """Test query id is printed in read step when verbose logging is set to 2"""
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    query = "SELECT L_ORDERKEY FROM LINEITEM LIMIT 10"
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        bodo.jit(impl)(query, conn)
+        check_logger_msg(stream, "Snowflake Query Submission")
