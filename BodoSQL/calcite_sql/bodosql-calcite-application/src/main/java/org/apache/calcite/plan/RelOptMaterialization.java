@@ -90,8 +90,8 @@ public class RelOptMaterialization {
   public static @Nullable RelNode tryUseStar(RelNode rel,
       final RelOptTable starRelOptTable) {
     final StarTable starTable = starRelOptTable.unwrapOrThrow(StarTable.class);
-    RelNode rel2 = rel.accept(
-        new RelShuttleImpl() {
+    RelNode rel2 =
+        rel.accept(new RelShuttleImpl() {
           @Override public RelNode visit(TableScan scan) {
             RelOptTable relOptTable = scan.getTable();
             final Table table = relOptTable.unwrap(Table.class);
@@ -102,6 +102,7 @@ public class RelOptMaterialization {
                       0, 0, relOptTable.getRowType().getFieldCount());
 
               final RelOptCluster cluster = scan.getCluster();
+              // Bodo Change: Add handling for LogicalTargetTableScan
               final RelNode scan2 = toRel(ViewExpanders.simpleContext(cluster), scan);
               return RelOptUtil.createProject(scan2,
                   Mappings.asListNonNull(mapping.inverse()));
@@ -109,6 +110,7 @@ public class RelOptMaterialization {
             return scan;
           }
 
+          // Bodo Change: Include for LogicalTargetTableScan
           private RelNode toRel(RelOptTable.ToRelContext context, TableScan scan) {
             if (scan instanceof LogicalTargetTableScan) {
               return starRelOptTable.toTargetTableRel(context);
@@ -162,9 +164,10 @@ public class RelOptMaterialization {
                       Mappings.offsetTarget(
                           Mappings.offsetSource(rightMapping, offset),
                           leftMapping.getTargetCount()));
-              final RelNode project = RelOptUtil.createProject(
-                  leftRelOptTable.toRel(ViewExpanders.simpleContext(cluster)),
-                  Mappings.asListNonNull(mapping.inverse()));
+              final RelNode project =
+                  RelOptUtil.createProject(
+                      leftRelOptTable.toRel(ViewExpanders.simpleContext(cluster)),
+                      Mappings.asListNonNull(mapping.inverse()));
               final List<RexNode> conditions = new ArrayList<>();
               if (left.condition != null) {
                 conditions.add(left.condition);
@@ -187,9 +190,10 @@ public class RelOptMaterialization {
                   Mappings.merge(
                       Mappings.offsetSource(leftMapping, offset),
                       Mappings.offsetTarget(rightMapping, leftCount));
-              final RelNode project = RelOptUtil.createProject(
-                  rightRelOptTable.toRel(ViewExpanders.simpleContext(cluster)),
-                  Mappings.asListNonNull(mapping.inverse()));
+              final RelNode project =
+                  RelOptUtil.createProject(
+                      rightRelOptTable.toRel(ViewExpanders.simpleContext(cluster)),
+                      Mappings.asListNonNull(mapping.inverse()));
               final List<RexNode> conditions = new ArrayList<>();
               if (left.condition != null) {
                 conditions.add(
@@ -209,10 +213,11 @@ public class RelOptMaterialization {
       // No rewrite happened.
       return null;
     }
-    final Program program = Programs.hep(
-        ImmutableList.of(
-            CoreRules.PROJECT_FILTER_TRANSPOSE, CoreRules.AGGREGATE_PROJECT_MERGE,
-            CoreRules.AGGREGATE_FILTER_TRANSPOSE),
+    final Program program =
+        Programs.hep(
+            ImmutableList.of(CoreRules.PROJECT_FILTER_TRANSPOSE,
+                CoreRules.AGGREGATE_PROJECT_MERGE,
+                CoreRules.AGGREGATE_FILTER_TRANSPOSE),
         false,
         DefaultRelMetadataProvider.INSTANCE);
     return program.run(castNonNull(null), rel2, castNonNull(null),
@@ -278,12 +283,13 @@ public class RelOptMaterialization {
    * as close to leaves as possible.
    */
   public static RelNode toLeafJoinForm(RelNode rel) {
-    final Program program = Programs.hep(
-        ImmutableList.of(CoreRules.JOIN_PROJECT_RIGHT_TRANSPOSE,
-            CoreRules.JOIN_PROJECT_LEFT_TRANSPOSE,
-            CoreRules.FILTER_INTO_JOIN,
-            CoreRules.PROJECT_REMOVE,
-            CoreRules.PROJECT_MERGE),
+    final Program program =
+        Programs.hep(
+            ImmutableList.of(CoreRules.JOIN_PROJECT_RIGHT_TRANSPOSE,
+                CoreRules.JOIN_PROJECT_LEFT_TRANSPOSE,
+                CoreRules.FILTER_INTO_JOIN,
+                CoreRules.PROJECT_REMOVE,
+                CoreRules.PROJECT_MERGE),
         false,
         DefaultRelMetadataProvider.INSTANCE);
     if (CalciteSystemProperty.DEBUG.value()) {
@@ -291,9 +297,9 @@ public class RelOptMaterialization {
           RelOptUtil.dumpPlan("before", rel, SqlExplainFormat.TEXT,
               SqlExplainLevel.DIGEST_ATTRIBUTES));
     }
-    final RelNode rel2 = program.run(castNonNull(null), rel, castNonNull(null),
-        ImmutableList.of(),
-        ImmutableList.of());
+    final RelNode rel2 =
+        program.run(castNonNull(null), rel, castNonNull(null),
+            ImmutableList.of(), ImmutableList.of());
     if (CalciteSystemProperty.DEBUG.value()) {
       System.out.println(
           RelOptUtil.dumpPlan("after", rel2, SqlExplainFormat.TEXT,

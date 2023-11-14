@@ -18,7 +18,6 @@ package org.apache.calcite.sql.parser;
 
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.avatica.util.DateTimeUtils;
-import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.config.CalciteSystemProperty;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.runtime.CalciteContextException;
@@ -65,11 +64,9 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.StringTokenizer;
 import java.util.function.Predicate;
 
-import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 import static org.apache.calcite.util.Static.RESOURCE;
 
 import static java.lang.Integer.parseInt;
@@ -191,10 +188,9 @@ public final class SqlParserUtil {
           if (i + 1 + charsToConsume >= length) {
             throw new MalformedUnicodeEscape(i);
           }
-          endIdx = calculateMaxCharsInSequence(input,
-              i + 2,
-              charsToConsume,
-              SqlParserUtil::isHexDigit);
+          endIdx =
+              calculateMaxCharsInSequence(input, i + 2, charsToConsume,
+                  SqlParserUtil::isHexDigit);
           if (endIdx != i + 2 + charsToConsume) {
             throw new MalformedUnicodeEscape(i);
           }
@@ -203,10 +199,9 @@ public final class SqlParserUtil {
           break;
         case 'x':
           // handle hex byte case - up to 2 chars for hex value
-          endIdx = calculateMaxCharsInSequence(input,
-              i + 2,
-              2,
-              SqlParserUtil::isHexDigit);
+          endIdx =
+              calculateMaxCharsInSequence(input, i + 2, 2,
+                  SqlParserUtil::isHexDigit);
           if (endIdx > i + 2) {
             builder.appendCodePoint(parseInt(input.substring(i + 2, endIdx), 16));
             i = endIdx - 1; // skip already consumed chars
@@ -221,10 +216,10 @@ public final class SqlParserUtil {
         case '2':
         case '3':
           // handle octal case - up to 3 chars
-          endIdx = calculateMaxCharsInSequence(input,
-              i + 2,
-              2,      // first char is already "consumed"
-              SqlParserUtil::isOctalDigit);
+          endIdx =
+              calculateMaxCharsInSequence(input, i + 2,
+                  2, // first char is already "consumed"
+                  SqlParserUtil::isOctalDigit);
           builder.appendCodePoint(parseInt(input.substring(i + 1, endIdx), 8));
           i = endIdx - 1; // skip already consumed chars
           break;
@@ -359,8 +354,9 @@ public final class SqlParserUtil {
     // PostgreSQL); TODO: require time fields except in Babel's lenient mode
     final DateFormat[] dateFormats = {format.timestamp, format.date};
     for (DateFormat dateFormat : dateFormats) {
-      pt = DateTimeUtils.parsePrecisionDateTimeLiteral(s,
-          dateFormat, DateTimeUtils.UTC_ZONE, -1);
+      pt =
+          DateTimeUtils.parsePrecisionDateTimeLiteral(s,
+              dateFormat, DateTimeUtils.UTC_ZONE, -1);
       if (pt != null) {
         break;
       }
@@ -398,170 +394,9 @@ public final class SqlParserUtil {
    * @throws SqlParseException if there is a parse error
    */
   public static SqlNode parseArrayLiteral(String s) throws SqlParseException {
-    SqlAbstractParserImpl parser = SqlParserImpl.FACTORY.getParser(
-        new StringReader(s));
+    SqlAbstractParserImpl parser =
+        SqlParserImpl.FACTORY.getParser(new StringReader(s));
     return parser.parseArray();
-  }
-
-  /**
-   * Parses an interval literal that is accepted by Snowflake:
-   * https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#interval-constants
-   *
-   * The parser currently removes the quotes.
-   *
-   * TODO: Add proper comma support
-   */
-  public static SqlIntervalLiteral parseSnowflakeIntervalLiteral(
-      SqlParserPos pos, int sign, String s) {
-    // Collect all the interval strings/qualifiers found in the string
-    List<String> intervalStrings = new ArrayList<>();
-    List<SqlIntervalQualifier> intervalQualifiers = new ArrayList<>();
-    // Parse the Snowflake interval literal string. This is a comma separated
-    // series of <integer> [ <date_time_part> ]. If any date_time_part is omitted this
-    // defaults to seconds.
-    String[] splitStrings = s.split(",");
-    if (splitStrings.length > 1) {
-      // TODO: Support multiple commas. We currently can't represent the
-      // Interval properly.
-      throw SqlUtil.newContextException(pos,
-              BODO_SQL_RESOURCE.unsupportedSnowflakeIntervalLiteral(s, pos.toString()));
-    }
-    for (String intervalInfo: splitStrings) {
-      String trimmedStr = intervalInfo.trim();
-      String[] intervalParts = trimmedStr.split("\\s+");
-      if (intervalParts.length == 1 || intervalParts.length == 2) {
-        final String intervalAmountStr;
-        final String timeUnitStr;
-        if (intervalParts.length == 1) {
-          // If we have only 1 part then it may not be space separated (rare but possible).
-          // For example: Interval '30d'.
-          // If we so we look for the first non-numeric character and split on that.
-          int endIdx = -1;
-          final String baseStr = intervalParts[0];
-          for (int i = 0; i < baseStr.length(); i++) {
-            if (!Character.isDigit(baseStr.charAt(i))) {
-              endIdx = i;
-              break;
-            }
-          }
-          if (endIdx == -1) {
-            // If we only have 1 part the default Interval is seconds.
-            intervalAmountStr = baseStr;
-            timeUnitStr = "second";
-          } else {
-            intervalAmountStr = baseStr.substring(0, endIdx);
-            timeUnitStr = baseStr.substring(endIdx).toLowerCase(Locale.ROOT);
-          }
-        } else {
-          intervalAmountStr = intervalParts[0];
-          timeUnitStr = intervalParts[1].toLowerCase(Locale.ROOT);
-        }
-        intervalStrings.add(intervalAmountStr);
-        // Parse the second string into the valid time units.
-        // Here we support the time units supported by the other interval syntax only.
-        // TODO: Support all interval values supported by Snowflake in both interval paths.
-        final TimeUnit unit;
-        switch (timeUnitStr) {
-        case "year":
-        case "years":
-        case "y":
-        case "yy":
-        case "yyy":
-        case "yyyy":
-        case "yr":
-        case "yrs":
-          unit = TimeUnit.YEAR;
-          break;
-        case "quarter":
-        case "quarters":
-        case "qtr":
-        case "qtrs":
-        case "q":
-          unit = TimeUnit.QUARTER;
-          break;
-        case "month":
-        case "months":
-        case "mm":
-        case "mon":
-        case "mons":
-          unit = TimeUnit.MONTH;
-          break;
-        case "week":
-        case "weeks":
-        case "w":
-        case "wk":
-        case "weekofyear":
-        case "woy":
-        case "wy":
-          unit = TimeUnit.WEEK;
-          break;
-        case "day":
-        case "days":
-        case "d":
-        case "dd":
-        case "dayofmonth":
-          unit = TimeUnit.DAY;
-          break;
-        case "hour":
-        case "hours":
-        case "h":
-        case "hh":
-        case "hr":
-        case "hrs":
-          unit = TimeUnit.HOUR;
-          break;
-        case "minute":
-        case "minutes":
-        case "m":
-        case "mi":
-        case "min":
-        case "mins":
-          unit = TimeUnit.MINUTE;
-          break;
-        case "second":
-        case "seconds":
-        case "s":
-        case "sec":
-        case "secs":
-          unit = TimeUnit.SECOND;
-          break;
-        case "millisecond":
-        case "milliseconds":
-        case "ms":
-        case "msec":
-          unit = TimeUnit.MILLISECOND;
-          break;
-        case "microsecond":
-        case "microseconds":
-        case "us":
-        case "usec":
-          unit = TimeUnit.MICROSECOND;
-          break;
-        case "nanosecond":
-        case "nanoseconds":
-        case "ns":
-        case "nsec":
-        case "nanosec":
-        case "nanosecs":
-        case "nsecond":
-        case "nseconds":
-          unit = TimeUnit.NANOSECOND;
-          break;
-        default:
-          throw SqlUtil.newContextException(pos,
-              RESOURCE.illegalIntervalLiteral(s, pos.toString()));
-        }
-        intervalQualifiers.add(new SqlIntervalQualifier(unit, null, pos));
-      } else {
-        throw SqlUtil.newContextException(pos,
-            RESOURCE.illegalIntervalLiteral(s, pos.toString()));
-      }
-    }
-    if (intervalStrings.size() == 0) {
-      throw SqlUtil.newContextException(pos,
-            RESOURCE.illegalIntervalLiteral(s, pos.toString()));
-    }
-    return SqlLiteral.createInterval(sign, intervalStrings.get(0), intervalQualifiers.get(0), pos);
   }
 
   /**
@@ -598,9 +433,9 @@ public final class SqlParserUtil {
         "interval must be day time");
     int[] ret;
     try {
-      ret = intervalQualifier.evaluateIntervalLiteral(literal,
-          intervalQualifier.getParserPosition(), typeSystem);
-      assert ret != null;
+      ret =
+          intervalQualifier.evaluateIntervalLiteral(literal,
+              intervalQualifier.getParserPosition(), typeSystem);
     } catch (CalciteContextException e) {
       throw new RuntimeException("while parsing day-to-second interval "
           + literal, e);
@@ -642,9 +477,9 @@ public final class SqlParserUtil {
         "interval must be year month");
     int[] ret;
     try {
-      ret = intervalQualifier.evaluateIntervalLiteral(literal,
-          intervalQualifier.getParserPosition(), typeSystem);
-      assert ret != null;
+      ret =
+          intervalQualifier.evaluateIntervalLiteral(literal,
+              intervalQualifier.getParserPosition(), typeSystem);
     } catch (CalciteContextException e) {
       throw new RuntimeException("Error while parsing year-to-month interval "
           + literal, e);
@@ -1019,8 +854,8 @@ public final class SqlParserUtil {
    */
   public static SqlNode toTreeEx(SqlSpecialOperator.TokenSequence list,
       int start, final int minPrec, final SqlKind stopperKind) {
-    PrecedenceClimbingParser parser = list.parser(start,
-        token -> {
+    PrecedenceClimbingParser parser =
+        list.parser(start, token -> {
           if (token instanceof PrecedenceClimbingParser.Op) {
             PrecedenceClimbingParser.Op tokenOp = (PrecedenceClimbingParser.Op) token;
             final SqlOperator op = ((ToTreeListItem) tokenOp.o()).op;
@@ -1199,8 +1034,9 @@ public final class SqlParserUtil {
     }
 
     @Override public SqlOperator op(int i) {
-      ToTreeListItem o = (ToTreeListItem) requireNonNull(list.get(i).o,
-          () -> "list.get(" + i + ").o is null in " + list);
+      ToTreeListItem o =
+          (ToTreeListItem) requireNonNull(list.get(i).o,
+              () -> "list.get(" + i + ").o is null in " + list);
       return o.getOperator();
     }
 
@@ -1293,8 +1129,9 @@ public final class SqlParserUtil {
     }
 
     @Override public SqlOperator op(int i) {
-      ToTreeListItem item = (ToTreeListItem) requireNonNull(list.get(i),
-          () -> "list.get(" + i + ")");
+      ToTreeListItem item =
+          (ToTreeListItem) requireNonNull(list.get(i),
+              () -> "list.get(" + i + ")");
       return item.op;
     }
 

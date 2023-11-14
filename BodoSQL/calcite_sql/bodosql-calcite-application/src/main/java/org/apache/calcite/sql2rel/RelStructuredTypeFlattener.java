@@ -267,11 +267,8 @@ public class RelStructuredTypeFlattener implements ReflectiveVisitor {
   private RexNode restructure(RelDataType structuredType) {
     // Use ROW(f1,f2,...,fn) to put flattened data back together into a structure.
     List<RexNode> structFields = restructureFields(structuredType);
-    RexNode rowConstructor = rexBuilder.makeCall(
-        structuredType,
-        SqlStdOperatorTable.ROW,
+    return rexBuilder.makeCall(structuredType, SqlStdOperatorTable.ROW,
         structFields);
-    return rowConstructor;
   }
 
   protected void setNewForOldRel(RelNode oldRel, RelNode newRel) {
@@ -420,8 +417,9 @@ public class RelStructuredTypeFlattener implements ReflectiveVisitor {
       RelNode restructuredInput = tryRestructure(oldInput, getNewForOldRel(oldInput));
       // expected that after restructuring indexes in AggregateCalls again became relevant,
       // leave it as is but with new input
-      RelNode newRel = rel.copy(rel.getTraitSet(), restructuredInput, rel.getGroupSet(),
-          rel.getGroupSets(), rel.getAggCallList());
+      RelNode newRel =
+          rel.copy(rel.getTraitSet(), restructuredInput, rel.getGroupSet(),
+              rel.getGroupSets(), rel.getAggCallList());
       if (!SqlTypeUtil.isFlat(rel.getRowType())) {
         newRel = coverNewRelByFlatteningProjection(rel, newRel);
       }
@@ -713,8 +711,9 @@ public class RelStructuredTypeFlattener implements ReflectiveVisitor {
             }
           }
         } else {
-          newExp = rexBuilder.makeCall(exp.getType(), operator,
-              shuttle.visitList(operands));
+          newExp =
+              rexBuilder.makeCall(exp.getType(), operator,
+                  shuttle.visitList(operands));
           // flatten call result type
           flattenResultTypeOfRexCall(newExp, fieldName, flattenedExps);
         }

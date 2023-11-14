@@ -198,8 +198,7 @@ class EmptyScope implements SqlValidatorScope {
         path = path.plus(null, -1, subSchema.name, StructKind.NONE);
         remainingNames = Util.skip(remainingNames);
         schema = subSchema;
-        namespace = new SchemaNamespace(validator,
-            ImmutableList.copyOf(path.stepNames()));
+        namespace = new SchemaNamespace(validator, path.stepNames());
         continue;
       }
       //Return early if we can't find any further sub schemas
@@ -243,8 +242,9 @@ class EmptyScope implements SqlValidatorScope {
       CalciteSchema.TableEntry entry =
           schema.getTable(schemaName, nameMatcher.isCaseSensitive());
       if (entry == null) {
-        entry = schema.getTableBasedOnNullaryFunction(schemaName,
-            nameMatcher.isCaseSensitive());
+        entry =
+            schema.getTableBasedOnNullaryFunction(schemaName,
+                nameMatcher.isCaseSensitive());
       }
       if (entry != null) {
         path = path.plus(null, -1, entry.name, StructKind.NONE);

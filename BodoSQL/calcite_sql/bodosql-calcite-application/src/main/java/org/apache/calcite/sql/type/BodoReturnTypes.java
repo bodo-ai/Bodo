@@ -560,10 +560,6 @@ public class BodoReturnTypes {
 
     public static final SqlReturnTypeInference TO_NULLABLE_VARYING_ARRAY = ReturnTypes.ARG0_NULLABLE_VARYING.andThen(SqlTypeTransforms.TO_ARRAY);
 
-    public static FamilyOperandTypeChecker CHARACTER_CHARACTER =
-            OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER);
-
-
     /**
      * Determine the return type for BITOR_AGG, BITAND_AGG, and BITXOR_AGG. The return type is the
      * same as the input if it is an integer, otherwise the return type is always int64 (BIGINT).

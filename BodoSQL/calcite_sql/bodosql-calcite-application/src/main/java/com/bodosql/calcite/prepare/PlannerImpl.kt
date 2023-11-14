@@ -51,7 +51,6 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                 .typeSystem(config.typeSystem)
                 .sqlToRelConverterConfig(
                     SqlToRelConverter.config()
-                        .withExpand(false)
                         .withInSubQueryThreshold(Integer.MAX_VALUE),
                 )
                 .parserConfig(
