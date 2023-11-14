@@ -524,7 +524,7 @@ def test_array_construct(data_values, use_case, use_map, memory_leak_check):
     """
     if any(isinstance(elem, dict) for elem in data_values) and use_case:
         pytest.skip(
-            reason="[BSE-XXXX] TODO: support returning JSON or arrays of JSON in CASE statements"
+            reason="[BSE-1889] TODO: support returning JSON or arrays of JSON in CASE statements"
         )
     if use_case:
         query = "SELECT CASE WHEN C THEN ARRAY_CONSTRUCT(A, B) ELSE ARRAY_CONSTRUCT(B, A) END FROM table1"

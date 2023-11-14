@@ -1482,6 +1482,17 @@ numeric types
         This aggregation function is currently only supported with a `GROUP BY` clause,
         and on numerical data (integers, floats, etc.) or string/binary data.
 
+
+#### OBJECT_AGG
+-   `#!sql OBJECT_AGG(K, V)`
+
+    Combines the data from columns `K` and `V` into a JSON object where the rows of 
+    column `K` are the field names and the rows of column `V` are the values.
+
+    !!! note
+        This aggregation function is currently only supported with a `GROUP BY` clause.
+
+
 #### APPROX_PERCENTILE
 -   `#!sql APPROX_PERCENTILE(A, q)`
 

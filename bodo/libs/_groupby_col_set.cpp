@@ -1208,6 +1208,61 @@ ArrayAggColSet::getOutputColumns() {
     return {update_cols[0]};
 }
 
+// ############################## ArrayAgg ##############################
+
+ObjectAggColSet::ObjectAggColSet(std::shared_ptr<array_info> _key_col,
+                                 std::shared_ptr<array_info> _val_col,
+                                 bool _is_parallel)
+    : BasicColSet(_key_col, Bodo_FTypes::object_agg, false, true),
+      key_col(_key_col),
+      val_col(_val_col),
+      is_parallel(_is_parallel) {}
+
+ObjectAggColSet::~ObjectAggColSet() {}
+
+void ObjectAggColSet::alloc_running_value_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    size_t in_length = key_col->length;
+    std::vector<std::shared_ptr<array_info>> child_arrays;
+    // Allocate dummy arrays for the keys and values since they will be replaced
+    // later.
+    std::shared_ptr<array_info> key_array =
+        alloc_array_top_level(0, 0, 0, key_col->arr_type, key_col->dtype);
+    std::shared_ptr<array_info> val_array =
+        alloc_array_top_level(0, 0, 0, val_col->arr_type, val_col->dtype);
+    child_arrays.push_back(key_array);
+    child_arrays.push_back(val_array);
+    std::shared_ptr inner_arr = alloc_struct(in_length, child_arrays);
+    out_cols.push_back(
+        alloc_array_item(num_groups, inner_arr, pool, std::move(mm)));
+}
+
+void ObjectAggColSet::update(const std::vector<grouping_info>& grp_infos,
+                             bodo::IBufferPool* const pool,
+                             std::shared_ptr<::arrow::MemoryManager> mm) {
+    if (this->combine_step) {
+        throw std::runtime_error(
+            "Internal error in ObjectAggColSet::update: array_agg must always "
+            "shuffle before update");
+    } else {
+        if (grp_infos.size() != 1) {
+            throw std::runtime_error(
+                "Internal error in ObjectAggColSet::update: grp_infos length "
+                "does not equal 1. Each ObjectAggColSet should handle only one "
+                "group");
+        }
+        object_agg_computation(key_col, val_col, update_cols[0], grp_infos[0],
+                               is_parallel, pool, std::move(mm));
+    }
+}
+
+// Since we don't do combine, output column is always at update_cols[0]
+const std::vector<std::shared_ptr<array_info>>
+ObjectAggColSet::getOutputColumns() {
+    return {update_cols[0]};
+}
+
 // ############################## Kurtosis ##############################
 
 KurtColSet::KurtColSet(std::shared_ptr<array_info> in_col, int ftype,
@@ -1913,10 +1968,12 @@ std::unique_ptr<BasicColSet> makeColSet(
          ftype != Bodo_FTypes::array_agg &&
          ftype != Bodo_FTypes::array_agg_distinct &&
          ftype != Bodo_FTypes::percentile_cont &&
-         ftype != Bodo_FTypes::percentile_disc) &&
+         ftype != Bodo_FTypes::percentile_disc &&
+         ftype != Bodo_FTypes::object_agg) &&
         in_cols.size() != 1) {
         throw std::runtime_error(
-            "Only listagg, array_agg, percentile_cont, percentile_disc and "
+            "Only listagg, array_agg, percentile_cont, percentile_disc, "
+            "object_agg and "
             "window functions can have multiple input "
             "columns");
     }
@@ -2021,6 +2078,13 @@ std::unique_ptr<BasicColSet> makeColSet(
                 std::vector<std::shared_ptr<array_info>>(in_cols.begin() + 1,
                                                          in_cols.end()),
                 window_ascending, window_na_position, ftype, is_parallel);
+            break;
+        case Bodo_FTypes::object_agg:
+            colset = new ObjectAggColSet(
+                // key column
+                in_cols[0],
+                // value column
+                in_cols[1], is_parallel);
             break;
         case Bodo_FTypes::first:
             colset = new FirstColSet(in_cols[0], do_combine, use_sql_rules);

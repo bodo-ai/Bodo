@@ -33,6 +33,16 @@ import static org.apache.calcite.util.Static.RESOURCE;
 
 public class BodoReturnTypes {
 
+    /**
+     * Converts the input type to a map type with varchar keys.
+     */
+    public static final SqlTypeTransform TO_MAP =
+            (opBinding, typeToTransform) -> {
+                BodoRelDataTypeFactory typeFactory = (BodoRelDataTypeFactory) opBinding.getTypeFactory();
+                return typeFactory.createMapType(
+                        typeFactory.createSqlType(SqlTypeName.VARCHAR), typeToTransform);
+            };
+
 
 
     /**
