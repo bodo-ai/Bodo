@@ -75,8 +75,11 @@ except subprocess.CalledProcessError as e:
 
 # get the list of test modules (test file names) to run
 # omit caching tests, as those will be run in a separate pipeline
-pytest_module_regexp = re.compile(r"<Module ((?!tests/caching_tests/)\S+.py)>")
+pytest_module_regexp = re.compile(
+    r"<(?:Module|CppTestFile) ((?!tests/caching_tests/)\S+.(?:py|cpp))>"
+)
 all_modules = []
+
 for l in output.decode().split("\n"):
     m = pytest_module_regexp.search(l)
     if m:

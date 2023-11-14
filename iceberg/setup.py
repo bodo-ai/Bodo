@@ -36,15 +36,16 @@ def build_libs(obj, dev_mode=False):
     """Build maven and then calls the original run command"""
     try:
         pom_dir = os.path.join("bodo_iceberg_connector", "iceberg-java", "pom.xml")
-        cmd_list = ["mvn", "clean", "install"]
 
         # Batch Mode (--batch-mode or -B) will assume your running in CI
         # --no-transfer-progress or -ntp will suppress additional download messages
         # Both significantly reduce output
-        if not dev_mode:
-            cmd_list += ["--batch-mode", "--no-transfer-progress"]
-
-        cmd_list += [
+        cmd_list = [
+            "mvn",
+            "clean",
+            "install",
+            "--batch-mode",
+            "--no-transfer-progress",
             "-Dmaven.test.skip=true",
             "-f",
             pom_dir,

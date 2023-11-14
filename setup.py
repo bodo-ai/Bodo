@@ -120,7 +120,8 @@ else:
     debug_flag = "-g0"
 
 
-is_testing = os.environ.get("NUMBA_DEVELOPER_MODE") == "1"
+# Enable Tests by default for development
+is_testing = develop_mode
 if "--no-test" in sys.argv:
     is_testing = False
     sys.argv.remove("--no-test")
@@ -542,7 +543,6 @@ setup(
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
         "Operating System :: POSIX :: Linux",
-        "Operating System :: Microsoft :: Windows",
         "Operating System :: MacOS :: MacOS X",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3.9",

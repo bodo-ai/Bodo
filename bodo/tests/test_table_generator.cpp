@@ -30,7 +30,7 @@ bodo::tests::suite table_generator_tests([] {
             auto table = bodo::tests::cppToBodo(
                 {"A", "B", "C"}, {false, true, true}, {},
                 std::vector<int64_t>{0}, std::vector<int64_t>{1});
-        } catch (std::runtime_error e) {
+        } catch (std::runtime_error &e) {
             exception_raised = true;
         }
         bodo::tests::check(exception_raised);
@@ -42,7 +42,7 @@ bodo::tests::suite table_generator_tests([] {
             auto table = bodo::tests::cppToBodo(
                 {"A"}, {false}, {}, std::vector<int64_t>{0},
                 std::vector<int64_t>{1}, std::vector<int64_t>{2});
-        } catch (std::runtime_error e) {
+        } catch (std::runtime_error &e) {
             exception_raised = true;
         }
         bodo::tests::check(exception_raised);
@@ -54,7 +54,7 @@ bodo::tests::suite table_generator_tests([] {
             auto table = bodo::tests::cppToBodo(
                 {"A", "B", "C"}, {false, true}, {}, std::vector<int64_t>{0},
                 std::vector<int64_t>{1}, std::vector<int64_t>{2});
-        } catch (std::runtime_error e) {
+        } catch (std::runtime_error &e) {
             exception_raised = true;
         }
         bodo::tests::check(exception_raised);
