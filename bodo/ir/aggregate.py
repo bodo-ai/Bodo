@@ -286,6 +286,7 @@ supported_agg_funcs = [
     "mode",
     "percentile_cont",
     "percentile_disc",
+    "object_agg",
     "udf",
     "gen_udf",
     "window",
@@ -311,6 +312,7 @@ supported_extended_agg_funcs = [
     "listagg",
     "percentile_cont",
     "percentile_disc",
+    "object_agg",
 ]
 
 # Currently supported operations with transform
@@ -436,6 +438,14 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1
         func.percentile = handle_percentile_additional_args(func_ir, rhs)
+        return func
+    elif func_name == "object_agg":
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.fname = func_name
+        func.ncols_pre_shuffle = 1
+        func.ncols_post_shuffle = 1
+        func.key_col = handle_object_agg_additional_args(func_ir, rhs)
         return func
     elif func_name == "kurtosis":
         func = pytypes.SimpleNamespace()
@@ -868,6 +878,26 @@ def handle_percentile_additional_args(func_ir, outcol_and_namedagg):  # pragma: 
     assert isinstance(
         additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)
     ), "Internal error in handle_percentile_additional_args: percentile should be a constant value"
+    return additional_args_values[0].value
+
+
+def handle_object_agg_additional_args(func_ir, outcol_and_namedagg):  # pragma: no cover
+    """
+    Extract additional arguments for OBJECT_AGG.
+
+    In this case, outcol_and_namedagg is a tuple containing the assigned column name,
+    and the pd.NamedAgg/ExtendedAgg value. For example,
+    in df.groupby("A").agg(New_B=pd.NamedAgg("B", "sum")), outcol_and_namedagg is
+    ("new_b", pd.NamedAgg("B", "sum")) (as the relevant numba types).
+
+    """
+    additional_args_values = extract_extendedagg_additional_args_tuple(
+        func_ir, outcol_and_namedagg
+    )
+
+    assert isinstance(
+        additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)
+    ), "Internal error in handle_object_agg_additional_args: key column should be a constant value"
     return additional_args_values[0].value
 
 
@@ -2126,6 +2156,7 @@ def gen_top_level_agg_func(
             "mode",
             "percentile_cont",
             "percentile_disc",
+            "object_agg",
         }:
             # these operations require shuffle at the beginning, so a
             # local aggregation followed by combine is not necessary
@@ -2162,6 +2193,8 @@ def gen_top_level_agg_func(
             # Therefore, we add an extra columns to account for the the data argument
             ascending = [False] + func.ascending
             na_position = [False] + func.na_position_b
+        if func.ftype == "object_agg":
+            do_combine = False  # See median/nunique note ^
 
         # Update the various window arguments
         n_window_calls_per_func.append(w_calls)

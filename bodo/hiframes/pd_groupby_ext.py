@@ -330,7 +330,7 @@ def static_getitem_df_groupby(context, builder, sig, args):
     return impl_ret_borrowed(context, builder, sig.return_type, args[0])
 
 
-def get_groupby_output_dtype(arr_type, func_name, index_type=None):
+def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=None):
     """
     Return output array dtype for groupby aggregation function based on the
     function and the input array type and dtype.
@@ -433,6 +433,17 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
                 f"Unsupported array type for {func_name}: {arr_type}",
             )
         return ArrayItemArrayType(arr_type), "ok"
+    elif func_name == "object_agg":
+        # For object_agg, output is a map array where the keys are the
+        # first argument (which must be a string dtype) and the values
+        # are the second argument
+        key_arr_type = other_args[0]
+        if key_arr_type.dtype != string_type:  # pragma: no cover
+            return (
+                None,
+                f"Unsupported array type for {func_name}: {arr_type}",
+            )
+        return bodo.MapArrayType(key_arr_type, arr_type), "ok"
 
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         if is_list_string or in_dtype == types.unicode_type:
@@ -657,6 +668,7 @@ def get_agg_typ(
                         )
                     )
             else:
+                other_args = None
                 if func_name in ("first", "last", "min", "max"):
                     kws = dict(kws) if kws else {}
                     # pop arguments from kws
@@ -752,9 +764,13 @@ def get_agg_typ(
                     # pop arguments from kws or args
                     if len(args) == 0:
                         kws.pop("n", None)
-
+                elif func_name == "object_agg":
+                    key_col = args[0]
+                    key_col_idx = grp.df_type.column_index[key_col]
+                    key_col_type = grp.df_type.data[key_col_idx]
+                    other_args = (key_col_type,)
                 out_dtype, err_msg = get_groupby_output_dtype(
-                    data, func_name, grp.df_type.index
+                    data, func_name, grp.df_type.index, other_args
                 )
             if err_msg == "ok":
                 out_dtype = (
@@ -997,6 +1013,16 @@ def handle_extended_named_agg_input_cols(
                 f"Groupby.{f_name}: 'percentile' should be a string of a single column name."
             )
         return (data_col_name, additional_args_made_literal[0]), ()
+    if f_name == "object_agg":
+        assert (
+            get_literal_value(args[1]) == f_name
+        ), "Internal error in resolve_array_agg_func_inputs: Called on not object_agg function."
+        key_col_name = additional_args_made_literal[0]
+        if not (isinstance(key_col_name, str)):
+            raise_bodo_error(
+                f"Groupby.{f_name}: 'key_col_name' should be a string of a single column name."
+            )
+        return (key_col_name, data_col_name), ()
 
     raise RuntimeError(
         f"Internal error in handle_extended_named_agg_input_cols: Unsupported function name: {f_name}"

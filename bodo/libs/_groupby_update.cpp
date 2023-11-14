@@ -1333,6 +1333,43 @@ void array_agg_computation(
     }
 }
 
+// OBJECT_AGG
+void object_agg_computation(const std::shared_ptr<array_info>& key_col,
+                            const std::shared_ptr<array_info>& val_col,
+                            std::shared_ptr<array_info> out_arr,
+                            const grouping_info& grp_info,
+                            const bool is_parallel,
+                            bodo::IBufferPool* const pool,
+                            std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::shared_ptr<table_info> sorted_table = grouped_sort(
+        grp_info, {}, {key_col, val_col}, {}, {}, 0, is_parallel, pool, mm);
+    std::shared_ptr<array_info> groups = sorted_table->columns[0];
+    std::shared_ptr<array_info> keys = sorted_table->columns[1];
+    std::shared_ptr<array_info> values = sorted_table->columns[2];
+
+    // Populate the offset buffer based on the number of pairs in each group
+    size_t num_group = grp_info.group_to_first_row.size();
+    size_t n_total = keys->length;
+    offset_t* offset_buffer = (offset_t*)(out_arr->buffers[0]->mutable_data());
+    offset_buffer[0] = 0;
+    offset_buffer[num_group] = n_total;
+    size_t offset_idx = 1;
+    // Declare a cutoff each time the group number (which the sorted table
+    // was sorted by) changes.
+    for (size_t i = 1; i < n_total; i++) {
+        if (!TestEqualColumn(groups, i, groups, i - 1, true)) {
+            offset_buffer[offset_idx] = i;
+            offset_idx++;
+        }
+    }
+
+    // Replace the two child arrays of the struct array with the sorted
+    // key and value columns
+    std::shared_ptr<array_info> inner_arr = out_arr->child_arrays[0];
+    inner_arr->child_arrays[0] = keys;
+    inner_arr->child_arrays[1] = values;
+}
+
 // NUNIQUE
 void nunique_computation(std::shared_ptr<array_info> arr,
                          std::shared_ptr<array_info> out_arr,

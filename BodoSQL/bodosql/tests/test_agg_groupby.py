@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from bodo import Time
 from bodo.tests.utils import pytest_slow_unless_groupby
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
@@ -1659,6 +1660,134 @@ def test_array_agg_distinct(call, answer, memory_leak_check):
         check_dtype=False,
         convert_columns_to_pandas=True,
     )
+
+
+@pytest.mark.parametrize(
+    "value_pool, dtype, nullable, requires_struct",
+    [
+        pytest.param(
+            [0, -1, 2, -4, 8, -16, 32],
+            pd.Int64Dtype(),
+            True,
+            False,
+            id="int64_nullable",
+        ),
+        pytest.param(
+            [127, 63, 31, 15, 7, 3, 1],
+            np.int8,
+            False,
+            False,
+            id="int8_numpy",
+            marks=pytest.mark.skip(
+                reason="[BSE-1952] TODO: fix unboxing issues with map arrays for gatherv"
+            ),
+        ),
+        pytest.param(
+            ["A", "", "BC", "DEF", "GHIJ", "abc", "defghij"],
+            None,
+            True,
+            False,
+            id="string",
+        ),
+        pytest.param(
+            [[1, 2], [], [3], [4, None], [5, 6, 7, 8], [9], [10, None, 11]],
+            None,
+            True,
+            False,
+            id="int_array",
+        ),
+        pytest.param(
+            [{"n": i, "typ": ("EVEN" if i % 2 == 0 else "ODD")} for i in range(10, 17)],
+            None,
+            True,
+            True,
+            id="struct",
+        ),
+        pytest.param(
+            [datetime.date.fromordinal(737425 + int(3.5**i)) for i in range(7)],
+            None,
+            True,
+            False,
+            id="date",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            [Time(nanosecond=35**i) for i in range(3, 10)],
+            None,
+            True,
+            False,
+            id="time",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_object_agg(value_pool, dtype, nullable, requires_struct, memory_leak_check):
+    """Tests OBJECT_AGG with GROUP BY"""
+    query = "SELECT G AS G, OBJECT_AGG(K, V) AS J FROM table1 GROUP BY G"
+    extra_val = None if nullable else value_pool[0]
+    in_df = pd.DataFrame(
+        {
+            "G": pd.Series(list("AABAABCBAABCDCBAABCDEF")),
+            "K": pd.Series([str(i) for i in range(22)]),
+            "V": pd.Series(
+                [value_pool[i] for i in list(range(7))] * 3 + [extra_val], dtype=dtype
+            ),
+        }
+    )
+    ctx = {"table1": in_df}
+    pairs = []
+    unique_keys = in_df["G"].drop_duplicates()
+    for group_key in unique_keys:
+        j_data = {}
+        for i in range(len(in_df)):
+            if in_df["G"][i] == group_key:
+                k = in_df["K"][i]
+                v = in_df["V"][i]
+                j_data[k] = v
+        pairs.append(j_data)
+
+    answer = pd.DataFrame(
+        {
+            "G": unique_keys,
+            "J": pairs,
+        }
+    )
+
+    if requires_struct:
+        # Test sequentially so that we don't run into issues with unboxing
+        # for gatherv.
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=answer,
+            check_names=False,
+            check_dtype=False,
+            sort_output=False,
+            use_map_arrays=False,
+            # [BSE-1952] TODO: support unboxing map arrays with dict encoding
+            use_dict_encoded_strings=False,
+            only_jit_seq=True,
+        )
+    else:
+        # Test in parallel with use_map_arrays=True so that
+        # we can correctly unbox the output as a map array for
+        # gatherv. Do not test with only_python=True to avoid issues
+        # with unboxing a map array vs a struct array.
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=answer,
+            check_names=False,
+            check_dtype=False,
+            sort_output=False,
+            # [BSE-1952] TODO: support unboxing map arrays with dict encoding
+            use_dict_encoded_strings=False,
+            use_map_arrays=True,
+            # [BSE-1952] TODO fix unboxing issues that prevent parallel testing
+            only_jit_seq=True,
+        )
 
 
 @pytest.mark.parametrize(

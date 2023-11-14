@@ -113,6 +113,7 @@ public class AggCodeGen {
     equivalentExtendedNamedAggAggregates.put("ARRAY_UNIQUE_AGG", "array_unique_agg");
     equivalentExtendedNamedAggAggregates.put("PERCENTILE_CONT", "percentile_cont");
     equivalentExtendedNamedAggAggregates.put("PERCENTILE_DISC", "percentile_disc");
+    equivalentExtendedNamedAggAggregates.put("OBJECT_AGG", "object_agg");
   }
 
   /**
@@ -252,7 +253,9 @@ public class AggCodeGen {
           || aggFunc.equals("bitand_agg")
           || aggFunc.equals("bitxor_agg")) {
         aggExpr = new Expr.Call("bodo.libs.array_kernels." + aggFunc, aggExpr);
-      } else if (aggFunc.equals("array_agg") || aggFunc.equals("array_unique_agg")) {
+      } else if (aggFunc.equals("array_agg")
+          || aggFunc.equals("array_unique_agg")
+          || aggFunc.equals("object_agg")) {
         throw new BodoSQLCodegenException(aggFunc + " not supported without a GROUP BY clause");
       } else if (aggFunc.equals("percentile_cont") || aggFunc.equals("percentile_disc")) {
         if (a.collation == null) {
@@ -509,6 +512,13 @@ public class AggCodeGen {
         if (aggFunc.equals("\"array_agg\"") && a.isDistinct()) {
           aggFunc = "\"array_agg_distinct\"";
         }
+        // Calcite will switch the locations of the key and value columns, so we need to switch
+        // them.
+        if (aggFunc.equals("\"object_agg\"")) {
+          Expr valueCol = additionalArgs.getArgs().get(0);
+          additionalArgs = new Expr.Tuple(new Expr.StringLiteral(aggCol));
+          aggCol = valueCol.emit();
+        }
         aggString
             .append(tempName)
             .append("=bodo.utils.utils.ExtendedNamedAgg(column=")
@@ -643,6 +653,17 @@ public class AggCodeGen {
         }
 
         return new Expr.Tuple(additionalArgsList);
+      case OTHER_FUNCTION:
+        String name = agg.getAggregation().getName();
+        switch (name) {
+          case "OBJECT_AGG":
+            Integer keyIdx = argsList.get(1);
+            additionalArgsList.add(new Expr.StringLiteral(inputColumnNames.get(keyIdx)));
+            return new Expr.Tuple(additionalArgsList);
+          default:
+            throw new BodoSQLCodegenException(
+                "Internal error in getAdditionalArgs: " + (name) + " not handled");
+        }
       default:
         throw new BodoSQLCodegenException(
             "Internal error in getAdditionalArgs: " + kind.name() + " not handled");

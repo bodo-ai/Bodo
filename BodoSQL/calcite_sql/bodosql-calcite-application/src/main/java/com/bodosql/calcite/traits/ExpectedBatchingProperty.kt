@@ -1,6 +1,7 @@
 package com.bodosql.calcite.traits
 
 import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable
+import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.utils.AggHelpers
 import com.bodosql.calcite.schema.CatalogSchemaImpl
 import com.bodosql.calcite.table.BodoSqlTable
@@ -135,6 +136,7 @@ class ExpectedBatchingProperty {
             SqlAggOperatorTable.LISTAGG.name,
             ArrayOperatorTable.ARRAY_UNIQUE_AGG.name,
             ArrayOperatorTable.ARRAY_AGG.name,
+            JsonOperatorTable.OBJECT_AGG.name,
         )
 
         @JvmStatic

@@ -5,6 +5,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -12,6 +13,7 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
+import org.apache.calcite.sql.fun.SqlBasicAggFunction;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -19,6 +21,7 @@ import org.apache.calcite.sql.type.SameOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
+import org.apache.calcite.util.Optionality;
 
 public final class JsonOperatorTable implements SqlOperatorTable {
 
@@ -45,6 +48,15 @@ public final class JsonOperatorTable implements SqlOperatorTable {
 
   public static final SameOperandTypeChecker OPERAND_CONSTRUCT_TYPE_CHECKER =
       ObjectConstructOperandChecker.INSTANCE;
+
+  public static final SqlAggFunction OBJECT_AGG =
+      SqlBasicAggFunction.create(
+              "OBJECT_AGG",
+              SqlKind.OTHER_FUNCTION,
+              ReturnTypes.ARG1.andThen(BodoReturnTypes.TO_MAP),
+              OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.ANY))
+          .withGroupOrder(Optionality.FORBIDDEN)
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
 
   public static final SqlFunction GET_PATH =
       new SqlFunction(
@@ -101,7 +113,12 @@ public final class JsonOperatorTable implements SqlOperatorTable {
 
   private List<SqlOperator> functionList =
       Arrays.asList(
-          GET_PATH, OBJECT_DELETE, JSON_EXTRACT_PATH_TEXT, OBJECT_KEYS, OBJECT_CONSTRUCT_KEEP_NULL);
+          GET_PATH,
+          OBJECT_DELETE,
+          JSON_EXTRACT_PATH_TEXT,
+          OBJECT_KEYS,
+          OBJECT_CONSTRUCT_KEEP_NULL,
+          OBJECT_AGG);
 
   @Override
   public void lookupOperatorOverloads(
