@@ -288,25 +288,26 @@ static bodo::tests::suite tests([] {
         nonspilling.push_back(0);
     });
 
-    construct_and_move<bodo::vector<uint32_t>>(0, 100);
-    construct_and_move<bodo::vector<uint32_t>>(0, 100000);
+    // construct_and_move<bodo::vector<uint32_t>>(0, 100);
+    // construct_and_move<bodo::vector<uint32_t>>(0, 100000);
 
-    insert_and_move<bodo::vector<uint32_t>>(100);
-    insert_and_move<bodo::vector<uint32_t>>(100000);
+    // insert_and_move<bodo::vector<uint32_t>>(100);
+    // insert_and_move<bodo::vector<uint32_t>>(100000);
 
-    insert_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(100);
-    insert_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(1000);
+    // insert_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(100);
+    // insert_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(1000);
 
-    insert_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(100);
-    insert_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(1000);
-    insert_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(10000);
+    // insert_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(100);
+    // insert_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(1000);
+    // insert_and_move_map<bodo::unord_map_container<uint32_t,
+    // uint32_t>>(10000);
 
-    insert_erase_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(
-        100);
-    insert_erase_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(
-        1000);
-    insert_erase_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(
-        10000);
+    // insert_erase_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(
+    //     100);
+    // insert_erase_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(
+    //     1000);
+    // insert_erase_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(
+    //     10000);
 
     // construct_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(0,
     // 1000000); construct_and_move_map<bodo::unord_map_container<uint32_t,

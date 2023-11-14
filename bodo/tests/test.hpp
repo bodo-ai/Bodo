@@ -12,6 +12,7 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <source_location>
 #include <string>
 #include <vector>
