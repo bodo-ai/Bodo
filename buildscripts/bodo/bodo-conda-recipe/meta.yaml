@@ -23,7 +23,7 @@ requirements:
     - numba 0.57.1
     # Compatable with Numba requirements.
     # Resolves build issues on nightly
-    - numpy >=1.23
+    - numpy >=1.23,<1.25
     - cython <3.0
     # Earliest version of Pandas on Python 3.11 is 1.5.1 for M1 Macs
     - pandas >=1.5.1,<2.0
@@ -61,7 +61,7 @@ requirements:
   run_constrained:
     - matplotlib <= 3.5.1
   run_constrained:
-    - numpy >=1.23
+    - numpy >=1.23,<1.25
   run_constrained:
     - scikit-learn =1.1.*
   run_constrained:
