@@ -83,17 +83,49 @@ stages:
       vmImage: macOS-latest
       platformBuild: false
       weeklyTest: false
+      pythonVersion: 3.11
+  - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
+    parameters:
+      name: macOS_310
+      vmImage: macOS-latest
+      platformBuild: false
+      weeklyTest: false
+      pythonVersion: 3.10
+  - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
+    parameters:
+      name: macOS_39
+      vmImage: macOS-latest
+      platformBuild: false
+      weeklyTest: false
+      pythonVersion: 3.9
 #  - template: buildscripts/bodo/azure/azure-build-conda-windows.yml
 #    parameters:
 #      name: Windows
 #      vmImage: windows-2019
   - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
     parameters:
-      name: macOS_ARM
+      name: macOS_ARM_311
       vmImage: macOS-latest
       platformBuild: false
       weeklyTest: false
       buildARM: true
+      pythonVersion: 3.11
+  - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
+    parameters:
+      name: macOS_ARM_310
+      vmImage: macOS-latest
+      platformBuild: false
+      weeklyTest: false
+      buildARM: true
+      pythonVersion: 3.10
+  - template: buildscripts/bodo/azure/azure-build-conda-linux-macos.yml
+    parameters:
+      name: macOS_ARM_39
+      vmImage: macOS-latest
+      platformBuild: false
+      weeklyTest: false
+      buildARM: true
+      pythonVersion: 3.9
 
 # Pip Packages. Usually disabled for Nightly Runs
 # But useful to have when testing all Pip Builds

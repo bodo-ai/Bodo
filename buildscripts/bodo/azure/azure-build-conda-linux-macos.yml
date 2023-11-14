@@ -16,10 +16,13 @@ parameters:
 - name: weeklyTest
   type: boolean
   default: false
+- name: pythonVersion
+  type: string
+  default: ''
 
 jobs:
 - job: ${{ parameters.name }}
-  timeoutInMinutes: 250
+  timeoutInMinutes: 360
   pool:
     vmImage: ${{ parameters.vmImage }}
 
@@ -192,7 +195,13 @@ jobs:
         export CONDA_VARIANT_ARG="-e nightly_conda_build_config.yaml"
       fi
 
-      conda mambabuild . -c conda-forge --no-test $VERIFY_ARG --debug --no-anaconda-upload $CONDA_VARIANT_ARG
+      if [ -n "${{ parameters.pythonVersion }}" ]; then
+        export BUILD_PY_VERSION="--python ${{ parameters.pythonVersion }}"
+      else
+        export BUILD_PY_VERSION=""
+      fi
+
+      conda mambabuild . -c conda-forge --no-test $VERIFY_ARG --debug --no-anaconda-upload $CONDA_VARIANT_ARG $BUILD_PY_VERSION
     displayName: 'Build Bodo'
 
   - task: DownloadSecureFile@1
