@@ -90,7 +90,7 @@ snowflake_writer_payload_members = (
     ("file_count_global", types.int64),
     # Copy into directory
     ("copy_into_dir", types.unicode_type),
-    # Snowflake query ID for previous COPY INTO command
+    #  Snowflake query ID for previous COPY INTO command
     ("copy_into_prev_sfqid", types.unicode_type),
     # Flag indicating if the Snowflake transaction has started
     ("is_initialized", types.boolean),
@@ -133,6 +133,10 @@ snowflake_writer_payload_members = (
     ("old_sas_token", types.unicode_type),
     # Batches collected to write
     ("batches", TableBuilderStateType()),
+    # Whether the `copy_intosfqids` exists.
+    ("copy_into_sfqids_exists", types.boolean),
+    # Keep track of list of copy into async Snowflake query ids
+    ("copy_into_sfqids", types.unicode_type),
 )
 snowflake_writer_payload_members_dict = dict(snowflake_writer_payload_members)
 
@@ -490,6 +494,8 @@ def gen_snowflake_writer_init_impl(
         writer["file_count_local"] = 0
         writer["file_count_global"] = 0
         writer["copy_into_prev_sfqid"] = ""
+        writer["copy_into_sfqids_exists"] = False
+        writer["copy_into_sfqids"] = ""
         writer["file_count_global_prev"] = 0
         writer["upload_threads_exists"] = False
         writer["batches"] = bodo.libs.table_builder.init_table_builder_state(
@@ -825,6 +831,14 @@ def gen_snowflake_writer_append_table_impl_inner(
                     )
                 writer["copy_into_prev_sfqid"] = copy_into_new_sfqid
                 writer["file_count_global_prev"] = writer["file_count_global"]
+                if bodo.user_logging.get_verbose_level() >= 2:
+                    if writer["copy_into_sfqids_exists"]:
+                        writer["copy_into_sfqids"] = ", ".join(
+                            [writer["copy_into_sfqids"], copy_into_new_sfqid]
+                        )
+                    else:
+                        writer["copy_into_sfqids_exists"] = True
+                        writer["copy_into_sfqids"] = copy_into_new_sfqid
             # Create a new COPY INTO internal stage directory
             writer["file_count_local"] = 0
             writer["file_count_global"] = 0
@@ -887,6 +901,12 @@ def gen_snowflake_writer_append_table_impl_inner(
             if writer["parallel"]:
                 bodo.barrier()
             writer["finished"] = True
+            if bodo.user_logging.get_verbose_level() >= 2:
+                bodo.user_logging.log_message(
+                    "Snowflake Query Submission",
+                    "/* async_execute_copy_into */ Snowflake Query IDs: "
+                    + ", ".join(writer["copy_into_sfqids"]),
+                )
         ev.finalize()
         return is_last
 

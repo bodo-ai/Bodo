@@ -49,6 +49,20 @@ def get_verbose_level():
     return _bodo_verbose_level
 
 
+@overload(get_verbose_level)
+def overload_get_verbose_level():
+    """
+    Implementation of get_verbose_level that can be called from JIT.
+    """
+
+    def impl():  # pragma: no cover
+        with objmode(verbose_level="int64"):
+            verbose_level = get_verbose_level()
+        return verbose_level
+
+    return impl
+
+
 def set_verbose_level(level):
     """
     User facing function to set the verbose level in Bodo.
