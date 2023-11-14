@@ -1,6 +1,7 @@
 package com.bodosql.calcite.sql.parser
 
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
+import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import org.apache.calcite.avatica.util.TimeUnit
@@ -9,6 +10,8 @@ import org.apache.calcite.sql.SqlIntervalLiteral
 import org.apache.calcite.sql.SqlIntervalQualifier
 import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
+import org.apache.calcite.sql.SqlNodeList
+import org.apache.calcite.sql.SqlSelect
 import org.apache.calcite.sql.SqlUtil
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.parser.SqlParserPos
@@ -59,6 +62,20 @@ class SqlBodoParserUtil {
             } else {
                 throw RuntimeException("Internal Error: Unexpected builtin table")
             }
+        }
+
+        /**
+         * Convert a call to SPLIT_TO_TABLE to a call to FLATTEN(SPLIT(...)) with a pruning projection
+         * that only selects the columns of FLATTEN that can be produced by SPLIT_TO_TABLE.
+         */
+        @JvmStatic
+        fun createSplitToTable(start: SqlParserPos, end: SqlParserPos, args: List<SqlNode>): SqlNode? {
+            val splitCall: SqlNode = StringOperatorTable.SPLIT.createCall(end, args)
+            val flattenCall = TableFunctionOperatorTable.FLATTEN.createCall(end, listOf(splitCall))
+            val tableCall = SqlStdOperatorTable.COLLECTION_TABLE.createCall(end, flattenCall)
+            val prunedCols = SqlNodeList(listOf(SqlIdentifier("SEQ", end), SqlIdentifier("INDEX", end), SqlIdentifier("VALUE", end)), end)
+            val pruningSelect = SqlSelect(end, null, prunedCols, tableCall, null, null, null, null, null, null, null, null, null)
+            return pruningSelect
         }
 
         /**

@@ -85,7 +85,6 @@ public class BodoReturnTypes {
                 } else if (inputType instanceof ArraySqlType) {
                     type4 = factory.createTypeWithNullability(inputType.getComponentType(), true);
                 } else {
-                    SqlParserPos pos =((SqlCallBinding) opBinding).operand(0).getParserPosition();
                     throw new CalciteContextException("", BODO_SQL_RESOURCE.requiresArrayOrJson("FLATTEN", "INPUT").ex());
                 }
                 RelDataType type5 = inputType;
