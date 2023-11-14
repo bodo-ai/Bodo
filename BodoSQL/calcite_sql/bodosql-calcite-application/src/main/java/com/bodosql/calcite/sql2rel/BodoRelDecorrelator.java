@@ -202,6 +202,7 @@ public class BodoRelDecorrelator extends RelDecorrelator {
             // New Rules:
             .addRuleInstance(RemoveCorrelationForSingletonValuesRule.config(this, f).toRule())
             .addRuleInstance(RemoveCorrelationForFlattenRule.config(this, f).toRule())
+            .addRuleInstance(PushProjectFlattenRule.config(this, f).toRule())
             .build();
 
     HepPlanner planner = createPlanner(program);
@@ -388,6 +389,93 @@ public class BodoRelDecorrelator extends RelDecorrelator {
   }
 
   /**
+   * PIn a plan like the following:
+   *
+   * <blockquote>
+   *
+   * <pre>
+   *  LogicalCorrelate(correlation=[$cor0], joinType=[inner], requiredColumns=[{3}])
+   *    LogicalProject(A=[$0], B=[$1]])
+   *      TableScan(...)
+   *    LogicalProject(C=[$0], D=[$3]])
+   *      BodoLogicalFlatten(Call=[FLATTEN($0)], ..., Repeated columns=[{}])
+   *        BodoLogicalProject($f0=[$cor0.$B])
+   *          LogicalValues(tuples=[[{ true }]])
+   * </pre>
+   *
+   * </blockquote>
+   *
+   * This rule pushes the project into the flatten call to explicitly prune which columns are kept.
+   *
+   * </blockquote>
+   */
+  public static final class PushProjectFlattenRule
+      extends RelRule<PushProjectFlattenRule.PushProjectFlattenRuleConfig> {
+    private final BodoRelDecorrelator d;
+
+    public static PushProjectFlattenRuleConfig config(BodoRelDecorrelator d, RelBuilderFactory f) {
+      return ImmutablePushProjectFlattenRuleConfig.builder()
+          .withRelBuilderFactory(f)
+          .withDecorrelator(d)
+          .withOperandSupplier(
+              b0 ->
+                  b0.operand(Correlate.class)
+                      .inputs(
+                          b1 -> b1.operand(RelNode.class).anyInputs(),
+                          b2 ->
+                              b2.operand(Project.class)
+                                  .oneInput(b3 -> b3.operand(Flatten.class).anyInputs())))
+          .build();
+    }
+
+    /** Creates a RemoveSingleAggregateRule. */
+    PushProjectFlattenRule(PushProjectFlattenRule.PushProjectFlattenRuleConfig config) {
+      super(config);
+      this.d = (BodoRelDecorrelator) requireNonNull(config.decorrelator());
+    }
+
+    @Override
+    public void onMatch(RelOptRuleCall call) {
+      final Correlate correlate = call.rel(0);
+      final RelNode left = call.rel(1);
+      final Project project = call.rel(2);
+      final Flatten flatten = call.rel(3);
+
+      List<Integer> usedOutputCols = new ArrayList<Integer>();
+      for (RexNode proj : project.getProjects()) {
+        if (proj instanceof RexInputRef) {
+          int idx = ((RexInputRef) proj).getIndex();
+          usedOutputCols.add(flatten.getUsedColOutputs().nth(idx));
+        } else {
+          return;
+        }
+      }
+
+      // Build the new flatten node
+      Flatten newFlatten =
+          flatten.copy(
+              flatten.getTraitSet(),
+              flatten.getInput(),
+              flatten.getCall(),
+              flatten.getCallType(),
+              ImmutableBitSet.of(usedOutputCols),
+              flatten.getRepeatColumns());
+
+      RelNode newCorrelate = correlate.copy(correlate.getTraitSet(), List.of(left, newFlatten));
+      call.transformTo(newCorrelate);
+    }
+
+    /** Rule configuration. */
+    @Value.Immutable(singleton = false)
+    public interface PushProjectFlattenRuleConfig extends BodoRelDecorrelator.Config {
+      @Override
+      default PushProjectFlattenRule toRule() {
+        return new PushProjectFlattenRule(this);
+      }
+    }
+  }
+
+  /**
    * A query like this: SELECT * FROM T, LATERAL FLATTEN(T.A) L Will be re-written into the
    * following plan:
    *
@@ -507,11 +595,6 @@ public class BodoRelDecorrelator extends RelDecorrelator {
       // Construct the new call to the flatten operation
       RexCall newFlattenCall = oldFlattenCall.clone(oldFlattenCall.type, flattenOperands);
 
-      // Build the new output row type of the flatten node
-      List<RelDataTypeField> rowType = new ArrayList<RelDataTypeField>();
-      rowType.addAll(flatten.getCallType().getFieldList());
-      rowType.addAll(left.getRowType().getFieldList());
-
       // Build the new flatten node
       Flatten newFlatten =
           flatten.copy(
@@ -533,7 +616,8 @@ public class BodoRelDecorrelator extends RelDecorrelator {
       }
       // Shift the used col outputs since there are now
       // repeated columns before them in the inputs.
-      for (int i : flatten.getUsedColOutputs()) {
+      int nOutputs = flatten.getUsedColOutputs().cardinality();
+      for (int i = 0; i < nOutputs; i++) {
         newOrder.add(new RexInputRef(i, newFlatten.getRowType().getFieldList().get(i).getType()));
       }
       RelNode reorderProject = d.relBuilder.push(newFlatten).project(newOrder).build();

@@ -9,6 +9,42 @@ import pytest
 from bodosql.tests.utils import check_query
 
 
+def test_lateral_split_to_table(memory_leak_check):
+    query = "SELECT lat.value, COUNT(*) FROM table1, LATERAL SPLIT_TO_TABLE(str_col, ';') lat GROUP BY 1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "str_col": [
+                    "red;orange;yellow",
+                    "red",
+                    None,
+                    "blue;green",
+                    None,
+                    None,
+                    "",
+                    "red;yellow;blue",
+                    "red;green;blue",
+                    None,
+                    "green",
+                    ";;;;",
+                    ";red;red;red;;red;",
+                ],
+            }
+        )
+    }
+    answer = pd.DataFrame(
+        {0: ["red", "orange", "yellow", "green", "blue", ""], 1: [8, 1, 2, 3, 3, 9]}
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+    )
+
+
 @pytest.mark.parametrize(
     "query, answer",
     [
