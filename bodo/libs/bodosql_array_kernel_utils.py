@@ -815,7 +815,7 @@ def verify_int_arg(arg, f_name, a_name):  # pragma: no cover
     """
     if not is_valid_int_arg(arg):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be an integer, integer column, or null"
+            f"{f_name} {a_name} argument must be an integer, integer column, or null, but was {arg}"
         )
 
 
@@ -840,7 +840,7 @@ def verify_int_float_arg(arg, f_name, a_name):  # pragma: no cover
         and not is_overload_constant_number(arg)
     ):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a numeric, numeric column, or null"
+            f"{f_name} {a_name} argument must be a numeric, numeric column, or null, but was {arg}"
         )
 
 
@@ -941,7 +941,7 @@ def verify_string_arg(arg, f_name, a_name):  # pragma: no cover
     """
     if not is_valid_string_arg(arg):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a string, string column, or null"
+            f"{f_name} {a_name} argument must be a string, string column, or null, but was {arg}"
         )
 
 
@@ -956,7 +956,9 @@ def verify_scalar_string_arg(arg, f_name, a_name):  # pragma: no cover
     if arg not in (types.unicode_type, bodo.none) and not isinstance(
         arg, types.StringLiteral
     ):
-        raise_bodo_error(f"{f_name} {a_name} argument must be a scalar string")
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a scalar string, but was {arg}"
+        )
 
 
 def verify_binary_arg(arg, f_name, a_name):  # pragma: no cover
@@ -969,7 +971,9 @@ def verify_binary_arg(arg, f_name, a_name):  # pragma: no cover
     raises: BodoError if the argument is not binary data or null
     """
     if not is_valid_binary_arg(arg):
-        raise_bodo_error(f"{f_name} {a_name} argument must be binary data or null")
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be binary data or null, but was {arg}"
+        )
 
 
 def verify_string_binary_arg(arg, f_name, a_name):  # pragma: no cover
@@ -993,7 +997,7 @@ def verify_string_binary_arg(arg, f_name, a_name):  # pragma: no cover
         return False
     else:
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a binary data, string, string column, or null"
+            f"{f_name} {a_name} argument must be a binary data, string, string column, or null, but was {arg}"
         )
 
 
@@ -1009,7 +1013,7 @@ def verify_string_numeric_arg(arg, f_name, a_name):  # pragma: no cover
     """
     if not is_valid_string_arg(arg) and not is_valid_numeric_bool(arg):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a string, integer, float, boolean, string column, integer column, float column, or boolean column"
+            f"{f_name} {a_name} argument must be a string, integer, float, boolean, string column, integer column, float column, or boolean column, but was {arg}"
         )
 
 
@@ -1032,7 +1036,7 @@ def verify_boolean_arg(arg, f_name, a_name):  # pragma: no cover
         and not is_overload_bool(arg)
     ):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a boolean, boolean column, or null"
+            f"{f_name} {a_name} argument must be a boolean, boolean column, or null, but was {arg}"
         )
 
 
@@ -1107,7 +1111,7 @@ def verify_datetime_arg(arg, f_name, a_name):  # pragma: no cover
         or is_valid_tz_naive_datetime_arg(arg)
     ):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a datetime, datetime column, or null without a tz"
+            f"{f_name} {a_name} argument must be a datetime, datetime column, or null without a tz, but was {arg}"
         )
 
 
@@ -1124,7 +1128,7 @@ def verify_date_arg(arg, f_name, a_name):  # pragma: no cover
     """
     if not (is_overload_none(arg) or is_valid_date_arg(arg)):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a date, date column, or null object"
+            f"{f_name} {a_name} argument must be a date, date column, or null object, but was {arg}"
         )
 
 
@@ -1146,7 +1150,7 @@ def verify_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
         or is_valid_tz_aware_datetime_arg(arg)
     ):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a datetime, datetime column, or null"
+            f"{f_name} {a_name} argument must be a datetime, datetime column, or null, but was {arg}"
         )
 
 
@@ -1168,7 +1172,7 @@ def verify_timestamp_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
         or is_valid_tz_aware_datetime_arg(arg)
     ):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a timestamp, timestamp column, or null"
+            f"{f_name} {a_name} argument must be a timestamp, timestamp column, or null, but was {arg}"
         )
 
 
@@ -1183,7 +1187,7 @@ def verify_datetime_arg_require_tz(arg, f_name, a_name):  # pragma: no cover
     """
     if not (is_overload_none(arg) or is_valid_tz_aware_datetime_arg(arg)):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a tz-aware datetime, datetime column, or null"
+            f"{f_name} {a_name} argument must be a tz-aware datetime, datetime column, or null, but was {arg}"
         )
 
 
@@ -1203,7 +1207,7 @@ def verify_sql_interval(arg, f_name, a_name):  # pragma: no cover
         or arg == bodo.date_offset_type
     ):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a Timedelta scalar/column, DateOffset, or null"
+            f"{f_name} {a_name} argument must be a Timedelta scalar/column, DateOffset, or null, but was {arg}"
         )
 
 
@@ -1218,7 +1222,7 @@ def verify_td_arg(arg, f_name, a_name):  # pragma: no cover
     """
     if not (is_overload_none(arg) or is_valid_timedelta_arg(arg)):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a Timedelta scalar/column or null"
+            f"{f_name} {a_name} argument must be a Timedelta scalar/column or null, but was {arg}"
         )
 
 
@@ -1275,7 +1279,7 @@ def verify_time_or_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cov
         or is_valid_tz_aware_datetime_arg(arg)
     ):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a time/datetime, time/datetime column, or null without a tz"
+            f"{f_name} {a_name} argument must be a time/datetime, time/datetime column, or null without a tz, but was {arg}"
         )
 
 
@@ -1296,7 +1300,7 @@ def verify_date_or_datetime_arg_forbid_tz(arg, f_name, a_name):  # pragma: no co
         or is_valid_tz_naive_datetime_arg(arg)
     ):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a date/datetime, date/datetime column, or null without a tz"
+            f"{f_name} {a_name} argument must be a date/datetime, date/datetime column, or null without a tz, but was {arg}"
         )
 
 
@@ -1318,7 +1322,7 @@ def verify_time_or_datetime_arg_forbid_tz(arg, f_name, a_name):  # pragma: no co
         or is_valid_tz_naive_datetime_arg(arg)
     ):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a time/datetime, time/datetime column, or null without a tz"
+            f"{f_name} {a_name} argument must be a time/datetime, time/datetime column, or null without a tz, but was {arg}"
         )
 
 
