@@ -26,3 +26,58 @@ Bodo 2023.10 Release (Date: 10/02/2023) {#October_2023}
   - Upgrade Calcite to 1.31
   - Upgrade Iceberg to 1.3.1
   - Upgrade Pandas to 1.5
+
+### 2023.10.2 New Features and Improvements
+
+- Fix critical bugs
+- Reduce memory usage in GROUPBY
+
+### 2023.10.3 New Features and Improvements
+
+- Fix critical bugs.
+- BodoSQL generated plans have been further optimized to reduce runtime.
+- Support more functionality in BodoSQL:
+  - Support `ARRAY_AGG` on strings and `ARRAY_AGG(DISTINCT)`
+  - Support all call signatures for `TRUNC` and `CONCAT`
+  - Support `current_database`
+  - Support writing timezone aware data in output tables
+
+### 2023.10.4 New Features and Improvements
+
+- Fix critical runtime bugs.
+
+### 2023.10.5 New Features and Improvements
+
+- Fix critical runtime bugs.
+
+### 2023.10.6 New Features and Improvements
+
+- Fix critical runtime bugs.
+- BodoSQL generated plans have been further optimized to reduce runtime and memory usage.
+- Improved our ability to gather and use distinctness metadata 
+- Support `DATEDIFF` between a timezone aware and a timezone naive column
+- Support `DATE_PART`
+
+### 2023.10.7 New Features and Improvements
+
+- Fix critical runtime bugs.
+- BodoSQL generated plans have been further optimized to reduce runtime and memory usage.
+- Support more functionality in BodoSQL:
+  - Support `JAROWINKLER_SIMILARITY`
+  - Support `BASE64_ENCODE`
+  - Support `BASE64_DECODE_STRING`
+  - Support `BASE64_DECODE_BINARY`
+  - Support `TRY_BASE64_DECODE_STRING`
+  - Support `TRY_BASE64_DECODE_BINARY`
+  - Support `HEX_ENCODE`
+  - Support `HEX_DECODE_STRING`
+  - Support `HEX_DECODE_BINARY`
+  - Support `TRY_HEX_DECODE_STRING`
+  - Support `TRY_HEX_DECODE_BINARY`
+  - Support `ARRAY_SIZE`
+  - Support `OBJECT_KEYS`
+  - Support `getitem/isna` on NULL columns
+  - Support `QUARTER` interval literals (and all aliases)
+  - Support all call signatures for `TIMESTAMP_FROM_PARTS`
+  - Support all call signatures for `TRY_TO_BOOLEAN/TRY_TO_DOUBLE`
+  - Support all call signatures for `DATEADD/TIMEADD/TIMESTAMPADD`
