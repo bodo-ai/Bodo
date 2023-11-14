@@ -22,7 +22,7 @@ requirements:
     - numba =0.57.1
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
-    - numpy >=1.23
+    - numpy >=1.23,<1.25
     - cython <3.0
     - pandas >=1.5.1,<2.0
     - fsspec >=2021.09
@@ -59,7 +59,7 @@ requirements:
   run_constrained:
     - matplotlib <= 3.5.1
   run_constrained:
-    - numpy >=1.23
+    - numpy >=1.23,<1.25
   run_constrained:
     - scikit-learn =1.1.*
   run_constrained:
