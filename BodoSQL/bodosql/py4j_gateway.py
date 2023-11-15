@@ -2,8 +2,8 @@
 APIs used to launch and connect to the Java py4j calcite gateway server.
 """
 
-
 import os
+import sys
 import warnings
 from typing import cast
 
@@ -84,7 +84,11 @@ def get_gateway():
             port_no = cast(
                 int,
                 launch_gateway(
-                    jarpath=full_path, java_path=java_path, die_on_exit=True
+                    jarpath=full_path,
+                    java_path=java_path,
+                    die_on_exit=True,
+                    redirect_stdout=sys.stdout,
+                    redirect_stderr=sys.stderr,
                 ),
             )
             gateway = JavaGateway(gateway_parameters=GatewayParameters(port=port_no))
