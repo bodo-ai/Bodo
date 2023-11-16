@@ -354,6 +354,13 @@ void Tokenizer::skipWhitespace() {
 
 // -------------------------- JSON to Array Builder --------------------------
 
+void parse_to_map(arrow::LargeStringBuilder* key_builder,
+                  arrow::ArrayBuilder* value_builder, Tokenizer& tokenizer,
+                  const std::shared_ptr<arrow::DataType>& value_type);
+
+void parse_to_struct(arrow::StructBuilder& struct_builder, Tokenizer& tokenizer,
+                     const std::shared_ptr<arrow::StructType>& struct_type);
+
 /**
  * @brief Consume output from a tokenizer for an input JSON and
  * insert into the ArrayBuilder for the values of a single element in a
@@ -363,8 +370,7 @@ void Tokenizer::skipWhitespace() {
  * @param tokenizer Tokenizer to read from. Should be at the start of an array
  * @param value_type
  */
-void parse_to_list(std::shared_ptr<arrow::ArrayBuilder> value_builder,
-                   Tokenizer& tokenizer,
+void parse_to_list(arrow::ArrayBuilder* value_builder, Tokenizer& tokenizer,
                    const std::shared_ptr<arrow::DataType>& value_type) {
     assert(tokenizer.current() == Token::ArrayStart);
     auto value_id = value_type->id();
@@ -404,8 +410,7 @@ void parse_to_list(std::shared_ptr<arrow::ArrayBuilder> value_builder,
                         std::string(tokenizer.source));
                 }
                 auto bool_builder =
-                    std::static_pointer_cast<arrow::BooleanBuilder>(
-                        value_builder);
+                    static_cast<arrow::BooleanBuilder*>(value_builder);
 
                 auto status = bool_builder->Append(token == Token::True);
                 if (!status.ok()) {
@@ -428,8 +433,7 @@ void parse_to_list(std::shared_ptr<arrow::ArrayBuilder> value_builder,
                         std::string(tokenizer.source));
                 }
                 auto double_builder =
-                    std::static_pointer_cast<arrow::DoubleBuilder>(
-                        value_builder);
+                    static_cast<arrow::DoubleBuilder*>(value_builder);
 
                 auto status = double_builder->Append(tokenizer.floatValue());
                 if (!status.ok()) {
@@ -443,8 +447,7 @@ void parse_to_list(std::shared_ptr<arrow::ArrayBuilder> value_builder,
             case Token::Integer: {
                 if (value_id == arrow::Type::INT64) {
                     auto int_builder =
-                        std::static_pointer_cast<arrow::Int64Builder>(
-                            value_builder);
+                        static_cast<arrow::Int64Builder*>(value_builder);
                     auto status = int_builder->Append(tokenizer.intValue());
                     if (!status.ok()) {
                         throw std::runtime_error(
@@ -455,8 +458,7 @@ void parse_to_list(std::shared_ptr<arrow::ArrayBuilder> value_builder,
                     }
                 } else if (value_id == arrow::Type::DOUBLE) {
                     auto double_builder =
-                        std::static_pointer_cast<arrow::DoubleBuilder>(
-                            value_builder);
+                        static_cast<arrow::DoubleBuilder*>(value_builder);
                     auto status =
                         double_builder->Append(tokenizer.floatValue());
                     if (!status.ok()) {
@@ -478,8 +480,7 @@ void parse_to_list(std::shared_ptr<arrow::ArrayBuilder> value_builder,
             case Token::String: {
                 if (value_id == arrow::Type::DATE32) {
                     auto date_builder =
-                        std::static_pointer_cast<arrow::Date32Builder>(
-                            value_builder);
+                        static_cast<arrow::Date32Builder*>(value_builder);
                     auto parsed =
                         arrow::Scalar::Parse(value_type, tokenizer.value())
                             .ValueOrDie();
@@ -494,8 +495,7 @@ void parse_to_list(std::shared_ptr<arrow::ArrayBuilder> value_builder,
                     break;
                 } else if (value_id == arrow::Type::TIMESTAMP) {
                     auto timestamp_builder =
-                        std::static_pointer_cast<arrow::TimestampBuilder>(
-                            value_builder);
+                        static_cast<arrow::TimestampBuilder*>(value_builder);
                     auto parsed =
                         arrow::Scalar::Parse(value_type, tokenizer.value())
                             .ValueOrDie();
@@ -511,8 +511,7 @@ void parse_to_list(std::shared_ptr<arrow::ArrayBuilder> value_builder,
                 } else if (value_id == arrow::Type::LARGE_STRING ||
                            value_id == arrow::Type::STRING) {
                     auto string_builder =
-                        std::static_pointer_cast<arrow::LargeStringBuilder>(
-                            value_builder);
+                        static_cast<arrow::LargeStringBuilder*>(value_builder);
 
                     arrow::Status status;
                     if (tokenizer.value_has_unescape) {
@@ -538,16 +537,69 @@ void parse_to_list(std::shared_ptr<arrow::ArrayBuilder> value_builder,
                 }
                 break;
             }
-            // TODO: Handle Nested Arrays
             case Token::ArrayStart: {
-                throw std::runtime_error(
-                    "Found a nested array when parsing a ListArray column");
+                if (value_id != arrow::Type::LARGE_LIST) {
+                    throw std::runtime_error(
+                        "Found a nested array when parsing a list[" +
+                        value_type->ToString() + "]");
+                }
+
+                auto list_builder =
+                    static_cast<arrow::LargeListBuilder*>(value_builder);
+                auto list_type =
+                    std::static_pointer_cast<arrow::LargeListType>(value_type);
+
+                auto status = list_builder->Append();
+                if (!status.ok()) {
+                    throw std::runtime_error("Failure while appending list: " +
+                                             status.ToString());
+                }
+
+                parse_to_list(list_builder->value_builder(), tokenizer,
+                              list_type->value_type());
                 break;
             }
-            // TODO: Handle Nested Objects
             case Token::ObjectStart: {
-                throw std::runtime_error(
-                    "Found a nested object when parsing a ListArray column");
+                if (value_id == arrow::Type::STRUCT) {
+                    auto struct_builder =
+                        static_cast<arrow::StructBuilder*>(value_builder);
+                    auto struct_type =
+                        std::static_pointer_cast<arrow::StructType>(value_type);
+
+                    auto status = struct_builder->Append();
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while appending map: " +
+                            status.ToString());
+                    }
+
+                    parse_to_struct(*struct_builder, tokenizer, struct_type);
+
+                } else if (value_id == arrow::Type::MAP) {
+                    auto map_builder =
+                        static_cast<arrow::MapBuilder*>(value_builder);
+                    auto map_type =
+                        std::static_pointer_cast<arrow::MapType>(value_type);
+
+                    auto key_builder = static_cast<arrow::LargeStringBuilder*>(
+                        map_builder->key_builder());
+
+                    auto status = map_builder->Append();
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while appending map: " +
+                            status.ToString());
+                    }
+
+                    parse_to_map(key_builder, map_builder->item_builder(),
+                                 tokenizer, map_type->item_type());
+
+                } else {
+                    throw std::runtime_error(
+                        "Found a nested object (map or struct) when parsing a "
+                        "list[" +
+                        value_type->ToString() + "] column.");
+                }
                 break;
             }
             case Token::Error: {
@@ -579,9 +631,8 @@ void parse_to_list(std::shared_ptr<arrow::ArrayBuilder> value_builder,
  * @param tokenizer Tokenizer to read from. Should be at the start of an array
  * @param value_type Type of MapArray value-size contents
  */
-void parse_to_map(std::shared_ptr<arrow::LargeStringBuilder> key_builder,
-                  std::shared_ptr<arrow::ArrayBuilder> value_builder,
-                  Tokenizer& tokenizer,
+void parse_to_map(arrow::LargeStringBuilder* key_builder,
+                  arrow::ArrayBuilder* value_builder, Tokenizer& tokenizer,
                   const std::shared_ptr<arrow::DataType>& value_type) {
     assert(tokenizer.current() == Token::ObjectStart);
     auto value_id = value_type->id();
@@ -664,8 +715,7 @@ void parse_to_map(std::shared_ptr<arrow::LargeStringBuilder> key_builder,
                         std::string(tokenizer.source));
                 }
                 auto bool_builder =
-                    std::static_pointer_cast<arrow::BooleanBuilder>(
-                        value_builder);
+                    static_cast<arrow::BooleanBuilder*>(value_builder);
 
                 auto status = bool_builder->Append(token == Token::True);
                 if (!status.ok()) {
@@ -696,8 +746,7 @@ void parse_to_map(std::shared_ptr<arrow::LargeStringBuilder> key_builder,
                         std::string(tokenizer.source));
                 }
                 auto double_builder =
-                    std::static_pointer_cast<arrow::DoubleBuilder>(
-                        value_builder);
+                    static_cast<arrow::DoubleBuilder*>(value_builder);
 
                 auto status = double_builder->Append(tokenizer.floatValue());
                 if (!status.ok()) {
@@ -718,8 +767,7 @@ void parse_to_map(std::shared_ptr<arrow::LargeStringBuilder> key_builder,
                 }
                 if (value_id == arrow::Type::INT64) {
                     auto int_builder =
-                        std::static_pointer_cast<arrow::Int64Builder>(
-                            value_builder);
+                        static_cast<arrow::Int64Builder*>(value_builder);
                     auto status = int_builder->Append(tokenizer.intValue());
                     if (!status.ok()) {
                         throw std::runtime_error(
@@ -731,8 +779,7 @@ void parse_to_map(std::shared_ptr<arrow::LargeStringBuilder> key_builder,
                     }
                 } else if (value_id == arrow::Type::DOUBLE) {
                     auto double_builder =
-                        std::static_pointer_cast<arrow::DoubleBuilder>(
-                            value_builder);
+                        static_cast<arrow::DoubleBuilder*>(value_builder);
                     auto status =
                         double_builder->Append(tokenizer.floatValue());
                     if (!status.ok()) {
@@ -761,8 +808,7 @@ void parse_to_map(std::shared_ptr<arrow::LargeStringBuilder> key_builder,
                 }
                 if (value_id == arrow::Type::DATE32) {
                     auto date_builder =
-                        std::static_pointer_cast<arrow::Date32Builder>(
-                            value_builder);
+                        static_cast<arrow::Date32Builder*>(value_builder);
                     auto parsed =
                         arrow::Scalar::Parse(value_type, tokenizer.value())
                             .ValueOrDie();
@@ -776,8 +822,7 @@ void parse_to_map(std::shared_ptr<arrow::LargeStringBuilder> key_builder,
                     }
                 } else if (value_id == arrow::Type::TIMESTAMP) {
                     auto timestamp_builder =
-                        std::static_pointer_cast<arrow::TimestampBuilder>(
-                            value_builder);
+                        static_cast<arrow::TimestampBuilder*>(value_builder);
                     auto parsed =
                         arrow::Scalar::Parse(value_type, tokenizer.value())
                             .ValueOrDie();
@@ -792,8 +837,7 @@ void parse_to_map(std::shared_ptr<arrow::LargeStringBuilder> key_builder,
                 } else if (value_id == arrow::Type::LARGE_STRING ||
                            value_id == arrow::Type::STRING) {
                     auto string_builder =
-                        std::static_pointer_cast<arrow::LargeStringBuilder>(
-                            value_builder);
+                        static_cast<arrow::LargeStringBuilder*>(value_builder);
 
                     arrow::Status status;
                     if (tokenizer.value_has_unescape) {
@@ -820,16 +864,84 @@ void parse_to_map(std::shared_ptr<arrow::LargeStringBuilder> key_builder,
                 expectFieldName = true;
                 break;
             }
-            // TODO: Handle Nested Arrays
             case Token::ArrayStart: {
-                throw std::runtime_error(
-                    "Found a nested array when parsing a MapArray column");
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a nested array when parsing a map column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+                if (value_id != arrow::Type::LARGE_LIST) {
+                    throw std::runtime_error(
+                        "Found a nested array when parsing a list[" +
+                        value_type->ToString() + "] column");
+                }
+
+                auto list_builder =
+                    static_cast<arrow::LargeListBuilder*>(value_builder);
+                auto list_type =
+                    std::static_pointer_cast<arrow::LargeListType>(value_type);
+
+                auto status = list_builder->Append();
+                if (!status.ok()) {
+                    throw std::runtime_error("Failure while appending list: " +
+                                             status.ToString());
+                }
+
+                parse_to_list(list_builder->value_builder(), tokenizer,
+                              list_type->value_type());
+                expectFieldName = true;
                 break;
             }
-            // TODO: Handle Nested Objects
             case Token::ObjectStart: {
-                throw std::runtime_error(
-                    "Found a nested object when parsing a MapArray column");
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a nested object when parsing a map column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+
+                if (value_id == arrow::Type::STRUCT) {
+                    auto struct_builder =
+                        static_cast<arrow::StructBuilder*>(value_builder);
+                    auto struct_type =
+                        std::static_pointer_cast<arrow::StructType>(value_type);
+
+                    auto status = struct_builder->Append();
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while appending map: " +
+                            status.ToString());
+                    }
+
+                    parse_to_struct(*struct_builder, tokenizer, struct_type);
+
+                } else if (value_id == arrow::Type::MAP) {
+                    auto map_builder =
+                        static_cast<arrow::MapBuilder*>(value_builder);
+                    auto map_type =
+                        std::static_pointer_cast<arrow::MapType>(value_type);
+
+                    auto key_builder = static_cast<arrow::LargeStringBuilder*>(
+                        map_builder->key_builder());
+
+                    auto status = map_builder->Append();
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while appending map: " +
+                            status.ToString());
+                    }
+
+                    parse_to_map(key_builder, map_builder->item_builder(),
+                                 tokenizer, map_type->item_type());
+
+                } else {
+                    throw std::runtime_error(
+                        "Found a nested object (map or struct) when parsing a "
+                        "map[str, " +
+                        value_type->ToString() + "] column.");
+                }
+                expectFieldName = true;
                 break;
             }
             case Token::Error: {
@@ -860,8 +972,7 @@ void parse_to_map(std::shared_ptr<arrow::LargeStringBuilder> key_builder,
  * @param tokenizer Tokenizer to read from. Should be at the start of an array
  * @param struct_type Type of MapArray value-size contents
  */
-void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
-                     Tokenizer& tokenizer,
+void parse_to_struct(arrow::StructBuilder& struct_builder, Tokenizer& tokenizer,
                      const std::shared_ptr<arrow::StructType>& struct_type) {
     assert(tokenizer.current() == Token::ObjectStart);
     bool expectFieldName = true;
@@ -896,7 +1007,7 @@ void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
                             continue;
                         }
                         auto status =
-                            struct_builder->child_builder(idx)->AppendNull();
+                            struct_builder.child_builder(idx)->AppendNull();
                         if (!status.ok()) {
                             throw std::runtime_error(
                                 "Failure while adding NULL from a struct "
@@ -946,7 +1057,7 @@ void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
                         std::string(tokenizer.source));
                 }
                 auto status =
-                    struct_builder->child_builder(curr_idx)->AppendNull();
+                    struct_builder.child_builder(curr_idx)->AppendNull();
                 if (!status.ok()) {
                     throw std::runtime_error(
                         "Failure while parsing NULL from a struct element:\n" +
@@ -972,7 +1083,7 @@ void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
                 }
                 auto bool_builder =
                     std::static_pointer_cast<arrow::BooleanBuilder>(
-                        struct_builder->child_builder(curr_idx));
+                        struct_builder.child_builder(curr_idx));
 
                 auto status = bool_builder->Append(token == Token::True);
                 if (!status.ok()) {
@@ -1003,7 +1114,7 @@ void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
                 }
                 auto double_builder =
                     std::static_pointer_cast<arrow::DoubleBuilder>(
-                        struct_builder->child_builder(curr_idx));
+                        struct_builder.child_builder(curr_idx));
 
                 auto status = double_builder->Append(tokenizer.floatValue());
                 if (!status.ok()) {
@@ -1025,7 +1136,7 @@ void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
                 if (field_types[curr_idx] == arrow::Type::INT64) {
                     auto int_builder =
                         std::static_pointer_cast<arrow::Int64Builder>(
-                            struct_builder->child_builder(curr_idx));
+                            struct_builder.child_builder(curr_idx));
                     auto status = int_builder->Append(tokenizer.intValue());
                     if (!status.ok()) {
                         throw std::runtime_error(
@@ -1038,7 +1149,7 @@ void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
                 } else if (field_types[curr_idx] == arrow::Type::DOUBLE) {
                     auto double_builder =
                         std::static_pointer_cast<arrow::DoubleBuilder>(
-                            struct_builder->child_builder(curr_idx));
+                            struct_builder.child_builder(curr_idx));
                     auto status =
                         double_builder->Append(tokenizer.floatValue());
                     if (!status.ok()) {
@@ -1060,7 +1171,7 @@ void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
             case Token::String: {
                 if (expectFieldName) {
                     throw std::runtime_error(
-                        "Found a string when parsing a map column "
+                        "Found a string when parsing a struct column "
                         "row, but expected a field name: " +
                         std::string(tokenizer.source));
                 }
@@ -1068,14 +1179,14 @@ void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
                 if (field_types[curr_idx] == arrow::Type::DATE32) {
                     auto date_builder =
                         std::static_pointer_cast<arrow::Date32Builder>(
-                            struct_builder->child_builder(curr_idx));
+                            struct_builder.child_builder(curr_idx));
                     auto parsed =
                         arrow::Scalar::Parse(value_type, tokenizer.value())
                             .ValueOrDie();
                     auto status = date_builder->AppendScalar(*parsed);
                     if (!status.ok()) {
                         throw std::runtime_error(
-                            "Failure while parsing a date from a map "
+                            "Failure while parsing a date from a struct "
                             "element:\n" +
                             std::string(tokenizer.source) + "\nWith error:\n" +
                             status.ToString());
@@ -1083,7 +1194,7 @@ void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
                 } else if (field_types[curr_idx] == arrow::Type::TIMESTAMP) {
                     auto timestamp_builder =
                         std::static_pointer_cast<arrow::TimestampBuilder>(
-                            struct_builder->child_builder(curr_idx));
+                            struct_builder.child_builder(curr_idx));
                     auto parsed =
                         arrow::Scalar::Parse(value_type, tokenizer.value())
                             .ValueOrDie();
@@ -1099,7 +1210,7 @@ void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
                            field_types[curr_idx] == arrow::Type::STRING) {
                     auto string_builder =
                         std::static_pointer_cast<arrow::LargeStringBuilder>(
-                            struct_builder->child_builder(curr_idx));
+                            struct_builder.child_builder(curr_idx));
 
                     arrow::Status status;
                     if (tokenizer.value_has_unescape) {
@@ -1127,14 +1238,88 @@ void parse_to_struct(std::shared_ptr<arrow::StructBuilder> struct_builder,
             }
             // TODO: Handle Nested Arrays
             case Token::ArrayStart: {
-                throw std::runtime_error(
-                    "Found a nested array when parsing a StructArray column");
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a nested array when parsing a struct column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+                if (field_types[curr_idx] != arrow::Type::LARGE_LIST) {
+                    throw std::runtime_error(
+                        "Found a nested array when parsing a " +
+                        struct_type->ToString() + " column");
+                }
+
+                auto list_builder =
+                    std::static_pointer_cast<arrow::LargeListBuilder>(
+                        struct_builder.child_builder(curr_idx));
+                auto list_type = std::static_pointer_cast<arrow::LargeListType>(
+                    struct_type->field(curr_idx)->type());
+
+                auto status = list_builder->Append();
+                if (!status.ok()) {
+                    throw std::runtime_error("Failure while appending list: " +
+                                             status.ToString());
+                }
+
+                parse_to_list(list_builder->value_builder(), tokenizer,
+                              list_type->value_type());
+                expectFieldName = true;
                 break;
             }
             // TODO: Handle Nested Objects
             case Token::ObjectStart: {
-                throw std::runtime_error(
-                    "Found a nested object when parsing a StructArray column");
+                if (expectFieldName) {
+                    throw std::runtime_error(
+                        "Found a nested object when parsing a struct column "
+                        "row, but expected a field name: " +
+                        std::string(tokenizer.source));
+                }
+
+                if (field_types[curr_idx] == arrow::Type::STRUCT) {
+                    auto inner_builder =
+                        std::static_pointer_cast<arrow::StructBuilder>(
+                            struct_builder.child_builder(curr_idx));
+                    auto inner_type =
+                        std::static_pointer_cast<arrow::StructType>(
+                            struct_type->field(curr_idx)->type());
+
+                    auto status = inner_builder->Append();
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while appending map: " +
+                            status.ToString());
+                    }
+
+                    parse_to_struct(*inner_builder, tokenizer, inner_type);
+
+                } else if (field_types[curr_idx] == arrow::Type::MAP) {
+                    auto map_builder =
+                        std::static_pointer_cast<arrow::MapBuilder>(
+                            struct_builder.child_builder(curr_idx));
+                    auto map_type = std::static_pointer_cast<arrow::MapType>(
+                        struct_type->field(curr_idx)->type());
+
+                    auto key_builder = static_cast<arrow::LargeStringBuilder*>(
+                        map_builder->key_builder());
+
+                    auto status = map_builder->Append();
+                    if (!status.ok()) {
+                        throw std::runtime_error(
+                            "Failure while appending map: " +
+                            status.ToString());
+                    }
+
+                    parse_to_map(key_builder, map_builder->item_builder(),
+                                 tokenizer, map_type->item_type());
+
+                } else {
+                    throw std::runtime_error(
+                        "Found a nested object (map or struct) when parsing "
+                        "a " +
+                        struct_type->ToString() + " column.");
+                }
+                expectFieldName = true;
                 break;
             }
             case Token::Error: {
@@ -1192,7 +1377,7 @@ std::shared_ptr<arrow::Array> string_to_list_arr(
         tokenizer.reset(json_str);
         [[maybe_unused]] auto start_token = tokenizer.next();
         assert(start_token == Token::ArrayStart);
-        parse_to_list(value_builder, tokenizer, value_type);
+        parse_to_list(list_builder->value_builder(), tokenizer, value_type);
     }
 
     return list_builder->Finish().ValueOrDie();
@@ -1210,11 +1395,11 @@ std::shared_ptr<arrow::Array> string_to_map_arr(
 
     auto key_builder = std::make_shared<arrow::LargeStringBuilder>(
         bodo::BufferPool::DefaultPtr());
-    std::shared_ptr<arrow::ArrayBuilder> value_builder =
+    std::shared_ptr<arrow::ArrayBuilder> item_builder =
         arrow::MakeBuilder(value_type, bodo::BufferPool::DefaultPtr())
             .ValueOrDie();
     auto map_builder = std::make_unique<arrow::MapBuilder>(
-        bodo::BufferPool::DefaultPtr(), key_builder, value_builder, in_type);
+        bodo::BufferPool::DefaultPtr(), key_builder, item_builder, in_type);
 
     Tokenizer tokenizer;
 
@@ -1236,7 +1421,8 @@ std::shared_ptr<arrow::Array> string_to_map_arr(
         tokenizer.reset(json_str);
         [[maybe_unused]] auto start_token = tokenizer.next();
         assert(start_token == Token::ObjectStart);
-        parse_to_map(key_builder, value_builder, tokenizer, value_type);
+        parse_to_map(key_builder.get(), item_builder.get(), tokenizer,
+                     value_type);
     }
 
     return map_builder->Finish().ValueOrDie();
@@ -1276,7 +1462,7 @@ std::shared_ptr<arrow::Array> string_to_struct_arr(
         tokenizer.reset(json_str);
         [[maybe_unused]] auto start_token = tokenizer.next();
         assert(start_token == Token::ObjectStart);
-        parse_to_struct(struct_builder, tokenizer, struct_type);
+        parse_to_struct(*struct_builder, tokenizer, struct_type);
     }
 
     return struct_builder->Finish().ValueOrDie();

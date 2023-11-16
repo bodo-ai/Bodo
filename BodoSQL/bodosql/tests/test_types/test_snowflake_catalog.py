@@ -2228,6 +2228,221 @@ def test_struct_read(test_db_snowflake_catalog, memory_leak_check):
     )
 
 
+def test_read_nested_array_in_array_col(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Basic test to read nested array data in array column
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    py_output = pd.DataFrame(
+        {
+            "A": [
+                np.nan,
+                [[10.0, 10.0], np.nan],
+                [[pd.NA], [12.4, -0.57]],
+            ],
+        }
+    )
+    queryA = "SELECT A FROM NESTED_ARRAY_TEST ORDER BY idx"
+    check_func(impl, (bc, queryA), py_output=py_output)
+
+
+@pytest.mark.skip(
+    "TODO: Enable once operator.setitem over slices of map arrays is supported"
+)
+def test_read_nested_map_in_array_col(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Basic test to read nested map data in array column
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    py_output = pd.DataFrame(
+        {
+            "B": [
+                np.nan,
+                [np.nan, {"m": datetime.date(2023, 11, 11), "mm": np.nan}],
+                [
+                    {
+                        "a": datetime.date(2023, 11, 12),
+                        "b": datetime.date(1980, 1, 5),
+                        "c": np.nan,
+                    },
+                    {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
+                ],
+            ],
+        }
+    )
+    queryB = "SELECT B FROM NESTED_ARRAY_TEST ORDER BY idx"
+    check_func(impl, (bc, queryB), py_output=py_output, use_map_arrays=True)
+
+
+@pytest.mark.skip(reason="[BSE-2041] Fix Boxing Issue After Pandas 2")
+def test_read_nested_struct_in_array_col(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Basic test to read nested struct data in array column
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    py_output = pd.DataFrame(
+        {
+            "c": [
+                [
+                    {"name": "dos", "stat": np.nan, "cnt": np.nan},
+                    {"name": "tres", "stat": False, "cnt": -2},
+                ],
+                [{"name": "uno", "stat": False, "cnt": np.nan}],
+                [],
+            ]
+        }
+    )
+    queryC = "SELECT C FROM NESTED_ARRAY_TEST ORDER BY A"
+    check_func(impl, (bc, queryC), py_output=py_output)
+
+
+# TODO: [BSE-2040] Find memory leak and add back memory_leak_check
+def test_read_nested_array_in_map_col(test_db_snowflake_catalog):
+    """
+    Basic test to read nested semi-structured data in Map Columns
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    py_output = pd.DataFrame(
+        {
+            "A": [
+                {},
+                {"bodo": [10.0, 10.0], "databricks": np.nan},
+                {"a": [np.nan], "b": [12.4, -0.57]},
+            ],
+        }
+    )
+    queryA = "SELECT A FROM NESTED_MAP_TEST ORDER BY idx"
+    check_func(impl, (bc, queryA), py_output=py_output, use_map_arrays=True)
+
+
+@pytest.mark.skip(
+    "TODO: Enable once operator.setitem over slices of map arrays is supported"
+)
+def test_read_nested_map_in_map_col(test_db_snowflake_catalog):
+    """
+    Basic test to read nested semi-structured data in Map Columns
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    py_output = pd.DataFrame(
+        {
+            "b": [
+                np.nan,
+                {"bodo": {"m": datetime.date(2023, 11, 11), "mm": np.nan}},
+                {
+                    "bodo": {
+                        "a": datetime.date(2023, 11, 12),
+                        "b": datetime.date(1980, 1, 5),
+                        "c": np.nan,
+                    },
+                    "google": {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
+                },
+            ],
+        }
+    )
+    queryB = "SELECT B FROM NESTED_MAP_TEST ORDER BY idx"
+    check_func(impl, (bc, queryB), py_output=py_output, use_map_arrays=True)
+
+
+@pytest.mark.skip(reason="[BSE-2041] Fix Boxing Issue After Pandas 2")
+def test_read_nested_struct_in_map_col(test_db_snowflake_catalog):
+    """
+    Basic test to read nested semi-structured data in Map Columns
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    # Cant test because outer dicts need to be map, inner need to be struct
+    # py_output = pd.DataFrame(...)
+    # queryC = "SELECT C FROM NESTED_MAP_TEST ORDER BY A"
+    # check_func(impl, (queryC, conn), py_output=py_output)
+
+
+def test_read_nested_in_struct_col(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Basic test to read nested semi-structured data in Struct Columns
+    TODO: Test the whole column at once, instead of non-map columns only
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    py_output = pd.DataFrame(
+        {
+            "INFO": [
+                {
+                    "group": np.nan,
+                    # Sentinel NaN for Timestamp
+                    # 'updated': datetime.datetime(1970, 1, 1),
+                    "values": np.nan,
+                    "created": np.nan,
+                },
+                {
+                    "group": "gravel",
+                    # 'updated': datetime.datetime(2023, 11, 12, 22, 58, 14, 118),
+                    "values": [10.0, 10.1],
+                    "created": {
+                        "creator": np.nan,
+                        "at": datetime.date(1990, 5, 5),
+                        "atnew": np.nan,
+                    },
+                },
+                {
+                    "group": "dirt",
+                    # Sentinel NaN for Timestamp
+                    # 'updated': datetime.datetime(1970, 1, 1),
+                    "values": [-1.15e3, -164, 100056],
+                    "created": {
+                        "creator": np.nan,
+                        "at": np.nan,
+                        "atnew": [2010, 10, 10],
+                    },
+                },
+                {
+                    "group": np.nan,
+                    # Sentinel NaN for Timestamp
+                    # 'updated': datetime.datetime(1970, 1, 1),
+                    "values": np.nan,
+                    "created": {"creator": "mark", "at": np.nan, "atnew": np.nan},
+                },
+            ],
+        }
+    )
+
+    # TODO: Add 'updated' for Sentinal NaNs and Struct Unboxing
+    query = "SELECT INFO FROM BODOSQL_NESTED_STRUCT_TEST ORDER BY idx"
+    check_func(impl, (bc, query), py_output=py_output)
+
+
 @pytest.mark.parametrize(
     "condition, answer",
     [
