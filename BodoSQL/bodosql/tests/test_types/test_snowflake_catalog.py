@@ -2465,8 +2465,8 @@ def test_snowflake_json_filter_pushdown(
     Tests reading from a Snowflake table with a filter condition based
     on a JSON field.
     """
-    # Only test on rank zero
-    if bodo.get_rank() != 0:
+    # Only test on single rank
+    if bodo.get_size() != 1:
         return
     query = f"SELECT id FROM BODOSQL_JSON_READ_TEST WHERE {condition}"
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
