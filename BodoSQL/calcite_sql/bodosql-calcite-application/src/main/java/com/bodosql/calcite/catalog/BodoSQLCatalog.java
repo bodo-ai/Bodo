@@ -19,7 +19,7 @@ public interface BodoSQLCatalog {
    */
 
   /** Enum describing the write behavior when the table already exists. */
-  public enum ifExistsBehavior {
+  enum ifExistsBehavior {
     REPLACE,
     APPEND,
     FAIL;
@@ -168,7 +168,7 @@ public interface BodoSQLCatalog {
    *
    * @return The source DB location.
    */
-  public String getDBType();
+  String getDBType();
 
   /**
    * Fetch the default timezone for this catalog. If the catalog doesn't influence the default
@@ -201,5 +201,5 @@ public interface BodoSQLCatalog {
    *
    * @return The top level name of the Catalog.
    */
-  public String getCatalogName();
+  String getCatalogName();
 }
