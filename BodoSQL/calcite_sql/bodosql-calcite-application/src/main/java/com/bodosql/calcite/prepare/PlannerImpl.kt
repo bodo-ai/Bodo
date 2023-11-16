@@ -40,6 +40,7 @@ import org.apache.calcite.sql2rel.SqlToRelConverter
 import org.apache.calcite.sql2rel.StandardConvertletTableConfig
 import org.apache.calcite.tools.FrameworkConfig
 import org.apache.calcite.tools.Frameworks
+import java.lang.RuntimeException
 
 class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config)) {
     private val defaultSchemas = config.defaultSchemas
@@ -98,6 +99,36 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
         for (schema in defaultSchemas) {
             defaultSchemaPaths.add(CalciteSchema.from(schema).path(null))
         }
+        defaultSchemaPaths.add(listOf())
+        return BodoCatalogReader(
+            CalciteSchema.from(rootSchema),
+            defaultSchemaPaths.build(),
+            typeFactory,
+            connectionConfig,
+        )
+    }
+
+    /**
+     * Variant of createCatalogReader that allows specifying a path for the defaults. This supersedes
+     * the defaultSchemas information that already exists.
+     * @param defaultPath A list of elements in the default path. Element i should be the
+     * parent of element i + 1.
+     * @return A new CalciteCatalogReader.
+     */
+    override fun createCatalogReaderWithDefaultPath(defaultPath: List<String>): CalciteCatalogReader {
+        // Load the root Schema. Note: This traverses the schemas and doesn't reuse
+        // the results.
+        val rootSchema = rootSchema(defaultSchemas[0])
+        var currentSchema = rootSchema
+        val defaultSchemaPaths: ImmutableList.Builder<List<String>> = ImmutableList.builder()
+        for (element in defaultPath) {
+            // Load each schema. It must already exist because we were able to resolve the view.
+            val newSchema = currentSchema.getSubSchema(element) ?: throw RuntimeException("Internal Error: Unable to locate schema")
+            defaultSchemaPaths.add(CalciteSchema.from(newSchema).path(null))
+            // Update the parent.
+            currentSchema = newSchema
+        }
+        // Last element must be an empty list.
         defaultSchemaPaths.add(listOf())
         return BodoCatalogReader(
             CalciteSchema.from(rootSchema),

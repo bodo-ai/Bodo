@@ -2775,3 +2775,48 @@ def test_secure_view_no_inlining(test_db_snowflake_catalog, memory_leak_check):
     finally:
         # Reset the inlining flag
         bodo.bodosql_try_inline_views = old_inline
+
+
+def test_separate_schema_inline_view(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that the a view defined in the same database but different schema as every
+    table it uses is properly inlined.
+
+    If you need to recreate this in snowflake, these are the relevant defintions:
+
+    create view TEST_DB.PUBLIC.WRONG_SCHEMA_VIEW as select * from TPCH_SF1.region
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select * from wrong_schema_view"
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string(
+            test_db_snowflake_catalog.database,
+            test_db_snowflake_catalog.connection_params["schema"],
+        ),
+    )
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    try:
+        # Ensure we always inline views
+        old_inline = bodo.bodosql_try_inline_views
+        bodo.bodosql_try_inline_views = True
+        with set_logging_stream(logger, 2):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=py_output,
+                check_dtype=False,
+                sort_output=True,
+                reset_index=True,
+            )
+            # Verify that REGION is found in the logger message so the
+            # view was inlined.
+            check_logger_msg(stream, "REGION")
+    finally:
+        # Reset the inlining flag
+        bodo.bodosql_try_inline_views = old_inline
