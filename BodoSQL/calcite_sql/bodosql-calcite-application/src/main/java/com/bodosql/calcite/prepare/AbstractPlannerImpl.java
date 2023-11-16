@@ -304,7 +304,8 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
       sqlNode = ((SqlCreateView) sqlNode).query;
     }
 
-    final CalciteCatalogReader catalogReader = createCatalogReader().withSchemaPath(schemaPath);
+    // Bodo Change: Change the catalogReader to take a defaultPath, not a required path.
+    final CalciteCatalogReader catalogReader = createCatalogReaderWithDefaultPath(schemaPath);
     final SqlValidator validator = createSqlValidator(catalogReader);
 
     final RexBuilder rexBuilder = createRexBuilder();
@@ -322,6 +323,9 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
 
   // CalciteCatalogReader is stateless; no need to store one
   protected abstract CalciteCatalogReader createCatalogReader();
+
+  protected abstract CalciteCatalogReader createCatalogReaderWithDefaultPath(
+      List<String> defaultPath);
 
   private SqlValidator createSqlValidator(CalciteCatalogReader catalogReader) {
     final SqlOperatorTable opTab = SqlOperatorTables.chain(operatorTable, catalogReader);
