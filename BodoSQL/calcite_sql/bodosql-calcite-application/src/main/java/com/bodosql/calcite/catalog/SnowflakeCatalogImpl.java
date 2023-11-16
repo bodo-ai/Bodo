@@ -10,6 +10,7 @@ import com.bodosql.calcite.application.utils.Memoizer;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
+import com.bodosql.calcite.schema.InlineViewMetadata;
 import com.bodosql.calcite.sql.BodoSqlUtil;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
@@ -527,41 +528,6 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     }
     SnowflakeTypeInfo typeInfo = new SnowflakeTypeInfo(columnDataType, elemType, precision);
     return typeInfo;
-  }
-
-  private final Function<List<String>, Boolean> isTablePossiblyView =
-      Memoizer.memoize(this::isTablePossiblyViewImpl);
-
-  /**
-   * Determine if a table could be a view. A table is a view if either show views like ... returns
-   * or if the query times out.
-   *
-   * @param tableName A list of schema name, table name. If the list doesn't match this format we
-   *     determine the table could be a view.
-   * @return If the table might be a view.
-   */
-  private boolean isTablePossiblyViewImpl(List<String> tableName) {
-    if (tableName.size() != 2) {
-      return true;
-    }
-    try {
-      ResultSet viewInfo =
-          executeSnowflakeQuery(
-              String.format(
-                  Locale.ROOT,
-                  "SHOW VIEWS LIKE '%s' IN SCHEMA \"%s\".\"%s\"",
-                  tableName.get(1),
-                  catalogName,
-                  tableName.get(0)));
-      // ResultSet.next() returns if there is a valid next value.
-      // If the result is empty we don't have a view.
-      return viewInfo.next();
-    } catch (SQLException e) {
-      String errorMsg =
-          String.format(
-              Locale.ROOT, "Unable to check for if tables are views. Error message: %s", e);
-      throw new RuntimeException(errorMsg);
-    }
   }
 
   /**
@@ -1104,7 +1070,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     // Sampling is not supported for views. This is because Row based
     // sampling is generally too slow and views do not support system
     // sampling.
-    boolean isView = isTablePossiblyView.apply(tableName);
+    boolean isView = tryGetViewMetadataFn.apply(tableName) != null;
     if (isView) {
       return null;
     }
@@ -1363,5 +1329,52 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     conn = getConnection();
     Statement stmt = conn.createStatement();
     return stmt.executeQuery(query);
+  }
+
+  /**
+   * Load the view metadata information from the catalog. If the table is not a view or no
+   * information can be found this should return NULL.
+   *
+   * @param names A list of two names starting with SCHEMA_NAME and ending with TABLE_NAME.
+   * @return The InlineViewMetadata loaded from the catalog or null if no information is available.
+   */
+  public @Nullable InlineViewMetadata tryGetViewMetadata(List<String> names) {
+    return tryGetViewMetadataFn.apply(names);
+  }
+
+  private final Function<List<String>, InlineViewMetadata> tryGetViewMetadataFn =
+      Memoizer.memoize(this::tryGetViewMetadataImpl);
+
+  /**
+   * The actual implementation for tryGetViewMetadata including calls to Snowflake. We add an extra
+   * layer of indirection to ensure this function is cached.
+   */
+  private @Nullable InlineViewMetadata tryGetViewMetadataImpl(List<String> names) {
+    try {
+      final String query =
+          String.format(
+              Locale.ROOT,
+              "Show views like '%s' in schema %s.%s starts with '%s'",
+              names.get(1),
+              catalogName,
+              names.get(0),
+              names.get(1));
+      ResultSet paramInfo = executeSnowflakeQuery(query);
+      if (paramInfo.next()) {
+        // See the return types: https://docs.snowflake.com/en/sql-reference/sql/show-views.
+        // Note: This is 1 indexed
+        String queryDefinition = paramInfo.getString(8);
+        // is_secure is not safe to inline.
+        String unsafeToInline = paramInfo.getString(9);
+        String isMaterialized = paramInfo.getString(10);
+        return new InlineViewMetadata(
+            Boolean.valueOf(unsafeToInline), Boolean.valueOf(isMaterialized), queryDefinition);
+      } else {
+        return null;
+      }
+    } catch (SQLException e) {
+      // If we cannot get view information just return NULL.
+      return null;
+    }
   }
 }

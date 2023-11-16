@@ -413,6 +413,7 @@ data: {
     # Example: "SqlCreateForeignSchema".
     createStatementParserMethods: [
         "SqlCreateTable",
+        "SqlCreateView",
     ]
 
     # List of methods for parsing extensions to "DROP" calls.

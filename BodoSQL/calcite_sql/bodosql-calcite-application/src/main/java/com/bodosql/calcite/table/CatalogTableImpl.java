@@ -4,6 +4,7 @@ import static java.lang.Double.min;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
+import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.application.utils.Memoizer;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
@@ -12,6 +13,7 @@ import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
+import com.bodosql.calcite.schema.InlineViewMetadata;
 import com.google.common.base.Suppliers;
 import java.util.*;
 import java.util.function.Function;
@@ -19,6 +21,7 @@ import java.util.function.Supplier;
 import javax.annotation.Nullable;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Statistic;
@@ -27,6 +30,7 @@ import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.sql.util.SqlString;
+import org.jetbrains.annotations.NotNull;
 
 /**
  *
@@ -254,6 +258,31 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     return statistic;
   }
 
+  /**
+   * Try to inline a view. If the view cannot be inlined then return the baseRelNode instead.
+   *
+   * @param toRelContext The context used to expand a view.
+   * @param viewDefinition The view definition.
+   * @param baseRelNode The RelNode generated if inlining this view fails.
+   * @return Either the new tree generated from inlining a view or the baseRelNode.
+   */
+  private RelNode tryInlineView(
+      RelOptTable.ToRelContext toRelContext,
+      @NotNull String viewDefinition,
+      @NotNull RelNode baseRelNode) {
+    try {
+      RelRoot root =
+          toRelContext.expandView(
+              baseRelNode.getRowType(),
+              viewDefinition,
+              List.of(getCatalog().getCatalogName(), getSchema().getName()),
+              List.of(getCatalog().getCatalogName(), getSchema().getName(), getName()));
+      return root.project();
+    } catch (Exception e) {
+      return baseRelNode;
+    }
+  }
+
   @Override
   public RelNode toRel(RelOptTable.ToRelContext toRelContext, RelOptTable relOptTable) {
     // TODO(jsternberg): We should refactor the catalog table types to specific adapters (see also,
@@ -262,7 +291,15 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     // bit before the refactor and directly create it here rather than refactor the entire
     // chain. That should reduce the scope of the code change to make it more easily reviewed
     // and separate the new feature from the refactor.
-    return SnowflakeTableScan.create(toRelContext.getCluster(), relOptTable, this);
+    RelNode baseRelNode = SnowflakeTableScan.create(toRelContext.getCluster(), relOptTable, this);
+    // Check if this table is a view and if so attempt to inline it.
+    if (RelationalAlgebraGenerator.tryInlineViews && canSafelyInlineView()) {
+      String viewDefinition = getViewDefinitionString();
+      if (viewDefinition != null) {
+        return tryInlineView(toRelContext, viewDefinition, baseRelNode);
+      }
+    }
+    return baseRelNode;
   }
 
   private final Function<Integer, Double> columnDistinctCount =
@@ -342,6 +379,59 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
       SqlString metadataSelectQueryString) {
     SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
     return catalog.trySubmitLongMetadataQuery(metadataSelectQueryString);
+  }
+
+  /**
+   * Load the view metadata information from the catalog. If the table is not a view or no
+   * information can be found this should return NULL. This should be used to implement
+   * isAccessibleView(), canSafelyInlineView(), and getViewDefinitionString().
+   *
+   * <p>This is currently only support for Snowflake catalogs.
+   *
+   * @return The InlineViewMetadata loaded from the catalog or null if no information is available.
+   */
+  private @Nullable InlineViewMetadata tryGetViewMetadata() {
+    String tableName = getName();
+    String schemaName = getSchema().getName();
+    SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
+    return catalog.tryGetViewMetadata(List.of(schemaName, tableName));
+  }
+
+  /**
+   * Is this table definitely a view (meaning we can access its definition). If this returns False
+   * we may have a view if we lack the permissions necessary to know it is a view.
+   *
+   * @return True if this is a view for which we can load metadata information.
+   */
+  public boolean isAccessibleView() {
+    return tryGetViewMetadata() != null;
+  }
+
+  /**
+   * Is this a view that can be safely inlined.
+   *
+   * @return Returns true if table is a view and the metadata indicates inlining is legal. If this
+   *     table is not a view this return false.
+   */
+  private boolean canSafelyInlineView() {
+    if (isAccessibleView()) {
+      InlineViewMetadata metadata = tryGetViewMetadata();
+      return !(metadata.getUnsafeToInline() || metadata.isMaterialized());
+    }
+    return false;
+  }
+
+  /**
+   * Get the SQL query definition used to define this table if it is a view.
+   *
+   * @return The string definition that was used to create the view. Returns null if the table is
+   *     not a view.
+   */
+  private @Nullable String getViewDefinitionString() {
+    if (isAccessibleView()) {
+      return tryGetViewMetadata().getViewDefinition();
+    }
+    return null;
   }
 
   private class StatisticImpl implements Statistic {

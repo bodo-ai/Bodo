@@ -20,6 +20,7 @@ import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
 import com.bodosql.calcite.sql.validate.BodoSqlValidator;
+import com.bodosql.calcite.sql2rel.BodoRelDecorrelator;
 import com.bodosql.calcite.sql2rel.BodoSqlToRelConverter;
 import com.google.common.collect.ImmutableList;
 import java.io.Reader;
@@ -51,6 +52,7 @@ import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperatorTable;
+import org.apache.calcite.sql.ddl.SqlCreateView;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.util.SqlOperatorTables;
@@ -296,6 +298,11 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
     } catch (SqlParseException e) {
       throw new RuntimeException("parse failed", e);
     }
+    // Bodo Change: When inlining from Snowflake we will pass
+    // the whole view, so extract just the query definition.
+    if (sqlNode instanceof SqlCreateView) {
+      sqlNode = ((SqlCreateView) sqlNode).query;
+    }
 
     final CalciteCatalogReader catalogReader = createCatalogReader().withSchemaPath(schemaPath);
     final SqlValidator validator = createSqlValidator(catalogReader);
@@ -305,12 +312,12 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
         BodoRelOptClusterSetup.create(requireNonNull(planner, "planner"), rexBuilder);
     final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
     final SqlToRelConverter sqlToRelConverter =
-        new SqlToRelConverter(this, validator, catalogReader, cluster, convertletTable, config);
+        new BodoSqlToRelConverter(this, validator, catalogReader, cluster, convertletTable, config);
 
     final RelRoot root = sqlToRelConverter.convertQuery(sqlNode, true, false);
     final RelRoot root2 = root.withRel(sqlToRelConverter.flattenTypes(root.rel, true));
     final RelBuilder relBuilder = config.getRelBuilderFactory().create(cluster, null);
-    return root2.withRel(RelDecorrelator.decorrelateQuery(root.rel, relBuilder));
+    return root2.withRel(BodoRelDecorrelator.decorrelateQuery(root.rel, relBuilder));
   }
 
   // CalciteCatalogReader is stateless; no need to store one
