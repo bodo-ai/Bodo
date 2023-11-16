@@ -1160,3 +1160,22 @@ SqlIntervalQualifier BodoIntervalQualifier() : {
         return new SqlIntervalQualifier(intervalUnit, null, getPos());
     }
 }
+
+
+/**
+ * Copied from Calcite. Generates a call to createView.
+ */
+SqlCreate SqlCreateView(Span s, boolean replace) :
+{
+    final SqlIdentifier id;
+    SqlNodeList columnList = null;
+    final SqlNode query;
+}
+{
+    <VIEW> id = CompoundIdentifier()
+    [ columnList = ParenthesizedSimpleIdentifierList() ]
+    <AS> query = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY) {
+        return SqlDdlNodes.createView(s.end(this), replace, id, columnList,
+            query);
+    }
+}

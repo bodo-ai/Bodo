@@ -1170,6 +1170,7 @@ class BodoSQLContext:
                 verbose_level,
                 bodo.bodosql_streaming_batch_size,
                 hide_credentials,
+                bodo.bodosql_try_inline_views,
             )
         generator = RelationalAlgebraGeneratorClass(
             self.schema,
@@ -1178,6 +1179,7 @@ class BodoSQLContext:
             verbose_level,
             bodo.bodosql_streaming_batch_size,
             hide_credentials,
+            bodo.bodosql_try_inline_views,
         )
         return generator
 

@@ -418,6 +418,7 @@ def _gen_pd_func_text_and_lowered_globals(
                     verbose_level,
                     bodo.bodosql_streaming_batch_size,
                     hide_credentials,
+                    bodo.bodosql_try_inline_views,
                 )
             else:
                 generator = RelationalAlgebraGeneratorClass(
@@ -427,6 +428,7 @@ def _gen_pd_func_text_and_lowered_globals(
                     verbose_level,
                     bodo.bodosql_streaming_batch_size,
                     hide_credentials,
+                    bodo.bodosql_try_inline_views,
                 )
         except Exception as e:
             # Raise BodoError outside except to avoid stack trace

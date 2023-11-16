@@ -21,6 +21,7 @@ import bodo
 import bodosql
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
+    check_logger_no_msg,
     create_string_io_logger,
     set_logging_stream,
 )
@@ -2465,3 +2466,97 @@ def test_current_database(snowflake_sample_data_snowflake_catalog, memory_leak_c
     bc = bodosql.BodoSQLContext(catalog=catalog)
     df2 = pd.DataFrame({"EXPR$0": ["TEST_DB"]})
     check_func(impl, (bc,), py_output=df2)
+
+
+def test_simple_inline_view(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that the a view defined in the same database and schema as every
+    table it uses is properly inlined.
+
+    If you need to recreate this in snowflake, these are the relevant defintions:
+
+    create table nick_base_table as (select length(r_comment) as A from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.REGION)
+
+    create view basic_view as select * from nick_base_table
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select * from basic_view"
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string(
+            test_db_snowflake_catalog.database,
+            test_db_snowflake_catalog.connection_params["schema"],
+        ),
+    )
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    try:
+        # Ensure we always inline views
+        old_inline = bodo.bodosql_try_inline_views
+        bodo.bodosql_try_inline_views = True
+        with set_logging_stream(logger, 2):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=py_output,
+                check_dtype=False,
+                sort_output=True,
+                reset_index=True,
+            )
+            # Verify that NICK_BASE_TABLE is found in the logger message so the
+            # view was inlined.
+            check_logger_msg(stream, "NICK_BASE_TABLE")
+    finally:
+        # Reset the inlining flag
+        bodo.bodosql_try_inline_views = old_inline
+
+
+def test_secure_view_no_inlining(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that the a secure view defined in the same database and schema as every
+    table it uses is still not inlined.
+
+    If you need to recreate this in snowflake, these are the relevant defintions:
+
+    create table nick_base_table as (select length(r_comment) as A from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.REGION)
+
+    create secure view basic_secure_view as select * from nick_base_table
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select * from basic_secure_view"
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string(
+            test_db_snowflake_catalog.database,
+            test_db_snowflake_catalog.connection_params["schema"],
+        ),
+    )
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    try:
+        # Ensure we always inline views
+        old_inline = bodo.bodosql_try_inline_views
+        bodo.bodosql_try_inline_views = True
+        with set_logging_stream(logger, 2):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=py_output,
+                check_dtype=False,
+                sort_output=True,
+                reset_index=True,
+            )
+            # Verify that NICK_BASE_TABLE is not found in the logger message
+            # so the view was not inlined.
+            check_logger_no_msg(stream, "NICK_BASE_TABLE")
+    finally:
+        # Reset the inlining flag
+        bodo.bodosql_try_inline_views = old_inline

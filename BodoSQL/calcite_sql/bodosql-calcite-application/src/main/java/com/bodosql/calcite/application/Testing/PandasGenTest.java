@@ -106,7 +106,8 @@ public class PandasGenTest {
             plannerChoice,
             0,
             BatchingProperty.defaultBatchSize,
-            true // Always hide credentials
+            true, // Always hide credentials
+            true // Always inline views
             );
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
