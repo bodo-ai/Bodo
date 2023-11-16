@@ -239,7 +239,8 @@ def test_array_metadata_handling_err(cursor):
     """
 
     with pytest.raises(
-        BodoError, match=r"has multiple value types \['DATE', 'VARCHAR'\]"
+        BodoError,
+        match=r"type list\[variant\]. We are unable to narrow the type further, because the `variant` content has items of types \['DATE', 'VARCHAR'\]",
     ):
         bodo.io.snowflake.get_schema_from_metadata(
             cursor,
@@ -358,7 +359,7 @@ def test_struct_metadata_handling_err_uncommon_field(cursor):
     implying otherwise.
     """
 
-    with pytest.raises(BodoError, match=r"contains field d in < 0.5% of non-null rows"):
+    with pytest.raises(BodoError, match=r"has a field d in < 0.5% of non-null rows"):
         bodo.io.snowflake.get_schema_from_metadata(
             cursor,
             """
@@ -411,6 +412,246 @@ def test_float_array_metadata_handling(cursor):
     assert pa_fields[0].equals(
         pa.field("A", pa.large_list(pa.float64()), nullable=True)
     )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_nested_in_array_metadata_handling(cursor):
+    """
+    Test that nested semi-structured data in Array Columns are properly typed
+    """
+
+    pa_fields = bodo.io.snowflake.get_schema_from_metadata(
+        cursor,
+        "SELECT A, B, C FROM NESTED_ARRAY_TEST",
+        None,
+        None,
+        True,
+        False,
+        False,
+    )[0]
+
+    assert len(pa_fields) == 3
+    assert pa_fields[0].equals(
+        pa.field("A", pa.large_list(pa.large_list(pa.float64())))
+    )
+    assert pa_fields[1].equals(
+        pa.field("B", pa.large_list(pa.map_(pa.large_string(), pa.date32())))
+    )
+    assert pa_fields[2].equals(
+        pa.field(
+            "C",
+            pa.large_list(
+                pa.struct(
+                    [
+                        pa.field("name", pa.large_string()),
+                        pa.field("stat", pa.bool_()),
+                        pa.field("cnt", pa.int64()),
+                    ]
+                )
+            ),
+        )
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_array_in_array_metadata_handling_err(cursor):
+    with pytest.raises(
+        BodoError,
+        match=r"type list\[list\[variant\]\]. We are unable to narrow the type further, because the `variant` content has items of types \['BOOLEAN', 'INTEGER'\]",
+    ):
+        bodo.io.snowflake.get_schema_from_metadata(
+            cursor,
+            """
+            select ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(10, 10.0), ARRAY_CONSTRUCT(true, false)) as A
+            """,
+            None,
+            None,
+            True,
+            False,
+            False,
+        )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_map_in_array_metadata_handling_err(cursor):
+    with pytest.raises(
+        BodoError,
+        match=r"type list\[map\[str, list\[variant\]\]\]. We are unable to narrow the type further, because the `variant` content has items of types \['BOOLEAN', 'INTEGER'\]",
+    ):
+        bodo.io.snowflake.get_schema_from_metadata(
+            cursor,
+            """
+            select ARRAY_CONSTRUCT(
+                OBJECT_CONSTRUCT_KEEP_NULL('a', ARRAY_CONSTRUCT(10, 10.0, false))
+            ) as main
+            """,
+            None,
+            None,
+            True,
+            False,
+            False,
+        )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_struct_in_array_metadata_handling_err(cursor):
+    with pytest.raises(
+        BodoError,
+        match=r"type list\[struct\[... b: variant ...\]\]. We are unable to narrow the type further, because field b was found containing multiple types \['INTEGER', 'VARCHAR'\]",
+    ):
+        bodo.io.snowflake.get_schema_from_metadata(
+            cursor,
+            """
+            select ARRAY_CONSTRUCT(
+                OBJECT_CONSTRUCT_KEEP_NULL(
+                    'a', ARRAY_CONSTRUCT(10, 10.0),
+                    'b', 'test' 
+                ),
+                OBJECT_CONSTRUCT_KEEP_NULL('a', null, 'b', 10)
+            ) as main
+            """,
+            None,
+            None,
+            True,
+            False,
+            False,
+        )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_nested_in_map_metadata_handling(cursor):
+    """
+    Test that nested semi-structured data in Map Columns are properly typed
+    """
+
+    pa_fields = bodo.io.snowflake.get_schema_from_metadata(
+        cursor,
+        "SELECT A, B, C FROM NESTED_MAP_TEST",
+        None,
+        None,
+        True,
+        False,
+        False,
+    )[0]
+
+    assert len(pa_fields) == 3
+    assert pa_fields[0].equals(
+        pa.field("A", pa.map_(pa.large_string(), pa.large_list(pa.float64())))
+    )
+    assert pa_fields[1].equals(
+        pa.field(
+            "B", pa.map_(pa.large_string(), pa.map_(pa.large_string(), pa.date32()))
+        )
+    )
+    assert pa_fields[2].equals(
+        pa.field(
+            "C",
+            pa.map_(
+                pa.large_string(),
+                pa.struct(
+                    [
+                        pa.field("name", pa.large_string()),
+                        pa.field("stat", pa.bool_()),
+                        pa.field("cnt", pa.int64()),
+                    ]
+                ),
+            ),
+        )
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_array_in_map_metadata_handling_err(cursor):
+    with pytest.raises(
+        BodoError,
+        match=r"type map\[str, list\[variant\]\]. We are unable to narrow the type further, because the `variant` content has items of types \['BOOLEAN', 'INTEGER'\]",
+    ):
+        bodo.io.snowflake.get_schema_from_metadata(
+            cursor,
+            """
+            select OBJECT_CONSTRUCT_KEEP_NULL(
+                'a', ARRAY_CONSTRUCT(10, 10.0),
+                'b', ARRAY_CONSTRUCT(true, false)
+            ) as A
+            """,
+            None,
+            None,
+            True,
+            False,
+            False,
+        )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_struct_in_map_metadata_handling_err(cursor):
+    with pytest.raises(
+        BodoError,
+        match=r"type map\[str, struct\[... name: variant ...\]\]. We are unable to narrow the type further, because field name was found containing multiple types \['ARRAY', 'VARCHAR'\]",
+    ):
+        bodo.io.snowflake.get_schema_from_metadata(
+            cursor,
+            """
+            select OBJECT_CONSTRUCT_KEEP_NULL(
+                'bodo', OBJECT_CONSTRUCT_KEEP_NULL(
+                    'name', ARRAY_CONSTRUCT(10, 10.0),
+                    'owner', 'test' 
+                ),
+                'data', OBJECT_CONSTRUCT_KEEP_NULL('name', 'data', 'owner', 'tester')
+            ) as main
+            """,
+            None,
+            None,
+            True,
+            False,
+            False,
+        )
+
+
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_nested_in_struct_metadata_handling(cursor):
+    """
+    Test that nested semi-structured data in Struct Columns are properly typed.
+    Also tests multiple levels of nesting
+    """
+
+    pa_fields = bodo.io.snowflake.get_schema_from_metadata(
+        cursor,
+        "SELECT info FROM NESTED_STRUCT_TEST",
+        None,
+        None,
+        True,
+        False,
+        False,
+    )[0]
+
+    assert len(pa_fields) == 1
+    f = pa_fields[0]
+    assert f.name == "INFO"
+    assert f.nullable
+
+    stype = pa_fields[0].type
+    assert pa.types.is_struct(stype)
+    assert stype.num_fields == 5
+    for f in (
+        pa.field("group", pa.large_string()),
+        pa.field("updated", pa.timestamp("ns")),
+        pa.field("values", pa.large_list(pa.float64())),
+        pa.field("ids", pa.map_(pa.large_string(), pa.int64())),
+    ):
+        assert stype.field(stype.get_field_index(f.name)).equals(f)
+
+    inner_sfield = stype.field(stype.get_field_index("created"))
+    assert inner_sfield.nullable
+    assert pa.types.is_struct(inner_sfield.type)
+    assert inner_sfield.type.num_fields == 3
+    for f in (
+        pa.field("creator", pa.large_string()),
+        pa.field("at", pa.date32()),
+        pa.field("atnew", pa.large_list(pa.int64())),
+    ):
+        assert inner_sfield.type.field(
+            inner_sfield.type.get_field_index(f.name)
+        ).equals(f)
 
 
 # TODO: Use numba_from_pyarrow to simplify parameterization
@@ -992,6 +1233,183 @@ def test_read_struct_col(memory_leak_check):
         (query, conn),
         py_output=py_output,
     )
+
+
+def test_read_nested_in_array_col(memory_leak_check):
+    """
+    Basic test to read nested semi-structured data in Array Columns
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
+
+    py_output = pd.DataFrame(
+        {
+            "a": [
+                [[pd.NA], [12.4, -0.57]],
+                [[10.0, 10.0], np.nan],
+                np.nan,
+            ],
+        }
+    )
+    queryA = "SELECT A FROM NESTED_ARRAY_TEST ORDER BY A"
+    check_func(impl, (queryA, conn), py_output=py_output)
+
+    py_output = pd.DataFrame(
+        {
+            "b": [
+                [
+                    {
+                        "a": datetime.date(2023, 11, 12),
+                        "b": datetime.date(1980, 1, 5),
+                        "c": np.nan,
+                    },
+                    {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
+                ],
+                [np.nan, {"m": datetime.date(2023, 11, 11), "mm": np.nan}],
+                np.nan,
+            ],
+        }
+    )
+    queryB = "SELECT B FROM NESTED_ARRAY_TEST ORDER BY A"
+    check_func(impl, (queryB, conn), py_output=py_output, use_map_arrays=True)
+
+
+@pytest.mark.skip(reason="[BSE-2041] Fix Boxing Issue After Pandas 2")
+def test_read_nested_struct_in_array_col(memory_leak_check):
+    # Err when comparing in pd.testing.assert_frame_equal
+    # TODO: Wait for Pandas 2. Arrow can compare nested dicts
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    py_output = pd.DataFrame(
+        {
+            "c": [
+                [
+                    {"name": "dos", "stat": np.nan, "cnt": np.nan},
+                    {"name": "tres", "stat": False, "cnt": -2},
+                ],
+                [{"name": "uno", "stat": False, "cnt": np.nan}],
+                [],
+            ]
+        }
+    )
+    queryC = "SELECT C FROM NESTED_ARRAY_TEST ORDER BY A"
+    conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
+    check_func(impl, (queryC, conn), py_output=py_output)
+
+
+# TODO: [BSE-2040] Find memory leak and add back memory_leak_check
+def test_read_nested_in_map_col():
+    """
+    Basic test to read nested semi-structured data in Map Columns
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
+
+    py_output = pd.DataFrame(
+        {
+            "a": [
+                {},
+                {"bodo": [10.0, 10.0], "databricks": np.nan},
+                {"a": [np.nan], "b": [12.4, -0.57]},
+            ],
+        }
+    )
+    queryA = "SELECT A FROM NESTED_MAP_TEST ORDER BY A"
+    check_func(impl, (queryA, conn), py_output=py_output, use_map_arrays=True)
+
+    py_output = pd.DataFrame(
+        {
+            "b": [
+                np.nan,
+                {"bodo": {"m": datetime.date(2023, 11, 11), "mm": np.nan}},
+                {
+                    "bodo": {
+                        "a": datetime.date(2023, 11, 12),
+                        "b": datetime.date(1980, 1, 5),
+                        "c": np.nan,
+                    },
+                    "google": {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
+                },
+            ],
+        }
+    )
+    queryB = "SELECT B FROM NESTED_MAP_TEST ORDER BY A"
+    check_func(impl, (queryB, conn), py_output=py_output, use_map_arrays=True)
+
+    # Cant test because outer dicts need to be map, inner need to be struct
+    # TODO: Wait for Pandas 2. Arrow can compare nested dicts
+    # py_output = pd.DataFrame(...)
+    # queryC = "SELECT C FROM NESTED_MAP_TEST ORDER BY A"
+    # check_func(impl, (queryC, conn), py_output=py_output)
+
+
+def test_read_nested_in_struct_col(memory_leak_check):
+    """
+    Basic test to read nested semi-structured data in Struct Columns
+    TODO: Test the whole column at once, instead of non-map columns only
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
+
+    py_output = pd.DataFrame(
+        {
+            "i": [
+                {
+                    "group": np.nan,
+                    # Sentinel NaN for Timestamp
+                    # 'updated': datetime.datetime(1970, 1, 1),
+                    "values": np.nan,
+                    "created": np.nan,
+                },
+                {
+                    "group": np.nan,
+                    # Sentinel NaN for Timestamp
+                    # 'updated': datetime.datetime(1970, 1, 1),
+                    "values": np.nan,
+                    "created": {"creator": "mark", "at": np.nan, "atnew": np.nan},
+                },
+                {
+                    "group": "dirt",
+                    # Sentinel NaN for Timestamp
+                    # 'updated': datetime.datetime(1970, 1, 1),
+                    "values": [-1.15e3, -164, 100056],
+                    "created": {
+                        "creator": np.nan,
+                        "at": np.nan,
+                        "atnew": [2010, 10, 10],
+                    },
+                },
+                {
+                    "group": "gravel",
+                    # 'updated': datetime.datetime(2023, 11, 12, 22, 58, 14, 118),
+                    "values": [10.0, 10.1],
+                    "created": {
+                        "creator": np.nan,
+                        "at": datetime.date(1990, 5, 5),
+                        "atnew": np.nan,
+                    },
+                },
+            ],
+        }
+    )
+
+    # TODO: Add 'updated' for Sentinal NaNs and Struct Unboxing
+    query = "SELECT OBJECT_PICK(INFO, 'group', 'values', 'created') as I FROM NESTED_STRUCT_TEST ORDER BY I"
+    check_func(impl, (query, conn), py_output=py_output)
 
 
 def test_snowflake_bodo_read_as_dict_no_table(memory_leak_check):

@@ -747,9 +747,9 @@ def get_number_types_from_metadata(
         idx, name, dtype = cols_to_check[i]
 
         # Parse output NUMBER(__,_)[SBx] to get the byte width x
-        byte_size = int(
-            re.search(r"NUMBER\(\d+,\d+\)\[SB(\d+)\]", typing_info).group(1)
-        )
+        number_regex = re.search(r"NUMBER\(\d+,\d+\)\[SB(\d+)\]", typing_info)
+        assert number_regex is not None
+        byte_size = int(number_regex.group(1))
 
         # Map Byte Width for Integer Only Columns
         if dtype.scale == 0:
@@ -771,10 +771,32 @@ def get_number_types_from_metadata(
 
 
 def snowflake_type_str_to_pyarrow_datatype(
-    types: set[str], col_to_check: str, tz: str
+    types: set[str],
+    cursor: "SnowflakeCursor",
+    sql_query: str,
+    colname: str,
+    source_colname: str,
+    cur_type: str,
+    tz: str,
 ) -> Optional[pa.DataType]:
     """
     Convert a Set of Snowflake Type Strings to a PyArrow type
+
+    Args:
+        types: Set of Snowflake Type Strings to Convert to PyArrow
+            Sometimes multiple types are coerced into one output
+        cursor: Snowflake cursor to pass through for nested semi-structured types
+        sql_query: Source table or query to get data for current column
+            Used for nested semi-structured types
+        colname: Current column name that we're typing
+            Used for nested semi-structured types
+        source_colname: Original column name from the source table / view
+        cur_type: Currently known type of the column as a string
+            Used for error reporting
+        tz: System Timezone, for timestamp types
+
+    Returns:
+        PyArrow DataType if successful, None if unable to determine
     """
 
     # Always assume output is nullable for now
@@ -819,10 +841,18 @@ def snowflake_type_str_to_pyarrow_datatype(
     elif value_type in ("TIMESTAMP_TZ", "TIMESTAMP_LTZ"):
         # TODO: Properly derive timestamp precision if necessary
         return pa.timestamp("ns", tz=tz)
+    elif value_type == "ARRAY":
+        return get_list_type_from_metadata(
+            cursor, sql_query, colname, source_colname, cur_type, tz
+        )
+    elif value_type == "OBJECT":
+        return get_map_type_from_metadata(
+            cursor, sql_query, colname, source_colname, cur_type, tz
+        )
 
-    elif value_type in ("VARIANT", "OBJECT", "ARRAY"):
+    elif value_type == "VARIANT":
         raise BodoError(
-            f"Bodo does not support reading nested semi-structured data in col `{col_to_check}`"
+            f"Bodo does not support reading VARIANT data found in column `{source_colname}`"
         )
 
     else:
@@ -830,17 +860,21 @@ def snowflake_type_str_to_pyarrow_datatype(
 
 
 def get_list_type_from_metadata(
-    cursor: "SnowflakeCursor", sql_query: str, col_to_check: str, tz: str
+    cursor: "SnowflakeCursor",
+    sql_query: str,
+    cur_colname: str,
+    source_colname: str,
+    cur_type: str,
+    tz: str,
 ):
     """
     Determine a precise output type for List Columns from Snowflake
+    See snowflake_type_str_to_pyarrow_datatype for argument types
     """
-
+    cur_type = cur_type.format("list[{}]")
     # TODO: Slice array for beginning content
-    probe_query = (
-        f"WITH in_table AS (SELECT * FROM ({sql_query}) SAMPLE (1000 ROWS)) "
-        f"SELECT DISTINCT TYPEOF(out.value) as VALUES_TYPE FROM in_table, LATERAL FLATTEN(input => {col_to_check}) out"
-    )
+    flatten_query = f"SELECT out.value as V FROM (SELECT * FROM (\n{sql_query}\n) SAMPLE (1000 ROWS)), LATERAL FLATTEN(input => {cur_colname}) out"
+    probe_query = f"SELECT DISTINCT TYPEOF(V) as VALUES_TYPE from ({flatten_query})"
 
     probe_res = execute_query(
         cursor,
@@ -850,39 +884,51 @@ def get_list_type_from_metadata(
 
     if probe_res is None or len(types_df := probe_res.fetch_pandas_all()) == 0:
         raise BodoError(
-            f"Snowflake Probe Query Failed or Timed out While Testing the Type of List Column {col_to_check} in the Source:\n{sql_query}"
+            f"Snowflake Probe Query Failed or Timed out While Typing List Content in Column {source_colname}. "
+            f"It is currently statically typed as {cur_type.format('...')} in the Source:\n"
+            f"{sql_query}"
         )
 
     value_types: set[str] = set(types_df["VALUES_TYPE"].to_list())
-    pa_type = snowflake_type_str_to_pyarrow_datatype(value_types, col_to_check, tz)
+    pa_type = snowflake_type_str_to_pyarrow_datatype(
+        value_types, cursor, flatten_query, "V", source_colname, cur_type, tz
+    )
 
     if pa_type is None:
         raise BodoError(
-            f"Snowflake Probe determined that List Column {col_to_check} in query or table:\n"
+            f"Snowflake Probe determined that Column {source_colname} in query or table:\n"
             f"{sql_query}\n"
-            f"has multiple value types {sorted(value_types)}. This indicated that {col_to_check} is either:\n"
-            "  - A variant / union column with multiple datatypes\n"
-            "  - A struct tuple column with a common schema across rows\n"
-            "Bodo currently does not support either column types"
+            f"is type {cur_type.format('variant')}. We are unable to narrow the type further, because the `variant` "
+            f"content has items of types {sorted(value_types)}. This indicated that the outer list is either:\n"
+            "  - A variant / union array with multiple datatypes\n"
+            "  - An array representing a tuple with a common schema across rows\n"
+            "Bodo currently does not support either array types"
         )
 
     return pa.large_list(pa_type)
 
 
 def get_struct_type_from_metadata(
-    cursor: "SnowflakeCursor", sql_query: str, col_to_check: str, tz: str
+    cursor: "SnowflakeCursor",
+    sql_query: str,
+    cur_colname: str,
+    source_colname: str,
+    cur_type: str,
+    tz: str,
 ):
     """
     For a potential Struct columns, determine a common set of field names
     and their internal types from Snowflake
+    See snowflake_type_str_to_pyarrow_datatype for argument types
     """
 
+    cur_type = cur_type.format("struct[{}]")
     # TODO: Improve potential performance of query
     probe_query = f"""\
         WITH source AS (
             SELECT
-                {col_to_check} AS vals,
-                COUNT(A) OVER () as src_cnt
+                {cur_colname} AS vals,
+                COUNT(vals) OVER () as src_cnt
             FROM ({sql_query}) WHERE vals is not NULL LIMIT 1000
         ),
         keys_table AS (
@@ -907,7 +953,9 @@ def get_struct_type_from_metadata(
     key_types: list[tuple[str, int, int, str]]
     if probe_res is None or len(key_types := probe_res.fetchall()) == 0:
         raise BodoError(
-            f"Snowflake Probe Query Failed or Timed out While Testing the Type of Struct Column {col_to_check} in the Source:\n{sql_query}"
+            f"Snowflake Probe Query Failed or Timed out While Typing Object Content in Column {source_colname}. "
+            f"It is currently statically typed as {cur_type.format('...')}. Timed-out Query:\n"
+            f"{sql_query}"
         )
 
     fields = []
@@ -915,19 +963,31 @@ def get_struct_type_from_metadata(
         # Edge case, only null columns have cnt == 0
         # Metric ignores null rows
         if cnt != 0 and cnt / total < 0.005:
+            cur_type = cur_type.format("...")
             raise BodoError(
-                f"Snowflake Probe found that Object Column {col_to_check} contains "
-                f"field {key_name} in < 0.5% of non-null rows. This imples {col_to_check} is map column "
+                f"Snowflake Probe found that Column {source_colname}, currently typed as {cur_type}, "
+                f"has a field {key_name} in < 0.5% of non-null rows. This imples {source_colname} has object elements "
                 "with heterogenous values, which Bodo does not currently support."
             )
 
         value_types: set[str] = set(json.loads(types_list_str))
-        pa_type = snowflake_type_str_to_pyarrow_datatype(value_types, col_to_check, tz)
+        elem_query = f"SELECT GET({cur_colname}, '{key_name}') as V FROM ({sql_query})"
+        pa_type = snowflake_type_str_to_pyarrow_datatype(
+            value_types,
+            cursor,
+            elem_query,
+            "V",
+            source_colname,
+            cur_type.format(f"... {key_name}: {{}} ..."),
+            tz,
+        )
         if pa_type is None:
             raise BodoError(
-                f"Snowflake Probe determined that Object Column {col_to_check} in query or table:\n"
+                f"Snowflake Probe determined that Column {source_colname} in query or table:\n"
                 f"{sql_query}\n"
-                f"can't be either a map or struct column. Field {key_name} was found containing multiple types {sorted(value_types)}. Bodo currently does not support heterogenous column types/\n"
+                f"is type {cur_type.format(f'... {key_name}: variant ...')}. We are unable to narrow the type further, because "
+                f"field {key_name} was found containing multiple types {sorted(value_types)}. "
+                "Bodo currently does not support heterogenous column types."
             )
 
         fields.append(pa.field(key_name, pa_type, nullable=True))
@@ -936,19 +996,25 @@ def get_struct_type_from_metadata(
 
 
 def get_map_type_from_metadata(
-    cursor: "SnowflakeCursor", sql_query: str, col_to_check: str, tz: str
+    cursor: "SnowflakeCursor",
+    sql_query: str,
+    cur_colname: str,
+    source_colname: str,
+    cur_type: str,
+    tz: str,
 ):
     """
     Determine a precise output type for Map Columns from Snowflake
+    See snowflake_type_str_to_pyarrow_datatype for argument types
     """
 
     # TODO: Improve potential performance of query
-    probe_query = f"""\
-        WITH in_table AS (SELECT * FROM ({sql_query}) SAMPLE (1000 ROWS))
-        SELECT DISTINCT TYPEOF(out.value) as VALUES_TYPE
-        FROM in_table,
-        LATERAL FLATTEN(input => {col_to_check}) out
+    flatten_query = f"""\
+        SELECT out.value as V 
+        FROM (SELECT * FROM ({sql_query}) SAMPLE (1000 ROWS)),
+        LATERAL FLATTEN(input => {cur_colname}) out
     """
+    probe_query = f"SELECT DISTINCT TYPEOF(V) as VALUES_TYPE from ({flatten_query})"
 
     probe_res = execute_query(
         cursor,
@@ -958,14 +1024,25 @@ def get_map_type_from_metadata(
 
     if probe_res is None or len(types_df := probe_res.fetch_pandas_all()) == 0:
         raise BodoError(
-            f"Snowflake Probe Query Failed or Timed out While Testing the Type of Map Column {col_to_check} in the Source:\n{sql_query}"
+            f"Snowflake Probe Query Failed or Timed out While Determining the Type of Column {cur_colname}.\n"
+            f"Currently determined to be {cur_type.format('map[str, ...]')}. Timed-out Query:\n{sql_query}"
         )
 
     value_types: set[str] = set(types_df["VALUES_TYPE"].to_list())
-    pa_type = snowflake_type_str_to_pyarrow_datatype(value_types, col_to_check, tz)
+    pa_type = snowflake_type_str_to_pyarrow_datatype(
+        value_types,
+        cursor,
+        flatten_query,
+        "V",
+        source_colname,
+        cur_type.format("map[str, {}]"),
+        tz,
+    )
 
     if pa_type is None:
-        return get_struct_type_from_metadata(cursor, sql_query, col_to_check, tz)
+        return get_struct_type_from_metadata(
+            cursor, sql_query, cur_colname, source_colname, cur_type, tz
+        )
 
     return pa.map_(pa.large_string(), pa_type)
 
@@ -1025,11 +1102,11 @@ def get_schema_from_metadata(
         if isinstance(dtype, UnknownSnowflakeType):
             if dtype == UnknownSnowflakeType.LIST:
                 dtype = get_list_type_from_metadata(
-                    cursor, sql_query, field_meta.name, tz
+                    cursor, sql_query, field_meta.name, field_meta.name, "{}", tz
                 )
             elif dtype == UnknownSnowflakeType.OBJECT:
                 dtype = get_map_type_from_metadata(
-                    cursor, sql_query, field_meta.name, tz
+                    cursor, sql_query, field_meta.name, field_meta.name, "{}", tz
                 )
 
         assert isinstance(
