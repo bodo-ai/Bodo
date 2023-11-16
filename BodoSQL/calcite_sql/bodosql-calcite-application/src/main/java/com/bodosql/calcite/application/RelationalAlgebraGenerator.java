@@ -105,6 +105,9 @@ public class RelationalAlgebraGenerator {
    */
   public static boolean hideCredentials = false;
 
+  /** Should we try inline views? */
+  public static boolean tryInlineViews = false;
+
   /**
    * Helper method for RelationalAlgebraGenerator constructor to create a Connection object so that
    * SQL queries can be executed within its context.
@@ -173,7 +176,8 @@ public class RelationalAlgebraGenerator {
       int plannerType,
       int verboseLevel,
       int streamingBatchSize,
-      boolean hideCredentials) {
+      boolean hideCredentials,
+      boolean tryInlineViews) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -190,6 +194,7 @@ public class RelationalAlgebraGenerator {
     this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
     this.hideCredentials = hideCredentials;
+    this.tryInlineViews = tryInlineViews;
   }
 
   public static final int VOLCANO_PLANNER = 0;
@@ -211,12 +216,14 @@ public class RelationalAlgebraGenerator {
       int plannerType,
       int verboseLevel,
       int streamingBatchSize,
-      boolean hideCredentials) {
+      boolean hideCredentials,
+      boolean tryInlineViews) {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
     this.streamingBatchSize = streamingBatchSize;
     this.hideCredentials = hideCredentials;
+    this.tryInlineViews = tryInlineViews;
     System.setProperty("calcite.default.charset", "UTF-8");
     CalciteConnection calciteConnection = setupCalciteConnection();
     List<SchemaPlus> defaultSchemas =
