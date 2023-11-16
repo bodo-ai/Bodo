@@ -661,6 +661,11 @@ static int finalize() {
     if (!is_initialized) {
         return 0;
     }
+
+    // Free user-defined decimal MPI type to avoid leaks
+    MPI_Datatype decimal_mpi_type = get_MPI_typ(Bodo_CTypes::DECIMAL);
+    MPI_Type_free(&decimal_mpi_type);
+
     int is_finalized;
     MPI_Finalized(&is_finalized);
     if (!is_finalized) {
