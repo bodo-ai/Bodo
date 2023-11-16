@@ -2,6 +2,7 @@ package com.bodosql.calcite.table;
 
 import static java.lang.Double.min;
 
+import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
@@ -13,6 +14,7 @@ import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
+import com.bodosql.calcite.schema.ExpandViewInput;
 import com.bodosql.calcite.schema.InlineViewMetadata;
 import com.google.common.base.Suppliers;
 import java.util.*;
@@ -258,6 +260,34 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     return statistic;
   }
 
+  // Cache used for inlining views. We cannot use the Memoizer here because the
+  // ToRelContext doesn't have .equals() properly defined. Here we know that
+  // all uses of the same CatalogTableImpl are safe to cache.
+  private final Map<ExpandViewInput, RelNode> inlineViewCache = new HashMap<>();
+
+  /**
+   * Inline a view. If this inlining is not possible return Null.
+   *
+   * @param toRelContext The context used for expanding the view.
+   * @param input The inputs used to call toRelContext.expandView(). This is grouped into one object
+   *     for caching purposes.
+   * @return The RelNode after expanding the view or NULL.
+   */
+  private @Nullable RelNode inlineViewImpl(
+      RelOptTable.ToRelContext toRelContext, ExpandViewInput input) {
+    try {
+      RelRoot root =
+          toRelContext.expandView(
+              input.getOutputType(),
+              input.getViewDefinition(),
+              input.getDefaultPath(),
+              input.getViewPath());
+      return PandasUtilKt.logicalProject(root);
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
   /**
    * Try to inline a view. If the view cannot be inlined then return the baseRelNode instead.
    *
@@ -270,15 +300,24 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
       RelOptTable.ToRelContext toRelContext,
       @NotNull String viewDefinition,
       @NotNull RelNode baseRelNode) {
-    try {
-      RelRoot root =
-          toRelContext.expandView(
-              baseRelNode.getRowType(),
-              viewDefinition,
-              List.of(getCatalog().getCatalogName(), getSchema().getName()),
-              List.of(getCatalog().getCatalogName(), getSchema().getName(), getName()));
-      return root.project();
-    } catch (Exception e) {
+    ExpandViewInput input =
+        new ExpandViewInput(
+            baseRelNode.getRowType(),
+            viewDefinition,
+            List.of(getCatalog().getCatalogName(), getSchema().getName()),
+            List.of(getCatalog().getCatalogName(), getSchema().getName(), getName()));
+    // Check the cache.
+    final RelNode result;
+    if (inlineViewCache.containsKey(input)) {
+      result = inlineViewCache.get(input);
+    } else {
+      result = inlineViewImpl(toRelContext, input);
+      // Store in the cache
+      inlineViewCache.put(input, result);
+    }
+    if (result != null) {
+      return result;
+    } else {
       return baseRelNode;
     }
   }
