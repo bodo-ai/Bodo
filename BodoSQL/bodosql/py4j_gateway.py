@@ -119,6 +119,7 @@ def configure_java_logging(level: int):
 
         java_level_one_logger = PythonLoggersClass.VERBOSE_LEVEL_ONE_LOGGER
         java_level_two_logger = PythonLoggersClass.VERBOSE_LEVEL_TWO_LOGGER
+        java_level_three_logger = PythonLoggersClass.VERBOSE_LEVEL_THREE_LOGGER
         if level >= 1:
             PythonLoggersClass.turnLoggerOn(java_level_one_logger)
         else:
@@ -127,3 +128,7 @@ def configure_java_logging(level: int):
             PythonLoggersClass.turnLoggerOn(java_level_two_logger)
         else:
             PythonLoggersClass.turnLoggerOff(java_level_two_logger)
+        if level >= 3:
+            PythonLoggersClass.turnLoggerOn(java_level_three_logger)
+        else:
+            PythonLoggersClass.turnLoggerOff(java_level_three_logger)
