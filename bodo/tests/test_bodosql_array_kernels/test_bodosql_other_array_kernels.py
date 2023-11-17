@@ -1105,7 +1105,7 @@ def test_uniform_count(memory_leak_check):
         C = R.value_counts().sort_index().astype("Float64")
         return C
 
-    count_result = pd.Series([10000.0] * 100)
+    count_result = pd.Series([10000.0] * 100, name="count")
     check_func(
         impl,
         (),

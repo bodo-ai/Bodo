@@ -63,6 +63,7 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal,
     _test_equal_guard,
+    cast_dt64_to_ns,
     check_func,
     convert_non_pandas_columns,
     gen_nonascii_list,
@@ -1206,8 +1207,8 @@ def test_basic_write_replace(
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies both
         # dataframes to match Spark.
         if base_name == "dt_tsz_table":
-            df["B"] = df["B"].fillna(datetime(1970, 1, 1))
-            py_out["B"] = py_out["B"].fillna(datetime(1970, 1, 1))
+            df["B"] = df["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
+            py_out["B"] = py_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
     else:
         assert (
             read_behavior == "bodo"
@@ -1255,6 +1256,7 @@ def test_basic_write_replace(
     # assert n_passed == n_pes)
 
 
+@pytest.mark.timeout(1000)
 @pytest.mark.slow
 @pytest.mark.parametrize("behavior", ["create", "append"])
 @pytest.mark.parametrize("initial_write", ["bodo", "spark"])
@@ -1343,7 +1345,9 @@ def test_basic_write_new_append(
     comm = MPI.COMM_WORLD
     if bodo.get_rank() == 0:
         if base_name == "dt_tsz_table":
-            expected_df["B"] = expected_df["B"].fillna(pd.Timestamp(1970, 1, 1))
+            expected_df["B"] = expected_df["B"].fillna(
+                pd.Timestamp(1970, 1, 1, tz="UTC")
+            )
             bodo_out["B"] = bodo_out["B"].fillna(
                 pd.Timestamp(year=1970, month=1, day=1, tz="UTC")
             )
@@ -1392,8 +1396,10 @@ def test_basic_write_new_append(
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies both
         # dataframes to match Spark.
         if base_name == "dt_tsz_table":
-            expected_df["B"] = expected_df["B"].fillna(pd.Timestamp(1970, 1, 1))
-            spark_out["B"] = spark_out["B"].fillna(datetime(1970, 1, 1))
+            expected_df["B"] = expected_df["B"].fillna(
+                pd.Timestamp(1970, 1, 1, tz="UTC")
+            )
+            spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
 
         if not_hashable:
             spark_out = convert_non_pandas_columns(spark_out)
@@ -2250,7 +2256,7 @@ def test_write_partitioned(
     # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies expected
     # df to match Spark.
     if base_name == "dt_tsz_table":
-        expected_df["B"] = expected_df["B"].fillna(pd.Timestamp(1970, 1, 1))
+        expected_df["B"] = expected_df["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
 
     # Validate Bodo read output:
     bodo_out = bodo.jit(distributed=["df"])(
@@ -2293,7 +2299,7 @@ def test_write_partitioned(
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies the
         # dataframe to match Spark.
         if base_name == "dt_tsz_table":
-            spark_out["B"] = spark_out["B"].fillna(datetime(1970, 1, 1))
+            spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
             expected_df,
             spark_out,
@@ -2375,7 +2381,7 @@ def test_write_sorted(
     # timestamps, so we convert all NaTs to epoch for consistent
     # comparison
     if base_name == "dt_tsz_table":
-        expected_df["B"] = expected_df["B"].fillna(pd.Timestamp(1970, 1, 1))
+        expected_df["B"] = expected_df["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
 
     if base_name == "bool_binary_table":
         # [BE-3585] Bodo write binary columns as string when partitioned,
@@ -2421,7 +2427,7 @@ def test_write_sorted(
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies expected
         # df to match Spark.
         if base_name == "dt_tsz_table":
-            spark_out["B"] = spark_out["B"].fillna(datetime(1970, 1, 1))
+            spark_out["B"] = spark_out["B"].fillna(pd.Timestamp(1970, 1, 1, tz="UTC"))
         passed = _test_equal_guard(
             expected_df,
             spark_out,
@@ -2575,7 +2581,8 @@ def _test_file_part(file_name: str, part_spec: List[PartitionField]):
 
 
 def _test_file_sorted(file_name: str, sort_order: List[SortField]):
-    df = pd.read_parquet(file_name, use_nullable_dtypes=True)
+    df = pd.read_parquet(file_name, dtype_backend="numpy_nullable")
+    df = cast_dt64_to_ns(df)
 
     # Compute Transformed Columns
     new_cols: List[pd.Series] = [
@@ -3019,7 +3026,7 @@ def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_co
             "A": list(np.arange(8)) * 8,
             "B": gen_nonascii_list(64),
             "C": np.arange(64),
-            "D": pd.date_range("2017-01-03", periods=8).repeat(8),
+            "D": pd.date_range("2017-01-03", periods=8).repeat(8).tz_localize("UTC"),
         }
     )
 

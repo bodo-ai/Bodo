@@ -379,7 +379,7 @@ def test_pd_get_dummies_series(cat_arr_value, memory_leak_check):
 @pytest.mark.slow
 def test_replace():
     def test_impl(A, to_replace, value):
-        return A.replace(to_replace, value)
+        return pd.Series(A).replace(to_replace, value)
 
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
     to_replace = "CC"
@@ -398,7 +398,7 @@ def test_replace():
 @pytest.mark.slow
 def test_replace_list(memory_leak_check):
     def test_impl(A, to_replace, value):
-        return A.replace(to_replace, value)
+        return pd.Series(A).replace(to_replace, value)
 
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
     to_replace = ["CC", "AA"]
@@ -414,7 +414,7 @@ def test_replace_list(memory_leak_check):
 @pytest.mark.slow
 def test_replace_const_string():
     def test_impl(A):
-        return A.replace("CC", "ZZZZ")
+        return pd.Series(A).replace("CC", "ZZZZ")
 
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
     check_func(test_impl, (A,))
@@ -423,7 +423,7 @@ def test_replace_const_string():
 # Readd memory_leak_check when lowering memory leak is handled
 def test_replace_const():
     def test_impl(A):
-        return A.replace(2, 5)
+        return pd.Series(A).replace(2, 5)
 
     A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12], ordered=True)
     check_func(test_impl, (A,))
@@ -433,7 +433,7 @@ def test_replace_const():
 @pytest.mark.slow
 def test_replace_const_list():
     def test_impl(A):
-        return A.replace([2, 3, 7], 5)
+        return pd.Series(A).replace([2, 3, 7], 5)
 
     A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12], ordered=True)
     check_func(test_impl, (A,))
@@ -443,7 +443,7 @@ def test_replace_const_list():
 @pytest.mark.slow
 def test_replace_delete():
     def test_impl(A, to_replace, value):
-        return A.replace(to_replace, value)
+        return pd.Series(A).replace(to_replace, value)
 
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
     to_replace = "CC"
@@ -462,7 +462,7 @@ def test_replace_delete():
 @pytest.mark.slow
 def test_replace_delete_list(memory_leak_check):
     def test_impl(A, to_replace, value):
-        return A.replace(to_replace, value)
+        return pd.Series(A).replace(to_replace, value)
 
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
     to_replace = ["CC", "AA"]
@@ -478,7 +478,7 @@ def test_replace_delete_list(memory_leak_check):
 @pytest.mark.slow
 def test_replace_delete_const():
     def test_impl(A):
-        return A.replace(2, 1)
+        return pd.Series(A).replace(2, 1)
 
     A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12], ordered=True)
     check_func(test_impl, (A,))
@@ -487,7 +487,7 @@ def test_replace_delete_const():
 @pytest.mark.slow
 def test_replace_same(memory_leak_check):
     def test_impl(A, to_replace, value):
-        return A.replace(to_replace, value)
+        return pd.Series(A).replace(to_replace, value)
 
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
     to_replace = "CC"
@@ -503,7 +503,7 @@ def test_replace_same(memory_leak_check):
 @pytest.mark.slow
 def test_replace_same_const():
     def test_impl(A):
-        return A.replace("CC", "CC")
+        return pd.Series(A).replace("CC", "CC")
 
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
     check_func(test_impl, (A,))
@@ -512,7 +512,7 @@ def test_replace_same_const():
 @pytest.mark.slow
 def test_replace_missing(memory_leak_check):
     def test_impl(A, to_replace, value):
-        return A.replace(to_replace, value)
+        return pd.Series(A).replace(to_replace, value)
 
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
     to_replace = "ZZ"
@@ -528,7 +528,7 @@ def test_replace_missing(memory_leak_check):
 @pytest.mark.slow
 def test_replace_missing_const():
     def test_impl(A):
-        return A.replace("ZZ", "CC")
+        return pd.Series(A).replace("ZZ", "CC")
 
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
     check_func(test_impl, (A,))

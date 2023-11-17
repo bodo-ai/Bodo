@@ -2038,36 +2038,6 @@ class SeriesPass:
                 self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
-        if fdef == ("Int64Index", "pandas"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_index_ext.create_numeric_constructor(
-                pd.Int64Index, "pandas.Int64Index", np.int64
-            )(*arg_typs, **kw_typs)
-            return replace_func(
-                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
-        if fdef == ("UInt64Index", "pandas"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_index_ext.create_numeric_constructor(
-                pd.UInt64Index, "pandas.UInt64Index", np.uint64
-            )(*arg_typs, **kw_typs)
-            return replace_func(
-                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
-        if fdef == ("Float64Index", "pandas"):
-            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
-            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_index_ext.create_numeric_constructor(
-                pd.Float64Index, "pandas.FloatIndex", np.float64
-            )(*arg_typs, **kw_typs)
-            return replace_func(
-                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
-            )
-
         if fdef == ("Series", "pandas"):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}

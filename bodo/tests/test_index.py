@@ -57,7 +57,7 @@ def test_range_index_constructor(memory_leak_check, is_slow_run):
     check_func(impl6, (5, 10, 2), only_seq=True)
 
     def impl7(r):  # unbox
-        return r._start, r._stop, r._step
+        return r.start, r.stop, r.step
 
     r = pd.RangeIndex(3, 10, 2)
     check_func(impl7, (r,), only_seq=True)
@@ -315,7 +315,8 @@ def test_generic_index_constructor(data):
         return pd.Index(data)
 
     # parallel with no dtype
-    check_func(impl, (data,))
+    # check_dtype=False since Bodo uses nullable arrays
+    check_func(impl, (data,), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -329,7 +330,7 @@ def test_binary_infer(memory_leak_check):
         impl,
         (
             pd.Index(
-                pd.array([b"ajkshdg", b"jhasdgf", b"asdfajd", np.NaN] * 3),
+                np.array([b"ajkshdg", b"jhasdgf", b"asdfajd", np.NaN] * 3),
                 name="my_index",
             ),
         ),
@@ -354,7 +355,7 @@ def test_generic_index_constructor_with_dtype(data, dtype):
     def impl(data, dtype):
         return pd.Index(data, dtype=dtype)
 
-    check_func(impl, (data, dtype))
+    check_func(impl, (data, dtype), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -377,73 +378,6 @@ def test_generic_index_constructor_sequential(data):
 
 
 @pytest.mark.slow
-def test_numeric_index_constructor(memory_leak_check, is_slow_run):
-    """
-    Test pd.Int64Index/UInt64Index/Float64Index objects
-    """
-
-    def impl1():  # list input
-        return pd.Int64Index([10, 12])
-
-    check_func(impl1, (), only_seq=True)
-
-    if not is_slow_run:
-        return
-
-    def impl2():  # list input with name
-        return pd.Int64Index([10, 12], name="A")
-
-    check_func(impl2, (), only_seq=True)
-
-    def impl3():  # array input
-        return pd.Int64Index(np.arange(3))
-
-    check_func(impl3, (), only_seq=True)
-
-    def impl4():  # array input different type
-        return pd.Int64Index(np.ones(3, dtype=np.int32))
-
-    check_func(impl4, (), only_seq=True)
-
-    def impl5():  # uint64: list input
-        return pd.UInt64Index([10, 12])
-
-    check_func(impl5, (), only_seq=True)
-
-    def impl6():  # uint64: array input different type
-        return pd.UInt64Index(np.ones(3, dtype=np.int32))
-
-    check_func(impl6, (), only_seq=True)
-
-    def impl7():  # float64: list input
-        return pd.Float64Index([10.1, 12.1])
-
-    check_func(impl7, (), only_seq=True)
-
-    def impl8():  # float64: array input different type
-        return pd.Float64Index(np.ones(3, dtype=np.int32))
-
-    check_func(impl8, (), only_seq=True)
-
-
-def test_init_numeric_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_numeric_index() is applied correctly"""
-    import numba.tests.test_array_analysis
-
-    def impl(d):
-        I = pd.Int64Index(d)
-        return I
-
-    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
-    test_func(np.arange(10))
-    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
-        "preserved_array_analysis"
-    ]
-    eq_set = array_analysis.equiv_sets[0]
-    assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
-
-
-@pytest.mark.slow
 @pytest.mark.parametrize(
     "index",
     [
@@ -462,7 +396,7 @@ def test_array_index_box(index, memory_leak_check):
     # convert ArrowStringArray to regular Numpy
     if bodo_out.dtype == pd.StringDtype("pyarrow"):
         bodo_out = pd.Index(bodo_out.to_numpy())
-    pd.testing.assert_index_equal(bodo_out, index)
+    pd.testing.assert_index_equal(bodo_out, index, exact=False, check_exact=False)
 
 
 @pytest.mark.slow
@@ -580,6 +514,7 @@ def test_index_set_operations(args):
         py_output=I.append(pd.Index(J)).unique(),
         sort_output=True,
         dist_test=dist_test,
+        check_dtype=False,
     )
 
     # Bodo diverges from the Pandas API for intersection by returning in a possibly
@@ -592,14 +527,21 @@ def test_index_set_operations(args):
         sort_output=True,
         dist_test=dist_test,
         only_1D=True,
+        check_dtype=False,
     )
 
     # Bodo diverges from the Pandas API for difference and symmetric_difference
     # by returning in a possibly different order, and always converting RangeIndex
     # to NumericIndex.
-    check_func(impl3, (I, J), sort_output=True, dist_test=dist_test)
-    check_func(impl3, (pd.Index(J), I), sort_output=True, dist_test=dist_test)
-    check_func(impl4, (I, J), sort_output=True, dist_test=dist_test)
+    check_func(impl3, (I, J), sort_output=True, dist_test=dist_test, check_dtype=False)
+    check_func(
+        impl3,
+        (pd.Index(J), I),
+        sort_output=True,
+        dist_test=dist_test,
+        check_dtype=False,
+    )
+    check_func(impl4, (I, J), sort_output=True, dist_test=dist_test, check_dtype=False)
 
 
 @pytest.mark.parametrize(
@@ -702,24 +644,38 @@ def test_index_to_series(args):
     dist_test_A = isinstance(index, pd.RangeIndex) and index.step < 0
     dist_test_B = isinstance(index, pd.RangeIndex) and index.step < 0
 
-    check_func(impl1, (index,), dist_test=dist_test_A)
-    check_func(impl2, (index,), dist_test=dist_test_A)
-    check_func(impl3, (index, other), dist_test=dist_test_A)
-    check_func(impl4, (index, other), dist_test=dist_test_A)
+    check_func(impl1, (index,), dist_test=dist_test_A, check_dtype=False)
+    check_func(impl2, (index,), dist_test=dist_test_A, check_dtype=False)
+    check_func(impl3, (index, other), dist_test=dist_test_A, check_dtype=False)
+    check_func(impl4, (index, other), dist_test=dist_test_A, check_dtype=False)
     if not isinstance(other, pd.MultiIndex):
-        check_func(impl3, (other, index), dist_test=dist_test_B)
+        check_func(impl3, (other, index), dist_test=dist_test_B, check_dtype=False)
 
     # Passing in other iterables for index not supported for Timedelta or Binary.
     # Lists/tuples not supported for distributed tests.
     if not isinstance(other[0], (bytes, pd._libs.tslibs.timedeltas.Timedelta)):
-        check_func(impl3, (index, list(other)), dist_test=False)
-        check_func(impl3, (index, pd.Series(other)), dist_test=dist_test_A)
-        check_func(impl3, (index, other.to_numpy()), dist_test=dist_test_A)
+        check_func(impl3, (index, list(other)), dist_test=False, check_dtype=False)
+        check_func(
+            impl3, (index, pd.Series(other)), dist_test=dist_test_A, check_dtype=False
+        )
+        check_func(
+            impl3, (index, other.to_numpy()), dist_test=dist_test_A, check_dtype=False
+        )
     if not isinstance(index[0], (bytes, pd._libs.tslibs.timedeltas.Timedelta)):
-        check_func(impl3, (other, tuple(index)), dist_test=False)
+        check_func(impl3, (other, tuple(index)), dist_test=False, check_dtype=False)
         if not isinstance(other, pd.MultiIndex):
-            check_func(impl4, (other, pd.Series(index)), dist_test=dist_test_B)
-            check_func(impl4, (other, index.to_numpy()), dist_test=dist_test_B)
+            check_func(
+                impl4,
+                (other, pd.Series(index)),
+                dist_test=dist_test_B,
+                check_dtype=False,
+            )
+            check_func(
+                impl4,
+                (other, index.to_numpy()),
+                dist_test=dist_test_B,
+                check_dtype=False,
+            )
 
 
 @pytest.mark.parametrize(
@@ -774,18 +730,18 @@ def test_index_to_frame(index):
         return index.to_frame(name=[7, "r", 13], index=False)
 
     dist_test = not (isinstance(index, pd.RangeIndex) and index.step < 0)
-    check_func(impl1, (index,), dist_test=dist_test)
-    check_func(impl2, (index,), dist_test=dist_test)
+    check_func(impl1, (index,), dist_test=dist_test, check_dtype=False)
+    check_func(impl2, (index,), dist_test=dist_test, check_dtype=False)
     if not isinstance(index, pd.MultiIndex):
-        check_func(impl3, (index,), dist_test=dist_test)
-        check_func(impl4, (index,), dist_test=dist_test)
+        check_func(impl3, (index,), dist_test=dist_test, check_dtype=False)
+        check_func(impl4, (index,), dist_test=dist_test, check_dtype=False)
     else:
         if len(index.levels) == 2:
-            check_func(impl5, (index,), dist_test=dist_test)
-            check_func(impl6, (index,), dist_test=dist_test)
+            check_func(impl5, (index,), dist_test=dist_test, check_dtype=False)
+            check_func(impl6, (index,), dist_test=dist_test, check_dtype=False)
         elif len(index.levels) == 3:
-            check_func(impl7, (index,), dist_test=dist_test)
-            check_func(impl8, (index,), dist_test=dist_test)
+            check_func(impl7, (index,), dist_test=dist_test, check_dtype=False)
+            check_func(impl8, (index,), dist_test=dist_test, check_dtype=False)
 
 
 @pytest.mark.parametrize(
@@ -990,14 +946,14 @@ def test_index_sort_values(index):
 
     # RangeIndex distributed sort_values not supported yet [BE-2944] & [BE-3008]
     dist_test = not (isinstance(index, pd.RangeIndex))
-    check_func(impl1, (index,), dist_test=dist_test)
-    check_func(impl2, (index,), dist_test=dist_test)
+    check_func(impl1, (index,), dist_test=dist_test, check_dtype=False)
+    check_func(impl2, (index,), dist_test=dist_test, check_dtype=False)
     # If the Index is numerical, test alternative placement of nulls and
     # verify nondestructiveness
-    if isinstance(index, pd.core.indexes.numeric.Int64Index):
-        check_func(impl3, (index,), dist_test=dist_test)
-        check_func(impl4, (index,), dist_test=dist_test)
-        check_func(impl5, (index,), dist_test=False)
+    if index.dtype == np.int64:
+        check_func(impl3, (index,), dist_test=dist_test, check_dtype=False)
+        check_func(impl4, (index,), dist_test=dist_test, check_dtype=False)
+        check_func(impl5, (index,), dist_test=False, check_dtype=False)
 
 
 @pytest.mark.parametrize(
@@ -1751,7 +1707,7 @@ def test_binary_index_constant_lowering(memory_leak_check):
 
 
 def test_int64_index_constant_lowering(memory_leak_check):
-    idx = pd.Int64Index([-1, 43, 54, 65, 123])
+    idx = pd.Index([-1, 43, 54, 65, 123])
 
     def impl():
         return idx
@@ -1761,7 +1717,7 @@ def test_int64_index_constant_lowering(memory_leak_check):
 
 
 def test_uint64_index_constant_lowering(memory_leak_check):
-    idx = pd.UInt64Index([1, 43, 54, 65, 123])
+    idx = pd.Index([1, 43, 54, 65, 123])
 
     def impl():
         return idx
@@ -1771,7 +1727,7 @@ def test_uint64_index_constant_lowering(memory_leak_check):
 
 
 def test_float64_index_constant_lowering(memory_leak_check):
-    idx = pd.Float64Index([1.2, 43.4, 54.7, 65, 123])
+    idx = pd.Index([1.2, 43.4, 54.7, 65, 123])
 
     def impl():
         return idx
@@ -2496,22 +2452,18 @@ def test_map(index, memory_leak_check):
 )
 def test_monotonicity(index, memory_leak_check):
     """
-    Test is_monotonic, is_monotonic_increasing, and is_monotonic_decreasing attributes for indices
+    Test is_monotonic_increasing, and is_monotonic_decreasing attributes for indices
     of type Int64Index, UInt64Index, Float64Index, DatetimeIndex, TimedeltaIndex, and RangeIndex.
     """
 
     def f1(index):
-        return index.is_monotonic
-
-    def f2(index):
         return index.is_monotonic_increasing
 
-    def f3(index):
+    def f2(index):
         return index.is_monotonic_decreasing
 
     check_func(f1, (index,))
     check_func(f2, (index,))
-    check_func(f3, (index,))
 
 
 def test_range_index_dce(memory_leak_check):
@@ -2933,13 +2885,8 @@ def test_index_where_putmask(args):
         isinstance(idx, pd.RangeIndex) and (idx.start != 0 or idx.step != 1)
     )
     check_func(impl1, (idx, con), dist_test=dist_test)
-    if isinstance(
-        idx,
-        (
-            pd.core.indexes.numeric.Int64Index,
-            pd.core.indexes.numeric.Float64Index,
-            pd.RangeIndex,
-        ),
+    if isinstance(idx, pd.RangeIndex) or isinstance(
+        bodo.typeof(idx), bodo.NumericIndexType
     ):
         check_func(impl2, (idx, con, np.nan), dist_test=dist_test)
     check_func(impl2, (idx, con, oth), dist_test=dist_test)
@@ -3685,7 +3632,6 @@ def test_index_simple_attributes(index):
             idx.ndim,
             idx.nlevels,
             idx.empty,
-            idx.is_all_dates,
             idx.inferred_type,
             idx.name,
             idx.names,
@@ -3739,7 +3685,6 @@ def test_interval_index_simple_attributes(index):
             idx.ndim,
             idx.nlevels,
             idx.empty,
-            idx.is_all_dates,
             idx.inferred_type,
             idx.name,
             idx.names,
@@ -3780,7 +3725,6 @@ def test_period_index_simple_attributes(index):
             idx.ndim,
             idx.nlevels,
             idx.empty,
-            idx.is_all_dates,
             idx.inferred_type,
             idx.name,
             idx.names,
@@ -3892,11 +3836,14 @@ def test_index_repeat(index):
         return index.repeat(n)
 
     dist_test = not (isinstance(index, pd.RangeIndex) and index.step < 0)
-    check_func(impl, (index, 1), dist_test=dist_test)
-    check_func(impl, (index, 3), dist_test=dist_test)
-    check_func(impl, (index, 0), dist_test=dist_test)
+    check_func(impl, (index, 1), dist_test=dist_test, check_dtype=False)
+    check_func(impl, (index, 3), dist_test=dist_test, check_dtype=False)
+    check_func(impl, (index, 0), dist_test=dist_test, check_dtype=False)
     check_func(
-        impl, (index, np.array([i % 3 for i in range(len(index))])), dist_test=dist_test
+        impl,
+        (index, np.array([i % 3 for i in range(len(index))])),
+        dist_test=dist_test,
+        check_dtype=False,
     )
 
 

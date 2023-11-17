@@ -221,7 +221,7 @@ def test_sort_datetime_missing(is_slow_run, memory_leak_check):
     e_list = []
     for idx in range(len_period):
         if np.random.random() < 0.2:
-            e_ent = "NaT"
+            e_ent = pd.NaT
         else:
             e_ent = list_date[idx]
         e_list.append(e_ent)

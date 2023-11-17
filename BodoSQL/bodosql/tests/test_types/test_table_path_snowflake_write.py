@@ -64,7 +64,7 @@ def test_insert_into(memory_leak_check):
         if bodo.get_rank() == 0:
             # Generate the reference answer
             filtered_df = append_df[append_df.a > 5][["b", "c"]]
-            py_output = create_df.append(filtered_df, ignore_index=True)
+            py_output = pd.concat((create_df, filtered_df), ignore_index=True)
 
         py_output = comm.bcast(py_output)
 
@@ -159,7 +159,7 @@ def test_insert_into_date(memory_leak_check):
         if bodo.get_rank() == 0:
             # Generate reference answer
             filtered_df = append_df[append_df.c > 2][["a"]]
-            py_output = create_df.append(filtered_df, ignore_index=True)
+            py_output = pd.concat((create_df, filtered_df), ignore_index=True)
 
         py_output = comm.bcast(py_output)
 

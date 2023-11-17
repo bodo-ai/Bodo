@@ -114,13 +114,6 @@ def test_value(timedelta_value, memory_leak_check):
     check_func(test_impl, (timedelta_value,))
 
 
-def test_delta(timedelta_value, memory_leak_check):
-    def test_impl(td):
-        return td.delta
-
-    check_func(test_impl, (timedelta_value,))
-
-
 def test_days(timedelta_value, memory_leak_check):
     def test_impl(td):
         return td.days

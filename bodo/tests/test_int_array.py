@@ -228,7 +228,7 @@ def test_setitem_int(int_arr_value, memory_leak_check):
     int_arr_value._mask[0] = False
     val = int_arr_value[0]
     bodo_func = bodo.jit(test_impl)
-    pd.util.testing.assert_extension_array_equal(
+    pd.testing.assert_extension_array_equal(
         bodo_func(int_arr_value, val), test_impl(int_arr_value, val)
     )
 
@@ -579,7 +579,7 @@ def test_unique(int_arr_value, memory_leak_check):
 
     # only sequential check since not directly parallelized
     bodo_func = bodo.jit(test_impl)
-    pd.util.testing.assert_extension_array_equal(
+    pd.testing.assert_extension_array_equal(
         bodo_func(int_arr_value),
         test_impl(int_arr_value),
     )

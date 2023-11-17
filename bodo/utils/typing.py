@@ -2296,7 +2296,9 @@ def type_col_to_index(col_names):
         else:
             return bodo.NumericIndexType(types.int64)
     else:
-        return bodo.hiframes.pd_index_ext.HeterogeneousIndexType(col_names)
+        return bodo.hiframes.pd_index_ext.HeterogeneousIndexType(
+            bodo.typeof(tuple(types.literal(c) for c in col_names))
+        )
 
 
 class BodoArrayIterator(types.SimpleIteratorType):

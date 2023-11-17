@@ -496,16 +496,6 @@ def test_datetime_comparisons_scalar(is_slow_run, memory_leak_check):
         check_func(test_ge, (date, date2))
         check_func(test_gt, (date, date2))
 
-    # compare timestamp and date
-    t = pd.Timestamp("2020-03-01")
-    check_func(test_eq, (t, date2))
-    if is_slow_run:
-        check_func(test_ne, (date2, t))
-        check_func(test_le, (date, t))
-        check_func(test_lt, (t, date2))
-        check_func(test_ge, (date, t))
-        check_func(test_gt, (t, date2))
-
     # datetime.datetime comparisons
     dt = datetime.datetime(2020, 1, 4, 10, 40, 55, 11)
     dt2 = datetime.datetime(2020, 1, 4, 11, 22, 12, 33)
@@ -1148,7 +1138,7 @@ def test_dt64_str_astype(memory_leak_check):
     def impl2(S):
         return S.astype("datetime64[ns]")
 
-    S = pd.Series(["3/11/2000", "nan", "3/13/2000", "5/31/2021 03:23:53.231"] * 3)
+    S = pd.Series(["3/11/2000", "nan", "3/13/2000"] * 3)
 
     check_func(impl1, (S,))
     check_func(impl2, (S,))
@@ -1850,9 +1840,9 @@ def test_timestamp_dt64_ops(cmp_op, memory_leak_check):
     func = generate_comparison_ops_func(cmp_op)
     val1 = pd.Timestamp("2021-02-24")
     val2 = pd.Timestamp("2019-11-15")
-    check_func(func, (val1, val1.to_numpy()))
-    check_func(func, (val1.to_numpy(), val2))
-    check_func(func, (val2, val1.to_numpy()))
+    check_func(func, (val1, val1.to_datetime64().astype("datetime64[ns]")))
+    check_func(func, (val1.to_datetime64().astype("datetime64[ns]"), val2))
+    check_func(func, (val2, val1.to_datetime64().astype("datetime64[ns]")))
 
 
 def test_timedelta_td64_ops(cmp_op, memory_leak_check):

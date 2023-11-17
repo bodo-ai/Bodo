@@ -1249,12 +1249,10 @@ def test_interval_join_detection(memory_leak_check):
                 pd.DataFrame(
                     {
                         "A": pd.Series(
-                            ["5D", None, "1D", "0D", None, "7D"] * 3,
-                            dtype="timedelta64[D]",
+                            pd.to_timedelta(["5D", None, "1D", "0D", None, "7D"] * 3),
                         ),
                         "B": pd.Series(
-                            ["6D", None, "0D", "10D", "4D", "7D"] * 3,
-                            dtype="timedelta64[D]",
+                            pd.to_timedelta(["6D", None, "0D", "10D", "4D", "7D"] * 3),
                         ),
                         "C": ["hello", "world"] * 9,
                     }
@@ -3659,8 +3657,8 @@ def test_merge_cat_multi_cols(memory_leak_check):
             "C3": ["A"],
         }
     )
-    df1 = df1.append((df3, df1))
-    df2 = df2.append((df3, df2))
+    df1 = pd.concat((df1, df3, df1))
+    df2 = pd.concat((df2, df3, df2))
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 

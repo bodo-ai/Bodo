@@ -454,9 +454,6 @@ def test_monotonicity(memory_leak_check):
     def f2(S):
         return S.is_monotonic_decreasing
 
-    def f3(S):
-        return S.is_monotonic
-
     random.seed(5)
     n = 100
     e_list = [random.randint(1, 10) for _ in range(n)]
@@ -470,12 +467,9 @@ def test_monotonicity(memory_leak_check):
     S_inc_fail = Srand2.cumsum()
     check_func(f1, (S_inc,))
     check_func(f2, (S_inc,))
-    check_func(f3, (S_inc,))
     check_func(f1, (S_dec,))
     check_func(f2, (S_dec,))
-    check_func(f3, (S_dec,))
     check_func(f1, (S_inc_fail,))
-    check_func(f3, (S_inc_fail,))
 
 
 def test_series_map_error_check(memory_leak_check):
@@ -1250,68 +1244,6 @@ def test_series_repeat(series_val):
     check_func(test_impl, (series_val, np.arange(len(series_val))))
 
 
-@pytest.mark.parametrize("ignore_index", [True, False])
-def test_series_append_single(series_val, ignore_index, memory_leak_check):
-    # not supported for list(string) and array(item)
-    if isinstance(series_val.values[0], list):
-        return
-
-    # not supported for Datetime.date yet, TODO: support and test
-    if isinstance(series_val.values[0], datetime.date):
-        return
-
-    # not supported for Decimal yet, TODO: support and test
-    if isinstance(series_val.values[0], Decimal):
-        return
-
-    func_text = "def test_impl(A, B):\n"
-    func_text += "  return A.append(B, {})\n".format(ignore_index)
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    test_impl = loc_vars["test_impl"]
-
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val, series_val),
-        test_impl(series_val, series_val),
-        check_dtype=False,
-        check_names=False,
-        check_index_type=False,
-        check_categorical=False,
-    )  # XXX append can't set name yet
-
-
-@pytest.mark.parametrize("ignore_index", [True, False])
-def test_series_append_multi(series_val, ignore_index, memory_leak_check):
-    # not supported for list(string) and array(item)
-    if isinstance(series_val.values[0], list):
-        return
-
-    # not supported for Datetime.date yet, TODO: support and test
-    if isinstance(series_val.values[0], datetime.date):
-        return
-
-    # not supported for Decimal yet, TODO: support and test
-    if isinstance(series_val.values[0], Decimal):
-        return
-
-    func_text = "def test_impl(A, B, C):\n"
-    func_text += "  return A.append([B, C], {})\n".format(ignore_index)
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    test_impl = loc_vars["test_impl"]
-
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val, series_val, series_val),
-        test_impl(series_val, series_val, series_val),
-        check_dtype=False,
-        check_names=False,
-        check_index_type=False,
-        check_categorical=False,
-    )  # XXX append can't set name yet
-
-
 @pytest.mark.slow
 def test_series_quantile(numeric_series_val, memory_leak_check):
     if isinstance(numeric_series_val.dtype, pd.core.arrays.integer.IntegerDtype):
@@ -1425,7 +1357,7 @@ def test_series_unique(series_val, memory_leak_check):
 @pytest.mark.slow
 def test_series_describe(numeric_series_val, memory_leak_check):
     def test_impl(A):
-        return A.describe(datetime_is_numeric=True)
+        return A.describe()
 
     # Pandas 1.5 makes the output nullable Float64 for some reason
     check_func(test_impl, (numeric_series_val,), False, check_dtype=False)
@@ -2746,17 +2678,6 @@ def test_qcut(memory_leak_check):
         bodo.jit(impl)(S, "ABC")
 
 
-def test_series_mad(series_stat, memory_leak_check):
-    def f(S):
-        return S.mad()
-
-    def f_skip(S):
-        return S.mad(skipna=False)
-
-    check_func(f, (series_stat,))
-    check_func(f_skip, (series_stat,))
-
-
 def test_series_skew(series_stat, memory_leak_check):
     def f(S):
         return S.skew()
@@ -2901,7 +2822,7 @@ def test_series_var(memory_leak_check):
     check_func(f_skipna, (S,), py_output=True)
     check_func(f_ddof, (S,))
     # Empty Series
-    S_empty = pd.Series()
+    S_empty = pd.Series([], dtype=np.float64)
     check_func(f, (S_empty,))
 
 
@@ -2922,7 +2843,7 @@ def test_series_sem(memory_leak_check):
     check_func(f_skipna, (S,), py_output=True)
     check_func(f_ddof, (S,))
     # Empty Series
-    S_empty = pd.Series()
+    S_empty = pd.Series([], dtype=np.float64)
     check_func(f, (S_empty,))
 
 
@@ -2944,22 +2865,6 @@ def test_np_pd_timedelta_truediv(memory_leak_check):
     check_func(test_impl, (S, val3))
 
 
-def test_datetime_date_pd_timedelta_ge(memory_leak_check):
-    """
-    Test that Series.ge works between a Series of datetimedate
-    and a pd.Timestamp type.
-    """
-
-    def test_impl(S, val):
-        return S >= val
-
-    S = pd.Series(pd.date_range(start="1/1/2018", end="1/08/2018").date)
-    val1 = pd.Timestamp("1/1/2018")
-    val2 = pd.Timestamp("1/1/2021")
-    check_func(test_impl, (S, val1))
-    check_func(test_impl, (S, val2))
-
-
 def test_series_std(memory_leak_check):
     def f(S):
         return S.std()
@@ -2975,7 +2880,7 @@ def test_series_std(memory_leak_check):
     check_func(f_skipna, (S,), py_output=True)
     check_func(f_ddof, (S,))
     # Empty Series
-    S_empty = pd.Series()
+    S_empty = pd.Series([], dtype=np.float64)
     check_func(f, (S_empty,))
 
 
@@ -3183,20 +3088,20 @@ def test_series_mem_usage(memory_leak_check):
     def impl2(S):
         return S.memory_usage(index=False)
 
-    S = pd.Series([1, 2, 3, 4, 5, 6], index=pd.Int64Index([10, 12, 24, 30, -10, 40]))
+    S = pd.Series([1, 2, 3, 4, 5, 6], index=pd.Index([10, 12, 24, 30, -10, 40]))
     py_out = 96
     check_func(impl1, (S,), py_output=py_out)
     py_out = 48
     check_func(impl2, (S,), py_output=py_out)
 
     # Empty Series
-    S = pd.Series()
+    S = pd.Series([], dtype=np.float64)
     # StringIndex only. Bodo has different underlying arrays than Pandas
     # Test sequential case
-    py_out = 8
+    py_out = 24
     check_func(impl1, (S,), only_seq=True, py_output=py_out, is_out_distributed=False)
     # Test parallel case. Index is replicated across ranks
-    py_out = 8 * bodo.get_size()
+    py_out = 24 * bodo.get_size()
     check_func(impl1, (S,), only_1D=True, py_output=py_out, is_out_distributed=False)
 
     # Empty and no index.
@@ -3322,7 +3227,7 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
     sorted_series = series_val.sort_values(ignore_index=True)
     fill_val = sorted_series.loc[sorted_series.first_valid_index()]
     # na_value doesn't play nice with iterables, so just use the nullable array type
-    if isinstance(fill_val, list):
+    if isinstance(fill_val, (list, pd.Series)):
         fill_val = None
     A2 = sorted_series.to_numpy(na_value=fill_val)
 
@@ -3394,7 +3299,7 @@ def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check
     sorted_series = series_val.sort_values(ignore_index=True)
     fill_val = sorted_series.loc[sorted_series.first_valid_index()]
     # na_value doesn't play nice with iterables, so just use the nullable array type
-    if isinstance(fill_val, list):
+    if isinstance(fill_val, (list, pd.Series)):
         fill_val = None
     A2 = sorted_series.to_numpy(na_value=fill_val)
 
@@ -3436,6 +3341,10 @@ def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check
 def test_series_np_select_non_unitype_set_default(series_val, memory_leak_check):
     """tests np select when passed a non unitype choicelist"""
     np.random.seed(42)
+
+    # Avoid testing errors with categoricals
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        return
 
     cond1 = np.random.randint(2, size=len(series_val)).astype(bool)
     cond2 = np.random.randint(2, size=len(series_val)).astype(bool)

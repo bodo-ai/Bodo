@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """DatetimeArray extension for Pandas DatetimeArray with timezone support."""
+import datetime
 import operator
 from typing import Any, Union
 
@@ -56,8 +57,11 @@ class PandasDatetimeTZDtype(types.Type):
     """Data type for datetime timezone"""
 
     def __init__(self, tz):
-        if isinstance(tz, (pytz._FixedOffset, pytz.tzinfo.BaseTzInfo)):
-            tz = get_pytz_type_info(tz)
+        if isinstance(
+            tz, (pytz._FixedOffset, pytz.tzinfo.BaseTzInfo, datetime.timezone)
+        ):
+            tz = get_tz_type_info(tz)
+
         if not isinstance(tz, (int, str)) and tz is not None:
             raise BodoError(
                 "Timezone must be either a valid pytz type with a zone, a fixed offset, or None"
@@ -125,19 +129,23 @@ def typeof_pd_int_dtype(val, c):
     return PandasDatetimeTZDtype(val.tz)
 
 
-def get_pytz_type_info(pytz_type):
+def get_tz_type_info(tz_type):
     """
-    Extracts the information used by Bodo when encountering a pytz
+    Extracts the information used by Bodo when encountering a pytz or datetime.timezone
     type. This obtains the string name of the zone for most timezones,
     but for FixedOffsets it outputs an integer in nanoseconds.
     """
-    if isinstance(pytz_type, pytz._FixedOffset):
+    if tz_type is datetime.timezone.utc:
+        tz_val = "UTC"
+    elif isinstance(tz_type, datetime.timezone):
+        tz_val = pd.Timedelta(tz_type.utcoffset(None)).value
+    elif isinstance(tz_type, pytz._FixedOffset):
         # If we have a fixed offset represent it as an integer
         # offset in ns.
-        # Note: pytz_type._offset is a np.timedelta.
-        tz_val = pd.Timedelta(pytz_type._offset).value
+        # Note: tz_type._offset is a np.timedelta.
+        tz_val = pd.Timedelta(tz_type._offset).value
     else:
-        tz_val = pytz_type.zone
+        tz_val = tz_type.zone
         if tz_val not in pytz.all_timezones_set:
             raise BodoError(
                 "Unsupported timezone type. Timezones must be a fixedOffset or contain a zone found in pytz.all_timezones"
@@ -176,8 +184,11 @@ class DatetimeArrayType(types.IterableType, types.ArrayCompatible):
     """Data type for datetime array with timezones"""
 
     def __init__(self, tz):
-        if isinstance(tz, (pytz._FixedOffset, pytz.tzinfo.BaseTzInfo)):
-            tz = get_pytz_type_info(tz)
+        if isinstance(
+            tz, (pytz._FixedOffset, pytz.tzinfo.BaseTzInfo, datetime.timezone)
+        ):
+            tz = get_tz_type_info(tz)
+
         if not isinstance(tz, (int, str)) and tz is not None:
             raise BodoError(
                 "Timezone must be either a valid pytz type with a zone, a fixed offset, or None"

@@ -176,7 +176,7 @@ def get_arrow_timestamp_type(pa_ts_typ):
         # https://arrow.readthedocs.io/en/latest/index.html
         # https://www.iana.org/time-zones
         tz_type = pa_ts_typ.to_pandas_dtype().tz
-        tz_val = bodo.libs.pd_datetime_arr_ext.get_pytz_type_info(tz_type)
+        tz_val = bodo.libs.pd_datetime_arr_ext.get_tz_type_info(tz_type)
         return bodo.DatetimeArrayType(tz_val), True
     else:
         # Without timezones Arrow ts arrays are converted to dt64 arrays.

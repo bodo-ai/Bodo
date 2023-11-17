@@ -36,10 +36,10 @@ def test_agg_single_str(test_groupby_agg_df, memory_leak_check):
         return df.groupby("B").agg("sum")
 
     def test_impl2(df):
-        return df.groupby("B", as_index=False).agg("mean")
+        return df.groupby("B", as_index=False)[["A", "C"]].agg("mean")
 
     def test_impl3(df):
-        return df.groupby(["A", "B"], as_index=False).agg("mean")
+        return df.groupby(["A", "B"], as_index=False)["C"].agg("mean")
 
     check_func(test_impl1, (test_groupby_agg_df,), sort_output=True, reset_index=True)
     check_func(

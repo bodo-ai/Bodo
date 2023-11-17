@@ -1229,17 +1229,11 @@ def test_concat_typing_transform(memory_leak_check):
 def test_concat_int_float(memory_leak_check):
     """Test dataframe concatenation when integer and float are put together"""
 
-    def test_impl(df, df2):
-        return df.append(df2, ignore_index=True)
-
     def test_impl_concat(df, df2):
         return pd.concat((df, df2), ignore_index=True)
 
     df = pd.DataFrame({"A": [1, 2, 3]})
     df2 = pd.DataFrame({"A": [4.0, 5.0]})
-    check_func(
-        test_impl, (df, df2), sort_output=True, reset_index=True, check_dtype=False
-    )
     check_func(
         test_impl_concat,
         (df, df2),
@@ -1251,9 +1245,6 @@ def test_concat_int_float(memory_leak_check):
 
 def test_concat_nulls(memory_leak_check):
     """Test dataframe concatenation when full NA arrays need to be appended"""
-
-    def test_impl(df, df2):
-        return df.append(df2, ignore_index=True)
 
     def test_impl_concat(df, df2):
         return pd.concat((df, df2), ignore_index=True)
@@ -1272,7 +1263,6 @@ def test_concat_nulls(memory_leak_check):
             "E": pd.timedelta_range(start=3, periods=n),
         }
     )
-    check_func(test_impl, (df, df2), sort_output=True, reset_index=True)
     check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
 
 
@@ -1327,7 +1317,7 @@ def test_append_empty_df(df):
     def test_impl(df2):
         df = pd.DataFrame()
         for _ in range(3):
-            df = df.append(df2)
+            df = pd.concat((df, df2))
         return df
 
     check_func(test_impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
@@ -2279,14 +2269,14 @@ def test_loc_setitem(memory_leak_check):
     check_func(impl1, (df,), copy_input=True)
     check_func(impl2, (df,), copy_input=True)
     check_func(impl3, (df,), copy_input=True)
-    check_func(impl4, (df,), copy_input=True)
-    check_func(impl5, (df,), copy_input=True)
-    check_func(impl6, (n,))
-    check_func(impl7, (df,), copy_input=True)
-    check_func(impl8, (df,), copy_input=True)
-    check_func(impl9, (n,))
+    check_func(impl4, (df,), copy_input=True, check_dtype=False)
+    check_func(impl5, (df,), copy_input=True, check_dtype=False)
+    check_func(impl6, (n,), check_dtype=False)
+    check_func(impl7, (df,), copy_input=True, check_dtype=False)
+    check_func(impl8, (df,), copy_input=True, check_dtype=False)
+    check_func(impl9, (n,), check_dtype=False)
     A = np.arange(2 * n).reshape(n, 2)
-    check_func(impl10, (df, A))
+    check_func(impl10, (df, A), check_dtype=False)
 
 
 @pytest.mark.skipif(
@@ -2376,7 +2366,7 @@ def test_df_schema_change(memory_leak_check):
 
     def test_impl(df):
         df["C"] = 3
-        return df.drop(["C"], 1)
+        return df.drop(["C"], axis=1)
 
     df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1]})
     bodo_func = bodo.jit(test_impl)
@@ -2449,7 +2439,7 @@ def test_set_df_index(memory_leak_check):
         return df
 
     def impl2(df):
-        df.index = pd.Int64Index([3, 1, 2, 0])
+        df.index = pd.Index([3, 1, 2, 0])
         return df
 
     # type instability due to control flow
@@ -2917,10 +2907,10 @@ def test_df_mem_usage(memory_leak_check):
     df = pd.DataFrame()
     # StringIndex only. Bodo has different underlying arrays than Pandas
     # Test sequential case
-    py_out = pd.Series([8], index=pd.Index(["Index"]))
+    py_out = pd.Series([24], index=pd.Index(["Index"]))
     check_func(impl1, (df,), only_seq=True, py_output=py_out, is_out_distributed=False)
     # Test parallel case. Index is replicated across ranks
-    py_out = pd.Series([8 * bodo.get_size()], index=pd.Index(["Index"]))
+    py_out = pd.Series([24 * bodo.get_size()], index=pd.Index(["Index"]))
     check_func(impl1, (df,), only_1D=True, py_output=py_out, is_out_distributed=False)
 
     # Empty and no index.

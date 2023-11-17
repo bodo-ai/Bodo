@@ -4,7 +4,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas._libs import lib
+import pyarrow as pa
 
 pandas_version = tuple(map(int, pd.__version__.split(".")[:2]))
 
@@ -100,111 +100,44 @@ if _check_pandas_change:
 pd.core.arrays.string_arrow.ArrowStringArray.__init__ = ArrowStringArray__init__
 
 
-# Bodo change to allow dict-encoded arrays
-def factorize(
-    self,
-    na_sentinel: int | lib.NoDefault = lib.no_default,
-    use_na_sentinel: bool | lib.NoDefault = lib.no_default,
-):
-    import pyarrow as pa
-    from pandas.core.algorithms import resolve_na_sentinel
+@classmethod
+def _concat_same_type(cls, to_concat):
+    """
+    Concatenate multiple ArrowExtensionArrays.
 
-    resolved_na_sentinel = resolve_na_sentinel(na_sentinel, use_na_sentinel)
-    # Bodo change:
-    # Arrow's ChunkedArray.dictionary_encode() doesn't work for arrays that are
-    # dict-encoded already so needs a check to be avoided.
-    if pd.compat.pa_version_under4p0:
-        encoded = (
-            self._data
-            if pa.types.is_dictionary(self._data.type)
-            else self._data.dictionary_encode()
-        )
+    Parameters
+    ----------
+    to_concat : sequence of ArrowExtensionArrays
+
+    Returns
+    -------
+    ArrowExtensionArray
+    """
+    chunks = [array for ea in to_concat for array in ea._data.iterchunks()]
+    if to_concat[0].dtype == "string":
+        # Bodo change: use Arrow type of underlying data since it could be different
+        # (dict-encoded or large_string)
+        pa_dtype = to_concat[0]._data.type
     else:
-        null_encoding = "mask" if resolved_na_sentinel is not None else "encode"
-        encoded = (
-            self._data
-            if pa.types.is_dictionary(self._data.type)
-            else self._data.dictionary_encode(null_encoding=null_encoding)
-        )
-    indices = pa.chunked_array(
-        [c.indices for c in encoded.chunks], type=encoded.type.index_type
-    ).to_pandas()
-    if indices.dtype.kind == "f":
-        indices[np.isnan(indices)] = (
-            resolved_na_sentinel if resolved_na_sentinel is not None else -1
-        )
-    indices = indices.astype(np.int64, copy=False)
-
-    if encoded.num_chunks:
-        uniques = type(self)(encoded.chunk(0).dictionary)
-        if resolved_na_sentinel is None and pd.compat.pa_version_under4p0:
-            # TODO: share logic with BaseMaskedArray.factorize
-            # Insert na with the proper code
-            na_mask = indices.values == -1
-            na_index = na_mask.argmax()
-            if na_mask[na_index]:
-                na_code = 0 if na_index == 0 else indices[:na_index].max() + 1
-                uniques = uniques.insert(na_code, self.dtype.na_value)
-                indices[indices >= na_code] += 1
-                indices[indices == -1] = na_code
-    else:
-        uniques = type(self)(pa.array([], type=encoded.type.value_type))
-
-    return indices.values, uniques
+        pa_dtype = to_concat[0].dtype.pyarrow_dtype
+    arr = pa.chunked_array(chunks, type=pa_dtype)
+    return cls(arr)
 
 
 if _check_pandas_change:
-    lines = inspect.getsource(pd.core.arrays.ArrowExtensionArray.factorize)
+    lines = inspect.getsource(
+        pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_type
+    )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "e9408b1ac5c424efc2e6343d6a99be636eed7c99014348cda173a7c23abf276c"
+        != "6a7397b59a7264de2167cc79344f01c411aeeecccd47d9ee4e37da4b700316ff"
     ):  # pragma: no cover
         warnings.warn(
-            "pd.core.arrays.string_arrow.ArrowStringArray.factorize has changed"
+            "pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_typehas changed"
         )
 
 
-pd.core.arrays.ArrowExtensionArray.factorize = factorize
-
-
-def to_numpy(
-    self,
-    dtype=None,
-    copy: bool = False,
-    na_value=lib.no_default,
-) -> np.ndarray:
-    """
-    Convert to a NumPy ndarray.
-    """
-    # TODO: copy argument is ignored
-
-    # Bodo change: work around bugs in Arrow for all null and empty array cases
-    # see test_all_null_pa_bug
-    data = self._data.combine_chunks() if len(self) != 0 else self._data
-
-    result = np.array(data, dtype=dtype)
-    if self._data.null_count > 0:
-        if na_value is lib.no_default:
-            if dtype and np.issubdtype(dtype, np.floating):
-                return result
-            na_value = self._dtype.na_value
-        mask = self.isna()
-        result[mask] = na_value
-    return result
-
-
-if _check_pandas_change:
-    lines = inspect.getsource(pd.core.arrays.string_arrow.ArrowStringArray.to_numpy)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "2f49768c0cb51d06eb41882aaf214938f268497fffa07bf81964a5056d572ea3"
-    ):  # pragma: no cover
-        warnings.warn(
-            "pd.core.arrays.string_arrow.ArrowStringArray.to_numpy has changed"
-        )
-
-
-pd.core.arrays.string_arrow.ArrowStringArray.to_numpy = to_numpy
+pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_type = _concat_same_type
 
 
 # Add support for pow() in join conditions

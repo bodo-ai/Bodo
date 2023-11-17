@@ -2,6 +2,7 @@
 """
 Tests correctness of the 'Greatest' keyword in BodoSQL
 """
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -325,22 +326,28 @@ def test_greatest_tz_aware_columns(
     check_query(query, ctx, None, expected_output=py_output)
 
 
-def test_least_datetime_strings(representative_tz, memory_leak_check):
+def test_least_datetime_strings(memory_leak_check):
     """
     tests that Least works with datetimes + valid strings (to be converted to datetimes)
     """
 
     df = pd.DataFrame(
         {
-            "A": pd.Series([pd.Timestamp("2000-08-17"), pd.Timestamp("1999-08-17")]),
-            "B": pd.Series([None, pd.Timestamp("1999-08-17")]),
-            "C": pd.Series(["1999-09-17", pd.Timestamp("1999-09-17")]),
+            "A": pd.Series(
+                [pd.Timestamp("2000-08-17"), pd.Timestamp("1999-08-17")] * 3
+            ),
+            "B": pd.Series([None, pd.Timestamp("1999-08-17")] * 3),
+            "C": pd.Series(["1999-09-17", "1999-09-17"] * 3),
         }
     )
     ctx = {"table1": df}
 
     query = "SELECT LEAST(A,B,C) as output FROM table1"
-    S = df.min(axis=1, skipna=False)
+    S = (
+        df.astype(np.dtype("datetime64[ns]"))
+        .min(axis=1, skipna=False)
+        .map(lambda s: pd.NA if pd.isna(s) else str(s))
+    )
     py_output = pd.DataFrame({"output": S})
     check_query(query, ctx, None, expected_output=py_output)
 

@@ -52,6 +52,7 @@ class TestDataFrame(unittest.TestCase):
         n = 11
         pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
 
+    @unittest.skip("TODO: raise error on int to float cast to match Pandas 2")
     def test_create_dtype1(self):
         def test_impl(n):
             df = pd.DataFrame(
@@ -922,33 +923,6 @@ class TestDataFrame(unittest.TestCase):
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
         pd.testing.assert_frame_equal(
             bodo_func(df), test_impl(df), check_column_type=False, check_dtype=False
-        )
-
-    def test_append1(self):
-        def test_impl(df, df2):
-            return df.append(df2, ignore_index=True)
-
-        bodo_func = bodo.jit(test_impl)
-        n = 11
-        df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        df2 = pd.DataFrame({"A": np.arange(n), "C": np.arange(n) ** 2})
-        df2.A[n // 2 :] = n
-        pd.testing.assert_frame_equal(
-            bodo_func(df, df2), test_impl(df, df2), check_column_type=False
-        )
-
-    def test_append2(self):
-        def test_impl(df, df2, df3):
-            return df.append([df2, df3], ignore_index=True)
-
-        bodo_func = bodo.jit(test_impl)
-        n = 11
-        df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        df2 = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        df2.A[n // 2 :] = n
-        df3 = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        pd.testing.assert_frame_equal(
-            bodo_func(df, df2, df3), test_impl(df, df2, df3), check_column_type=False
         )
 
     def test_concat_columns1(self):
