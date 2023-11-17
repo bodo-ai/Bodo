@@ -9,6 +9,13 @@ const int SHUFFLE_THRESHOLD = __env_threshold_str != nullptr
                                   ? std::stoi(__env_threshold_str)
                                   : 50 * 1024 * 1024;
 
+// Factor in determining whether shuffle buffer is large enough to need cleared
+const float SHUFFLE_BUFFER_CUTOFF_MULTIPLIER = 3.0;
+
+// Minimum utilization of shuffle buffer, used as a factor in determining when
+// to clear
+const float SHUFFLE_BUFFER_MIN_UTILIZATION = 0.5;
+
 // Streaming batch size. The default of 4096 should match the default of
 // bodosql_streaming_batch_size defined in __init__.py
 static char* __env_streaming_batch_size_str =
