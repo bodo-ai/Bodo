@@ -38,8 +38,7 @@ def restore_default_bodo_verbose_level():
     Restore the verbose level back to the default level. This
     is primarily intended for internal usage and testing.
     """
-    global _bodo_verbose_level
-    _bodo_verbose_level = _default_verbose_level
+    set_verbose_level(_default_verbose_level)
 
 
 def get_verbose_level():
@@ -73,6 +72,14 @@ def set_verbose_level(level):
     if not isinstance(level, int) or level < 0:
         raise TypeError("set_verbose_level(): requires an integer level >= 0")
     _bodo_verbose_level = level
+    # If BodoSQL exists, enable logging there as as well.
+    try:
+        import bodosql.py4j_gateway
+
+        bodosql.py4j_gateway.configure_java_logging(level)
+    except ImportError:
+        # Ignore if we don't have bodosql installed.
+        pass
 
 
 def restore_default_bodo_verbose_logger():
@@ -80,8 +87,7 @@ def restore_default_bodo_verbose_logger():
     Restore the logger back to the default logger. This
     is primarily intended for internal usage and testing.
     """
-    global _bodo_logger
-    _bodo_logger = _default_logger
+    set_bodo_verbose_logger(_default_logger)
 
 
 def get_current_bodo_verbose_logger():
@@ -95,7 +101,7 @@ def set_bodo_verbose_logger(logger):
     """
     User facing function to set the logger used when
     setting the verbose flag in JIT. This logger should be
-    a fully intialized logging.Logger instance.
+    a fully initialized logging.Logger instance.
 
     This code is intended to be called from regular Python,
     ideally when you initialize your JIT module. All verbose

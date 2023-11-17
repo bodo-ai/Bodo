@@ -1,5 +1,7 @@
 package com.bodosql.calcite.catalog;
 
+import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER;
+import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER;
 import static java.lang.Math.min;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
@@ -52,8 +54,6 @@ import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.util.SqlString;
 import org.apache.calcite.util.Pair;
 import org.json.simple.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   /**
@@ -85,9 +85,6 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
 
   // Cached value for the database metadata.
   private DatabaseMetaData dbMeta;
-
-  // Logger for logging warnings.
-  private static final Logger LOGGER = LoggerFactory.getLogger(SnowflakeCatalogImpl.class);
 
   // The maximum number of retries for connecting to snowflake before succeeding.
   private static final int maxRetries = 5;
@@ -178,7 +175,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         if (conn == null) {
           int sleepMultiplier = 2 << numRetries;
           int sleepTime = min(sleepMultiplier * backoffMilliseconds, maxBackoffMilliseconds);
-          LOGGER.warn(
+          VERBOSE_LEVEL_TWO_LOGGER.info(
               String.format(
                   "Failed to connect to Snowflake, retrying after %d milleseconds...", sleepTime));
           try {
@@ -371,7 +368,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
               "Unable to get table names for Schema '%s' from Snowflake account. Error message: %s",
               schemaName, e);
       if (shouldRetry) {
-        LOGGER.warn(errorMsg);
+        VERBOSE_LEVEL_TWO_LOGGER.warning(errorMsg);
         closeConnections();
         return getTableNamesImpl(schemaName, false);
       } else {
@@ -582,7 +579,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
               "Unable to get table '%s' for Schema '%s' from Snowflake account. Error message: %s",
               tableName, schema.getName(), e);
       if (shouldRetry) {
-        LOGGER.warn(errorMsg);
+        VERBOSE_LEVEL_TWO_LOGGER.warning(errorMsg);
         closeConnections();
         return getTableImpl(schema, tableName, false);
       } else {
@@ -624,7 +621,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
               "Unable to get a list of schema names from the Snowflake account. Error message: %s",
               e);
       if (shouldRetry) {
-        LOGGER.warn(errorMsg);
+        VERBOSE_LEVEL_TWO_LOGGER.warning(errorMsg);
         closeConnections();
         return getSchemaNamesImpl(false);
       } else {
@@ -705,7 +702,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       String errorMsg =
           String.format("Unable to load default schema from snowflake. Error message: %s", e);
       if (shouldRetry) {
-        LOGGER.warn(errorMsg);
+        VERBOSE_LEVEL_TWO_LOGGER.warning(errorMsg);
         closeConnections();
         return getDefaultSchemaImpl(false);
       } else {
@@ -888,7 +885,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         // We ignore any exception from closing the connection string as
         // we should no longer need to connect to Snowflake. This could happen
         // for example if the connection already timed out.
-        LOGGER.warn(
+        VERBOSE_LEVEL_TWO_LOGGER.warning(
             String.format(
                 "Exception encountered when trying to close the Snowflake connection: %s", e));
       }
@@ -999,7 +996,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
                   + "Snowflake Error Message: %s",
               query, e.getMessage());
       if (shouldRetry) {
-        LOGGER.warn(errorMsg);
+        VERBOSE_LEVEL_TWO_LOGGER.warning(errorMsg);
         closeConnections();
         executeExplainQueryImpl(query, false);
       } else {
@@ -1072,6 +1069,11 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     // sampling.
     boolean isView = tryGetViewMetadataFn.apply(tableName) != null;
     if (isView) {
+      String dotTableName = String.join(".", tableName);
+      String loggingMessage =
+          String.format(
+              Locale.ROOT, "Skipping attempt to sample from %s as it is a view", dotTableName);
+      VERBOSE_LEVEL_TWO_LOGGER.info(loggingMessage);
       return null;
     }
     // This function calls approx_count_distinct on the given column name.
@@ -1165,7 +1167,6 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   public @Nullable Long trySubmitLongMetadataQuery(SqlString sql) {
     String sqlString = sql.getSql();
-
     // TODO(jsternberg): This class mostly doesn't handle connections correctly.
     // This should be inside of a try/resource block, but it will likely cause
     // this to fail because we're not utilizing connection pooling or reuse and
@@ -1188,10 +1189,15 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         }
       }
     } catch (SQLException ex) {
-      // Error executing the query.
-      // There's really nothing we can do other than just accept
-      // this failure and maybe log this when we have a logging mechanism
-      // in the future.
+      // Error executing the query. Nothing we can do except
+      // log the information.
+      String msg =
+          String.format(
+              Locale.ROOT,
+              "Failure in attempted metadata query\n%s\nReason given for failure\n%s",
+              sql,
+              ex.getMessage());
+      VERBOSE_LEVEL_ONE_LOGGER.warning(msg);
     }
     return null;
   }
@@ -1228,10 +1234,15 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         }
       }
     } catch (SQLException ex) {
-      // Error executing the query.
-      // There's really nothing we can do other than just accept
-      // this failure and maybe log this when we have a logging mechanism
-      // in the future.
+      // Error executing the query. Nothing we can do except
+      // log the information.
+      String msg =
+          String.format(
+              Locale.ROOT,
+              "Failure in attempted distinctness metadata query\n%s\nReason given for failure\n%s",
+              sql,
+              ex.getMessage());
+      VERBOSE_LEVEL_ONE_LOGGER.warning(msg);
     }
     return null;
   }
