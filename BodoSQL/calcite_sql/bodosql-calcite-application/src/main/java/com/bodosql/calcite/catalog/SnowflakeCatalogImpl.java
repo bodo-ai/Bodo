@@ -1,6 +1,7 @@
 package com.bodosql.calcite.catalog;
 
 import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER;
+import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_THREE_LOGGER;
 import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER;
 import static java.lang.Math.min;
 
@@ -537,6 +538,10 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   private Table getTableImpl(BodoSqlSchema schema, String tableName, boolean shouldRetry) {
     try {
+      String dotSeparatedTableName =
+          String.format(Locale.ROOT, "%s.%s.%s", catalogName, schema.getName(), tableName);
+      VERBOSE_LEVEL_THREE_LOGGER.info(
+          String.format(Locale.ROOT, "Validating table: %s", dotSeparatedTableName));
       // Fetch the timezone info.
       BodoTZInfo tzInfo = getSnowflakeTimezone(shouldRetry);
       // Table metadata needs to be derived from describe table because some types
@@ -545,7 +550,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       // information about Variant, Array, or Object.
       ResultSet tableInfo =
           executeSnowflakeQuery(
-              String.format("Describe table %s.%s.%s", catalogName, schema.getName(), tableName));
+              String.format(Locale.ROOT, "Describe table %s", dotSeparatedTableName));
       List<BodoSQLColumn> columns = new ArrayList<>();
       while (tableInfo.next()) {
         // Column name is stored in column 1
