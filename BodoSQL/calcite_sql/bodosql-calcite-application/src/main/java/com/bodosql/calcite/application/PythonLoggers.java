@@ -12,6 +12,8 @@ public class PythonLoggers {
   public static final Logger VERBOSE_LEVEL_ONE_LOGGER = Logger.getLogger("VERBOSE_LEVEL_ONE");
   public static final Logger VERBOSE_LEVEL_TWO_LOGGER = Logger.getLogger("VERBOSE_LEVEL_TWO");
 
+  public static final Logger VERBOSE_LEVEL_THREE_LOGGER = Logger.getLogger("VERBOSE_LEVEL_THREE");
+
   // Pattern copied from Py4j
   public static void turnLoggerOn(Logger logger) {
     logger.setLevel(Level.INFO);
@@ -25,5 +27,6 @@ public class PythonLoggers {
     // Disable loggers until turned on by Python.
     turnLoggerOff(VERBOSE_LEVEL_ONE_LOGGER);
     turnLoggerOff(VERBOSE_LEVEL_TWO_LOGGER);
+    turnLoggerOff(VERBOSE_LEVEL_THREE_LOGGER);
   }
 }
