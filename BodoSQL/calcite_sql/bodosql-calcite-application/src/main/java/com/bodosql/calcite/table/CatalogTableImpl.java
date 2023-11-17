@@ -1,5 +1,6 @@
 package com.bodosql.calcite.table;
 
+import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER;
 import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER;
 import static java.lang.Double.min;
 
@@ -65,6 +66,16 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     }
   }
 
+  /**
+   * Return the fully qualifed name. This should be of the form
+   * "DATABASE_NAME"."SCHEMA_NAME"."TABLE_NAME"
+   *
+   * @return
+   */
+  public String getQualifiedName() {
+    return String.format(
+        Locale.ROOT, "%s.%s.%s", getCatalog().getCatalogName(), getSchema().getName(), getName());
+  }
   /**
    * Returns the schema for the table but cast to the required CatalogSchemaImpl. This is done when
    * actions are catalog specific, such as the read/write code.
@@ -285,6 +296,17 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
               input.getViewPath());
       return PandasUtilKt.logicalProject(root);
     } catch (Exception e) {
+      // Log the failure
+      String message =
+          String.format(
+              Locale.ROOT,
+              "Unable to expand view %s with definition:\n"
+                  + "%s. Error encountered when compiling view:\n"
+                  + "%s",
+              getQualifiedName(),
+              input.getViewDefinition(),
+              e.getMessage());
+      VERBOSE_LEVEL_ONE_LOGGER.warning(message);
       return null;
     }
   }
@@ -317,6 +339,17 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
       inlineViewCache.put(input, result);
     }
     if (result != null) {
+      // Log that we inlined the view.
+      String levelOneMessage =
+          String.format(Locale.ROOT, "Successfully inlined view %s", getQualifiedName());
+      VERBOSE_LEVEL_ONE_LOGGER.info(levelOneMessage);
+      String levelTwoMessage =
+          String.format(
+              Locale.ROOT,
+              "Replaced view %s with definition %s",
+              getQualifiedName(),
+              input.getViewDefinition());
+      VERBOSE_LEVEL_TWO_LOGGER.info(levelTwoMessage);
       return result;
     } else {
       return baseRelNode;
@@ -337,6 +370,29 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
       String viewDefinition = getViewDefinitionString();
       if (viewDefinition != null) {
         return tryInlineView(toRelContext, viewDefinition, baseRelNode);
+      } else {
+        String message =
+            String.format(
+                Locale.ROOT,
+                "Unable to inline view %s because we cannot determine its definition.",
+                getQualifiedName());
+        VERBOSE_LEVEL_ONE_LOGGER.info(message);
+      }
+    } else if (isAccessibleView()) {
+      if (isSecureView()) {
+        String message =
+            String.format(
+                Locale.ROOT,
+                "Unable to inline view %s because it is a secure view.",
+                getQualifiedName());
+        VERBOSE_LEVEL_ONE_LOGGER.info(message);
+      } else if (isMaterializedView()) {
+        String message =
+            String.format(
+                Locale.ROOT,
+                "Unable to inline view %s because it is a materialized view.",
+                getQualifiedName());
+        VERBOSE_LEVEL_ONE_LOGGER.info(message);
       }
     }
     return baseRelNode;
@@ -371,13 +427,12 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     // not pre-cleared by the metadata scanning pass.
     if (!BodoMetadataRestrictionScan.Companion.canRequestColumnDistinctiveness(
         qualifiedName, columnName)) {
-      String dotTableName = String.join(".", qualifiedName);
       String message =
           String.format(
               Locale.ROOT,
               "Skipping attempt to fetch column '%s' from table '%s' due to metadata restrictions",
               columnName,
-              dotTableName);
+              getQualifiedName());
       VERBOSE_LEVEL_TWO_LOGGER.warning(message);
       return null;
     }
@@ -456,17 +511,39 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
   }
 
   /**
+   * Is this table actually a materialized view.
+   *
+   * @return True if this table is definitely a materialized view.
+   */
+  public boolean isMaterializedView() {
+    if (isAccessibleView()) {
+      InlineViewMetadata metadata = tryGetViewMetadata();
+      return metadata.isMaterialized();
+    }
+    return false;
+  }
+
+  /**
+   * Is this table actually a secure view.
+   *
+   * @return True if this table is definitely a secure view.
+   */
+  public boolean isSecureView() {
+    if (isAccessibleView()) {
+      InlineViewMetadata metadata = tryGetViewMetadata();
+      return metadata.getUnsafeToInline();
+    }
+    return false;
+  }
+
+  /**
    * Is this a view that can be safely inlined.
    *
    * @return Returns true if table is a view and the metadata indicates inlining is legal. If this
    *     table is not a view this return false.
    */
   private boolean canSafelyInlineView() {
-    if (isAccessibleView()) {
-      InlineViewMetadata metadata = tryGetViewMetadata();
-      return !(metadata.getUnsafeToInline() || metadata.isMaterialized());
-    }
-    return false;
+    return isAccessibleView() && !(isSecureView() || isMaterializedView());
   }
 
   /**
