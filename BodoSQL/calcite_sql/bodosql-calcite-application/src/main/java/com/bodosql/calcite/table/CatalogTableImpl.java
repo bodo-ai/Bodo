@@ -1,5 +1,6 @@
 package com.bodosql.calcite.table;
 
+import static com.bodosql.calcite.application.PythonLoggers.VERBOSE_LEVEL_TWO_LOGGER;
 import static java.lang.Double.min;
 
 import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
@@ -370,6 +371,14 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     // not pre-cleared by the metadata scanning pass.
     if (!BodoMetadataRestrictionScan.Companion.canRequestColumnDistinctiveness(
         qualifiedName, columnName)) {
+      String dotTableName = String.join(".", qualifiedName);
+      String message =
+          String.format(
+              Locale.ROOT,
+              "Skipping attempt to fetch column '%s' from table '%s' due to metadata restrictions",
+              columnName,
+              dotTableName);
+      VERBOSE_LEVEL_TWO_LOGGER.warning(message);
       return null;
     }
     // Avoid ever returning more than the row count. This can happen because
