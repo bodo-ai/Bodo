@@ -27,6 +27,7 @@ from bodo.tests.utils import (
     SeriesOptTestPipeline,
     _check_for_io_reader_filters,
     _get_dist_arg,
+    cast_dt64_to_ns,
     check_func,
     count_array_REPs,
     count_parfor_REPs,
@@ -92,7 +93,9 @@ def test_pq_read_date(fname, datapath, memory_leak_check):
         df = pd.read_parquet(fpath)
         return pd.DataFrame({"DT64": df.DT64, "col2": df.DATE})
 
-    check_func(impl, (), only_seq=True)
+    df = pd.read_parquet(fpath)
+    output = cast_dt64_to_ns(pd.DataFrame({"DT64": df.DT64, "col2": df.DATE}))
+    check_func(impl, (), only_seq=True, py_output=output)
 
 
 @pytest.mark.slow
@@ -947,7 +950,7 @@ def test_partition_cols(test_tz, memory_leak_check):
                     ds = pq.ParquetDataset(TEST_DIR)
                     assert ds.partitioning.schema.names == part_cols
                     # read bodo output with pandas
-                    df_test = pd.read_parquet(TEST_DIR)
+                    df_test = cast_dt64_to_ns(pd.read_parquet(TEST_DIR))
                     # pandas reads the partition columns as categorical, but they
                     # are not categorical in input dataframe, so we do some dtype
                     # conversions to be able to compare the dataframes
@@ -1204,7 +1207,7 @@ def test_read_predicates_timestamp_date(memory_leak_check):
 
         def impl(path):
             df = pd.read_parquet(filepath)
-            df = df[df.A > pd.Timestamp(2021, 3, 30)]
+            df = df[df.A > datetime.date(2021, 3, 30)]
             return df
 
         # TODO: Fix index

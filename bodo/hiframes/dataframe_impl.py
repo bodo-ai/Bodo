@@ -1236,11 +1236,11 @@ def overload_dataframe_abs(df):
 
 def overload_dataframe_corr(df, method="pearson", min_periods=1):
     # This function is called by the inlining in compiler.py
-    numeric_cols = [
+    numeric_cols = tuple(
         c
         for c, d in zip(df.columns, df.data)
         if bodo.utils.typing._is_pandas_numeric_dtype(d.dtype)
-    ]
+    )
     # TODO: support empty dataframe
     assert len(numeric_cols) != 0
 
@@ -1297,11 +1297,11 @@ def overload_dataframe_cov(df, min_periods=None, ddof=1):
     # TODO: support calling np.cov() when there is no NA
     minpv = "1" if is_overload_none(min_periods) else "min_periods"
 
-    numeric_cols = [
+    numeric_cols = tuple(
         c
         for c, d in zip(df.columns, df.data)
         if bodo.utils.typing._is_pandas_numeric_dtype(d.dtype)
-    ]
+    )
     # TODO: support empty dataframe
     if len(numeric_cols) == 0:
         raise_bodo_error("DataFrame.cov(): requires non-empty dataframe")
@@ -1950,25 +1950,17 @@ def _is_describe_type(data):
 
 
 @overload_method(DataFrameType, "describe", inline="always", no_unliteral=True)
-def overload_dataframe_describe(
-    df, percentiles=None, include=None, exclude=None, datetime_is_numeric=True
-):
+def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None):
     """
     Support df.describe with numeric and datetime column.
-    For datetime: Bodo mimic's Pandas future behavior.
-    (treating it like numeric rather than categorical).
-    Hence, datetime_is_numeric is set to True as default value.
     """
     check_runtime_cols_unsupported(df, "DataFrame.describe()")
     unsupported_args = dict(
         percentiles=percentiles,
         include=include,
         exclude=exclude,
-        datetime_is_numeric=datetime_is_numeric,
     )
-    arg_defaults = dict(
-        percentiles=None, include=None, exclude=None, datetime_is_numeric=True
-    )
+    arg_defaults = dict(percentiles=None, include=None, exclude=None)
     check_unsupported_args(
         "DataFrame.describe",
         unsupported_args,
@@ -2005,7 +1997,7 @@ def overload_dataframe_describe(
 
         return f"des_{col_ind}"
 
-    header = "def impl(df, percentiles=None, include=None, exclude=None, datetime_is_numeric=True):\n"
+    header = "def impl(df, percentiles=None, include=None, exclude=None):\n"
     for c in numeric_cols:
         col_ind = df.column_index[c]
         header += f"  des_{col_ind} = bodo.libs.array_ops.array_op_describe(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {col_ind}))\n"
@@ -5504,37 +5496,6 @@ def overload_dataframe_drop(
     return _gen_init_df(func_text, new_cols, data_args, index)
 
 
-@overload_method(DataFrameType, "append", inline="always", no_unliteral=True)
-def overload_dataframe_append(
-    df, other, ignore_index=False, verify_integrity=False, sort=None
-):
-    check_runtime_cols_unsupported(df, "DataFrame.append()")
-    check_runtime_cols_unsupported(other, "DataFrame.append()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(df, "DataFrame.append()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        other, "DataFrame.append()"
-    )
-    if isinstance(other, DataFrameType):
-        return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
-            (df, other), ignore_index=ignore_index, verify_integrity=verify_integrity
-        )  # pragma: no cover
-
-    if isinstance(other, types.BaseTuple):
-        return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
-            (df,) + other, ignore_index=ignore_index, verify_integrity=verify_integrity
-        )  # pragma: no cover
-
-    # TODO: non-homogenous build_list case
-    if isinstance(other, types.List) and isinstance(other.dtype, DataFrameType):
-        return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
-            [df] + other, ignore_index=ignore_index, verify_integrity=verify_integrity
-        )  # pragma: no cover
-
-    raise BodoError(
-        "invalid df.append() input. Only dataframe and list/tuple of dataframes supported"
-    )
-
-
 @overload_method(DataFrameType, "sample", inline="always", no_unliteral=True)
 def overload_dataframe_sample(
     df,
@@ -5834,7 +5795,6 @@ def overload_read_excel(
     names=None,
     index_col=None,
     usecols=None,
-    squeeze=False,
     dtype=None,
     engine=None,
     converters=None,
@@ -5848,11 +5808,12 @@ def overload_read_excel(
     verbose=False,
     parse_dates=False,
     date_parser=None,
+    date_format=None,
     thousands=None,
+    decimal=".",
     comment=None,
     skipfooter=0,
-    convert_float=True,
-    mangle_dupe_cols=True,
+    storage_options=None,
     _bodo_df_type=None,
 ):
     # implement pd.read_excel() by just calling Pandas
@@ -5884,7 +5845,6 @@ def impl(
     names=None,
     index_col=None,
     usecols=None,
-    squeeze=False,
     dtype=None,
     engine=None,
     converters=None,
@@ -5898,11 +5858,12 @@ def impl(
     verbose=False,
     parse_dates=False,
     date_parser=None,
+    date_format=None,
     thousands=None,
+    decimal='.',
     comment=None,
     skipfooter=0,
-    convert_float=True,
-    mangle_dupe_cols=True,
+    storage_options=None,
     _bodo_df_type=None,
 ):
     with numba.objmode(df="{t_name}"):
@@ -5913,7 +5874,6 @@ def impl(
             names={list(df_type.columns)},
             index_col=index_col,
             usecols=usecols,
-            squeeze=squeeze,
             dtype={{{pd_dtype_strs}}},
             engine=engine,
             converters=converters,
@@ -5926,12 +5886,13 @@ def impl(
             na_filter=na_filter,
             verbose=verbose,
             parse_dates={parse_dates_const},
-            date_parser=date_parser,
+            date_parser=pd._libs.lib.no_default,
+            date_format=date_format,
             thousands=thousands,
+            decimal=decimal,
             comment=comment,
             skipfooter=skipfooter,
-            convert_float=convert_float,
-            mangle_dupe_cols=mangle_dupe_cols,
+            storage_options=storage_options,
         )
     return df
 """

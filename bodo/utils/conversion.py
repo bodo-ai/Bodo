@@ -31,6 +31,7 @@ from bodo.utils.typing import (
     get_overload_const_str,
     is_heterogeneous_tuple_type,
     is_np_arr_typ,
+    is_nullable_type,
     is_overload_constant_bool,
     is_overload_constant_list,
     is_overload_constant_str,
@@ -190,12 +191,24 @@ def overload_coerce_to_ndarray(
 
     # index types
     if isinstance(data, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType)):
+        if isinstance(data, NumericIndexType) and not is_overload_none(
+            use_nullable_array
+        ):
+            return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.utils.conversion.coerce_to_array(
+                bodo.hiframes.pd_index_ext.get_index_data(data), use_nullable_array=True
+            )  # pragma: no cover
+
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.hiframes.pd_index_ext.get_index_data(
             data
         )  # pragma: no cover
 
     # RangeIndex
     if isinstance(data, RangeIndexType):
+        if not is_overload_none(use_nullable_array):
+            return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.utils.conversion.coerce_to_array(
+                np.arange(data._start, data._stop, data._step), use_nullable_array=True
+            )  # pragma: no cover
+
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: np.arange(
             data._start, data._stop, data._step
         )  # pragma: no cover
@@ -545,6 +558,22 @@ def overload_coerce_to_array(
 
     # series
     if isinstance(data, SeriesType):
+        if not is_overload_none(use_nullable_array) and not is_nullable_type(data.data):
+
+            def impl_series_to_nullable(
+                data,
+                error_on_nonarray=True,
+                use_nullable_array=None,
+                scalar_to_arr_len=None,
+                dict_encode=True,
+            ):  # pragma: no cover
+                arr = bodo.hiframes.pd_series_ext.get_series_data(data)
+                return bodo.utils.conversion.coerce_to_array(
+                    arr, use_nullable_array=True
+                )
+
+            return impl_series_to_nullable
+
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None, dict_encode=True: bodo.hiframes.pd_series_ext.get_series_data(
             data
         )  # pragma: no cover

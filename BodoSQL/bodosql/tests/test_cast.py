@@ -664,7 +664,7 @@ def test_tz_aware_datetime_to_timestamp_cast(
     spark_query2 = "SELECT CAST(A as Date) as A from table1"
 
     expected_output2 = pd.DataFrame(
-        {"A": tz_aware_df["table1"]["A"].dt.tz_localize(None).dt.normalize()}
+        {"A": tz_aware_df["table1"]["A"].dt.tz_localize(None).dt.normalize().dt.date}
     )
     check_query(
         query2,

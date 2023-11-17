@@ -118,7 +118,7 @@ def test_to_boolean(to_boolean_test_arrs):
     arr = to_boolean_test_arrs
     to_bool_scalar_fn = lambda x: np.nan if pd.isna(x) else bool(x)
     run_check = True
-    if is_string_dtype(arr):
+    if pd._libs.lib.infer_dtype(arr, skipna=True) == "string":
         if arr.apply(
             lambda x: pd.isna(x) or x.lower() in true_vals or x.lower() in false_vals
         ).all():
@@ -151,7 +151,7 @@ def test_try_to_boolean(to_boolean_test_arrs):
         return pd.Series(bodo.libs.bodosql_array_kernels.try_to_boolean(arr))
 
     arr = to_boolean_test_arrs
-    if is_string_dtype(arr):
+    if pd._libs.lib.infer_dtype(arr, skipna=True) == "string":
         to_bool_scalar_fn = str_to_bool
     elif is_float_dtype(arr):
         to_bool_scalar_fn = lambda x: np.nan if np.isnan(x) or np.isinf(x) else bool(x)
@@ -173,7 +173,7 @@ def test_try_to_boolean_opt(to_boolean_test_arrs_null):
         return pd.Series(bodo.libs.bodosql_array_kernels.try_to_boolean(arr))
 
     arr = to_boolean_test_arrs_null
-    if is_string_dtype(arr):
+    if pd._libs.lib.infer_dtype(arr, skipna=True) == "string":
         py_output = vectorized_sol((arr,), str_to_bool, "boolean")
     elif is_float_dtype(arr):
         py_output = vectorized_sol(
@@ -200,7 +200,7 @@ def test_to_boolean_opt(to_boolean_test_arrs_null):
         return pd.Series(bodo.libs.bodosql_array_kernels.to_boolean(arr))
 
     arr = to_boolean_test_arrs_null
-    if is_string_dtype(arr):
+    if pd._libs.lib.infer_dtype(arr, skipna=True) == "string":
         py_output = vectorized_sol((arr,), str_to_bool, "boolean")
     elif is_float_dtype(arr):
         py_output = vectorized_sol(

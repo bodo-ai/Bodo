@@ -446,7 +446,11 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
         return bodo.MapArrayType(key_arr_type, arr_type), "ok"
 
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
-        if is_list_string or in_dtype == types.unicode_type:
+        if (
+            is_list_string
+            or in_dtype == types.unicode_type
+            or arr_type == bodo.binary_array_type
+        ):
             if func_name not in {
                 "count",
                 "nunique",
@@ -797,28 +801,6 @@ def get_agg_typ(
                 else:
                     list_err_msg.append(err_msg)
 
-    if func_name == "sum":
-        has_numeric = any(
-            [x == ColumnType.NumericalColumn.value for x in out_column_type]
-        )
-        if has_numeric:
-            out_data = [
-                x
-                for x, y in zip(out_data, out_column_type)
-                if y != ColumnType.NonNumericalColumn.value
-            ]
-            out_columns = [
-                x
-                for x, y in zip(out_columns, out_column_type)
-                if y != ColumnType.NonNumericalColumn.value
-            ]
-            # gb_info maps (in_cols, additional_args, func_name) -> [out_col_1, out_col_2, ...]
-            # where in_cols is a tuple of input column names
-            gb_info = {}
-            for c in out_columns:
-                if grp.as_index is False and c in grp.keys:
-                    continue
-                dict_add_multimap(gb_info, ((c,), (), func_name), c)
     nb_drop = len(list_err_msg)
     if len(out_data) == 0:
         if nb_drop == 0:
@@ -2592,14 +2574,10 @@ def groupby_value_counts(
 
     ascending_val = get_overload_const_bool(ascending)
 
-    # Series.value_counts set its index name to `None`
-    # Here, last index name in MultiIndex will have series name.
-    name = grp.selection[0]
-
     # df.groupby("X")["Y"].value_counts() => df.groupby("X")["Y"].apply(lambda S : S.value_counts())
     func_text = f"def impl(grp, normalize=False, sort=True, ascending=False, bins=None, dropna=True):\n"
     # TODO: [BE-635] Use S.rename_axis
-    udf = f"lambda S: S.value_counts(ascending={ascending_val}, _index_name='{name}')"
+    udf = f"lambda S: S.value_counts(ascending={ascending_val})"
     func_text += f"    return grp.apply({udf})\n"
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
@@ -2644,7 +2622,6 @@ groupby_unsupported = {
     "fillna",
     "filter",
     "hist",
-    "mad",
     "plot",
     "quantile",
     "resample",

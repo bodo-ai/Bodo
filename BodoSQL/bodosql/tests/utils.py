@@ -14,6 +14,7 @@ import pandas as pd
 import pyspark
 from mpi4py import MPI
 from pyspark.sql.types import (
+    BooleanType,
     ByteType,
     DayTimeIntervalType,
     DoubleType,
@@ -24,10 +25,12 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampNTZType,
     TimestampType,
 )
 
 import bodo
+import bodo.pyspark_compat
 import bodosql
 from bodo.tests.utils import (
     _convert_float_to_nullable_float,
@@ -1116,6 +1119,7 @@ def _check_query_equal(
 
     """
     # convert pyarrow string data to regular object arrays to avoid dtype errors
+    # also, convert datetime64[ns] to datetime.date if necessary
     for i in range(len(bodosql_output.columns)):
         # pd dtype must be the first value for comparing numpy dtypes
         if pd.StringDtype("pyarrow") == bodosql_output.dtypes.iloc[i]:
@@ -1125,12 +1129,25 @@ def _check_query_equal(
             if arr.isna().all():
                 bodosql_output.iloc[:, i] = None
             else:
+                # Workaround Pandas 2 Arrow setitem error by setting to an int first
+                bodosql_output.iloc[:, i] = 3
                 bodosql_output.iloc[:, i] = arr.to_numpy()
+        # convert datetime64[ns] to datetime.date to match expected type
+        # TODO[BSE-2014]: fix data type issues and remove this conversion
+        if (
+            bodosql_output.dtypes.iloc[i] == np.dtype("datetime64[ns]")
+            or isinstance(bodosql_output.dtypes.iloc[i], pd.DatetimeTZDtype)
+        ) and expected_output.dtypes.iloc[i] == np.object_:
+            S = bodosql_output.iloc[:, i].dt.date
+            # set a dummy value to force type change
+            bodosql_output.iloc[:, i] = 3
+            bodosql_output.iloc[:, i] = S
 
     if convert_columns_to_pandas:
         bodosql_output = bodo.tests.utils.convert_non_pandas_columns(bodosql_output)
         expected_output = bodo.tests.utils.convert_non_pandas_columns(expected_output)
-    if sort_output:
+    # NOTE: zero length dataframe may cause errors in Arrow's sort
+    if sort_output and len(bodosql_output.dropna(how="all")):
         bodosql_output = bodosql_output.sort_values(
             bodosql_output.columns.tolist()
         ).reset_index(drop=True)

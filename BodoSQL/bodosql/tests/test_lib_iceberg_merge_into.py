@@ -124,7 +124,7 @@ stress_test_base_df = pd.DataFrame(
         "bytes_col": gen_random_string_binary_array(100, is_binary=True),
         "ts_col": pd.date_range(start="2011-02-24", end="2013-01-1", periods=100),
         "td_col": pd.Series(np.random.randint(-1000000, 1000000, size=100)).astype(
-            "timedelta64[s]"
+            "timedelta64[ns]"
         ),
         "bool_col": np.random.randint(0, 2, size=100).astype(bool),
         "float_col": np.random.uniform(-1000000, 1000000, size=100),
@@ -141,7 +141,7 @@ stress_test_delta_df = pd.DataFrame(
         "bytes_col": gen_random_string_binary_array(75, is_binary=True),
         "ts_col": pd.date_range(start="2011-02-24", end="2013-01-1", periods=75),
         "td_col": pd.Series(np.random.randint(-1000000, 1000000, size=75)).astype(
-            "timedelta64[s]"
+            "timedelta64[ns]"
         ),
         "bool_col": np.random.randint(0, 2, size=75).astype(bool),
         "float_col": np.random.uniform(-1000000, 1000000, size=75),

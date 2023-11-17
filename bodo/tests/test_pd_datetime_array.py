@@ -531,7 +531,7 @@ def test_tz_convert_none(memory_leak_check):
 
     arr = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
     # Python will have a different output type until we handle no timezone in Datetime array
-    py_output = arr.tz_convert(None)._data
+    py_output = arr.tz_convert(None)
     check_func(impl, (arr,), py_output=py_output)
 
 

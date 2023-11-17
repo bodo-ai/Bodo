@@ -196,7 +196,7 @@ def test_tz_date_scalar_cmp(sample_tz, cmp_op, memory_leak_check):
 
 def test_date_array_tz_scalar(sample_tz, cmp_op, memory_leak_check):
     """Check that comparison operators work between an array
-    of dates and a Timestamp
+    of dates and a date scalar
     """
     func = generate_comparison_ops_func(cmp_op)
     arr = (
@@ -204,14 +204,14 @@ def test_date_array_tz_scalar(sample_tz, cmp_op, memory_leak_check):
         .to_series()
         .dt.date.values
     )
-    ts = pd.Timestamp("4/4/2022", tz=sample_tz)
+    ts = pd.Timestamp("4/4/2022", tz=sample_tz).date()
     check_func(func, (arr, ts))
     check_func(func, (ts, arr))
 
 
 def test_date_series_tz_scalar(sample_tz, cmp_op, memory_leak_check):
     """Check that comparison operators work between an Series
-    of dates and a Timestamp
+    of dates and a date scalar
     """
     func = generate_comparison_ops_func(cmp_op)
     S = (
@@ -219,7 +219,7 @@ def test_date_series_tz_scalar(sample_tz, cmp_op, memory_leak_check):
         .to_series()
         .dt.date
     )
-    ts = pd.Timestamp("4/4/2022", tz=sample_tz)
+    ts = pd.Timestamp("4/4/2022", tz=sample_tz).date()
     check_func(func, (S, ts))
     check_func(func, (ts, S))
 

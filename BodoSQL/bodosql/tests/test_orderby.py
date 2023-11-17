@@ -437,8 +437,10 @@ def test_orderby_nulls_defaults_desc(null_ordering_table, memory_leak_check):
     output = null_ordering_table["table1"].sort_values(
         by=["A", "B"], ascending=[False, True], na_position="first"
     )
-    output["B"] = output.groupby(["A"], dropna=False).transform(
-        lambda x: x.sort_values(ascending=True, na_position="last")
+    output["B"] = (
+        output.groupby(["A"], dropna=False)["B"]
+        .transform(lambda x: x.sort_values(ascending=True, na_position="last").values)
+        .values
     )
     check_query(
         query,

@@ -24,7 +24,7 @@ requirements:
     # Resolves build issues on nightly
     - numpy >=1.23,<1.25
     - cython <3.0
-    - pandas >=1.5.1,<2.0
+    - pandas >=2,<2.2
     - fsspec >=2021.09
     - pyarrow =13.0.0
     - boost-cpp =1.82
@@ -40,7 +40,7 @@ requirements:
   run:
     - python
     - {{ pin_compatible('numpy') }}
-    - pandas >=1.5.1,<2.0
+    - pandas >=2,<2.2
     - fsspec >=2021.09
     - pyarrow =13.0.0
     - numba

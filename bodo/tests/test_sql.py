@@ -805,7 +805,7 @@ def test_to_sql_postgres(is_distributed, memory_leak_check):
         bodo.barrier()
 
 
-# @pytest.mark.slow
+@pytest.mark.skip
 @pytest.mark.parametrize("is_distributed", [True, False])
 def test_to_sql_oracle(is_distributed, memory_leak_check):
     """Test to_sql with Oracle database

@@ -1085,9 +1085,11 @@ def _test_equal(
             bodo_out = bodo_out[bodo_out.argsort()]
         # We don't care about category order so sort always.
         if isinstance(py_out, pd.Categorical):
-            py_out.categories = py_out.categories.sort_values()
+            py_out = pd.Categorical(py_out, categories=py_out.categories.sort_values())
         if isinstance(bodo_out, pd.Categorical):
-            bodo_out.categories = bodo_out.categories.sort_values()
+            bodo_out = pd.Categorical(
+                bodo_out, categories=bodo_out.categories.sort_values()
+            )
         pd.testing.assert_extension_array_equal(bodo_out, py_out, check_dtype=False)
     elif isinstance(py_out, csr_matrix):
         # https://stackoverflow.com/questions/30685024/check-if-two-scipy-sparse-csr-matrix-are-equal
@@ -2863,3 +2865,20 @@ def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
         return result
 
     return inner
+
+
+def cast_dt64_to_ns(df):
+    """Cast datetime64 to datetime64[ns] to match Bodo since Pandas 2 reads some
+    Parquet files as datetime64[us/ms]
+    """
+    from pandas.api.types import is_datetime64_any_dtype
+
+    for c in df.columns:
+        if is_datetime64_any_dtype(df[c]):
+            if isinstance(df[c].dtype, pd.DatetimeTZDtype):
+                df[c] = df[c].astype(pd.DatetimeTZDtype(tz=df[c].dtype.tz))
+            else:
+                df[c] = df[c].astype("datetime64[ns]")
+    if isinstance(df.index, pd.DatetimeIndex):
+        df.index = df.index.astype("datetime64[ns]")
+    return df

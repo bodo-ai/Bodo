@@ -52,6 +52,7 @@ ll.add_symbol(
     "unbox_datetime_timedelta_array", hdatetime_ext.unbox_datetime_timedelta_array
 )
 
+
 # sentinel type representing no first input to pd.Timestamp() constructor
 # similar to _no_input object of Pandas in timestamps.pyx
 # https://github.com/pandas-dev/pandas/blob/8806ed7120fed863b3cd7d3d5f377ec4c81739d0/pandas/_libs/tslibs/timestamps.pyx#L38
@@ -91,6 +92,7 @@ class PDTimeDeltaType(types.Type):
 pd_timedelta_type = PDTimeDeltaType()
 types.pd_timedelta_type = pd_timedelta_type
 
+
 # 2.Teach Numba how to infer the Numba type of Python values of a certain class,
 # using typeof_impl.register
 @typeof_impl.register(pd.Timedelta)
@@ -125,7 +127,6 @@ def box_pd_timedelta(typ, val, c):
 # using the @unbox decorator and the NativeValue class
 @unbox(PDTimeDeltaType)
 def unbox_pd_timedelta(typ, val, c):
-
     value_obj = c.pyapi.object_getattr_string(val, "value")
 
     valuell = c.pyapi.long_as_longlong(value_obj)
@@ -224,7 +225,6 @@ def pd_timedelta(
             hours=0,
             weeks=0,
         ):  # pragma: no cover
-
             days = value.days
             seconds = 60 * 60 * 24 * days + value.seconds
             microseconds = 1000 * 1000 * seconds + value.microseconds
@@ -278,7 +278,6 @@ make_attribute_wrapper(PDTimeDeltaType, "value", "_value")
 
 # Implement the getters
 @overload_attribute(PDTimeDeltaType, "value")
-@overload_attribute(PDTimeDeltaType, "delta")
 def pd_timedelta_get_value(td):
     def impl(td):  # pragma: no cover
         return td._value
@@ -774,6 +773,7 @@ class DatetimeTimeDeltaType(types.Type):
 
 datetime_timedelta_type = DatetimeTimeDeltaType()
 
+
 # 2.Teach Numba how to infer the Numba type of Python values of a certain class,
 # using typeof_impl.register
 @typeof_impl.register(datetime.timedelta)
@@ -816,7 +816,6 @@ def box_datetime_timedelta(typ, val, c):
 # using the @unbox decorator and the NativeValue class
 @unbox(DatetimeTimeDeltaType)
 def unbox_datetime_timedelta(typ, val, c):
-
     days_obj = c.pyapi.object_getattr_string(val, "days")
     seconds_obj = c.pyapi.object_getattr_string(val, "seconds")
     microseconds_obj = c.pyapi.object_getattr_string(val, "microseconds")
@@ -1137,6 +1136,7 @@ seconds_data_type = types.Array(types.int64, 1, "C")
 microseconds_data_type = types.Array(types.int64, 1, "C")
 nulls_type = types.Array(types.uint8, 1, "C")
 
+
 # datetime.timedelta has three arrays of integers to store data
 @register_model(DatetimeTimeDeltaArrayType)
 class DatetimeTimeDeltaArrayModel(models.StructModel):
@@ -1307,7 +1307,6 @@ def init_datetime_timedelta_array(
 
 @lower_constant(DatetimeTimeDeltaArrayType)
 def lower_constant_datetime_timedelta_arr(context, builder, typ, pyval):
-
     n = len(pyval)
     days_data_arr = np.empty(n, np.int64)
     seconds_data_arr = np.empty(n, np.int64)
@@ -1467,7 +1466,6 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
     # scalar case
     if isinstance(ind, types.Integer):
-
         if types.unliteral(val) == datetime_timedelta_type:
 
             def impl(A, ind, val):  # pragma: no cover
@@ -1490,7 +1488,6 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
     # array of integers
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
-
         if types.unliteral(val) == datetime_timedelta_type:
 
             def impl_arr_ind_scalar(A, ind, val):  # pragma: no cover
@@ -1525,7 +1522,6 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
     # bool array
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
-
         if types.unliteral(val) == datetime_timedelta_type:
 
             def impl_bool_ind_mask_scalar(A, ind, val):  # pragma: no cover
@@ -1629,7 +1625,6 @@ def timedelta_arr_nbytes_overload(A):
 
 
 def overload_datetime_timedelta_arr_sub(arg1, arg2):
-
     # datetime_timedelta_array - timedelta
     if arg1 == datetime_timedelta_array_type and arg2 == datetime_timedelta_type:
 

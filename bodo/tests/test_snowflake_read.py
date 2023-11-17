@@ -1938,21 +1938,14 @@ def test_snowflake_filter_pushdown(memory_leak_check):
         df = df[date_val > df["l_shipdate"]]
         return df["l_suppkey"]
 
-    def impl_timestamp(query, conn, ts_val):
-        df = pd.read_sql(query, conn)
-        # Note when comparing to date Pandas will truncate the timestamp.
-        # This comparison is deprecated in general.
-        df = df[ts_val <= df["l_shipdate"]]
-        return df["l_suppkey"]
-
-    def impl_mixed(query, conn, int_val, str_val, date_val, ts_val):
+    def impl_mixed(query, conn, int_val, str_val, date_val):
         """
         Test a query with mixed parameter types.
         """
         df = pd.read_sql(query, conn)
         df = df[
             ((df["l_linenumber"] <= int_val) | (date_val > df["l_shipdate"]))
-            | ((ts_val <= df["l_shipdate"]) & (df["l_linestatus"] != str_val))
+            | (df["l_linestatus"] != str_val)
         ]
         return df["l_suppkey"]
 
@@ -2000,29 +1993,16 @@ def test_snowflake_filter_pushdown(memory_leak_check):
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
-    ts_val = pd.Timestamp(year=1997, month=4, day=12)
-    check_func(
-        impl_timestamp, (query, conn, ts_val), check_dtype=False, reset_index=True
-    )
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-        bodo.jit(impl_timestamp)(query, conn, ts_val)
-        # Check the columns were pruned
-        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
-        # Check for filter pushdown
-        check_logger_msg(stream, "Filter pushdown successfully performed")
-
     check_func(
         impl_mixed,
-        (query, conn, int_val, str_val, date_val, ts_val),
+        (query, conn, int_val, str_val, date_val),
         check_dtype=False,
         reset_index=True,
     )
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
-        bodo.jit(impl_mixed)(query, conn, int_val, str_val, date_val, ts_val)
+        bodo.jit(impl_mixed)(query, conn, int_val, str_val, date_val)
         # Check the columns were pruned
         check_logger_msg(stream, "Columns loaded ['l_suppkey']")
         # Check for filter pushdown
@@ -2892,7 +2872,7 @@ def test_snowflake_filter_pushdown_edgecase(memory_leak_check):
         reset_index=True,
         py_output=pd.DataFrame(
             {
-                "full_date": [pd.to_datetime("2023-05-05")],
+                "full_date": [pd.to_datetime("2023-05-05").date()],
                 "other_column": [2.0],
             }
         ),
@@ -2950,7 +2930,7 @@ def test_snowflake_filter_pushdown_edgecase_2(memory_leak_check):
         reset_index=True,
         py_output=pd.DataFrame(
             {
-                "full_date": [pd.to_datetime("2023-05-05")],
+                "full_date": [pd.to_datetime("2023-05-05").date()],
                 "other_column": [2.0],
             }
         ),

@@ -3369,10 +3369,6 @@ class TypingTransforms:
                 assign, lhs, rhs, df_var, inplace_var, label, func_name
             )
 
-        # convert const list to tuple for better optimization
-        if func_name == "append":
-            self._call_arg_list_to_tuple(rhs, "append", 0, "other", nodes)
-
         return nodes + [assign]
 
     def _df_assign_non_lambda_helper(self, lhs, kws_key_val_list, df_var, assign):
@@ -3818,10 +3814,6 @@ class TypingTransforms:
     def _run_call_series(self, assign, rhs, series_var, func_name, label):
         """Handle Series calls that need transformation to meet Bodo requirements"""
         nodes = []
-
-        # convert const list to tuple for better optimization
-        if func_name == "append":
-            self._call_arg_list_to_tuple(rhs, "append", 0, "to_append", nodes)
 
         # mapping of Series functions to their arguments that require constant values
         series_call_const_args = {

@@ -561,69 +561,6 @@ def overload_series_all(S, axis=0, bool_only=None, skipna=True, level=None):
     return impl
 
 
-@overload_method(SeriesType, "mad", inline="always", no_unliteral=True)
-def overload_series_mad(S, axis=None, skipna=True, level=None):
-    unsupported_args = dict(level=level)
-    arg_defaults = dict(level=None)
-    check_unsupported_args(
-        "Series.mad",
-        unsupported_args,
-        arg_defaults,
-        package_name="pandas",
-        module_name="Series",
-    )
-
-    if not is_overload_bool(skipna):
-        raise BodoError("Series.mad(): 'skipna' argument must be a boolean")
-
-    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
-        raise_bodo_error("Series.mad(): axis argument not supported")
-
-    # see core/nanops.py/nanmean() for output types
-    # TODO: more accurate port of dtypes from pandas
-    sum_dtype = types.float64
-    count_dtype = types.float64
-    if S.dtype == types.float32:
-        sum_dtype = types.float32
-        count_dtype = types.float32
-
-    val_0 = sum_dtype(0)
-    count_0 = count_dtype(0)
-    count_1 = count_dtype(1)
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.mad()")
-
-    def impl(S, axis=None, skipna=True, level=None):  # pragma: no cover
-        A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfors.parfor.init_prange()
-        # First computing the mean
-        s_mean = val_0
-        count = count_0
-        for i in numba.parfors.parfor.internal_prange(len(A)):
-            val = val_0
-            count_val = count_0
-            if not bodo.libs.array_kernels.isna(A, i) or not skipna:
-                val = A[i]
-                count_val = count_1
-            s_mean += val
-            count += count_val
-
-        res_mean = bodo.hiframes.series_kernels._mean_handle_nan(s_mean, count)
-        # Second computing the mad
-        s_mad = val_0
-        for i in numba.parfors.parfor.internal_prange(len(A)):
-            val = val_0
-            if not bodo.libs.array_kernels.isna(A, i) or not skipna:
-                val = abs(A[i] - res_mean)
-            s_mad += val
-
-        res_mad = bodo.hiframes.series_kernels._mean_handle_nan(s_mad, count)
-        return res_mad
-
-    return impl
-
-
 @overload_method(SeriesType, "mean", inline="always", no_unliteral=True)
 def overload_series_mean(S, axis=None, skipna=None, level=None, numeric_only=None):
     # Mean is supported for integer, float, datetime, and boolean Series
@@ -1463,7 +1400,6 @@ def overload_series_infer_objects(S):
     return lambda S: S.copy()  # pragma: no cover
 
 
-@overload_attribute(SeriesType, "is_monotonic", inline="always")
 @overload_attribute(SeriesType, "is_monotonic_increasing", inline="always")
 def overload_series_is_monotonic_increasing(S):
     # TODO [BE-2453]: Better errorchecking in general?
@@ -2264,7 +2200,6 @@ def overload_series_value_counts(
     ascending=False,
     bins=None,
     dropna=True,
-    _index_name=None,  # bodo argument. See groupby.value_counts
 ):
     unsupported_args = dict(dropna=dropna)
     arg_defaults = dict(dropna=True)
@@ -2307,7 +2242,6 @@ def overload_series_value_counts(
     func_text += "    ascending=False,\n"
     func_text += "    bins=None,\n"
     func_text += "    dropna=True,\n"
-    func_text += "    _index_name=None,  # bodo argument. See groupby.value_counts\n"
     func_text += "):\n"
 
     func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
@@ -2341,11 +2275,12 @@ def overload_series_value_counts(
             "        bodo.hiframes.pd_series_ext.get_series_index(count_series)\n"
         )
         func_text += "    )\n"
-        func_text += "    index = bodo.utils.conversion.index_from_array(ind_arr, name=_index_name)\n"
+        func_text += (
+            "    index = bodo.utils.conversion.index_from_array(ind_arr, name=name)\n"
+        )
 
-    func_text += (
-        "    res = bodo.hiframes.pd_series_ext.init_series(count_arr, index, name)\n"
-    )
+    series_name = "proportion" if is_overload_true(normalize) else "count"
+    func_text += f"    res = bodo.hiframes.pd_series_ext.init_series(count_arr, index, '{series_name}')\n"
     if is_overload_true(sort):
         func_text += "    res = res.sort_values(ascending=ascending)\n"
     if is_overload_true(normalize):
@@ -2717,51 +2652,6 @@ def overload_series_groupby(
     return impl
 
 
-@overload_method(SeriesType, "append", inline="always", no_unliteral=True)
-def overload_series_append(S, to_append, ignore_index=False, verify_integrity=False):
-    unsupported_args = dict(verify_integrity=verify_integrity)
-    arg_defaults = dict(verify_integrity=False)
-    check_unsupported_args(
-        "Series.append",
-        unsupported_args,
-        arg_defaults,
-        package_name="pandas",
-        module_name="Series",
-    )
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.append()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        to_append, "Series.append()"
-    )
-
-    # call pd.concat()
-    # single Series case
-    if isinstance(to_append, SeriesType):
-        return (
-            lambda S, to_append, ignore_index=False, verify_integrity=False: pd.concat(
-                (S, to_append),
-                ignore_index=ignore_index,
-                verify_integrity=verify_integrity,
-            )
-        )  # pragma: no cover
-
-    # tuple case
-    if isinstance(to_append, types.BaseTuple):
-        return (
-            lambda S, to_append, ignore_index=False, verify_integrity=False: pd.concat(
-                (S,) + to_append,
-                ignore_index=ignore_index,
-                verify_integrity=verify_integrity,
-            )
-        )  # pragma: no cover
-
-    # list/other cases
-    return lambda S, to_append, ignore_index=False, verify_integrity=False: pd.concat(
-        [S] + to_append, ignore_index=ignore_index, verify_integrity=verify_integrity
-    )  # pragma: no cover
-
-
 @overload_method(SeriesType, "isin", inline="always", no_unliteral=True)
 def overload_series_isin(S, values):
     # TODO [BE-2453]: Better errorchecking in general?
@@ -2864,25 +2754,17 @@ def overload_series_unique(S):
 
 
 @overload_method(SeriesType, "describe", inline="always", no_unliteral=True)
-def overload_series_describe(
-    S, percentiles=None, include=None, exclude=None, datetime_is_numeric=True
-):
+def overload_series_describe(S, percentiles=None, include=None, exclude=None):
     """
     Support S.describe with numeric and datetime column.
-    For datetime: Bodo mimic's Pandas future behavior
-    (treating it like numeric rather than categorical).
-    Hence, datetime_is_numeric is set to True as default value.
     """
 
     unsupported_args = dict(
         percentiles=percentiles,
         include=include,
         exclude=exclude,
-        datetime_is_numeric=datetime_is_numeric,
     )
-    arg_defaults = dict(
-        percentiles=None, include=None, exclude=None, datetime_is_numeric=True
-    )
+    arg_defaults = dict(percentiles=None, include=None, exclude=None)
     check_unsupported_args(
         "Series.describe",
         unsupported_args,
@@ -2913,7 +2795,7 @@ def overload_series_describe(
     if S.data.dtype == bodo.datetime64ns:
 
         def impl_dt(
-            S, percentiles=None, include=None, exclude=None, datetime_is_numeric=True
+            S, percentiles=None, include=None, exclude=None
         ):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -2928,9 +2810,7 @@ def overload_series_describe(
         return impl_dt
 
     # This is for numeric columns only
-    def impl(
-        S, percentiles=None, include=None, exclude=None, datetime_is_numeric=True
-    ):  # pragma: no cover
+    def impl(S, percentiles=None, include=None, exclude=None):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         return bodo.hiframes.pd_series_ext.init_series(

@@ -891,7 +891,7 @@ def test_to_dates_option(memory_leak_check):
     # TODO: change this to test the format str for non-None values once
     # it's supported. (https://bodo.atlassian.net/browse/BE-3614)
     for flag in [True, False]:
-        fn_output = pd.Timestamp("2022-02-18") if flag else None
+        fn_output = pd.Timestamp("2022-02-18").date() if flag else None
 
         answer = (fn_output, fn_output)
         check_func(impl, ("2022-02-18", flag), py_output=answer)

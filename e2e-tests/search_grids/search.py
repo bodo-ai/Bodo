@@ -35,7 +35,7 @@ def search_all(categories, strategies, df_prod, grids, results_file):
     for i in prange(n_idx):
         idx = (categories[i], strategies[i])
         res = search(df_prod, idx, "STRATEGY_SET_MEMBER_ID", grids)
-        df_rec = df_rec.append(res)
+        df_rec = pd.concat((df_rec, res))
 
     df_rec = df_rec.sort_values(by="STRATEGY").reset_index(drop=True)
     df_rec.to_csv(results_file, index=False)

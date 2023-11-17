@@ -1455,7 +1455,7 @@ def test_tz_aware_date_part(tz_aware_df, query_fmt, spark_info, memory_leak_chec
             "my_year": df.A.dt.year,
             "my_q": df.A.dt.quarter,
             "my_mons": df.A.dt.month,
-            "my_wk": df.A.dt.weekofyear,
+            "my_wk": df.A.map(lambda t: t.weekofyear),
             "my_dayofmonth": df.A.dt.day,
             "my_hrs": df.A.dt.hour,
             "my_min": df.A.dt.minute,
@@ -1513,7 +1513,7 @@ def test_date_part_unquoted_timeunit(memory_leak_check):
             "my_year": df.A.dt.year,
             "my_quarter": df.A.dt.quarter,
             "my_month": df.A.dt.month,
-            "my_week": df.A.dt.weekofyear,
+            "my_week": df.A.map(lambda t: t.weekofyear),
             "my_day": df.A.dt.day,
             "my_hour": df.A.dt.hour,
             "my_minute": df.A.dt.minute,
@@ -2316,7 +2316,7 @@ def test_snowflake_tz_dateadd(tz_dateadd_data, case):
     [
         pytest.param(
             "SELECT DATEADD('MONTH', 10, '2022-06-30'::DATE)",
-            pd.DataFrame({"A": pd.Series([pd.Timestamp("2023-04-30")])}),
+            pd.DataFrame({"A": pd.Series([pd.Timestamp("2023-04-30").date()])}),
             id="dateadd-date",
         ),
         pytest.param(
@@ -2898,7 +2898,7 @@ def test_subdate_cols_td_arg1(
     expected_output = pd.DataFrame(
         {
             "unknown_column_name": pd.to_datetime(
-                in_dfs["table1"][timestamp_date_string_cols]
+                in_dfs["table1"][timestamp_date_string_cols], format="mixed"
             )
             - in_dfs["table1"]["intervals"]
         }
@@ -2943,7 +2943,7 @@ def test_subdate_td_scalars(
     expected_output = pd.DataFrame(
         {
             "unknown_column_name": pd.to_datetime(
-                in_dfs["table1"][timestamp_date_string_cols]
+                in_dfs["table1"][timestamp_date_string_cols], format="mixed"
             )
             - in_dfs["table1"]["intervals"]
         }
@@ -3466,6 +3466,7 @@ def test_next_previous_day_cols(
     py_output = pd.DataFrame(
         {"A": next_prev_day(dt_fn_dataframe["table1"]["timestamps"], dow_col)}
     )
+    py_output = pd.DataFrame({"A": py_output.apply(lambda s: s.iloc[0].date(), axis=1)})
     check_query(
         query,
         dt_fn_dataframe,
@@ -3507,7 +3508,11 @@ def test_next_previous_day_scalars(
         else np.array([dow_str])
     )
     py_output = pd.DataFrame(
-        {"A": next_prev_day_case(dt_fn_dataframe["table1"]["timestamps"], dow_col)}
+        {
+            "A": next_prev_day_case(
+                dt_fn_dataframe["table1"]["timestamps"], dow_col
+            ).dt.date
+        }
     )
     check_query(
         query,
@@ -3804,7 +3809,7 @@ def test_tz_aware_next_day(memory_leak_check):
         ).tz_localize(None),
         axis=1,
     )
-    py_output = pd.DataFrame({"m": out_series})
+    py_output = pd.DataFrame({"m": out_series.dt.date})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
@@ -3831,7 +3836,7 @@ def test_tz_aware_next_day_case(
         axis=1,
     )
     week_series[~df.C] = None
-    py_output = pd.DataFrame({"m": week_series})
+    py_output = pd.DataFrame({"m": week_series.dt.date})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
@@ -3855,7 +3860,7 @@ def test_tz_aware_previous_day(memory_leak_check):
         ).tz_localize(None),
         axis=1,
     )
-    py_output = pd.DataFrame({"m": out_series})
+    py_output = pd.DataFrame({"m": out_series.dt.date})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
@@ -3882,7 +3887,7 @@ def test_tz_aware_previous_day_case(
         axis=1,
     )
     week_series[~df.C] = None
-    py_output = pd.DataFrame({"m": week_series})
+    py_output = pd.DataFrame({"m": week_series.dt.date})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 

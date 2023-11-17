@@ -52,7 +52,7 @@ def filter(df_pg, pg_type, strategy_set_valid_prices):
     mesh = mesh.merge(tmp, on="KEY").drop(columns="KEY")
 
     dtmp = df_pg[[pg_type, "PRICE"]].rename(columns={"PRICE": "VALID_PRICES"})
-    mesh = mesh.append(dtmp).sort_values(by=[pg_type, "VALID_PRICES"])
+    mesh = pd.concat((mesh, dtmp)).sort_values(by=[pg_type, "VALID_PRICES"])
 
     df_pg = df_pg.merge(mesh, on=pg_type)
 
@@ -64,9 +64,9 @@ def filter(df_pg, pg_type, strategy_set_valid_prices):
         (df_pg.UPPER_V_PRICE <= df_pg.VALID_PRICES)
         & (df_pg.VALID_PRICES <= df_pg.P_MAX)
     ]
-    df_pg = lower_half.append(upper_half)
+    df_pg = pd.concat((lower_half, upper_half))
 
-    df_pg = df_pg.append(df_pg_tmp)
+    df_pg = pd.concat((df_pg, df_pg_tmp))
     df_pg = df_pg.reset_index(drop=True)
 
     return df_pg
@@ -123,7 +123,7 @@ def search(df_opt, idx, pg_type, strategy_set_valid_prices):
         idxmax = df_pg.groupby(pg_type)["SV"].idxmax().values
         df_tmp = df_pg.iloc[idxmax][[pg_type, "VALID_PRICES"]]
         df_tmp["PRICE_LOCK"] = False
-        df_rec = df_rec.append(df_tmp)
+        df_rec = pd.concat((df_rec, df_tmp))
 
     df_rec = df_rec.sort_values(by=pg_type).reset_index(drop=True)
     df_rec["STRATEGY"] = strategy

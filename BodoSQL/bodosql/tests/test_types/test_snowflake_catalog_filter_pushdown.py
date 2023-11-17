@@ -2261,8 +2261,6 @@ def test_no_arg_datetime_functions(
     conn_str = get_snowflake_connection_string(db, schema)
     df = pd.read_sql(f"select * from {table_name}", conn_str)
 
-    pushdown_sql_func = sql_func
-
     for test_col in test_cols:
         datetime_test_col = df[test_col]
         if test_col != "timestamp_col":
@@ -2284,6 +2282,10 @@ def test_no_arg_datetime_functions(
             computed_col = datetime_test_col.dt.isocalendar().year
         else:
             computed_col = getattr(datetime_test_col.dt, sql_func)
+
+        # Match expected datetime.date output type
+        if test_col != "timestamp_col":
+            datetime_test_col = datetime_test_col.dt.date
 
         expected_output = datetime_test_col[computed_col == test_val].to_frame()
 

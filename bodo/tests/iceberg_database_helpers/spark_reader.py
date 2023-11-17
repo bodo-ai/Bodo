@@ -1,5 +1,8 @@
 import sys
 
+import numpy as np
+
+import bodo.pyspark_compat
 from bodo.tests.iceberg_database_helpers.utils import get_spark
 
 
@@ -14,6 +17,12 @@ def read_iceberg_table(table_name, database_name, spark=None):
     count = df.count()
     spark_schema = df.schema
     pd_df = df.toPandas()
+
+    # Convert datetime64 to tz-aware UTC to match Bodo output
+    for i in range(len(pd_df.columns)):
+        if pd_df.dtypes.iloc[i] == np.dtype("datetime64[ns]"):
+            pd_df.iloc[:, i] = pd_df.iloc[:, i].dt.tz_localize("UTC")
+
     return pd_df, count, spark_schema
 
 

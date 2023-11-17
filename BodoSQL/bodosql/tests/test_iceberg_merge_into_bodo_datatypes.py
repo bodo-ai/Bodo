@@ -80,7 +80,7 @@ def test_merge_into_bodo_datatypes_as_values(iceberg_database, iceberg_table_con
 
     source = target_table.copy()
     source.id = source.id + 10
-    expected = target_table.append(source, ignore_index=True)
+    expected = pd.concat((target_table, source), ignore_index=True)
 
     # create query
     query = (

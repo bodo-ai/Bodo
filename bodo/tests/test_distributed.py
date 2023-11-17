@@ -1468,7 +1468,7 @@ def test_concat_reduction():
     def impl(n):
         df = pd.DataFrame()
         for i in bodo.prange(n):
-            df = df.append(pd.DataFrame({"A": np.arange(i)}))
+            df = pd.concat((df, pd.DataFrame({"A": np.arange(i)})))
 
         return df
 
@@ -1483,7 +1483,7 @@ def test_series_concat_reduction():
     def impl(n):
         S = pd.Series(np.empty(0, np.int64))
         for i in bodo.prange(n):
-            S = S.append(pd.Series(np.arange(i)))
+            S = pd.concat((S, pd.Series(np.arange(i))), ignore_index=True)
 
         return S
 
