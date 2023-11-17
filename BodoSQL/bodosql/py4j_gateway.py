@@ -92,6 +92,8 @@ def get_gateway():
                 ),
             )
             gateway = JavaGateway(gateway_parameters=GatewayParameters(port=port_no))
+            # Initialize logging
+            configure_java_logging(bodo.get_verbose_level())
         except Exception as e:
             msg = f"Error when launching the BodoSQL JVM. {str(e)}"
 
@@ -100,3 +102,28 @@ def get_gateway():
     if failed:
         raise Exception(msg)
     return gateway
+
+
+def configure_java_logging(level: int):
+    """Configure the java logging based on the given logging level.
+    This just turns the loggers on/off, but in the future should ideally
+    enable support for changing the logging destination in Java based
+    upon the default verbose logger.
+
+    Args:
+        level (int): The verbose level.
+    """
+    # Java logging is only on rank 0
+    if bodo.get_rank() == 0:
+        from bodosql.imported_java_classes import PythonLoggersClass
+
+        java_level_one_logger = PythonLoggersClass.VERBOSE_LEVEL_ONE_LOGGER
+        java_level_two_logger = PythonLoggersClass.VERBOSE_LEVEL_TWO_LOGGER
+        if level >= 1:
+            PythonLoggersClass.turnLoggerOn(java_level_one_logger)
+        else:
+            PythonLoggersClass.turnLoggerOff(java_level_one_logger)
+        if level >= 2:
+            PythonLoggersClass.turnLoggerOn(java_level_two_logger)
+        else:
+            PythonLoggersClass.turnLoggerOff(java_level_two_logger)

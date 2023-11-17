@@ -37,6 +37,7 @@ if bodo.get_rank() == 0:
         CommonsExceptionUtilsClass = (
             gateway.jvm.org.apache.commons.lang3.exception.ExceptionUtils
         )
+        PythonLoggersClass = gateway.jvm.com.bodosql.calcite.application.PythonLoggers
     except Exception as e:
         saw_error = True
         msg = str(e)
@@ -52,6 +53,7 @@ else:
     BodoTZInfoClass = None
     SnowflakeDriver = None
     CommonsExceptionUtilsClass = None
+    PythonLoggersClass = None
 
 saw_error = bcast_scalar(saw_error)
 msg = bcast_scalar(msg)
