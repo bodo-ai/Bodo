@@ -139,7 +139,17 @@ void IncrementalShuffleState::ResetAfterShuffle() {
     // reset the dictionaries to point to the shared dictionaries
     // and reset the dictionary related flags.
     // This is crucial for correctness.
-    this->table_buffer->Reset();
+    // If the build shuffle buffer is too large and utilization is below
+    // SHUFFLE_BUFFER_MIN_UTILIZATION, it will be freed and reallocated.
+    size_t capacity = this->table_buffer->EstimatedSize();
+    if (capacity > (SHUFFLE_BUFFER_CUTOFF_MULTIPLIER * SHUFFLE_THRESHOLD) &&
+        (capacity * SHUFFLE_BUFFER_MIN_UTILIZATION) >
+            table_local_memory_size(this->table_buffer->data_table, false)) {
+        this->table_buffer.reset(
+            new TableBuildBuffer(this->schema, this->dict_builders));
+    } else {
+        this->table_buffer->Reset();
+    }
 }
 
 std::tuple<

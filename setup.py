@@ -397,6 +397,7 @@ if is_testing:
             "bodo/tests/test_test_framework.cpp",
             "bodo/tests/test_json_col_reader.cpp",
             "bodo/tests/test_nested_array.cpp",
+            "bodo/tests/test_stream_shuffle.cpp",
         ]
     )
     ext_metadata["define_macros"].append(("IS_TESTING", "1"))
