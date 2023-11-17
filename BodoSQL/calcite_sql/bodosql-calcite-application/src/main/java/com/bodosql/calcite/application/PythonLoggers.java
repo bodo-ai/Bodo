@@ -20,4 +20,10 @@ public class PythonLoggers {
   public static void turnLoggerOff(Logger logger) {
     logger.setLevel(Level.OFF);
   }
+
+  static {
+    // Disable loggers until turned on by Python.
+    turnLoggerOff(VERBOSE_LEVEL_ONE_LOGGER);
+    turnLoggerOff(VERBOSE_LEVEL_TWO_LOGGER);
+  }
 }
