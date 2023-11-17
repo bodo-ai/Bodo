@@ -335,7 +335,6 @@ _series_method_alias = {
     "isnull": "isna",
     "product": "prod",
     "kurtosis": "kurt",
-    "is_monotonic": "is_monotonic_increasing",
     "notnull": "notna",
 }
 # DataFrame methods that are not inlined currently, but some may be possible to inline

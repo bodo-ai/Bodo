@@ -733,9 +733,6 @@ def test_describe_args(memory_leak_check):
     def impl_exclude(df):
         return df.describe(exclude=[np.number])
 
-    def impl_datetime_is_numeric(df):
-        return df.describe(datetime_is_numeric=False)
-
     df = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
@@ -749,8 +746,6 @@ def test_describe_args(memory_leak_check):
         bodo.jit(impl_include)(df)
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl_exclude)(df)
-    with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl_datetime_is_numeric)(df)
 
 
 @pytest.mark.slow

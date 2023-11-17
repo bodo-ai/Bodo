@@ -889,27 +889,6 @@ class TestSeries(unittest.TestCase):
             )
             check_func(test_impl, (S,))
 
-    def test_series_append1(self):
-        def test_impl(S, other):
-            return S.append(other).values
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([-2.0, 3.0, 9.1])
-        S2 = pd.Series([-2.0, 5.0])
-        # Test single series
-        np.testing.assert_array_equal(bodo_func(S1, S2), test_impl(S1, S2))
-
-    def test_series_append2(self):
-        def test_impl(S1, S2, S3):
-            return S1.append([S2, S3]).values
-
-        bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series([-2.0, 3.0, 9.1])
-        S2 = pd.Series([-2.0, 5.0])
-        S3 = pd.Series([1.0])
-        # Test series tuple
-        np.testing.assert_array_equal(bodo_func(S1, S2, S3), test_impl(S1, S2, S3))
-
     def test_series_isna1(self):
         def test_impl(S):
             return S.isna()

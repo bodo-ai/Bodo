@@ -514,7 +514,9 @@ def test_time_groupby(precision, memory_leak_check):
         return df.groupby("B")["A"].max()
 
     # Hard-code py_output (See [BE-4107])
-    py_output = df.dropna().groupby("B")["A"].max().append(pd.Series([None], name="A"))
+    py_output = pd.concat(
+        (df.dropna().groupby("B")["A"].max(), pd.Series([None], name="A"))
+    )
     check_func(impl2, (df,), py_output=py_output, sort_output=True, reset_index=True)
 
     # Test Time as key with index=False and keeping None group

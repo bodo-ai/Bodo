@@ -2727,7 +2727,7 @@ def test_timestamp_from_date_and_time(timetype, memory_leak_check):
     time_constructor = bodo.Time
 
     def timestamp_constructor(h, m, s, ms, us, ns):
-        return pd.Timestamp(2023, 1, 1, h, m, s, ms * 1000 + us, ns)
+        return pd.Timestamp(2023, 1, 1, h, m, s, ms * 1000 + us, nanosecond=ns)
 
     def datetime_constructor(h, m, s, ms, us, ns):
         ts = timestamp_constructor(h, m, s, ms, us, ns)
@@ -2770,11 +2770,11 @@ def test_timestamp_from_date_and_time(timetype, memory_leak_check):
 
     answer = pd.Series(
         [
-            pd.Timestamp(1890, 11, 8, 5, 26, 19, 653001, 5),
-            pd.Timestamp(2016, 2, 13, 5, 11, 50, 716002, 4),
-            pd.Timestamp(1847, 9, 27, 12, 37, 18, 371003, 3),
-            pd.Timestamp(1946, 1, 3, 11, 19, 51, 179004, 2),
-            pd.Timestamp(2014, 4, 7, 3, 33, 56, 570005, 1),
+            pd.Timestamp(1890, 11, 8, 5, 26, 19, 653001, nanosecond=5),
+            pd.Timestamp(2016, 2, 13, 5, 11, 50, 716002, nanosecond=4),
+            pd.Timestamp(1847, 9, 27, 12, 37, 18, 371003, nanosecond=3),
+            pd.Timestamp(1946, 1, 3, 11, 19, 51, 179004, nanosecond=2),
+            pd.Timestamp(2014, 4, 7, 3, 33, 56, 570005, nanosecond=1),
         ]
     )
     check_func(
@@ -3147,7 +3147,7 @@ def test_calendar_optional(memory_leak_check):
                 a2 = "Apr" if flag0 else None
                 a3 = 6 if flag0 else None
                 a4 = 2018 if flag0 else None
-                a5 = pd.Timestamp("2005-12-31") if flag1 and flag2 else None
+                a5 = pd.Timestamp("2005-12-31").date() if flag1 and flag2 else None
                 a6 = 0 if flag0 else None
                 a7 = 1 if flag0 else None
                 a8 = 91 if flag0 else None
@@ -3618,18 +3618,18 @@ def test_months_between_series(arg0, arg1, answer, memory_leak_check):
             id="positive-eom-2",
         ),
         pytest.param(
-            datetime.date(2023, 1, 1), -1, datetime.date(2022, 12, 1), id="negative-eom"
+            datetime.date(2023, 1, 1), -1, pd.Timestamp("2022-12-1"), id="negative-eom"
         ),
         pytest.param(
             datetime.date(2023, 1, 31),
             -13,
-            datetime.date(2021, 12, 31),
+            pd.Timestamp("2021-12-31"),
             id="negative-eom-1",
         ),
         pytest.param(
             datetime.date(2023, 2, 28),
             -25,
-            datetime.date(2021, 1, 31),
+            pd.Timestamp("2021-1-31"),
             id="negative-eom-2",
         ),
     ],

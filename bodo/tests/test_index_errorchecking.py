@@ -785,9 +785,6 @@ def test_where_args():
         bodo.jit(impl)(I, C, list(range(8)))
 
     with pytest.raises(BodoError, match=err_msg2):
-        bodo.jit(impl)(I, C, I)
-
-    with pytest.raises(BodoError, match=err_msg2):
         bodo.jit(impl)(I, C, pd.Series(list("ABCDEFGH")))
 
 
@@ -812,9 +809,6 @@ def test_putmask_args():
 
     with pytest.raises(BodoError, match=err_msg2):
         bodo.jit(impl)(I, C, list(range(8)))
-
-    with pytest.raises(BodoError, match=err_msg2):
-        bodo.jit(impl)(I, C, I)
 
     with pytest.raises(BodoError, match=err_msg2):
         bodo.jit(impl)(I, C, pd.Series(list("ABCDEFGH")))
@@ -1105,60 +1099,6 @@ def test_tdi_init_kwd_err():
         bodo.jit(impl)()
 
 
-def test_idx_int64_init_err():
-    def impl():
-        pd.Int64Index(np.arange(100), dtype=np.int32)
-
-    err_msg = (
-        ".*"
-        + re.escape(
-            "pandas.Int64Index(): dtype parameter only supports default value None"
-        )
-        + ".*"
-    )
-    with pytest.raises(
-        BodoError,
-        match=err_msg,
-    ):
-        bodo.jit(impl)()
-
-
-def test_idx_uint64_init_err():
-    def impl():
-        pd.UInt64Index(np.arange(100), dtype=np.uint32)
-
-    err_msg = (
-        ".*"
-        + re.escape(
-            "pandas.UInt64Index(): dtype parameter only supports default value None"
-        )
-        + ".*"
-    )
-    with pytest.raises(
-        BodoError,
-        match=err_msg,
-    ):
-        bodo.jit(impl)()
-
-
-def test_idx_float64_init_err():
-    def impl():
-        pd.Float64Index(np.arange(100), dtype=np.float32)
-
-    err_msg = (
-        ".*"
-        + re.escape(
-            "pandas.Float64Index(): dtype parameter only supports default value None"
-        )
-        + ".*"
-    )
-    with pytest.raises(
-        BodoError,
-        match=err_msg,
-    ):
-        bodo.jit(impl)()
-
-
 @pytest.mark.skip("TODO")
 def test_idx_map_tup_return():
     index = pd.Index(np.arange(10))
@@ -1200,22 +1140,16 @@ def test_idx_map_tup_return():
 )
 def test_monotonic_unsupported(index):
     """
-    Checks that is_monotonic, is_monotonic_increasing, and is_monotonic_decreasing attributes
+    Checks that is_monotonic_increasing, and is_monotonic_decreasing attributes
     throw error for unsupported index types (i.e. not a NumericIndex, DatetimeIndex,
     TimedeltaIndex, or RangeIndex).
     """
-
-    def test_unsupp_is_monotonic(idx):
-        return idx.is_monotonic
 
     def test_unsupp_is_monotonic_increasing(idx):
         return idx.is_monotonic_increasing
 
     def test_unsupp_is_monotonic_decreasing(idx):
         return idx.is_monotonic_decreasing
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_unsupp_is_monotonic)(index)
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_unsupp_is_monotonic_increasing)(index)

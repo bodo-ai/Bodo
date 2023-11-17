@@ -18,6 +18,7 @@ from bodo.tests.conftest import DataPath
 from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
+    cast_dt64_to_ns,
     check_func,
     gen_random_arrow_array_struct_int,
     gen_random_arrow_list_list_int,
@@ -185,8 +186,8 @@ def test_pq_write_metadata(df, index_name, memory_leak_check):
 
                 # Also make sure result of reading parquet file is same as that of pandas
                 pd.testing.assert_frame_equal(
-                    pd.read_parquet("bodo_metadatatest.pq"),
-                    pd.read_parquet("pandas_metadatatest.pq"),
+                    cast_dt64_to_ns(pd.read_parquet("bodo_metadatatest.pq")),
+                    cast_dt64_to_ns(pd.read_parquet("pandas_metadatatest.pq")),
                     check_column_type=False,
                 )
 
@@ -405,8 +406,8 @@ def test_read_write_parquet(memory_leak_check):
                     bodo_write(_get_dist_arg(df, False, True), bodo_pq_filename)
                 bodo.barrier()
                 # read both files with pandas
-                df1 = pd.read_parquet(pandas_pq_filename)
-                df2 = pd.read_parquet(bodo_pq_filename)
+                df1 = cast_dt64_to_ns(pd.read_parquet(pandas_pq_filename))
+                df2 = cast_dt64_to_ns(pd.read_parquet(bodo_pq_filename))
 
                 # to test equality, we have to coerce datetime columns to ms
                 # because pandas writes to parquet as datetime64[ms]
@@ -786,7 +787,7 @@ def test_tz_to_parquet(memory_leak_check):
     passed = 1
     if bodo.get_rank() == 0:
         try:
-            result = pd.read_parquet(output_filename)
+            result = cast_dt64_to_ns(pd.read_parquet(output_filename))
             passed = _test_equal_guard(result, py_output)
             # Check the metadata. We want to verify that columns A and C
             # have the correct pandas type, numpy types, and metadata because

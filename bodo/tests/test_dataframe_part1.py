@@ -1035,7 +1035,7 @@ def test_empty_df_columns(memory_leak_check):
         return df.columns
 
     df = pd.DataFrame()
-    check_func(impl, (df,), is_out_distributed=False)
+    check_func(impl, (df,), is_out_distributed=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1182,7 +1182,7 @@ def test_df_empty(df, memory_leak_check):
     assert bodo_func(df) == impl(df)
 
 
-@pytest.mark.parametrize("dtype", [np.int64, "datetime64[ns]", str, pd.StringDtype()])
+@pytest.mark.parametrize("dtype", [np.int64, str, pd.StringDtype()])
 def test_tz_aware_df_astype(dtype, memory_leak_check):
     df = pd.date_range(
         start="2018-04-24",
@@ -1483,20 +1483,20 @@ def test_df_abs3(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_df_corr(df_value, memory_leak_check):
+def test_df_corr(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
-    if len(df_value._get_numeric_data().columns) == 0:
+    if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
 
     # XXX pandas excludes bool columns with NAs, which we can't do dynamically
-    for c in df_value.columns:
-        if is_bool_object_series(df_value[c]) and df_value[c].hasnans:
+    for c in numeric_df_value.columns:
+        if is_bool_object_series(numeric_df_value[c]) and numeric_df_value[c].hasnans:
             return
 
     def impl(df):
         return df.corr()
 
-    check_func(impl, (df_value,), is_out_distributed=False, check_dtype=False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1528,20 +1528,20 @@ def test_df_corr_parallel(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_df_cov(df_value, memory_leak_check):
+def test_df_cov(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
-    if len(df_value._get_numeric_data().columns) == 0:
+    if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
 
     # XXX pandas excludes bool columns with NAs, which we can't do dynamically
-    for c in df_value.columns:
-        if is_bool_object_series(df_value[c]) and df_value[c].hasnans:
+    for c in numeric_df_value.columns:
+        if is_bool_object_series(numeric_df_value[c]) and numeric_df_value[c].hasnans:
             return
 
     def impl(df):
         return df.cov()
 
-    check_func(impl, (df_value,), is_out_distributed=False, check_dtype=False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1553,16 +1553,16 @@ def test_df_count(df_value, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_df_prod(df_value, memory_leak_check):
+def test_df_prod(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
-    if len(df_value._get_numeric_data().columns) == 0:
+    if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
 
     def impl(df):
         return df.prod()
 
     # TODO: match Pandas 1.1.1 output dtype
-    check_func(impl, (df_value,), is_out_distributed=False, check_dtype=False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1651,7 +1651,6 @@ def test_df_max(numeric_df_value, memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": ["a", "b", "c", "d", None, None, None, "e", "f"],
                     "B": [1, 4, 3, 4, None, 5, 6, None, np.nan],
                     "C": [1, 2, None, 3, 4, 5, 6, None, 0],
                 }
@@ -1784,18 +1783,20 @@ def test_df_median2(numeric_df_value, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_df_quantile(df_value, memory_leak_check):
+def test_df_quantile(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
-    if len(df_value._get_numeric_data().columns) == 0:
+    if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
 
     # pandas returns object Series for some reason when input has IntegerArray
-    if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer.IntegerDtype):
+    if isinstance(
+        numeric_df_value.iloc[:, 0].dtype, pd.core.arrays.integer.IntegerDtype
+    ):
         return
 
     # boolean input fails in Pandas with Numpy 1.20
     # TODO(ehsan): remove check when fixed
-    if np.dtype("bool") in df_value.dtypes.values:
+    if np.dtype("bool") in numeric_df_value.dtypes.values:
         return
 
     def impl(df):
@@ -1803,7 +1804,7 @@ def test_df_quantile(df_value, memory_leak_check):
 
     check_func(
         impl,
-        (df_value,),
+        (numeric_df_value,),
         is_out_distributed=False,
         check_names=False,
         check_dtype=False,
@@ -1825,7 +1826,7 @@ def test_df_pct_change(numeric_df_value, memory_leak_check):
 @pytest.mark.slow
 def test_df_describe(numeric_df_value, memory_leak_check):
     def test_impl(df):
-        return df.describe(datetime_is_numeric=True)
+        return df.describe()
 
     check_func(
         test_impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False
@@ -1839,7 +1840,7 @@ def test_df_describe_mixed_dt(memory_leak_check):
     """
 
     def test_impl(df):
-        return df.describe(datetime_is_numeric=True)
+        return df.describe()
 
     # all datetime
     df = pd.DataFrame(

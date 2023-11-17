@@ -822,7 +822,7 @@ def test_series_name(series_val, memory_leak_check):
 
 @pytest.mark.parametrize(
     "dtype",
-    [np.int64, str, pd.StringDtype(), "datetime64[ns]"],
+    [np.int64, str, pd.StringDtype()],
 )
 def test_tz_aware_series_astype(dtype, memory_leak_check):
     def test_impl(S):
@@ -1925,7 +1925,10 @@ def test_series_getitem_int(series_val):
 
     bodo_func = bodo.jit(test_impl)
     # integer label-based indexing should raise error
-    if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
+    if not isinstance(series_val.index, pd.RangeIndex) and series_val.index.dtype in (
+        np.int64,
+        np.uint64,
+    ):
         with pytest.raises(BodoError, match="not supported yet"):
             bodo_func(series_val)
     else:
@@ -1955,7 +1958,10 @@ def test_series_getitem_list_int(series_val, idx, memory_leak_check):
 
     bodo_func = bodo.jit(test_impl)
     # integer label-based indexing should raise error
-    if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
+    if not isinstance(series_val.index, pd.RangeIndex) and series_val.index.dtype in (
+        np.int64,
+        np.uint64,
+    ):
         with pytest.raises(BodoError, match="not supported yet"):
             bodo_func(series_val, idx)
     else:
@@ -2019,7 +2025,10 @@ def test_series_setitem_int(series_val, memory_leak_check):
 
     bodo_func = bodo.jit(test_impl)
     # integer label-based indexing should raise error
-    if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
+    if not isinstance(series_val.index, pd.RangeIndex) and series_val.index.dtype in (
+        np.int64,
+        np.uint64,
+    ):
         with pytest.raises(BodoError, match="not supported yet"):
             bodo_func(series_val, val)
     else:
@@ -2067,7 +2076,10 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_chec
 
     bodo_func = bodo.jit(test_impl)
     # integer label-based indexing should raise error
-    if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
+    if not isinstance(series_val.index, pd.RangeIndex) and series_val.index.dtype in (
+        np.int64,
+        np.uint64,
+    ):
         with pytest.raises(BodoError, match="not supported yet"):
             bodo_func(series_val, val, idx)
     else:
@@ -3029,7 +3041,7 @@ def test_series_getitem_str_grpby_apply():
     def test_impl(df):
         return df.groupby(
             ["id1", "id2"], as_index=False, sort=False, observed=True, dropna=False
-        ).apply(lambda x: x.corr()["v1"]["v2"] ** 2)
+        ).apply(lambda x: x[["v1", "v2"]].corr()["v1"]["v2"] ** 2)
 
     # in Bodo, when doing groupby apply, we set the output column to empty string
     # if we have a string index. In Pandas, it's normally None
@@ -3072,7 +3084,10 @@ def test_series_getitem_str_and_series_init_dict_grpby_apply():
             )
             .apply(
                 lambda x: pd.Series(
-                    {"r2": x.corr()["v1"]["v2"] ** 2, "r2_2": x.corr()["v1"]["v2"]}
+                    {
+                        "r2": x[["v1", "v2"]].corr()["v1"]["v2"] ** 2,
+                        "r2_2": x[["v1", "v2"]].corr()["v1"]["v2"],
+                    }
                 )
             )
         )

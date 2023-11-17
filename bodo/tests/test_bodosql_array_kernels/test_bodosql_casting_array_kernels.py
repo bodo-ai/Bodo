@@ -982,7 +982,7 @@ def test_cast_date_opt(memory_leak_check):
         return bodo.libs.bodosql_array_kernels.cast_date(arg0)
 
     for flag in [True, False]:
-        answer = pd.Timestamp("2020-01-01").normalize() if flag else None
+        answer = pd.Timestamp("2020-01-01").normalize().date() if flag else None
         check_func(
             impl,
             ("2020-01-01", flag),

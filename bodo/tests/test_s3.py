@@ -7,7 +7,7 @@ import pytest
 from pyarrow import fs as pafs
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.tests.utils import _get_dist_arg, cast_dt64_to_ns, check_func
 from bodo.utils.testing import ensure_clean2
 from bodo.utils.typing import BodoError
 
@@ -253,7 +253,7 @@ def test_s3_pq_asof1(minio_server, bucket_fixture, datapath, bucket_name, reques
         return pd.read_parquet(fpath)
 
     fname = datapath("asof1.pq")
-    py_output = pd.read_parquet(fname)
+    py_output = cast_dt64_to_ns(pd.read_parquet(fname))
     check_func(test_impl, (f"s3://{bucket_name}/asof1.pq",), py_output=py_output)
 
 

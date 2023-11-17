@@ -54,7 +54,7 @@ from bodo.hiframes.datetime_timedelta_ext import (
 )
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.libs import hdatetime_ext
-from bodo.libs.pd_datetime_arr_ext import get_pytz_type_info
+from bodo.libs.pd_datetime_arr_ext import get_tz_type_info
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import (
     BodoError,
@@ -114,8 +114,6 @@ date_fields = [
     "is_quarter_end",
     "is_year_start",
     "is_year_end",
-    "week",
-    "weekofyear",
     "weekday",
 ]
 date_methods = ["normalize", "day_name", "month_name"]
@@ -183,7 +181,7 @@ def check_tz_aware_unsupported(val, func_name):
 
 @typeof_impl.register(pd.Timestamp)
 def typeof_pd_timestamp(val, c):
-    return PandasTimestampType(get_pytz_type_info(val.tz) if val.tz else None)
+    return PandasTimestampType(get_tz_type_info(val.tz) if val.tz else None)
 
 
 ts_field_typ = types.int64
@@ -268,19 +266,23 @@ def box_pandas_timestamp(typ, val, c):
 
     pdts_obj = c.pyapi.unserialize(c.pyapi.serialize_object(pd.Timestamp))
     if typ.tz is None:
-        res = c.pyapi.call_function_objargs(
-            pdts_obj,
-            (
-                year_obj,
-                month_obj,
-                day_obj,
-                hour_obj,
-                minute_obj,
-                second_obj,
-                us_obj,
-                ns_obj,
-            ),
+        args = c.pyapi.tuple_pack(())
+        # NOTE: nanosecond argument is keyword-only as of Pandas 2
+        kwargs = c.pyapi.dict_pack(
+            [
+                ("year", year_obj),
+                ("month", month_obj),
+                ("day", day_obj),
+                ("hour", hour_obj),
+                ("minute", minute_obj),
+                ("second", second_obj),
+                ("microsecond", us_obj),
+                ("nanosecond", ns_obj),
+            ]
         )
+        res = c.pyapi.call(pdts_obj, args, kwargs)
+        c.pyapi.decref(args)
+        c.pyapi.decref(kwargs)
     else:
         if isinstance(typ.tz, int):
             tz_obj = c.pyapi.long_from_longlong(lir.Constant(lir.IntType(64), typ.tz))
@@ -1593,7 +1595,8 @@ def datetime_timedelta_to_timedelta64(val):  # pragma: no cover
     """convert datetime.timedelta to np.timedelta64"""
     with numba.objmode(res='NPTimedelta("ns")'):
         res = pd.to_timedelta(val)
-        res = res.to_timedelta64()
+        # Pandas 2 returns us precision for some reason
+        res = res.to_timedelta64().astype(np.dtype("timedelta64[ns]"))
     return res
 
 
@@ -1606,7 +1609,7 @@ def series_str_dt64_astype(data):  # pragma: no cover
         # This enables conversions not supported in just Numba.
         # call ArrowStringArray.to_numpy() since PyArrow can't convert all datetime
         # formats, see test_dt64_str_astype
-        res = pd.Series(data.to_numpy()).astype("datetime64[ns]").values
+        res = pd.to_datetime(pd.Series(data.to_numpy()), format="mixed").values
     return res
 
 
@@ -1617,7 +1620,8 @@ def series_str_td64_astype(data):  # pragma: no cover
     with numba.objmode(res="NPTimedelta('ns')[::1]"):
         # No need to use Series because Timedelta doesn't
         # have extra parsing.
-        res = data.astype("timedelta64[ns]")
+        # NOTE: Pandas 2 returns a TimedeltaArray so to_numpy is needed
+        res = data.astype("timedelta64[ns]").to_numpy()
     return res
 
 

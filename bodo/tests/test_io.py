@@ -313,14 +313,14 @@ def test_to_csv_quotechar_kwd_arg(memory_leak_check):
     )
 
 
-def test_to_csv_line_terminator_kwd_arg(memory_leak_check):
-    """tests the line_terminator keyword argument to to_csv"""
+def test_to_csv_lineterminator_kwd_arg(memory_leak_check):
+    """tests the lineterminator keyword argument to to_csv"""
 
     def impl_none(df):
-        return df.to_csv(None, line_terminator="__LINE_TERMINATION__")
+        return df.to_csv(None, lineterminator="__LINE_TERMINATION__")
 
     def impl(df, f_name):
-        return df.to_csv(f_name, line_terminator="\t")
+        return df.to_csv(f_name, lineterminator="\t")
 
     def read_impl(f_name):
         return pd.read_csv(f_name, lineterminator="\t")
@@ -955,7 +955,11 @@ def test_csv_sep_arg(datapath, memory_leak_check):
             check_dtype=False,
         )
     else:
-        assert pandas_version in ((1, 4), (1, 5)), "Check if this test is still valid"
+        assert pandas_version in (
+            (1, 4),
+            (1, 5),
+            (2, 0),
+        ), "Check if this test is still valid"
         with pytest.raises(
             BodoError, match=r".*Specified \\n as separator or delimiter.*"
         ):
@@ -1410,6 +1414,7 @@ def test_excel1(datapath, memory_leak_check):
         (1, 3),
         (1, 4),
         (1, 5),
+        (2, 0),
     ), "`name` na-filtering issue for 1.4, check if it's fixed in later versions"
     if pandas_version == (1, 3):
         check_func(test_impl3, (fname,), is_out_distributed=False)
@@ -2255,17 +2260,15 @@ def test_csv_unsupported_arg_match(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        # squeeze is provided but not supported. It matches the default
-        # so it should still work.
         return pd.read_csv(
             fname,
-            ",",
-            None,
-            "infer",
-            ["A", "B", "C", "D", "E"],
-            None,
-            None,
-            False,
+            sep=",",
+            delimiter=None,
+            header="infer",
+            names=["A", "B", "C", "D", "E"],
+            index_col=None,
+            usecols=None,
+            engine=None,
         )
 
     check_func(impl, (), check_dtype=False)

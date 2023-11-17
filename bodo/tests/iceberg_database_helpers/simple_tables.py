@@ -59,7 +59,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
                     datetime.strptime("13/11/2018", "%d/%m/%Y"),
                 ]
                 * 10
-            ),
+            ).dt.tz_localize("UTC"),
             "C": np.arange(50, dtype=np.int32),
         },
         [
