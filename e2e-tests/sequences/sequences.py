@@ -1,4 +1,5 @@
 import argparse
+import json
 import math
 import zlib
 
@@ -227,7 +228,7 @@ def sequences(in_file, chosen_type, out_file, maxseqlength):
             res = g(series["A"])
         return res
 
-    print(df6.apply(lambda x: f(x), axis=1).sum())
+    return df6.apply(lambda x: f(x), axis=1).sum()
 
 
 def g(string):
@@ -245,9 +246,26 @@ if __name__ == "__main__":
     parser.add_argument("--chosentype", type=int, help="", default=0)
     parser.add_argument("--maxseqlength", type=int, help="", default=4194304)
     parser.add_argument("--require_cache", action="store_true", default=False)
+    parser.add_argument(
+        "--checksum_loc",
+        type=str,
+        help="output path to put the json file with checksum in",
+        default="checksum_out.json",
+    )
     args = parser.parse_args()
+    checksum_out_path = args.checksum_loc
 
-    sequences(args.input, args.chosentype, args.output, args.maxseqlength)
+    final_checksum = sequences(
+        args.input, args.chosentype, args.output, args.maxseqlength
+    )
+
+    # Only print on rank 0
+    if bodo.get_rank() == 0:
+        print("Final checksum: ", final_checksum)
+        print("Writing checksum to ", checksum_out_path)
+        with open(checksum_out_path, "w") as f:
+            json.dump({"checksum": final_checksum}, f)
+
     if args.require_cache and isinstance(sequences, numba.core.dispatcher.Dispatcher):
         assert (
             sequences._cache_hits[sequences.signatures[0]] == 1

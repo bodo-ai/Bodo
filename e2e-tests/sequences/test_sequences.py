@@ -1,5 +1,8 @@
+import json
 import os
+import random
 import shutil
+import string
 
 from utils.utils import run_cmd
 
@@ -28,6 +31,8 @@ def validate_sequences_output(require_cache=False):
     maxseqlength = "4194304"
     # run on 36 cores
     num_processes = 36
+    random_str = "".join(random.choice(string.ascii_lowercase) for _ in range(5))
+    checksum_loc = f"checksum_out_{random_str}.json"
     cmd = [
         "mpiexec",
         "-n",
@@ -45,11 +50,14 @@ def validate_sequences_output(require_cache=False):
         chosentype,
         "--maxseqlength",
         maxseqlength,
+        "--checksum_loc",
+        f"{checksum_loc}",
     ]
     if require_cache:
         cmd.append("--require_cache")
     # Precomputed checksum to verify that the Bodo output doesn't change.
     expected_checksum = 17458202297301487
-    output = run_cmd(cmd)
-    checksum = int(output.strip())
-    assert checksum == expected_checksum
+    run_cmd(cmd)
+    with open(checksum_loc, "r") as f:
+        out_checksum = json.load(f)["checksum"]
+    assert out_checksum == expected_checksum, "Checksum doesn't match"
