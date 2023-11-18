@@ -16,6 +16,85 @@ from bodosql.tests.utils import check_query
 pytestmark = pytest_slow_unless_codegen
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case", marks=pytest.mark.slow),
+    ]
+)
+def use_case(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            [5, 25, 625],
+            id="integers",
+        ),
+        pytest.param(
+            [2.71828, 1024.5, -3.1415],
+            id="floats",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            [
+                pd.Timestamp(s)
+                for s in [
+                    "1999-12-31 23:59:59.99925",
+                    "2023-10-31 18:30:00",
+                    "2018-4-1",
+                ]
+            ],
+            id="timestamp_ntz",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            [
+                pd.Timestamp(s, tz="US/Eastern")
+                for s in [
+                    "2022-2-28",
+                    "2021-11-12 13:14:15",
+                    "2015-3-14 9:26:53",
+                ]
+            ],
+            id="timestamp_ltz",
+        ),
+        pytest.param(
+            [
+                [0],
+                [0, 1, 2],
+                [1, 2],
+            ],
+            id="list_integer",
+        ),
+        pytest.param(
+            [
+                [["A"]],
+                [[]],
+                [],
+            ],
+            id="list_list_string",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            [
+                {"name": "Zuko", "nation": "Fire"},
+                {"name": "Katara", "nation": "Water"},
+                {"name": "Sokka", "nation": "Water"},
+            ],
+            id="struct",
+        ),
+    ],
+)
+def value_pool(request):
+    """
+    Returns a list of 3 values of a certain type used to construct
+    nested arrays of various patterns using said type.
+    """
+    return request.param
+
+
 def test_to_array_scalars(basic_df, memory_leak_check):
     """Test TO_ARRAY works correctly with scalar inputs"""
     query_fmt = "TO_ARRAY({!s})"
@@ -464,13 +543,6 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "use_case",
-    [
-        pytest.param(False, id="no_case"),
-        pytest.param(True, id="with_case"),
-    ],
-)
-@pytest.mark.parametrize(
     "data_values, use_map",
     [
         pytest.param(
@@ -739,101 +811,12 @@ def test_array_to_string_scalar(basic_df, input, answer, memory_leak_check):
     )
 
 
-@pytest.mark.parametrize(
-    "use_case",
-    [
-        pytest.param(False, id="no_case"),
-        pytest.param(True, id="with_case", marks=pytest.mark.slow),
-    ],
-)
-@pytest.mark.parametrize(
-    "data_values",
-    [
-        pytest.param(
-            [0, 1, -2, 4, -8, 16, 32, -64],
-            id="integers",
-        ),
-        pytest.param(
-            [0.0, 2.3, -5.7, 11.13, -17.19, 3.1415, 2.71828, 1024.5],
-            id="floats",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            [
-                pd.Timestamp(s)
-                for s in [
-                    "2023-7-4",
-                    "1999-12-31 23:59:59.9992576",
-                    "2023-10-31 18:30:00",
-                    "2018-4-1",
-                    "2006-12-25 6:00:00",
-                    "2015-3-14 9:26:53",
-                    "2021-11-12 13:14:15",
-                    "2022-2-28",
-                ]
-            ],
-            id="timestamp_ntz",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            [
-                pd.Timestamp(s, tz="US/Pacific")
-                for s in [
-                    "2022-2-28",
-                    "2021-11-12 13:14:15",
-                    "2015-3-14 9:26:53",
-                    "2006-12-25 6:00:00",
-                    "2018-4-1",
-                    "2023-10-31 18:30:00",
-                    "1999-12-31 23:59:59.9992576",
-                    "2023-7-4",
-                ]
-            ],
-            id="timestamp_ltz",
-        ),
-        pytest.param(
-            [
-                [["A"]],
-                [[]],
-                [],
-                [["A"], ["B"]],
-                [["A", "B"]],
-                [None],
-                [[None]],
-                [[None], ["A"]],
-            ],
-            id="list_list_string",
-        ),
-        pytest.param(
-            [
-                [{"name": "Aang", "nation": "Air"}],
-                [],
-                [None],
-                [
-                    {"name": "Zuko", "nation": "Fire"},
-                    {"name": "Azula", "nation": "Fire"},
-                ],
-                [None, {"name": "Zuko", "nation": "Fire"}],
-                [
-                    {"name": "Katara", "nation": "Water"},
-                    {"name": "Sokka", "nation": "Water"},
-                ],
-                [
-                    {"name": "Sokka", "nation": "Water"},
-                    {"name": "Katara", "nation": "Water"},
-                ],
-                [{"name": "Katara", "nation": "Water"}, None],
-            ],
-            id="list_struct",
-        ),
-    ],
-)
-def test_arrays_overlap(data_values, use_case, memory_leak_check):
+def test_arrays_overlap(value_pool, use_case, memory_leak_check):
     """
     Test ARRAYS_OVERLAP works correctly with different data type columns
     and with/without case statements.
 
-    Takes in a list of 8 distinct values of the desired type and uses them
+    Takes in a list of 3 distinct values of the desired type and uses them
     to construct 2 columns of arrays of these values, then compares them
     using ARRAYS_OVERLAP. Since the values are always placed in the columns
     in the same permutations, the answers should always be the same.
@@ -848,37 +831,28 @@ def test_arrays_overlap(data_values, use_case, memory_leak_check):
     def make_vals(L):
         if L is None:
             return None
-        return [None if idx is None else data_values[idx] for idx in L]
+        return [None if idx is None else value_pool[idx] for idx in L]
 
     pattern_a = (
-        [[0]] * 100
-        + [[0, 1, 2]] * 6
-        + [[0, 3, 6, None]] * 6
+        [[0], [1], [0], [1]] * 25
+        + [[0, 1, 2]] * 3
+        + [[0, 1, None, 0]] * 3
         + [None] * 3
-        + [[7, 5, 3, 1, 3, 5, 7]] * 6
+        + [[0, 2, 0, 2]] * 3
     )
-    pattern_b = [[0]] * 100 + [
-        [0],
-        [],
+    pattern_b = [[0], [0], [1], [1]] * 25 + [
+        [2, None],
         [1],
-        [None],
-        [2],
-        [3, 4, None, 5],
-        [3, 4, None, 5],
-        [None],
-        [3],
-        [6],
-        [2, 4, 5, 7, 4],
-        [6, 7, 6, 5],
-        [None],
         [],
+        [2, None, 2],
+        [2, 2, 2, 2, 2, 2],
+        [None, None, None],
         None,
-        [0, None, 2, None, 4, None, 6],
-        [None] * 12,
-        [7] * 5,
-        [6, 5] * 4,
-        [None, 4, 3],
-        [],
+        [0],
+        [None],
+        [0, 2, 0, 2],
+        [1, 1, 1, 1],
+        [1, None, 1, 2],
     ]
     vals_a = [make_vals(row) for row in pattern_a]
     vals_b = [make_vals(row) for row in pattern_b]
@@ -892,11 +866,11 @@ def test_arrays_overlap(data_values, use_case, memory_leak_check):
         )
     }
     answer = pd.Series(
-        [True] * 100
-        + [True, False, True, False, True, False]
-        + [True, True, True, True, False, True]
+        [True, False, False, True] * 25
+        + [True, True, False]
+        + [True, False, True]
         + [None, None, None]
-        + [False, False, True, True, True, False]
+        + [True, False, True]
     )
     if use_case:
         answer = answer.apply(lambda x: "Y" if x else "N")
@@ -910,75 +884,7 @@ def test_arrays_overlap(data_values, use_case, memory_leak_check):
     )
 
 
-@pytest.mark.parametrize(
-    "use_case",
-    [
-        pytest.param(False, id="no_case"),
-        pytest.param(True, id="with_case", marks=pytest.mark.slow),
-    ],
-)
-@pytest.mark.parametrize(
-    "data_values",
-    [
-        pytest.param(
-            [5, 25, 625],
-            id="integers",
-        ),
-        pytest.param(
-            [2.71828, 1024.5, -3.1415],
-            id="floats",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            [
-                pd.Timestamp(s)
-                for s in [
-                    "1999-12-31 23:59:59.99925",
-                    "2023-10-31 18:30:00",
-                    "2018-4-1",
-                ]
-            ],
-            id="timestamp_ntz",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            [
-                pd.Timestamp(s, tz="US/Eastern")
-                for s in [
-                    "2022-2-28",
-                    "2021-11-12 13:14:15",
-                    "2015-3-14 9:26:53",
-                ]
-            ],
-            id="timestamp_ltz",
-        ),
-        pytest.param(
-            [
-                [0],
-                [0, 1, 2],
-                [1, 2],
-            ],
-            id="list_integer",
-        ),
-        pytest.param(
-            [
-                [["A"]],
-                [[]],
-                [],
-            ],
-            id="list_list_string",
-        ),
-        pytest.param(
-            [
-                {"name": "Zuko", "nation": "Fire"},
-                {"name": "Katara", "nation": "Water"},
-                {"name": "Sokka", "nation": "Water"},
-            ],
-            id="struct",
-        ),
-    ],
-)
-def test_array_contains(data_values, use_case, memory_leak_check):
+def test_array_contains(value_pool, use_case, memory_leak_check):
     """
     Test ARRAY_CONTAINS works correctly with different data type columns
     and with/without case statements.
@@ -995,7 +901,7 @@ def test_array_contains(data_values, use_case, memory_leak_check):
     def make_vals(L):
         if L is None:
             return None
-        return [None if idx is None else data_values[idx] for idx in L]
+        return [None if idx is None else value_pool[idx] for idx in L]
 
     pattern_a = [0] * 40 + [0, 1, 2, None] * 3
     pattern_b = [[0]] * 40 + [[1, None]] * 4 + [[], None, None, []] + [[0, 2]] * 4
@@ -1028,75 +934,7 @@ def test_array_contains(data_values, use_case, memory_leak_check):
     )
 
 
-@pytest.mark.parametrize(
-    "use_case",
-    [
-        pytest.param(False, id="no_case"),
-        pytest.param(True, id="with_case", marks=pytest.mark.slow),
-    ],
-)
-@pytest.mark.parametrize(
-    "data_values",
-    [
-        pytest.param(
-            [5, 25, 625],
-            id="integers",
-        ),
-        pytest.param(
-            [2.71828, 1024.5, -3.1415],
-            id="floats",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            [
-                pd.Timestamp(s)
-                for s in [
-                    "1999-12-31 23:59:59.99925",
-                    "2023-10-31 18:30:00",
-                    "2018-4-1",
-                ]
-            ],
-            id="timestamp_ntz",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            [
-                pd.Timestamp(s, tz="US/Eastern")
-                for s in [
-                    "2022-2-28",
-                    "2021-11-12 13:14:15",
-                    "2015-3-14 9:26:53",
-                ]
-            ],
-            id="timestamp_ltz",
-        ),
-        pytest.param(
-            [
-                [0],
-                [0, 1, 2],
-                [1, 2],
-            ],
-            id="list_integer",
-        ),
-        pytest.param(
-            [
-                [["A"]],
-                [[]],
-                [],
-            ],
-            id="list_list_string",
-        ),
-        pytest.param(
-            [
-                {"name": "Zuko", "nation": "Fire"},
-                {"name": "Katara", "nation": "Water"},
-                {"name": "Sokka", "nation": "Water"},
-            ],
-            id="struct",
-        ),
-    ],
-)
-def test_array_position(data_values, use_case, memory_leak_check):
+def test_array_position(value_pool, use_case, memory_leak_check):
     """
     Test ARRAY_POSITION works correctly with different data type columns
     and with/without case statements.
@@ -1114,7 +952,7 @@ def test_array_position(data_values, use_case, memory_leak_check):
     def make_vals(L):
         if L is None:
             return None
-        return [None if idx is None else data_values[idx] for idx in L]
+        return [None if idx is None else value_pool[idx] for idx in L]
 
     pattern_a = [0] * 40 + [0, 1, 2, None] * 4
     pattern_b = (
@@ -1150,6 +988,243 @@ def test_array_position(data_values, use_case, memory_leak_check):
         check_names=False,
         check_dtype=False,
         expected_output=pd.DataFrame({0: list(range(len(vals_a))), 1: answer}),
+    )
+
+
+def test_array_except(value_pool, use_case, memory_leak_check):
+    """
+    Test ARRAY_EXCEPT works correctly with different data type columns
+    and with/without case statements.
+
+    Takes in a list of 3 distinct values of the desired type and uses them
+    to construct 2 columns of arrays of these values, then modifies them
+    using ARRAY_EXCEPT. Since the values are always placed in the columns
+    in the same permutations, the answers should always be the orderings of
+    the original values.
+
+    For case statements, uses the size of the output since BodoSQL is currently
+    unable to infer the inner array dtype for case statements.
+    """
+    if use_case:
+        query = "SELECT I, CASE WHEN I < 0 THEN -1 ELSE NVL(ARRAY_SIZE(ARRAY_EXCEPT(A, B)), -1) END FROM table1"
+    else:
+        query = "SELECT I, ARRAY_EXCEPT(A, B) FROM table1"
+
+    def make_vals(L):
+        if L is None:
+            return None
+        return [None if idx is None else value_pool[idx] for idx in L]
+
+    pattern_a = [[0, 0, 1, 0]] * 40 + [
+        [0, 1, 2, 0, 1, 2, 0, 1, 2],
+        [0, 1, 2, 0, 1, 2, 0, 1, 2],
+        [0, 1, 2, 0, 1, 2, 0, 1, 2],
+        [0, 1, 2, 0, 1, 2, 0, 1, 2],
+        [0, 1, 2, 0, 1, 2, 0, 1, 2],
+        [0, 0, None, None, 0, 1, None],
+        [0, 0, None, None, 0, 1, None],
+        [0, 0, None, None, 0, 1, None],
+        [0, 0, None, None, 0, 1, None],
+    ]
+    pattern_b = [[0, 1]] * 40 + [
+        [0],
+        None,
+        [0, 1, 2],
+        [],
+        [0, 0, 0, 1, 1, 2],
+        [1, None],
+        [1, None, 1, None, 1],
+        [0, 1, None] * 5,
+        [0, 2] * 5,
+    ]
+    answer_pattern = [[0, 0]] * 40 + [
+        [1, 2, 0, 1, 2, 0, 1, 2],
+        None,
+        [0, 1, 2, 0, 1, 2],
+        [0, 1, 2, 0, 1, 2, 0, 1, 2],
+        [2, 1, 2],
+        [0, 0, None, 0, None],
+        [0, 0, 0, None],
+        [],
+        [None, None, 1, None],
+    ]
+    vals_a = [make_vals(row) for row in pattern_a]
+    vals_b = [make_vals(row) for row in pattern_b]
+    if use_case:
+        answer = [-1 if ans is None else len(ans) for ans in answer_pattern]
+    else:
+        answer = [make_vals(row) for row in answer_pattern]
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "I": list(range(len(vals_a))),
+                "A": vals_a,
+                "B": vals_b,
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=pd.DataFrame({0: list(range(len(vals_a))), 1: answer}),
+        sort_output=False,
+    )
+
+
+def test_array_intersection(value_pool, use_case, memory_leak_check):
+    """
+    Test ARRAY_INTERSECTION works correctly with different data type columns
+    and with/without case statements.
+
+    Takes in a list of 3 distinct values of the desired type and uses them
+    to construct 2 columns of arrays of these values, then modifies them
+    using ARRAY_INTERSECTION. Since the values are always placed in the columns
+    in the same permutations, the answers should always be the orderings of
+    the original values.
+
+    For case statements, uses the size of the output since BodoSQL is currently
+    unable to infer the inner array dtype for case statements.
+    """
+    if use_case:
+        query = "SELECT I, CASE WHEN I < 0 THEN -1 ELSE NVL(ARRAY_SIZE(ARRAY_INTERSECTION(A, B)), -1) END FROM table1"
+    else:
+        query = "SELECT I, ARRAY_INTERSECTION(A, B) FROM table1"
+
+    def make_vals(L):
+        if L is None:
+            return None
+        return [None if idx is None else value_pool[idx] for idx in L]
+
+    pattern_a = [[0, 0, 1, 0, 1]] * 40 + [
+        [0, 1, 2, 0, 1, 2, 0, 1, 2],
+        [0, 1, 2, 0, 1, 2, 0, 1, 2],
+        [0, 1, 2, 0, 1, 2, 0, 1, 2],
+        [0, 0, None, None, 0, 1, None],
+        [0, 0, None, None, 0, 1, None],
+        [0, 0, None, None, 0, 1, None],
+    ]
+    pattern_b = [[0, 1, 1, 1]] * 40 + [
+        [],
+        None,
+        [0, 1, 1, 2, 2, 2, None, None, None, None],
+        [],
+        None,
+        [0, 1, 1, 2, 2, 2, None, None, None, None, None],
+    ]
+    answer_pattern = [[0, 1, 1]] * 40 + [
+        [],
+        None,
+        [0, 1, 2, 1, 2, 2],
+        [],
+        None,
+        [0, None, None, 1, None],
+    ]
+    vals_a = [make_vals(row) for row in pattern_a]
+    vals_b = [make_vals(row) for row in pattern_b]
+    if use_case:
+        answer = [-1 if ans is None else len(ans) for ans in answer_pattern]
+    else:
+        answer = [make_vals(row) for row in answer_pattern]
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "I": list(range(len(vals_a))),
+                "A": vals_a,
+                "B": vals_b,
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=pd.DataFrame({0: list(range(len(vals_a))), 1: answer}),
+        sort_output=False,
+    )
+
+
+def test_array_cat(value_pool, use_case, memory_leak_check):
+    """
+    Test ARRAY_CAT works correctly with different data type columns
+    and with/without case statements.
+
+    Takes in a list of 3 distinct values of the desired type and uses them
+    to construct 2 columns of arrays of these values, then modifies them
+    using ARRAY_CAT. Since the values are always placed in the columns
+    in the same permutations, the answers should always be the orderings of
+    the original values.
+
+    For case statements, uses the size of the output since BodoSQL is currently
+    unable to infer the inner array dtype for case statements.
+    """
+    if use_case:
+        query = "SELECT I, CASE WHEN I < 0 THEN -1 ELSE NVL(ARRAY_SIZE(ARRAY_CAT(A, B)), -1) END FROM table1"
+    else:
+        query = "SELECT I, ARRAY_CAT(A, B) FROM table1"
+
+    def make_vals(L):
+        if L is None:
+            return None
+        return [None if idx is None else value_pool[idx] for idx in L]
+
+    pattern_a = [[0, None, 1]] * 40 + [
+        [0, 0, 1, 0, 0, 1, 2, 1, 0],
+        [0, 0, 1, 0, 0, 1, 2, 1, 0],
+        [0, 0, 1, 0, 0, 1, 2, 1, 0],
+        [0, 0, 1, 0, 0, 1, 2, 1, 0],
+        [],
+        [],
+        None,
+        [None],
+    ]
+    pattern_b = [[2]] * 40 + [
+        [],
+        None,
+        [None],
+        [0, 0, 1, None, 0],
+        [],
+        [0, 1],
+        [0, 1],
+        [0, 1],
+    ]
+    answer_pattern = [[0, None, 1, 2]] * 40 + [
+        [0, 0, 1, 0, 0, 1, 2, 1, 0],
+        None,
+        [0, 0, 1, 0, 0, 1, 2, 1, 0, None],
+        [0, 0, 1, 0, 0, 1, 2, 1, 0, 0, 0, 1, None, 0],
+        [],
+        [0, 1],
+        None,
+        [None, 0, 1],
+    ]
+    vals_a = [make_vals(row) for row in pattern_a]
+    vals_b = [make_vals(row) for row in pattern_b]
+    if use_case:
+        answer = [-1 if ans is None else len(ans) for ans in answer_pattern]
+    else:
+        answer = [make_vals(row) for row in answer_pattern]
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "I": list(range(len(vals_a))),
+                "A": vals_a,
+                "B": vals_b,
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=pd.DataFrame({0: list(range(len(vals_a))), 1: answer}),
+        sort_output=False,
     )
 
 

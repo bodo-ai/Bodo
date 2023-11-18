@@ -3006,6 +3006,37 @@ Bodo currently supports the following functions that operate on columns of array
     to be easily reconciled into a common type. 
 
 
+#### ARRAY_EXCEPT
+-   `#!sql ARRAY_EXCEPT(A, B)`
+
+    Takes in two arrays and returns a copy of the first array but with all
+    of the elements from the second array dropped. If an element appears in
+    the first array more than once, that element is only dropped as many
+    times as it appears in the second array. For instance, if the
+    first array contains three 1s and four 6s, and the second array
+    contains two 1s and one 6, then the output will have one 1 and
+    three 6s.
+
+
+#### ARRAY_INTERSECTION
+-   `#!sql ARRAY_INTERSECTION(A, B)`
+
+    Takes in two arrays and returns an arary of all the elements from the 
+    first array that also appear in the second. If an element appears in
+    either array more than once, that element is kept the minimum of the
+    number of times it appears in either array. For instance, if the
+    first array contains three 1s and four 6s, and the second array
+    contains two 1s and five 6s, then the output will have two 1s and
+    three 6s.
+
+
+#### ARRAY_CAT
+-   `#!sql ARRAY_CAT(A, B)`
+
+    Takes in two arrays and returns an arary of all the elements from the 
+    first array followed by all of the elements in the second array.
+
+
 #### ARRAYS_OVERLAP
 -   `#!sql ARRAYS_OVERLAP(arr0, arr1)`
 
