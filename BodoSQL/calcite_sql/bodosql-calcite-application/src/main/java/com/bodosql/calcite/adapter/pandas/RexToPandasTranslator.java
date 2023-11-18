@@ -1323,6 +1323,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "ARRAYS_OVERLAP":
       case "ARRAY_CONTAINS":
       case "ARRAY_POSITION":
+      case "ARRAY_EXCEPT":
+      case "ARRAY_INTERSECTION":
+      case "ARRAY_CAT":
         Expr isScalar0 = new Expr.BooleanLiteral(argScalars.get(0));
         Expr isScalar1 = new Expr.BooleanLiteral(argScalars.get(0));
         ArrayList<Pair<String, Expr>> kwargs = new ArrayList();
@@ -1934,6 +1937,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return getCondFuncCode(fnName, operands);
           case "ARRAY_CONTAINS":
           case "ARRAY_POSITION":
+          case "ARRAY_EXCEPT":
+          case "ARRAY_INTERSECTION":
+          case "ARRAY_CAT":
           case "ARRAYS_OVERLAP":
           case "ARRAY_SIZE":
             return visitNestedArrayFunc(fnName, operands, argScalars);

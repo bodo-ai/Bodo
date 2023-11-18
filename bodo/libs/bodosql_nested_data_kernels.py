@@ -11,8 +11,10 @@ import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     get_overload_const_bool,
+    is_bin_arr_type,
     is_overload_constant_bool,
     is_overload_none,
+    is_str_arr_type,
     raise_bodo_error,
     unwrap_typeref,
 )
@@ -82,6 +84,303 @@ def object_keys_util(arr):
         propagate_null,
         scalar_text,
         out_dtype,
+    )
+
+
+def array_except(
+    arr, to_remove, is_scalar_0=False, is_scalar_1=False
+):  # pragma: no cover
+    pass
+
+
+@overload(array_except, no_unliteral=True)
+def overload_array_except(arr, to_remove, is_scalar_0=False, is_scalar_1=False):
+    """
+    Handles cases where ARRAY_EXCEPT receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    args = [arr, to_remove]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.array_except",
+                ["arr", "to_remove", "is_scalar_0", "is_scalar_1"],
+                i,
+                default_map={"is_scalar_0": False, "is_scalar_1": False},
+            )
+
+    def impl(arr, to_remove, is_scalar_0=False, is_scalar_1=False):  # pragma: no cover
+        return array_except_util(arr, to_remove, is_scalar_0, is_scalar_1)
+
+    return impl
+
+
+def array_except_util(arr, to_remove, is_scalar_0, is_scalar_1):  # pragma: no cover
+    pass
+
+
+@overload(array_except_util, no_unliteral=True)
+def overload_array_except_util(arr, to_remove, is_scalar_0, is_scalar_1):
+    """
+    A dedicated kernel for the SQL function ARRAY_EXCEPT which takes in
+    two arrays (or columns of arrays) and returns the elements of the first
+    that do not appear in the second.
+
+    Args:
+        arr (array scalar/array item array): the starting values
+        to_remove (array scalar/array item array): the array whose
+        elements are dropped from arr
+
+    Returns:
+        array: arr with the elements of to_remove dropped
+    """
+    arg_names = ["arr", "to_remove", "is_scalar_0", "is_scalar_1"]
+    arg_types = [arr, to_remove, is_scalar_0, is_scalar_1]
+    propagate_null = [True] * 2 + [False] * 2
+    are_arrays = [
+        not get_overload_const_bool(is_scalar_0),
+        not get_overload_const_bool(is_scalar_1),
+        False,
+        False,
+    ]
+    if are_arrays[0]:
+        out_dtype = arr
+    else:
+        out_dtype = to_remove
+
+    # A boolean array to keep track of which indices from the original
+    # array should be copied over, and use it it index into the original
+    # at the end in order to produce the final answer.
+    scalar_text = "elems_to_keep = np.ones(len(arg0), dtype=np.bool_)\n"
+
+    # A boolean array to keep track of which indices in the second array have
+    # found a match in the first array, that way no single index in the second
+    # array gets counted more than once.
+    scalar_text += "already_matched = np.zeros(len(arg1), dtype=np.bool_)\n"
+
+    # Loop over each element in the original array and update it's index in
+    # elems_to_keep to False if any element in the second array matches it,
+    # skipping any indices that already had a match.
+    scalar_text += "for idx0 in range(len(arg0)):\n"
+    scalar_text += "   null0 = bodo.libs.array_kernels.isna(arg0, idx0)\n"
+    scalar_text += "   for idx1 in range(len(arg1)):\n"
+    scalar_text += "      if already_matched[idx1]: continue\n"
+    scalar_text += "      null1 = bodo.libs.array_kernels.isna(arg1, idx1)\n"
+    scalar_text += "      if (null0 and null1) or ((not null0) and (not null1) and bodo.libs.bodosql_array_kernels.semi_safe_equals(arg0[idx0], arg1[idx1])):\n"
+    scalar_text += "         already_matched[idx1] = True\n"
+    scalar_text += "         elems_to_keep[idx0] = False\n"
+    scalar_text += "         break\n"
+    scalar_text += "res[i] = arg0[elems_to_keep]"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=are_arrays,
+    )
+
+
+def array_intersection(
+    arr_0, arr_1, is_scalar_0=False, is_scalar_1=False
+):  # pragma: no cover
+    pass
+
+
+@overload(array_intersection, no_unliteral=True)
+def overload_array_intersection(arr_0, arr_1, is_scalar_0=False, is_scalar_1=False):
+    """
+    Handles cases where ARRAY_INTERSECTION receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    args = [arr_0, arr_1]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.array_intersection",
+                ["arr_0", "arr_1", "is_scalar_0", "is_scalar_1"],
+                i,
+                default_map={"is_scalar_0": False, "is_scalar_1": False},
+            )
+
+    def impl(arr_0, arr_1, is_scalar_0=False, is_scalar_1=False):  # pragma: no cover
+        return array_intersection_util(arr_0, arr_1, is_scalar_0, is_scalar_1)
+
+    return impl
+
+
+def array_intersection_util(arr_0, arr_1, is_scalar_0, is_scalar_1):  # pragma: no cover
+    pass
+
+
+@overload(array_intersection_util, no_unliteral=True)
+def overload_array_intersection_util(arr_0, arr_1, is_scalar_0, is_scalar_1):
+    """
+    A dedicated kernel for the SQL function ARRAY_INTERSECTION which takes in
+    two arrays (or columns of arrays) and returns the intersection of the two
+    arrays.
+
+    Args:
+        arr_0 (array scalar/array item array): the first array
+        arr_1 (array scalar/array item array): the second array
+        is_scalar_0 (boolean): whether arr_0 is a scalar array
+        is_scalar_1 (boolean): whether arr_1 is a scalar array
+
+    Returns:
+        array: the elements that appear in both arr_0 and arr_1. If an element
+        appears more than once in either arr_0 or arr_1, it is kept the smaller
+        number of times that it appears.
+    """
+    arg_names = ["arr_0", "arr_1", "is_scalar_0", "is_scalar_1"]
+    arg_types = [arr_0, arr_1, is_scalar_0, is_scalar_1]
+    propagate_null = [True] * 2 + [False] * 2
+    are_arrays = [
+        not get_overload_const_bool(is_scalar_0),
+        not get_overload_const_bool(is_scalar_1),
+        False,
+        False,
+    ]
+    if are_arrays[0]:
+        out_dtype = arr_0
+    else:
+        out_dtype = arr_1
+
+    # A boolean array to keep track of which indices from the original
+    # array should be copied over, and use it it index into the original
+    # at the end in order to produce the final answer.
+    scalar_text = "elems_to_keep = np.zeros(len(arg0), dtype=np.bool_)\n"
+
+    # A boolean array to keep track of which indices in the second array have
+    # found a match in the first array, that way no single index in the second
+    # array gets counted more than once.
+    scalar_text += "already_matched = np.zeros(len(arg1), dtype=np.bool_)\n"
+
+    # Loop over each element in the original array and update it's index in
+    # elems_to_keep to True if any element in the second array matches it,
+    # skipping any indices that already had a match.
+    scalar_text += "for idx0 in range(len(arg0)):\n"
+    scalar_text += "   has_match = False\n"
+    scalar_text += "   null0 = bodo.libs.array_kernels.isna(arg0, idx0)\n"
+    scalar_text += "   for idx1 in range(len(arg1)):\n"
+    scalar_text += "      if already_matched[idx1]: continue\n"
+    scalar_text += "      null1 = bodo.libs.array_kernels.isna(arg1, idx1)\n"
+    scalar_text += "      if (null0 and null1) or ((not null0) and (not null1) and bodo.libs.bodosql_array_kernels.semi_safe_equals(arg0[idx0], arg1[idx1])):\n"
+    scalar_text += "         elems_to_keep[idx0] = True\n"
+    scalar_text += "         already_matched[idx1] = True\n"
+    scalar_text += "         break\n"
+    scalar_text += "res[i] = arg0[elems_to_keep]"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=are_arrays,
+    )
+
+
+def array_cat(arr_0, arr_1, is_scalar_0=False, is_scalar_1=False):  # pragma: no cover
+    pass
+
+
+@overload(array_cat, no_unliteral=True)
+def overload_array_cat(arr_0, arr_1, is_scalar_0=False, is_scalar_1=False):
+    """
+    Handles cases where ARRAY_CAT receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    args = [arr_0, arr_1]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.array_cat",
+                ["arr_0", "arr_1", "is_scalar_0", "is_scalar_1"],
+                i,
+                default_map={"is_scalar_0": False, "is_scalar_1": False},
+            )
+
+    def impl(arr_0, arr_1, is_scalar_0=False, is_scalar_1=False):  # pragma: no cover
+        return array_cat_util(arr_0, arr_1, is_scalar_0, is_scalar_1)
+
+    return impl
+
+
+def array_cat_util(arr_0, arr_1, is_scalar_0, is_scalar_1):  # pragma: no cover
+    pass
+
+
+@overload(array_cat_util, no_unliteral=True)
+def overload_array_cat_util(arr_0, arr_1, is_scalar_0, is_scalar_1):
+    """
+    A dedicated kernel for the SQL function ARRAY_CAT which takes in
+    two arrays (or columns of arrays) and returns an array containing the
+    elements of the first array followed by the elements of the second array.
+
+    Args:
+        arr_0 (array scalar/array item array): the first array
+        arr_1 (array scalar/array item array): the second array
+        is_scalar_0 (boolean): whether arr_0 is a scalar array
+        is_scalar_1 (boolean): whether arr_1 is a scalar array
+
+    Returns:
+        array: an array containing the elements of the first array
+        followed by the elements of the second array.
+    """
+    arg_names = ["arr_0", "arr_1", "is_scalar_0", "is_scalar_1"]
+    arg_types = [arr_0, arr_1, is_scalar_0, is_scalar_1]
+    propagate_null = [True] * 2 + [False] * 2
+    is_scalar_0 = get_overload_const_bool(is_scalar_0)
+    is_scalar_1 = get_overload_const_bool(is_scalar_1)
+    are_arrays = [
+        not is_scalar_0,
+        not is_scalar_1,
+        False,
+        False,
+    ]
+    if are_arrays[0]:
+        out_dtype = arr_0
+    else:
+        out_dtype = arr_1
+
+    # Infer what type of array needs to be allocated for each row
+    inner_dtype = out_dtype if is_scalar_0 and is_scalar_1 else out_dtype.dtype
+    extra_globals = {"inner_dtype": inner_dtype}
+    scalar_text = "length_0 = len(arg0)\n"
+    scalar_text += "length_1 = len(arg1)\n"
+    if is_str_arr_type(inner_dtype):
+        scalar_text += "inner_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(length_0 + length_1, -1)\n"
+    elif is_bin_arr_type(inner_dtype):
+        scalar_text += "inner_arr = bodo.libs.binary_arr_ext.pre_alloc_binary_array(length_0 + length_1, -1)\n"
+    else:
+        scalar_text += "inner_arr = bodo.utils.utils.alloc_type(length_0 + length_1, inner_dtype, (-1,))\n"
+
+    # Loop over each index in the first array and copy it (or a null) into the
+    # same index of the result array
+    scalar_text += "for idx0 in range(length_0):\n"
+    scalar_text += "   if bodo.libs.array_kernels.isna(arg0, idx0):\n"
+    scalar_text += "      bodo.libs.array_kernels.setna(inner_arr, idx0)\n"
+    scalar_text += "   else:\n"
+    scalar_text += "      inner_arr[idx0] = arg0[idx0]\n"
+
+    # Loop over each index in the second array and copy it (or a null) into the
+    # same index of the result array plus an offset to account for all of the
+    # elements from the first array.
+    scalar_text += "for idx1 in range(length_1):\n"
+    scalar_text += "   if bodo.libs.array_kernels.isna(arg1, idx1):\n"
+    scalar_text += "      bodo.libs.array_kernels.setna(inner_arr, length_0 + idx1)\n"
+    scalar_text += "   else:\n"
+    scalar_text += "      inner_arr[length_0 + idx1] = arg1[idx1]\n"
+    scalar_text += "res[i] = inner_arr"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=are_arrays,
+        extra_globals=extra_globals,
     )
 
 
