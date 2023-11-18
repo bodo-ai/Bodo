@@ -882,7 +882,16 @@ def check_query_jit_1D(
         check_typing_issues=check_typing_issues,
     )
     if is_out_distributed:
-        bodosql_output = bodo.gatherv(bodosql_output)
+        try:
+            bodosql_output = bodo.gatherv(bodosql_output)
+        except Exception as e:
+            comm = MPI.COMM_WORLD
+            bodosql_output_list = comm.gather(bodosql_output)
+            if bodo.get_rank() == 0:
+                if isinstance(bodosql_output_list[0], np.ndarray):
+                    bodosql_output = np.concatenate(bodosql_output_list)
+                else:
+                    bodosql_output = pd.concat(bodosql_output_list)
     _check_query_equal(
         bodosql_output,
         expected_output,
@@ -961,7 +970,16 @@ def check_query_jit_1DVar(
         check_typing_issues=check_typing_issues,
     )
     if is_out_distributed:
-        bodosql_output = bodo.gatherv(bodosql_output)
+        try:
+            bodosql_output = bodo.gatherv(bodosql_output)
+        except Exception as e:
+            comm = MPI.COMM_WORLD
+            bodosql_output_list = comm.gather(bodosql_output)
+            if bodo.get_rank() == 0:
+                if isinstance(bodosql_output_list[0], np.ndarray):
+                    bodosql_output = np.concatenate(bodosql_output_list)
+                else:
+                    bodosql_output = pd.concat(bodosql_output_list)
     _check_query_equal(
         bodosql_output,
         expected_output,

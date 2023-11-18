@@ -176,10 +176,63 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction ARRAY_EXCEPT =
+      new SqlFunction(
+          "ARRAY_EXCEPT",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.ARG0_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // The input can be any data type.
+          OperandTypes.sequence(
+              "ARRAY_EXCEPT(ARRAY, ARRAY)", OperandTypes.ARRAY, OperandTypes.ARRAY),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlFunction ARRAY_INTERSECTION =
+      new SqlFunction(
+          "ARRAY_INTERSECTION",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.ARG0_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // The input can be any data type.
+          OperandTypes.sequence(
+              "ARRAY_INTERSECTION(ARRAY, ARRAY)", OperandTypes.ARRAY, OperandTypes.ARRAY),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlFunction ARRAY_CAT =
+      new SqlFunction(
+          "ARRAY_CAT",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.ARG0_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // The input can be any data type.
+          OperandTypes.sequence("ARRAY_CAT(ARRAY, ARRAY)", OperandTypes.ARRAY, OperandTypes.ARRAY),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           TO_ARRAY,
           ARRAY_CONSTRUCT,
+          ARRAY_EXCEPT,
+          ARRAY_INTERSECTION,
+          ARRAY_CAT,
           ARRAY_TO_STRING,
           ARRAY_AGG,
           ARRAY_UNIQUE_AGG,
