@@ -54,6 +54,7 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.util.SqlString;
 import org.apache.calcite.util.Pair;
+import org.jetbrains.annotations.NotNull;
 import org.json.simple.JSONObject;
 
 public class SnowflakeCatalogImpl implements BodoSQLCatalog {
@@ -1336,15 +1337,27 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   }
 
   /**
-   * Execute the given query inside Snowflake and return the result set.
+   * Execute the given query inside Snowflake and return the result set with the given timeout.
+   *
+   * @param query The query to execute exactly.
+   * @param timeout The timeout for the query in seconds.
+   * @return The ResultSet returned by executing the query.
+   */
+  private ResultSet executeSnowflakeQuery(String query, int timeout) throws SQLException {
+    conn = getConnection();
+    Statement stmt = conn.createStatement();
+    stmt.setQueryTimeout(timeout);
+    return stmt.executeQuery(query);
+  }
+
+  /**
+   * Execute the given query inside Snowflake and return the result set with no timeout.
    *
    * @param query The query to execute exactly.
    * @return The ResultSet returned by executing the query.
    */
   private ResultSet executeSnowflakeQuery(String query) throws SQLException {
-    conn = getConnection();
-    Statement stmt = conn.createStatement();
-    return stmt.executeQuery(query);
+    return executeSnowflakeQuery(query, 0);
   }
 
   /**
@@ -1391,6 +1404,43 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     } catch (SQLException e) {
       // If we cannot get view information just return NULL.
       return null;
+    }
+  }
+
+  /**
+   * Determine if we have read access to a table by trying to submit a read query to a table with
+   * limit 0. This is necessary because you need admin permissions to directly check permissions and
+   * nested permissions make lookups very difficult.
+   *
+   * @param names A list of two names starting with SCHEMA_NAME and ending with TABLE_NAME.
+   * @return Do we have read support.
+   */
+  public @Nullable boolean canReadTable(List<String> names) {
+    return canReadTableFn.apply(names);
+  }
+
+  private final Function<List<String>, Boolean> canReadTableFn =
+      Memoizer.memoize(this::canReadTableImpl);
+
+  /**
+   * The actual implementation for canReadTable including calls to Snowflake. We add an extra layer
+   * of indirection to ensure this function is cached.
+   */
+  private @NotNull boolean canReadTableImpl(List<String> names) {
+    String dotTableName =
+        String.format(Locale.ROOT, "%s.%s.%s", catalogName, names.get(0), names.get(1));
+    try {
+      final String query = String.format(Locale.ROOT, "Select * from %s limit 0", dotTableName);
+      executeSnowflakeQuery(query, 5);
+      return true;
+    } catch (SQLException e) {
+      // If the query errors just return and log.
+      String errorMsg =
+          String.format(
+              "Unable to read table '%s' from Snowflake. Error message: %s",
+              dotTableName, e.getMessage());
+      VERBOSE_LEVEL_TWO_LOGGER.info(errorMsg);
+      return false;
     }
   }
 }
