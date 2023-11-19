@@ -9,6 +9,7 @@ import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.application.utils.Memoizer;
+import com.bodosql.calcite.application.utils.checkTablePermissions;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
 import com.bodosql.calcite.ir.Expr;
@@ -102,6 +103,18 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
   public boolean isWriteable() {
     // TODO: Update with the ability to check permissions from the schema/catalog
     return true;
+  }
+
+  /**
+   * Check within the catalog if we have read access.
+   *
+   * @return Do we have read access?
+   */
+  public boolean canRead() {
+    String tableName = getName();
+    String schemaName = getSchema().getName();
+    SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
+    return catalog.canReadTable(List.of(schemaName, tableName));
   }
 
   /**
@@ -294,7 +307,11 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
               input.getViewDefinition(),
               input.getDefaultPath(),
               input.getViewPath());
-      return PandasUtilKt.logicalProject(root);
+      RelNode rel = PandasUtilKt.logicalProject(root);
+      // Verify that we can read before inlining.
+      if (checkTablePermissions.canRead(rel)) {
+        return rel;
+      }
     } catch (Exception e) {
       // Log the failure
       String message =
@@ -307,8 +324,8 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
               input.getViewDefinition(),
               e.getMessage());
       VERBOSE_LEVEL_ONE_LOGGER.warning(message);
-      return null;
     }
+    return null;
   }
 
   /**
