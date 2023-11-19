@@ -183,6 +183,16 @@ public abstract class BodoSqlTable implements ExtensibleTable {
   public abstract boolean isWriteable();
 
   /**
+   * Do we have read access for this table. This should be overridden by tables with a catalog
+   * source.
+   *
+   * @return Do we have read access?
+   */
+  public boolean canRead() {
+    return true;
+  }
+
+  /**
    * Generate the code needed to write the given variable to storage.
    *
    * @param varName Name of the variable to write.

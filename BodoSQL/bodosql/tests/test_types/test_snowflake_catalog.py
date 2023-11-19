@@ -2820,3 +2820,64 @@ def test_separate_schema_inline_view(test_db_snowflake_catalog, memory_leak_chec
     finally:
         # Reset the inlining flag
         bodo.bodosql_try_inline_views = old_inline
+
+
+def test_missing_select_permission_no_inline(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Add a check that we don't inline a view if we lose read permissions
+    once we inline the view.
+
+    To recreate, perform the following steps in Snowflake:
+
+    -- switch to security admin
+    -- Create a table which won't have read permissions for sysadmin
+    create table CANNOT_READ_TABLE as select 'literal' as literal
+    from TABLE(GENERATOR(ROWCOUNT => 10));
+    -- Create a view that just aliases this view. We will grant permissions to sysadmin
+    create view CAN_READ_VIEW as select * from CANNOT_READ_TABLE
+    -- Grant reference to CANNOT_READ_TABLE
+    grant REFERENCES on CANNOT_READ_TABLE to Sysadmin
+    -- Grant reference and select to CAN_READ_VIEW
+    grant REFERENCES, SELECT on CAN_READ_VIEW to Sysadmin
+    -- Verify you can read
+    select * from CAN_READ_VIEW
+    -- Verify you cannot read
+    select * from CANNOT_READ_TABLE
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select * from CAN_READ_VIEW"
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string(
+            test_db_snowflake_catalog.database,
+            test_db_snowflake_catalog.connection_params["schema"],
+        ),
+    )
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    try:
+        # Ensure we always inline views
+        old_inline = bodo.bodosql_try_inline_views
+        bodo.bodosql_try_inline_views = True
+        with set_logging_stream(logger, 2):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=py_output,
+                check_dtype=False,
+                sort_output=True,
+                reset_index=True,
+            )
+            # Verify that CANNOT_READ_TABLE is not found in the logger message
+            # so the view was not inlined and CAN_READ_VIEW is found.
+            check_logger_msg(stream, "CAN_READ_VIEW")
+            check_logger_no_msg(stream, "CANNOT_READ_TABLE")
+    finally:
+        # Reset the inlining flag
+        bodo.bodosql_try_inline_views = old_inline
