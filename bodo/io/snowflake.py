@@ -1628,14 +1628,17 @@ def get_dataset(
             cur = conn.cursor()
             ev_query = tracing.Event("execute_length_query", is_parallel=False)
             ev_query.add_attribute("query", query)
+            t0 = time.time()
             cur.execute(query)
+            sf_exec_time = time.time() - t0
             if bodo.user_logging.get_verbose_level() >= 2:
                 bodo.user_logging.log_message(
                     "Snowflake Query Submission",
                     "/* execute_length_query */ Snowflake Query ID: "
                     + cur.sfqid
                     + "\nSQL Text:\n"
-                    + query,
+                    + query
+                    + f"\nApproximate Execution Time: {sf_exec_time:.3f}s",
                 )
             # We are just loading a single row of data so we can just load
             # all of the data.
@@ -1654,14 +1657,17 @@ def get_dataset(
             ev_query = tracing.Event("execute_query", is_parallel=False)
             ev_query.add_attribute("query", query)
             cur = conn.cursor()
+            t0 = time.time()
             cur.execute(query)
+            sf_exec_time = time.time() - t0
             if bodo.user_logging.get_verbose_level() >= 2:
                 bodo.user_logging.log_message(
                     "Snowflake Query Submission",
                     "/* execute_query */ Snowflake Query ID: "
                     + cur.sfqid
                     + "\nSQL Text:\n"
-                    + query,
+                    + query
+                    + f"\nApproximate Execution Time: {sf_exec_time:.3f}s",
                 )
             ev_query.finalize()
 
@@ -2017,14 +2023,17 @@ def execute_copy_into(
     )
 
     if synchronous:
+        t0 = time.time()
         copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()  # type: ignore
+        sf_exec_time = time.time() - t0
         if bodo.user_logging.get_verbose_level() >= 2:
             bodo.user_logging.log_message(
                 "Snowflake Query Submission",
                 "/* io.snowflake.execute_copy_into() */ Snowflake Query ID: "
                 + cursor.sfqid
                 + "\nSQL Text:\n"
-                + copy_into_sql,
+                + copy_into_sql
+                + f"\nApproximate Execution Time: {sf_exec_time:.3f}s",
             )
         nsuccess, nchunks, nrows, copy_results = decode_copy_into(copy_results)
 
