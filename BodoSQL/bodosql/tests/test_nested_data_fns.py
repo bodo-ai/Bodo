@@ -1182,7 +1182,7 @@ def test_array_cat(value_pool, use_case, memory_leak_check):
         None,
         [None],
     ]
-    pattern_b = [[2]] * 40 + [
+    pattern_b = [[0, 2]] * 40 + [
         [],
         None,
         [None],
@@ -1192,7 +1192,7 @@ def test_array_cat(value_pool, use_case, memory_leak_check):
         [0, 1],
         [0, 1],
     ]
-    answer_pattern = [[0, None, 1, 2]] * 40 + [
+    answer_pattern = [[0, None, 1, 0, 2]] * 40 + [
         [0, 0, 1, 0, 0, 1, 2, 1, 0],
         None,
         [0, 0, 1, 0, 0, 1, 2, 1, 0, None],
