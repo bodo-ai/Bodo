@@ -117,6 +117,10 @@ struct BufferPoolOptions {
     /// @brief Total available memory (in MiB) for the buffer pool.
     uint64_t memory_size = 200;
 
+    /// @brief Real system memory (in MiB) available to this rank.
+    /// -1 indicates that this value is not known.
+    int64_t sys_mem_mib = -1;
+
     /// @brief Size of the smallest size class (in KiB)
     /// Must be a power of 2.
     uint64_t min_size_class = 64;
@@ -811,6 +815,14 @@ class BufferPool final : public IBufferPool {
      * @return uint64_t
      */
     uint64_t get_memory_size_bytes() const;
+
+    /**
+     * @brief Getter for options_.sys_mem_mib (converted from MiB to bytes).
+     * Returns -1 if not known.
+     *
+     * @return int64_t
+     */
+    int64_t get_sys_memory_bytes() const;
 
     /**
      * @brief Getter for bytes_freed_through_malloc_since_last_trim_.

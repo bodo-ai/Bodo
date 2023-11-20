@@ -2,12 +2,35 @@
 
 #include "_table_builder.h"
 
-// Shuffle when streaming shuffle buffers are larger than 50MB
+#define DEFAULT_SHUFFLE_THRESHOLD 50 * 1024 * 1024  // 50MiB
+#define MIN_SHUFFLE_THRESHOLD 50 * 1024 * 1024      // 50MiB
+#define MAX_SHUFFLE_THRESHOLD 200 * 1024 * 1024     // 200MiB
+#define DEFAULT_SHUFFLE_THRESHOLD_PER_MiB 12800     // 12.5KiB
+
+static int64_t get_shuffle_threshold() {
+    // Get shuffle threshold from an env var if provided.
+    if (char* threshold_env_ = std::getenv("BODO_SHUFFLE_THRESHOLD")) {
+        return std::stoi(threshold_env_);
+    }
+    // Get system memory size (rank)
+    int64_t sys_mem_bytes = bodo::BufferPool::Default()->get_sys_memory_bytes();
+    if (sys_mem_bytes == -1) {
+        // Use default threshold if system memory size is not known.
+        return DEFAULT_SHUFFLE_THRESHOLD;
+    } else {
+        int64_t sys_mem_mib = std::ceil(sys_mem_bytes / (1024.0 * 1024.0));
+        // min(max(MIN_THRESHOLD, THRESHOLD_PER_MiB * System_Memory),
+        //     MAX_THRESHOLD)
+        return std::min(
+            std::max(static_cast<int64_t>(MIN_SHUFFLE_THRESHOLD),
+                     sys_mem_mib * DEFAULT_SHUFFLE_THRESHOLD_PER_MiB),
+            static_cast<int64_t>(MAX_SHUFFLE_THRESHOLD));
+    }
+}
+
+// Shuffle when streaming shuffle buffers are larger than threshold.
 // TODO(ehsan): tune this parameter
-static char* __env_threshold_str = std::getenv("BODO_SHUFFLE_THRESHOLD");
-const int SHUFFLE_THRESHOLD = __env_threshold_str != nullptr
-                                  ? std::stoi(__env_threshold_str)
-                                  : 50 * 1024 * 1024;
+static const int64_t SHUFFLE_THRESHOLD = get_shuffle_threshold();
 
 // Factor in determining whether shuffle buffer is large enough to need cleared
 const float SHUFFLE_BUFFER_CUTOFF_MULTIPLIER = 3.0;
@@ -30,9 +53,9 @@ const int STREAMING_BATCH_SIZE = __env_streaming_batch_size_str != nullptr
 #define DEFAULT_SYNC_ITERS 1000
 #endif
 
-#ifndef SYNC_UPDATE_FREQ
-// Update sync freq every 10 syncs
-#define SYNC_UPDATE_FREQ 10
+#ifndef DEFAULT_SYNC_UPDATE_FREQ
+// Update sync freq every 10 syncs by default.
+#define DEFAULT_SYNC_UPDATE_FREQ 10
 #endif
 
 /**
@@ -70,8 +93,8 @@ class IncrementalShuffleState {
         const std::vector<int8_t>& arr_c_types_,
         const std::vector<int8_t>& arr_array_types_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
-        const uint64_t n_keys_, const uint64_t& curr_iter_,
-        int64_t& sync_freq_);
+        const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
+        int64_t parent_op_id_);
 
     /**
      * @brief Calculate initial synchronization frequency if syncing
@@ -129,7 +152,7 @@ class IncrementalShuffleState {
    protected:
     /**
      * @brief Helper function for ShuffleIfRequired. In this base class,
-     * this simply be the shuffle-table and its hashes.
+     * this simply returns the shuffle-table and its hashes.
      * Child classes can modify this. e.g. Groupby may do a drop-duplicates on
      * the shuffle buffer in the nunique-only case.
      *
@@ -153,6 +176,24 @@ class IncrementalShuffleState {
      */
     virtual void ResetAfterShuffle();
 
+    /**
+     * @brief API to report the input and shuffle batch size at every iteration.
+     * This is meant to be called either during AppendBatch or in
+     * `GroupbyState::UpdateShuffleGroupsAndCombine`.
+     *
+     * @param batch_size Size of the input batch
+     * @param shuffle_batch_size Size of the shuffle batch (out of the input
+     * batch)
+     */
+    inline void UpdateAppendBatchSize(uint64_t batch_size,
+                                      uint64_t shuffle_batch_size) {
+        this->max_input_batch_size_since_prev_shuffle =
+            std::max(this->max_input_batch_size_since_prev_shuffle, batch_size);
+        this->max_shuffle_batch_size_since_prev_shuffle =
+            std::max(this->max_shuffle_batch_size_since_prev_shuffle,
+                     shuffle_batch_size);
+    }
+
     /// @brief Number of shuffle keys.
     const uint64_t n_keys;
 
@@ -171,8 +212,22 @@ class IncrementalShuffleState {
     /// @brief The iteration number of last shuffle (used for adaptive sync
     /// estimation)
     uint64_t prev_shuffle_iter = 0;
+    /// @brief Max input batch size seen since the previous shuffle.
+    uint64_t max_input_batch_size_since_prev_shuffle = 0;
+    /// @brief Max shuffle batch size seen since the previous shuffle.
+    uint64_t max_shuffle_batch_size_since_prev_shuffle = 0;
     /// @brief Number of ranks.
     int n_pes;
+    /// @brief Estimated size of a row based on just the dtypes.
+    const size_t row_bytes_guesstimate;
+    /// @brief Operator ID of the parent operator. Used for debug prints.
+    const int64_t parent_op_id = -1;
+    /// @brief Number of syncs after which we should re-evaluate the sync
+    /// frequency.
+    int64_t sync_update_freq = DEFAULT_SYNC_UPDATE_FREQ;
+    /// @brief Print information about the shuffle state during initialization,
+    /// during every shuffle and after sync frequency is updated.
+    bool debug_mode = false;
 
     /**
      * @brief Helper function for ShuffleIfRequired. This determines whether we
