@@ -92,6 +92,10 @@ snowflake_writer_payload_members = (
     ("copy_into_dir", types.unicode_type),
     #  Snowflake query ID for previous COPY INTO command
     ("copy_into_prev_sfqid", types.unicode_type),
+    # SQL that should be applied at the end to flatten map ararys
+    ("flatten_sql", types.unicode_type),
+    # Tempoary table for flattening map arrays
+    ("flatten_table", types.unicode_type),
     # Flag indicating if the Snowflake transaction has started
     ("is_initialized", types.boolean),
     # File count for previous COPY INTO command
@@ -494,6 +498,8 @@ def gen_snowflake_writer_init_impl(
         writer["file_count_local"] = 0
         writer["file_count_global"] = 0
         writer["copy_into_prev_sfqid"] = ""
+        writer["flatten_sql"] = ""
+        writer["flatten_table"] = ""
         writer["copy_into_sfqids_exists"] = False
         writer["copy_into_sfqids"] = ""
         writer["file_count_global_prev"] = 0
@@ -644,6 +650,7 @@ def gen_snowflake_writer_append_table_impl_inner(
         col_names_meta.meta, table.arr_types, col_precisions_tup
     )
 
+    column_datatypes = dict(zip(col_names_meta.meta, table.arr_types))
     # Use default number of iterations for sync if not specified by user
     sync_iters = (
         bodo.default_stream_loop_sync_iters
@@ -820,16 +827,29 @@ def gen_snowflake_writer_append_table_impl_inner(
                 stage_name = writer["stage_name"]
                 location = writer["location"]
                 copy_into_dir = writer["copy_into_dir"]
-                with numba.objmode(copy_into_new_sfqid="unicode_type"):
-                    copy_into_new_sfqid = bodo.io.snowflake.execute_copy_into(
+                flatten_table = writer["flatten_table"]
+                with numba.objmode(
+                    copy_into_new_sfqid="unicode_type",
+                    flatten_sql="unicode_type",
+                    flatten_table="unicode_type",
+                ):
+                    (
+                        copy_into_new_sfqid,
+                        flatten_sql,
+                        flatten_table,
+                    ) = bodo.io.snowflake.execute_copy_into(
                         cursor,
                         stage_name,
                         location,
                         sf_schema,
+                        column_datatypes,
                         synchronous=False,
                         stage_dir=copy_into_dir,
+                        flatten_table=flatten_table,
                     )
                 writer["copy_into_prev_sfqid"] = copy_into_new_sfqid
+                writer["flatten_sql"] = flatten_sql
+                writer["flatten_table"] = flatten_table
                 writer["file_count_global_prev"] = writer["file_count_global"]
                 if bodo.user_logging.get_verbose_level() >= 2:
                     if writer["copy_into_sfqids_exists"]:
@@ -860,14 +880,42 @@ def gen_snowflake_writer_append_table_impl_inner(
                         cursor, copy_into_prev_sfqid, file_count_global_prev
                     )
                     bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)
+                    if flatten_sql == "":
+                        cursor.execute(
+                            "COMMIT /* io.snowflake_write.snowflake_writer_append_table() */"
+                        )
+            if (not parallel or bodo.get_rank() == 0) and writer["flatten_sql"] != "":
+                cursor = writer["cursor"]
+                flatten_sql = writer["flatten_sql"]
+                with bodo.objmode(flatten_sfqid="unicode_type"):
+                    err = None
+                    try:
+                        # TODO: BSE-1929 call flatten_sql once for each copy into
+                        #
+                        # This assumes flatten_sql is the same for all batches, otherwise it would have to be run for every copy into.
+                        cursor.execute(flatten_sql)
+                        flatten_sfqid = cursor.sfqid
+                    except Exception as e:
+                        err = e
+                    bodo.io.helpers.sync_and_reraise_error(err, _is_parallel=parallel)
                     cursor.execute(
                         "COMMIT /* io.snowflake_write.snowflake_writer_append_table() */"
                     )
+                if bodo.user_logging.get_verbose_level() >= 2:
+                    if writer["copy_into_sfqids_exists"]:
+                        writer["copy_into_sfqids"] = ", ".join(
+                            [writer["copy_into_sfqids"], flatten_sfqid]
+                        )
+                    else:
+                        writer["copy_into_sfqids_exists"] = True
+                        writer["copy_into_sfqids"] = flatten_sfqid
             else:
                 with bodo.objmode():
                     bodo.io.helpers.sync_and_reraise_error(None, _is_parallel=parallel)
             if bodo.get_rank() == 0:
                 writer["copy_into_prev_sfqid"] = ""
+                writer["flatten_sql"] = ""
+                writer["flatten_table"] = ""
                 writer["file_count_global_prev"] = 0
             # Force reset the existing Hadoop filesystem instance to avoid
             # conflicts with any future ADLS operations in the same process
