@@ -833,12 +833,10 @@ def gen_snowflake_writer_append_table_impl_inner(
                 writer["file_count_global_prev"] = writer["file_count_global"]
                 if bodo.user_logging.get_verbose_level() >= 2:
                     if writer["copy_into_sfqids_exists"]:
-                        writer["copy_into_sfqids"] = ", ".join(
-                            [writer["copy_into_sfqids"], copy_into_new_sfqid]
-                        )
+                        writer["copy_into_sfqids"] += f", {copy_into_new_sfqid}"
                     else:
                         writer["copy_into_sfqids_exists"] = True
-                        writer["copy_into_sfqids"] = copy_into_new_sfqid
+                        writer["copy_into_sfqids"] = f"{copy_into_new_sfqid}"
             # Create a new COPY INTO internal stage directory
             writer["file_count_local"] = 0
             writer["file_count_global"] = 0
@@ -905,7 +903,7 @@ def gen_snowflake_writer_append_table_impl_inner(
                 bodo.user_logging.log_message(
                     "Snowflake Query Submission",
                     "/* async_execute_copy_into */ Snowflake Query IDs: "
-                    + ", ".join(writer["copy_into_sfqids"]),
+                    + writer["copy_into_sfqids"],
                 )
         ev.finalize()
         return is_last
