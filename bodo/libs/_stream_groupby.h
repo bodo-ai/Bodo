@@ -26,6 +26,7 @@
 
 class GroupbyPartition;
 class GroupbyIncrementalShuffleState;
+class GroupbyState;
 
 template <bool is_local>
 struct HashGroupbyTable {
@@ -391,7 +392,7 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
         const std::vector<int8_t>& arr_array_types_,
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
         const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
-        const bool nunique_only_);
+        int64_t op_id_, const bool nunique_only_);
 
     virtual ~GroupbyIncrementalShuffleState() = default;
 
@@ -403,6 +404,8 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
      * This is meant to be called in GroupbyState::FinalizeBuild.
      */
     void Finalize() override;
+
+    friend class GroupbyState;
 
    protected:
     /**
@@ -558,7 +561,7 @@ class GroupbyState {
                  std::vector<int32_t> f_in_offsets_,
                  std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
                  int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
-                 int64_t op_pool_size_bytes);
+                 int64_t op_id_, int64_t op_pool_size_bytes);
 
     /**
      * @brief Unify dictionaries of input table with build table

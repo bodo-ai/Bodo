@@ -517,7 +517,7 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         // make allocations that could invoke the threshold enforcement
         // error.
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            update_groups_helper</*is_local*/ true>(
+            update_groups_helper(
                 *(this->build_table_buffer), this->build_table_groupby_hashes,
                 *(this->build_hash_table), this->next_group, this->n_keys,
                 grp_info, in_table, batch_hashes_groupby, i_row);
@@ -593,11 +593,11 @@ void GroupbyPartition::UpdateGroupsAndCombine(
         // error.
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
             if (append_rows[i_row]) {
-                update_groups_helper</*is_local*/ true>(
-                    *(this->build_table_buffer),
-                    this->build_table_groupby_hashes, *(this->build_hash_table),
-                    this->next_group, this->n_keys, grp_info, in_table,
-                    batch_hashes_groupby, i_row);
+                update_groups_helper(*(this->build_table_buffer),
+                                     this->build_table_groupby_hashes,
+                                     *(this->build_hash_table),
+                                     this->next_group, this->n_keys, grp_info,
+                                     in_table, batch_hashes_groupby, i_row);
             }
         }
 
@@ -1016,9 +1016,9 @@ GroupbyIncrementalShuffleState::GroupbyIncrementalShuffleState(
     const std::vector<int8_t>& arr_array_types_,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
     const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_,
-    const bool nunique_only_)
+    int64_t op_id_, const bool nunique_only_)
     : IncrementalShuffleState(arr_c_types_, arr_array_types_, dict_builders_,
-                              n_keys_, curr_iter_, sync_freq_),
+                              n_keys_, curr_iter_, sync_freq_, op_id_),
       hash_table(std::make_unique<shuffle_hash_table_t>(
           0, HashGroupbyTable<false>(nullptr, this),
           KeyEqualGroupbyTable<false>(nullptr, this, this->n_keys))),
@@ -1106,7 +1106,8 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
                            std::vector<int32_t> f_in_offsets_,
                            std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
                            int64_t output_batch_size_, bool parallel_,
-                           int64_t sync_iter_, int64_t op_pool_size_bytes)
+                           int64_t sync_iter_, int64_t op_id_,
+                           int64_t op_pool_size_bytes)
     :  // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           ((op_pool_size_bytes == -1)
@@ -1397,7 +1398,7 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
     this->shuffle_state = std::make_unique<GroupbyIncrementalShuffleState>(
         build_arr_c_types, build_arr_array_types,
         this->build_table_dict_builders, this->n_keys, this->build_iter,
-        this->sync_iter, this->nunique_only);
+        this->sync_iter, op_id_, this->nunique_only);
 
     this->partitions.emplace_back(std::make_shared<GroupbyPartition>(
         0, 0, build_arr_c_types, build_arr_array_types,
@@ -1731,12 +1732,12 @@ void GroupbyState::UpdateShuffleGroupsAndCombine(
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         if (!not_append_rows[i_row]) {  // double-negative to avoid
                                         // recomputation
-            update_groups_helper</*is_local*/ false>(
-                *(this->shuffle_state->table_buffer),
-                this->shuffle_state->groupby_hashes,
-                *(this->shuffle_state->hash_table),
-                this->shuffle_state->next_group, this->n_keys, shuffle_grp_info,
-                in_table, batch_hashes_groupby, i_row);
+            update_groups_helper(*(this->shuffle_state->table_buffer),
+                                 this->shuffle_state->groupby_hashes,
+                                 *(this->shuffle_state->hash_table),
+                                 this->shuffle_state->next_group, this->n_keys,
+                                 shuffle_grp_info, in_table,
+                                 batch_hashes_groupby, i_row);
         }
     }
     // Combine existing (and new) keys using the input batch
@@ -1744,6 +1745,10 @@ void GroupbyState::UpdateShuffleGroupsAndCombine(
                                this->shuffle_state->table_buffer->data_table,
                                this->f_running_value_offsets, this->col_sets,
                                shuffle_init_start_row);
+
+    int64_t new_groups =
+        this->shuffle_state->next_group - shuffle_init_start_row;
+    this->shuffle_state->UpdateAppendBatchSize(in_table->nrows(), new_groups);
 
     // Reset temporary references
     this->shuffle_state->in_table.reset();
@@ -2176,15 +2181,6 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-    if (groupby_state->build_iter == 0) {
-        groupby_state->shuffle_state->Initialize(in_table,
-                                                 groupby_state->parallel);
-    }
-
-    // Make is_last global
-    is_last = stream_sync_is_last(is_last, groupby_state->build_iter,
-                                  groupby_state->sync_iter);
-
     // Unify dictionaries keys to allow consistent hashing and fast key
     // comparison using indices
     in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table, true);
@@ -2194,6 +2190,15 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
         in_table, groupby_state->n_keys, groupby_state->col_sets,
         groupby_state->f_in_offsets, groupby_state->f_in_cols,
         groupby_state->req_extended_group_info);
+
+    if (groupby_state->build_iter == 0) {
+        groupby_state->shuffle_state->Initialize(in_table,
+                                                 groupby_state->parallel);
+    }
+
+    // Make is_last global
+    is_last = stream_sync_is_last(is_last, groupby_state->build_iter,
+                                  groupby_state->sync_iter);
 
     // Dictionary hashes for the key columns which will be used for
     // the partitioning hashes:
@@ -2477,7 +2482,8 @@ GroupbyState* groupby_state_init_py_entry(
         std::vector<int32_t>(ftypes, ftypes + n_funcs),
         std::vector<int32_t>(f_in_offsets, f_in_offsets + n_funcs + 1),
         std::vector<int32_t>(f_in_cols, f_in_cols + f_in_offsets[n_funcs]),
-        n_keys, output_batch_size, parallel, sync_iter, op_pool_size_bytes);
+        n_keys, output_batch_size, parallel, sync_iter, operator_id,
+        op_pool_size_bytes);
 }
 
 /**

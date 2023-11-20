@@ -11,7 +11,7 @@ class IncrementalShuffleStateTest : public IncrementalShuffleState {
         const uint64_t n_keys_, const uint64_t& curr_iter_, int64_t& sync_freq_)
         : IncrementalShuffleState(arr_c_types_, arr_array_types_,
                                   dict_builders_, n_keys_, curr_iter_,
-                                  sync_freq_){};
+                                  sync_freq_, -1){};
     void ResetAfterShuffle() { IncrementalShuffleState::ResetAfterShuffle(); }
 };
 
