@@ -792,6 +792,7 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         // Equal allocation of memory for each rank on this node.
         size_t mem_per_rank =
             static_cast<size_t>(mem_on_node / (double)num_ranks_on_node);
+        options.sys_mem_mib = mem_per_rank;
         // Set memory_size as mem_fraction of mem_per_rank
         options.memory_size =
             static_cast<uint64_t>(mem_per_rank * mem_fraction);
@@ -1483,6 +1484,14 @@ bool BufferPool::IsPinned(uint8_t* buffer, int64_t size,
 
 uint64_t BufferPool::get_memory_size_bytes() const {
     return this->memory_size_bytes_;
+}
+
+int64_t BufferPool::get_sys_memory_bytes() const {
+    if (this->options_.sys_mem_mib != -1) {
+        return this->options_.sys_mem_mib * 1024 * 1024;
+    } else {
+        return -1;
+    }
 }
 
 int64_t BufferPool::get_bytes_freed_through_malloc_since_last_trim() const {

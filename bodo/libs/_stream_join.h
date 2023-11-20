@@ -630,6 +630,7 @@ class HashJoinState : public JoinState {
                   bool probe_table_outer_, cond_expr_fn_t cond_func_,
                   bool build_parallel_, bool probe_parallel_,
                   int64_t output_batch_size_, int64_t sync_iter_,
+                  int64_t op_id_,
                   // If -1, we'll use 100% of the total buffer
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,

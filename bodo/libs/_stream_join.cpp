@@ -1051,7 +1051,7 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
                              bool probe_table_outer_, cond_expr_fn_t cond_func_,
                              bool build_parallel_, bool probe_parallel_,
                              int64_t output_batch_size_, int64_t sync_iter_,
-                             int64_t op_pool_size_bytes,
+                             int64_t op_id_, int64_t op_pool_size_bytes,
                              size_t max_partition_depth_)
     : JoinState(build_arr_c_types, build_arr_array_types, probe_arr_c_types,
                 probe_arr_array_types, n_keys_, build_table_outer_,
@@ -1070,10 +1070,10 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
       max_partition_depth(max_partition_depth_),
       build_shuffle_state(build_arr_c_types, build_arr_array_types,
                           this->build_table_dict_builders, this->n_keys,
-                          this->build_iter, this->sync_iter),
+                          this->build_iter, this->sync_iter, op_id_),
       probe_shuffle_state(probe_arr_c_types, probe_arr_array_types,
                           this->probe_table_dict_builders, this->n_keys,
-                          this->probe_iter, this->sync_iter),
+                          this->probe_iter, this->sync_iter, op_id_),
       // Create a build buffer for NA values to skip the hash table.
       build_na_key_buffer(build_arr_c_types, build_arr_array_types,
                           this->build_table_dict_builders, output_batch_size_,
@@ -1539,6 +1539,12 @@ void HashJoinState::FinalizeProbeForInactivePartitions(
     // and the build table is not.
     bool build_needs_reduction = this->probe_parallel && !this->build_parallel;
     for (size_t i = 1; i < this->partitions.size(); i++) {
+        if (this->debug_partitioning) {
+            std::cerr
+                << "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: "
+                   "Starting probe finalization for partition "
+                << i << "." << std::endl;
+        }
         // Pin the partition
         this->partitions[i]->pin();
         this->partitions[i]
@@ -1548,6 +1554,12 @@ void HashJoinState::FinalizeProbeForInactivePartitions(
                 build_needs_reduction, this->output_buffer);
         // Free the partition
         this->partitions[i].reset();
+        if (this->debug_partitioning) {
+            std::cerr
+                << "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: "
+                   "Finalized probe for partition "
+                << i << "." << std::endl;
+        }
     }
 }
 
@@ -2133,22 +2145,6 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             join_state->probe_shuffle_state.ShuffleIfRequired(is_last);
         if (new_data_.has_value()) {
             std::shared_ptr<table_info> new_data = new_data_.value();
-            // NOTE: partition hashes need to be consistent across ranks so need
-            // to use dictionary hashes
-            std::shared_ptr<
-                bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
-                new_data_dict_hashes = join_state->GetDictionaryHashesForKeys();
-            // NOTE: Partition hashes need to be consistent across ranks, so
-            // need to use dictionary hashes. Since we are using dictionary
-            // hashes, we don't need dictionaries to be global. In fact,
-            // hash_keys_table will ignore the dictionaries entirely when
-            // dict_hashes are provided.
-            std::shared_ptr<uint32_t[]> batch_hashes_partition =
-                hash_keys_table(new_data, join_state->n_keys,
-                                SEED_HASH_PARTITION, shuffle_possible,
-                                /*global_dict_needed*/ false,
-                                new_data_dict_hashes);
-
             // probe hash table with new data
             std::shared_ptr<uint32_t[]> batch_hashes_join =
                 hash_keys_table(new_data, join_state->n_keys, SEED_HASH_JOIN,
@@ -2176,6 +2172,23 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             join_state->num_processed_probe_table_rows += new_data->nrows();
 
             if (join_state->partitions.size() > 1) {
+                // NOTE: partition hashes need to be consistent across ranks so
+                // need to use dictionary hashes
+                std::shared_ptr<
+                    bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+                    new_data_dict_hashes =
+                        join_state->GetDictionaryHashesForKeys();
+                // NOTE: Partition hashes need to be consistent across ranks, so
+                // need to use dictionary hashes. Since we are using dictionary
+                // hashes, we don't need dictionaries to be global. In fact,
+                // hash_keys_table will ignore the dictionaries entirely when
+                // dict_hashes are provided.
+                std::shared_ptr<uint32_t[]> batch_hashes_partition =
+                    hash_keys_table(new_data, join_state->n_keys,
+                                    SEED_HASH_PARTITION, shuffle_possible,
+                                    /*global_dict_needed*/ false,
+                                    new_data_dict_hashes);
+
                 append_to_probe_inactive_partition.resize(new_data->nrows(),
                                                           false);
                 for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
@@ -2196,6 +2209,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                 join_state->AppendProbeBatchToInactivePartition(
                     new_data, batch_hashes_join, batch_hashes_partition,
                     append_to_probe_inactive_partition);
+                batch_hashes_partition.reset();
             } else {
                 // Fast path for the single partition case:
                 for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
@@ -2212,9 +2226,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             // Reset active partition state
             active_partition->probe_table_hashes = nullptr;
             active_partition->probe_table = nullptr;
-
             batch_hashes_join.reset();
-            batch_hashes_partition.reset();
 
             join_state->output_buffer->AppendJoinOutput(
                 active_partition->build_table_buffer->data_table,
@@ -2329,7 +2341,8 @@ JoinState* join_state_init_py_entry(
         std::vector<int8_t>(probe_arr_array_types,
                             probe_arr_array_types + n_probe_arrs),
         n_keys, build_table_outer, probe_table_outer, cond_func, build_parallel,
-        probe_parallel, output_batch_size, sync_iter, op_pool_size_bytes);
+        probe_parallel, output_batch_size, sync_iter, operator_id,
+        op_pool_size_bytes);
 }
 
 /**
@@ -2520,6 +2533,7 @@ table_info* join_probe_consume_batch_py_entry(
         // is_last) and there's no more output remaining in the output_buffer:
         *out_is_last =
             is_last && join_state_->output_buffer->total_remaining == 0;
+
         return out_table;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
