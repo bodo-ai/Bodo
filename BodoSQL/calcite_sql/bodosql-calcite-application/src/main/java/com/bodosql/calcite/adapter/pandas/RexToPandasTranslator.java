@@ -146,6 +146,7 @@ import org.apache.calcite.sql.SqlNullTreatmentOperator;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlPostfixOperator;
 import org.apache.calcite.sql.SqlPrefixOperator;
+import org.apache.calcite.sql.SqlSpecialOperator;
 import org.apache.calcite.sql.fun.SqlCaseOperator;
 import org.apache.calcite.sql.fun.SqlCastFunction;
 import org.apache.calcite.sql.fun.SqlDatetimePlusOperator;
@@ -263,9 +264,29 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       return visitSubstringScan(call);
     } else if (call.getOperator() instanceof SqlFunction) {
       return visitGenericFuncOp(call);
+    } else if (call.getOperator() instanceof SqlSpecialOperator) {
+      return visitSpecialOp(call);
     } else {
       throw new BodoSQLCodegenException(
           "Internal Error: Calcite Plan Produced an Unsupported RexCall:" + call.getOperator());
+    }
+  }
+
+  private Expr visitSpecialOp(RexCall node) {
+    List<Expr> operands = visitList(node.operands);
+    Expr output = null;
+    switch (node.getKind()) {
+      case ITEM:
+        assert operands.size() == 2;
+        boolean inputScalar = isOperandScalar(node.getOperands().get(0));
+        kotlin.Pair isScalarArg =
+            new kotlin.Pair("is_scalar_arr", new Expr.BooleanLiteral(inputScalar));
+        List<Pair<String, Expr>> namedArgs = List.of(isScalarArg);
+        return new Expr.Call("bodo.libs.bodosql_array_kernels.arr_get", operands, namedArgs);
+      default:
+        throw new BodoSQLCodegenException(
+            "Internal Error: Calcite Plan Produced an Unsupported special operand call: "
+                + node.getOperator());
     }
   }
 

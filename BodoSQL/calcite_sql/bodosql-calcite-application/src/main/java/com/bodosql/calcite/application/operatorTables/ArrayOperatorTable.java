@@ -21,6 +21,7 @@ import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.util.Optionality;
 
@@ -51,14 +52,16 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           //  https://docs.snowflake.com/en/sql-reference/functions/array_construct
           //  I'm not sure how we're handling this, so for now we're just disallowing
           //  anything that doesn't coerce to a common type
-          // TODO: this function should also be able to accept array inputs to create
-          // nested arrays. See https://bodo.atlassian.net/browse/BSE-1782
-          ReturnTypes.LEAST_RESTRICTIVE.andThen(BodoReturnTypes.WRAP_TYPE_TO_ARRAY),
+          ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_ARRAY),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
           // The input can be any data type, any number of times.
-          OperandTypes.VARIADIC,
+          // We require there to be at least one input type, otherwise
+          // ReturnTypes.LEAST_RESTRICTIVE will throw an error. This isn't an easy
+          // fix for other reasons detailed in the ticket here:
+          // https://bodo.atlassian.net/browse/BSE-2111
+          OperandTypes.ONE_OR_MORE,
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
