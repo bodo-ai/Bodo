@@ -2140,13 +2140,18 @@ uint64_t GroupbyState::op_pool_bytes_allocated() const {
  *
  * @param groupby_state groupby state pointer
  * @param in_table build table batch
- * @param is_last is last batch locally
+ * @param is_last is last batch (in this pipeline) locally
+ * @param is_final_pipeline Is this the final pipeline. Only relevant for the
+ * Union-Distinct case where this is called in multiple pipelines. For regular
+ * groupby, this should always be true. We only call FinalizeBuild in the last
+ * pipeline.
  * @return updated global is_last with possibility of false negatives due to
  * iterations between syncs
  */
 bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
                                      std::shared_ptr<table_info> in_table,
-                                     bool is_last) {
+                                     bool is_last,
+                                     const bool is_final_pipeline) {
     // High level workflow (reusing as much of existing groupby
     // infrastructure as possible):
     // 1. Get update values from input. Example with sum function:
@@ -2162,18 +2167,6 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     // tables.
     //    This inserts a new group to the table if it doesn't exist.
     // 3. Combine update values with local and shuffle build tables.
-
-    if (groupby_state->build_input_finalized) {
-        if (in_table->nrows() != 0) {
-            throw std::runtime_error(
-                "groupby_agg_build_consume_batch: Received non-empty "
-                "in_table after the build was already finalized!");
-        }
-        // Nothing left to do for build
-        // When build is finalized global is_last has been seen so no need
-        // for additional synchronization
-        return true;
-    }
 
     int n_pes, myrank;
     // trace performance
@@ -2257,11 +2250,21 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
         }
     }
 
-    if (is_last) {
+    if (is_last && is_final_pipeline) {
         groupby_state->FinalizeBuild();
     }
 
     groupby_state->build_iter++;
+
+    // XXX Could reset the shuffle state (including setting build_iter to 0)
+    // here if it's the last iteration of non-final pipeline.
+    // This would free the buffer and give back memory to the system until we
+    // enter the next pipeline.
+    // It would also force it to re-evaluate the sync frequency in the new
+    // pipeline, which is generally good since the data pattern might change
+    // between sources.
+    // (https://bodo.atlassian.net/browse/BSE-2091)
+
     return is_last;
 }
 
@@ -2272,23 +2275,17 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
  *
  * @param groupby_state groupby state pointer
  * @param in_table build table batch
- * @param is_last is last batch
+ * @param is_last is last batch locally
+ * @param is_final_pipeline Is this the final pipeline. This should always be
+ * true. We provide this parameter for consistency with the
+ * incremental-aggregation code-path.
  * @return updated is_last
  */
 bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
                                      std::shared_ptr<table_info> in_table,
-                                     bool is_last) {
-    if (groupby_state->build_input_finalized) {
-        if (in_table->nrows() != 0) {
-            throw std::runtime_error(
-                "groupby_acc_build_consume_batch: Received non-empty "
-                "in_table after the build was already finalized!");
-        }
-        // Nothing left to do for build
-        // When build is finalized global is_last has been seen so no need
-        // for additional synchronization
-        return true;
-    }
+                                     bool is_last,
+                                     const bool is_final_pipeline) {
+    assert(is_final_pipeline);
     int n_pes, myrank;
     // trace performance
     auto iterationEvent(groupby_state->groupby_event.iteration());
@@ -2362,11 +2359,21 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     }
 
     // Compute output when all input batches are accumulated
-    if (is_last) {
+    if (is_last && is_final_pipeline) {
         groupby_state->FinalizeBuild();
     }
 
     groupby_state->build_iter++;
+
+    // XXX Could reset the shuffle state (including setting build_iter to 0)
+    // here if it's the last iteration of non-final pipeline.
+    // This would free the buffer and give back memory to the system until we
+    // enter the next pipeline.
+    // It would also force it to re-evaluate the sync frequency in the new
+    // pipeline, which is generally good since the data pattern might change
+    // between sources.
+    // (https://bodo.atlassian.net/browse/BSE-2091)
+
     return is_last;
 }
 
@@ -2399,19 +2406,26 @@ std::tuple<std::shared_ptr<table_info>, bool> groupby_produce_output_batch(
  *
  * @param groupby_state groupby state pointer
  * @param in_table build table batch
- * @param is_last is last batch locally
+ * @param is_last is last batch (in this pipeline) locally
+ * @param is_final_pipeline Is this the final pipeline. Only relevant for the
+ * Union-Distinct case where this is called in multiple pipelines. For regular
+ * groupby, this should always be true. We only call FinalizeBuild in the last
+ * pipeline.
  * @return updated global is_last with possibility of false negatives due to
  * iterations between syncs
  */
 bool groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
-                                          table_info* in_table, bool is_last) {
+                                          table_info* in_table, bool is_last,
+                                          const bool is_final_pipeline) {
     try {
         if (groupby_state->accumulate_before_update) {
             return groupby_acc_build_consume_batch(
-                groupby_state, std::unique_ptr<table_info>(in_table), is_last);
+                groupby_state, std::unique_ptr<table_info>(in_table), is_last,
+                is_final_pipeline);
         } else {
             return groupby_agg_build_consume_batch(
-                groupby_state, std::unique_ptr<table_info>(in_table), is_last);
+                groupby_state, std::unique_ptr<table_info>(in_table), is_last,
+                is_final_pipeline);
         }
 
     } catch (const std::exception& e) {

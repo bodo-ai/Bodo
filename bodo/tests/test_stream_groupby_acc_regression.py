@@ -135,7 +135,10 @@ def impl(conn_str):  # Codegen change: add conn_str
         # Codegen change: Track build time
         t_build = time.time()
         _temp14 = bodo.libs.stream_groupby.groupby_build_consume_batch(
-            state_2, T1, __bodo_is_last_streaming_output_1
+            state_2,
+            T1,
+            __bodo_is_last_streaming_output_1,
+            True,
         )
         build_time += time.time() - t_build
         _temp15 = time.time()

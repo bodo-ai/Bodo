@@ -52,7 +52,7 @@ def test_groupby_basic(func_name, memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -123,7 +123,7 @@ def test_groupby_drop_duplicates(memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -191,7 +191,7 @@ def test_groupby_key_reorder(memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -259,7 +259,7 @@ def test_groupby_dict_str(func_name, memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -325,7 +325,7 @@ def test_produce_output(memory_leak_check):
             )
             is_last1 = (_temp1 * batch_size) >= len(df)
             _temp1 = _temp1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T2, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, T2, is_last1, True)
 
         out_dfs = []
         is_last2 = False
@@ -414,7 +414,7 @@ def test_groupby_acc_path_fallback(memory_leak_check):
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
             _iter_1 = _iter_1 + 1
 
         is_last2 = False
@@ -532,7 +532,7 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -727,7 +727,7 @@ def test_groupby_nested_array_data(memory_leak_check, df):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:

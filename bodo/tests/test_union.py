@@ -366,7 +366,9 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
         while not is_last1:
             T1, is_last1 = bodo.io.arrow_reader.read_arrow_next(state_1, True)
             T3 = bodo.hiframes.table.table_subset(T1, global_2, False)
-            bodo.libs.stream_union.union_consume_batch(state_2, T3, False)
+            is_last1 = bodo.libs.stream_union.union_consume_batch(
+                state_2, T3, is_last1, False
+            )
             _iter_1 = _iter_1 + 1
         bodo.io.arrow_reader.arrow_reader_del(state_1)
 
@@ -377,7 +379,9 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
         while not _temp1:
             T2, is_last2 = bodo.io.arrow_reader.read_arrow_next(state_3, True)
             T4 = bodo.hiframes.table.table_subset(T2, global_3, False)
-            _temp1 = bodo.libs.stream_union.union_consume_batch(state_2, T4, is_last2)
+            _temp1 = bodo.libs.stream_union.union_consume_batch(
+                state_2, T4, is_last2, True
+            )
             _iter_2 = _iter_2 + 1
         bodo.io.arrow_reader.arrow_reader_del(state_3)
 
@@ -588,9 +592,11 @@ def test_nested_array_stream_union(all, df, use_map_arrays, memory_leak_check):
             T3 = bodo.hiframes.table.table_local_filter(
                 T1, slice((_iter_1 * 3), ((_iter_1 + 1) * 3))
             )
-            bodo.libs.stream_union.union_consume_batch(state_2, T3, False)
-            _iter_1 = _iter_1 + 1
             is_last1 = (_iter_1 * 3) >= len(T1)
+            is_last1 = bodo.libs.stream_union.union_consume_batch(
+                state_2, T3, is_last1, False
+            )
+            _iter_1 = _iter_1 + 1
 
         is_last2 = False
         _iter_2 = 0
@@ -601,7 +607,9 @@ def test_nested_array_stream_union(all, df, use_map_arrays, memory_leak_check):
             )
             _iter_2 = _iter_2 + 1
             is_last2 = (_iter_2 * 3) >= len(T1)
-            _temp1 = bodo.libs.stream_union.union_consume_batch(state_2, T5, is_last2)
+            _temp1 = bodo.libs.stream_union.union_consume_batch(
+                state_2, T5, is_last2, True
+            )
 
         is_last3 = False
         _iter_3 = 0
