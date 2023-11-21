@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
-import com.bodosql.calcite.table.CatalogTableImpl
+import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import org.apache.calcite.plan.Convention
@@ -88,7 +88,7 @@ interface SnowflakeRel : RelNode {
         return this.getCatalogTable().trySubmitIntegerMetadataQuerySnowflake(metadataSelectQueryString)?.toDouble()
     }
 
-    fun getCatalogTable(): CatalogTableImpl
+    fun getCatalogTable(): CatalogTable
 
     /**
      * Get the batching property.

@@ -5,7 +5,7 @@ import com.bodosql.calcite.application.operatorTables.JsonOperatorTable
 import com.bodosql.calcite.application.utils.AggHelpers
 import com.bodosql.calcite.schema.CatalogSchemaImpl
 import com.bodosql.calcite.table.BodoSqlTable
-import com.bodosql.calcite.table.CatalogTableImpl
+import com.bodosql.calcite.table.CatalogTable
 import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexInputRef
@@ -182,7 +182,7 @@ class ExpectedBatchingProperty {
         @JvmStatic
         fun tableModifyProperty(table: BodoSqlTable, inputRowType: RelDataType): BatchingProperty {
             // We can stream if it's a Snowflake write via the Snowflake Catalog.
-            val canStream = (table is CatalogTableImpl) && (table.dbType.equals("SNOWFLAKE"))
+            val canStream = (table is CatalogTable) && (table.dbType.equals("SNOWFLAKE"))
             val nodeTypes = rowTypeToTypes(inputRowType)
             return getBatchingProperty(canStream, nodeTypes)
         }

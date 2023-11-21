@@ -6,10 +6,8 @@ import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
 import com.bodosql.calcite.ir.Expr.IntegerLiteral;
 import com.bodosql.calcite.ir.Expr.StringLiteral;
-import com.bodosql.calcite.schema.BodoSqlSchema;
-import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
-import com.bodosql.calcite.table.CatalogTableImpl;
+import com.bodosql.calcite.table.CatalogTable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -333,12 +331,8 @@ public class Utils {
   }
 
   public static boolean isSnowflakeCatalogTable(BodoSqlTable table) {
-    BodoSqlSchema schema = table.getSchema();
-    if (table instanceof CatalogTableImpl && schema instanceof CatalogSchemaImpl) {
-      CatalogSchemaImpl catalogSchema = (CatalogSchemaImpl) schema;
-      return catalogSchema.getCatalog() instanceof SnowflakeCatalogImpl;
-    }
-    return false;
+    return table instanceof CatalogTable
+        && ((CatalogTable) table).getCatalog() instanceof SnowflakeCatalogImpl;
   }
 
   /**

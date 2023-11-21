@@ -60,7 +60,7 @@ import com.bodosql.calcite.ir.StreamingPipelineFrame;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
-import com.bodosql.calcite.table.LocalTableImpl;
+import com.bodosql.calcite.table.LocalTable;
 import com.bodosql.calcite.traits.BatchingProperty;
 import com.bodosql.calcite.traits.CombineStreamsExchange;
 import com.bodosql.calcite.traits.SeparateStreamExchange;
@@ -1895,7 +1895,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Add the table to cached values
     if (isTargetTableScan) {
       // TODO: Properly restrict to Iceberg.
-      if (!(table instanceof LocalTableImpl) || !table.getDBType().equals("ICEBERG")) {
+      if (!(table instanceof LocalTable) || !table.getDBType().equals("ICEBERG")) {
         throw new BodoSQLCodegenException(
             "Insert Into is only supported with Iceberg table destinations provided via"
                 + " the the SQL TablePath API");

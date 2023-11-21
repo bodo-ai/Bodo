@@ -4,7 +4,7 @@
 
 package com.bodosql.calcite.schema;
 
-import com.bodosql.calcite.ir.Expr;
+import com.google.common.collect.ImmutableList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -36,6 +36,18 @@ public abstract class BodoSqlSchema implements Schema {
   /** @return The schema's name. */
   public String getName() {
     return this.name;
+  }
+
+  /**
+   * Get the full path of schemas traversed from the root to reach this schema.
+   *
+   * <p>This currently just returns the name because we don't support multiple levels of schemas
+   * yet.
+   *
+   * @return An immutable list wrapping the name.
+   */
+  public ImmutableList<String> getFullPath() {
+    return ImmutableList.of(this.name);
   }
 
   /**
@@ -138,13 +150,4 @@ public abstract class BodoSqlSchema implements Schema {
   public Schema snapshot(SchemaVersion sv) {
     throw new UnsupportedOperationException("Not supported yet.");
   }
-
-  /**
-   * Generates the code necessary to submit the remote query to the catalog DB. This is not
-   * supported for local tables.
-   *
-   * @param query Query to submit.
-   * @return The generated code.
-   */
-  public abstract Expr generateRemoteQuery(String query);
 }

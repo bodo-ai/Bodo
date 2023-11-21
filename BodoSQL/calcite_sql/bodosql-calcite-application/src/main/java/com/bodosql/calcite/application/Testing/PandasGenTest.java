@@ -6,7 +6,7 @@ import com.bodosql.calcite.schema.LocalSchemaImpl;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
-import com.bodosql.calcite.table.LocalTableImpl;
+import com.bodosql.calcite.table.LocalTable;
 import com.bodosql.calcite.traits.BatchingProperty;
 import java.util.ArrayList;
 import org.apache.calcite.plan.RelOptUtil;
@@ -32,9 +32,9 @@ public class PandasGenTest {
     arr.add(column3);
 
     BodoSqlTable table =
-        new LocalTableImpl(
+        new LocalTable(
             "table1",
-            schema,
+            schema.getFullPath(),
             arr,
             true,
             "table1",
@@ -52,9 +52,9 @@ public class PandasGenTest {
     arr.add(column5);
 
     BodoSqlTable table2 =
-        new LocalTableImpl(
+        new LocalTable(
             "table2",
-            schema,
+            schema.getFullPath(),
             arr,
             true,
             "table2",
@@ -64,9 +64,9 @@ public class PandasGenTest {
             null);
     schema.addTable(table2);
     BodoSqlTable table3 =
-        new LocalTableImpl(
+        new LocalTable(
             "table3",
-            schema,
+            schema.getFullPath(),
             arr,
             true,
             "table3",
@@ -86,9 +86,9 @@ public class PandasGenTest {
     BodoSQLColumnImpl param2 = new BodoSQLColumnImpl("cwsfe_21", paramType, true);
     arr.add(param2);
     BodoSqlTable paramTable =
-        new LocalTableImpl(
+        new LocalTable(
             paramTableName,
-            schema,
+            schema.getFullPath(),
             arr,
             true,
             paramTableName,

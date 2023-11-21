@@ -3,8 +3,7 @@ package com.bodosql.calcite.table;
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
-import com.bodosql.calcite.schema.BodoSqlSchema;
-import com.bodosql.calcite.schema.LocalSchemaImpl;
+import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -19,7 +18,7 @@ import org.apache.calcite.sql.type.TZAwareSqlType;
  * Definition of a table that is not associated with any schema. These tables include in memory
  * DataFrames and
  */
-public class LocalTableImpl extends BodoSqlTable {
+public class LocalTable extends BodoSqlTable {
   /**
    * A BodoSQL Table that is loaded locally (either using an in memory DataFrame or the table path
    * API). Since these tables are loaded individually, each table is responsible for its own code
@@ -53,12 +52,13 @@ public class LocalTableImpl extends BodoSqlTable {
   private final Statistic statistic = new StatisticImpl();
 
   /**
-   * Constructor used for a LocalTableImpl. In addition to the normal table components the table is
+   * Constructor used for a LocalTable. In addition to the normal table components the table is
    * required to provide code need to read/write it. If a table is not writeable then the write code
    * is garbage and should be ignored.
    *
    * @param name Name of the table.
-   * @param schema The table's schema. This must be a LocalSchemaImpl.
+   * @param schemaPath A list of schemas names that must be traversed from the root to reach this
+   *     table.
    * @param columns The list of columns for the table in order.
    * @param isWriteable Can we write to this table.
    * @param readCode The generated code to read this table.
@@ -68,9 +68,9 @@ public class LocalTableImpl extends BodoSqlTable {
    * @param dbType What is the database source.
    * @param estimatedRowCount Estimated row count passed from Python.
    */
-  public LocalTableImpl(
+  public LocalTable(
       String name,
-      BodoSqlSchema schema,
+      ImmutableList<String> schemaPath,
       List<BodoSQLColumn> columns,
       boolean isWriteable,
       String readCode,
@@ -79,10 +79,7 @@ public class LocalTableImpl extends BodoSqlTable {
       String dbType,
       @Nullable Long estimatedRowCount) {
 
-    super(name, schema, columns);
-    if (!(schema instanceof LocalSchemaImpl)) {
-      throw new RuntimeException("Local table must be implemented with a Local Schema.");
-    }
+    super(name, schemaPath, columns);
     this.isWriteable = isWriteable;
     this.readCode = readCode;
     this.writeCodeFormatString = writeCodeFormatString;
@@ -92,7 +89,7 @@ public class LocalTableImpl extends BodoSqlTable {
   }
 
   /**
-   * Can we write to this table? Currently only certain tables in TablePath API support writing.
+   * Can we write to this table? Currently, only certain tables in TablePath API support writing.
    *
    * @return Is this table writeable?
    */
@@ -206,7 +203,6 @@ public class LocalTableImpl extends BodoSqlTable {
   @Override
   public Table extend(List<RelDataTypeField> extensionFields) {
     String name = this.getName();
-    BodoSqlSchema schema = this.getSchema();
     List<BodoSQLColumn> extendedColumns = new ArrayList<>();
     extendedColumns.addAll(this.columns);
     for (int i = 0; i < extensionFields.size(); i++) {
@@ -220,9 +216,9 @@ public class LocalTableImpl extends BodoSqlTable {
       BodoSQLColumn newCol = new BodoSQLColumnImpl(fieldName, newColType, false, tzInfo);
       extendedColumns.add(newCol);
     }
-    return new LocalTableImpl(
+    return new LocalTable(
         name,
-        schema,
+        getParentFullPath(),
         extendedColumns,
         isWriteable,
         readCode,
