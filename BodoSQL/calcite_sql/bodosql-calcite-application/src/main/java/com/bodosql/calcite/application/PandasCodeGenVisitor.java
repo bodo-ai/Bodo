@@ -656,30 +656,40 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
     timerInfo.insertStateEndTimer();
 
-    // All but the last union call just requires the union_consume_batch call
+    // In all but the last UNION call, we should set is_final_pipeline=False
     for (int i = 0; i < node.getInputs().size() - 1; i++) {
       if (i != 0) {
         RelNode input = node.getInput(i);
         this.visit(input, i, node);
       }
 
+      StreamingPipelineFrame pipeline = generatedCode.getCurrentStreamingPipeline();
+      Variable batchExitCond = pipeline.getExitCond();
+
+      Variable newExitCond = genGenericTempVar();
+
       // Add Union Consume Code in Pipeline Loop
       BodoEngineTable inputTable = tableGenStack.pop();
       Expr.Call consumeCall =
           new Expr.Call(
               "bodo.libs.stream_union.union_consume_batch",
-              List.of(stateVar, inputTable, new Expr.BooleanLiteral(false)));
+              List.of(
+                  stateVar,
+                  inputTable,
+                  batchExitCond,
+                  /*is_final_pipeline*/
+                  new Expr.BooleanLiteral(false)));
 
       timerInfo.insertLoopOperationStartTimer();
-      generatedCode.add(new Op.Stmt(consumeCall));
+      generatedCode.add(new Op.Assign(newExitCond, consumeCall));
       timerInfo.insertLoopOperationEndTimer();
+      pipeline.endSection(newExitCond);
 
       // Finalize and add the batch pipeline.
       generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));
     }
 
-    // For the last UNION consume call, we need to track is_last and set it
-    // in the pipeline loop
+    // For the last UNION consume call, we need to set is_final_pipeline=True
     RelNode input = node.getInput(node.getInputs().size() - 1);
     this.visit(input, node.getInputs().size() - 1, node);
 
@@ -692,7 +702,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Expr.Call consumeCall =
         new Expr.Call(
             "bodo.libs.stream_union.union_consume_batch",
-            List.of(stateVar, inputTable, batchExitCond));
+            List.of(
+                stateVar,
+                inputTable,
+                batchExitCond,
+                /*is_final_pipeline*/
+                new Expr.BooleanLiteral(true)));
 
     timerInfo.insertLoopOperationStartTimer();
     generatedCode.add(new Op.Assign(newExitCond, consumeCall));
@@ -1685,10 +1700,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable batchExitCond = inputPipeline.getExitCond();
     Variable newExitCond = genGenericTempVar();
     inputPipeline.endSection(newExitCond);
+    // is_final_pipeline is always True in the regular Groupby case.
     Expr.Call batchCall =
         new Expr.Call(
             "bodo.libs.stream_groupby.groupby_build_consume_batch",
-            List.of(groupbyStateVar, buildTable, batchExitCond));
+            List.of(
+                groupbyStateVar,
+                buildTable,
+                batchExitCond,
+                /*is_final_pipeline*/
+                new Expr.BooleanLiteral(true)));
     timerInfo.insertLoopOperationStartTimer();
     generatedCode.add(new Op.Assign(newExitCond, batchCall));
     timerInfo.insertLoopOperationEndTimer();

@@ -266,11 +266,11 @@ def _union_cast_batch(union_state: UnionStateType, table: TableType):
     return impl
 
 
-def union_consume_batch(union_state, table, is_last):
+def union_consume_batch(union_state, table, is_last, is_final_pipeline):
     pass
 
 
-def gen_union_consume_batch_impl(union_state, table, is_last):
+def gen_union_consume_batch_impl(union_state, table, is_last, is_final_pipeline):
     """
     Consume a table batch in streaming union. Will cast the table
     and then process depending on type of union.
@@ -279,7 +279,10 @@ def gen_union_consume_batch_impl(union_state, table, is_last):
         union_state (UnionState): Union State, containing internal
             state tool (Chunked Table Builder or Aggregation)
         table (table_type): Input table batch
-        is_last (bool): Last batch
+        is_last (bool): is last batch (in this pipeline) locally
+        is_final_pipeline (bool): Is this the final pipeline. Only relevant for the
+         Union-Distinct case where this is called in multiple pipelines. For regular
+         groupby, this should always be true.
     """
 
     if not isinstance(union_state, UnionStateType):  # pragma: no cover
@@ -298,7 +301,7 @@ def gen_union_consume_batch_impl(union_state, table, is_last):
 
     if union_state.all:
 
-        def impl(union_state, table, is_last):  # pragma: no cover
+        def impl(union_state, table, is_last, is_final_pipeline):  # pragma: no cover
             casted_table = _union_cast_batch(union_state, table)
             cpp_table = py_data_to_cpp_table(casted_table, (), in_col_inds, n_cols)
             bodo.libs.table_builder._chunked_table_builder_append(
@@ -308,11 +311,11 @@ def gen_union_consume_batch_impl(union_state, table, is_last):
 
     else:
 
-        def impl(union_state, table, is_last):  # pragma: no cover
+        def impl(union_state, table, is_last, is_final_pipeline):  # pragma: no cover
             casted_table = _union_cast_batch(union_state, table)
             cpp_table = py_data_to_cpp_table(casted_table, (), in_col_inds, n_cols)
             return bodo.libs.stream_groupby._groupby_build_consume_batch(
-                union_state, cpp_table, is_last
+                union_state, cpp_table, is_last, is_final_pipeline
             )
 
     return impl

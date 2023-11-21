@@ -58,7 +58,7 @@ def groupby_common_impl(
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1)
+            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
             ### Uncomment for debugging purposes ###
             # bytes_pinned = get_op_pool_bytes_pinned(groupby_state)
             # bytes_allocated = get_op_pool_bytes_allocated(groupby_state)

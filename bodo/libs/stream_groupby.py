@@ -504,6 +504,7 @@ def _groupby_build_consume_batch(
     groupby_state,
     cpp_table,
     is_last,
+    is_final_pipeline,
 ):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -511,6 +512,7 @@ def _groupby_build_consume_batch(
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(1),
                 lir.IntType(1),
             ],
         )
@@ -521,22 +523,27 @@ def _groupby_build_consume_batch(
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
-    sig = types.bool_(groupby_state, cpp_table, is_last)
+    sig = types.bool_(groupby_state, cpp_table, is_last, is_final_pipeline)
     return sig, codegen
 
 
-def groupby_build_consume_batch(groupby_state, table, is_last):
+def groupby_build_consume_batch(groupby_state, table, is_last, is_final_pipeline):
     pass
 
 
-def gen_groupby_build_consume_batch_impl(groupby_state, table, is_last):
+def gen_groupby_build_consume_batch_impl(
+    groupby_state, table, is_last, is_final_pipeline
+):
     """Consume a build table batch in streaming groupby (insert into hash table and
     update running values)
 
     Args:
         groupby_state (GroupbyState): C++ GroupbyState pointer
         table (table_type): build table batch
-        is_last (bool): is last batch locally
+        is_last (bool): is last batch (in this pipeline) locally
+        is_final_pipeline (bool): Is this the final pipeline. Only relevant for the
+         Union-Distinct case where this is called in multiple pipelines. For regular
+         groupby, this should always be true.
     Returns:
         bool: is last batch globally with possiblity of false negatives due to iterations between syncs
     """
@@ -544,10 +551,12 @@ def gen_groupby_build_consume_batch_impl(groupby_state, table, is_last):
     n_table_cols = groupby_state.num_build_input_arrs
 
     def impl_groupby_build_consume_batch(
-        groupby_state, table, is_last
+        groupby_state, table, is_last, is_final_pipeline
     ):  # pragma: no cover
         cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
-        return _groupby_build_consume_batch(groupby_state, cpp_table, is_last)
+        return _groupby_build_consume_batch(
+            groupby_state, cpp_table, is_last, is_final_pipeline
+        )
 
     return impl_groupby_build_consume_batch
 
