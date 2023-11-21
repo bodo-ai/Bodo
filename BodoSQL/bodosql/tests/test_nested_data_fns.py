@@ -9,7 +9,9 @@ import pandas as pd
 import pytest
 
 import bodo
+import bodosql
 from bodo.tests.utils import pytest_slow_unless_codegen
+from bodo.utils.typing import BodoError
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
@@ -1431,6 +1433,189 @@ def test_array_size_scalar(basic_df, input, memory_leak_check):
     check_query(
         query,
         basic_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            ("1", 1),
+        ),
+        pytest.param(("'1'", "1"), marks=pytest.mark.slow),
+        pytest.param(("True", True), marks=pytest.mark.slow),
+    ],
+)
+def test_array_index_scalar(args, memory_leak_check):
+    """
+    Test Array indexing works correctly with different data type scalars
+    """
+
+    expr = args[0]
+
+    query = f"SELECT CASE WHEN ARRAY_CONSTRUCT({expr})[0] = {expr} THEN ARRAY_CONSTRUCT({expr})[0] ELSE NULL END as out_col FROM TABLE1"
+    ctx = {"table1": pd.DataFrame({"unused_col": list(range(10))})}
+    py_output = pd.DataFrame({"out_col": [args[1]] * 10})
+
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(("1", 1), marks=pytest.mark.slow),
+        pytest.param(("'hello world'", "hello world"), marks=pytest.mark.slow),
+        pytest.param(
+            ("TIMESTAMP '1969-07-20 20:17:40'", pd.Timestamp("1969-07-20 20:17:40")),
+        ),
+    ],
+)
+def test_array_index_column(args, memory_leak_check):
+    """
+    Test Array indexing works correctly with different data type
+    """
+
+    expr = args[0]
+
+    query = f"SELECT arr_col[0] as out_col from (SELECT ARRAY_CONSTRUCT({expr}) as arr_col FROM TABLE1)"
+    ctx = {"table1": pd.DataFrame({"unused_col": list(range(10))})}
+    py_output = pd.DataFrame({"out_col": [args[1]] * 10})
+
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.slow()
+def test_array_index_stress_test(memory_leak_check):
+    """
+    Stress test for Test Array indexing works correctly with different data type
+    """
+
+    query = f"""
+    SELECT
+        ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(0)[0])[ARRAY_CONSTRUCT(0)[0]])[0] as out_col_1,
+        arr_col[arr_col[arr_col[arr_col[arr_col[0]]]] + 1] as out_col_2
+    from
+    (SELECT ARRAY_CONSTRUCT(int_col_0, int_col_1, int_col_2) as arr_col FROM TABLE1)
+    """
+
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "int_col_0": [0] * 12,
+                "int_col_1": list(range(12)),
+                "int_col_2": list(range(12)),
+            }
+        )
+    }
+
+    py_output = pd.DataFrame(
+        {
+            "out_col_1": [0] * 12,
+            "out_col_2": list(range(12)),
+        }
+    )
+
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.slow()
+@pytest.mark.skip("https://bodo.atlassian.net/browse/BSE-2111")
+def test_array_index_empty(memory_leak_check):
+    """
+    Test that indexing into an empty array throws a reasonable error
+    """
+
+    query = f"""
+    SELECT
+        arr_col[0] as out_col
+    from
+    (SELECT ARRAY_CONSTRUCT() as arr_col FROM TABLE1)
+    """
+
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "input_col": list(range(12)),
+            }
+        )
+    }
+
+    py_output = pd.DataFrame(
+        {
+            "out_col": pd.Series([None] * 12, dtype=pd.Int64Dtype()),
+        }
+    )
+
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.slow()
+def test_array_index_out_of_bounds(memory_leak_check):
+    """
+    Test that indexing out of bounds throws a reasonable error.
+    """
+
+    query = f"""
+    SELECT
+        arr_col[2] as out_col
+    from
+    (SELECT ARRAY_CONSTRUCT(input_col) as arr_col FROM TABLE1)
+    """
+
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "input_col": list(range(12)),
+            }
+        )
+    }
+
+    py_output = pd.DataFrame(
+        {
+            "out_col": pd.Series([None] * 12, dtype=pd.Int64Dtype()),
+        }
+    )
+
+    check_query(
+        query,
+        ctx,
         None,
         check_names=False,
         check_dtype=False,
