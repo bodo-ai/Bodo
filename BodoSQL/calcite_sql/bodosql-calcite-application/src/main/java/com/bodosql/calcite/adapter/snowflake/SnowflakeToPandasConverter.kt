@@ -134,7 +134,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     }
 
     private fun getTableName(input: SnowflakeRel) = input.getCatalogTable().name
-    private fun getSchemaName(input: SnowflakeRel) = input.getCatalogTable().schema.name
+    private fun getSchemaName(input: SnowflakeRel) = input.getCatalogTable().fullPath[0]
 
     /**
      * Generate the code required to read a table. This path is necessary because the Snowflake
@@ -176,10 +176,8 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         val bodoTableNameExpr = if (passTableInfo) {
             // Store the original indices to allow handling renaming.
             val catalogTable = relInput.getCatalogTable()
-            // Give the full name as schema.table. In the future when we
-            // support multiple databases it will need to be
-            // database.schema.table
-            StringLiteral("\"${catalogTable.schema.name}\".\"${catalogTable.name}\"")
+            // Get the fully qualified name.
+            StringLiteral(catalogTable.qualifiedName)
         } else {
             Expr.None
         }

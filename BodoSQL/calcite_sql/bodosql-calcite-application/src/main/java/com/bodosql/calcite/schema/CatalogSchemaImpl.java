@@ -1,9 +1,9 @@
 package com.bodosql.calcite.schema;
 
-import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
+import com.google.common.collect.ImmutableList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
@@ -101,18 +101,6 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
   }
 
   /**
-   * Generates the code necessary to submit the remote query to the catalog DB. This is not
-   * supported for local tables.
-   *
-   * @param query Query to submit.
-   * @return The generated code.
-   */
-  @Override
-  public Expr generateRemoteQuery(String query) {
-    return this.catalog.generateRemoteQuery(query);
-  }
-
-  /**
    * API specific to CatalogSchemaImpl and not all schemas. Since schemas with the same catalog
    * often share the same code generation process, the write code for a given table with a catalog
    * is controlled by that catalog.
@@ -128,13 +116,10 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
       String tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
-    return this.catalog.generateWriteCode(
-        varName, this.getName(), tableName, ifExists, createTableType);
-  }
-
-  public Expr generateWriteCode(
-      Variable varName, String tableName, BodoSQLCatalog.ifExistsBehavior ifExists) {
-    return generateWriteCode(varName, tableName, ifExists, SqlCreateTable.CreateTableType.DEFAULT);
+    ImmutableList.Builder<String> builder = new ImmutableList.Builder();
+    builder.addAll(getFullPath());
+    builder.add(tableName);
+    return this.catalog.generateWriteCode(varName, builder.build(), ifExists, createTableType);
   }
 
   public Expr generateStreamingWriteInitCode(
@@ -142,14 +127,11 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
       String tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
+    ImmutableList.Builder<String> builder = new ImmutableList.Builder();
+    builder.addAll(getFullPath());
+    builder.add(tableName);
     return this.catalog.generateStreamingWriteInitCode(
-        operatorID, this.getName(), tableName, ifExists, createTableType);
-  }
-
-  public Expr generateStreamingWriteInitCode(
-      Expr.IntegerLiteral operatorID, String tableName, BodoSQLCatalog.ifExistsBehavior ifExists) {
-    return this.catalog.generateStreamingWriteInitCode(
-        operatorID, this.getName(), tableName, ifExists, SqlCreateTable.CreateTableType.DEFAULT);
+        operatorID, builder.build(), ifExists, createTableType);
   }
 
   public Expr generateStreamingWriteAppendCode(
@@ -161,24 +143,6 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
       Expr columnPrecision) {
     return this.catalog.generateStreamingWriteAppendCode(
         stateVarName, tableVarName, colNamesGlobal, isLastVarName, iterVarName, columnPrecision);
-  }
-
-  /**
-   * API specific to CatalogSchemaImpl and not all schemas. Since schemas with the same catalog
-   * often share the same code generation process, the read code for a given table with a catalog is
-   * controlled by that catalog.
-   *
-   * @param useStreaming Should we generate code to read the table as streaming (currently only
-   *     supported for snowflake tables)
-   * @param tableName The name of the table as the read source.
-   * @param useStreaming Should we generate code to read the table as streaming (currently only
-   *     supported for snowflake tables)
-   * @param streamingOptions Streaming-related options including batch size
-   * @return The generated code to compute the read in Python.
-   */
-  public Expr generateReadCode(
-      String tableName, boolean useStreaming, StreamingOptions streamingOptions) {
-    return this.catalog.generateReadCode(this.getName(), tableName, useStreaming, streamingOptions);
   }
 
   /** @return The catalog for the schema. */

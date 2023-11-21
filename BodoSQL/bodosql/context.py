@@ -520,7 +520,7 @@ def add_table_type(
     read_code = _generate_table_read(table_name, bodo_type, table_num, from_jit)
     table = LocalTableClass(
         table_name,
-        schema,
+        schema.getFullPath(),
         col_arr,
         is_writeable,
         read_code,
@@ -623,7 +623,15 @@ def add_param_table(table_name, schema, param_keys, param_values):
     # be used.
     schema.addTable(
         LocalTableClass(
-            table_name, schema, param_arr, False, "", "", False, "MEMORY", -1
+            table_name,
+            schema.getFullPath(),
+            param_arr,
+            False,
+            "",
+            "",
+            False,
+            "MEMORY",
+            -1,
         )
     )
 

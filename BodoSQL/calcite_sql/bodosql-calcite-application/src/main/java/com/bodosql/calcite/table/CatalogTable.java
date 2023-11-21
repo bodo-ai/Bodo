@@ -15,11 +15,10 @@ import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan;
-import com.bodosql.calcite.schema.BodoSqlSchema;
-import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.schema.ExpandViewInput;
 import com.bodosql.calcite.schema.InlineViewMetadata;
 import com.google.common.base.Suppliers;
+import com.google.common.collect.ImmutableList;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -44,9 +43,11 @@ import org.jetbrains.annotations.NotNull;
  *
  * @author bodo
  */
-public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable {
+public class CatalogTable extends BodoSqlTable implements TranslatableTable {
   // Hold the statistics for this table.
   private final Statistic statistic = new StatisticImpl();
+  // The catalog that holds this table's origin.
+  private final BodoSQLCatalog catalog;
 
   /**
    * See the design described on Confluence:
@@ -57,40 +58,38 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * This constructor is used to fill in all the values for the table.
    *
    * @param name the name of the table that is being created
-   * @param schema the BodoSQL schema to which this table belongs
+   * @param schemaPath A list of schemas names that must be traversed from the root to reach this
+   *     table.
    * @param columns list of columns to be added to the table.
+   * @param catalog The catalog used to submit remote requests.
    */
-  public CatalogTableImpl(String name, BodoSqlSchema schema, List<BodoSQLColumn> columns) {
-    super(name, schema, columns);
-    if (!(schema instanceof CatalogSchemaImpl)) {
-      throw new RuntimeException("Catalog table must be initialized with a Catalog Schema.");
-    }
+  public CatalogTable(
+      String name,
+      ImmutableList<String> schemaPath,
+      List<BodoSQLColumn> columns,
+      BodoSQLCatalog catalog) {
+    super(name, schemaPath, columns);
+    this.catalog = catalog;
   }
 
   /**
-   * Return the fully qualifed name. This should be of the form
+   * Return the fully qualified name. This should be of the form
    * "DATABASE_NAME"."SCHEMA_NAME"."TABLE_NAME"
    *
    * @return
    */
   public String getQualifiedName() {
-    return String.format(
-        Locale.ROOT, "%s.%s.%s", getCatalog().getCatalogName(), getSchema().getName(), getName());
-  }
-  /**
-   * Returns the schema for the table but cast to the required CatalogSchemaImpl. This is done when
-   * actions are catalog specific, such as the read/write code.
-   *
-   * @return The stored schema cast to a CatalogSchemaImpl.
-   */
-  private CatalogSchemaImpl getCatalogSchema() {
-    // This cast is safe because it's enforced on the constructor.
-    return (CatalogSchemaImpl) this.getSchema();
+    ImmutableList.Builder<String> quotedPath = new ImmutableList.Builder<>();
+    for (String elem : getFullPath()) {
+      quotedPath.add(String.format(Locale.ROOT, "\"%s\"", elem));
+    }
+
+    return String.join(".", quotedPath.build());
   }
 
-  /** Returns the catalog for the table. */
+  /** Interface to get the catalog for creating RelNodes. */
   public BodoSQLCatalog getCatalog() {
-    return getCatalogSchema().getCatalog();
+    return catalog;
   }
 
   /**
@@ -111,10 +110,8 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * @return Do we have read access?
    */
   public boolean canRead() {
-    String tableName = getName();
-    String schemaName = getSchema().getName();
-    SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
-    return catalog.canReadTable(List.of(schemaName, tableName));
+    SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) this.catalog;
+    return catalog.canReadTable(getFullPath());
   }
 
   /**
@@ -152,8 +149,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    */
   @Override
   public Expr generateWriteCode(Variable varName) {
-    return this.getCatalogSchema()
-        .generateWriteCode(varName, this.getName(), BodoSQLCatalog.ifExistsBehavior.APPEND);
+    return catalog.generateAppendWriteCode(varName, getFullPath());
   }
 
   /**
@@ -174,9 +170,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * @return The generated streaming code to write the table.
    */
   public Expr generateStreamingWriteInitCode(Expr.IntegerLiteral operatorID) {
-    return this.getCatalogSchema()
-        .generateStreamingWriteInitCode(
-            operatorID, this.getName(), BodoSQLCatalog.ifExistsBehavior.APPEND);
+    return catalog.generateStreamingAppendWriteInitCode(operatorID, getFullPath());
   }
 
   public Expr generateStreamingWriteAppendCode(
@@ -186,9 +180,9 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
       Variable isLastVarName,
       Variable iterVarName,
       Expr columnPrecisions) {
-    return this.getCatalogSchema()
-        .generateStreamingWriteAppendCode(
-            stateVarName, dfVarName, colNamesGlobal, isLastVarName, iterVarName, columnPrecisions);
+    // TODO: Move to SnowflakeTable defintion.
+    return catalog.generateStreamingWriteAppendCode(
+        stateVarName, dfVarName, colNamesGlobal, isLastVarName, iterVarName, columnPrecisions);
   }
 
   /**
@@ -199,7 +193,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    */
   @Override
   public String getDBType() {
-    return this.getCatalogSchema().getDBType().toUpperCase();
+    return catalog.getDBType().toUpperCase();
   }
 
   /**
@@ -213,7 +207,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    */
   @Override
   public Expr generateReadCode(boolean useStreaming, StreamingOptions streamingOptions) {
-    return this.getCatalogSchema().generateReadCode(this.getName(), useStreaming, streamingOptions);
+    return catalog.generateReadCode(getFullPath(), useStreaming, streamingOptions);
   }
 
   /**
@@ -246,13 +240,12 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    */
   @Override
   public Expr generateRemoteQuery(String query) {
-    return this.getCatalogSchema().generateRemoteQuery(query);
+    return catalog.generateRemoteQuery(query);
   }
 
   @Override
   public Table extend(List<RelDataTypeField> extensionFields) {
     String name = this.getName();
-    BodoSqlSchema schema = this.getSchema();
     List<BodoSQLColumn> extendedColumns = new ArrayList<>();
     extendedColumns.addAll(this.columns);
     for (int i = 0; i < extensionFields.size(); i++) {
@@ -266,7 +259,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
       BodoSQLColumn newCol = new BodoSQLColumnImpl(fieldName, newColType, false, tzInfo);
       extendedColumns.add(newCol);
     }
-    return new CatalogTableImpl(name, schema, extendedColumns);
+    return new CatalogTable(name, getParentFullPath(), extendedColumns, this.catalog);
   }
 
   /**
@@ -287,7 +280,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
 
   // Cache used for inlining views. We cannot use the Memoizer here because the
   // ToRelContext doesn't have .equals() properly defined. Here we know that
-  // all uses of the same CatalogTableImpl are safe to cache.
+  // all uses of the same CatalogTable are safe to cache.
   private final Map<ExpandViewInput, RelNode> inlineViewCache = new HashMap<>();
 
   /**
@@ -344,8 +337,9 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
         new ExpandViewInput(
             baseRelNode.getRowType(),
             viewDefinition,
-            List.of(getCatalog().getCatalogName(), getSchema().getName()),
-            List.of(getCatalog().getCatalogName(), getSchema().getName(), getName()));
+            // TODO: FIXME
+            List.of(catalog.getCatalogName(), getParentFullPath().get(0)),
+            List.of(catalog.getCatalogName(), getParentFullPath().get(0), getName()));
     // Check the cache.
     final RelNode result;
     if (inlineViewCache.containsKey(input)) {
@@ -437,13 +431,12 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * @return The approximate distinct count. Returns null if there is a timeout.
    */
   private @Nullable Double estimateColumnDistinctCount(int column) {
-    List<String> qualifiedName = List.of(getSchema().getName(), getName());
     String columnName = getColumnNames().get(column).toUpperCase(Locale.ROOT);
-    SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
+    SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) this.catalog;
     // Do not allow the metadata to be requested if this column of this table was
     // not pre-cleared by the metadata scanning pass.
     if (!BodoMetadataRestrictionScan.Companion.canRequestColumnDistinctiveness(
-        qualifiedName, columnName)) {
+        getFullPath(), columnName)) {
       String message =
           String.format(
               Locale.ROOT,
@@ -455,13 +448,13 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     }
     // Avoid ever returning more than the row count. This can happen because
     // Snowflake returns an estimate.
-    Double distinctCount = catalog.estimateColumnDistinctCount(qualifiedName, columnName);
+    Double distinctCount = catalog.estimateColumnDistinctCount(getFullPath(), columnName);
 
     // If the original query failed, try again with sampling
     if (distinctCount == null) {
       distinctCount =
           catalog.estimateColumnDistinctCountWithSampling(
-              qualifiedName, columnName, getStatistic().getRowCount());
+              getFullPath(), columnName, getStatistic().getRowCount());
     }
 
     // Important: We must use getStatistic() here to allow subclassing, which we use for
@@ -497,7 +490,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    */
   public @Nullable Long trySubmitLongMetadataQuerySnowflakeInternal(
       SqlString metadataSelectQueryString) {
-    SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
+    SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) this.catalog;
     return catalog.trySubmitLongMetadataQuery(metadataSelectQueryString);
   }
 
@@ -511,10 +504,8 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * @return The InlineViewMetadata loaded from the catalog or null if no information is available.
    */
   private @Nullable InlineViewMetadata tryGetViewMetadata() {
-    String tableName = getName();
-    String schemaName = getSchema().getName();
-    SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
-    return catalog.tryGetViewMetadata(List.of(schemaName, tableName));
+    SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) this.catalog;
+    return catalog.tryGetViewMetadata(getFullPath());
   }
 
   /**
@@ -596,9 +587,8 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
      * @return estimated row count for this table.
      */
     private @Nullable Double estimateRowCount() {
-      List<String> qualifiedName = List.of(getSchema().getName(), getName());
-      SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) getCatalog();
-      return catalog.estimateRowCount(qualifiedName);
+      SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) CatalogTable.this.catalog;
+      return catalog.estimateRowCount(getFullPath());
     }
   }
 }

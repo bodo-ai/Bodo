@@ -7,7 +7,7 @@ package com.bodosql.calcite.table;
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
-import com.bodosql.calcite.schema.BodoSqlSchema;
+import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.calcite.config.CalciteConnectionConfig;
@@ -32,7 +32,10 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    */
   private final String name;
 
-  private final BodoSqlSchema schema;
+  // Full path of schemas to reach this, including the
+  // table name.
+  private final ImmutableList<String> fullPath;
+
   protected final List<BodoSQLColumn> columns;
 
   /**
@@ -40,13 +43,20 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * backlink to the schema.
    *
    * @param name Name of the table.
-   * @param schema Schema to which this table belongs.
+   * @param schemaPath A list of schemas names that must be traversed from the root to reach this
+   *     table.
    * @param columns List of columns in this table, in order.
    */
-  protected BodoSqlTable(String name, BodoSqlSchema schema, List<BodoSQLColumn> columns) {
+  protected BodoSqlTable(
+      String name, ImmutableList<String> schemaPath, List<BodoSQLColumn> columns) {
     this.name = name;
-    this.schema = schema;
     this.columns = columns;
+    ImmutableList.Builder<String> builder = new ImmutableList.Builder<>();
+    for (String elem : schemaPath) {
+      builder.add(elem);
+    }
+    builder.add(name);
+    fullPath = builder.build();
   }
 
   /** @return This table's name. */
@@ -54,9 +64,16 @@ public abstract class BodoSqlTable implements ExtensibleTable {
     return this.name;
   }
 
-  /** @return This table's schema. */
-  public BodoSqlSchema getSchema() {
-    return this.schema;
+  /** @return The full path for this table. * */
+  public ImmutableList<String> getFullPath() {
+    return fullPath;
+  }
+
+  /**
+   * @return The full path for this table's parent. This is the full path without the table name. *
+   */
+  public ImmutableList<String> getParentFullPath() {
+    return fullPath.subList(0, fullPath.size() - 1);
   }
 
   public List<String> getColumnNames() {

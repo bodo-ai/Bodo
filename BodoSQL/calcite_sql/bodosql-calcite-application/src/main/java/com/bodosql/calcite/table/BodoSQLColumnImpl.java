@@ -12,8 +12,8 @@ import org.apache.calcite.sql.type.BodoTZInfo;
  *
  * <h1>Representaion of a column in a table</h1>
  *
- * A {@link CatalogTableImpl} contains several columns. The point of this class is to be able to
- * store names and types.
+ * A {@link CatalogTable} contains several columns. The point of this class is to be able to store
+ * names and types.
  *
  * <p>For more information, see the design described on Confluence:
  * https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1130299393/Java+Table+and+Schema+Typing#Column

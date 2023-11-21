@@ -150,7 +150,7 @@ public interface BodoSQLColumn {
       }
     }
 
-    // TODO: support ARRAY, JSON and VARIANT so that CatalogTableImpl and LocalTableImpl will work
+    // TODO: support ARRAY, JSON and VARIANT so that CatalogTable and LocalTable will work
     public static BodoSQLColumnDataType fromSqlType(RelDataType relDataType) {
       SqlTypeName typeName = relDataType.getSqlTypeName();
       BodoSQLColumnDataType outType;

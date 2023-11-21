@@ -150,7 +150,9 @@ class BodoMetadataRestrictionScan {
                 val names = node.getRowType().fieldNames
                 cols.forEach {
                     val columnName = names[it]
-                    columnsAllowedToRequest.add("${table.schema.name}.${table.name}.$columnName".uppercase(Locale.ROOT))
+                    val schemaName = table.fullPath[0]
+                    val tableName = table.name
+                    columnsAllowedToRequest.add("$schemaName.$tableName.$columnName".uppercase(Locale.ROOT))
                 }
             } else if (node is SetOp || node is Filter || node is SnowflakeToPandasConverter) {
                 // For these types of RelNodes, forward the scan onto all the children un-modified.
