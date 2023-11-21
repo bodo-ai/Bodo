@@ -2,7 +2,7 @@ package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.rel.core.ProjectBase
-import com.bodosql.calcite.table.CatalogTableImpl
+import com.bodosql.calcite.table.CatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
@@ -25,7 +25,7 @@ class SnowflakeProject(
     input: RelNode,
     projects: List<RexNode>,
     rowType: RelDataType,
-    private val catalogTable: CatalogTableImpl,
+    private val catalogTable: CatalogTable,
 ) : ProjectBase(cluster, traitSet.replace(SnowflakeRel.CONVENTION), ImmutableList.of(), input, projects, rowType), SnowflakeRel {
 
     override fun copy(
@@ -50,7 +50,7 @@ class SnowflakeProject(
             input: RelNode,
             projects: List<RexNode>,
             rowType: RelDataType,
-            catalogTable: CatalogTableImpl,
+            catalogTable: CatalogTable,
         ): SnowflakeProject {
             return SnowflakeProject(cluster, traitSet, input, projects, rowType, catalogTable)
         }
@@ -62,7 +62,7 @@ class SnowflakeProject(
             input: RelNode,
             projects: List<RexNode>,
             fieldNames: List<String?>?,
-            catalogTable: CatalogTableImpl,
+            catalogTable: CatalogTable,
         ): SnowflakeProject {
             val rowType = RexUtil.createStructType(
                 cluster.typeFactory,
@@ -74,5 +74,5 @@ class SnowflakeProject(
         }
     }
 
-    override fun getCatalogTable(): CatalogTableImpl = catalogTable
+    override fun getCatalogTable(): CatalogTable = catalogTable
 }

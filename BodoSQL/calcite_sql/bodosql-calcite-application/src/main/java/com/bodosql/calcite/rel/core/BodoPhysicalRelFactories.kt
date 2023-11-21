@@ -17,7 +17,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeSort
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.table.BodoSqlTable
-import com.bodosql.calcite.table.CatalogTableImpl
+import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.Context
@@ -216,7 +216,7 @@ object BodoPhysicalRelFactories {
     private fun createTableScan(toRelContext: RelOptTable.ToRelContext, table: RelOptTable): RelNode {
         val bodoSqlTable: BodoSqlTable = ((table as? RelOptTableImpl)?.table() as? BodoSqlTable)!!
 
-        val retVal = if (bodoSqlTable is CatalogTableImpl) {
+        val retVal = if (bodoSqlTable is CatalogTable) {
             SnowflakeTableScan.create(toRelContext.cluster, table, bodoSqlTable)
         } else {
             PandasTableScan.create(toRelContext.cluster, table)

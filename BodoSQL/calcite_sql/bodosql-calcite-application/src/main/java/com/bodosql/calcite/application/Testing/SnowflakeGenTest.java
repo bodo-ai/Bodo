@@ -9,7 +9,7 @@ import com.bodosql.calcite.schema.LocalSchemaImpl;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
-import com.bodosql.calcite.table.LocalTableImpl;
+import com.bodosql.calcite.table.LocalTable;
 import com.bodosql.calcite.traits.BatchingProperty;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -70,7 +70,8 @@ public class SnowflakeGenTest {
     arr.add(column3);
 
     BodoSqlTable table =
-        new LocalTableImpl("localtable", schema, arr, false, "", "", false, "MEMORY", null);
+        new LocalTable(
+            "localtable", schema.getFullPath(), arr, false, "", "", false, "MEMORY", null);
     schema.addTable(table);
 
     RelationalAlgebraGenerator generator =

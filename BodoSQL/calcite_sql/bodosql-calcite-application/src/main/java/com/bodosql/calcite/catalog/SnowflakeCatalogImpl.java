@@ -18,7 +18,7 @@ import com.bodosql.calcite.sql.BodoSqlUtil;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
-import com.bodosql.calcite.table.CatalogTableImpl;
+import com.bodosql.calcite.table.CatalogTable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.sql.Connection;
@@ -578,7 +578,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
             new BodoSQLColumnImpl(
                 readName, writeName, type, elemType, nullable, tzInfo, precision));
       }
-      return new CatalogTableImpl(tableName, schema, columns);
+      return new CatalogTable(tableName, schema.getFullPath(), columns, this);
     } catch (SQLException e) {
       String errorMsg =
           String.format(
@@ -793,15 +793,28 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * Generates the code necessary to produce a write expression from Snowflake.
    *
    * @param varName Name of the variable to write.
-   * @param schemaName Name of the schema to use when writing.
-   * @param tableName Name of the table to use when writing.
+   * @param tableName The path of schema used to reach the table from the root that includes the
+   *     table. This should be of the form SCHEMA_NAME, TABLE_NAME.
+   * @return The generated code to produce a write.
+   */
+  @Override
+  public Expr generateAppendWriteCode(Variable varName, List<String> tableName) {
+    return generateWriteCode(
+        varName, tableName, ifExistsBehavior.APPEND, SqlCreateTable.CreateTableType.DEFAULT);
+  }
+
+  /**
+   * Generates the code necessary to produce a write expression from Snowflake.
+   *
+   * @param varName Name of the variable to write.
+   * @param tableName The path of schema used to reach the table from the root that includes the
+   *     table. This should be of the form SCHEMA_NAME, TABLE_NAME.
    * @return The generated code to produce a write.
    */
   @Override
   public Expr generateWriteCode(
       Variable varName,
-      String schemaName,
-      String tableName,
+      List<String> tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType tableType) {
     return new Expr.Raw(
@@ -809,26 +822,32 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
             "%s.to_sql('%s', '%s', schema='%s', if_exists='%s', _bodo_create_table_type='%s',"
                 + " index=False)",
             varName.emit(),
-            tableName,
-            generatePythonConnStr(schemaName),
-            schemaName,
+            tableName.get(1),
+            generatePythonConnStr(tableName.get(0)),
+            tableName.get(0),
             ifExists.asToSqlKwArgument(),
             tableType.asStringKeyword()));
   }
 
   @Override
+  public Expr generateStreamingAppendWriteInitCode(
+      Expr.IntegerLiteral operatorID, List<String> tableName) {
+    return generateStreamingWriteInitCode(
+        operatorID, tableName, ifExistsBehavior.APPEND, SqlCreateTable.CreateTableType.DEFAULT);
+  }
+
+  @Override
   public Expr generateStreamingWriteInitCode(
       Expr.IntegerLiteral operatorID,
-      String schemaName,
-      String tableName,
+      List<String> tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
     return new Expr.Call(
         "bodo.io.snowflake_write.snowflake_writer_init",
         operatorID,
-        new Expr.StringLiteral(generatePythonConnStr(schemaName)),
-        new Expr.StringLiteral(tableName),
-        new Expr.StringLiteral(schemaName),
+        new Expr.StringLiteral(generatePythonConnStr(tableName.get(0))),
+        new Expr.StringLiteral(tableName.get(1)),
+        new Expr.StringLiteral(tableName.get(0)),
         new Expr.StringLiteral(ifExists.asToSqlKwArgument()),
         new Expr.StringLiteral(createTableType.asStringKeyword()));
   }
@@ -855,8 +874,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   /**
    * Generates the code necessary to produce a read expression from Snowflake.
    *
-   * @param schemaName Name of the schema to use when reading.
-   * @param tableName Name of the table to use when reading.
+   * @param tableName The path of schema used to reach the table from the root that includes the
+   *     table. This should be of the form SCHEMA_NAME, TABLE_NAME.
    * @param useStreaming Should we generate code to read the table as streaming (currently only
    *     supported for snowflake tables)
    * @param streamingOptions The options to use if streaming is enabled.
@@ -864,10 +883,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   @Override
   public Expr generateReadCode(
-      String schemaName,
-      String tableName,
-      boolean useStreaming,
-      StreamingOptions streamingOptions) {
+      List<String> tableName, boolean useStreaming, StreamingOptions streamingOptions) {
     // TODO: Convert to use Expr.Call
     String streamingArg = "";
     if (useStreaming) {
@@ -876,7 +892,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     return new Expr.Raw(
         String.format(
             "pd.read_sql('%s', '%s', _bodo_is_table_input=True, _bodo_read_as_table=True, %s)",
-            tableName, generatePythonConnStr(schemaName), streamingArg));
+            tableName.get(1), generatePythonConnStr(tableName.get(0)), streamingArg));
   }
 
   /**

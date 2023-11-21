@@ -22,7 +22,7 @@ if bodo.get_rank() == 0:
             gateway.jvm.com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
         )
         ColumnClass = gateway.jvm.com.bodosql.calcite.table.BodoSQLColumnImpl
-        LocalTableClass = gateway.jvm.com.bodosql.calcite.table.LocalTableImpl
+        LocalTableClass = gateway.jvm.com.bodosql.calcite.table.LocalTable
         LocalSchemaClass = gateway.jvm.com.bodosql.calcite.schema.LocalSchemaImpl
         RelationalAlgebraGeneratorClass = (
             gateway.jvm.com.bodosql.calcite.application.RelationalAlgebraGenerator

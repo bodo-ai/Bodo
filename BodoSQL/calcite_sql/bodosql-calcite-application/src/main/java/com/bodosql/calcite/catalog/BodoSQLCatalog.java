@@ -82,35 +82,56 @@ public interface BodoSQLCatalog {
   List<String> getDefaultSchema();
 
   /**
+   * Generates the code necessary to produce an append write expression from the given catalog.
+   *
+   * @param varName Name of the variable to write.
+   * @param tableName The path of schema used to reach the table from the root that includes the
+   *     table.
+   * @return The generated code to produce the append write.
+   */
+  Expr generateAppendWriteCode(Variable varName, List<String> tableName);
+
+  /**
    * Generates the code necessary to produce a write expression from the given catalog.
    *
    * @param varName Name of the variable to write.
-   * @param schemaName Name of the schema to use when writing.
-   * @param tableName Name of the table to use when writing.
+   * @param tableName The path of schema used to reach the table from the root that includes the
+   *     table.
+   * @param ifExists Behavior to perform if the table already exists
+   * @param createTableType Type of table to create if it doesn't exist
    * @return The generated code to produce a write.
    */
   Expr generateWriteCode(
       Variable varName,
-      String schemaName,
-      String tableName,
+      List<String> tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType);
+
+  /**
+   * Generates the code necessary to produce the streaming write initialization code from the given
+   * catalog for an append operation.
+   *
+   * @param operatorID ID of operation to use for retrieving memory budget.
+   * @param tableName The path of schema used to reach the table from the root that includes the
+   *     table.
+   * @return The generated code to produce the write-initialization code
+   */
+  Expr generateStreamingAppendWriteInitCode(Expr.IntegerLiteral operatorID, List<String> tableName);
 
   /**
    * Generates the code necessary to produce the streaming write initialization code from the given
    * catalog.
    *
    * @param operatorID ID of operation to use for retrieving memory budget.
-   * @param schemaName Name of the schema to use when writing.
-   * @param tableName Name of the table to use when writing.
+   * @param tableName The path of schema used to reach the table from the root that includes the
+   *     table.
    * @param ifExists Behavior to perform if the table already exists
    * @param createTableType Type of table to create if it doesn't exist
    * @return The generated code to produce the write-initialization code
    */
   Expr generateStreamingWriteInitCode(
       Expr.IntegerLiteral operatorID,
-      String schemaName,
-      String tableName,
+      List<String> tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType);
 
@@ -139,15 +160,15 @@ public interface BodoSQLCatalog {
    *
    * @param useStreaming Should we generate code to read the table as streaming (currently only
    *     supported for snowflake tables)
-   * @param schemaName Name of the schema to use when reading.
-   * @param tableName Name of the table to use when reading.
+   * @param tableName The path of schema used to reach the table from the root that includes the
+   *     table.
    * @param useStreaming Should we generate code to read the table as streaming (currently only
    *     supported for snowflake tables)
    * @param streamingOptions The options to use if streaming is enabled.
    * @return The generated code to produce a read.
    */
   Expr generateReadCode(
-      String schemaName, String tableName, boolean useStreaming, StreamingOptions streamingOptions);
+      List<String> tableName, boolean useStreaming, StreamingOptions streamingOptions);
 
   /**
    * Close any connections to the remote DataBase. If there are no connections this should be a

@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.plan.makeCost
-import com.bodosql.calcite.table.CatalogTableImpl
+import com.bodosql.calcite.table.CatalogTable
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner
@@ -19,7 +19,7 @@ class SnowflakeAggregate private constructor(
     groupSet: ImmutableBitSet,
     groupSets: List<ImmutableBitSet>?,
     aggCalls: List<AggregateCall>,
-    private val catalogTable: CatalogTableImpl,
+    private val catalogTable: CatalogTable,
 ) :
     Aggregate(cluster, traitSet.replace(SnowflakeRel.CONVENTION), listOf(), input, groupSet, groupSets, aggCalls),
     SnowflakeRel {
@@ -34,7 +34,7 @@ class SnowflakeAggregate private constructor(
         return SnowflakeAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls, catalogTable)
     }
 
-    override fun getCatalogTable(): CatalogTableImpl = catalogTable
+    override fun getCatalogTable(): CatalogTable = catalogTable
 
     override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
         val rows = mq.getRowCount(this)
@@ -50,7 +50,7 @@ class SnowflakeAggregate private constructor(
             groupSet: ImmutableBitSet,
             groupSets: List<ImmutableBitSet>?,
             aggCalls: List<AggregateCall>,
-            catalogTable: CatalogTableImpl,
+            catalogTable: CatalogTable,
         ): SnowflakeAggregate {
             return SnowflakeAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls, catalogTable)
         }
