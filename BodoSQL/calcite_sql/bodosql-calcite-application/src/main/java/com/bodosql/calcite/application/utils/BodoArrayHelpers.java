@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.utils;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import java.util.Objects;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.TZAwareSqlType;
@@ -89,7 +90,8 @@ public class BodoArrayHelpers {
         typeName =
             String.format(
                 "bodo.ArrayItemArrayType(%s)",
-                sqlTypeToBodoArrayType(type.getComponentType(), false).emit());
+                sqlTypeToBodoArrayType(Objects.requireNonNull(type.getComponentType()), false)
+                    .emit());
         break;
       case BOOLEAN:
         // TODO: Add nullable support in the type

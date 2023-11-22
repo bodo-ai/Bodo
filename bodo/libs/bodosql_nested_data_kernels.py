@@ -10,14 +10,17 @@ import numba
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
+    dtype_to_array_type,
     get_overload_const_bool,
     is_bin_arr_type,
     is_overload_constant_bool,
     is_overload_none,
     is_str_arr_type,
     raise_bodo_error,
+    to_nullable_type,
     unwrap_typeref,
 )
+from bodo.utils.utils import is_array_typ
 
 
 @numba.generated_jit(nopython=True)
@@ -384,27 +387,56 @@ def overload_array_cat_util(arr_0, arr_1, is_scalar_0, is_scalar_1):
     )
 
 
-@numba.generated_jit(nopython=True)
-def to_array(arr, dtype, dict_encoding_state=None, func_id=-1):
-    if isinstance(arr, types.optional):  # pragma: no cover
-        return unopt_argument("bodo.libs.bodosql_array_kernels.to_array", ["arr"], 0)
+def to_array(
+    arr, is_scalar=False, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
+    pass
 
-    def impl(arr, dtype, dict_encoding_state=None, func_id=-1):  # pragma: no cover
-        return to_array_util(arr, dtype, dict_encoding_state, func_id)
+
+@overload(to_array, no_unliteral=True)
+def overload_to_array(arr, is_scalar=False, dict_encoding_state=None, func_id=-1):
+    """
+    Handles cases where TO_ARRAY receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.to_array",
+            ["arr", "is_scalar", "dict_encoding_state", "func_id"],
+            0,
+            default_map={
+                "is_scalar": False,
+                "dict_encoding_state": None,
+                "func_id": -1,
+            },
+        )
+
+    def impl(
+        arr, is_scalar=False, dict_encoding_state=None, func_id=-1
+    ):  # pragma: no cover
+        return to_array_util(arr, is_scalar, dict_encoding_state, func_id)
 
     return impl
 
 
-@numba.generated_jit(nopython=True)
-def to_array_util(arr, dtype, dict_encoding_state, func_id):
-    arg_names = ["arr", "dtype", "dict_encoding_state", "func_id"]
-    arg_types = [arr, dtype, dict_encoding_state, func_id]
+def to_array_util(arr, is_scalar, dict_encoding_state, func_id):  # pragma: no cover
+    pass
+
+
+@overload(to_array_util, no_unliteral=True)
+def overload_to_array_util(arr, is_scalar, dict_encoding_state, func_id):
+    is_scalar_bool = get_overload_const_bool(is_scalar)
+    arg_names = ["arr", "is_scalar", "dict_encoding_state", "func_id"]
+    arg_types = [arr, is_scalar, dict_encoding_state, func_id]
     propagate_null = [True, False, False, False]
-    arr_dtype = unwrap_typeref(dtype)
-    out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(arr_dtype)
-    scalar_text = (
-        "res[i] = bodo.utils.conversion.coerce_scalar_to_array(arg0, 1, arg1, False)"
+    inner_dtype = arr if is_scalar_bool else arr.dtype
+    inner_dtype = (
+        inner_dtype
+        if is_array_typ(inner_dtype)
+        else dtype_to_array_type(inner_dtype, True)
     )
+    out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(inner_dtype)
+    scalar_text = "res[i] = bodo.utils.conversion.coerce_scalar_to_array(arg0, 1, inner_dtype, False)"
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
         arg_names,
@@ -412,9 +444,10 @@ def to_array_util(arr, dtype, dict_encoding_state, func_id):
         propagate_null,
         scalar_text,
         out_dtype,
-        # Add support for dict encoding caching with streaming.
+        extra_globals={"inner_dtype": inner_dtype},
         dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
         func_id_name="func_id" if use_dict_caching else None,
+        are_arrays=[not is_scalar_bool, False, False, False],
     )
 
 
@@ -641,29 +674,40 @@ def overload_array_contains_util(
     )
 
 
-@numba.generated_jit(nopython=True)
-def array_to_string(arr, separator):
+def array_to_string(arr, separator, is_scalar=False):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(array_to_string, no_unliteral=True)
+def overload_array_to_string(arr, separator, is_scalar=False):  # pragma: no cover
     """
     Handles cases where ARRAY_TO_STRING receives optional arguments and
     forwards to the appropriate version of the real implementation
     """
     args = [arr, separator]
     for i in range(len(args)):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+        if isinstance(args[i], types.optional):
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.array_to_string",
-                ["arr", "separator"],
+                ["arr", "separator", "is_scalar"],
                 i,
+                default_map={"is_scalar": False},
             )
 
-    def impl(arr, separator):  # pragma: no cover
-        return array_to_string_util(arr, separator)
+    def impl(arr, separator, is_scalar=False):
+        return array_to_string_util(arr, separator, is_scalar)
 
     return impl
 
 
-@numba.generated_jit(nopython=True)
-def array_to_string_util(arr, separator):
+def array_to_string_util(arr, separator, is_scalar):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(array_to_string_util, no_unliteral=True)
+def overload_array_to_string_util(arr, separator, is_scalar):  # pragma: no cover
     """
     A dedicated kernel for the SQL function ARRAY_TO_STRING which takes in an
            array, (or arrray column) and a separator string (or string column), then
@@ -674,17 +718,17 @@ def array_to_string_util(arr, separator):
     Returns:
         A string scalar/array: the result string(s)
     """
-    arg_names = ["arr", "separator"]
-    arg_types = [arr, separator]
-    propagate_null = [True, True]
+    verify_string_arg(separator, "ARRAY_TO_STRING", "separator")
+    is_scalar_bool = get_overload_const_bool(is_scalar)
+    arg_names = ["arr", "separator", "is_scalar"]
+    arg_types = [arr, separator, is_scalar]
+    propagate_null = [True, True, False]
     out_dtype = bodo.string_array_type
     scalar_text = "arr_str = ''\n"
     scalar_text += "if len(arg0) > 0:\n"
-    scalar_text += (
-        "    arr_str = '' if bodo.libs.array_kernels.isna(arg0, 0) else str(arg0[0])\n"
-    )
-    scalar_text += "    for j in bodo.prange(len(arg0) - 1):\n"
-    scalar_text += "        arr_str += arg1 + ('' if bodo.libs.array_kernels.isna(arg0, j + 1) else str(arg0[j + 1]))\n"
+    scalar_text += "    arr_str = '' if bodo.libs.array_kernels.isna(arg0, 0) else bodo.libs.bodosql_array_kernels.to_char(arg0[0])\n"
+    scalar_text += "    for idx0 in bodo.prange(len(arg0) - 1):\n"
+    scalar_text += "        arr_str += arg1 + ('' if bodo.libs.array_kernels.isna(arg0, idx0 + 1) else bodo.libs.bodosql_array_kernels.to_char(arg0[idx0 + 1]))\n"
     scalar_text += "res[i] = arr_str"
     return gen_vectorized(
         arg_names,
@@ -692,7 +736,11 @@ def array_to_string_util(arr, separator):
         propagate_null,
         scalar_text,
         out_dtype,
-        array_is_scalar=True,
+        are_arrays=[
+            not is_scalar_bool,
+            bodo.utils.utils.is_array_typ(separator),
+            False,
+        ],
         # Protect against the input being a "scalar" string/dict array.
         support_dict_encoding=False,
     )

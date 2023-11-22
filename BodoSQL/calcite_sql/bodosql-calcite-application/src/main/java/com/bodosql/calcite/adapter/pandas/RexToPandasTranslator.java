@@ -40,7 +40,6 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.s
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.getObjectConstructKeepNullCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.visitJsonFunc;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.NestedDataCodeGen.generateToArrayFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.genFloorCeilCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLeastGreatestCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLogFnInfo;
@@ -1074,11 +1073,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "TO_TIME":
       case "TRY_TO_TIME":
         return generateToTimeCode(operands, fnName, streamingNamedArgs);
-      case "TO_ARRAY":
-        return generateToArrayFnCode(this.visitor, fnOperation, operands, streamingNamedArgs);
-      case "ARRAY_TO_STRING":
-        assert operands.size() == 2;
-        return ExprKt.BodoSQLKernel("array_to_string", operands, List.of());
       default:
         throw new BodoSQLCodegenException(String.format("Unexpected Cast function: %s", fnName));
     }
@@ -1329,7 +1323,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    * Implementation for functions that use nested arrays.
    *
    * @param fnName The name of the function.
-   * @param operands The arguments to the function.
+   * @param fnOperands The arguments to the function.
    * @param argScalars Indicates which arguments are scalars
    * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
    *     we aren't in a streaming context.
@@ -1337,31 +1331,38 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    */
   protected Expr visitNestedArrayFunc(
       String fnName,
-      List<Expr> operands,
+      List<Expr> fnOperands,
       List<Boolean> argScalars,
       List<Pair<String, Expr>> streamingNamedArgs) {
+    List<Expr> operands = new ArrayList<>(fnOperands);
+    ArrayList<Pair<String, Expr>> kwargs = new ArrayList<>();
+
     switch (fnName) {
+        // functions which need is_scalar indicator for the first argument only
+      case "TO_ARRAY":
+      case "ARRAY_TO_STRING":
+        kwargs.add(new Pair<>("is_scalar", new Expr.BooleanLiteral(argScalars.get(0))));
+        break;
+        // functions which need is_scalar indicators for the first two argument
       case "ARRAYS_OVERLAP":
       case "ARRAY_CONTAINS":
       case "ARRAY_POSITION":
       case "ARRAY_EXCEPT":
       case "ARRAY_INTERSECTION":
       case "ARRAY_CAT":
-        Expr isScalar0 = new Expr.BooleanLiteral(argScalars.get(0));
-        Expr isScalar1 = new Expr.BooleanLiteral(argScalars.get(0));
-        ArrayList<Pair<String, Expr>> kwargs = new ArrayList();
-        kwargs.add(new Pair<String, Expr>("is_scalar_0", isScalar0));
-        kwargs.add(new Pair<String, Expr>("is_scalar_1", isScalar1));
-        return ExprKt.BodoSQLKernel(fnName.toLowerCase(Locale.ROOT), operands, kwargs);
+        kwargs.add(new Pair<>("is_scalar_0", new Expr.BooleanLiteral(argScalars.get(0))));
+        kwargs.add(new Pair<>("is_scalar_1", new Expr.BooleanLiteral(argScalars.get(1))));
+        break;
       case "ARRAY_SIZE":
         Expr isSingleRowLiteral = new Expr.BooleanLiteral(argScalars.get(0));
-        List<Expr> all_operands = new ArrayList<>(operands);
-        all_operands.add(isSingleRowLiteral);
-        return ExprKt.BodoSQLKernel(fnName.toLowerCase(Locale.ROOT), all_operands, List.of());
+        operands.add(isSingleRowLiteral);
+        break;
       default:
         throw new BodoSQLCodegenException(
             String.format(Locale.ROOT, "Unsupported nested Array function: %s", fnName));
     }
+
+    return ExprKt.BodoSQLKernel(fnName.toLowerCase(Locale.ROOT), operands, kwargs);
   }
 
   /**
@@ -1664,8 +1665,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TIME":
           case "TO_TIME":
           case "TRY_TO_TIME":
-          case "TO_ARRAY":
-          case "ARRAY_TO_STRING":
             return visitCastFunc(fnOperation, operands);
           case "ASINH":
           case "ACOSH":
@@ -1963,6 +1962,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "ARRAY_CAT":
           case "ARRAYS_OVERLAP":
           case "ARRAY_SIZE":
+          case "ARRAY_TO_STRING":
+          case "TO_ARRAY":
             return visitNestedArrayFunc(fnName, operands, argScalars);
         }
       default:

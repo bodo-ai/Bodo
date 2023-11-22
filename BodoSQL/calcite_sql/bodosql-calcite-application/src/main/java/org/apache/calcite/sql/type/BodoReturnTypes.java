@@ -4,21 +4,13 @@ import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSyst
 import com.google.common.base.Preconditions;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
-import org.apache.calcite.rel.type.RelRecordType;
 import org.apache.calcite.runtime.CalciteContextException;
-import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlCollation;
-import org.apache.calcite.sql.SqlFunction;
-import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperatorBinding;
 
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 
-import org.apache.calcite.sql.parser.SqlParserPos;
-import org.apache.calcite.tools.ValidationException;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.ArrayList;
