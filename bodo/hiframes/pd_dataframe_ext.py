@@ -3731,7 +3731,8 @@ def gen_pandas_parquet_metadata(
             (
                 bodo.ArrayItemArrayType,
                 bodo.StructArrayType,
-                bodo.MapArrayType,
+                # TODO BSE-1317
+                # bodo.MapArrayType,
             ),
         ):
             # TODO: provide meaningful pandas_type when possible.
@@ -4659,7 +4660,6 @@ def to_sql_overload(
 
     # Generate snowflake schema from bodo datatypes.
     sf_schema = bodo.io.snowflake.gen_snowflake_schema(df.columns, df.data)
-    column_datatypes = dict(zip(df.columns, df.data))
 
     # Compute the total number of files written.
     func_text += (
@@ -4671,7 +4671,7 @@ def to_sql_overload(
     func_text += (
         "        with bodo.objmode():\n"
         "            bodo.io.snowflake.create_table_copy_into(\n"
-        f"                cursor, stage_name, location, {sf_schema}, column_datatypes,\n"
+        f"                cursor, stage_name, location, {sf_schema},\n"
         "                if_exists, _bodo_create_table_type, num_files_global, old_creds, tmp_folder,\n"
         "                azure_stage_direct_upload, old_core_site,\n"
         "                old_sas_token,\n"
@@ -4729,6 +4729,7 @@ def to_sql_overload(
     func_text += "        if err_msg != 'all_ok':\n"
     func_text += "            print('err_msg=', err_msg)\n"
     func_text += "            raise ValueError('error in to_sql() operation')\n"
+
     loc_vars = {}
     glbls = globals().copy()
     glbls.update(
@@ -4753,7 +4754,6 @@ def to_sql_overload(
             "tracing": tracing,
             "unicode_to_utf8": unicode_to_utf8,
             "warnings": warnings,
-            "column_datatypes": column_datatypes,
         }
     )
     glbls.update(extra_globals)
