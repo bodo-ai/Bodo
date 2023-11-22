@@ -41,6 +41,7 @@ public class DateAddCodeGen {
     if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
       arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", arg1);
     }
+
     if (adding_delta) {
       return new Expr.Call("bodo.libs.bodosql_array_kernels.add_interval", arg0, arg1);
     } else {

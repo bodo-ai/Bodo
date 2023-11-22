@@ -154,10 +154,25 @@ def add_interval(start_dt, interval):
     """Handles cases where adding intervals receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [start_dt, interval]
+    arg_names = ["start_dt", "interval"]
+
+    return convert_numeric_to_int(
+        "bodo.libs.bodosql_datetime_array_kernels.add_interval_unopt_util",
+        arg_names,
+        args,
+        ["interval"],
+    )
+
+
+@numba.generated_jit(nopython=True)
+def add_interval_unopt_util(start_dt, interval):
+    """Handles cases where adding intervals receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [start_dt, interval]
     for i in range(len(args)):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.add_interval",
+                "bodo.libs.bodosql_array_kernels.add_interval_unopt_util",
                 ["start_dt", "interval"],
                 i,
             )
@@ -216,30 +231,55 @@ def add_interval_nanoseconds(amount, start_dt):  # pragma: no cover
 def construct_timestamp(
     year, month, day, hour, minute, second, nanosecond, time_zone
 ):  # pragma: no cover
+    """Handles cases where TIMESTAMP_FROM_PARTS receives numeric
+    arguments and forwards to the appropriate version of the real implementation"""
+    args = [year, month, day, hour, minute, second, nanosecond, time_zone]
+    arg_names = [
+        "year",
+        "month",
+        "day",
+        "hour",
+        "minute",
+        "second",
+        "nanosecond",
+        "time_zone",
+    ]
+
+    return convert_numeric_to_int(
+        "bodo.libs.bodosql_datetime_array_kernels.construct_timestamp_unopt_util",
+        arg_names,
+        args,
+        ["year", "month", "day", "hour", "minute", "second", "nanosecond"],
+    )
+
+
+@numba.generated_jit(nopython=True)
+def construct_timestamp_unopt_util(
+    year, month, day, hour, minute, second, nanosecond, time_zone
+):  # pragma: no cover
     """Handles cases where TIMESTAMP_FROM_PARTS receives optional
     arguments and forwards to the appropriate version of the real implementation"""
     args = [year, month, day, hour, minute, second, nanosecond, time_zone]
+    arg_names = [
+        "year",
+        "month",
+        "day",
+        "hour",
+        "minute",
+        "second",
+        "nanosecond",
+        "time_zone",
+    ]
     for i in range(len(args)):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.construct_timestamp",
-                [
-                    "year",
-                    "month",
-                    "day",
-                    "hour",
-                    "minute",
-                    "second",
-                    "nanosecond",
-                    "time_zone",
-                ],
+                "bodo.libs.bodosql_datetime_array_kernels.construct_timestamp_unopt_util",
+                arg_names,
                 i,
             )
 
-    def impl(
-        year, month, day, hour, minute, second, nanosecond, time_zone
-    ):  # pragma: no cover
-        return construct_timestamp_util(
+    def impl(year, month, day, hour, minute, second, nanosecond, time_zone):
+        return bodo.libs.bodosql_array_kernels.construct_timestamp_util(
             year, month, day, hour, minute, second, nanosecond, time_zone
         )
 
@@ -248,19 +288,41 @@ def construct_timestamp(
 
 @numba.generated_jit(nopython=True)
 def date_from_parts(year, month, day):  # pragma: no cover
+    """Handles cases where DATE_FROM_PARTS receives numeric
+    arguments and forwards to the appropriate version of the real implementation"""
+    args = [year, month, day]
+    arg_names = ["year", "month", "day"]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.date_from_parts",
+                arg_names,
+                i,
+            )
+
+    return convert_numeric_to_int(
+        "bodo.libs.bodosql_datetime_array_kernels.date_from_parts_unopt_util",
+        arg_names,
+        args,
+        arg_names,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def date_from_parts_unopt_util(year, month, day):  # pragma: no cover
     """Handles cases where DATE_FROM_PARTS receives optional
     arguments and forwards to the appropriate version of the real implementation"""
     args = [year, month, day]
     for i in range(len(args)):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.date_from_parts",
+                "bodo.libs.bodosql_array_kernels.date_from_parts_unopt_util",
                 ["year", "month", "day"],
                 i,
             )
 
-    def impl(year, month, day):  # pragma: no cover
-        return date_from_parts_util(year, month, day)
+    def impl(year, month, day):
+        return bodo.libs.bodosql_array_kernels.date_from_parts_util(year, month, day)
 
     return impl
 
@@ -616,7 +678,15 @@ def add_interval_util(start_dt, interval):
     )
 
 
+def add_interval_years_unopt_util(amount, start_dt):  # pragma: no cover
+    return
+
+
 def add_interval_years_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_quarters_unopt_util(amount, start_dt):  # pragma: no cover
     return
 
 
@@ -624,7 +694,15 @@ def add_interval_quarters_util(amount, start_dt):  # pragma: no cover
     return
 
 
+def add_interval_months_unopt_util(amount, start_dt):  # pragma: no cover
+    return
+
+
 def add_interval_months_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_weeks_unopt_util(amount, start_dt):  # pragma: no cover
     return
 
 
@@ -632,7 +710,15 @@ def add_interval_weeks_util(amount, start_dt):  # pragma: no cover
     return
 
 
+def add_interval_days_unopt_util(amount, start_dt):  # pragma: no cover
+    return
+
+
 def add_interval_days_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_hours_unopt_util(amount, start_dt):  # pragma: no cover
     return
 
 
@@ -640,7 +726,15 @@ def add_interval_hours_util(amount, start_dt):  # pragma: no cover
     return
 
 
+def add_interval_minutes_unopt_util(amount, start_dt):  # pragma: no cover
+    return
+
+
 def add_interval_minutes_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_seconds_unopt_util(amount, start_dt):  # pragma: no cover
     return
 
 
@@ -648,11 +742,23 @@ def add_interval_seconds_util(amount, start_dt):  # pragma: no cover
     return
 
 
+def add_interval_milliseconds_unopt_util(amount, start_dt):  # pragma: no cover
+    return
+
+
 def add_interval_milliseconds_util(amount, start_dt):  # pragma: no cover
     return
 
 
+def add_interval_microseconds_unopt_util(amount, start_dt):  # pragma: no cover
+    return
+
+
 def add_interval_microseconds_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_nanoseconds_unopt_util(amount, start_dt):  # pragma: no cover
     return
 
 
@@ -661,6 +767,22 @@ def add_interval_nanoseconds_util(amount, start_dt):  # pragma: no cover
 
 
 def create_add_interval_func_overload(unit):  # pragma: no cover
+    def overload_func(amount, start_dt):
+        """Handles cases where this interval addition function receives numeric
+        arguments and forwards to the appropriate version of the real implementation"""
+        args = [amount, start_dt]
+        arg_names = ["amount", "start_dt"]
+        return convert_numeric_to_int(
+            f"bodo.libs.bodosql_array_kernels.add_interval_{unit}_unopt_util",
+            arg_names,
+            args,
+            ["amount"],
+        )
+
+    return overload_func
+
+
+def create_add_interval_func_unopt_util_overload(unit):  # pragma: no cover
     def overload_func(amount, start_dt):
         """Handles cases where this interval addition function receives optional
         arguments and forwards to the appropriate version of the real implementation"""
@@ -674,22 +796,9 @@ def create_add_interval_func_overload(unit):  # pragma: no cover
                 )
 
         func_text = "def impl(amount, start_dt):\n"
-        if is_valid_float_arg(amount) and amount != types.none:
-            func_text += f"  sign_ = np.sign(amount)\n"
-            func_text += f"  abs_amount = np.abs(amount)\n"
-            func_text += f"  whole = sign_ * np.floor(abs_amount)\n"
-            func_text += f"  frac = amount - whole\n"
-            # if -1 < x < 1, sign(sign(|x| - 0.5) + 1) is 1 if |x| >= 0.5, and 0
-            # otherwise. We can use this to implement the same rounding as snowflake
-            # where 1.5 -> 2, and -1.5 -> -2 (half rounds up).
-            func_text += (
-                f"  frac_rounds_up = np.sign(np.sign(np.abs(frac) - 0.5) + 1)\n"
-            )
-            func_text += f"  rounded_value = bodo.libs.bodosql_array_kernels.cast_int64(whole + sign_ * frac_rounds_up)\n"
-            func_text += f"  return bodo.libs.bodosql_array_kernels.add_interval_{unit}_util(rounded_value, start_dt)"
-        else:
-            verify_int_arg(amount, "add_interval_" + unit, "amount")
-            func_text += f"  return bodo.libs.bodosql_array_kernels.add_interval_{unit}_util(amount, start_dt)"
+
+        verify_int_arg(amount, "add_interval_" + unit, "amount")
+        func_text += f"  return bodo.libs.bodosql_array_kernels.add_interval_{unit}_util(amount, start_dt)"
         loc_vars = {}
         exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
 
@@ -903,23 +1012,25 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
 def _install_add_interval_overload():
     """Creates and installs the overloads for interval addition functions"""
     funcs_utils_names = [
-        ("years", add_interval_years, add_interval_years_util),
-        ("quarters", add_interval_quarters, add_interval_quarters_util),
-        ("months", add_interval_months, add_interval_months_util),
-        ("weeks", add_interval_weeks, add_interval_weeks_util),
-        ("days", add_interval_days, add_interval_days_util),
-        ("hours", add_interval_hours, add_interval_hours_util),
-        ("minutes", add_interval_minutes, add_interval_minutes_util),
-        ("seconds", add_interval_seconds, add_interval_seconds_util),
-        ("milliseconds", add_interval_milliseconds, add_interval_milliseconds_util),
-        ("microseconds", add_interval_microseconds, add_interval_microseconds_util),
-        ("nanoseconds", add_interval_nanoseconds, add_interval_nanoseconds_util),
+        "years",
+        "quarters",
+        "months",
+        "weeks",
+        "days",
+        "hours",
+        "minutes",
+        "seconds",
+        "milliseconds",
+        "microseconds",
+        "nanoseconds",
     ]
-    for unit, func, util in funcs_utils_names:
+    for unit in funcs_utils_names:
         func_overload_impl = create_add_interval_func_overload(unit)
-        overload(func)(func_overload_impl)
+        overload(eval(f"add_interval_{unit}"))(func_overload_impl)
+        func_overload_impl = create_add_interval_func_unopt_util_overload(unit)
+        overload(eval(f"add_interval_{unit}_unopt_util"))(func_overload_impl)
         util_overload_impl = create_add_interval_util_overload(unit)
-        overload(util)(util_overload_impl)
+        overload(eval(f"add_interval_{unit}_util"))(util_overload_impl)
 
 
 _install_add_interval_overload()

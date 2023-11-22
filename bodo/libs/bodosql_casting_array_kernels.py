@@ -251,3 +251,48 @@ def _install_cast_func_overloads(funcs_utils_names):
 
 
 _install_cast_func_overloads(cast_funcs_utils_names)
+
+
+@numba.generated_jit(nopython=True)
+def round_to_int64(x):
+    if isinstance(x, types.optional):
+        return unopt_argument(
+            f"bodo.libs.bodosql_casting_array_kernels.round_to_int64", ["x"], 0
+        )
+
+    def impl(x):
+        # we can't use cast_int64(round(x, 0)), because round(x, 0) doesn't
+        # handle cases where x is not in [INT64_MIN, INT64_MAX].
+        rounded = bodo.libs.bodosql_array_kernels.round(x, 0)
+        return bodo.libs.bodosql_casting_array_kernels.round_to_int64_util(x, rounded)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def round_to_int64_util(x, rounded_x):
+    arg_names = ["x", "rounded_x"]
+    arg_types = [x, rounded_x]
+    propagate_null = [True, True]
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
+
+    imax = np.iinfo(np.int64).max
+    imin = np.iinfo(np.int64).min
+    extra_globals = {"imax": imax, "imin": imin}
+
+    # Essentially the logic of cast_int64 for floats, but we use the rounded
+    # value
+    scalar_text = "is_valid = not(pd.isna(arg0) or np.isinf(arg0) or arg0 < imin or arg0 > imax)\n"
+    scalar_text += "if not is_valid:\n"
+    scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+    scalar_text += "else:\n"
+    scalar_text += f"  res[i] = np.int64(arg1)\n"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        extra_globals=extra_globals,
+    )

@@ -1739,8 +1739,10 @@ BodoSQL currently supports the following Timestamp functions:
 -   `#!sql TIMESTAMP_FROM_PARTS(date_expr, time_expr)`
     The first overload is equivalent to `DATE_FROM_PARTS` but also takes in an
     hour, minute and second (which can be out of bounds just like the
-    month/day). Optionally takes in a nanosecond value, and a timezone value for
-    the output. If the timezone is not specified, the output is timezone-naive.
+    month/day). Optionally takes in a nanosecond value, and a timezone value
+    for the output. If the timezone is not specified, the output is
+    timezone-naive. Note that if any numeric argument cannot be converted to
+    an int64, then it will become NULL.
 
     Note: timezone argument is not supported at this time.
 

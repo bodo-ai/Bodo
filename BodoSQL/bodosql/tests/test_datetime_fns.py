@@ -4321,6 +4321,60 @@ def test_date_from_parts(date_from_parts_data, use_case, memory_leak_check):
     )
 
 
+@pytest.fixture
+def date_from_parts_float_data():
+    years = pd.Series(
+        [2014.5, 2018.1, 2021.0, 2024.3, 2025.4, 2027.2, 2029.6],
+        dtype=pd.Float64Dtype(),
+    )
+    months = pd.Series([1.1, None, 7.2, 20.3, -1.4, 0.1, 6.5], dtype=pd.Float64Dtype())
+    days = pd.Series([1.1, 12.2, 4.3, -4.5, 12.4, 0.6, 0], dtype=pd.Float64Dtype())
+    answer = pd.Series(
+        [
+            datetime.date(2015, 1, 1),
+            None,
+            datetime.date(2021, 7, 4),
+            datetime.date(2025, 7, 26),
+            datetime.date(2024, 11, 12),
+            datetime.date(2026, 12, 1),
+            datetime.date(2030, 6, 30),
+        ]
+    )
+    return years, months, days, answer
+
+
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case", marks=pytest.mark.slow),
+    ],
+)
+def test_date_from_float_parts(date_from_parts_float_data, use_case, memory_leak_check):
+    if use_case:
+        query = "SELECT CASE WHEN YR < 0 THEN NULL ELSE DATE_FROM_PARTS(YR, MO, DA) END FROM table1"
+    else:
+        query = "SELECT DATE_FROM_PARTS(YR, MO, DA) FROM table1"
+    year, month, day, answer = date_from_parts_float_data
+    df = pd.DataFrame(
+        {
+            "YR": year,
+            "MO": month,
+            "DA": day,
+        }
+    )
+    ctx = {"table1": df}
+    py_output = pd.DataFrame({0: pd.Series([s for s in answer])})
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+        check_dtype=False,
+        check_names=False,
+    )
+
+
 @pytest.fixture(
     params=[
         pytest.param(True, id="with_ns", marks=pytest.mark.slow),
@@ -4328,14 +4382,39 @@ def test_date_from_parts(date_from_parts_data, use_case, memory_leak_check):
     ]
 )
 def timestamp_from_parts_data(request):
-    year = pd.Series([2014, 2016, 2018, None, 2022, 2024], dtype=pd.Int64Dtype())
-    month = pd.Series([1, 7, 0, 12, 100, -3], dtype=pd.Int64Dtype())
-    day = pd.Series([70, 12, -123, None, 1, -7], dtype=pd.Int64Dtype())
-    hour = pd.Series([0, 2, 4, None, 40, -5], dtype=pd.Int64Dtype())
-    minute = pd.Series([15, 0, -1, 0, 65, 0], dtype=pd.Int64Dtype())
-    second = pd.Series([0, -1, 50, 3, 125, 1234], dtype=pd.Int64Dtype())
+    year = pd.Series(
+        [2014, 2016, 2018, None, 2022, 2024, None, None, None], dtype=pd.Int64Dtype()
+    )
+    year_float = pd.Series(
+        [
+            2014.3,
+            2015.6,
+            2017.5,
+            None,
+            2022.2,
+            2024.3,
+            np.finfo(np.float64).max,
+            2.0**70,
+            -(3.0**50),
+        ],
+        dtype=pd.Float64Dtype(),
+    )
+    month = pd.Series([1, 7, 0, 12, 100, -3, 1, 1, 1], dtype=pd.Int64Dtype())
+    month_float = pd.Series(
+        [1.1, 7.2, 0.3, 12.4, 99.8, -2.5, 1, 1, 1], dtype=pd.Float64Dtype()
+    )
+    day = pd.Series([70, 12, -123, None, 1, -7, 1, 1, 1], dtype=pd.Int64Dtype())
+    day_float = pd.Series(
+        [70.1, 12.2, -123.3, None, 0.9, -6.6, 1, 1, 1], dtype=pd.Float64Dtype()
+    )
+    hour = pd.Series([0, 2, 4, None, 40, -5, 0, 0, 0], dtype=pd.Int64Dtype())
+    hour_float = pd.Series(
+        [0.1, 2.1, 4.1, None, 40.1, -5.1, 0, 0, 0], dtype=pd.Float64Dtype()
+    )
+    minute = pd.Series([15, 0, -1, 0, 65, 0, 0, 0, 0], dtype=pd.Int64Dtype())
+    second = pd.Series([0, -1, 50, 3, 125, 1234, 0, 0, 0], dtype=pd.Int64Dtype())
     nanosecond = pd.Series(
-        [-1, 0, 123456789, 0, 250999, -102030405060], dtype=pd.Int64Dtype()
+        [-1, 0, 123456789, 0, 250999, -102030405060, 0, 0, 0], dtype=pd.Int64Dtype()
     )
     use_nanosecond = request.param
     if use_nanosecond:
@@ -4347,6 +4426,9 @@ def timestamp_from_parts_data(request):
                 None,
                 "2030-4-2 17:07:05.000250999",
                 "2023-8-23 19:18:51.969594940",
+                None,
+                None,
+                None,
             ]
         )
     else:
@@ -4358,9 +4440,26 @@ def timestamp_from_parts_data(request):
                 None,
                 "2030-4-2 17:07:05",
                 "2023-8-23 19:20:34",
+                None,
+                None,
+                None,
             ]
         )
-    return year, month, day, hour, minute, second, nanosecond, use_nanosecond, answer
+    return (
+        year,
+        year_float,
+        month,
+        month_float,
+        day,
+        day_float,
+        hour,
+        hour_float,
+        minute,
+        second,
+        nanosecond,
+        use_nanosecond,
+        answer,
+    )
 
 
 @pytest.mark.parametrize(
@@ -4376,14 +4475,25 @@ def timestamp_from_parts_data(request):
         pytest.param("TIMESTAMPTZFROMPARTS", marks=pytest.mark.slow),
     ],
 )
+@pytest.mark.parametrize(
+    "use_floats",
+    [
+        pytest.param(True, id="with_floats"),
+        pytest.param(False, id="with_ints"),
+    ],
+)
 def test_timestamp_from_parts(
-    func, timestamp_from_parts_data, local_tz, memory_leak_check
+    func, use_floats, timestamp_from_parts_data, local_tz, memory_leak_check
 ):
     (
         year,
+        year_float,
         month,
+        month_float,
         day,
+        day_float,
         hour,
+        hour_float,
         minute,
         second,
         nanosecond,
@@ -4401,6 +4511,7 @@ def test_timestamp_from_parts(
         query = f"SELECT CASE WHEN YR < 0 THEN NULL ELSE {func}(YR, MO, DA, HO, MI, SE{ns_str}) END FROM table1"
     else:
         query = f"SELECT {func}(YR, MO, DA, HO, MI, SE{ns_str}) FROM table1"
+
     tz = (
         local_tz
         if func
@@ -4414,10 +4525,10 @@ def test_timestamp_from_parts(
     )
     df = pd.DataFrame(
         {
-            "YR": year,
-            "MO": month,
-            "DA": day,
-            "HO": hour,
+            "YR": year if not use_floats else year_float,
+            "MO": month if not use_floats else month_float,
+            "DA": day if not use_floats else day_float,
+            "HO": hour if not use_floats else hour_float,
             "MI": minute,
             "SE": second,
             "NS": nanosecond,
