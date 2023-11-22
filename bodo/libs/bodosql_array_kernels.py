@@ -46,6 +46,7 @@ broadcasted_fixed_arg_functions = {
     "array_cat",
     "array_except",
     "array_intersection",
+    "array_compact",
     "array_contains",
     "array_position",
     "array_size",

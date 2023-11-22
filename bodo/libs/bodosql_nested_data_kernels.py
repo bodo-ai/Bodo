@@ -819,3 +819,56 @@ def array_size_util(arr, is_single_row):
         out_dtype,
         are_arrays=are_arrays,
     )
+
+
+def array_compact(arr, is_scalar=False):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(array_compact, no_unliteral=True)  # pragma: no cover
+def overload_array_compact(arr, is_scalar=False):
+    """
+    Handles cases where ARRAY_COMPACT receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    if isinstance(arr, types.optional):
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.array_compact",
+            ["arr", "is_scalar"],
+            0,
+            default_map={"is_scalar": False},
+        )
+
+    def impl(arr, is_scalar=False):
+        return array_compact_util(arr, is_scalar)
+
+    return impl
+
+
+def array_compact_util(arr, is_scalar):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(array_compact_util, no_unliteral=True)  # pragma: no cover
+def overload_array_compact_util(arr, is_scalar):
+    is_scalar_bool = get_overload_const_bool(is_scalar)
+    arg_names = ["arr", "is_scalar"]
+    arg_types = [arr, is_scalar]
+    propagate_null = [True, False]
+    inner_arr_type = arr if is_scalar_bool else arr.dtype
+    out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(inner_arr_type)
+    scalar_text = "elems_to_keep = np.ones(len(arg0), dtype=np.bool_)\n"
+    scalar_text += "for idx0 in range(len(arg0)):\n"
+    scalar_text += "   if bodo.libs.array_kernels.isna(arg0, idx0):\n"
+    scalar_text += "      elems_to_keep[idx0] = False\n"
+    scalar_text += "res[i] = arg0[elems_to_keep]"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=[not is_scalar_bool, False],
+    )
