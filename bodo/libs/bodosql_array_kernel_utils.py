@@ -86,7 +86,6 @@ def gen_vectorized(
     synthesize_dict_scalar_text=None,
     synthesize_dict_global=False,
     synthesize_dict_unique=False,
-    array_is_scalar=False,
     dict_encoding_state_name=None,
     func_id_name=None,
     are_arrays=None,
@@ -214,10 +213,7 @@ def gen_vectorized(
     ), "Cannot use res_list with support_dict_encoding"
 
     if are_arrays is None:
-        if array_is_scalar:
-            are_arrays = [is_array_item_array(typ) for typ in arg_types]
-        else:
-            are_arrays = [bodo.utils.utils.is_array_typ(typ, True) for typ in arg_types]
+        are_arrays = [bodo.utils.utils.is_array_typ(typ) for typ in arg_types]
     all_scalar = not any(are_arrays)
     out_null = any(
         [propagate_null[i] for i in range(len(arg_types)) if arg_types[i] == bodo.none]

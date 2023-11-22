@@ -2988,6 +2988,21 @@ BodoSQL currently supports the following JSON functions:
 Bodo currently supports the following functions that operate on columns of arrays:
 
 
+#### TO_ARRAY
+-   `#!sql TO_ARRAY(arr)`
+
+    Converts the input expression to a single-element array containing this value. If the input
+    is an ARRAY, or VARIANT containing an array value, the result is unchanged. Returns `NULL`
+    for `NULL` or a JSON null input.
+
+
+#### ARRAY_TO_STRING
+-   `#!sql ARRAY_TO_STRING(arr, sep)`
+
+    Converted the input array `arr` to a string by casting all values to strings (using `TO_VARCHAR`)
+    and concatenating them (using `sep` to separate the elements).
+
+
 #### ARRAY_CONTAINS
 -   `#!sql ARRAY_CONTAINS(elem, arr)`
 

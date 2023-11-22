@@ -326,9 +326,11 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
       if (this.elemType == BodoSQLColumnDataType.EMPTY) {
         throw new BodoSQLCodegenException("Cannot have ARRAY type with dtype EMPTY");
       }
+      // TODO(njriasan): Fix the nullable for elemType by making elemType a proper nested type.
       RelDataType elemRelType =
           this.elemType.convertToSqlType(typeFactory, nullable, tzInfo, precision);
-      return typeFactory.createArrayType(elemRelType, -1);
+      return typeFactory.createTypeWithNullability(
+          typeFactory.createArrayType(elemRelType, -1), nullable);
     }
     return dtype.convertToSqlType(typeFactory, nullable, tzInfo, precision);
   }

@@ -18,7 +18,7 @@ public class PandasGenTest {
   public static void main(String[] args) throws Exception {
 
     String sql = "select CURRENT_DATE()";
-    int plannerChoice = RelationalAlgebraGenerator.VOLCANO_PLANNER;
+    int plannerChoice = RelationalAlgebraGenerator.STREAMING_PLANNER;
 
     LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
     ArrayList arr = new ArrayList();
