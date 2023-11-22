@@ -7,7 +7,7 @@ from numba.core import types
 import bodo
 from bodo.hiframes.table import TableType
 from bodo.libs.stream_union import UnionStateType
-from bodo.tests.utils import check_func, pytest_mark_pandas
+from bodo.tests.utils import check_func, pytest_mark_pandas, temp_env_override
 from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
@@ -418,6 +418,111 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
         reset_index=True,
         check_dtype=False,
     )
+
+
+@pytest.mark.skipif(bodo.get_size() != 2, reason="Only calibrated for 2 ranks")
+def test_stream_union_distinct_sync(datapath, memory_leak_check):
+    """
+    Test that streaming union synchronization works as expected across
+    multiple pipelines where the number of input batches on different ranks
+    might be different.
+    """
+    customer_path: str = datapath("tpch-test_data/parquet/customer.parquet")
+    orders_path: str = datapath("tpch-test_data/parquet/orders.parquet")
+    global_1 = ColNamesMetaType(("c_custkey",))
+    global_2 = MetaType((0,))
+    global_3 = MetaType((0,))
+
+    def impl(customer_df, orders_df):
+        is_last1 = False
+        _iter_1 = 0
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(customer_df),
+            (),
+            global_2,
+            1,
+        )
+        T1_len = bodo.hiframes.table.local_len(T1)
+        union_state = bodo.libs.stream_union.init_union_state(-1, all=False)
+        while not is_last1:
+            # We use a small batch size to force different number of iterations.
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * 200), ((_iter_1 + 1) * 200))
+            )
+            is_last1 = ((_iter_1 + 1) * 200) >= T1_len
+            is_last1 = bodo.libs.stream_union.union_consume_batch(
+                union_state, T2, is_last1, False
+            )
+            _iter_1 = _iter_1 + 1
+
+        is_last2 = False
+        _iter_2 = 0
+        T3 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(orders_df),
+            (),
+            global_3,
+            1,
+        )
+        T3_len = bodo.hiframes.table.local_len(T3)
+        while not is_last2:
+            T4 = bodo.hiframes.table.table_local_filter(
+                T3, slice((_iter_2 * 200), ((_iter_2 + 1) * 200))
+            )
+            is_last2 = ((_iter_2 + 1) * 200) >= T3_len
+            is_last2 = bodo.libs.stream_union.union_consume_batch(
+                union_state, T4, is_last2, True
+            )
+            _iter_2 = _iter_2 + 1
+
+        is_last3 = False
+        _iter_3 = 0
+        table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        while not is_last3:
+            T5, is_last3 = bodo.libs.stream_union.union_produce_batch(union_state, True)
+            bodo.libs.table_builder.table_builder_append(table_builder, T5)
+            _iter_3 = _iter_3 + 1
+
+        bodo.libs.stream_union.delete_union_state(union_state)
+        T6 = bodo.libs.table_builder.table_builder_finalize(table_builder)
+        index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T6), 1, None)
+        df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T6,), index_1, global_1)
+        return df1
+
+    cust_df = pd.read_parquet(customer_path, columns=["C_CUSTKEY"]).rename(
+        columns={"C_CUSTKEY": "c_custkey"}
+    )
+    ord_df = pd.read_parquet(orders_path, columns=["O_CUSTKEY"]).rename(
+        columns={"O_CUSTKEY": "c_custkey"}
+    )
+
+    py_output = pd.concat([cust_df, ord_df], ignore_index=True)
+    py_output = py_output.drop_duplicates()
+
+    len_cust_df = cust_df.shape[0]
+    len_ord_df = ord_df.shape[0]
+
+    # Distribute the input unevenly between the two ranks
+    # to force potential hang from shuffle and is_last sync
+    if bodo.get_rank() == 0:
+        cust_df = cust_df.iloc[: (len_cust_df // 4)]
+        ord_df = ord_df.iloc[(len_ord_df // 4) :]
+    else:
+        cust_df = cust_df.iloc[(len_cust_df // 4) :]
+        ord_df = ord_df.iloc[: (len_ord_df // 4)]
+
+    # Test with a very low shuffle threshold to force many syncs.
+    with temp_env_override({"BODO_SHUFFLE_THRESHOLD": str(1024)}):
+        out_df = bodo.jit(distributed=["customer_df", "orders_df"])(impl)(
+            cust_df, ord_df
+        )
+        # Verify that the output is correct
+        out_df = bodo.allgatherv(out_df)
+        pd.testing.assert_frame_equal(
+            out_df.sort_values(by="c_custkey").reset_index(drop=True),
+            py_output.sort_values(by="c_custkey").reset_index(drop=True),
+            check_dtype=False,
+            check_index_type=False,
+        )
 
 
 @pytest.mark.parametrize(
