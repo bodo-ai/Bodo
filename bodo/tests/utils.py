@@ -2,7 +2,6 @@
 """
 Utility functions for testing such as check_func() that tests a function.
 """
-import datetime
 import io
 import os
 import random
@@ -1552,7 +1551,7 @@ def check_timing_func(func, args):
 
 
 def string_list_ent(x):
-    if isinstance(x, (int, np.int64, float, pd.Timestamp, datetime.date)):
+    if isinstance(x, (int, np.int64, float)):
         return str(x)
     if isinstance(x, dict):
         l_str = []
@@ -2774,26 +2773,6 @@ pytest_perf_regression = [
     ),
     pytest.mark.perf_regression,
 ]
-
-
-@pytest.fixture
-def box_as_map(request):
-    """
-    Boxes all list[dict] as MapArrays instead of StructArrays if "map" is in
-    the test name.
-    """
-    prev_struct_size_limit = None
-    try:
-        if "map" in request.node.name:
-            prev_struct_size_limit = bodo.hiframes.boxing.struct_size_limit
-            bodo.hiframes.boxing.struct_size_limit = -1
-            yield
-            bodo.hiframes.boxing.struct_size_limit = prev_struct_size_limit
-        else:
-            yield
-    finally:
-        if prev_struct_size_limit is not None:
-            bodo.hiframes.boxing.struct_size_limit = prev_struct_size_limit
 
 
 @contextmanager
