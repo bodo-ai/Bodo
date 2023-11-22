@@ -2984,6 +2984,7 @@ BodoSQL currently supports the following JSON functions:
     to cast them to a common data type, which is currently
     undefined behavior.
 
+
 ### Array Functions
 Bodo currently supports the following functions that operate on columns of arrays:
 
@@ -3001,6 +3002,13 @@ Bodo currently supports the following functions that operate on columns of array
 
     Converted the input array `arr` to a string by casting all values to strings (using `TO_VARCHAR`)
     and concatenating them (using `sep` to separate the elements).
+
+
+#### ARRAY_COMPACT
+-   `#!sql ARRAY_COMPACT(arr)`
+
+    Returns a compacted array with missing and null values removed from `arr`, effectively
+    converting sparse arrays into dense arrays. Return `NULL` when `arr` is `NULL`.
 
 
 #### ARRAY_CONTAINS

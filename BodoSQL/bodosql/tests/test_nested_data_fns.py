@@ -1336,6 +1336,41 @@ def test_array_cat(value_pool, use_case, memory_leak_check):
     )
 
 
+def test_array_compact(value_pool, use_case, memory_leak_check):
+    """
+    Test ARRAY_COMPACT works correctly with different data type columns
+    """
+    if use_case:
+        query = "SELECT CASE WHEN A IS NULL THEN ARRAY_COMPACT(A) ELSE ARRAY_COMPACT(A) END FROM table1"
+    else:
+        query = "SELECT ARRAY_COMPACT(A) FROM table1"
+
+    def make_vals(L):
+        if L is None:
+            return None
+        return [None if idx is None else value_pool[idx] for idx in L]
+
+    data_pattern = [
+        [None, 0, 1, None, 2, None, None],
+        [0, None, None, 2],
+        [None, None, None],
+        [],
+        None,
+    ] * 2
+    expected_pattern = [[0, 1, 2], [0, 2], [], [], None] * 2
+    data = [make_vals(row) for row in data_pattern]
+    expected = [make_vals(row) for row in expected_pattern]
+    ctx = {"table1": pd.DataFrame({"A": data})}
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=pd.DataFrame({"EXPR$0": expected}),
+    )
+
+
 @pytest.mark.parametrize(
     "query, answer",
     [

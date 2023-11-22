@@ -1341,6 +1341,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         // functions which need is_scalar indicator for the first argument only
       case "TO_ARRAY":
       case "ARRAY_TO_STRING":
+      case "ARRAY_COMPACT":
         kwargs.add(new Pair<>("is_scalar", new Expr.BooleanLiteral(argScalars.get(0))));
         break;
         // functions which need is_scalar indicators for the first two argument
@@ -1957,6 +1958,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return getCondFuncCode(fnName, operands);
           case "ARRAY_CONTAINS":
           case "ARRAY_POSITION":
+          case "ARRAY_COMPACT":
           case "ARRAY_EXCEPT":
           case "ARRAY_INTERSECTION":
           case "ARRAY_CAT":
