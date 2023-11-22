@@ -2917,7 +2917,9 @@ def test_split(string, separator, memory_leak_check):
             return pd.array([string])
         return pd.array(string.split(separator))
 
-    answer = vectorized_sol((string, separator), scalar_fn, pd.StringDtype())
+    answer = vectorized_sol(
+        (string, separator), scalar_fn, pd.ArrowDtype(pa.large_list(pa.large_string()))
+    )
     check_func(
         impl,
         (string, separator),

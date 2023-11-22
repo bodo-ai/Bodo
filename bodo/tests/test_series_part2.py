@@ -199,6 +199,7 @@ def test_series_map_global_jit(memory_leak_check):
 
 
 # TODO: add memory_leak_check
+@pytest.mark.skip("TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing")
 @pytest.mark.slow
 def test_series_map_tup1():
     def test_impl(S):

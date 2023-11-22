@@ -568,14 +568,17 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "a": np.arange(50),
-                    "b": [
-                        {"1": 38.7, "2": 33.2},
-                        {"3": 11.0},
-                        None,
-                        {"abc": 398.21, "jakasf": None},
-                        {},
-                    ]
-                    * 10,
+                    "b": pd.Series(
+                        [
+                            {"1": 38.7, "2": 33.2},
+                            {"3": 11.0},
+                            None,
+                            {"abc": 398.21, "jakasf": None},
+                            {},
+                        ]
+                        * 10,
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.float64())),
+                    ),
                 }
             ),
             True,
@@ -587,6 +590,9 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             ),
             False,
             id="tuple_array",
+            marks=pytest.mark.skip(
+                "TODO[BSE-2076]: support tuple arrays in Arrow boxing/unboxing"
+            ),
         ),
         pytest.param(
             pd.DataFrame(

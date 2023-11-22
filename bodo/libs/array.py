@@ -7,12 +7,20 @@ import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_cast
 from numba.core.typing.templates import signature
 from numba.cpython.listobj import ListInstance
-from numba.extending import intrinsic, models, overload, register_model
+from numba.extending import (
+    NativeValue,
+    intrinsic,
+    models,
+    overload,
+    register_model,
+    typeof_impl,
+)
 from numba.np.arrayobj import _getitem_array_single_int
 
 import bodo
@@ -91,6 +99,13 @@ ll.add_symbol("info_to_interval_array", array_ext.info_to_interval_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
 ll.add_symbol("info_from_table", array_ext.info_from_table)
 ll.add_symbol("delete_info", array_ext.delete_info)
+ll.add_symbol(
+    "bodo_array_from_pyarrow_py_entry", array_ext.bodo_array_from_pyarrow_py_entry
+)
+ll.add_symbol(
+    "pd_pyarrow_array_from_bodo_array_py_entry",
+    array_ext.pd_pyarrow_array_from_bodo_array_py_entry,
+)
 ll.add_symbol("array_info_unpin", array_ext.array_info_unpin)
 ll.add_symbol("delete_table", array_ext.delete_table)
 ll.add_symbol("shuffle_table_py_entrypt", array_ext.shuffle_table_py_entrypt)
@@ -226,7 +241,10 @@ def array_to_info_codegen(context, builder, sig, args):
         # StructArrayType to generate LLVM
         tuple_array = context.make_helper(builder, arr_type, in_arr)
         in_arr = tuple_array.data
-        arr_type = StructArrayType(arr_type.data, ("dummy",) * len(arr_type.data))
+        arr_type = StructArrayType(
+            arr_type.data,
+            tuple(f"_bodo_tuple_array_field{i}" for i in range(len(arr_type.data))),
+        )
 
     if isinstance(arr_type, MapArrayType):
         # Note: The C++ code doesn't contain any special handling for MapArrayType.
@@ -650,10 +668,17 @@ def array_to_info_codegen(context, builder, sig, args):
             ],
         )
 
+    # Dummy handling for PrimitiveArrayType used in string array since bodo.gatherv()
+    # calls itself on string array data which generates an unnecessary CPython wrapper
+    # for a nested array. Boxing of nested array uses info_to_array().
+    # See test_scatterv_gatherv_allgatherv_df_jit"[df_value2]"
+    if isinstance(arr_type, bodo.PrimitiveArrayType):
+        return context.get_constant_null(array_info_type)
+
     raise_bodo_error(f"array_to_info(): array type {arr_type} is not supported")
 
 
-def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
+def _lower_info_to_array_numpy(arr_type, context, builder, in_info, raise_py_err=True):
     assert arr_type.ndim == 1, "only 1D array supported"
     arr = context.make_array(arr_type)(context, builder)
 
@@ -674,9 +699,8 @@ def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
         builder.module, fnty, name="info_to_numpy_array"
     )
     builder.call(fn_tp, [in_info, length_ptr, data_ptr, meminfo_ptr])
-    context.compile_internal(
-        builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-    )  # pragma: no cover
+    if raise_py_err:
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     intp_t = context.get_value_type(types.intp)
     shape_array = cgutils.pack_array(builder, [builder.load(length_ptr)], ty=intp_t)
@@ -702,7 +726,9 @@ def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
     return arr._getvalue()
 
 
-def _lower_info_to_array_item_array(context, builder, arr_type, in_info):
+def _lower_info_to_array_item_array(
+    context, builder, arr_type, in_info, raise_py_err=True
+):
     """Convert C++ array_info* to array(array(string)).
     Allocates an array(array(item)) payload and uses C++ to fill n_arrays/offsets/
     null_bitmap fields.
@@ -752,9 +778,8 @@ def _lower_info_to_array_item_array(context, builder, arr_type, in_info):
             payload._get_ptr_by_name("null_bitmap"),
         ],
     )
-    context.compile_internal(
-        builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-    )  # pragma: no cover
+    if raise_py_err:
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     # The data array of array(array(string)) is a string array
     payload.data = info_to_array_codegen(
@@ -762,6 +787,7 @@ def _lower_info_to_array_item_array(context, builder, arr_type, in_info):
         builder,
         inner_arr_type(array_info_type, inner_arr_type),
         (str_arr_info, context.get_constant_null(arr_type)),
+        raise_py_err,
     )
     builder.store(payload._getvalue(), meminfo_data_ptr)
 
@@ -770,7 +796,7 @@ def _lower_info_to_array_item_array(context, builder, arr_type, in_info):
     return array_item_array._getvalue()
 
 
-def _lower_info_to_struct_array(context, builder, arr_type, in_info):
+def _lower_info_to_struct_array(context, builder, arr_type, in_info, raise_py_err=True):
     """Convert C++ array_info* to struct array.
     Allocates a struct array payload and uses C++ to fill null_bitmap field.
     Calls info_to_array_codegen() recursively to convert child arrays.
@@ -812,9 +838,8 @@ def _lower_info_to_struct_array(context, builder, arr_type, in_info):
             payload._get_ptr_by_name("null_bitmap"),
         ],
     )
-    context.compile_internal(
-        builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-    )  # pragma: no cover
+    if raise_py_err:
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     fnty = lir.FunctionType(
         lir.IntType(8).as_pointer(),
@@ -837,6 +862,7 @@ def _lower_info_to_struct_array(context, builder, arr_type, in_info):
                 builder,
                 inner_arr_type(array_info_type, inner_arr_type),
                 (inner_info, context.get_constant_null(arr_type)),
+                raise_py_err,
             )
         )
 
@@ -852,7 +878,7 @@ def _lower_info_to_struct_array(context, builder, arr_type, in_info):
     return struct_array._getvalue()
 
 
-def info_to_array_codegen(context, builder, sig, args):
+def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
     array_type = sig.args[1]
     arr_type = (
         array_type.instance_type
@@ -866,7 +892,9 @@ def info_to_array_codegen(context, builder, sig, args):
         tuple_array = context.make_helper(builder, arr_type)
         struct_arr_type = StructArrayType(arr_type.data)
         inner_sig = struct_arr_type(array_info_type, struct_arr_type)
-        tuple_array.data = info_to_array_codegen(context, builder, inner_sig, args)
+        tuple_array.data = info_to_array_codegen(
+            context, builder, inner_sig, args, raise_py_err
+        )
         return tuple_array._getvalue()
 
     if isinstance(arr_type, MapArrayType):
@@ -876,18 +904,26 @@ def info_to_array_codegen(context, builder, sig, args):
         map_array = context.make_helper(builder, arr_type)
         map_arr_type = _get_map_arr_data_type(arr_type)
         inner_sig = map_arr_type(array_info_type, map_arr_type)
-        map_array.data = info_to_array_codegen(context, builder, inner_sig, args)
+        map_array.data = info_to_array_codegen(
+            context, builder, inner_sig, args, raise_py_err
+        )
         return map_array._getvalue()
 
     if isinstance(arr_type, ArrayItemArrayType):
-        return _lower_info_to_array_item_array(context, builder, arr_type, in_info)
+        return _lower_info_to_array_item_array(
+            context, builder, arr_type, in_info, raise_py_err
+        )
 
     if isinstance(arr_type, StructArrayType):
-        return _lower_info_to_struct_array(context, builder, arr_type, in_info)
+        return _lower_info_to_struct_array(
+            context, builder, arr_type, in_info, raise_py_err
+        )
 
     # StringArray
     if arr_type in (string_array_type, binary_array_type):
-        return _gen_info_to_string_array(context, builder, arr_type, in_info)
+        return _gen_info_to_string_array(
+            context, builder, arr_type, in_info, raise_py_err
+        )
 
     # dictionary-encoded string array
     if arr_type == bodo.dict_str_arr_type:
@@ -925,6 +961,7 @@ def info_to_array_codegen(context, builder, sig, args):
             builder,
             sig,
             (str_arr_info, context.get_constant_null(arr_type.data)),
+            raise_py_err,
         )
 
         indices_arr_t = bodo.libs.dict_arr_ext.dict_indices_arr_type
@@ -934,6 +971,7 @@ def info_to_array_codegen(context, builder, sig, args):
             builder,
             sig,
             (indices_arr_info, context.get_constant_null(indices_arr_t)),
+            raise_py_err,
         )
 
         fnty = lir.FunctionType(
@@ -994,7 +1032,7 @@ def info_to_array_codegen(context, builder, sig, args):
         int_dtype = get_categories_int_type(arr_type.dtype)
         int_arr_type = types.Array(int_dtype, 1, "C")
         out_arr.codes = _lower_info_to_array_numpy(
-            int_arr_type, context, builder, in_info
+            int_arr_type, context, builder, in_info, raise_py_err
         )
         # set categorical dtype of output array to be same as input array
         if isinstance(array_type, types.TypeRef):
@@ -1036,7 +1074,16 @@ def info_to_array_codegen(context, builder, sig, args):
 
     # Numpy
     if isinstance(arr_type, types.Array):
-        return _lower_info_to_array_numpy(arr_type, context, builder, in_info)
+        return _lower_info_to_array_numpy(
+            arr_type, context, builder, in_info, raise_py_err
+        )
+
+    # Dummy handling for PrimitiveArrayType used in string array since bodo.gatherv()
+    # calls itself on string array data which generates an unnecessary CPython wrapper
+    # for a nested array. Unboxing of nested array uses info_to_array().
+    # See test_scatterv_gatherv_allgatherv_df_jit"[df_value2]"
+    if isinstance(arr_type, bodo.PrimitiveArrayType):
+        return context.get_constant_null(arr_type)
 
     # null array
     if arr_type == bodo.null_array_type:
@@ -1061,9 +1108,8 @@ def info_to_array_codegen(context, builder, sig, args):
                 length_ptr,
             ],
         )
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        if raise_py_err:
+            bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         arr.length = builder.load(length_ptr)
         return arr._getvalue()
 
@@ -1131,9 +1177,8 @@ def info_to_array_codegen(context, builder, sig, args):
                 meminfo_nulls_ptr,
             ],
         )
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        if raise_py_err:
+            bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
         intp_t = context.get_value_type(types.intp)
 
@@ -1230,9 +1275,8 @@ def info_to_array_codegen(context, builder, sig, args):
                 meminfo_right_ptr,
             ],
         )
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
+        if raise_py_err:
+            bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
         intp_t = context.get_value_type(types.intp)
 
@@ -1280,7 +1324,7 @@ def info_to_array_codegen(context, builder, sig, args):
     raise_bodo_error(f"info_to_array(): array type {arr_type} is not supported")
 
 
-def _gen_info_to_string_array(context, builder, arr_type, info_ptr):
+def _gen_info_to_string_array(context, builder, arr_type, info_ptr, raise_py_err=True):
     """Generate LLVM code for converting array_info to string/binary array.
     Creates the necessary structs, allocates the array(item) payload meminfo, and
     calls info_to_string_array().
@@ -1336,9 +1380,8 @@ def _gen_info_to_string_array(context, builder, arr_type, info_ptr):
             payload._get_ptr_by_name("null_bitmap"),
         ],
     )
-    context.compile_internal(
-        builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-    )  # pragma: no cover
+    if raise_py_err:
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     # C++ string array doesn't support offsets
     char_arr.meminfo_offset = context.get_constant(types.int64, 0)
@@ -1355,6 +1398,262 @@ def info_to_array(typingctx, info_type, array_type):
     arr_type = unwrap_typeref(array_type)
     assert info_type == array_info_type, "info_to_array: expected info type"
     return arr_type(info_type, array_type), info_to_array_codegen
+
+
+@typeof_impl.register(pd.arrays.ArrowExtensionArray)
+def _typeof_pd_arrow_arr(val, c):
+    return bodo.io.helpers.pyarrow_type_to_numba(val._data.type)
+
+
+def convert_arrow_arr_to_dict(arr, arrow_type):
+    """Convert PyArrow array's type to a type with dictionary-encoding as specified by
+    arrow_type. Not using Arrow's cast() since not working for nested arrays
+    (as of Arrow 13).
+
+    Args:
+        arr (pa.Array): input PyArrow array
+        arrow_type (DataType): target Arrow array type with dictionary encoding
+
+    Returns:
+        pa.Array: converted PyArrow array
+    """
+    if pa.types.is_large_list(arrow_type) or pa.types.is_list(arrow_type):
+        return arr.from_arrays(
+            arr.offsets, convert_arrow_arr_to_dict(arr.values, arrow_type.value_type)
+        )
+
+    if pa.types.is_struct(arrow_type):
+        new_arrs = [
+            convert_arrow_arr_to_dict(arr.field(i), arrow_type.field(i).type)
+            for i in range(arr.type.num_fields)
+        ]
+        names = [arr.type.field(i).name for i in range(arr.type.num_fields)]
+        return arr.from_arrays(new_arrs, names)
+
+    if pa.types.is_map(arrow_type):
+        new_keys = convert_arrow_arr_to_dict(arr.keys, arrow_type.key_type)
+        new_items = convert_arrow_arr_to_dict(arr.items, arrow_type.item_type)
+        return arr.from_arrays(arr.offsets, new_keys, new_items)
+
+    if (
+        pa.types.is_string(arr.type) or pa.types.is_large_string(arr.type)
+    ) and pa.types.is_dictionary(arrow_type):
+        return arr.dictionary_encode()
+
+    return arr
+
+
+def to_pa_arr(A, arrow_type, arrow_type_no_dict):
+    """Convert input to PyArrow array with specified type"""
+    if isinstance(A, pa.Array):
+        return A
+
+    if isinstance(A, pd.arrays.ArrowExtensionArray):
+        return A._data.combine_chunks()
+
+    arr = pa.array(A, arrow_type_no_dict)
+
+    if arrow_type != arrow_type_no_dict:
+        arr = convert_arrow_arr_to_dict(arr, arrow_type)
+
+    return arr
+
+
+def unbox_nested_array(typ, val, c):
+    """Unboxing method for nested arrays using Arrow arrays (used by all nested array
+    types)
+
+    Args:
+        typ (types.Type): Numba array type to unbox
+        val (PyObject): array object to unbox
+        c (_UnboxContext): Unboxing context
+
+    Returns:
+        NativeValue: Unboxed array
+    """
+    arrow_type, _ = bodo.io.helpers._numba_to_pyarrow_type(typ, use_dict_arr=True)
+    arrow_type_no_dict, _ = bodo.io.helpers._numba_to_pyarrow_type(
+        typ, use_dict_arr=False
+    )
+
+    to_pa_arr_obj = c.pyapi.unserialize(c.pyapi.serialize_object(to_pa_arr))
+    arrow_type_obj = c.pyapi.unserialize(c.pyapi.serialize_object(arrow_type))
+    arrow_type_no_dict_obj = c.pyapi.unserialize(
+        c.pyapi.serialize_object(arrow_type_no_dict)
+    )
+    val = c.pyapi.call_function_objargs(
+        to_pa_arr_obj, [val, arrow_type_obj, arrow_type_no_dict_obj]
+    )
+    c.pyapi.decref(to_pa_arr_obj)
+    c.pyapi.decref(arrow_type_obj)
+    c.pyapi.decref(arrow_type_no_dict_obj)
+
+    fnty = lir.FunctionType(
+        lir.IntType(8).as_pointer(),
+        [lir.IntType(8).as_pointer()],
+    )
+    fn_tp = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="bodo_array_from_pyarrow_py_entry"
+    )
+    arr_info = c.builder.call(fn_tp, [val])
+
+    bodo_array = bodo.libs.array.info_to_array_codegen(
+        c.context,
+        c.builder,
+        typ(bodo.libs.array.array_info_type, typ),
+        (arr_info, c.context.get_constant_null(typ)),
+        # Avoid raising error in unboxing context to avoid calling convention issues
+        raise_py_err=False,
+    )
+
+    # delete output array_info
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),
+        ],
+    )
+    fn_tp = cgutils.get_or_insert_function(c.builder.module, fnty, name="delete_info")
+    c.builder.call(fn_tp, [arr_info])
+
+    # decref since val is output of to_pa_list_arr() and not coming from user context
+    c.pyapi.decref(val)
+
+    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
+    return NativeValue(bodo_array, is_error=is_error)
+
+
+def _convert_to_pa_map_arr(arr, arrow_type):
+    """Convert array(struct) returned from C++ to proper map array.
+    NOTE: there could be nested maps inside.
+    Also converts boolean array to null array since C++ doesn't support null array yet
+    and uses boolean.
+
+    Args:
+        arr (pd.arrays.ArrowExtensionArray): input array(struct) array
+        arrow_type (DataType): target Arrow map array type
+
+    Returns:
+        ArrowExtensionArray: equivalent map array
+    """
+    if arr.type == arrow_type:
+        return arr
+
+    # Convert list(struct) to map
+    if (
+        (pa.types.is_large_list(arr.type) or pa.types.is_list(arr.type))
+        and pa.types.is_struct(arr.type.value_type)
+        and pa.types.is_map(arrow_type)
+    ):
+        new_arr = pa.MapArray.from_arrays(
+            arr.offsets,
+            arr.values.field(0),
+            _convert_to_pa_map_arr(arr.values.field(1), arrow_type.item_type),
+        )
+        # Arrow's from_arrays ignores nulls (bug as of Arrow 13) so we add them back manually
+        buffs = new_arr.buffers()
+        buffs[0] = pa.compute.invert(arr.is_null()).buffers()[1]
+        return new_arr.from_buffers(
+            new_arr.type, len(new_arr), buffs[:2], children=[new_arr.values]
+        )
+
+    # Handle struct recursively
+    if pa.types.is_struct(arr.type):
+        new_arrs = [
+            _convert_to_pa_map_arr(arr.field(i), arrow_type.field(i).type)
+            for i in range(arr.type.num_fields)
+        ]
+        names = [arr.type.field(i).name for i in range(arr.type.num_fields)]
+        new_arr = pa.StructArray.from_arrays(new_arrs, names)
+        # Arrow's from_arrays ignores nulls (bug as of Arrow 13) so we add them back manually
+        return pa.Array.from_buffers(
+            new_arr.type, len(new_arr), arr.buffers()[:1], children=new_arrs
+        )
+
+    # Handle list recursively
+    if pa.types.is_large_list(arr.type) or pa.types.is_list(arr.type):
+        new_arr = pa.LargeListArray.from_arrays(
+            arr.offsets, _convert_to_pa_map_arr(arr.values, arrow_type.value_type)
+        )
+        # Arrow's from_arrays ignores nulls (bug as of Arrow 13) so we add them back manually
+        return pa.Array.from_buffers(
+            new_arr.type, len(new_arr), arr.buffers()[:2], children=[new_arr.values]
+        )
+
+    # Convert bool array to null array (since C++ doesn't support null array yet and
+    # uses bool array)
+    if arrow_type == pa.null() and pa.types.is_boolean(arr.type):
+        return pa.NullArray.from_buffers(arrow_type, len(arr), arr.buffers()[:1])
+
+    return arr
+
+
+def fix_boxed_nested_array(arr, arrow_type):
+    """Convert array returned from C++ to proper array type since C++ doesn't have
+    map array and timezone information.
+    NOTE: there could be differences inside nested arrays
+
+    Args:
+        arr (pd.arrays.ArrowExtensionArray): input array
+        arrow_type (DataType): target Arrow array type
+
+    Returns:
+        ArrowExtensionArray: equivalent array with proper type
+    """
+    arr = arr._data.combine_chunks()
+    new_arr = _convert_to_pa_map_arr(arr, arrow_type)
+
+    # Bodo C++ doesn't have details like timezone which need fixed
+    if new_arr.type != arrow_type:
+        new_arr = pa.compute.cast(arr, arrow_type)
+
+    return pd.arrays.ArrowExtensionArray(new_arr)
+
+
+def box_nested_array(typ, val, c):
+    """Boxing method for nested arrays using Arrow arrays (used by all nested array
+    types)
+
+    Args:
+        typ (types.Type): Numba array type to box
+        val (PyObject): array object to box
+        c (_BoxContext): boxing context
+
+    Returns:
+        PyObject: boxed Pandas PyArrow array
+    """
+
+    arr_info = array_to_info_codegen(c.context, c.builder, array_info_type(typ), (val,))
+    fnty = lir.FunctionType(
+        c.pyapi.pyobj,
+        [
+            lir.IntType(8).as_pointer(),
+        ],
+    )
+    box_fname = "pd_pyarrow_array_from_bodo_array_py_entry"
+    fn_get = cgutils.get_or_insert_function(c.builder.module, fnty, name=box_fname)
+    arr = c.builder.call(
+        fn_get,
+        [
+            arr_info,
+        ],
+    )
+
+    # Convert array(struct) returned from C++ to proper array type (map array, timezone)
+    # NOTE: needs to handle nested cases
+    to_pa_map_arr_obj = c.pyapi.unserialize(
+        c.pyapi.serialize_object(fix_boxed_nested_array)
+    )
+    arrow_type, _ = bodo.io.helpers._numba_to_pyarrow_type(typ, use_dict_arr=True)
+    arrow_type_obj = c.pyapi.unserialize(c.pyapi.serialize_object(arrow_type))
+    map_arr = c.pyapi.call_function_objargs(to_pa_map_arr_obj, [arr, arrow_type_obj])
+    c.pyapi.decref(to_pa_map_arr_obj)
+    c.pyapi.decref(arr)
+    c.pyapi.decref(arrow_type_obj)
+    arr = map_arr
+
+    c.context.nrt.decref(c.builder, typ, val)
+    return arr
 
 
 @intrinsic

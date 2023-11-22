@@ -5,6 +5,7 @@ from decimal import Decimal
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -1458,9 +1459,15 @@ def test_df_explode_invalid_cols():
 
     df = pd.DataFrame(
         {
-            "A": [[0, 1, 2], [5], [], [3, 4]] * 3,
+            "A": pd.Series(
+                [[0, 1, 2], [5], [], [3, 4]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
             "B": [1, 7, 2, 4] * 3,
-            "C": [[1, 2, 3], np.nan, [], [1, 2]] * 3,
+            "C": pd.Series(
+                [[1, 2, 3], None, [], [1, 2]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
         }
     )
     with pytest.raises(
@@ -1471,9 +1478,18 @@ def test_df_explode_invalid_cols():
 
     df2 = pd.DataFrame(
         {
-            "A": [[0, 1, 2], [5], [], [3, 4]] * 3,
-            "B": [[1, 2], [3], [], [1, 2]] * 3,
-            "C": [[1, 2, 3], np.nan, [], [1, 2]] * 3,
+            "A": pd.Series(
+                [[0, 1, 2], [5], [], [3, 4]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
+            "B": pd.Series(
+                [[1, 2], [3], [], [1, 2]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
+            "C": pd.Series(
+                [[1, 2, 3], None, [], [1, 2]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
         }
     )
     with pytest.raises(

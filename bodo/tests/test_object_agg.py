@@ -1,6 +1,7 @@
 # Copyright (C) 2023 Bodo Inc. All rights reserved.
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -28,6 +29,7 @@ pytestmark = pytest_slow_unless_codegen
                 pd.Int64Dtype(),
                 False,
                 False,
+                pa.map_(pa.string(), pa.int64()),
             ),
             id="int64",
         ),
@@ -47,6 +49,7 @@ pytestmark = pytest_slow_unless_codegen
                 None,
                 False,
                 False,
+                pa.map_(pa.string(), pa.string()),
             ),
             id="string",
         ),
@@ -66,6 +69,7 @@ pytestmark = pytest_slow_unless_codegen
                 None,
                 False,
                 False,
+                pa.map_(pa.string(), pa.list_(pa.int64())),
             ),
             id="array_int",
         ),
@@ -85,6 +89,7 @@ pytestmark = pytest_slow_unless_codegen
                 None,
                 False,
                 True,  # Dictionary encoding inside of array item arrays causes unboxing issues
+                pa.map_(pa.string(), pa.list_(pa.string())),
             ),
             id="array_string",
         ),
@@ -104,6 +109,16 @@ pytestmark = pytest_slow_unless_codegen
                 None,
                 False,
                 False,
+                pa.map_(
+                    pa.string(),
+                    pa.struct(
+                        [
+                            pa.field("lat", pa.float64()),
+                            pa.field("lon", pa.float64()),
+                            pa.field("name", pa.string()),
+                        ]
+                    ),
+                ),
             ),
             id="struct_simple",
         ),
@@ -147,6 +162,25 @@ pytestmark = pytest_slow_unless_codegen
                 None,
                 False,
                 False,
+                pa.map_(
+                    pa.string(),
+                    pa.struct(
+                        [
+                            pa.field(
+                                "Exams",
+                                pa.list_(
+                                    pa.struct(
+                                        [
+                                            pa.field("Topic", pa.string()),
+                                            pa.field("Score", pa.float64()),
+                                        ]
+                                    )
+                                ),
+                            ),
+                            pa.field("Grade", pa.string()),
+                        ]
+                    ),
+                ),
             ),
             id="struct_nested",
         ),
@@ -163,9 +197,10 @@ pytestmark = pytest_slow_unless_codegen
                     {"A": 71, "L": 76, "P": 80, "R": 82, "S": 83},
                     {"H": 72, "M": 77},
                 ],
-                None,
+                pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
                 True,
                 True,  # Dictionary encoding inside of array item arrays causes unboxing issues
+                pa.map_(pa.string(), pa.map_(pa.string(), pa.int64())),
             ),
             id="map_simple",
         ),
@@ -179,7 +214,7 @@ def object_agg_data(request):
     value_pool: a list of 9 values of a specific dtype that are used
     to construct the input column.
     """
-    vals, dtype, use_map_arrays, ban_dictionary = request.param
+    vals, dtype, use_map_arrays, ban_dictionary, out_arrow_type = request.param
     value_pool = vals + [None]
     group_keys_unique = list("ABCDEFGHIJ")
     counts = [0] * 10
@@ -215,6 +250,9 @@ def object_agg_data(request):
                 json_value = json_values[i]
                 json_obj[json_key] = json_value
         json_out.append(json_obj)
+
+    # Use Arrow MapArray to match Bodo output
+    json_out = pd.Series(json_out, dtype=pd.ArrowDtype(out_arrow_type))
 
     expected_answer = pd.DataFrame(
         {

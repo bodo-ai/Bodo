@@ -1069,6 +1069,10 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             return arrow_numeric_array_to_bodo<arrow::Int8Array>(
                 std::static_pointer_cast<arrow::Int8Array>(arrow_arr),
                 Bodo_CTypes::INT8);
+        case arrow::Type::TIME64:
+            return arrow_numeric_array_to_bodo<arrow::Time64Array>(
+                std::static_pointer_cast<arrow::Time64Array>(arrow_arr),
+                Bodo_CTypes::TIME);
         case arrow::Type::DICTIONARY:
             return arrow_dictionary_array_to_bodo(
                 std::static_pointer_cast<arrow::DictionaryArray>(arrow_arr),

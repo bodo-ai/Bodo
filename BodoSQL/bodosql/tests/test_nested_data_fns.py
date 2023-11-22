@@ -6,6 +6,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -40,26 +41,30 @@ def use_case(request):
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            [
-                pd.Timestamp(s)
-                for s in [
-                    "1999-12-31 23:59:59.99925",
-                    "2023-10-31 18:30:00",
-                    "2018-4-1",
+            pd.array(
+                [
+                    pd.Timestamp(s)
+                    for s in [
+                        "1999-12-31 23:59:59.99925",
+                        "2023-10-31 18:30:00",
+                        "2018-4-1",
+                    ]
                 ]
-            ],
+            ),
             id="timestamp_ntz",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            [
-                pd.Timestamp(s, tz="US/Eastern")
-                for s in [
-                    "2022-2-28",
-                    "2021-11-12 13:14:15",
-                    "2015-3-14 9:26:53",
+            pd.array(
+                [
+                    pd.Timestamp(s, tz="US/Eastern")
+                    for s in [
+                        "2022-2-28",
+                        "2021-11-12 13:14:15",
+                        "2015-3-14 9:26:53",
+                    ]
                 ]
-            ],
+            ),
             id="timestamp_ltz",
         ),
         pytest.param(
@@ -211,9 +216,9 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                     [
                         bodo.Time(11, 19, 34),
                         bodo.Time(12, 30, 15),
-                        bodo.Time(12, 34, 56, 78, 12),
+                        bodo.Time(12, 34, 56),
                         None,
-                        bodo.Time(12, 34, 56, 78, 12, 34),
+                        bodo.Time(12, 34, 56),
                     ]
                     * 4
                 ),
@@ -221,9 +226,9 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                     [
                         pd.array([bodo.Time(11, 19, 34)]),
                         pd.array([bodo.Time(12, 30, 15)]),
-                        pd.array([bodo.Time(12, 34, 56, 78, 12)]),
+                        pd.array([bodo.Time(12, 34, 56)]),
                         None,
-                        pd.array([bodo.Time(12, 34, 56, 78, 12, 34)]),
+                        pd.array([bodo.Time(12, 34, 56)]),
                     ]
                     * 4
                 ),
@@ -508,30 +513,28 @@ def array_df():
                         None,
                         [
                             bodo.Time(12, 0),
-                            bodo.Time(1, 1, 3, 1),
+                            bodo.Time(1, 1, 3),
                             bodo.Time(2),
                             bodo.Time(
                                 15,
                                 0,
                                 50,
-                                10,
-                                100,
                             ),
-                            bodo.Time(9, 1, 3, 10),
+                            bodo.Time(9, 1, 3),
                         ],
                         [],
                         [
-                            bodo.Time(6, 11, 3, 1),
-                            bodo.Time(12, 30, 42, 64),
+                            bodo.Time(6, 11, 3),
+                            bodo.Time(12, 30, 42),
                             bodo.Time(4, 5, 6),
                         ],
                         [
-                            bodo.Time(5, 6, 7, 8),
-                            bodo.Time(12, 13, 14, 15, 16, 17),
-                            bodo.Time(17, 33, 26, 91, 8, 79),
-                            bodo.Time(0, 24, 43, 365, 18, 74),
-                            bodo.Time(3, 59, 6, 25, 757, 3),
-                            bodo.Time(11, 59, 59, 100, 100, 50),
+                            bodo.Time(5, 6, 7),
+                            bodo.Time(12, 13, 14),
+                            bodo.Time(17, 33, 26),
+                            bodo.Time(0, 24, 43),
+                            bodo.Time(3, 59, 6),
+                            bodo.Time(11, 59, 59),
                         ],
                     ]
                     * 4
@@ -557,7 +560,8 @@ def array_df():
                         ],
                         None,
                     ]
-                    * 4
+                    * 4,
+                    dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns"))),
                 ),
                 "nested_array_col": pd.Series(
                     [
@@ -591,15 +595,7 @@ def test_array_item_array_boxing(array_df, col_name, memory_leak_check):
     """Test reading ArrayItemArray"""
     query = "SELECT " + col_name + " from table1"
     py_output = pd.DataFrame({"A": array_df["table1"][col_name]})
-    if col_name == "timestamp_col":
-        for i in range(len(py_output["A"])):
-            if py_output["A"][i] is not None:
-                py_output["A"][i] = list(
-                    map(
-                        lambda x: None if x is None else np.datetime64(x, "ns"),
-                        py_output["A"][i],
-                    )
-                )
+
     check_query(
         query,
         array_df,
@@ -629,15 +625,7 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
     """Test BodoSQL can infer ARRAY column type correctly"""
     query = "SELECT TO_ARRAY(" + col_name + ") from table1"
     py_output = pd.DataFrame({"A": array_df["table1"][col_name]})
-    if col_name == "timestamp_col":
-        for i in range(len(py_output["A"])):
-            if py_output["A"][i] is not None:
-                py_output["A"][i] = list(
-                    map(
-                        lambda x: None if x is None else np.datetime64(x, "ns"),
-                        py_output["A"][i],
-                    )
-                )
+
     check_query(
         query,
         array_df,
@@ -831,11 +819,9 @@ def test_array_construct(data_values, use_case, use_map, memory_leak_check):
             pd.Series(
                 [
                     "",
-                    "2021-12-08T00:00:00-*-2020-03-14T15:32:52.192548-*-2016-02-28T12:23:33"
-                    "-*-2005-01-01T00:00:00-*-1999-10-31T12:23:33-*-2020-01-01T00:00:00",
-                    "2021-10-14T00:00:00-*-2017-01-05T00:00:00",
-                    "2017-01-11T00:00:00-*-2022-11-06T11:30:15-*-2030-01-01T15:23:42.728347"
-                    "-*-1981-08-31T00:00:00-*-2019-11-12T00:00:00",
+                    "2021-12-08 00:00:00-*-2020-03-14 15:32:52.192548651-*-2016-02-28 12:23:33-*-2005-01-01 00:00:00-*-1999-10-31 12:23:33-*-2020-01-01 00:00:00",
+                    "2021-10-14 00:00:00-*-2017-01-05 00:00:00",
+                    "2017-01-11 00:00:00-*-2022-11-06 11:30:15-*-2030-01-01 15:23:42.728347-*-1981-08-31 00:00:00-*-2019-11-12 00:00:00",
                     None,
                 ]
                 * 4
@@ -939,7 +925,10 @@ def test_arrays_overlap(value_pool, use_case, memory_leak_check):
     def make_vals(L):
         if L is None:
             return None
-        return [None if idx is None else value_pool[idx] for idx in L]
+        out = [None if idx is None else value_pool[idx] for idx in L]
+        if isinstance(value_pool, pd.arrays.DatetimeArray):
+            out = pd.Series(out)
+        return out
 
     pattern_a = (
         [[0], [1], [0], [1]] * 25
@@ -964,6 +953,14 @@ def test_arrays_overlap(value_pool, use_case, memory_leak_check):
     ]
     vals_a = [make_vals(row) for row in pattern_a]
     vals_b = [make_vals(row) for row in pattern_b]
+    if isinstance(value_pool, pd.arrays.DatetimeArray):
+        tz = value_pool.tz
+        vals_a = pd.Series(
+            vals_a, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
+        )
+        vals_b = pd.Series(
+            vals_b, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
+        )
     ctx = {
         "table1": pd.DataFrame(
             {
@@ -1009,19 +1006,23 @@ def test_array_contains(value_pool, use_case, memory_leak_check):
     def make_vals(L):
         if L is None:
             return None
-        return [None if idx is None else value_pool[idx] for idx in L]
+        out = [None if idx is None else value_pool[idx] for idx in L]
+        if isinstance(value_pool, pd.arrays.DatetimeArray):
+            out = pd.Series(out)
+        return out
 
     pattern_a = [0] * 40 + [0, 1, 2, None] * 3
     pattern_b = [[0]] * 40 + [[1, None]] * 4 + [[], None, None, []] + [[0, 2]] * 4
     vals_a = make_vals(pattern_a)
     vals_b = [make_vals(row) for row in pattern_b]
+    if isinstance(value_pool, pd.arrays.DatetimeArray):
+        tz = value_pool.tz
+        vals_b = pd.Series(
+            vals_b, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
+        )
     ctx = {
         "table1": pd.DataFrame(
-            {
-                "I": list(range(len(vals_a))),
-                "A": vals_a,
-                "B": vals_b,
-            }
+            {"I": list(range(len(vals_a))), "A": vals_a, "B": vals_b}
         )
     }
     expected = pd.Series(
@@ -1060,7 +1061,10 @@ def test_array_position(value_pool, use_case, memory_leak_check):
     def make_vals(L):
         if L is None:
             return None
-        return [None if idx is None else value_pool[idx] for idx in L]
+        out = [None if idx is None else value_pool[idx] for idx in L]
+        if isinstance(value_pool, pd.arrays.DatetimeArray):
+            out = pd.Series(out)
+        return out
 
     pattern_a = [0] * 40 + [0, 1, 2, None] * 4
     pattern_b = (
@@ -1072,6 +1076,11 @@ def test_array_position(value_pool, use_case, memory_leak_check):
     )
     vals_a = make_vals(pattern_a)
     vals_b = [make_vals(row) for row in pattern_b]
+    if isinstance(value_pool, pd.arrays.DatetimeArray):
+        tz = value_pool.tz
+        vals_b = pd.Series(
+            vals_b, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
+        )
     ctx = {
         "table1": pd.DataFrame(
             {
@@ -1121,7 +1130,10 @@ def test_array_except(value_pool, use_case, memory_leak_check):
     def make_vals(L):
         if L is None:
             return None
-        return [None if idx is None else value_pool[idx] for idx in L]
+        out = [None if idx is None else value_pool[idx] for idx in L]
+        if isinstance(value_pool, pd.arrays.DatetimeArray):
+            out = pd.Series(out)
+        return out
 
     pattern_a = [[0, 0, 1, 0]] * 40 + [
         [0, 1, 2, 0, 1, 2, 0, 1, 2],
@@ -1158,6 +1170,15 @@ def test_array_except(value_pool, use_case, memory_leak_check):
     ]
     vals_a = [make_vals(row) for row in pattern_a]
     vals_b = [make_vals(row) for row in pattern_b]
+    if isinstance(value_pool, pd.arrays.DatetimeArray):
+        tz = value_pool.tz
+        vals_a = pd.Series(
+            vals_a, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
+        )
+        vals_b = pd.Series(
+            vals_b, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
+        )
+
     if use_case:
         answer = [-1 if ans is None else len(ans) for ans in answer_pattern]
     else:
@@ -1204,7 +1225,10 @@ def test_array_intersection(value_pool, use_case, memory_leak_check):
     def make_vals(L):
         if L is None:
             return None
-        return [None if idx is None else value_pool[idx] for idx in L]
+        out = [None if idx is None else value_pool[idx] for idx in L]
+        if isinstance(value_pool, pd.arrays.DatetimeArray):
+            out = pd.Series(out)
+        return out
 
     pattern_a = [[0, 0, 1, 0, 1]] * 40 + [
         [0, 1, 2, 0, 1, 2, 0, 1, 2],
@@ -1232,6 +1256,14 @@ def test_array_intersection(value_pool, use_case, memory_leak_check):
     ]
     vals_a = [make_vals(row) for row in pattern_a]
     vals_b = [make_vals(row) for row in pattern_b]
+    if isinstance(value_pool, pd.arrays.DatetimeArray):
+        tz = value_pool.tz
+        vals_a = pd.Series(
+            vals_a, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
+        )
+        vals_b = pd.Series(
+            vals_b, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
+        )
     if use_case:
         answer = [-1 if ans is None else len(ans) for ans in answer_pattern]
     else:
@@ -1278,7 +1310,10 @@ def test_array_cat(value_pool, use_case, memory_leak_check):
     def make_vals(L):
         if L is None:
             return None
-        return [None if idx is None else value_pool[idx] for idx in L]
+        out = [None if idx is None else value_pool[idx] for idx in L]
+        if isinstance(value_pool, pd.arrays.DatetimeArray):
+            out = pd.Series(out)
+        return out
 
     pattern_a = [[0, None, 1]] * 40 + [
         [0, 0, 1, 0, 0, 1, 2, 1, 0],
@@ -1312,6 +1347,14 @@ def test_array_cat(value_pool, use_case, memory_leak_check):
     ]
     vals_a = [make_vals(row) for row in pattern_a]
     vals_b = [make_vals(row) for row in pattern_b]
+    if isinstance(value_pool, pd.arrays.DatetimeArray):
+        tz = value_pool.tz
+        vals_a = pd.Series(
+            vals_a, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
+        )
+        vals_b = pd.Series(
+            vals_b, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
+        )
     if use_case:
         answer = [-1 if ans is None else len(ans) for ans in answer_pattern]
     else:

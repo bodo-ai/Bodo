@@ -1245,7 +1245,7 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
         pd.DataFrame(
             {
                 # list list
-                "A": np.array(
+                "A": pd.Series(
                     [
                         [1, 2],
                         [3],
@@ -1259,7 +1259,7 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
                             6,
                         ],
                     ],
-                    object,
+                    dtype=pd.ArrowDtype(pa.list_(pa.int64())),
                 ),
             }
         ),
@@ -1267,7 +1267,7 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
             pd.DataFrame(
                 {
                     # struct
-                    "A": np.array(
+                    "A": pd.Series(
                         [
                             [{"A": 1, "B": 2}, {"A": 10, "B": 20}],
                             [{"A": 3, "B": 4}],
@@ -1285,7 +1285,16 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
                             ],
                             [{"A": 30, "B": 40}],
                         ],
-                        object,
+                        dtype=pd.ArrowDtype(
+                            pa.list_(
+                                pa.struct(
+                                    [
+                                        pa.field("A", pa.int64()),
+                                        pa.field("B", pa.int64()),
+                                    ]
+                                )
+                            )
+                        ),
                     ),
                 }
             ),
@@ -1297,8 +1306,6 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
 def test_snowflake_to_sql_bodo_datatypes_part3(df, memory_leak_check):
     """
     Tests that df.to_sql works with all Bodo's supported dataframe datatypes
-    Compare what Bodo reads vs. Pandas read (Note: Bodo writes these data and
-    confirmed it's correct data but with different format)
     """
 
     bodo_tablename = "BODO_DT_P3"
@@ -1317,8 +1324,8 @@ def test_snowflake_to_sql_bodo_datatypes_part3(df, memory_leak_check):
     with ensure_clean_snowflake_table(conn, bodo_tablename) as b_tablename:
         test_write(_get_dist_arg(df), b_tablename, conn, schema)
         bodo_result = bodo.jit(sf_read)(conn, b_tablename)
-        if bodo.get_rank() == 0:
-            py_output = sf_read(conn, b_tablename)
+        # Snowflake column names are not case sensitive and read as lower case
+        bodo_result.columns = bodo_result.columns.str.capitalize()
 
     bodo_result = bodo.gatherv(bodo_result)
 
@@ -1327,7 +1334,7 @@ def test_snowflake_to_sql_bodo_datatypes_part3(df, memory_leak_check):
         try:
             pd.testing.assert_frame_equal(
                 bodo_result,
-                py_output,
+                df,
                 check_dtype=False,
             )
         except Exception as e:

@@ -21,6 +21,7 @@ from typing import List
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -2035,7 +2036,9 @@ def test_list_string_arrow():
                     val = "".join(random.choices(["A", "B", "C"], k=k))
                     e_ent.append(val)
             e_list.append(e_ent)
-        return e_list
+        return pd.Series(
+            e_list, dtype=pd.ArrowDtype(pa.large_list(pa.large_string()))
+        ).values
 
     random.seed(5)
     n = 1000

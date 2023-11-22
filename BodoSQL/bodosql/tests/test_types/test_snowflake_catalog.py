@@ -12,6 +12,7 @@ import time
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from mpi4py import MPI
 from numba.core import types
@@ -2089,26 +2090,30 @@ def test_read_with_array(test_db_snowflake_catalog, memory_leak_check):
     out: pd.DataFrame = bc.sql("SELECT * FROM BODOSQL_ARRAY_READ_TEST")
     assert len(out) == 100
     assert len(out.columns) == 3
-    assert all(isinstance(i, pd.core.arrays.integer.IntegerArray) for i in out["a"])
+    assert all(isinstance(i, list) for i in out["a"])
 
 
 def test_float_array_read(test_db_snowflake_catalog, memory_leak_check):
     """Test reading an array of floating-point column from Snowflake"""
 
     def impl(bc):
-        return bc.sql("SELECT * FROM ARRAY_NUMBER_TEST")
+        return bc.sql("SELECT * FROM ARRAY_NUMBER_TEST2")
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     py_output = pd.DataFrame(
         {
-            "a": [
-                [pd.NA, 12.4, -0.57],
-                [np.nan, np.inf, -np.inf],
-                [-1235.0, 0.01234567890123456789],
-                [10.0, 10.0, pd.NA],
-                [12345678901234567890.0],
-                np.nan,
-            ],
+            "a": pd.Series(
+                [
+                    [pd.NA, 12.4, -0.57],
+                    [-1235.0, 0.01234567890123456789],
+                    [10.0, 10.0, pd.NA],
+                    [12345678901234567890.0],
+                    [np.nan, np.inf, -np.inf],
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.float64())),
+            ),
+            "b": [1, 2, 3, 4, 5, 6],
         }
     )
     check_func(
@@ -2124,20 +2129,24 @@ def test_string_array_read(test_db_snowflake_catalog, memory_leak_check):
     """Test reading an array of string column from Snowflake"""
 
     def impl(bc):
-        return bc.sql("SELECT * FROM ARRAY_STRING_TEST")
+        return bc.sql("SELECT * FROM ARRAY_STRING_TEST2")
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     py_output = pd.DataFrame(
         {
-            "a": [
-                ["\n    test multiline \\t  \n    string with junk\n    "],
-                ["\041", "\x21", "\u26c4", "z", "\b", "\f", "/"],
-                ["'", '"', '"', "\t\n", "\\"],
-                ["test \0 zero"],
-                ["true", "10", "2023-10-20", "hello"],
-                ["why", "does", "snowflake", "use", pd.NA],
-                np.nan,
-            ],
+            "a": pd.Series(
+                [
+                    ["\n    test multiline \\t  \n    string with junk\n    "],
+                    ["\041", "\x21", "\u26c4", "z", "\b", "\f", "/"],
+                    ["'", '"', '"', "\t\n", "\\"],
+                    ["test \0 zero"],
+                    ["true", "10", "2023-10-20", "hello"],
+                    ["why", "does", "snowflake", "use", None],
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.list_(pa.string())),
+            ),
+            "b": [1, 2, 3, 4, 5, 6, 7],
         }
     )
     check_func(
@@ -2161,14 +2170,14 @@ def test_map_read(test_db_snowflake_catalog, memory_leak_check):
             "idx": pd.Series([1, 2, 3, 4, 5, 6], dtype="Int8"),
             "a": pd.Series(
                 [
-                    np.nan,
-                    {"int": 10.0, "whole_dec": 10.0, "null": np.nan},
-                    {"null2": np.nan, "float": 12.4, "neg_float": -0.57},
-                    {"\\u2912": -np.inf, 'inf\\"ity': np.inf, "/\\\\/\\\\": np.nan},
+                    None,
+                    {"int": 10.0, "null": np.nan, "whole_dec": 10.0},
+                    {"float": 12.4, "neg_float": -0.57, "null2": np.nan},
+                    {"/\\\\/\\\\": np.nan, "\\u2912": -np.inf, 'inf\\"ity': np.inf},
                     {"int20": 12345678901234567890.0, "null3": np.nan},
-                    {"neg_int": -1235.0, "dec": 0.01234567890123456789},
+                    {"dec": 0.01234567890123456789, "neg_int": -1235.0},
                 ],
-                dtype="object",
+                dtype=pd.ArrowDtype(pa.map_(pa.large_string(), pa.float64())),
             ),
         }
     )
@@ -2176,6 +2185,7 @@ def test_map_read(test_db_snowflake_catalog, memory_leak_check):
         impl,
         (bc,),
         py_output=py_output,
+        sort_output=True,
         use_map_arrays=True,
     )
 
@@ -2324,11 +2334,16 @@ def test_read_nested_array_in_map_col(test_db_snowflake_catalog):
 
     py_output = pd.DataFrame(
         {
-            "A": [
-                {},
-                {"bodo": [10.0, 10.0], "databricks": np.nan},
-                {"a": [np.nan], "b": [12.4, -0.57]},
-            ],
+            "A": pd.Series(
+                [
+                    {},
+                    {"bodo": [10.0, 10.0], "databricks": np.nan},
+                    {"a": [np.nan], "b": [12.4, -0.57]},
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.map_(pa.large_string(), pa.large_list(pa.float64()))
+                ),
+            ),
         }
     )
     queryA = "SELECT A FROM NESTED_MAP_TEST ORDER BY idx"

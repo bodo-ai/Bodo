@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from numba.core.ir_utils import find_callname, guard
 
@@ -2281,35 +2282,38 @@ def get_random_int64index(n):
         # unboxing crashes for case below (issue #812)
         # pd.Series(gen_random_string_binary_array(n)).map(lambda a: None if pd.isna(a) else [a, "A"]).values
         pytest.param(
-            pd.Series(["A"] * n).map(lambda a: None if pd.isna(a) else [a, "A"]).values,
+            pd.Series(["A"] * n)
+            .map(lambda a: None if pd.isna(a) else [a, "A"])
+            .astype(dtype=pd.ArrowDtype(pa.large_list(pa.large_string())))
+            .values,
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            np.array(
+            pd.Series(
                 [
                     [1, 3],
                     [2],
-                    np.nan,
+                    None,
                     [4, 5, 6],
                     [],
                     [1, 1753],
                     [],
                     [-10],
                     [4, 10],
-                    np.nan,
+                    None,
                     [42],
                 ]
                 * 2,
-                dtype=object,
-            ),
+                dtype=pd.ArrowDtype(pa.large_list(pa.float64())),
+            ).values,
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            np.array(
+            pd.Series(
                 [
                     [2.0, -3.2],
                     [2.2, 1.3],
-                    np.nan,
+                    None,
                     [4.1, 5.2, 6.3],
                     [],
                     [1.1, 1.2],
@@ -2317,15 +2321,15 @@ def get_random_int64index(n):
                     [-42.0],
                     [3.14],
                     [2.0, 3.0],
-                    np.nan,
+                    None,
                 ]
                 * 2,
-                dtype=object,
-            ),
+                dtype=pd.ArrowDtype(pa.large_list(pa.float64())),
+            ).values,
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            np.array(
+            pd.Series(
                 [
                     ["AB", "ABC"],
                     ["a1", "a2"],
@@ -2340,8 +2344,8 @@ def get_random_int64index(n):
                     None,
                 ]
                 * 2,
-                dtype=object,
-            ),
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ).values,
             marks=pytest.mark.slow,
         ),
     ],

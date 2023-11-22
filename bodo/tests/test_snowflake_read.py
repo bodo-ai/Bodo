@@ -1141,14 +1141,21 @@ def test_read_map_col(memory_leak_check):
     """
     py_output = pd.DataFrame(
         {
-            "a": [
-                {"int20": 12345678901234567890.0, "null3": np.nan},
-                {"int": 10.0, "whole_dec": 10.0, "null": np.nan},
-                {"null2": np.nan, "float": 12.4, "neg_float": -0.57},
-                {"neg_int": -1235.0, "dec": 0.01234567890123456789},
-                {"\u2912": -np.inf, 'inf"ity': np.inf, "/\\/\\": np.nan},
-                np.nan,
-            ]
+            "a": pd.Series(
+                [
+                    {"int20": 12345678901234567890.0, "null3": np.nan},
+                    {"int": 10.0, "null": np.nan, "whole_dec": 10.0},
+                    {"float": 12.4, "neg_float": -0.57, "null2": np.nan},
+                    {"dec": 0.01234567890123456789, "neg_int": -1235.0},
+                    {
+                        "/\\/\\": np.nan,
+                        'inf"ity': np.inf,
+                        "\u2912": -np.inf,
+                    },
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.large_string(), pa.float64())),
+            )
         }
     )
 
@@ -1248,11 +1255,14 @@ def test_read_nested_in_array_col(memory_leak_check):
 
     py_output = pd.DataFrame(
         {
-            "a": [
-                [[pd.NA], [12.4, -0.57]],
-                [[10.0, 10.0], np.nan],
-                np.nan,
-            ],
+            "a": pd.Series(
+                [
+                    [[pd.NA], [12.4, -0.57]],
+                    [[10.0, 10.0], np.nan],
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.float64()))),
+            ),
         }
     )
     queryA = "SELECT A FROM NESTED_ARRAY_TEST ORDER BY A"
@@ -1260,18 +1270,23 @@ def test_read_nested_in_array_col(memory_leak_check):
 
     py_output = pd.DataFrame(
         {
-            "b": [
+            "b": pd.Series(
                 [
-                    {
-                        "a": datetime.date(2023, 11, 12),
-                        "b": datetime.date(1980, 1, 5),
-                        "c": np.nan,
-                    },
-                    {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
+                    [
+                        {
+                            "a": datetime.date(2023, 11, 12),
+                            "b": datetime.date(1980, 1, 5),
+                            "c": None,
+                        },
+                        {"ten": datetime.date(2023, 11, 11), "ton": None},
+                    ],
+                    [None, {"m": datetime.date(2023, 11, 11), "mm": None}],
+                    None,
                 ],
-                [np.nan, {"m": datetime.date(2023, 11, 11), "mm": np.nan}],
-                np.nan,
-            ],
+                dtype=pd.ArrowDtype(
+                    pa.large_list(pa.map_(pa.large_string(), pa.date32()))
+                ),
+            ),
         }
     )
     queryB = "SELECT B FROM NESTED_ARRAY_TEST ORDER BY A"
@@ -1317,11 +1332,16 @@ def test_read_nested_in_map_col():
 
     py_output = pd.DataFrame(
         {
-            "a": [
-                {},
-                {"bodo": [10.0, 10.0], "databricks": np.nan},
-                {"a": [np.nan], "b": [12.4, -0.57]},
-            ],
+            "a": pd.Series(
+                [
+                    {},
+                    {"bodo": [10.0, 10.0], "databricks": None},
+                    {"a": [np.nan], "b": [12.4, -0.57]},
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.map_(pa.large_string(), pa.large_list(pa.float64()))
+                ),
+            ),
         }
     )
     queryA = "SELECT A FROM NESTED_MAP_TEST ORDER BY A"
@@ -1329,18 +1349,23 @@ def test_read_nested_in_map_col():
 
     py_output = pd.DataFrame(
         {
-            "b": [
-                np.nan,
-                {"bodo": {"m": datetime.date(2023, 11, 11), "mm": np.nan}},
-                {
-                    "bodo": {
-                        "a": datetime.date(2023, 11, 12),
-                        "b": datetime.date(1980, 1, 5),
-                        "c": np.nan,
+            "b": pd.Series(
+                [
+                    None,
+                    {"bodo": {"m": datetime.date(2023, 11, 11), "mm": None}},
+                    {
+                        "bodo": {
+                            "a": datetime.date(2023, 11, 12),
+                            "b": datetime.date(1980, 1, 5),
+                            "c": None,
+                        },
+                        "google": {"ten": datetime.date(2023, 11, 11), "ton": None},
                     },
-                    "google": {"ten": datetime.date(2023, 11, 11), "ton": np.nan},
-                },
-            ],
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.map_(pa.large_string(), pa.map_(pa.large_string(), pa.date32()))
+                ),
+            ),
         }
     )
     queryB = "SELECT B FROM NESTED_MAP_TEST ORDER BY A"
