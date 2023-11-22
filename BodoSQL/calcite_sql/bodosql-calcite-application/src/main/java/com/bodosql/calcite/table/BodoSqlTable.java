@@ -52,9 +52,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
     this.name = name;
     this.columns = columns;
     ImmutableList.Builder<String> builder = new ImmutableList.Builder<>();
-    for (String elem : schemaPath) {
-      builder.add(elem);
-    }
+    builder.addAll(schemaPath);
     builder.add(name);
     fullPath = builder.build();
   }

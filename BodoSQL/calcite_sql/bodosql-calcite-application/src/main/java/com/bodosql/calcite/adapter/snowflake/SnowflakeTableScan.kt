@@ -1,6 +1,6 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.bodosql.calcite.table.CatalogTable
+import com.bodosql.calcite.table.SnowflakeCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptPlanner
@@ -15,7 +15,7 @@ import org.apache.calcite.rel.type.RelDataTypeFieldImpl
 import org.apache.calcite.rel.type.RelRecordType
 import org.apache.calcite.util.ImmutableBitSet
 
-class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: RelTraitSet, table: RelOptTable, val keptColumns: ImmutableBitSet, private val catalogTable: CatalogTable) :
+class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: RelTraitSet, table: RelOptTable, val keptColumns: ImmutableBitSet, private val catalogTable: SnowflakeCatalogTable) :
     TableScan(cluster, traitSet, ImmutableList.of(), table), SnowflakeRel {
 
     /**
@@ -41,7 +41,7 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
             .item("Columns", columnNames)
     }
 
-    override fun getCatalogTable(): CatalogTable = catalogTable
+    override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): SnowflakeTableScan {
         return copy(traitSet, keptColumns)
@@ -94,7 +94,7 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
 
     companion object {
         @JvmStatic
-        fun create(cluster: RelOptCluster, table: RelOptTable, catalogTable: CatalogTable): SnowflakeTableScan {
+        fun create(cluster: RelOptCluster, table: RelOptTable, catalogTable: SnowflakeCatalogTable): SnowflakeTableScan {
             // Note: Types may be lazily computed so use getRowType() instead of rowType
             val rowType = table.getRowType()
             val keptColumns = ImmutableBitSet.range(rowType.fieldCount)
