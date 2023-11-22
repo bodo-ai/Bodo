@@ -2,7 +2,6 @@
 """
 Tests for writing to Snowflake using Python APIs
 """
-import datetime
 import io
 import os
 import random
@@ -33,7 +32,6 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     _get_dist_arg,
-    box_as_map,  # fmt: skip
     check_func,
     create_snowflake_table_from_select_query,
     drop_snowflake_table,
@@ -534,23 +532,15 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
 
     comm = MPI.COMM_WORLD
 
-    def test_impl_execute_copy_into(cursor, stage_name, location, sf_schema, df_in):
+    def test_impl_execute_copy_into(cursor, stage_name, location, sf_schema):
         with bodo.objmode(
-            nsuccess="int64",
-            nchunks="int64",
-            nrows="int64",
-            output="unicode_type",
-            flatten_sql="unicode_type",
+            nsuccess="int64", nchunks="int64", nrows="int64", output="unicode_type"
         ):
-            nsuccess, nchunks, nrows, output, flatten_sql = execute_copy_into(
-                cursor,
-                stage_name,
-                location,
-                sf_schema,
-                dict(zip(df_in.columns, bodo.typeof(df_in).data)),
+            nsuccess, nchunks, nrows, output = execute_copy_into(
+                cursor, stage_name, location, sf_schema
             )
             output = repr(output)
-        return nsuccess, nchunks, nrows, output, flatten_sql
+        return nsuccess, nchunks, nrows, output
 
     bodo_impl = bodo.jit()(test_impl_execute_copy_into)
 
@@ -647,12 +637,8 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
             sf_schema = bodo.io.snowflake.gen_snowflake_schema(
                 df_in.columns, bodo.typeof(df_in).data
             )
-            num_success, num_chunks, num_rows, _, _ = bodo_impl(
-                cursor,
-                stage_name,
-                table_name,
-                sf_schema,
-                df_in,
+            num_success, num_chunks, num_rows, _ = bodo_impl(
+                cursor, stage_name, table_name, sf_schema
             )
         except Exception as e:
             print("".join(traceback.format_exception(None, e, e.__traceback__)))
@@ -847,8 +833,8 @@ def test_to_sql_table_name(table_names):
     write_impl(df, conn_str, table_names)
     output_df = read_impl(conn_str, table_names)
     pd.testing.assert_frame_equal(
-        output_df.sort_values("a").reset_index(drop=True),
-        df.sort_values("a").reset_index(drop=True),
+        output_df.reset_index(drop=True),
+        df.reset_index(drop=True),
         check_names=False,
         check_dtype=False,
         check_index_type=False,
@@ -1874,12 +1860,17 @@ def test_batched_write_agg(
             ),
             "variant",
         ),
-        pytest.param(  # struct array
+        (  # struct array
             pd.DataFrame(
                 {
                     "a": np.arange(10),
                     "b": [
-                        {"W": 1, "X": "AB", "Y": 1.100000000000000e00, "Z": i}
+                        {
+                            "X": "AB",
+                            "Y": [1.1, 2.2],
+                            "Z": [[i], None, [3, None]],
+                            "W": {"A": 1, "B": "A"},
+                        }
                         for i in range(10)
                     ],
                 }
@@ -1888,12 +1879,7 @@ def test_batched_write_agg(
                 {
                     "a": np.arange(10),
                     "b": [
-                        {
-                            "W": 1,
-                            "X": "AB",
-                            "Z": i,
-                            "Y": 1.100000000000000e00,
-                        }
+                        f'{{\n  "W": {{\n    "A": 1,\n    "B": "A"\n  }},\n  "X": "AB",\n  "Y": [\n    1.100000000000000e+00,\n    2.200000000000000e+00\n  ],\n  "Z": [\n    [\n      {i}\n    ],\n    null,\n    [\n      3,\n      null\n    ]\n  ]\n}}'
                         for i in range(10)
                     ],
                 }
@@ -1926,98 +1912,57 @@ def test_batched_write_agg(
             ),
             "variant",
         ),
-        (  # map array
-            pd.DataFrame(
-                {
-                    "a": np.arange(10),
-                    "b": [{"2": 4.1, "1": 5.1}, {"3": 100.38}] * 5,
-                    "c": [{"a": "a", "b": "b"}, {"c": "c"}] * 5,
-                    "d": [
-                        {
-                            "a": pd.Timestamp("2000-01-01"),
-                            "b": pd.Timestamp("2000-01-02"),
-                        },
-                        {"c": pd.Timestamp("2000-01-03")},
-                    ]
-                    * 5,
-                    "e": [{"a": datetime.date(2010, 1, 10)}] * 10,
-                }
-            ),
-            pd.DataFrame(
-                {
-                    "a": np.arange(10),
-                    "b": [
-                        {"1": 5.100000000000000e00, "2": 4.100000000000000e00},
-                        {"3": 1.003800000000000e02},
-                    ]
-                    * 5,
-                    "c": [{"a": "a", "b": "b"}, {"c": "c"}] * 5,
-                    "d": [
-                        {
-                            "a": "2000-01-01",
-                            "b": "2000-01-02",
-                        },
-                        {"c": "2000-01-03"},
-                    ]
-                    * 5,
-                    "e": [{"a": datetime.date(2010, 1, 10)}] * 10,
-                }
-            ),
-            "object",
-        ),
-        (  # map array
-            pd.DataFrame(
-                {
-                    "a": np.arange(10),
-                    "b": [{"2": 4.1, "1": 5.1}, {"3": 100.38}] * 5,
-                    "c": [{"a": "a", "b": "b"}, {"c": "c"}] * 5,
-                    "d": [
-                        {
-                            "a": pd.Timestamp("2000-01-01"),
-                            "b": pd.Timestamp("2000-01-02"),
-                        },
-                        {"c": pd.Timestamp("2000-01-03")},
-                    ]
-                    * 5,
-                    "e": [{"a": datetime.date(2010, 1, 10)}] * 10,
-                }
-            ),
-            pd.DataFrame(
-                {
-                    "a": np.arange(10),
-                    "b": [
-                        '{\n  "1": 5.100000000000000e+00,\n  "2": 4.100000000000000e+00\n}',
-                        '{\n  "3": 1.003800000000000e+02\n}',
-                    ]
-                    * 5,
-                    "c": [
-                        '{\n  "a": "a",\n  "b": "b"\n}',
-                        '{\n  "c": "c"\n}',
-                    ]
-                    * 5,
-                    "d": [
-                        '{\n  "a": "2000-01-01",\n  "b": "2000-01-02"\n}',
-                        '{\n  "c": "2000-01-03"\n}',
-                    ]
-                    * 5,
-                    "e": ['{\n  "a": "2010-01-10"\n}'] * 10,
-                }
-            ),
-            "variant",
-        ),
+        # TODO BSE-1317
+        # (  # map array
+        #    pd.DataFrame(
+        #        {
+        #            "a": np.arange(10),
+        #            "b": [{"2": 1.4, "1": 3.1} for i in range(10)],
+        #        }
+        #    ),
+        #    pd.DataFrame(
+        #        {
+        #            "a": np.arange(10),
+        #            "b": [
+        #                '{\n  "1": 3.100000000000000e+00,\n  "2": 1.400000000000000e+00\n}'
+        #                for i in range(10)
+        #            ],
+        #        }
+        #    ),
+        #    "object",
+        # ),
+        # (  # map array
+        #    pd.DataFrame(
+        #        {
+        #            "a": np.arange(10),
+        #            "b": [{"2": 1.4, "1": 3.1} for i in range(10)],
+        #        }
+        #    ),
+        #    pd.DataFrame(
+        #        {
+        #            "a": np.arange(10),
+        #            "b": [
+        #                '{\n  "1": 3.100000000000000e+00,\n  "2": 1.400000000000000e+00\n}'
+        #                for i in range(10)
+        #            ],
+        #        }
+        #    ),
+        #    "variant",
+        # ),
     ],
     ids=[
         "array_item_array",
         "array_item_variant",
         "struct_object",
         "struct_variant",
-        "map_object",
-        "map_variant",
+        # TODO BSE-1317
+        # "map_object",
+        # "map_variant",
     ],
 )
 @pytest.mark.parametrize("write_type", ["append", "replace"])
 def test_batched_write_nested_array(
-    df, expected_df, column_type, write_type, box_as_map, memory_leak_check
+    df, expected_df, column_type, write_type, memory_leak_check
 ):
     """
     Test writing a table with a column of nested arrays to Snowflake
@@ -2029,8 +1974,13 @@ def test_batched_write_nested_array(
     from bodo.io.snowflake import snowflake_connect
 
     conn = bodo.tests.utils.get_snowflake_connection_string("TEST_DB", "PUBLIC")
-    kept_cols = bodo.utils.typing.MetaType(tuple(range(len(df.columns))))
-    col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "a",
+            "b",
+        )
+    )
     batch_size = 3
 
     with ensure_clean_snowflake_table(conn, "NESTED_ARRAY_WRITE_TEST") as table_name:
@@ -2038,11 +1988,11 @@ def test_batched_write_nested_array(
         cursor = snowflake_connect(conn).cursor()
         if write_type == "append":
             run_rank0(
-                lambda cursor, table_name, column_type, df: cursor.execute(
-                    f"create or replace transient table {table_name} (a NUMBER,  {','.join([f'{col} {column_type}' for col in df.columns[1:]])})"
+                lambda cursor, table_name, column_type: cursor.execute(
+                    f"create or replace transient table {table_name} (a NUMBER, b {column_type})"
                 ),
                 bcast_result=False,
-            )(cursor, table_name, column_type, df)
+            )(cursor, table_name, column_type)
         cursor.close()
 
         def write_impl(conn, df):
@@ -2086,26 +2036,20 @@ def test_batched_write_nested_array(
             return df
 
         bodo.jit(write_impl)(conn, df)
-        if bodo.get_rank() == 0:
-            # Check the output columns type
-            table_info = pd.read_sql(f"DESCRIBE TABLE {table_name}", conn)
-            remote_column_type = table_info[table_info["name"] == "B"]["type"].iloc[0]
-            assert remote_column_type == column_type.upper()
-            if "e" in df.columns and "d" in df.columns:
-                table_info = pd.read_sql(
-                    f"SELECT TYPEOF(e:a), TYPEOF(d:a) from {table_name}", conn
-                )
-                assert table_info["TYPEOF(E:A)"].str.contains("DATE").any()
-                assert table_info["TYPEOF(D:A)"].str.contains("DATE").any()
-        check_func(
-            read_impl,
-            (conn,),
-            py_output=expected_df,
-            sort_output=True,
-            reset_index=True,
-            only_1DVar=True,
-            convert_columns_to_pandas=True,
-        )
+        # Check the output columns type
+        table_info = pd.read_sql(f"DESCRIBE TABLE {table_name}", conn)
+        remote_column_type = table_info[table_info["name"] == "B"]["type"].iloc[0]
+        assert remote_column_type == column_type.upper()
+
+        if column_type != "object":
+            check_func(
+                read_impl,
+                (conn,),
+                py_output=expected_df,
+                sort_output=True,
+                reset_index=True,
+                only_1DVar=True,
+            )
 
 
 def test_write_with_string_precision(memory_leak_check):

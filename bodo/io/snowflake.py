@@ -25,10 +25,14 @@ from bodo.io.helpers import (
     update_file_contents,
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
-from bodo.libs.map_arr_ext import contains_map_array
 from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
-from bodo.utils.typing import BodoError, BodoWarning, is_str_arr_type, raise_bodo_error
+from bodo.utils.typing import (
+    BodoError,
+    BodoWarning,
+    is_str_arr_type,
+    raise_bodo_error,
+)
 
 # Imports for typechecking
 if TYPE_CHECKING:  # pragma: no cover
@@ -317,30 +321,24 @@ def gen_snowflake_schema(
             col_type,
             (bodo.ArrayItemArrayType,),
         ):
-            if contains_map_array(col_type):
-                raise_bodo_error("Nested MapArrayType is not supported.")
             sf_schema[col_name] = "ARRAY"
 
         elif isinstance(
             col_type,
             (bodo.StructArrayType,),
         ):
-            if contains_map_array(col_type):
-                raise_bodo_error("Nested MapArrayType is not supported.")
             sf_schema[col_name] = "OBJECT"
 
         elif isinstance(col_type, bodo.MapArrayType):
-            if (
-                not col_type.key_arr_type == bodo.string_array_type
-                and bodo.get_rank() == 0
-            ):
-                warning = BodoWarning(
-                    f"Snowflake does not support objects with non-string key type {col_type.key_arr_type}. Column {col_name} will be parsed as {{'key': key_value, 'value': value_value }}."
-                )
-                warnings.warn(warning)
-            if contains_map_array(col_type.value_arr_type):
-                raise_bodo_error("Nested MapArrayType is not supported.")
-            sf_schema[col_name] = "OBJECT"
+            raise_bodo_error("Writing Map Arrays to Snowflake is unsupported")
+        # TODO BSE-1317
+        #    if col_type.key_arr_type != bodo.string_array_type:
+        #        warning = BodoWarning(
+        #            f"Snowflake does not support objects with non-string key type {col_type.key_arr_type}. Column {col_name} will be parsed as {{'key': key_value, 'value': value_value }}."
+        #        )
+        #        warnings.warn(warning)
+        #    # based on testing with infer_schema
+        #    sf_schema[col_name] = "VARIANT"
         # See https://bodo.atlassian.net/browse/BSE-1525
         elif col_type == bodo.null_array_type:
             sf_schema[col_name] = "VARCHAR"
@@ -1942,121 +1940,13 @@ def create_table_handle_exists(
     ev.finalize()
 
 
-def gen_flatten_sql(
-    cursor: "SnowflakeCursor",
-    sf_schema: dict,
-    column_datatypes: dict,
-    columns: list,
-    flatten_table: str,
-    location: str,
-):  # pragma: no cover
-    """Generate the SQL to flatten the table if needed. If flattening is needed, and no flatten_table
-    is passed, a temporary table will be created to flatten the data into.
-    https://bodo.atlassian.net/wiki/spaces/B/pages/1486815233/Map+Array+Snowflake+Write
-    Args:
-    cursor: Snowflake connection cursor
-    sf_schema (dict): key: dataframe column names, value: dataframe column snowflake datatypes
-    column_datatypes (dict): key: dataframe column names, value: dataframe column bodo datatypes
-    columns (list): list of column names
-    flatten_table (optional(string)): Optionally, specify an existing table to use for flattening
-    location (string): desired final location of the data
-    """
-
-    # If there are any map arrays they need flattened
-    def map_needs_flattened(column_datatype):
-        return (
-            isinstance(column_datatype, bodo.MapArrayType)
-            and column_datatype.key_arr_type == bodo.string_array_type
-        )
-
-    # Group columns on whether they need flattened so we know if we
-    # need to flatten
-    no_flatten = []
-    flatten = []
-    for c, data_type in column_datatypes.items():
-        if map_needs_flattened(column_datatypes[c]):
-            flatten.append(c)
-        else:
-            no_flatten.append(c)
-
-    needs_flatten = len(flatten) != 0
-    if needs_flatten and flatten_table == "":
-        temp_schema = {}
-        for c, typ in sf_schema.items():
-            # Map columns need a variant column in the temp table
-            temp_schema[c] = (
-                typ
-                if not isinstance(column_datatypes[c], bodo.MapArrayType)
-                else "VARIANT"
-            )
-        flatten_table = f"bodo_temp_{str(uuid4()).replace('-', '_')}"
-
-        # Create temp table to copy into
-        # so the final table can be the correct type
-        create_table_handle_exists(
-            cursor,
-            flatten_table,
-            temp_schema,
-            "fail",  # This table should never exist
-            "TEMPORARY",  # Only persist for this session
-        )
-
-    # Create a subquery to flatten each required column
-    subqueries = []
-    for i, c in enumerate(flatten):
-        subqueries.append(
-            (
-                c,
-                f"SELECT rn {c}_rn, {','.join(no_flatten) + ', ' if i == 0 else ''} OBJECT_AGG(\"{c}_bodo_flattened\".value:key::string, GET(\"{c}_bodo_flattened\".value, 'value')) {c},"
-                f"rn from table_with_rn, LATERAL FLATTEN({c}) \"{c}_bodo_flattened\" GROUP BY rn, \"{c}_bodo_flattened\".seq {',' +','.join(no_flatten) if i == 0 else ''}",
-            )
-        )
-
-    # Use joins to correlate each column
-    subqueries_joined = (
-        f"({subqueries[0][1]}) {subqueries[0][0]}_bodo_flattened"
-        if len(subqueries)
-        else ""
-    )
-    for i in range(1, len(subqueries)):
-        column = subqueries[i][0]
-        prev_column = subqueries[i - 1][0]
-        subqueries_joined += f" join ({subqueries[i][1]}) {column}_bodo_flattened on {prev_column}_bodo_flattened.{prev_column}_rn = {column}_bodo_flattened.{column}_rn"
-
-    # Figure out where each column comes from
-    column_get = (
-        [
-            f"{c}_bodo_flattened.{c}"
-            if map_needs_flattened(column_datatypes[c])
-            else f"{flatten[0]}_bodo_flattened.{c}"
-            for c in column_datatypes.keys()
-        ]
-        if needs_flatten
-        else []
-    )
-
-    flatten_sql = (
-        (
-            f"INSERT INTO {location} ({columns}) "
-            f"WITH table_with_rn as"
-            f"  (SELECT ROW_NUMBER() OVER (ORDER BY {columns[0]}) rn, * FROM {flatten_table})"
-            f"SELECT {','.join(column_get)} FROM {subqueries_joined}"
-        )
-        if needs_flatten
-        else ""
-    )
-    return flatten_sql, flatten_table
-
-
 def execute_copy_into(
     cursor: "SnowflakeCursor",
     stage_name: str,
     location: str,
     sf_schema,
-    column_datatypes,
     synchronous=True,
     stage_dir=None,
-    flatten_table="",
 ):  # pragma: no cover
     """Execute a COPY_INTO command from all files in stage to a table location.
     Note: This is intended to be called only from Rank 0.
@@ -2068,7 +1958,6 @@ def execute_copy_into(
         sf_schema (dict): key: dataframe column names, value: dataframe column snowflake datatypes
         stage_dir (str or None): Optionally, specify a directory within internal stage
         synchronous (bool): Whether to execute a synchronous COPY INTO command
-        flatten_table (optional(string)): Optionally, specify an existing table to use for flattening
 
     Returns: If synchronous, returns (nsuccess, nchunks, nrows, output) as
         described in `decode_copy_into`. If async, returns COPY INTO Snowflake
@@ -2123,14 +2012,10 @@ def execute_copy_into(
         # Snowflake side.
         stage_name_with_dir = f'@"{stage_name}"/{stage_dir}/'
 
-    flatten_sql, flatten_table = gen_flatten_sql(
-        cursor, sf_schema, column_datatypes, columns, flatten_table, location
-    )
-
     # Execute copy_into command with files from all ranks
     # TODO: FILE_FROMAT: USE_LOGICAL_TYPE=True for timezone
     copy_into_sql = (
-        f"COPY INTO {flatten_table if flatten_table != '' else location} ({columns}) "
+        f"COPY INTO {location} ({columns}) "
         f"FROM (SELECT {parquet_columns} FROM {stage_name_with_dir}) "
         f"FILE_FORMAT=(TYPE=PARQUET COMPRESSION=AUTO BINARY_AS_TEXT=False) "
         f"PURGE=TRUE ON_ERROR={SF_WRITE_COPY_INTO_ON_ERROR} "
@@ -2163,12 +2048,12 @@ def execute_copy_into(
             print(f"[Snowflake Write] Total files processed: {nchunks}.")
             print(f"[Snowflake Write] Total files successfully processed: {nsuccess}.")
         ev.finalize()
-        return nsuccess, nchunks, nrows, copy_results, flatten_sql
+        return nsuccess, nchunks, nrows, copy_results
 
     else:
         cursor.execute_async(copy_into_sql, _is_internal=True)  # type: ignore
         ev.finalize()
-        return cursor.sfqid, flatten_sql, flatten_table
+        return cursor.sfqid
 
 
 def retrieve_async_query(cursor: "SnowflakeCursor", sfqid: str):  # pragma: no cover
@@ -2642,8 +2527,7 @@ def create_table_copy_into(
     cursor: "SnowflakeCursor",
     stage_name: str,
     location: str,
-    sf_schema: dict,
-    column_datatypes: dict,
+    sf_schema,
     if_exists: str,
     table_type: str,
     num_files_uploaded: int,
@@ -2663,7 +2547,6 @@ def create_table_copy_into(
         stage_name: Name of internal stage containing files to copy_into
         location: Destination table location
         sf_schema (dict): key: dataframe column names, value: dataframe column snowflake datatypes
-        column_datatypes (dict): key: dataframe column names, value: dataframe column bodo datatypes
         if_exists: Action to take if table already exists:
             "fail": If table exists, raise a ValueError. Create if does not exist
             "replace": If table exists, drop it, recreate it, and insert data.
@@ -2713,13 +2596,8 @@ def create_table_copy_into(
             )
             # No point of running COPY INTO if there are no files.
             if num_files_uploaded > 0:
-                nsuccess, nchunks, nrows, copy_results, flatten_sql = execute_copy_into(
-                    cursor,
-                    stage_name,
-                    location,
-                    sf_schema,
-                    column_datatypes,
-                    synchronous=True,
+                nsuccess, nchunks, nrows, copy_results = execute_copy_into(
+                    cursor, stage_name, location, sf_schema, synchronous=True
                 )
 
                 # Validate copy into results
@@ -2744,10 +2622,6 @@ def create_table_copy_into(
                         f"{nsuccess} were successful. "
                         f"Full COPY INTO result:\n{copy_results}"
                     )
-
-                # Execute flatten query if needed
-                if len(flatten_sql) != 0:
-                    cursor.execute(flatten_sql)
 
             commit_transaction_sql = (
                 "COMMIT /* io.snowflake.create_table_copy_into() */"
