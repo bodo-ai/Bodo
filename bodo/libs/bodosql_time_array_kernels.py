@@ -4,6 +4,8 @@ Implements time array kernels that are specific to BodoSQL
 """
 
 import numba
+import numpy as np
+from numba.core import types
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
@@ -91,18 +93,33 @@ def to_time_util(
 
 
 @numba.generated_jit(nopython=True)
-def time_from_parts(hour, minute, second, nanosecond):
+def time_from_parts(hour, minute, second, nanosecond):  # pragma: no cover
+    args = [hour, minute, second, nanosecond]
+    arg_names = ["hour", "minute", "second", "nanosecond"]
+
+    return convert_numeric_to_int(
+        "bodo.libs.bodosql_time_array_kernels.time_from_parts_unopt_util",
+        arg_names,
+        args,
+        arg_names,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def time_from_parts_unopt_util(hour, minute, second, nanosecond):  # pragma: no cover
     args = [hour, minute, second, nanosecond]
     for i in range(len(args)):
-        if isinstance(args[i], types.optional):  # pragma: no cover
+        if isinstance(args[i], types.optional):
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.time_from_parts",
+                "bodo.libs.bodosql_array_kernels.time_from_parts_unopt_util",
                 ["hour", "minute", "second", "nanosecond"],
                 i,
             )
 
-    def impl(hour, minute, second, nanosecond):  # pragma: no cover
-        return time_from_parts_util(hour, minute, second, nanosecond)
+    def impl(hour, minute, second, nanosecond):
+        return bodo.libs.bodosql_array_kernels.time_from_parts_util(
+            hour, minute, second, nanosecond
+        )
 
     return impl
 
