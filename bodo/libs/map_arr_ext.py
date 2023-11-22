@@ -249,8 +249,17 @@ def map_arr_setitem(arr, ind, val):
 
         return map_arr_setitem_impl
 
+    # Handle setting a slice of the array during construction
+    if isinstance(ind, types.SliceType) and val == arr:
+
+        def map_arr_setitem_impl(arr, ind, val):  # pragma: no cover
+            # NOTE: [:len(val)] is necessary since val could be over-allocated
+            arr._data[ind] = val._data[: len(val)]
+
+        return map_arr_setitem_impl
+
     raise BodoError(
-        "operator.setitem with MapArrays is only supported with an integer index."
+        f"Unsupported operator.setitem with MapArrays with index {ind} and value {val}."
     )
 
 
