@@ -7,37 +7,12 @@
 #define MAX_SHUFFLE_THRESHOLD 200 * 1024 * 1024     // 200MiB
 #define DEFAULT_SHUFFLE_THRESHOLD_PER_MiB 12800     // 12.5KiB
 
-static int64_t get_shuffle_threshold() {
-    // Get shuffle threshold from an env var if provided.
-    if (char* threshold_env_ = std::getenv("BODO_SHUFFLE_THRESHOLD")) {
-        return std::stoi(threshold_env_);
-    }
-    // Get system memory size (rank)
-    int64_t sys_mem_bytes = bodo::BufferPool::Default()->get_sys_memory_bytes();
-    if (sys_mem_bytes == -1) {
-        // Use default threshold if system memory size is not known.
-        return DEFAULT_SHUFFLE_THRESHOLD;
-    } else {
-        int64_t sys_mem_mib = std::ceil(sys_mem_bytes / (1024.0 * 1024.0));
-        // min(max(MIN_THRESHOLD, THRESHOLD_PER_MiB * System_Memory),
-        //     MAX_THRESHOLD)
-        return std::min(
-            std::max(static_cast<int64_t>(MIN_SHUFFLE_THRESHOLD),
-                     sys_mem_mib * DEFAULT_SHUFFLE_THRESHOLD_PER_MiB),
-            static_cast<int64_t>(MAX_SHUFFLE_THRESHOLD));
-    }
-}
-
-// Shuffle when streaming shuffle buffers are larger than threshold.
-// TODO(ehsan): tune this parameter
-static const int64_t SHUFFLE_THRESHOLD = get_shuffle_threshold();
-
 // Factor in determining whether shuffle buffer is large enough to need cleared
-const float SHUFFLE_BUFFER_CUTOFF_MULTIPLIER = 3.0;
+constexpr float SHUFFLE_BUFFER_CUTOFF_MULTIPLIER = 3.0;
 
 // Minimum utilization of shuffle buffer, used as a factor in determining when
 // to clear
-const float SHUFFLE_BUFFER_MIN_UTILIZATION = 0.5;
+constexpr float SHUFFLE_BUFFER_MIN_UTILIZATION = 0.5;
 
 // Streaming batch size. The default of 4096 should match the default of
 // bodosql_streaming_batch_size defined in __init__.py
@@ -101,8 +76,8 @@ class IncrementalShuffleState {
      * adaptively.
      * This must be called in the first iteration. It estimates how many
      * iterations it will take to for the shuffle buffer size of any rank to be
-     * larger than SHUFFLE_THRESHOLD based on the size of the first input batch.
-     * 'sync_freq' will be modified accordingly.
+     * larger than this->shuffle_threshold based on the size of the first input
+     * batch. 'sync_freq' will be modified accordingly.
      *
      * @param sample_in_table_batch Input batch to use for estimating the
      * initial sync frequency.
@@ -225,6 +200,8 @@ class IncrementalShuffleState {
     /// @brief Number of syncs after which we should re-evaluate the sync
     /// frequency.
     int64_t sync_update_freq = DEFAULT_SYNC_UPDATE_FREQ;
+    /// @brief Threshold to use to decide when we should shuffle.
+    const int64_t shuffle_threshold = DEFAULT_SHUFFLE_THRESHOLD;
     /// @brief Print information about the shuffle state during initialization,
     /// during every shuffle and after sync frequency is updated.
     bool debug_mode = false;
@@ -232,8 +209,8 @@ class IncrementalShuffleState {
     /**
      * @brief Helper function for ShuffleIfRequired. This determines whether we
      * should shuffle at this iteration based on the synchronization frequency,
-     * size of the shuffle table (if it's larger than SHUFFLE_THRESHOLD on any
-     * rank) and whether it's the last iteration
+     * size of the shuffle table (if it's larger than this->shuffle_threshold on
+     * any rank) and whether it's the last iteration
      * ('is_last').
      * This also updates the synchronization frequency (based on current shuffle
      * buffer size and number of iterations from previous shuffle) if we're
