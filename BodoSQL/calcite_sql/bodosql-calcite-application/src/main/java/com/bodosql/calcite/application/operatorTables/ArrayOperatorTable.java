@@ -65,6 +65,15 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction ARRAY_COMPACT =
+      new SqlFunction(
+          "ARRAY_COMPACT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.ARRAY,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction TO_ARRAY =
       new SqlFunction(
           "TO_ARRAY",
@@ -232,6 +241,7 @@ public class ArrayOperatorTable implements SqlOperatorTable {
   private List<SqlOperator> functionList =
       Arrays.asList(
           TO_ARRAY,
+          ARRAY_COMPACT,
           ARRAY_CONSTRUCT,
           ARRAY_EXCEPT,
           ARRAY_INTERSECTION,

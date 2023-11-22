@@ -1199,6 +1199,148 @@ def test_arrays_overlap(
 
 
 @pytest.mark.parametrize(
+    "arr, is_scalar, use_map_arrays, expected",
+    [
+        pytest.param(
+            pd.array([None, 1, 2, None, 3, None, None], pd.Int32Dtype()),
+            True,
+            False,
+            pd.array([1, 2, 3], pd.Int32Dtype()),
+            id="int_arrays-scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [None, 1, 2, None, 3, None, None],
+                    [1, None, None, 3],
+                    [None, None, None],
+                    [],
+                    None,
+                ]
+                * 2
+            ),
+            False,
+            False,
+            pd.Series([[1, 2, 3], [1, 3], [], [], None] * 2),
+            id="int_arrays-vector",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [None, "ABC", "", None, "DEF", None, None],
+                    ["gnls", None, None, "hello"],
+                    [None, None, None],
+                    [],
+                    ["", ""],
+                    None,
+                ]
+                * 2
+            ),
+            False,
+            False,
+            pd.Series(
+                [["ABC", "", "DEF"], ["gnls", "hello"], [], [], ["", ""], None] * 2
+            ),
+            id="string_arrays-vector",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [None, [1], [2, 3], None, [None], None, None],
+                    [[4, 6, None], None, None, []],
+                    [None, None, None],
+                    [],
+                    None,
+                ]
+                * 2
+            ),
+            False,
+            False,
+            pd.Series([[[1], [2, 3], [None]], [[4, 6, None], []], [], [], None] * 2),
+            id="nested_int_arrays-vector",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [{"A": 0, "B": [1]}],
+                    [None, {"A": 0, "B": [1, 0]}],
+                    [None],
+                    [],
+                    [{"A": 0, "B": [0, 1]}, None],
+                    None,
+                    [{"A": 0, "B": [1]}, None, {"A": 1, "B": [0, 1]}],
+                ]
+            ),
+            False,
+            False,
+            pd.Series(
+                [
+                    [{"A": 0, "B": [1]}],
+                    [{"A": 0, "B": [1, 0]}],
+                    [],
+                    [],
+                    [{"A": 0, "B": [0, 1]}],
+                    None,
+                    [{"A": 0, "B": [1]}, {"A": 1, "B": [0, 1]}],
+                ]
+            ),
+            id="nested_struct_arrays-vector",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [{"A": [0], "B": [1]}],
+                    [None, {"A": [0], "C": [1, 0]}],
+                    [None],
+                    [{"E": [0], "": [0, 1], "H": [None]}, None],
+                    [],
+                    None,
+                    [{"A": [4, 5], "K": [1]}, None, {"ok": [1, None], "B": [0, 1]}],
+                ]
+            ),
+            False,
+            True,
+            pd.Series(
+                [
+                    [{"A": [0], "B": [1]}],
+                    [{"A": [0], "C": [1, 0]}],
+                    [],
+                    [{"E": [0], "": [0, 1], "H": [None]}],
+                    [],
+                    None,
+                    [{"A": [4, 5], "K": [1]}, {"ok": [1, None], "B": [0, 1]}],
+                ]
+            ),
+            id="nested_map_arrays-vector",
+            marks=pytest.mark.skip(
+                reason="[BSE-1829] TODO: support copy_data on map arrays"
+            ),
+        ),
+    ],
+)
+def test_array_compact(arr, is_scalar, use_map_arrays, expected, memory_leak_check):
+    if is_scalar:
+
+        def impl(arr):
+            return bodo.libs.bodosql_array_kernels.array_compact(arr, True)
+
+    else:
+
+        def impl(arr):
+            return pd.Series(bodo.libs.bodosql_array_kernels.array_compact(arr, False))
+
+    check_func(
+        impl,
+        (arr,),
+        py_output=expected,
+        distributed=not is_scalar,
+        is_out_distributed=not is_scalar,
+        dist_test=not is_scalar,
+        use_map_arrays=use_map_arrays,
+    )
+
+
+@pytest.mark.parametrize(
     "elem, container, elem_is_scalar, container_is_scalar, use_map_arrays, answer",
     [
         pytest.param(
