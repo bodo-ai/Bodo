@@ -6,6 +6,27 @@
 #include "_memory_budget.h"
 #include "_shuffle.h"
 
+static int64_t get_shuffle_threshold() {
+    // Get shuffle threshold from an env var if provided.
+    if (char* threshold_env_ = std::getenv("BODO_SHUFFLE_THRESHOLD")) {
+        return std::stoi(threshold_env_);
+    }
+    // Get system memory size (rank)
+    int64_t sys_mem_bytes = bodo::BufferPool::Default()->get_sys_memory_bytes();
+    if (sys_mem_bytes == -1) {
+        // Use default threshold if system memory size is not known.
+        return DEFAULT_SHUFFLE_THRESHOLD;
+    } else {
+        int64_t sys_mem_mib = std::ceil(sys_mem_bytes / (1024.0 * 1024.0));
+        // Else, return a value between MIN and MAX threshold based
+        // on the available memory.
+        return std::min(
+            std::max(static_cast<int64_t>(MIN_SHUFFLE_THRESHOLD),
+                     sys_mem_mib * DEFAULT_SHUFFLE_THRESHOLD_PER_MiB),
+            static_cast<int64_t>(MAX_SHUFFLE_THRESHOLD));
+    }
+}
+
 IncrementalShuffleState::IncrementalShuffleState(
     const std::vector<int8_t>& arr_c_types_,
     const std::vector<int8_t>& arr_array_types_,
@@ -23,7 +44,8 @@ IncrementalShuffleState::IncrementalShuffleState(
       // if sync_freq == -1 (user hasn't specified number of syncs)
       adaptive_sync_counter(this->sync_freq == -1 ? 0 : -1),
       row_bytes_guesstimate(get_row_bytes(this->schema)),
-      parent_op_id(parent_op_id_) {
+      parent_op_id(parent_op_id_),
+      shuffle_threshold(get_shuffle_threshold()) {
     MPI_Comm_size(MPI_COMM_WORLD, &(this->n_pes));
     if (char* debug_env_ = std::getenv("BODO_DEBUG_STREAM_SHUFFLE")) {
         this->debug_mode = !std::strcmp(debug_env_, "1");
@@ -87,7 +109,7 @@ void IncrementalShuffleState::Initialize(
             // Calculate sync freq based on max batch size estimate across all
             // ranks:
             int64_t shuffle_iters = std::max<int64_t>(
-                SHUFFLE_THRESHOLD / max_batch_data_size_est, 1);
+                this->shuffle_threshold / max_batch_data_size_est, 1);
             this->sync_freq =
                 std::min<int64_t>(DEFAULT_SYNC_ITERS, shuffle_iters);
         } else {
@@ -110,7 +132,7 @@ void IncrementalShuffleState::Initialize(
             << ", Estimated Sync Freq: " << this->sync_freq
             << ", Sync Update Freq: " << this->sync_update_freq
             << ", Shuffle Threshold: "
-            << BytesToHumanReadableString(SHUFFLE_THRESHOLD) << std::endl;
+            << BytesToHumanReadableString(this->shuffle_threshold) << std::endl;
     }
 }
 
@@ -136,14 +158,15 @@ bool IncrementalShuffleState::check_if_shuffle_this_iter_and_update_sync_iter(
     // Use iter + 1 to avoid a sync on the first iteration
     else if ((this->curr_iter + 1) % this->sync_freq == 0) {
         // shuffle now if shuffle buffer size of any rank is larger than
-        // SHUFFLE_THRESHOLD
+        // this->shuffle_threshold
         const size_t n_rows = this->table_buffer->data_table->nrows();
         int64_t local_shuffle_buffer_size = table_local_memory_size(
             this->table_buffer->data_table, /*include_dict_size*/ false);
         int64_t reduced_shuffle_buffer_size;
         MPI_Allreduce(&local_shuffle_buffer_size, &reduced_shuffle_buffer_size,
                       1, MPI_INT64_T, MPI_MAX, MPI_COMM_WORLD);
-        bool shuffle_now = reduced_shuffle_buffer_size >= SHUFFLE_THRESHOLD;
+        bool shuffle_now =
+            reduced_shuffle_buffer_size >= this->shuffle_threshold;
 
         // Estimate how many iterations it will take until we need to shuffle
         // again and update sync frequency (every this->sync_update_freq syncs
@@ -238,7 +261,7 @@ bool IncrementalShuffleState::check_if_shuffle_this_iter_and_update_sync_iter(
                 // global_shuffle_batch_size_est. Based on this, the new
                 // shuffle frequency should be:
                 this->sync_freq =
-                    SHUFFLE_THRESHOLD / global_shuffle_batch_size_est;
+                    this->shuffle_threshold / global_shuffle_batch_size_est;
                 this->sync_freq = std::max<int64_t>(this->sync_freq, 1);
                 this->sync_freq =
                     std::min<int64_t>(this->sync_freq, DEFAULT_SYNC_ITERS);
@@ -319,7 +342,8 @@ void IncrementalShuffleState::ResetAfterShuffle() {
     // If the build shuffle buffer is too large and utilization is below
     // SHUFFLE_BUFFER_MIN_UTILIZATION, it will be freed and reallocated.
     size_t capacity = this->table_buffer->EstimatedSize();
-    if (capacity > (SHUFFLE_BUFFER_CUTOFF_MULTIPLIER * SHUFFLE_THRESHOLD) &&
+    if (capacity >
+            (SHUFFLE_BUFFER_CUTOFF_MULTIPLIER * this->shuffle_threshold) &&
         (capacity * SHUFFLE_BUFFER_MIN_UTILIZATION) >
             table_local_memory_size(this->table_buffer->data_table, false)) {
         this->table_buffer.reset(
