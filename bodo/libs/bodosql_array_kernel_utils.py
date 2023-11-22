@@ -628,6 +628,25 @@ def gen_vectorized(
     return impl_gen_vectorized
 
 
+def convert_numeric_to_int(func_name, arg_names, args, numeric_args_to_cast):
+    func_text = f"def impl({', '.join(arg_names)}):\n"
+    for arg_name, arg in zip(arg_names, args):
+        # This conversion is only done for float arguments
+        if (
+            arg_name in numeric_args_to_cast
+            and is_valid_float_arg(arg)
+            or (isinstance(arg, types.optional) and is_valid_float_arg(arg.type))
+        ):
+            func_text += f"  {arg_name} = bodo.libs.bodosql_casting_array_kernels.round_to_int64({arg_name})\n"
+    func_text += f"  return {func_name}({', '.join(arg_names)})\n"
+
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["impl"]
+
+    return impl
+
+
 def unopt_argument(
     func_name, arg_names, i, container_arg=0, container_length=None, default_map=None
 ):

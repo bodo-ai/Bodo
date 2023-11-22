@@ -236,18 +236,12 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       SqlBasicFunction.create(
           "TIMEFROMPARTS",
           ReturnTypes.TIME_NULLABLE,
-          OperandTypes.sequence(
-                  "TIMEFROMPARTS(HOUR, MINUTE, SECOND)",
-                  OperandTypes.INTEGER,
-                  OperandTypes.INTEGER,
-                  OperandTypes.INTEGER)
-              .or(
-                  OperandTypes.sequence(
-                      "TIMEFROMPARTS(HOUR, MINUTE, SECOND, NANOSECOND)",
-                      OperandTypes.INTEGER,
-                      OperandTypes.INTEGER,
-                      OperandTypes.INTEGER,
-                      OperandTypes.INTEGER)),
+          argumentRange(
+              3,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC),
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIME_FROM_PARTS = TIMEFROMPARTS.withName("TIME_FROM_PARTS");
@@ -285,41 +279,18 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
     return typeFactory.createTypeWithNullability(returnType, nullable);
   }
 
-  public static final SqlFunction DATE_FROM_PARTS =
-      new SqlFunction(
+  public static final SqlBasicFunction DATE_FROM_PARTS =
+      SqlBasicFunction.create(
           "DATE_FROM_PARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
           ReturnTypes.DATE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           OperandTypes.sequence(
-              "DATE_FROM_PARTS(YEAR, MONTH, DAY)",
-              OperandTypes.INTEGER,
-              OperandTypes.INTEGER,
-              OperandTypes.INTEGER),
-          // What group of functions does this fall into?
+              "DATE_FROM_PARTS(HOUR, MINUTE, SECOND)",
+              OperandTypes.NUMERIC,
+              OperandTypes.NUMERIC,
+              OperandTypes.NUMERIC),
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction DATEFROMPARTS =
-      new SqlFunction(
-          "DATEFROMPARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.DATE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          OperandTypes.sequence(
-              "DATEFROMPARTS(YEAR, MONTH, DAY)",
-              OperandTypes.INTEGER,
-              OperandTypes.INTEGER,
-              OperandTypes.INTEGER),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
+  public static final SqlFunction DATEFROMPARTS = DATE_FROM_PARTS.withName("DATEFROMPARTS");
 
   // Operand type checker for the overloade timestamp_from_parts functions. The
   // first overload has the signature:
@@ -330,13 +301,13 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlOperandTypeChecker OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER =
       argumentRange(
               6,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
               SqlTypeFamily.STRING)
           .or(OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.TIME))
           .or(OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.TIMESTAMP))
@@ -369,13 +340,13 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           opBinding -> timestampConstructionOutputType(opBinding, false),
           argumentRange(
               6,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER),
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC),
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIMESTAMPLTZFROMPARTS =
@@ -393,13 +364,13 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           argumentRange(
               6,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
               SqlTypeFamily.STRING),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
@@ -416,13 +387,13 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           argumentRange(
               6,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
-              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
               SqlTypeFamily.STRING),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);

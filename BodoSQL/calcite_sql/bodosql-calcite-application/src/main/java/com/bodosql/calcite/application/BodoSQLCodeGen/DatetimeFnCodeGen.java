@@ -383,6 +383,7 @@ public class DatetimeFnCodeGen {
     if (timestamp_mode && numArgs < 8) {
       args.add(tzExpr);
     }
+
     return ExprKt.BodoSQLKernel(generateFnName, args, List.of());
   }
 

@@ -400,6 +400,91 @@ def time_from_parts_fn(request):
             ),
             id="four_args",
         ),
+        pytest.param(
+            (
+                {
+                    "table1": pd.DataFrame(
+                        {
+                            "H": pd.Series(
+                                [0.1, 12.2, 25.3, 23.4, 23.5, 0.1, 0.3, 0, 0, 11.8, 0],
+                                dtype=pd.Float64Dtype(),
+                            ),
+                            "M": pd.Series(
+                                [
+                                    99.99,
+                                    0,
+                                    29.6,
+                                    -0.7,
+                                    0,
+                                    0,
+                                    -3.4,
+                                    0,
+                                    0,
+                                    500.01,
+                                    10**6,
+                                ],
+                                dtype=pd.Float64Dtype(),
+                            ),
+                            "S": pd.Series(
+                                [0, 12345.1, 0, 0, 0, 0, 65.2, 0, 0, -699.5, 0],
+                                dtype=pd.Float64Dtype(),
+                            ),
+                            "NS": pd.Series(
+                                [
+                                    0,
+                                    0,
+                                    0,
+                                    0,
+                                    0,
+                                    -1.1,
+                                    0,
+                                    None,
+                                    2**44,
+                                    -(2**30),
+                                    1234.3,
+                                ],
+                                dtype=pd.Float64Dtype(),
+                            ),
+                        }
+                    )
+                },
+                pd.DataFrame(
+                    {
+                        "A": pd.Series(
+                            [
+                                bodo.Time(1, 40, 0, precision=9),
+                                bodo.Time(15, 25, 45, precision=9),
+                                bodo.Time(1, 30, 0, precision=9),
+                                bodo.Time(22, 59, 0, precision=9),
+                                bodo.Time(0, 0, 0, precision=9),
+                                bodo.Time(
+                                    23, 59, 59, nanosecond=999999999, precision=9
+                                ),
+                                bodo.Time(23, 58, 5, precision=9),
+                                None,
+                                bodo.Time(
+                                    hour=4,
+                                    minute=53,
+                                    second=12,
+                                    nanosecond=186044416,
+                                    precision=9,
+                                ),
+                                bodo.Time(
+                                    hour=20,
+                                    minute=8,
+                                    second=18,
+                                    nanosecond=926258176,
+                                    precision=9,
+                                ),
+                                bodo.Time(10, 40, 0, nanosecond=1234, precision=9),
+                            ]
+                        )
+                    }
+                ),
+                "H, M, S, NS",
+            ),
+            id="four_args_with_floats",
+        ),
     ]
 )
 def time_from_parts_data(request):
