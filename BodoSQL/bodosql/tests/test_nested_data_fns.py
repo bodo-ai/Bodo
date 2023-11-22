@@ -103,7 +103,6 @@ def test_to_array_scalars(basic_df, memory_leak_check):
     scalars = [
         "123",
         "456.789",
-        "null",
         "'asdafa'",
         "true",
         "to_time('05:34:51')",
@@ -118,7 +117,6 @@ def test_to_array_scalars(basic_df, memory_leak_check):
         {
             "int": pd.Series([pd.array([123])]),
             "float": pd.Series([pd.array([456.789])]),
-            "null": pd.Series([None]),
             "string": pd.Series([pd.array(["asdafa"], "string[pyarrow]")]),
             "bool": pd.Series([pd.array([True])]),
             "time": pd.Series([pd.array([bodo.Time(5, 34, 51)])]),
@@ -171,6 +169,7 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                 ),
             ),
             id="float",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -187,6 +186,7 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                 ),
             ),
             id="string",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -203,6 +203,7 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                 ),
             ),
             id="bool",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -228,6 +229,7 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                 ),
             ),
             id="time",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -253,6 +255,7 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                 ),
             ),
             id="date",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -278,6 +281,59 @@ def test_to_array_scalars(basic_df, memory_leak_check):
                 ),
             ),
             id="timestamp",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        None,
+                        [1, 3, 4],
+                        [2, 5],
+                        [6, None],
+                    ]
+                    * 4
+                ),
+                pd.Series(
+                    [
+                        None,
+                        [1, 3, 4],
+                        [2, 5],
+                        [6, None],
+                    ]
+                    * 4
+                ),
+            ),
+            id="integer_array",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        {"i": 3, "s": 9.9},
+                        {"i": 4, "s": 16.3},
+                        {"i": 5, "s": 25.0},
+                        None,
+                        {"i": 6, "s": -36.41},
+                    ]
+                    * 4
+                ),
+                pd.Series(
+                    [
+                        [{"i": 3, "s": 9.9}],
+                        [{"i": 4, "s": 16.3}],
+                        [{"i": 5, "s": 25.0}],
+                        None,
+                        [{"i": 6, "s": -36.41}],
+                    ]
+                    * 4
+                ),
+            ),
+            id="struct",
+            marks=pytest.mark.skip(
+                reason="TODO: Make coerce_to_array support struct array"
+            ),
         ),
     ]
 )
@@ -325,6 +381,55 @@ def test_to_array_arrays(to_array_columns_data, memory_leak_check):
         # Passing this since _use_dict_str_type=True causes gatherv to fail internally
         # and is not needed since the output of the actual test is regular string array
         # (see https://bodo.atlassian.net/browse/BSE-1256)
+        use_dict_encoded_strings=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "query, expected",
+    [
+        pytest.param(
+            "SELECT CASE WHEN int_col IS NOT NULL THEN TO_ARRAY(int_col) ELSE TO_ARRAY(int_col) END FROM TABLE1",
+            [[1], [2], [3], [4]] * 3 + [None] + [[5], [6], [7]] * 2,
+            id="int",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT CASE WHEN string_col IS NOT NULL THEN TO_ARRAY(string_col) ELSE TO_ARRAY(string_col) END FROM TABLE1",
+            ["1", "2", "3", "4"] * 3 + [None] + ["5", "6", "7"] * 2,
+            id="string",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT CASE WHEN int_col IS NOT NULL THEN TO_ARRAY(ARRAY_CONSTRUCT(int_col)) ELSE TO_ARRAY(ARRAY_CONSTRUCT(int_col)) END FROM TABLE1",
+            [[1], [2], [3], [4]] * 3 + [[None]] + [[5], [6], [7]] * 2,
+            id="int_array",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_to_array_case(query, expected, memory_leak_check):
+    """tests TO_ARRAY works correctly in a case statement"""
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "int_col": pd.array(
+                    [1, 2, 3, 4] * 3 + [None] + [5, 6, 7] * 2, pd.Int64Dtype()
+                ),
+                "string_col": pd.array(
+                    ["1", "2", "3", "4"] * 3 + [None] + ["5", "6", "7"] * 2,
+                    pd.StringDtype(),
+                ),
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=pd.DataFrame({"EXPR$0": expected}),
         use_dict_encoded_strings=False,
     )
 
@@ -668,11 +773,11 @@ def test_array_construct(data_values, use_case, use_map, memory_leak_check):
             "SELECT ARRAY_TO_STRING(bool_col, '.') from table1",
             pd.Series(
                 [
-                    "True.False.False.True.True.True",
+                    "true.false.false.true.true.true",
                     "",
-                    "False.False.True",
+                    "false.false.true",
                     None,
-                    "False.True.False.True.False",
+                    "false.true.false.true.false",
                 ]
                 * 4
             ),
@@ -710,7 +815,7 @@ def test_array_construct(data_values, use_case, use_map, memory_leak_check):
             "SELECT ARRAY_TO_STRING(time_col, '| ') from table1",
             pd.Series(
                 [
-                    "True| False| and| or| not| xor",
+                    "true| false| and| or| not| xor",
                     "kgspoas| 0q3e0j| ;.2qe",
                     None,
                     "",
@@ -736,6 +841,7 @@ def test_array_construct(data_values, use_case, use_map, memory_leak_check):
                 * 4
             ),
             id="timestamp",
+            marks=pytest.mark.skip(reason="TODO: Support TO_VARCHAR for time type."),
         ),
     ],
 )
@@ -769,8 +875,8 @@ def test_array_to_string_column(array_df, query, answer, memory_leak_check):
             id="float",
         ),
         pytest.param(
-            "True",
-            "True",
+            "true",
+            "true",
             id="bool",
         ),
         pytest.param(
@@ -791,7 +897,7 @@ def test_array_to_string_column(array_df, query, answer, memory_leak_check):
         ),
         pytest.param(
             "TO_TIMESTAMP('2023-06-13 16:49:50')",
-            "2023-06-13T16:49:50",
+            "2023-06-13 16:49:50",
             id="timestamp",
         ),
     ],

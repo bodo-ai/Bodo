@@ -5485,6 +5485,18 @@ class TypingTransforms:
         # (See BodoSQL #189)
         self.needs_transform = True
 
+        # Update the function globals with SQL globals since needed for case handling.
+        # See https://github.com/Bodo-inc/Bodo/blob/53369bb1817c30e751975b1694ec3f65a648294b/bodo/transforms/dataframe_pass.py#L939
+        if (
+            self.func_ir.func_id.func.__globals__.keys()
+            & additional_globals_to_lower.keys()
+        ):  # pragma: no cover
+            warnings.warn(
+                "SQL globals overlap with JIT globals which may cause errors. This could be because of multiple sql() calls in the same JIT function."
+            )
+
+        self.func_ir.func_id.func.__globals__.update(additional_globals_to_lower)
+
         return replace_func(
             self,
             impl,

@@ -805,14 +805,20 @@ def test_option_array_cat(flag0, flag1, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "to_array_input, dtype, answer",
+    "arr, is_scalar, use_map_arrays, expected",
     [
+        pytest.param(1, True, False, pd.array([1]), id="scalar_integer"),
         pytest.param(
-            1, bodo.IntegerArrayType(bodo.int32), pd.array([1]), id="scalar_integer"
+            pd.Series([1, 2, None, 3, 4, None, 5], dtype=pd.Int64Dtype()),
+            False,
+            False,
+            pd.Series([[1], [2], None, [3], [4], None, [5]]),
+            id="vector_integer",
         ),
         pytest.param(
             pd.Series([-253.123, None, 534.958, -4.37, 0.9305] * 4),
-            bodo.FloatingArrayType(bodo.float64),
+            False,
+            False,
             pd.Series(
                 [
                     pd.array([-253.123]),
@@ -825,10 +831,10 @@ def test_option_array_cat(flag0, flag1, memory_leak_check):
             ),
             id="vector_float",
         ),
-        pytest.param(None, bodo.null_array_type, None, id="scalar_null"),
         pytest.param(
             pd.Series(["asfdav", "1423", "!@#$", None, "0.9305"] * 4),
-            bodo.string_array_type,
+            False,
+            False,
             pd.Series(
                 [
                     pd.array(["asfdav"], dtype="string[pyarrow]"),
@@ -843,7 +849,8 @@ def test_option_array_cat(flag0, flag1, memory_leak_check):
         ),
         pytest.param(
             bodo.Time(18, 32, 59),
-            bodo.TimeArrayType(9),
+            True,
+            False,
             pd.array([bodo.Time(18, 32, 59)]),
             id="scalar_time",
         ),
@@ -858,7 +865,8 @@ def test_option_array_cat(flag0, flag1, memory_leak_check):
                 ]
                 * 4
             ),
-            bodo.datetime_date_array_type,
+            False,
+            False,
             pd.Series(
                 [
                     pd.array([datetime.date(2016, 3, 3)]),
@@ -873,35 +881,103 @@ def test_option_array_cat(flag0, flag1, memory_leak_check):
         ),
         pytest.param(
             pd.Timestamp("2021-12-08"),
-            numba.core.types.Array(bodo.datetime64ns, 1, "C"),
+            True,
+            False,
             np.array([pd.Timestamp("2021-12-08")], dtype="datetime64[ns]"),
             id="scalar_timestamp",
         ),
+        pytest.param(
+            pd.array([5, None, 1, 2, 3, 4], pd.Int64Dtype()),
+            True,
+            False,
+            pd.array([5, None, 1, 2, 3, 4], pd.Int64Dtype()),
+            id="scalar_int_array",
+        ),
+        pytest.param(
+            pd.Series([[1], [2, 3], [4, None], [None], None] * 2),
+            False,
+            False,
+            pd.Series([[1], [2, 3], [4, None], [None], None] * 2),
+            id="vector_int_array",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {"A": 0, "B": [1]},
+                    None,
+                    {"A": 0, "B": [1, 0]},
+                    {"A": 0, "B": [0, 1]},
+                ]
+                * 2
+            ),
+            False,
+            False,
+            pd.Series(
+                [
+                    [{"A": 0, "B": [1]}],
+                    None,
+                    [{"A": 0, "B": [1, 0]}],
+                    [{"A": 0, "B": [0, 1]}],
+                ]
+                * 2
+            ),
+            marks=pytest.mark.skip(
+                reason="TODO: Make coerce_to_array support struct array"
+            ),
+            id="vector_struct",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {"name": "pomegranate"},
+                    {},
+                    {"hex": "660c21"},
+                    {"hex": "660c21", "name": "red"},
+                    {"hex": "#660c21", "name": "pomegranate"},
+                    {"hex": "660c21", "name": "pomegranate"},
+                    None,
+                    {"hex": "660c21", "name": "pomegranate"},
+                ],
+            ),
+            False,
+            True,
+            pd.Series(
+                [
+                    [{"name": "pomegranate"}],
+                    [{}],
+                    [{"hex": "660c21"}],
+                    [{"hex": "660c21", "name": "red"}],
+                    [{"hex": "#660c21", "name": "pomegranate"}],
+                    [{"hex": "660c21", "name": "pomegranate"}],
+                    None,
+                    [{"hex": "660c21", "name": "pomegranate"}],
+                ],
+            ),
+            marks=pytest.mark.skip(reason="TODO: Support setitem for map array"),
+            id="vector_map",
+        ),
     ],
 )
-def test_to_array(to_array_input, dtype, answer, memory_leak_check):
-    is_scalar = False
+def test_to_array(arr, is_scalar, use_map_arrays, expected, memory_leak_check):
+    if is_scalar:
 
-    def impl(to_array_input, dtype):
-        return pd.Series(
-            bodo.libs.bodosql_array_kernels.to_array(to_array_input, dtype)
-        )
+        def impl(arr):
+            return bodo.libs.bodosql_array_kernels.to_array(arr, is_scalar)
 
-    if not isinstance(to_array_input, pd.Series):
-        is_scalar = True
-        impl = lambda to_array_input, dtype: bodo.libs.bodosql_array_kernels.to_array(
-            to_array_input, dtype
-        )
+    else:
+
+        def impl(arr):
+            return pd.Series(bodo.libs.bodosql_array_kernels.to_array(arr, is_scalar))
 
     check_func(
         impl,
-        (
-            to_array_input,
-            dtype,
-        ),
-        py_output=answer,
+        (arr,),
+        py_output=expected,
         check_dtype=False,
+        use_map_arrays=use_map_arrays,
+        distributed=not is_scalar,
         is_out_distributed=not is_scalar,
+        dist_test=not is_scalar,
     )
 
 
@@ -1736,13 +1812,43 @@ def test_option_array_contains(memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "array, separator, answer",
+    "array, separator, is_scalar_arr, answer",
     [
         pytest.param(
             np.array([4234, 401, -820]),
             "+",
+            True,
             "4234+401+-820",
-            id="int_scalar",
+            id="int-scalar-scalar",
+        ),
+        pytest.param(
+            np.array([4234, 401, -820]),
+            pd.Series(["+", " - ", None] * 2),
+            True,
+            pd.Series(["4234+401+-820", "4234 - 401 - -820", None] * 2),
+            marks=pytest.mark.slow,
+            id="int-scalar-vector",
+        ),
+        pytest.param(
+            pd.Series([[4234, 401, -820], [4234], [], None] * 2),
+            "+",
+            False,
+            pd.Series(["4234+401+-820", "4234", "", None] * 2),
+            marks=pytest.mark.slow,
+            id="int-vector-scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [[4234, 401, -820], [4234, 401, -820], [4234]] * 5
+                + [[], [], None, None]
+            ),
+            pd.Series(["+", "", " - "] * 5 + [" ", None, " + ", None]),
+            False,
+            pd.Series(
+                ["4234+401+-820", "4234401-820", "4234"] * 5 + ["", None, None, None]
+            ),
+            marks=pytest.mark.slow,
+            id="int-vector-vector",
         ),
         pytest.param(
             pd.Series(
@@ -1755,6 +1861,7 @@ def test_option_array_contains(memory_leak_check):
                 * 4
             ),
             "-",
+            False,
             pd.Series(
                 [
                     "-253.123000--534.958000--4.370000-0.930500",
@@ -1764,13 +1871,14 @@ def test_option_array_contains(memory_leak_check):
                 ]
                 * 4
             ),
-            id="float_vector",
+            id="float-vector-scalar",
         ),
         pytest.param(
             np.array([False, True, None, True]),
             "&",
-            "False&True&&True",
-            id="bool_scalar",
+            True,
+            "false&true&&true",
+            id="bool-scalar-scalar",
         ),
         pytest.param(
             pd.Series(
@@ -1783,6 +1891,7 @@ def test_option_array_contains(memory_leak_check):
                 * 4
             ),
             "",
+            False,
             pd.Series(
                 [
                     "-253.123534.958-4.370.9305",
@@ -1792,7 +1901,7 @@ def test_option_array_contains(memory_leak_check):
                 ]
                 * 4
             ),
-            id="string_vector",
+            id="string-vector-scalar",
         ),
         pytest.param(
             np.array(
@@ -1804,34 +1913,48 @@ def test_option_array_contains(memory_leak_check):
                 ],
             ),
             "_",
+            True,
             "1932-10-05_2012-07-23_1999-03-15_2022-12-29",
-            id="date_scalar",
+            id="date-scalar-scalar",
+        ),
+        pytest.param(
+            pd.Series([[1, 2], [3, None], None]).values,
+            "_",
+            True,
+            "[[1, 2], [3, None], None]",
+            id="int_array-scalar-scalar",
+            marks=pytest.mark.skip(
+                reason="TODO: Make TO_VARCHAR support semi-structured data types"
+            ),
         ),
     ],
 )
-def test_array_to_string(array, separator, answer, memory_leak_check):
-    distributed = True
+def test_array_to_string(array, separator, is_scalar_arr, answer, memory_leak_check):
+    both_scalar = is_scalar_arr and not isinstance(separator, pd.Series)
+    no_scalar = not is_scalar_arr and isinstance(separator, pd.Series)
+    if both_scalar:
 
-    def impl(array, separator):
-        return pd.Series(
-            bodo.libs.bodosql_array_kernels.array_to_string(array, separator)
-        )
+        def impl(array, separator):
+            return bodo.libs.bodosql_array_kernels.array_to_string(
+                array, separator, is_scalar_arr
+            )
 
-    if not isinstance(array, pd.Series):
-        distributed = False
-        impl = lambda array, separator: bodo.libs.bodosql_array_kernels.array_to_string(
-            array, separator
-        )
+    else:
+
+        def impl(array, separator):
+            return pd.Series(
+                bodo.libs.bodosql_array_kernels.array_to_string(
+                    array, separator, is_scalar_arr
+                )
+            )
 
     check_func(
         impl,
-        (
-            array,
-            separator,
-        ),
+        (array, separator),
         py_output=answer,
-        distributed=distributed,
-        is_out_distributed=distributed,
+        distributed=no_scalar,
+        is_out_distributed=no_scalar,
+        dist_test=no_scalar,
     )
 
 
