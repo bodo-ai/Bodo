@@ -4,11 +4,11 @@ import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
+import com.bodosql.calcite.table.CatalogTable;
 import java.util.List;
 import java.util.Set;
 import javax.annotation.Nullable;
 import org.apache.calcite.schema.Schema;
-import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
 
@@ -52,7 +52,7 @@ public interface BodoSQLCatalog {
    * @param tableName Name of the table.
    * @return The table object.
    */
-  Table getTable(BodoSqlSchema schema, String tableName);
+  CatalogTable getTable(BodoSqlSchema schema, String tableName);
 
   /**
    * Get the top level schemas available for this catalog. Each individual catalog will decide what

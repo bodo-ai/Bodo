@@ -58,7 +58,7 @@ import com.bodosql.calcite.ir.OperatorType;
 import com.bodosql.calcite.ir.StateVariable;
 import com.bodosql.calcite.ir.StreamingPipelineFrame;
 import com.bodosql.calcite.ir.Variable;
-import com.bodosql.calcite.schema.CatalogSchemaImpl;
+import com.bodosql.calcite.schema.CatalogSchema;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTable;
 import com.bodosql.calcite.traits.BatchingProperty;
@@ -959,7 +959,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   public void genSingleBatchTableCreate(
       PandasTableCreate node,
-      CatalogSchemaImpl outputSchemaAsCatalog,
+      CatalogSchema outputSchemaAsCatalog,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
     BuildContext ctx = new BuildContext(node);
@@ -986,7 +986,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   public void genStreamingTableCreate(
       PandasTableCreate node,
-      CatalogSchemaImpl outputSchemaAsCatalog,
+      CatalogSchema outputSchemaAsCatalog,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType,
       Expr columnPrecisions) {
@@ -1063,12 +1063,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Schema outputSchema = node.getSchema();
 
     // Fow now, we only support CREATE TABLE AS with CatalogSchema
-    if (!(outputSchema instanceof CatalogSchemaImpl)) {
+    if (!(outputSchema instanceof CatalogSchema)) {
       throw new BodoSQLCodegenException(
           "CREATE TABLE is only supported for Snowflake Catalog Schemas");
     }
 
-    CatalogSchemaImpl outputSchemaAsCatalog = (CatalogSchemaImpl) outputSchema;
+    CatalogSchema outputSchemaAsCatalog = (CatalogSchema) outputSchema;
 
     BodoSQLCatalog.ifExistsBehavior ifExists;
     if (node.isReplace()) {

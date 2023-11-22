@@ -8,7 +8,7 @@ import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.prepare.PlannerImpl;
 import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
-import com.bodosql.calcite.schema.CatalogSchemaImpl;
+import com.bodosql.calcite.schema.CatalogSchema;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import java.io.PrintWriter;
@@ -243,13 +243,13 @@ public class RelationalAlgebraGenerator {
               //     (table_identifier) (Note: this case will never yield a match,
               //     as the root schema is currently always empty. This may change
               //     in the future)
-              root.add(catalogName, new CatalogSchemaImpl(catalogName, catalog));
+              root.add(catalogName, new CatalogSchema(catalogName, catalog));
               Set<String> remainingSchemaNamesToAdd = catalog.getSchemaNames();
 
               for (String schemaName : catalog.getDefaultSchema()) {
                 SchemaPlus schema =
                     root.getSubSchema(catalogName)
-                        .add(schemaName, new CatalogSchemaImpl(schemaName, catalog));
+                        .add(schemaName, new CatalogSchema(schemaName, catalog));
                 defaults.add(schema);
                 assert schemaName.contains(schemaName)
                     : "Error in RelationalAlgebraGenerator: catalog.getDefaultSchema() returned"
@@ -260,7 +260,7 @@ public class RelationalAlgebraGenerator {
               }
               for (String schemaName : remainingSchemaNamesToAdd) {
                 root.getSubSchema(catalogName)
-                    .add(schemaName, new CatalogSchemaImpl(schemaName, catalog));
+                    .add(schemaName, new CatalogSchema(schemaName, catalog));
               }
               defaults.add(root.getSubSchema(catalogName));
               defaults.add(root.add(newSchema.getName(), newSchema));

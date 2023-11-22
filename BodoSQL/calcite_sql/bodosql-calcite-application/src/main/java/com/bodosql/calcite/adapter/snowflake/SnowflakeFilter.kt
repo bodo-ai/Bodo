@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.plan.makeCost
-import com.bodosql.calcite.table.CatalogTable
+import com.bodosql.calcite.table.SnowflakeCatalogTable
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner
@@ -16,7 +16,7 @@ class SnowflakeFilter private constructor(
     traitSet: RelTraitSet,
     input: RelNode,
     condition: RexNode,
-    private val catalogTable: CatalogTable,
+    private val catalogTable: SnowflakeCatalogTable,
 ) : Filter(cluster, traitSet.replace(SnowflakeRel.CONVENTION), input, condition), SnowflakeRel {
 
     override fun copy(traitSet: RelTraitSet, input: RelNode, condition: RexNode): Filter {
@@ -35,11 +35,11 @@ class SnowflakeFilter private constructor(
             traitSet: RelTraitSet,
             input: RelNode,
             condition: RexNode,
-            catalogTable: CatalogTable,
+            catalogTable: SnowflakeCatalogTable,
         ): SnowflakeFilter {
             return SnowflakeFilter(cluster, traitSet, input, condition, catalogTable)
         }
     }
 
-    override fun getCatalogTable(): CatalogTable = catalogTable
+    override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
 }
