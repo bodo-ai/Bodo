@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.plan.makeCost
-import com.bodosql.calcite.table.CatalogTable
+import com.bodosql.calcite.table.SnowflakeCatalogTable
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner
@@ -19,7 +19,7 @@ class SnowflakeSort private constructor(
     collation: RelCollation,
     offset: RexNode?,
     fetch: RexNode?,
-    private val catalogTable: CatalogTable,
+    private val catalogTable: SnowflakeCatalogTable,
 ) :
     Sort(cluster, traitSet.replace(SnowflakeRel.CONVENTION), input, collation, offset, fetch), SnowflakeRel {
 
@@ -33,7 +33,7 @@ class SnowflakeSort private constructor(
         return SnowflakeSort(cluster, traitSet, newInput, newCollation, offset, fetch, catalogTable)
     }
 
-    override fun getCatalogTable(): CatalogTable = catalogTable
+    override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable
 
     override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost {
         val rows = mq.getRowCount(this)
@@ -49,7 +49,7 @@ class SnowflakeSort private constructor(
             collation: RelCollation,
             offset: RexNode?,
             fetch: RexNode?,
-            catalogTable: CatalogTable,
+            catalogTable: SnowflakeCatalogTable,
         ): SnowflakeSort {
             return SnowflakeSort(cluster, traitSet, input, collation, offset, fetch, catalogTable)
         }

@@ -51,6 +51,19 @@ public abstract class BodoSqlSchema implements Schema {
   }
 
   /**
+   * Create the full path of for a table by concatenating a table name with the full path.
+   *
+   * @param tableName The name of the table to append.
+   * @return A table path combining getFullPath with the tableName.
+   */
+  public ImmutableList<String> createTablePath(String tableName) {
+    ImmutableList.Builder<String> builder = new ImmutableList.Builder();
+    builder.addAll(getFullPath());
+    builder.add(tableName);
+    return builder.build();
+  }
+
+  /**
    * Returns all functions defined in this schema with a given name. This is likely used for a
    * stored procedure syntax but is not implemented for BodoSQL.
    *

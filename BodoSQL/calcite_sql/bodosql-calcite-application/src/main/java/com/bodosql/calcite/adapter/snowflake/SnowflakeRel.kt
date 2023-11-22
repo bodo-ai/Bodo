@@ -1,7 +1,6 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
-import com.bodosql.calcite.table.CatalogTable
+import com.bodosql.calcite.table.SnowflakeCatalogTable
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import org.apache.calcite.plan.Convention
@@ -14,7 +13,6 @@ import org.apache.calcite.sql.SqlWriterConfig
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.parser.SqlParserPos
 import org.apache.calcite.sql.util.SqlString
-import java.util.function.UnaryOperator
 
 /**
  * Temporary convention for Snowflake relations.
@@ -31,15 +29,7 @@ interface SnowflakeRel : RelNode {
     }
 
     fun generatePythonConnStr(schema: String): String {
-        // TODO(jsternberg): The catalog will specifically be SnowflakeCatalogImpl.
-        // This cast is a bad idea and is particularly unsafe and unverifiable using
-        // the compiler tools. It would be better if the catalog implementations were
-        // refactored to not be through an interface and we had an actual class type
-        // that referenced snowflake than needing to do it through a cast.
-        // That's a bit too much work to refactor quite yet, so this cast gets us
-        // through this time where the code is too abstract and we just need a way
-        // to convert over.
-        val catalog = getCatalogTable().catalog as SnowflakeCatalogImpl
+        val catalog = getCatalogTable().catalog
         return catalog.generatePythonConnStr(schema)
     }
 
@@ -78,17 +68,15 @@ interface SnowflakeRel : RelNode {
             null,
         )
 
-        val metadataSelectQueryString: SqlString = metadataSelectQuery.toSqlString(
-            UnaryOperator { c: SqlWriterConfig ->
-                c.withClauseStartsLine(false)
-                    .withDialect(BodoSnowflakeSqlDialect.NO_DOLLAR_ESCAPE)
-            },
-        )
+        val metadataSelectQueryString: SqlString = metadataSelectQuery.toSqlString { c: SqlWriterConfig ->
+            c.withClauseStartsLine(false)
+                .withDialect(BodoSnowflakeSqlDialect.NO_DOLLAR_ESCAPE)
+        }
 
         return this.getCatalogTable().trySubmitIntegerMetadataQuerySnowflake(metadataSelectQueryString)?.toDouble()
     }
 
-    fun getCatalogTable(): CatalogTable
+    fun getCatalogTable(): SnowflakeCatalogTable
 
     /**
      * Get the batching property.

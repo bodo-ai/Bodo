@@ -18,7 +18,7 @@ import com.bodosql.calcite.sql.BodoSqlUtil;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
-import com.bodosql.calcite.table.CatalogTable;
+import com.bodosql.calcite.table.SnowflakeCatalogTable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.sql.Connection;
@@ -41,7 +41,6 @@ import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.schema.Schema;
-import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNodeList;
@@ -388,7 +387,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @return The table object.
    */
   @Override
-  public Table getTable(BodoSqlSchema schema, String tableName) {
+  public SnowflakeCatalogTable getTable(BodoSqlSchema schema, String tableName) {
     return getTableImpl(schema, tableName, isConnectionCached());
   }
 
@@ -537,7 +536,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @param shouldRetry Should we retry the connection if we see an exception?
    * @return The table object.
    */
-  private Table getTableImpl(BodoSqlSchema schema, String tableName, boolean shouldRetry) {
+  private SnowflakeCatalogTable getTableImpl(
+      BodoSqlSchema schema, String tableName, boolean shouldRetry) {
     try {
       String dotSeparatedTableName =
           String.format(Locale.ROOT, "%s.%s.%s", catalogName, schema.getName(), tableName);
@@ -578,7 +578,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
             new BodoSQLColumnImpl(
                 readName, writeName, type, elemType, nullable, tzInfo, precision));
       }
-      return new CatalogTable(tableName, schema.getFullPath(), columns, this);
+      return new SnowflakeCatalogTable(tableName, schema.getFullPath(), columns, this);
     } catch (SQLException e) {
       String errorMsg =
           String.format(
