@@ -142,12 +142,11 @@ class OperatorComptroller {
     void Initialize();
 
     /**
-     * @brief Set the total memory budget for a pipeline.
-     * Only used for unit testing purposes.
-     * @param pipeline_id Pipeline to modify
-     * @param budget total budget to set (in bytes)
+     * @brief Initialize and set the total memory budget for all pipeline.
+     *
+     * @param budget Total budget to set (in bytes)
      */
-    void SetPipelineMemoryBudget(int64_t pipeline_id, size_t budget);
+    void Initialize(size_t budget);
 
     /**
      * @brief Register an operator and associate it with all pipelines where it
@@ -156,13 +155,6 @@ class OperatorComptroller {
     void RegisterOperator(int64_t operator_id, OperatorType operator_type,
                           int64_t min_pipeline_id, int64_t max_pipeline_id,
                           size_t estimate);
-
-    // XXX Not sure if it's really needed.
-    /**
-     * @brief Increment the id of the current pipeline. This represents the
-     * program beginning execution of the next pipeline.
-     */
-    void IncrementPipelineID();
 
     /**
      * @brief Get the budget for a given operator in the current pipeline
@@ -200,13 +192,8 @@ class OperatorComptroller {
     void PrintBudgetAllocations(std::ostream& os);
 
    private:
-    static constexpr size_t UNINITIALIZED_PIPELINE_ID =
-        std::numeric_limits<size_t>::max();
-
-    // XXX Not sure if it's really needed. Not being initialized could just be a
-    // flag.
-    size_t current_pipeline_id = UNINITIALIZED_PIPELINE_ID;
-
+    /// @brief Total budget for each pipeline. Set during `Initialize`.
+    size_t total_budget = 0;
     std::vector<size_t> pipeline_remaining_budget;
     std::vector<std::set<int64_t>> pipeline_to_remaining_operator_ids;
     std::vector<int64_t> operator_allocated_budget;
@@ -319,4 +306,4 @@ class OperatorComptroller {
  * @param bytes
  * @return std::string
  */
-std::string BytesToHumanReadableString(size_t bytes);
+std::string BytesToHumanReadableString(const size_t bytes);
