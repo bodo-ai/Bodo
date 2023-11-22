@@ -1,6 +1,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Numba extension support for time objects and their arrays.
 """
+import datetime
 import operator
 
 import llvmlite.binding as ll
@@ -95,6 +96,17 @@ class Time:
         return int(self.value)
 
     def __eq__(self, other):
+        # datetime.time doesn't have all the Time fields
+        if isinstance(other, datetime.time):
+            return (
+                (self.hour == other.hour)
+                and (self.minute == other.minute)
+                and (self.second == other.second)
+                and (self.millisecond == 0)
+                and (self.microsecond == other.microsecond)
+                and (self.nanosecond == 0)
+            )
+
         if not isinstance(other, Time):  # pragma: no cover
             return False
         # Removing precision check. It does not affect how Bodo computes `value`.
@@ -282,6 +294,7 @@ def parse_time_string(time_str):  # pragma: no cover
 
 ll.add_symbol("box_time_array", hdatetime_ext.box_time_array)
 ll.add_symbol("unbox_time_array", hdatetime_ext.unbox_time_array)
+
 
 # bodo.Time implementation that uses a single int to store hour/minute/second/microsecond/nanosecond
 # The precision is saved in it's type
@@ -625,6 +638,7 @@ class TimeArrayType(types.ArrayCompatible):
 data_type = types.Array(types.int64, 1, "C")
 nulls_type = types.Array(types.uint8, 1, "C")
 
+
 # Time array has only an array integers to store data
 @register_model(TimeArrayType)
 class TimeArrayModel(models.StructModel):
@@ -869,7 +883,6 @@ def time_arr_setitem(A, idx, val):  # pragma: no cover
 
     # scalar case
     if isinstance(idx, types.Integer):
-
         if isinstance(types.unliteral(val), TimeType):
 
             def impl(A, idx, val):  # pragma: no cover
@@ -890,7 +903,6 @@ def time_arr_setitem(A, idx, val):  # pragma: no cover
 
     # array of integers
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
-
         if isinstance(types.unliteral(val), TimeType):
             return lambda A, idx, val: array_setitem_int_index(
                 A, idx, cast_time_to_int(val)
@@ -904,7 +916,6 @@ def time_arr_setitem(A, idx, val):  # pragma: no cover
 
     # bool array
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
-
         if isinstance(types.unliteral(val), TimeType):
             return lambda A, idx, val: array_setitem_bool_index(
                 A, idx, cast_time_to_int(val)
@@ -917,7 +928,6 @@ def time_arr_setitem(A, idx, val):  # pragma: no cover
 
     # slice case
     if isinstance(idx, types.SliceType):
-
         if isinstance(types.unliteral(val), TimeType):
             return lambda A, idx, val: array_setitem_slice_index(
                 A, idx, cast_time_to_int(val)

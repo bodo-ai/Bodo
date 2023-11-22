@@ -773,13 +773,32 @@ def test_list_string_array_type_specific(memory_leak_check):
         df3 = df1.merge(df2, on="A", how="outer")
         return df3
 
-    df1 = pd.DataFrame({"A": [["AB"], np.nan, ["A", "B", "C"]], "C": [1, 2, 3]})
-    df2 = pd.DataFrame({"A": [["A", "B", "C"], ["AB", "EF"], np.nan], "D": [4, 5, 6]})
+    df1 = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [["AB"], None, ["A", "B", "C"]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
+            "C": [1, 2, 3],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [["A", "B", "C"], ["AB", "EF"], None],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
+            "D": [4, 5, 6],
+        }
+    )
     bodo_impl = bodo.jit(test_impl)
     df3_bodo = bodo_impl(df1, df2)
     df3_target = pd.DataFrame(
         {
-            "A": [["AB"], np.nan, ["A", "B", "C"], ["AB", "EF"]],
+            "A": pd.Series(
+                [["AB"], None, ["A", "B", "C"], ["AB", "EF"]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
             "C": [1, 2, 3, np.nan],
             "D": [np.nan, 6, 4, 5],
         }

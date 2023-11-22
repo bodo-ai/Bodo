@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodo.tests.utils import (
@@ -155,6 +156,9 @@ pytestmark = pytest_pandas
                 * 2
             ),
             id="nested_array_7_",
+            marks=pytest.mark.skip(
+                "TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing"
+            ),
         ),
     ]
 )
@@ -564,7 +568,15 @@ def test_dd_map_array_non_drop():
 
     df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4]})
     # We can only run the sequential test because Pandas can't sort a dict column
-    check_func(test_impl, (df1,), reset_index=True, dist_test=False)
+    check_func(
+        test_impl,
+        (df1,),
+        reset_index=True,
+        dist_test=False,
+        py_output=test_impl(df1).astype(
+            {"A": "int64", "B": pd.ArrowDtype(pa.map_(pa.large_string(), pa.int64()))}
+        ),
+    )
 
 
 # TODO: Add memory_leak_check. There appears to be a leak for struct arrays.

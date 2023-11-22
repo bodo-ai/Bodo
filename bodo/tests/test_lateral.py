@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -86,8 +87,9 @@ def simulate_lateral_flatten_json(
         keys = []
         vals = []
         explode_length = 0
-        if json_obj is not None:
+        if json_obj is not None and json_obj is not pd.NA:
             explode_length = len(json_obj)
+            json_obj = dict(json_obj)
             for k, v in json_obj.items():
                 keys.append(k)
                 vals.append(v)
@@ -103,6 +105,8 @@ def simulate_lateral_flatten_json(
             out_dict["val"].extend(vals)
         if output_this:
             out_dict["this"].extend([json_obj] * explode_length)
+    if output_this:
+        out_dict["this"] = pd.Series(out_dict["this"], dtype=column_to_explode.dtype)
     for i in range(len(keep_cols)):
         out_dict[i] = pd.Series(out_dict[i], dtype=df_subset.iloc[:, i].dtype)
     return pd.DataFrame(out_dict)
@@ -219,7 +223,7 @@ def test_lateral_flatten_array(
     ],
 )
 @pytest.mark.parametrize(
-    "explode_col_values, use_map_arrays, ban_dictionary",
+    "explode_col_values, val_type, use_map_arrays, ban_dictionary",
     [
         pytest.param(
             [
@@ -229,6 +233,7 @@ def test_lateral_flatten_array(
                 {"hex": "7b6d8d", "name": "ultraviolet"},
                 {"hex": None, "name": "midnight"},
             ],
+            pa.struct([pa.field("hex", pa.string()), pa.field("name", pa.string())]),
             False,
             False,
             id="explode_struct_string",
@@ -241,6 +246,12 @@ def test_lateral_flatten_array(
                 {"ratings": [3.0, 1.0], "scores": [94.5]},
                 {"ratings": None, "scores": [None]},
             ],
+            pa.struct(
+                [
+                    pa.field("ratings", pa.list_(pa.float64())),
+                    pa.field("scores", pa.list_(pa.float64())),
+                ]
+            ),
             False,
             False,
             id="explode_struct_float_arrays",
@@ -262,6 +273,12 @@ def test_lateral_flatten_array(
                 },
                 {"states": [], "cities": ["Omaha"]},
             ],
+            pa.struct(
+                [
+                    pa.field("states", pa.list_(pa.string())),
+                    pa.field("cities", pa.list_(pa.string())),
+                ]
+            ),
             False,
             True,  # Array item array of dictionary encoded arrays not well supported in compilation
             id="explode_struct_string_arrays",
@@ -274,6 +291,15 @@ def test_lateral_flatten_array(
                 {"A": [[20]], "B": [[21, 22, None], [23, None, None]]},
                 {"A": [[24], [25], [26], [27]], "B": None},
             ],
+            pa.struct(
+                [
+                    pa.field(
+                        "A",
+                        pa.list_(pa.list_((pa.int64()))),
+                        pa.field("cities", pa.list_(pa.list_((pa.int64())))),
+                    )
+                ]
+            ),
             False,
             False,
             id="explode_struct_double_nested_int_arrays",
@@ -286,6 +312,7 @@ def test_lateral_flatten_array(
                 {"F": 70},
                 {},
             ],
+            pa.map_(pa.string(), pa.int64()),
             True,
             False,
             id="explode_map",
@@ -294,6 +321,7 @@ def test_lateral_flatten_array(
 )
 def test_lateral_flatten_json(
     explode_col_values,
+    val_type,
     use_map_arrays,
     ban_dictionary,
     keep_cols,
@@ -321,7 +349,8 @@ def test_lateral_flatten_json(
                     None,
                     explode_col_values[3],
                     explode_col_values[4],
-                ]
+                ],
+                dtype=pd.ArrowDtype(val_type),
             ),
             "c": "A,BCD,A,FG,HIJKL,,MNOPQR,S,FG,U".split(","),
         }

@@ -617,38 +617,83 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
 }
 
 /**
- * @brief count the total number of data elements in array(item) arrays
+ * @brief create a Bodo array from a PyArrow array PyObject
  *
- * @param list_arr_obj array(item) array object
- * @return int64_t total number of data elements
+ * @param obj PyArrow array PyObject
+ * @return std::shared_ptr<array_info> Bodo array
  */
-int64_t count_total_elems_list_array(PyObject* list_arr_obj) {
+array_info* bodo_array_from_pyarrow_py_entry(PyObject* pyarrow_arr) {
 #undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return -1;                     \
+        throw std::runtime_error(msg); \
     }
-    // get pd.NA object to check for new NA kind
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
 
-    Py_ssize_t n = PyObject_Size(list_arr_obj);
-    int64_t n_lists = 0;
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        PyObject* s = PySequence_GetItem(list_arr_obj, i);
-        CHECK(s, "getting element failed");
-        // Pandas stores NA as either None or nan
-        if (!(s == Py_None ||
-              (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s)))) ||
-            s == C_NA) {
-            n_lists += PyObject_Size(s);
-        }
-        Py_DECREF(s);
+    try {
+        // https://arrow.apache.org/docs/python/integration/extending.html
+        CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
+
+        // unwrap C++ Arrow array from pyarrow array
+        std::shared_ptr<arrow::Array> arrow_arr;
+        auto res = arrow::py::unwrap_array(pyarrow_arr);
+        CHECK_ARROW_AND_ASSIGN(res, "unwrap_array(pyarrow_arr)", arrow_arr);
+        CHECK(arrow_arr->offset() == 0,
+              "only Arrow arrays with zero offset supported");
+
+        return new array_info(*arrow_array_to_bodo(arrow_arr));
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
     }
-    return n_lists;
+
+#undef CHECK
+}
+
+/**
+ * @brief Create Pandas ArrowExtensionArray from Bodo array
+ *
+ * @param arr input Bodo array
+ * @return void* Pandas ArrowStringArray object
+ */
+void* pd_pyarrow_array_from_bodo_array_py_entry(array_info* arr) {
+#undef CHECK
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        throw std::runtime_error(msg); \
+    }
+
+    try {
+        // convert to Arrow array
+        std::shared_ptr<arrow::Array> arrow_arr;
+        arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+        bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(),
+                            std::shared_ptr<array_info>(arr), &arrow_arr,
+                            false /*convert_timedelta_to_int64*/, "", time_unit,
+                            false /*downcast_time_ns_to_us*/);
+
+        // https://arrow.apache.org/docs/python/integration/extending.html
+        CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
+
+        // convert Arrow C++ to PyArrow
+        PyObject* pyarrow_arr = arrow::py::wrap_array(arrow_arr);
+
+        // call pd.arrays.ArrowStringArray(pyarrow_arr) which avoids copy
+        PyObject* pd_mod = PyImport_ImportModule("pandas");
+        CHECK(pd_mod, "importing pandas module failed");
+        PyObject* pd_arrays_mod = PyObject_GetAttrString(pd_mod, "arrays");
+        CHECK(pd_arrays_mod, "importing pandas.arrays module failed");
+
+        PyObject* arr_obj = PyObject_CallMethod(
+            pd_arrays_mod, "ArrowExtensionArray", "O", pyarrow_arr);
+
+        Py_DECREF(pd_mod);
+        Py_DECREF(pd_arrays_mod);
+        Py_DECREF(pyarrow_arr);
+        return arr_obj;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
 #undef CHECK
 }
 
@@ -678,72 +723,6 @@ inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
 }
 
 /**
- * @brief compute offsets, data, and null_bitmap values for array(item) array
- * from an array of lists of values. The lists inside array can have different
- * lengths.
- *
- * @param array_item_arr_obj Python Sequence object, intended to be an array of
- * lists of items.
- * @param data data buffer to be filled with all values
- * @param offsets offsets buffer to be filled with computed offsets
- * @param null_bitmap nulls buffer to be filled
- * @param dtype data type of values, currently only float64 and int64 supported.
- */
-void array_item_array_from_sequence(PyObject* list_arr_obj, char* data,
-                                    offset_t* offsets, uint8_t* null_bitmap,
-                                    Bodo_CTypes::CTypeEnum dtype) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return;                        \
-    }
-
-    CHECK(PySequence_Check(list_arr_obj), "expecting a PySequence");
-    CHECK(data && offsets && null_bitmap, "buffer arguments must not be NULL");
-
-    // get pd.NA object to check for new NA kind
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
-
-    Py_ssize_t n = PyObject_Size(list_arr_obj);
-
-    int64_t curr_item_ind = 0;
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        offsets[i] = curr_item_ind;
-        PyObject* s = PySequence_GetItem(list_arr_obj, i);
-        CHECK(s, "getting array(item) array element failed");
-        // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
-            // set null bit to 0
-            SetBitTo(null_bitmap, i, 0);
-        } else {
-            // set null bit to 1
-            null_bitmap[i / 8] |= kBitmask[i % 8];
-            // check list
-            CHECK(PySequence_Check(s), "expecting a list");
-            Py_ssize_t n_items = PyObject_Size(s);
-            for (Py_ssize_t j = 0; j < n_items; j++) {
-                PyObject* v = PySequence_GetItem(s, j);
-                copy_item_to_buffer(data, curr_item_ind, v, dtype);
-                Py_DECREF(v);
-                curr_item_ind++;
-            }
-        }
-        Py_DECREF(s);
-    }
-    offsets[n] = curr_item_ind;
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(C_NA);
-#undef CHECK
-}
-
-/**
  * @brief convert native value from buffer to Python object
  *
  * @param data data buffer for input native value (only int64/float64 currently)
@@ -768,298 +747,6 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
                   << " not supported for boxing array(item) array."
                   << std::endl;
     return NULL;
-}
-
-/**
- * @brief create a numpy array of lists of item objects from a ArrayItemArray
- *
- * @param num_lists number of lists in input array
- * @param buffer all values
- * @param offsets offsets to data
- * @param null_bitmap null bitmask
- * @param dtype data type of values (currently, only int/float)
- * @return numpy array of list of item objects
- */
-void* np_array_from_array_item_array(int64_t num_lists, const char* buffer,
-                                     const offset_t* offsets,
-                                     const uint8_t* null_bitmap,
-                                     Bodo_CTypes::CTypeEnum dtype) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
-
-    // allocate array and get nan object
-    npy_intp dims[] = {num_lists};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
-    PyObject* np_mod = PyImport_ImportModule("numpy");
-    CHECK(np_mod, "importing numpy module failed");
-    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
-    CHECK(nan_obj, "getting np.nan failed");
-
-    size_t curr_value = 0;
-    // for each list item
-    for (int64_t i = 0; i < num_lists; ++i) {
-        // set nan if item is NA
-        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(p, "getting offset in numpy array failed");
-        if (is_na(null_bitmap, i)) {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
-            CHECK(err == 0, "setting item in numpy array failed");
-            continue;
-        }
-
-        // alloc list item
-        Py_ssize_t n_vals = (Py_ssize_t)(offsets[i + 1] - offsets[i]);
-        PyObject* l = PyList_New(n_vals);
-
-        for (Py_ssize_t j = 0; j < n_vals; j++) {
-            PyObject* s = value_to_pyobject(buffer, curr_value, dtype);
-            CHECK(s, "creating Python int/float object failed");
-            PyList_SET_ITEM(l, j, s);  // steals reference to s!
-            curr_value++;
-        }
-
-        err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, l);
-        CHECK(err == 0, "setting item in numpy array failed");
-        Py_DECREF(l);
-    }
-
-    Py_DECREF(np_mod);
-    Py_DECREF(nan_obj);
-    return ret;
-#undef CHECK
-}
-
-/**
- * @brief create a numpy array of dict objects from a MapArrayType
- *
- * @param num_maps number of map in input array
- * @param key_data data buffer for keys
- * @param value_data data buffer for values
- * @param offsets offsets for different map key/value pairs
- * @param null_bitmap nulls buffer
- * @param key_dtype data types of keys
- * @param value_dtype data types of values
- * @return numpy array of dict objects
- */
-void* np_array_from_map_array(int64_t num_maps, const char* key_data,
-                              const char* value_data, const offset_t* offsets,
-                              const uint8_t* null_bitmap,
-                              Bodo_CTypes::CTypeEnum key_dtype,
-                              Bodo_CTypes::CTypeEnum value_dtype) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
-
-    // allocate array and get nan object
-    npy_intp dims[] = {num_maps};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
-    PyObject* np_mod = PyImport_ImportModule("numpy");
-    CHECK(np_mod, "importing numpy module failed");
-    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
-    CHECK(nan_obj, "getting np.nan failed");
-
-    size_t curr_item = 0;
-    // for each map
-    for (int64_t i = 0; i < num_maps; ++i) {
-        // set nan if item is NA
-        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(p, "getting offset in numpy array failed");
-        if (is_na(null_bitmap, i)) {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
-            CHECK(err == 0, "setting item in numpy array failed");
-            continue;
-        }
-
-        // create dict and fill key/value items
-        Py_ssize_t n_items = (Py_ssize_t)(offsets[i + 1] - offsets[i]);
-        PyObject* dict = PyDict_New();
-
-        for (Py_ssize_t j = 0; j < n_items; j++) {
-            PyObject* key_obj =
-                value_to_pyobject(key_data, curr_item, key_dtype);
-            CHECK(key_obj, "creating Python int/float object failed");
-            PyObject* value_obj =
-                value_to_pyobject(value_data, curr_item, value_dtype);
-            CHECK(value_obj, "creating Python int/float object failed");
-            PyDict_SetItem(dict, key_obj, value_obj);
-            Py_DECREF(key_obj);
-            Py_DECREF(value_obj);
-            curr_item++;
-        }
-
-        err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, dict);
-        CHECK(err == 0, "setting item in numpy array failed");
-        Py_DECREF(dict);
-    }
-
-    Py_DECREF(np_mod);
-    Py_DECREF(nan_obj);
-    return ret;
-#undef CHECK
-}
-
-/**
- * @brief extract data and null_bitmap values for struct array
- * from an array of dict of values. The dicts inside array should have
- * the same key names.
- *
- * @param struct_arr_obj Python Sequence object, intended to be an array of
- * dicts.
- * @param n_fields number of fields in struct array
- * @param data data buffers to be filled with all values (one buffer per field)
- * @param null_bitmap nulls buffer to be filled
- * @param dtype data types of field values
- * @param field_names names of struct fields.
- */
-void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
-                                char** data, uint8_t* null_bitmap,
-                                int32_t* dtypes, char** field_names,
-                                bool is_tuple_array) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return;                        \
-    }
-
-    // TODO: currently only float64 and int64 supported
-    CHECK(PySequence_Check(struct_arr_obj), "expecting a PySequence");
-    CHECK(data && null_bitmap, "buffer arguments must not be NULL");
-
-    // get pd.NA object to check for new NA kind
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
-
-    Py_ssize_t n = PyObject_Size(struct_arr_obj);
-
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        PyObject* s = PySequence_GetItem(struct_arr_obj, i);
-        CHECK(s, "getting struct array element failed");
-        // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
-            // set null bit to 0
-            SetBitTo(null_bitmap, i, 0);
-        } else {
-            // set null bit to 1
-            null_bitmap[i / 8] |= kBitmask[i % 8];
-            if (is_tuple_array) {
-                CHECK(PyTuple_Check(s),
-                      "invalid non-tuple element in tuple array");
-            } else {
-                CHECK(PyDict_Check(s),
-                      "invalid non-dict element in struct array");
-            }
-            // set field data values
-            for (Py_ssize_t j = 0; j < n_fields; j++) {
-                PyObject* v;
-                if (is_tuple_array)
-                    v = PyTuple_GET_ITEM(s, j);  // returns borrowed reference
-                else
-                    v = PyDict_GetItemString(
-                        s, field_names[j]);  // returns borrowed reference
-                copy_item_to_buffer(data[j], i, v,
-                                    (Bodo_CTypes::CTypeEnum)dtypes[j]);
-            }
-        }
-        Py_DECREF(s);
-    }
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(C_NA);
-#undef CHECK
-}
-
-/**
- * @brief extract key/value data, offsets and null_bitmap values for map array
- * from an array of dict of values.
- *
- * @param map_arr_obj Python Sequence object, intended to be an array of
- * dicts.
- * @param key_data data buffer for keys
- * @param value_data data buffer for values
- * @param offsets offsets for different map key/value pairs
- * @param null_bitmap nulls buffer to be filled
- * @param key_dtype data types of keys
- * @param value_dtype data types of values
- */
-void map_array_from_sequence(PyObject* map_arr_obj, char* key_data,
-                             char* value_data, offset_t* offsets,
-                             uint8_t* null_bitmap,
-                             Bodo_CTypes::CTypeEnum key_dtype,
-                             Bodo_CTypes::CTypeEnum value_dtype) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return;                        \
-    }
-
-    // TODO: currently only a few types like float64 and int64 supported
-    CHECK(PySequence_Check(map_arr_obj), "expecting a PySequence");
-    CHECK(key_data && value_data && offsets && null_bitmap,
-          "buffer arguments must not be NULL");
-
-    // get pd.NA object to check for new NA kind
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
-
-    Py_ssize_t n = PyObject_Size(map_arr_obj);
-
-    int64_t curr_item_ind = 0;
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        offsets[i] = curr_item_ind;
-        PyObject* s = PySequence_GetItem(map_arr_obj, i);
-        CHECK(s, "getting map array element failed");
-        // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
-            // set null bit to 0
-            SetBitTo(null_bitmap, i, 0);
-        } else {
-            // set null bit to 1
-            null_bitmap[i / 8] |= kBitmask[i % 8];
-            CHECK(PyDict_Check(s), "invalid non-dict element in map array");
-            PyObject* key_list = PyDict_Keys(s);
-            PyObject* value_list = PyDict_Values(s);
-            Py_ssize_t n_items = PyObject_Size(key_list);
-            // set field data values
-            for (Py_ssize_t j = 0; j < n_items; j++) {
-                PyObject* v1 =
-                    PyList_GET_ITEM(key_list, j);  // returns borrowed reference
-                PyObject* v2 = PyList_GET_ITEM(
-                    value_list, j);  // returns borrowed reference
-                copy_item_to_buffer(key_data, curr_item_ind, v1,
-                                    (Bodo_CTypes::CTypeEnum)key_dtype);
-                copy_item_to_buffer(value_data, curr_item_ind, v2,
-                                    (Bodo_CTypes::CTypeEnum)value_dtype);
-                curr_item_ind++;
-            }
-        }
-        Py_DECREF(s);
-    }
-    offsets[n] = curr_item_ind;
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(C_NA);
-#undef CHECK
 }
 
 /**
@@ -1099,78 +786,6 @@ PyObject* seq_getitem(PyObject* obj, Py_ssize_t i) {
     PyObject* s = PySequence_GetItem(obj, i);
     CHECK(s, "getting item failed");
     return s;
-#undef CHECK
-}
-
-/**
- * @brief create a numpy array of dict objects from a StructArray
- *
- * @param num_structs number of structs in input array (length of array)
- * @param n_fields number of fields in structs
- * @param data data values (one array per field)
- * @param null_bitmap null bitmask
- * @param dtypes data types of field values (currently, only int/float)
- * @param field_names names of struct fields
- * @return numpy array of dict objects
- */
-void* np_array_from_struct_array(int64_t num_structs, int n_fields, char** data,
-                                 uint8_t* null_bitmap, int32_t* dtypes,
-                                 char** field_names, bool is_tuple_array) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
-
-    // allocate array and get nan object
-    npy_intp dims[] = {num_structs};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
-    PyObject* np_mod = PyImport_ImportModule("numpy");
-    CHECK(np_mod, "importing numpy module failed");
-    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
-    CHECK(nan_obj, "getting np.nan failed");
-
-    // for each struct value
-    for (int64_t i = 0; i < num_structs; ++i) {
-        // set nan if value is NA
-        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(p, "getting offset in numpy array failed");
-        if (is_na(null_bitmap, i)) {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
-            CHECK(err == 0, "setting item in numpy array failed");
-            continue;
-        }
-
-        // alloc dictionary
-        PyObject* d;
-        if (is_tuple_array)
-            d = PyTuple_New(n_fields);
-        else
-            d = PyDict_New();
-
-        for (Py_ssize_t j = 0; j < n_fields; j++) {
-            PyObject* s = value_to_pyobject(data[j], i,
-                                            (Bodo_CTypes::CTypeEnum)dtypes[j]);
-            CHECK(s, "creating Python int/float object failed");
-            if (is_tuple_array) {
-                PyTuple_SET_ITEM(d, j, s);  // steals s reference
-            } else {
-                PyDict_SetItemString(d, field_names[j], s);
-                Py_DECREF(s);
-            }
-        }
-
-        err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, d);
-        CHECK(err == 0, "setting item in numpy array failed");
-        Py_DECREF(d);
-    }
-
-    Py_DECREF(np_mod);
-    Py_DECREF(nan_obj);
-    return ret;
 #undef CHECK
 }
 
@@ -1506,14 +1121,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
 
     // Functions in the section below only use C which cannot throw exceptions,
     // so typical exception handling is not required
-    SetAttrStringFromVoidPtr(m, count_total_elems_list_array);
-    SetAttrStringFromVoidPtr(m, array_item_array_from_sequence);
-    SetAttrStringFromVoidPtr(m, struct_array_from_sequence);
-    SetAttrStringFromVoidPtr(m, map_array_from_sequence);
+    SetAttrStringFromVoidPtr(m, bodo_array_from_pyarrow_py_entry);
+    SetAttrStringFromVoidPtr(m, pd_pyarrow_array_from_bodo_array_py_entry);
     SetAttrStringFromVoidPtr(m, string_array_from_sequence);
-    SetAttrStringFromVoidPtr(m, np_array_from_struct_array);
-    SetAttrStringFromVoidPtr(m, np_array_from_array_item_array);
-    SetAttrStringFromVoidPtr(m, np_array_from_map_array);
     SetAttrStringFromVoidPtr(m, array_getitem);
     SetAttrStringFromVoidPtr(m, list_check);
     SetAttrStringFromVoidPtr(m, dict_keys);

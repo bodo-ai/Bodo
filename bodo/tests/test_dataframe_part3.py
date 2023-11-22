@@ -477,8 +477,27 @@ def test_map_array_concat(memory_leak_check):
     # Test correctness sequentially, where ordering matters.
     # We cannot test parallel right now because we would need to sort
     # the output.
-    check_func(impl, (df, n), is_out_distributed=False, only_seq=True)
-    check_func(impl_str, (df, n), is_out_distributed=False, only_seq=True)
+    check_func(
+        impl,
+        (df, n),
+        is_out_distributed=False,
+        only_seq=True,
+        py_output=impl(df, n).astype(
+            {"A": "int64", "B": pd.ArrowDtype(pa.map_(pa.int64(), pa.int64()))}
+        ),
+    )
+    check_func(
+        impl_str,
+        (df, n),
+        is_out_distributed=False,
+        only_seq=True,
+        py_output=impl_str(df, n).astype(
+            {
+                "A": "int64",
+                "B": pd.ArrowDtype(pa.map_(pa.large_string(), pa.large_string())),
+            }
+        ),
+    )
 
 
 def test_update_df_type(memory_leak_check):
@@ -715,7 +734,11 @@ pd_supported_merge_cols = [
         id="DecimalArrayType",
     ),
     pytest.param(
-        pd.Series(({1: 1, 2: 2}, {2: 2}, {3: 3}, {4: 4}, {5: 5})), id="MapArrayType"
+        pd.Series(
+            ({1: 1, 2: 2}, {2: 2}, {3: 3}, {4: 4}, {5: 5}),
+            dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int64())),
+        ),
+        id="MapArrayType",
     ),
     pytest.param(("a", "b", "c", "d", "e"), id="StringArrayType"),
     pytest.param((b"a", b"b", b"c", b"d", b"e"), id="BinaryArrayType"),
@@ -749,10 +772,18 @@ pd_supported_merge_cols = [
 
 bodo_only_merge_cols = [
     pytest.param(
-        pd.Series(({"a": 1}, {"a": 2}, {"a": 3}, {"a": 4}, {"a": 5})),
+        pd.Series(
+            ({"a": 1}, {"a": 2}, {"a": 3}, {"a": 4}, {"a": 5}),
+            dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.int64())])),
+        ),
         id="StructArrayType",
     ),
-    pytest.param(pd.Series(([1], [2], [3], [4], [5])), id="ArrayItemArrayType"),
+    pytest.param(
+        pd.Series(
+            ([1], [2], [3], [4], [5]), dtype=pd.ArrowDtype(pa.large_list(pa.int64()))
+        ),
+        id="ArrayItemArrayType",
+    ),
 ]
 
 
@@ -1258,10 +1289,12 @@ def test_dataframe_explode():
         assert all(all(counts == df[c].apply(mylen)) for c in cols)
         res = pd.DataFrame(
             {
-                c: df[c].explode() if c in cols else df[c].repeat(counts)
+                c: df[c].astype(object).explode().values
+                if c in cols
+                else df[c].repeat(counts).values
                 for c in df.columns
             },
-            index=df[cols[0]].explode().index,
+            index=df[cols[0]].astype(object).explode().index,
         )
         return res
 
@@ -1283,9 +1316,15 @@ def test_dataframe_explode():
 
     df = pd.DataFrame(
         {
-            "A": [[0, 1, 2], [5], [], [3, 4]] * 3,
+            "A": pd.Series(
+                [[0, 1, 2], [5], [], [3, 4]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
             "B": [1, 7, 2, 4] * 3,
-            "C": [[1, 2, 3], np.nan, [], [1, 2]] * 3,
+            "C": pd.Series(
+                [[1, 2, 3], None, [], [1, 2]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
         }
     )
     S = pd.Series(["a b c", "d e", "f", "g h"] * 3)

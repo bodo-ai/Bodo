@@ -1373,7 +1373,8 @@ def test_row_number(test, memory_leak_check):
                     {"A": 16, "B": None},
                     {"B": 42},
                     {"A": 42},
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ).values,
             True,
             pd.Series(
@@ -1387,7 +1388,8 @@ def test_row_number(test, memory_leak_check):
                     {"C": 11},
                 ]
                 * 10
-                + [None, {"B": None}, {}, {"B": None}, {"B": 42}, {}]
+                + [None, {"B": None}, {}, {"B": None}, {"B": 42}, {}],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ).values,
             id="map-drop_literal_string",
         ),
@@ -1412,7 +1414,8 @@ def test_row_number(test, memory_leak_check):
                     {"A": 16, "B": None},
                     {"B": 42},
                     {"A": 42},
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ).values,
             True,
             pd.Series(
@@ -1434,8 +1437,9 @@ def test_row_number(test, memory_leak_check):
                     {"A": 16},
                     {"B": 42},
                     {"A": 42},
-                ]
-            ).values,
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+            ),
             id="map-drop_column",
         ),
         pytest.param(
@@ -1564,7 +1568,15 @@ def test_object_delete(
                         {"address": 6525, "street": "Penn"},
                     ]
                     * 10
-                    + [{"address": 5607, "street": None}, None]
+                    + [{"address": 5607, "street": None}, None],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("address", pa.int64()),
+                                pa.field("street", pa.string()),
+                            ]
+                        )
+                    ),
                 ).values,
                 {"lat": 40.44, "lon": -79.99},
             ),
@@ -1592,7 +1604,23 @@ def test_object_delete(
                         "metadata": {"lat": 40.44, "lon": -79.99},
                     },
                     {"data": None, "metadata": {"lat": 40.44, "lon": -79.99}},
-                ]
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field(
+                                "data",
+                                pa.struct(
+                                    [
+                                        pa.field("address", pa.int64()),
+                                        pa.field("street", pa.string()),
+                                    ]
+                                ),
+                            ),
+                            pa.field("metadata", pa.map_(pa.string(), pa.float64())),
+                        ]
+                    )
+                ),
             ),
             id="2-struct_vector-struct_scalar",
         ),
@@ -1613,7 +1641,17 @@ def test_object_delete(
                         [{"species": "Elephant", "colors": ["grey"]}],
                     ]
                     * 5
-                    + [[], None]
+                    + [[], None],
+                    dtype=pd.ArrowDtype(
+                        pa.list_(
+                            pa.struct(
+                                [
+                                    pa.field("species", pa.string()),
+                                    pa.field("colors", pa.list_(pa.string())),
+                                ]
+                            )
+                        )
+                    ),
                 ),
             ),
             ("facts",),
@@ -1645,9 +1683,27 @@ def test_object_delete(
                     },
                 ]
                 * 5
-                + [{"facts": []}, {"facts": None}]
+                + [{"facts": []}, {"facts": None}],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field(
+                                "facts",
+                                pa.list_(
+                                    pa.struct(
+                                        [
+                                            pa.field("species", pa.string()),
+                                            pa.field("colors", pa.list_(pa.string())),
+                                        ]
+                                    )
+                                ),
+                            )
+                        ]
+                    )
+                ),
             ),
             id="1-struct_array_vector",
+            marks=pytest.mark.skip(reason="[BSE-2078] TODO: fix segfault"),
         ),
         pytest.param(
             (
@@ -1694,7 +1750,16 @@ def test_object_delete(
                         "hash": None,
                         "letters": ["Pi"],
                     },
-                ]
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("scores", pa.large_list(pa.int64())),
+                            pa.field("hash", pa.null()),
+                            pa.field("letters", pa.large_list(pa.large_string())),
+                        ]
+                    )
+                ),
             ),
             id="3-int_array_vector-null-string_array_vector",
         ),

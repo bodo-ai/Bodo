@@ -1790,7 +1790,7 @@ def get_value_for_type(dtype):  # pragma: no cover
     if dtype == bodo.dict_str_arr_type:
         import pyarrow as pa
 
-        return pa.array(["a"], type=pa.dictionary(pa.int32(), pa.string()))
+        return pa.array(["a"], type=pa.dictionary(pa.int32(), pa.large_string()))
 
     if dtype == binary_array_type:
         return np.array([b"A"], dtype=object)
@@ -2868,7 +2868,7 @@ def slice_getitem_overload(arr, slice_index, arr_start, total_len):
     return getitem_impl
 
 
-dummy_use = numba.njit(lambda a: None)
+dummy_use = numba.njit(no_cpython_wrapper=True)(lambda a: None)
 
 
 def int_getitem(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
