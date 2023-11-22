@@ -8,6 +8,9 @@
 // Max iterations of the step 1 of the compute satisfiable budgets algorithms.
 #define SATISFIABLE_BUDGET_CALC_MAX_ITERS 100000
 
+// Minimum budget to assign to every operator with relative estimates.
+#define DEFAULT_MIN_BUDGET_REL_OPS 16L * 1024 * 1024  // 16MiB
+
 /**
  * @brief Get string representation of the different Operator types.
  *
@@ -32,7 +35,6 @@ std::string GetOperatorType_as_string(OperatorType const& op_type) {
 }
 
 std::string BytesToHumanReadableString(size_t bytes) {
-    std::string db_size;
     auto kibibytes = bytes / 1024;
     auto mebibyte = kibibytes / 1024;
     kibibytes -= mebibyte * 1024;
@@ -43,18 +45,18 @@ std::string BytesToHumanReadableString(size_t bytes) {
     auto pebibyte = tebibyte / 1024;
     tebibyte -= pebibyte * 1024;
     if (pebibyte > 0) {
-        return std::to_string(pebibyte) + "." + std::to_string(tebibyte / 100) +
-               "PiB";
+        return std::to_string(pebibyte) + "." +
+               std::to_string((tebibyte * 100) / 1024) + "PiB";
     }
     if (tebibyte > 0) {
-        return std::to_string(tebibyte) + "." + std::to_string(gibibyte / 100) +
-               "TiB";
+        return std::to_string(tebibyte) + "." +
+               std::to_string((gibibyte * 100) / 1024) + "TiB";
     } else if (gibibyte > 0) {
-        return std::to_string(gibibyte) + "." + std::to_string(mebibyte / 100) +
-               "GiB";
+        return std::to_string(gibibyte) + "." +
+               std::to_string((mebibyte * 100) / 1024) + "GiB";
     } else if (mebibyte > 0) {
         return std::to_string(mebibyte) + "." +
-               std::to_string(kibibytes / 100) + "MiB";
+               std::to_string((kibibytes * 100) / 1024) + "MiB";
     } else if (kibibytes > 0) {
         return std::to_string(kibibytes) + "KiB";
     } else {
@@ -63,8 +65,6 @@ std::string BytesToHumanReadableString(size_t bytes) {
 }
 
 void OperatorComptroller::Initialize() {
-    this->current_pipeline_id = 0;
-
     this->debug_level = 0;
     if (char* debug_level_env_ =
             std::getenv("BODO_MEMORY_BUDGETS_DEBUG_LEVEL")) {
@@ -78,6 +78,12 @@ void OperatorComptroller::Initialize() {
             static_cast<double>(std::stoi(mem_percent_env_) / 100.0);
     }
 
+    // If a budget is not explicitly specified (common/default case), initialize
+    // it with the total memory available (with some factor applied to the total
+    // size to allow for non-budgeted memory usage.
+    this->total_budget = this->memory_usage_fraction *
+                         bodo::BufferPool::Default()->get_memory_size_bytes();
+
     this->pipeline_remaining_budget.clear();
     this->pipeline_to_remaining_operator_ids.clear();
     this->operator_allocated_budget.clear();
@@ -88,15 +94,11 @@ void OperatorComptroller::Initialize() {
     this->num_operators = 0;
 }
 
-void OperatorComptroller::SetPipelineMemoryBudget(int64_t pipeline_id,
-                                                  size_t budget) {
-    if (static_cast<int64_t>(this->pipeline_remaining_budget.size() - 1) <
-        pipeline_id) {
-        this->pipeline_remaining_budget.resize(pipeline_id + 1);
-    }
-    this->pipeline_remaining_budget[pipeline_id] = budget;
-    this->num_pipelines =
-        std::max(this->num_pipelines, static_cast<size_t>(pipeline_id + 1));
+void OperatorComptroller::Initialize(size_t budget) {
+    // Initialize the usual.
+    this->Initialize();
+    // Set the budget based on the provided value
+    this->total_budget = budget;
 }
 
 void OperatorComptroller::RegisterOperator(int64_t operator_id,
@@ -124,15 +126,6 @@ void OperatorComptroller::RegisterOperator(int64_t operator_id,
         operator_type, min_pipeline_id, max_pipeline_id, estimate);
     this->num_pipelines =
         std::max(this->num_pipelines, static_cast<size_t>(max_pipeline_id + 1));
-}
-
-void OperatorComptroller::IncrementPipelineID() {
-    if (this->current_pipeline_id == UNINITIALIZED_PIPELINE_ID) {
-        throw std::runtime_error(
-            "Initialize() was not called before IncrementPipelineID()");
-    }
-
-    this->current_pipeline_id++;
 }
 
 int64_t OperatorComptroller::GetOperatorBudget(int64_t operator_id) const {
@@ -335,13 +328,11 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
 
     // Tests might have set their own max budgets.
     if (this->pipeline_remaining_budget.size() == 0) {
-        // If the budgets for each pipeline have not been initialized yet
-        // (common/default case), initialize it with the total memory available
-        // (with some factor applied to the total size to allow for non-budgeted
-        // memory usage.
-        size_t total_mem = this->memory_usage_fraction *
-                           bodo::BufferPool::Default()->get_memory_size_bytes();
-        this->pipeline_remaining_budget.resize(this->num_pipelines, total_mem);
+        // If the budgets for the pipelines has not been initialized yet
+        // (common/default case), initialize it with this->total_budget (which
+        // is set during Initialize)
+        this->pipeline_remaining_budget.resize(this->num_pipelines,
+                                               this->total_budget);
     } else {
         if (this->pipeline_remaining_budget.size() !=
             static_cast<size_t>(this->num_pipelines)) {
@@ -415,6 +406,39 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
                 }
             }
 
+            // Initialize avail_budget_for_ops_in_pipelines[pipeline_id]
+            // for relative est ops.
+            for (const int64_t op_id : rel_req_op_ids) {
+                avail_budget_for_ops_in_pipelines[pipeline_id][op_id] = 0;
+            }
+
+            // Calc min budget for the relative operators:
+            // min(16MiB,
+            //     min(0.01, 1/num_rel_ops_in_pipeline) *
+            //     max_rel_req_budget
+            //    )
+            size_t min_rel_op_allocation = std::min(
+                static_cast<size_t>(DEFAULT_MIN_BUDGET_REL_OPS),
+                static_cast<size_t>(
+                    std::min<double>(0.01, (1.0 / rel_req_op_ids.size())) *
+                    max_rel_req_budget));
+
+            // Allocate min_rel_op_allocation to each operator up-front (if it's
+            // not already allocated)
+            for (const int64_t op_id : rel_req_op_ids) {
+                if (static_cast<size_t>(
+                        this->operator_allocated_budget[op_id]) <
+                    min_rel_op_allocation) {
+                    size_t rem_alloc =
+                        min_rel_op_allocation -
+                        static_cast<size_t>(
+                            this->operator_allocated_budget[op_id]);
+                    avail_budget_for_ops_in_pipelines[pipeline_id][op_id] =
+                        rem_alloc;
+                    max_rel_req_budget -= rem_alloc;
+                }
+            }
+
             // Calculate available budgets for operators with relative
             // budget estimates. Distribute max_rel_req_budget proportionally
             // between them.
@@ -423,7 +447,7 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
                     ((double)this->requests_per_operator[op_id].rem_estimate /
                      (double)rel_req_sum) *
                     max_rel_req_budget);
-                avail_budget_for_ops_in_pipelines[pipeline_id][op_id] =
+                avail_budget_for_ops_in_pipelines[pipeline_id][op_id] +=
                     avail_budget_for_op;
             }
         }
@@ -566,7 +590,9 @@ void OperatorComptroller::PrintBudgetAllocations(std::ostream& os) {
           "======================================="
        << std::endl;
     os << "Number of Pipelines: " << this->num_pipelines << std::endl;
-    os << "Number of Operators: " << this->num_operators << "\n\n";
+    os << "Number of Operators: " << this->num_operators << std::endl;
+    os << "Total Budget: " << BytesToHumanReadableString(this->total_budget)
+       << "\n\n";
     for (size_t pipeline_id = 0; pipeline_id < this->num_pipelines;
          pipeline_id++) {
         os << "Pipeline " << pipeline_id << " (Remaining Budget: "
