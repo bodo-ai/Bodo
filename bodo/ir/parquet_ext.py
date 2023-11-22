@@ -214,7 +214,8 @@ class ParquetHandler:
             unsupported_columns = []
             unsupported_arrow_types = []
             arrow_schema = numba_to_pyarrow_schema(
-                DataFrameType(data=tuple(col_types), columns=tuple(col_names))
+                DataFrameType(data=tuple(col_types), columns=tuple(col_names)),
+                is_pq=True,
             )
 
         index_colname = (

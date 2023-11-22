@@ -5,6 +5,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -13,60 +14,71 @@ from bodo.tests.utils import check_func
 
 @pytest.fixture(
     params=[
-        np.array(
-            [[1, 3, None], [2], None, [4, None, 5, 6], [], [1, 1], None] * 2,
-            dtype=object,
+        pd.arrays.ArrowExtensionArray(
+            pa.array(
+                [[1, 3, None], [2], None, [4, None, 5, 6], [], [1, 1], None] * 2,
+                pa.large_list(pa.int64()),
+            )
         ),
         pytest.param(
-            np.array(
-                [[2.0, -3.2], [2.2, 1.3], None, [4.1, np.nan, 6.3], [], [1.1, 1.2]] * 2,
-                dtype=object,
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [[2.0, -3.2], [2.2, 1.3], None, [4.1, np.nan, 6.3], [], [1.1, 1.2]]
+                    * 2,
+                    pa.large_list(pa.float64()),
+                )
             ),
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            np.array(
-                [
-                    [True, False, None],
-                    [False, False],
-                    None,
-                    [True, False, None] * 4,
-                    [],
-                    [True, True],
-                ]
-                * 2,
-                dtype=object,
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [
+                        [True, False, None],
+                        [False, False],
+                        None,
+                        [True, False, None] * 4,
+                        [],
+                        [True, True],
+                    ]
+                    * 2,
+                    pa.large_list(pa.bool_()),
+                )
             ),
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            np.array(
-                [
-                    [datetime.date(2018, 1, 24), datetime.date(1983, 1, 3)],
-                    [datetime.date(1966, 4, 27), datetime.date(1999, 12, 7)],
-                    None,
-                    [datetime.date(1966, 4, 27), datetime.date(2004, 7, 8)],
-                    [],
-                    [datetime.date(2020, 11, 17)],
-                ]
-                * 2,
-                dtype=object,
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [
+                        [datetime.date(2018, 1, 24), datetime.date(1983, 1, 3)],
+                        [datetime.date(1966, 4, 27), datetime.date(1999, 12, 7)],
+                        None,
+                        [datetime.date(1966, 4, 27), datetime.date(2004, 7, 8)],
+                        [],
+                        [datetime.date(2020, 11, 17)],
+                    ]
+                    * 2,
+                    pa.large_list(pa.date32()),
+                )
             ),
             marks=pytest.mark.slow,
         ),
         # data from Spark-generated Parquet files can have array elements
         pytest.param(
-            np.array(
-                [
-                    np.array([1, 3], np.int32),
-                    np.array([2], np.int32),
-                    None,
-                    np.array([4, 5, 6], np.int32),
-                    np.array([], np.int32),
-                    np.array([1, 1], np.int32),
-                ]
-                * 2,
-                dtype=object,
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [
+                        np.array([1, 3], np.int32),
+                        np.array([2], np.int32),
+                        None,
+                        np.array([4, 5, 6], np.int32),
+                        np.array([], np.int32),
+                        np.array([1, 1], np.int32),
+                    ]
+                    * 2,
+                    pa.large_list(pa.int32()),
+                )
             ),
             marks=pytest.mark.slow,
         ),
@@ -83,38 +95,47 @@ from bodo.tests.utils import check_func
         # ),
         # nested list case with NA elems
         pytest.param(
-            np.array(
-                [
-                    [[1, 3], [2]],
-                    [[3, 1]],
-                    None,
-                    [[4, 5, 6], [1], [1, 2]],
-                    [],
-                    [[1], None, [1, 4], []],
-                ]
-                * 2,
-                dtype=object,
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [
+                        [[1, 3], [2]],
+                        [[3, 1]],
+                        None,
+                        [[4, 5, 6], [1], [1, 2]],
+                        [],
+                        [[1], None, [1, 4], []],
+                    ]
+                    * 2,
+                    pa.large_list(pa.large_list(pa.int64())),
+                )
             ),
             marks=pytest.mark.slow,
         ),
         # string data with NA
         pytest.param(
-            np.array([[["1", "2", "8"], ["3"]], [["2", None]]] * 4, dtype=object),
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [[["1", "2", "8"], ["3"]], [["2", None]]] * 4,
+                    pa.large_list(pa.large_list(pa.string())),
+                )
+            ),
             marks=pytest.mark.slow,
         ),
         # two level nesting
         pytest.param(
-            np.array(
-                [
-                    [[[1, 2], [3]], [[2, None]]],
-                    [[[3], [], [1, None, 4]]],
-                    None,
-                    [[[4, 5, 6], []], [[1]], [[1, 2]]],
-                    [],
-                    [[[], [1]], None, [[1, 4]], []],
-                ]
-                * 2,
-                dtype=object,
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    [
+                        [[[1, 2], [3]], [[2, None]]],
+                        [[[3], [], [1, None, 4]]],
+                        None,
+                        [[[4, 5, 6], []], [[1]], [[1, 2]]],
+                        [],
+                        [[[], [1]], None, [[1, 4]], []],
+                    ]
+                    * 2,
+                    pa.large_list(pa.large_list(pa.large_list(pa.int64()))),
+                )
             ),
             marks=pytest.mark.slow,
         ),

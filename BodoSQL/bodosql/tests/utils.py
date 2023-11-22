@@ -1206,6 +1206,21 @@ def _test_equal_guard(
     atol: float = 1e-08,
     rtol: float = 1e-05,
 ):
+    # No need to avoid exceptions if running with a single process and hang is not
+    # possible. TODO: remove _test_equal_guard in general when [BE-2223] is resolved
+    if bodo.get_size() == 1:
+        # convert bodosql output to a value that can be compared with Spark
+        if convert_nullable_bodosql:
+            bodosql_output = convert_nullable_object(bodosql_output)
+        pd.testing.assert_frame_equal(
+            bodosql_output,
+            expected_output,
+            check_dtype,
+            check_column_type=False,
+            rtol=rtol,
+            atol=atol,
+        )
+        return 1
     passed = 1
     try:
         # convert bodosql output to a value that can be compared with Spark

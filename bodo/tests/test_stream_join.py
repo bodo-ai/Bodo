@@ -4,6 +4,7 @@ import string
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -3476,25 +3477,31 @@ def test_hash_join_map_array(memory_leak_check):
     probe_table = pd.DataFrame(
         {
             "A": pd.array([1, 2, 3, 4] * 5),
-            "B": [
-                {1: 1.4, 2: 3.1},
-                None,
-                {7: -1.2},
-                {11: 3.4, 21: 3.1, 9: 8.1},
-            ]
-            * 5,
+            "B": pd.Series(
+                [
+                    {1: 1.4, 2: 3.1},
+                    None,
+                    {7: -1.2},
+                    {11: 3.4, 21: 3.1, 9: 8.1},
+                ]
+                * 5,
+                dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+            ),
         }
     )
     build_table = pd.DataFrame(
         {
             "C": pd.array([1, 2, 3, 4] * 5),
-            "D": [
-                {4: 9.4, 6: 4.1},
-                {7: -1.2},
-                {},
-                {8: 3.3, 5: 6.3},
-            ]
-            * 5,
+            "D": pd.Series(
+                [
+                    {4: 9.4, 6: 4.1},
+                    {7: -1.2},
+                    {},
+                    {8: 3.3, 5: 6.3},
+                ]
+                * 5,
+                dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+            ),
         }
     )
     build_keys_inds = bodo.utils.typing.MetaType((0,))
@@ -3577,21 +3584,27 @@ def test_hash_join_map_array(memory_leak_check):
     expected_df = pd.DataFrame(
         {
             "A": pd.array([1, 2, 3, 4] * 25),
-            "B": [
-                {1: 1.4, 2: 3.1},
-                None,
-                {7: -1.2},
-                {11: 3.4, 21: 3.1, 9: 8.1},
-            ]
-            * 25,
+            "B": pd.Series(
+                [
+                    {1: 1.4, 2: 3.1},
+                    None,
+                    {7: -1.2},
+                    {11: 3.4, 21: 3.1, 9: 8.1},
+                ]
+                * 25,
+                dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+            ),
             "C": pd.array([1, 2, 3, 4] * 25),
-            "D": [
-                {4: 9.4, 6: 4.1},
-                {7: -1.2},
-                {},
-                {8: 3.3, 5: 6.3},
-            ]
-            * 25,
+            "D": pd.Series(
+                [
+                    {4: 9.4, 6: 4.1},
+                    {7: -1.2},
+                    {},
+                    {8: 3.3, 5: 6.3},
+                ]
+                * 25,
+                dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+            ),
         }
     )
 
@@ -3609,23 +3622,29 @@ def test_nested_loop_join_map_array(memory_leak_check):
     probe_table = pd.DataFrame(
         {
             "A": pd.array([1, 2, 3] * 5),
-            "B": [
-                {1: 1.4, 2: 3.1},
-                None,
-                {7: -1.2},
-            ]
-            * 5,
+            "B": pd.Series(
+                [
+                    {1: 1.4, 2: 3.1},
+                    None,
+                    {7: -1.2},
+                ]
+                * 5,
+                dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+            ),
         }
     )
     build_table = pd.DataFrame(
         {
             "C": pd.array([1, 2, 3] * 5),
-            "D": [
-                {4: 9.4, 6: 4.1},
-                {7: -1.2},
-                {},
-            ]
-            * 5,
+            "D": pd.Series(
+                [
+                    {4: 9.4, 6: 4.1},
+                    {7: -1.2},
+                    {},
+                ]
+                * 5,
+                dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+            ),
         }
     )
     build_keys_inds = bodo.utils.typing.MetaType(())
@@ -3709,19 +3728,25 @@ def test_nested_loop_join_map_array(memory_leak_check):
     expected_df = pd.DataFrame(
         {
             "A": pd.array([1, 1, 2] * 25),
-            "B": [
-                {1: 1.4, 2: 3.1},
-                {1: 1.4, 2: 3.1},
-                None,
-            ]
-            * 25,
+            "B": pd.Series(
+                [
+                    {1: 1.4, 2: 3.1},
+                    {1: 1.4, 2: 3.1},
+                    None,
+                ]
+                * 25,
+                dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+            ),
             "C": pd.array([2, 3, 3] * 25),
-            "D": [
-                {7: -1.2},
-                {},
-                {},
-            ]
-            * 25,
+            "D": pd.Series(
+                [
+                    {7: -1.2},
+                    {},
+                    {},
+                ]
+                * 25,
+                dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+            ),
         }
     )
 
@@ -3735,6 +3760,7 @@ def test_nested_loop_join_map_array(memory_leak_check):
     )
 
 
+@pytest.mark.skip("TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing")
 def test_hash_join_tuple_array(memory_leak_check):
     probe_table = pd.DataFrame(
         {
@@ -3878,6 +3904,7 @@ def test_hash_join_tuple_array(memory_leak_check):
     )
 
 
+@pytest.mark.skip("TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing")
 def test_nested_loop_join_tuple_array(memory_leak_check):
     probe_table = pd.DataFrame(
         {

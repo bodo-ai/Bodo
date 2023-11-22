@@ -910,11 +910,19 @@ def sort_dataframe_values_index(df):
     if isinstance(df.index, pd.MultiIndex):
         # rename index in case names are None
         index_names = [f"index_{i}" for i in range(len(df.index.names))]
-        list_col_names = df.columns.to_list() + index_names
+        list_col_names = [
+            c
+            for i, c in enumerate(df.columns)
+            if not isinstance(df.dtypes.iloc[i], pd.ArrowDtype)
+        ] + index_names
         return df.rename_axis(index_names).sort_values(list_col_names, kind="mergesort")
 
     eName = "index123"
-    list_col_names = df.columns.to_list() + [eName]
+    list_col_names = [
+        c
+        for i, c in enumerate(df.columns)
+        if not isinstance(df.dtypes.iloc[i], pd.ArrowDtype)
+    ] + [eName]
     if None in list_col_names:
         raise RuntimeError(
             "Testing error in sort_dataframe_values_index: None in column names"
@@ -928,6 +936,18 @@ def sort_dataframe_values_index(df):
         else x
     )
     return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
+
+
+def _to_pa_array(py_out, bodo_arr_type):
+    """Convert object array to Arrow array with specified Bodo type"""
+    arrow_type = bodo.io.helpers._numba_to_pyarrow_type(
+        bodo_arr_type, use_dict_arr=True
+    )[0]
+    arrow_type_no_dict = bodo.io.helpers._numba_to_pyarrow_type(bodo_arr_type)[0]
+    py_out = pa.array(py_out, arrow_type_no_dict)
+    if arrow_type != arrow_type_no_dict:
+        py_out = bodo.libs.array.convert_arrow_arr_to_dict(py_out, arrow_type)
+    return py_out
 
 
 def _test_equal(
@@ -951,6 +971,18 @@ def _test_equal(
         py_out = np.array(py_out)
 
     if isinstance(py_out, pd.Series):
+        if isinstance(bodo_out.dtype, pd.ArrowDtype) and not isinstance(
+            py_out.dtype, pd.ArrowDtype
+        ):
+            py_out = pd.Series(
+                _to_pa_array(
+                    py_out.map(lambda a: None if a is np.nan else a).values,
+                    bodo.typeof(bodo_out.values),
+                ),
+                py_out.index,
+                bodo_out.dtype,
+                py_out.name,
+            )
         if sort_output:
             py_out = sort_series_values_index(py_out)
             bodo_out = sort_series_values_index(bodo_out)
@@ -1023,6 +1055,21 @@ def _test_equal(
             check_column_type=False,
             check_freq=False,
             check_categorical=check_categorical,
+            atol=atol,
+            rtol=rtol,
+        )
+    # Convert object array py_out to Pandas PyArrow array to match Bodo
+    # Avoid changing string arrays to avoid regressions in current infrastructure
+    elif (
+        isinstance(bodo_out, pd.arrays.ArrowExtensionArray)
+        and not isinstance(bodo_out, pd.arrays.ArrowStringArray)
+        and not isinstance(py_out, pd.arrays.ArrowExtensionArray)
+    ):
+        py_out = _to_pa_array(py_out, bodo.typeof(bodo_out))
+        pd.testing.assert_series_equal(
+            pd.Series(py_out),
+            pd.Series(bodo_out),
+            check_dtype=False,
             atol=atol,
             rtol=rtol,
         )
@@ -1225,6 +1272,8 @@ def _gather_output(bodo_output):
         if bodo.get_rank() == 0:
             if isinstance(bodo_output_list[0], np.ndarray):
                 bodo_output = np.concatenate(bodo_output_list)
+            elif isinstance(bodo_output_list[0], pd.arrays.ArrowExtensionArray):
+                pd.concat([pd.Series(a) for a in bodo_output_list]).values
             else:
                 bodo_output = pd.concat(bodo_output_list)
 
@@ -2040,11 +2089,16 @@ def gen_random_list_string_array(option, n):
         return e_list_list
 
     if option == 1:
-        e_list = rand_col_l_str(n)
+        e_list = pd.Series(
+            rand_col_l_str(n), dtype=pd.ArrowDtype(pa.large_list(pa.large_string()))
+        ).values
     if option == 2:
         e_list = rand_col_str(n)
     if option == 3:
-        e_list = rand_col_l_str_none_no_first(n)
+        e_list = pd.Series(
+            rand_col_l_str_none_no_first(n),
+            dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+        ).values
     return e_list
 
 

@@ -3,6 +3,7 @@ import itertools
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -1090,26 +1091,29 @@ def test_mul_scalar(test_unicode, memory_leak_check):
 @pytest.fixture(
     params=[
         pytest.param(
-            np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2, dtype=object),
+            pd.Series(
+                [["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2,
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ).values,
             marks=pytest.mark.slow,
         ),
         # empty strings, empty lists, NA
         pytest.param(
-            np.array(
-                [["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2,
-                dtype=object,
-            ),
+            pd.Series(
+                [["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], None] * 2,
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ).values,
             marks=pytest.mark.slow,
         ),
         # large array
-        np.array(
+        pd.Series(
             [
                 ["a", "bc"],
                 ["a"],
                 [],
                 ["aaa", "", "cc"],
                 [""],
-                np.nan,
+                None,
                 [
                     "¿abc¡Y tú, quién te crees?",
                     "ÕÕÕú¡úú,úũ¿ééé",
@@ -1127,8 +1131,8 @@ def test_mul_scalar(test_unicode, memory_leak_check):
                 ["😀🐍,⚡😅😂", "🌶🍔,🏈💔💑💕", "𠁆𠁪,𠀓𠄩𠆶", "🏈,💔,𠄩,😅", "🠂,🠋🢇🄐,🞧"],
             ]
             * 1000,
-            dtype=object,
-        ),
+            dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+        ).values,
     ]
 )
 def list_str_arr_value(request):
@@ -1260,11 +1264,12 @@ def test_join(memory_leak_check):
                 "大处着眼，小处着手。",
                 "오늘도 피츠버그의 날씨는 매우, 구림",
             ],
-            np.nan,
+            None,
             ["😀🐍,⚡😅😂", "🌶🍔,🏈💔💑💕", "𠁆𠁪,𠀓𠄩𠆶", "🏈,💔,𠄩,😅", "🠂,🠋🢇🄐,🞧"],
-        ]
+        ],
+        dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
     )
-    check_func(test_impl, (S,))
+    check_func(test_impl, (S,), py_output=S.astype(object).str.join("-"))
 
 
 def test_split_non_ascii(memory_leak_check):

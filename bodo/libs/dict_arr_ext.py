@@ -219,7 +219,7 @@ def generate_dict_id(typingctx, length_t):
 @typeof_impl.register(pa.DictionaryArray)
 def typeof_dict_value(val, c):
     # only support dict-encoded string arrays for now, TODO(ehsan): support other types
-    if val.type.value_type == pa.string():
+    if val.type.value_type == pa.string() or val.type.value_type == pa.large_string():
         return dict_str_arr_type
 
 

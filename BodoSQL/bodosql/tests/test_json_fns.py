@@ -1,4 +1,5 @@
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodosql.tests.utils import check_query
@@ -470,64 +471,83 @@ def test_object_construct_keep_null(query, use_map, answer, memory_leak_check):
             "SELECT OBJECT_DELETE(J, K) FROM table1",
             pd.DataFrame(
                 {
-                    "J": (
-                        [{"A": 0, "B": 1, "C": 2, "D": 3}] * 4 + [{"A": 4, "C": 5}] * 4
-                    )
-                    * 5
-                    + [
-                        None,
-                        {"A": 6, "B": 7, "C": None, "D": None},
-                        {},
-                        {"A": 8, "B": 9, "C": None, "D": None},
-                    ],
+                    "J": pd.Series(
+                        (
+                            [{"A": 0, "B": 1, "C": 2, "D": 3}] * 4
+                            + [{"A": 4, "C": 5}] * 4
+                        )
+                        * 5
+                        + [
+                            None,
+                            {"A": 6, "B": 7, "C": None, "D": None},
+                            {},
+                            {"A": 8, "B": 9, "C": None, "D": None},
+                        ],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                    ),
                     "K": ["A", "B", "C", "D"] * 11,
                 }
             ),
             True,
-            [
-                {"B": 1, "C": 2, "D": 3},
-                {"A": 0, "C": 2, "D": 3},
-                {"A": 0, "B": 1, "D": 3},
-                {"A": 0, "B": 1, "C": 2},
-                {"C": 5},
-                {"A": 4, "C": 5},
-                {"A": 4},
-                {"A": 4, "C": 5},
-            ]
-            * 5
-            + [None, {"A": 6, "C": None, "D": None}, {}, {"A": 8, "B": 9, "C": None}],
+            pd.Series(
+                [
+                    {"B": 1, "C": 2, "D": 3},
+                    {"A": 0, "C": 2, "D": 3},
+                    {"A": 0, "B": 1, "D": 3},
+                    {"A": 0, "B": 1, "C": 2},
+                    {"C": 5},
+                    {"A": 4, "C": 5},
+                    {"A": 4},
+                    {"A": 4, "C": 5},
+                ]
+                * 5
+                + [
+                    None,
+                    {"A": 6, "C": None, "D": None},
+                    {},
+                    {"A": 8, "B": 9, "C": None},
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+            ),
             id="map-drop_column-no_case",
         ),
         pytest.param(
             "SELECT OBJECT_DELETE(J, 'D', K, 'E', 'A') FROM table1",
             pd.DataFrame(
                 {
-                    "J": (
-                        [{"A": 0, "B": 1, "C": 2, "D": 3}] * 4 + [{"A": 4, "C": 5}] * 4
-                    )
-                    * 5
-                    + [
-                        None,
-                        {"A": 6, "B": 7, "C": None, "D": None},
-                        {},
-                        {"A": 8, "B": 9, "C": None, "D": None},
-                    ],
+                    "J": pd.Series(
+                        (
+                            [{"A": 0, "B": 1, "C": 2, "D": 3}] * 4
+                            + [{"A": 4, "C": 5}] * 4
+                        )
+                        * 5
+                        + [
+                            None,
+                            {"A": 6, "B": 7, "C": None, "D": None},
+                            {},
+                            {"A": 8, "B": 9, "C": None, "D": None},
+                        ],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                    ),
                     "K": ["A", "B", "C", "D"] * 11,
                 }
             ),
             True,
-            [
-                {"B": 1, "C": 2},
-                {"C": 2},
-                {"B": 1},
-                {"B": 1, "C": 2},
-                {"C": 5},
-                {"C": 5},
-                {},
-                {"C": 5},
-            ]
-            * 5
-            + [None, {"C": None}, {}, {"B": 9, "C": None}],
+            pd.Series(
+                [
+                    {"B": 1, "C": 2},
+                    {"C": 2},
+                    {"B": 1},
+                    {"B": 1, "C": 2},
+                    {"C": 5},
+                    {"C": 5},
+                    {},
+                    {"C": 5},
+                ]
+                * 5
+                + [None, {"C": None}, {}, {"B": 9, "C": None}],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+            ),
             id="map-drop_mixed-no_case",
         ),
     ],

@@ -9,6 +9,7 @@ import unittest
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -162,7 +163,13 @@ def test_get_list_string(memory_leak_check):
         value = df1["A"].iat[1]
         return value
 
-    df1 = pd.DataFrame({"A": [["A"], np.nan, ["AB", "CD"]]})
+    df1 = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [["A"], None, ["AB", "CD"]], dtype=pd.ArrowDtype(pa.list_(pa.string()))
+            )
+        }
+    )
     np.testing.assert_array_equal(bodo.jit(test_impl)(df1), [])
 
 

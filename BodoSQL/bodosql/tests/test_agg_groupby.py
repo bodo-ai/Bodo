@@ -6,8 +6,10 @@ import datetime
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
+import bodo
 from bodo import Time
 from bodo.tests.utils import pytest_slow_unless_groupby
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
@@ -1712,7 +1714,7 @@ def test_array_agg_distinct(call, answer, memory_leak_check):
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            [Time(nanosecond=35**i) for i in range(3, 10)],
+            [Time(millisecond=22**i) for i in range(3, 10)],
             None,
             True,
             False,
@@ -1746,10 +1748,16 @@ def test_object_agg(value_pool, dtype, nullable, requires_struct, memory_leak_ch
                 j_data[k] = v
         pairs.append(j_data)
 
+    val_type = bodo.typeof(in_df["V"].values)
+    val_arrow_type, _ = bodo.io.helpers._numba_to_pyarrow_type(
+        val_type, use_dict_arr=True
+    )
     answer = pd.DataFrame(
         {
-            "G": unique_keys,
-            "J": pairs,
+            "G": unique_keys.values,
+            "J": pd.Series(
+                pairs, dtype=pd.ArrowDtype(pa.map_(pa.string(), val_arrow_type))
+            ),
         }
     )
 

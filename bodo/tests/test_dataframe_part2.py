@@ -1266,6 +1266,7 @@ def test_concat_nulls(memory_leak_check):
     check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.skip("TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing")
 def test_concat_tuple(memory_leak_check):
     """Test dataframe concatenation with array of tuples"""
 

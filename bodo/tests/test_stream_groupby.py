@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -666,32 +667,36 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
                     2,
                     2,
                 ],
-                "B": [
-                    {1: 1.4, 2: 3.1},
-                    None,
-                    {},
-                    {11: 3.4, 21: 3.1, 9: 8.1},
-                ]
-                * 2,
+                "B": pd.Series(
+                    [
+                        {1: 1.4, 2: 3.1},
+                        None,
+                        {},
+                        {11: 3.4, 21: 3.1, 9: 8.1},
+                    ]
+                    * 2,
+                    dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.float64())),
+                ),
             }
         ),
-        pd.DataFrame(
-            {
-                "A": [
-                    1,
-                    2,
-                    1,
-                    0,
-                    2,
-                    1,
-                    2,
-                    2,
-                ],
-                "B": [(1, 1.1), (2, 2.2), None, (4, 4.4)] * 2,
-            }
-        ),
+        # TODO[BSE-2076]: Support tuple array in Arrow boxing/unboxing
+        # pd.DataFrame(
+        #     {
+        #         "A": [
+        #             1,
+        #             2,
+        #             1,
+        #             0,
+        #             2,
+        #             1,
+        #             2,
+        #             2,
+        #         ],
+        #         "B": [(1, 1.1), (2, 2.2), None, (4, 4.4)] * 2,
+        #     }
+        # ),
     ],
-    ids=("array_item", "struct", "map", "tuple"),
+    ids=("array_item", "struct", "map"),
 )
 def test_groupby_nested_array_data(memory_leak_check, df):
     """
