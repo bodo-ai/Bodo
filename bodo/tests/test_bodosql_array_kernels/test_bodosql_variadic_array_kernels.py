@@ -2439,7 +2439,7 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                         {"S": "", "T": "EFGH", "U": "IJ"},
                     ]
                     * 3
-                ).values,
+                ),
             ),
             (False,),
             True,
@@ -2451,11 +2451,14 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     [{}],
                     [{"S": "", "T": "EFGH", "U": "IJ"}],
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.large_list(pa.map_(pa.large_string(), pa.large_string()))
+                ),
             ),
             id="map_array-string-1",
             marks=pytest.mark.skip(
-                reason="[BSE-1782] TODO: fix array_construct when inputs are map arrays with simple keys"
+                reason="[BSE-2114] TODO: fix segfault in parallel test"
             ),
         ),
         pytest.param(
@@ -2491,12 +2494,10 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     [{}, {10: 7}],
                     [{4: 6, 5: 6}, {}],
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.map_(pa.int64(), pa.int64()))),
             ),
             id="map_array-int_int-2",
-            marks=pytest.mark.skip(
-                reason="[BSE-1782] TODO: fix array_construct when inputs are map arrays with simple keys"
-            ),
         ),
         pytest.param(
             (
@@ -2565,9 +2566,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 * 3
             ),
             id="map_array_with_scalars-int_int-2",
-            marks=pytest.mark.skip(
-                reason="[BSE-1782] TODO: fix array_construct when inputs are map arrays with simple keys"
-            ),
         ),
     ],
 )
