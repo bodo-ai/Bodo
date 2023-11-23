@@ -100,9 +100,6 @@ public class CatalogSchema extends BodoSqlSchema {
       String tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
-    ImmutableList.Builder<String> builder = new ImmutableList.Builder();
-    builder.addAll(getFullPath());
-    builder.add(tableName);
     return this.catalog.generateStreamingWriteInitCode(
         operatorID, createTablePath(tableName), ifExists, createTableType);
   }
