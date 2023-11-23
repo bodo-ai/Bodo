@@ -9,19 +9,15 @@ import com.bodosql.calcite.prepare.PlannerImpl;
 import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchema;
+import com.bodosql.calcite.schema.RootSchema;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Properties;
 import java.util.Set;
 import java.util.function.BiConsumer;
-import javax.annotation.Nullable;
-import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
@@ -35,7 +31,6 @@ import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.tools.Planner;
 import org.apache.calcite.tools.RelConversionException;
 import org.apache.calcite.tools.ValidationException;
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -109,36 +104,12 @@ public class RelationalAlgebraGenerator {
   public static boolean tryInlineViews = false;
 
   /**
-   * Helper method for RelationalAlgebraGenerator constructor to create a Connection object so that
-   * SQL queries can be executed within its context.
-   */
-  private @Nullable CalciteConnection setupCalciteConnection() {
-    CalciteConnection calciteConnection = null;
-    try {
-      Class.forName("org.apache.calcite.jdbc.Driver");
-
-      Properties info = new Properties();
-      info.setProperty("lex", "JAVA");
-      Connection connection = DriverManager.getConnection("jdbc:calcite:", info);
-      calciteConnection = connection.unwrap(CalciteConnection.class);
-
-    } catch (Exception e) {
-      throw new RuntimeException(
-          String.format(
-              "Internal Error: JDBC Driver unable to obtain database connection. Error message: %s",
-              e));
-    }
-    return calciteConnection;
-  }
-
-  /**
    * Helper method for RelationalAlgebraGenerator constructors to create a SchemaPlus object from a
    * list of BodoSqlSchemas.
    */
   private List<SchemaPlus> setupSchema(
-      @NotNull CalciteConnection calciteConnection,
       BiConsumer<SchemaPlus, ImmutableList.Builder<SchemaPlus>> setup) {
-    final SchemaPlus root = calciteConnection.getRootSchema();
+    final SchemaPlus root = RootSchema.Companion.createRootSchema(this.catalog);
     ImmutableList.Builder<SchemaPlus> defaults = ImmutableList.builder();
     setup.accept(root, defaults);
     return defaults.build();
@@ -183,10 +154,8 @@ public class RelationalAlgebraGenerator {
     this.verboseLevel = verboseLevel;
     this.streamingBatchSize = streamingBatchSize;
     System.setProperty("calcite.default.charset", "UTF-8");
-    CalciteConnection calciteConnection = setupCalciteConnection();
     List<SchemaPlus> defaultSchemas =
         setupSchema(
-            calciteConnection,
             (root, defaults) -> {
               defaults.add(root.add(newSchema.getName(), newSchema));
             });
@@ -225,10 +194,8 @@ public class RelationalAlgebraGenerator {
     this.hideCredentials = hideCredentials;
     this.tryInlineViews = tryInlineViews;
     System.setProperty("calcite.default.charset", "UTF-8");
-    CalciteConnection calciteConnection = setupCalciteConnection();
     List<SchemaPlus> defaultSchemas =
         setupSchema(
-            calciteConnection,
             (root, defaults) -> {
               String catalogName = catalog.getCatalogName();
               // Create a schema object with the name of the catalog,
