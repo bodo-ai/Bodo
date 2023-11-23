@@ -8,7 +8,7 @@ import argparse
 import os
 import re
 import subprocess
-from typing import List, Set
+from typing import List
 
 
 def main(
