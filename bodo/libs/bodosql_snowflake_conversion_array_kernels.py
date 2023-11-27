@@ -1,8 +1,3 @@
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""
-Implements a number of array kernels that handling casting functions for BodoSQL
-"""
-
 import datetime
 
 import numba
@@ -17,8 +12,10 @@ from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_bool,
+    get_overload_const_int,
     get_overload_const_str,
     is_literal_type,
+    is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
     is_str_arr_type,
@@ -1496,25 +1493,44 @@ def make_to_number(_try):
     if _try:
         func_name = "try_to_number"
 
-    @numba.generated_jit(nopython=True)
-    def func(expr, dict_encoding_state=None, func_id=-1):
+    def to_number_helper(expr, prec, scale, dict_encoding_state=None, func_id=-1):
+        return
+
+    @overload(to_number_helper, no_unliteral=True)
+    def to_number_helper_overload(
+        expr, prec, scale, dict_encoding_state=None, func_id=-1
+    ):
         """Handles cases where TO_NUMBER receives optional arguments and forwards
         to the appropriate version of the real implementation"""
-        if isinstance(expr, types.optional):  # pragma: no cover
-            return unopt_argument(
-                f"bodo.libs.bodosql_array_kernels.{func_name}",
-                ["expr", "dict_encoding_state", "func_id"],
-                0,
-            )
 
-        def impl(expr, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        args = [expr, prec, scale]
+        for i in range(len(args)):
+            if isinstance(args[i], types.optional):  # pragma: no cover
+                return unopt_argument(
+                    f"bodo.libs.bodosql_array_kernels.{func_name}",
+                    ["expr", "prec", "scale", "dict_encoding_state", "func_id"],
+                    i,
+                    default_map={
+                        "dict_encoding_state": None,
+                        "func_id": -1,
+                    },
+                )
+
+        def impl(
+            expr, prec, scale, dict_encoding_state=None, func_id=-1
+        ):  # pragma: no cover
             return to_number_util(
-                expr, numba.literally(_try), dict_encoding_state, func_id
+                expr,
+                prec,
+                scale,
+                _try,
+                dict_encoding_state,
+                func_id,
             )
 
         return impl
 
-    return func
+    return to_number_helper
 
 
 try_to_number = make_to_number(True)
@@ -1548,21 +1564,67 @@ def _is_string_numeric(expr):  # pragma: no cover
     return impl
 
 
-@numba.generated_jit(nopython=True)
-def to_number_util(expr, _try, dict_encoding_state, func_id):  # pragma: no cover
+def to_number_util(
+    expr, prec, scale, _try, dict_encoding_state, func_id
+):  # pragma: no cover
+    pass
+
+
+@overload(to_number_util, no_unliteral=True)
+def to_number_util_overload(
+    expr, prec, scale, _try, dict_encoding_state, func_id
+):  # pragma: no cover
     """Equivalent to the SQL [TRY] TO_NUMBER/TO_NUMERIC/TO_DECIMAL function.
     With the default args, this converts the input to a 64-bit integer.
-    TODO: support non-default `scale` arg, which could result in float.
+    Depending on scale and precision, this could return a float, or a much smaller number
 
     Args:
         expr (numeric or string series/scalar): the number/string to convert to a number of type int64
+        prec (positive integer literal): By SQL semantics, this is the number of allowed digits
+                in the resulting number. The current behavior is to return a lower bitwidth number
+                depending on the value of prec.
+        scale (positive integer literal): By SQL semantics, the number of digits to the right of the
+                decimal point. The current behavior is to return a float64 if scale > 0.
 
     Returns:
         numeric series/scalar: the converted number
     """
-    arg_names = ["expr", "_try", "dict_encoding_state", "func_id"]
-    arg_types = [expr, _try, dict_encoding_state, func_id]
-    propagate_null = [True, False, False, False]
+    arg_names = ["expr", "prec", "scale", "_try", "dict_encoding_state", "func_id"]
+    arg_types = [expr, prec, scale, _try, dict_encoding_state, func_id]
+    propagate_null = [True, False, False, False, False, False]
+
+    verify_int_arg(prec, "TO_NUMBER", "prec")
+    verify_int_arg(scale, "TO_NUMBER", "scale")
+
+    if not (is_overload_constant_int(prec) or is_overload_none(prec)):
+        raise_bodo_error("TO_NUMBER: prec must be a literal value if provided")
+    if not (is_overload_constant_int(scale) or is_overload_none(scale)):
+        raise_bodo_error("TO_NUMBER: scale must be a literal value if provided")
+
+    if is_overload_constant_int(prec):
+        prec = get_overload_const_int(prec)
+    elif is_overload_none(prec):
+        prec = 38  # default value for prec
+    else:
+        raise_bodo_error("TO_NUMBER: prec must be a literal value if provided")
+
+    # Import must occur within this function, otherwise we hit a circular import error
+    from bodo.io.snowflake import precision_to_numpy_dtype
+
+    # Calculate the output integer type based on the precision assuming scale = 0
+    # This may not be used if the scale > 0, but calculating it up front makes the
+    # code clearer
+    output_scalar_int_type = precision_to_numpy_dtype(prec)
+    # use int64 if we can't fit the number in the output type
+    if output_scalar_int_type is None:
+        output_scalar_int_type = types.int64
+
+    if is_overload_constant_int(scale):
+        scale = get_overload_const_int(scale)
+    elif is_overload_none(scale):
+        scale = 0  # default value for scale
+    else:
+        raise_bodo_error("TO_NUMBER: scale must be a literal value if provided")
 
     is_string = is_valid_string_arg(expr)
     if not is_string:
@@ -1570,22 +1632,71 @@ def to_number_util(expr, _try, dict_encoding_state, func_id):  # pragma: no cove
 
     _try = get_overload_const_bool(_try)
 
-    out_dtype = bodo.IntegerArrayType(types.int64)
+    if scale == 0:
+        out_dtype = bodo.IntegerArrayType(output_scalar_int_type)
+    else:
+        out_dtype = bodo.FloatingArrayType(types.float64)
 
+    # NOTE: we can't use continue/early return with gen vectorized,
+    # so we use a flag to indicate if we've already seen an invalid value/should skip
+    # later checks
+    scalar_text = "seen_invalid = False\n"
+
+    # First, handle casting the input if the input is string
     if is_string:
-        scalar_text = (
-            "if bodo.libs.bodosql_snowflake_conversion_array_kernels._is_string_numeric(arg0):\n"
-            "  res[i] = np.int64(np.float64(arg0))\n"
-            "else:\n"
-        )
+        scalar_text += "if not bodo.libs.bodosql_snowflake_conversion_array_kernels._is_string_numeric(arg0):\n"
         if _try:
             scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "  seen_invalid=True\n"
         else:
             scalar_text += (
                 "  raise ValueError('unable to convert string literal to number')\n"
             )
+
+        # Convert to float, to simplify subsequent logic
+        scalar_text += "arg0 = np.float64(arg0)\n"
+
+    # Next, check that the number of digits to the LHS of the decimal is <= prec - scale
+    # if not, throw an error/return null depending on the value of _try
+    allowed_digits_lhs_decimal_point = prec - scale
+
+    if allowed_digits_lhs_decimal_point <= 0:
+        raise_bodo_error(
+            "TO_NUMBER: difference between prec and scale must be greater than 0"
+        )
+
+    # 2 ** 63 - 1 < 10^19, so only bother checking if we expect < 19 digits
+    if allowed_digits_lhs_decimal_point < 19:
+        scalar_text += "if not seen_invalid:\n"
+
+        # Since np.int64 will always round towards zero
+        # the cast to np.int64 is fine for our purposes
+        scalar_text += f"  if np.abs(np.int64(arg0)) >= {10 ** allowed_digits_lhs_decimal_point}:\n"
+        if _try:
+            scalar_text += "    bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "    seen_invalid=True\n"
+        else:
+            scalar_text += "    raise ValueError('Value has too many digits to the left of the decimal')\n"
+
+    # Finally, perform the actual conversion, and set the output
+    # Snowflake behavior is that if the number of digits to the right of the decimal is greater than scale,
+    # the input is truncated, rounding up
+    # numpy truncates to the integer nearest to zero, so we
+    # use some helper functions to round up
+
+    bodo.libs.bodosql_array_kernels.round_half_always_up
+
+    scalar_text += "if not seen_invalid:\n"
+    if scale == 0:
+        cast_str = str(output_scalar_int_type)
+        if is_valid_int_arg(expr):
+            # If the input is already an integer, we can just cast it
+            scalar_text += f"  res[i] = np.{cast_str}(arg0)\n"
+        else:
+            # Otherwise, we need to round it
+            scalar_text += f"  res[i] = np.{cast_str}(round_half_always_up(arg0, 0))\n"
     else:
-        scalar_text = "res[i] = np.int64(arg0)"
+        scalar_text += f"  res[i] = np.float64(round_half_always_up(arg0, {scale}))\n"
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
@@ -1597,6 +1708,9 @@ def to_number_util(expr, _try, dict_encoding_state, func_id):  # pragma: no cove
         # Add support for dict encoding caching with streaming.
         dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
         func_id_name="func_id" if use_dict_caching else None,
+        extra_globals={
+            "round_half_always_up": bodo.libs.bodosql_array_kernels.round_half_always_up
+        },
     )
 
 

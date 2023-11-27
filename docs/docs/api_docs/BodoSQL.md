@@ -1486,7 +1486,7 @@ numeric types
 #### OBJECT_AGG
 -   `#!sql OBJECT_AGG(K, V)`
 
-    Combines the data from columns `K` and `V` into a JSON object where the rows of 
+    Combines the data from columns `K` and `V` into a JSON object where the rows of
     column `K` are the field names and the rows of column `V` are the values.
 
     !!! note
@@ -2825,7 +2825,7 @@ BodoSQL currently supports the following JSON functions:
 -   `#!sql OBJECT_CONSTRUCT_KEEP_NULL(key1, value1, ...)`
 
     Takes in a variable number of key-value pairs and combines them
-    into JSON data. BodoSQL currently requires all `key` arguments to 
+    into JSON data. BodoSQL currently requires all `key` arguments to
     be string literals.
 
     The full Snowflake specification: https://docs.snowflake.com/en/sql-reference/functions/object_construct_keep_null.html
@@ -2848,7 +2848,7 @@ BodoSQL currently supports the following JSON functions:
     Takes in a column of JSON data and 1+ keys and returns the same JSON data but
     with all of those keys removed.
 
-    !!! note: BodoSQL supports when the keys are passed in as string literals, 
+    !!! note: BodoSQL supports when the keys are passed in as string literals,
     but only sometimes supports when they are passed in as columns of strings.
 
 
@@ -3028,7 +3028,7 @@ Bodo currently supports the following functions that operate on columns of array
 
     Note: Snowflake allows any number of arguments (even zero arguments) of any
     type. BodoSQL currently requires 1+ arguments, and requires all arguments
-    to be easily reconciled into a common type. 
+    to be easily reconciled into a common type.
 
 
 #### ARRAY_EXCEPT
@@ -3046,7 +3046,7 @@ Bodo currently supports the following functions that operate on columns of array
 #### ARRAY_INTERSECTION
 -   `#!sql ARRAY_INTERSECTION(A, B)`
 
-    Takes in two arrays and returns an arary of all the elements from the 
+    Takes in two arrays and returns an arary of all the elements from the
     first array that also appear in the second. If an element appears in
     either array more than once, that element is kept the minimum of the
     number of times it appears in either array. For instance, if the
@@ -3058,7 +3058,7 @@ Bodo currently supports the following functions that operate on columns of array
 #### ARRAY_CAT
 -   `#!sql ARRAY_CAT(A, B)`
 
-    Takes in two arrays and returns an arary of all the elements from the 
+    Takes in two arrays and returns an arary of all the elements from the
     first array followed by all of the elements in the second array.
 
 
@@ -3647,26 +3647,29 @@ BodoSQL currently supports the following casting/conversion functions:
     This is similar to `#!sql TO_DOUBLE` except that it will return `NULL` instead of throwing an error invalid inputs.
 
 #### TO_NUMBER
--   `#!sql TO_NUMBER(EXPR)`
+-   `#!sql TO_NUMBER(EXPR [, PRECICION [, SCALE]])`
 
-    Converts an input expression to a fixed-point number. For `NULL` input,
+    Converts an input expression to a fixed-point number with the specified precicion and scale.
+    Precicon and scale must be constant integer literals if provided. Precicion must be between
+    1 and 38. Scale must be between 0 and prec - 1.
+    Precicion and scale default to 38 and 0 if not provided. For `NULL` input,
     the output is `NULL`.
 
 
 #### TO_NUMERIC
--   `#!sql TO_NUMERIC(EXPR)`
+-   `#!sql TO_NUMERIC(EXPR [, PRECICION [, SCALE]])`
 
-    Equivalent to `#!sql TO_NUMBER(EXPR)`.
+    Equivalent to `#!sql TO_NUMBER(EXPR, PRECICION, SCALE)`.
 
 
 #### TO_DECIMAL
--   `#!sql TO_DECIMAL(EXPR)`
+-   `#!sql TO_DECIMAL(EXPR [, PRECICION [, SCALE]])`
 
-    Equivalent to `#!sql TO_NUMBER(EXPR)`.
+    Equivalent to `#!sql TO_NUMBER(EXPR, PRECICION, SCALE)`.
 
 
 #### TRY_TO_NUMBER
--   `#!sql TRY_TO_NUMBER(EXPR)`
+-   `#!sql TRY_TO_NUMBER(EXPR [, PRECICION [, SCALE]])`
 
     A special version of `#!sql TO_NUMBER` that performs
     the same operation (i.e. converts an input expression to a fixed-point
@@ -3675,15 +3678,15 @@ BodoSQL currently supports the following casting/conversion functions:
 
 
 #### TRY_TO_NUMERIC
--   `#!sql TRY_TO_NUMERIC(EXPR)`
+-   `#!sql TRY_TO_NUMERIC(EXPR [, PRECICION [, SCALE]])`
 
-    Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`.
+    Equivalent to `#!sql TRY_TO_NUMBER(EXPR, PRECICION, SCALE)`.
 
 
 #### TRY_TO_DECIMAL
--   `#!sql TRY_TO_DECIMAL(EXPR)`
+-   `#!sql TRY_TO_DECIMAL(EXPR [, PRECICION [, SCALE]])`
 
-    Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`.
+    Equivalent to `#!sql TRY_TO_NUMBER(EXPR, PRECICION, SCALE)`.
 
 
 #### TO_DATE
@@ -3806,7 +3809,7 @@ Bodo currently supports the following functions that produce tables:
     Takes in a column of semi-structured data and produces a table by
     "exploding" the data into multiple rows, producing the following
     columns:
-    
+
     - `#!sql SEQ`: not currently supported by BodoSQL.
     - `#!sql KEY`: the individual values from the json data.
     - `#!sql PATH`: not currently supported by BodoSQL.
@@ -3885,9 +3888,9 @@ Bodo currently supports the following functions that produce tables:
 -   `#!sql SPLIT_TO_TABLE(str, delim)`
 
     Takes in a string column and a delimeter and produces a table by
-    "exploding" the string into multiple rows based on the delimeter, 
+    "exploding" the string into multiple rows based on the delimeter,
     producing the following columns:
-    
+
     - `#!sql SEQ`: not currently supported by BodoSQL.
     - `#!sql INDEX`: which index in the splitted string did the current seciton come from.
     - `#!sql VALUE`: the current section of the splitted string.

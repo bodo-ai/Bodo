@@ -135,6 +135,9 @@ public class CastCodeGen {
       case DECIMAL:
       case INTEGER:
         fnName = "try_to_number";
+        // Add defaults
+        args.add(new Expr.IntegerLiteral(38));
+        args.add(new Expr.IntegerLiteral(0));
         break;
       case DOUBLE:
       case FLOAT:

@@ -16,6 +16,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem.getMinIntegerSize;
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCharset;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCollation;
@@ -569,4 +570,44 @@ public class BodoReturnTypes {
             return ReturnTypes.BIGINT_NULLABLE.andThen(BodoReturnTypes.FORCE_NULLABLE_IF_EMPTY_GROUP).inferReturnType(binding);
         }
     }
+
+    public static final SqlReturnTypeInference TO_NUMBER_RET_TYPE =  ToNumberRetTypeHelper(true);
+
+    public static final SqlReturnTypeInference TRY_TO_NUMBER_RET_TYPE = ToNumberRetTypeHelper(false);
+
+    public static SqlReturnTypeInference ToNumberRetTypeHelper(boolean errorOnFailedConversion) {
+        //First, generate the return type without considering output nullability
+        SqlReturnTypeInference retType = opBinding -> {
+            RelDataTypeFactory factory = opBinding.getTypeFactory();
+
+            //TODO: the binding.getOperandCount() checks will need to be changed if/when we allow the 'format'
+            // optional argument
+            if (opBinding.getOperandCount() == 3) {
+                //We have a fractional value, return Double
+                assert opBinding.isOperandLiteral(2, true) : "Internal error in ToNumberRetTypeHelper: scale argument is not a literal";
+                int scale = opBinding.getIntLiteralOperand(2);
+
+                if (scale > 0) {
+                    return factory.createSqlType(SqlTypeName.DOUBLE);
+                }
+            }
+
+            //precicion defaults to 38 if not specified
+            int precicion = 38;
+            if (opBinding.getOperandCount() >= 2) {
+                assert opBinding.isOperandLiteral(2, true) :
+                        "Internal error in ToNumberRetTypeHelper: scale argument is not a literal";
+                precicion = opBinding.getIntLiteralOperand(1);
+            }
+            return factory.createSqlType(getMinIntegerSize(precicion));
+        };
+
+        //Now handle nullability
+        if (errorOnFailedConversion) {
+            return retType.andThen(SqlTypeTransforms.TO_NULLABLE);
+        } else {
+            return retType.andThen(SqlTypeTransforms.FORCE_NULLABLE);
+        }
+    }
+
 }
