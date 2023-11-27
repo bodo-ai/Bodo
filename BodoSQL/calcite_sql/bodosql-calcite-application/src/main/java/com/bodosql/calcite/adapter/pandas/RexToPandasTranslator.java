@@ -45,7 +45,6 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.gene
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLogFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateRandomFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateToNumberCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateTryToNumberCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateUniformFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.getNumericFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.PostfixOpCodeGen.generatePostfixOpCode;
@@ -1061,11 +1060,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "TO_NUMBER":
       case "TO_NUMERIC":
       case "TO_DECIMAL":
-        return generateToNumberCode(operands, streamingNamedArgs);
+        return generateToNumberCode(fnOperation.operands, false, streamingNamedArgs, this);
       case "TRY_TO_NUMBER":
       case "TRY_TO_NUMERIC":
       case "TRY_TO_DECIMAL":
-        return generateTryToNumberCode(operands, streamingNamedArgs);
+        return generateToNumberCode(fnOperation.operands, true, streamingNamedArgs, this);
       case "TO_DOUBLE":
       case "TRY_TO_DOUBLE":
         return generateToDoubleFnCode(operands, fnName, streamingNamedArgs);

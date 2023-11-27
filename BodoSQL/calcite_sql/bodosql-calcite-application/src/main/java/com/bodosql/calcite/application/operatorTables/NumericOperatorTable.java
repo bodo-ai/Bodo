@@ -10,6 +10,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlAggFunction;
+import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
@@ -20,6 +21,7 @@ import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
+import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -414,60 +416,26 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
-  // TODO: Add support for `precision` and `scale` arguments
-  public static final SqlFunction TO_NUMBER =
-      new SqlFunction(
-          "TO_NUMBER",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BIGINT_NULLABLE,
-          null,
-          OperandTypes.NUMERIC.or(OperandTypes.STRING),
-          SqlFunctionCategory.NUMERIC);
+  public static final SqlBasicFunction TO_NUMBER =
+      SqlBasicFunction.create(
+              SqlKind.OTHER_FUNCTION,
+              BodoReturnTypes.TO_NUMBER_RET_TYPE,
+              BodoOperandTypes.TO_NUMBER_OPERAND_TYPE_CHECKER)
+          .withName("TO_NUMBER");
 
-  public static final SqlFunction TO_NUMERIC =
-      new SqlFunction(
-          "TO_NUMERIC",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BIGINT_NULLABLE,
-          null,
-          OperandTypes.NUMERIC.or(OperandTypes.STRING),
-          SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction TO_NUMERIC = TO_NUMBER.withName("TO_NUMERIC");
+  public static final SqlFunction TO_DECIMAL = TO_NUMBER.withName("TO_DECIMAL");
 
-  public static final SqlFunction TO_DECIMAL =
-      new SqlFunction(
-          "TO_DECIMAL",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BIGINT_NULLABLE,
-          null,
-          OperandTypes.NUMERIC.or(OperandTypes.STRING),
-          SqlFunctionCategory.NUMERIC);
+  public static final SqlBasicFunction TRY_TO_NUMBER =
+      SqlBasicFunction.create(
+              SqlKind.OTHER_FUNCTION,
+              BodoReturnTypes.TRY_TO_NUMBER_RET_TYPE,
+              BodoOperandTypes.TRY_TO_NUMBER_OPERAND_TYPE_CHECKER)
+          .withName("TRY_TO_NUMBER");
 
-  public static final SqlFunction TRY_TO_NUMBER =
-      new SqlFunction(
-          "TRY_TO_NUMBER",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BIGINT_FORCE_NULLABLE,
-          null,
-          OperandTypes.NUMERIC.or(OperandTypes.STRING),
-          SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction TRY_TO_NUMERIC = TRY_TO_NUMBER.withName("TRY_TO_NUMERIC");
 
-  public static final SqlFunction TRY_TO_NUMERIC =
-      new SqlFunction(
-          "TRY_TO_NUMERIC",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BIGINT_FORCE_NULLABLE,
-          null,
-          OperandTypes.NUMERIC.or(OperandTypes.STRING),
-          SqlFunctionCategory.NUMERIC);
-
-  public static final SqlFunction TRY_TO_DECIMAL =
-      new SqlFunction(
-          "TRY_TO_DECIMAL",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BIGINT_FORCE_NULLABLE,
-          null,
-          OperandTypes.NUMERIC.or(OperandTypes.STRING),
-          SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction TRY_TO_DECIMAL = TRY_TO_NUMBER.withName("TRY_TO_DECIMAL");
 
   public static final SqlFunction RANDOM = new SqlRandomOperator();
 

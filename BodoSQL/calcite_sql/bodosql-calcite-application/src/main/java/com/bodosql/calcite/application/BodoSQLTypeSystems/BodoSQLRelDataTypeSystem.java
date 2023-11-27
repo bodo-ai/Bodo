@@ -193,4 +193,24 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
   public @Nullable String getCatalogName() {
     return currentDatabase;
   }
+
+  /**
+   * Helper function that, given a decimal scale, returns the minimum sized integer that can hold
+   * that number. Note that this function returns bigint even if the scale is so large that a bigint
+   * could not hold it.
+   */
+  public static SqlTypeName getMinIntegerSize(int scale) {
+    if (scale < 3) {
+      // 127
+      return SqlTypeName.TINYINT;
+    } else if (scale < 5) {
+      // 32767
+      return SqlTypeName.SMALLINT;
+    } else if (scale < 10) {
+      // 2 147 483 647
+      return SqlTypeName.INTEGER;
+    } else {
+      return SqlTypeName.BIGINT;
+    }
+  }
 }
