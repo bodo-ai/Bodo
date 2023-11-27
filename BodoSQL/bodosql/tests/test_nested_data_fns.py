@@ -571,7 +571,8 @@ def array_df():
                         None,
                         [[12, 13, 14, 15, 16], [17, 18]],
                     ]
-                    * 4
+                    * 4,
+                    dtype=pd.ArrowDtype(pa.list_(pa.list_(pa.int64()))),
                 ),
             }
         )
