@@ -793,10 +793,12 @@ def array_item_arr_setitem(A, idx, val):
             required_capacity = start_offset + val_data_len
             ensure_data_capacity(A, start_offset, required_capacity)
             data = get_data(A)
-            data[start_offset : start_offset + val_data_len] = val_data
+            # NOTE: val_data could be over-allocated so :val_data_len is necessary
+            data[start_offset : start_offset + val_data_len] = val_data[:val_data_len]
 
             # copy offsets (n+1 elements)
-            offsets[start : stop + 1] = val_offsets + start_offset
+            # NOTE: val_data could be over-allocated so :(len(val)+1) is necessary
+            offsets[start : stop + 1] = val_offsets[: (len(val) + 1)] + start_offset
 
             # copy null bits
             val_ind = 0
