@@ -435,11 +435,11 @@ std::unique_ptr<array_info> alloc_interval_array(
 
 std::unique_ptr<array_info> alloc_array_item(
     int64_t n_arrays, std::shared_ptr<array_info> inner_arr,
-    bodo::IBufferPool* const pool,
+    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
     const std::shared_ptr<::arrow::MemoryManager> mm) {
     std::unique_ptr<BodoBuffer> offsets_buffer =
         AllocateBodoBuffer(n_arrays + 1, Bodo_CType_offset, pool, mm);
-    int64_t n_bytes = (n_arrays + 7) >> 3;
+    int64_t n_bytes = ((n_arrays + 7) >> 3) + extra_null_bytes;
     std::unique_ptr<BodoBuffer> null_bitmap_buffer =
         AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8, pool, std::move(mm));
     // Set offset buffer to all zeros. Not setting this will result in known
@@ -457,8 +457,9 @@ std::unique_ptr<array_info> alloc_array_item(
 
 std::unique_ptr<array_info> alloc_struct(
     int64_t length, std::vector<std::shared_ptr<array_info>> child_arrays,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
-    int64_t n_bytes = (length + 7) >> 3;
+    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     std::unique_ptr<BodoBuffer> buffer_bitmask =
         AllocateBodoBuffer(n_bytes, pool, std::move(mm));
     // Set null bitmask to all ones to avoid unexpected issues
@@ -572,14 +573,15 @@ std::unique_ptr<array_info> alloc_string_array(
 
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     // dictionary
     std::shared_ptr<array_info> dict_data_arr =
         alloc_string_array(Bodo_CTypes::CTypeEnum::STRING, n_keys, n_chars_keys,
                            -1, 0, false, false, false, pool, mm);
     // indices
     std::shared_ptr<array_info> indices_data_arr = alloc_nullable_array(
-        length, Bodo_CTypes::INT32, 0, pool, std::move(mm));
+        length, Bodo_CTypes::INT32, extra_null_bytes, pool, std::move(mm));
 
     return std::make_unique<array_info>(
         bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
@@ -770,11 +772,14 @@ std::unique_ptr<array_info> alloc_array_top_level(
 
         case bodo_array_type::DICT:
             return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
-                                           pool, std::move(mm));
+                                           extra_null_bytes, pool,
+                                           std::move(mm));
         case bodo_array_type::ARRAY_ITEM:
-            return alloc_array_item(length, nullptr);
+            return alloc_array_item(length, nullptr, extra_null_bytes, pool,
+                                    std::move(mm));
         case bodo_array_type::STRUCT:
-            return alloc_struct(length, {});
+            return alloc_struct(length, {}, extra_null_bytes, pool,
+                                std::move(mm));
         default:
             throw std::runtime_error("alloc_array: array type (" +
                                      GetArrType_as_string(arr_type) +

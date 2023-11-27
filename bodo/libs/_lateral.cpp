@@ -426,7 +426,7 @@ std::shared_ptr<array_info> interleave_array_item_arrays(
     // and the array sizes calculated earlier.
     size_t n_arrays = array_sizes.size();
     std::shared_ptr<array_info> result =
-        alloc_array_item(n_arrays, combined_inner_arrs, pool, mm);
+        alloc_array_item(n_arrays, combined_inner_arrs, 0, pool, mm);
     offset_t *offset_buffer =
         (offset_t *)(result->buffers[0]->mutable_data() + result->offset);
     offset_buffer[0] = 0;
