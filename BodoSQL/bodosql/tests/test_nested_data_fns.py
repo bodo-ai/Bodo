@@ -401,7 +401,10 @@ def test_to_array_arrays(to_array_columns_data, memory_leak_check):
         ),
         pytest.param(
             "SELECT CASE WHEN string_col IS NOT NULL THEN TO_ARRAY(string_col) ELSE TO_ARRAY(string_col) END FROM TABLE1",
-            ["1", "2", "3", "4"] * 3 + [None] + ["5", "6", "7"] * 2,
+            pd.Series(
+                [["1"], ["2"], ["3"], ["4"]] * 3 + [None] + [["5"], ["6"], ["7"]] * 2,
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+            ),
             id="string",
             marks=pytest.mark.slow,
         ),
