@@ -2223,8 +2223,14 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
         ),
         pytest.param(
             (
-                pd.Series([[1], [2, None], [], None, [5, 6], []] * 3),
-                pd.Series([[], [], [7], [8], [None, 10], [11, 12]] * 3),
+                pd.Series(
+                    [[1], [2, None], [], None, [5, 6], []] * 3,
+                    dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+                ),
+                pd.Series(
+                    [[], [], [7], [8], [None, 10], [11, 12]] * 3,
+                    dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+                ),
             ),
             (False, False),
             False,
@@ -2237,17 +2243,21 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     [[5, 6], [None, 10]],
                     [[], [11, 12]],
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.int64()))),
             ),
             id="nested_integer-2",
-            marks=pytest.mark.skip(
-                reason="[BSE-1780] TODO: fix array_construct when inputs are multiple arrays"
-            ),
         ),
         pytest.param(
             (
-                pd.Series([["A"], ["BC", None], [], None, ["DEF", "", "GH"], []] * 3),
-                pd.Series([["A", "BC"], [], ["DEF", ""], [None], None, ["GH"]] * 3),
+                pd.Series(
+                    [["A"], ["BC", None], [], None, ["DEF", "", "GH"], []] * 3,
+                    dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+                ),
+                pd.Series(
+                    [["A", "BC"], [], ["DEF", ""], [None], None, ["GH"]] * 3,
+                    dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+                ),
             ),
             (False, False),
             False,
@@ -2260,12 +2270,11 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     [["DEF", "", "GH"], None],
                     [[], ["GH"]],
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.large_string()))),
             ),
             id="nested_string-2",
-            marks=pytest.mark.skip(
-                reason="[BSE-1780] TODO: fix array_construct when inputs are multiple arrays"
-            ),
+            marks=pytest.mark.skip(reason="[BSE-2123] TODO: fix segfault on 2 ranks"),
         ),
         pytest.param(
             (
