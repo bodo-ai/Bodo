@@ -5,6 +5,7 @@ Test correctness of SQL the flatten operation in BodoSQL
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodosql.tests.utils import check_query
@@ -148,7 +149,6 @@ def test_lateral_split_to_table(memory_leak_check):
                 }
             ),
             id="split_string-output_value-replicate_int",
-            marks=pytest.mark.skip(reason="Skip until [BSE-1746] is merged"),
         ),
     ],
 )
@@ -185,28 +185,30 @@ def test_lateral_flatten_arrays(query, answer, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "query, df, use_map_arrays, answer",
+    "query, df, answer",
     [
         pytest.param(
             "SELECT I, lat.key as K, lat.value as V FROM table1, lateral flatten(J) lat",
             pd.DataFrame(
                 {
                     "I": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-                    "J": [
-                        {"A": 0},
-                        None,
-                        {"B": 1, "I": 8, "L": 11},
-                        {"C": 2},
-                        {"D": 3, "J": None, "M": 12},
-                        {"E": 4},
-                        {"F": 5, "K": 10},
-                        {"G": 6},
-                        {},
-                        {"H": 7},
-                    ],
+                    "J": pd.Series(
+                        [
+                            {"A": 0},
+                            None,
+                            {"B": 1, "I": 8, "L": 11},
+                            {"C": 2},
+                            {"D": 3, "J": None, "M": 12},
+                            {"E": 4},
+                            {"F": 5, "K": 10},
+                            {"G": 6},
+                            {},
+                            {"H": 7},
+                        ],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                    ),
                 }
             ),
-            True,
             pd.DataFrame(
                 {
                     "I": [0, 2, 2, 2, 3, 4, 4, 4, 5, 6, 6, 7, 9],
@@ -221,21 +223,27 @@ def test_lateral_flatten_arrays(query, answer, memory_leak_check):
             pd.DataFrame(
                 {
                     "I": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-                    "J": [
-                        {"A": 0, "B": 9},
-                        {"A": 1, "B": 10},
-                        {"A": 2, "B": 11},
-                        {"A": 3, "B": 12},
-                        {"A": 4, "B": 13},
-                        {"A": 5, "B": 14},
-                        {"A": 6, "B": 15},
-                        {"A": 7, "B": 16},
-                        None,
-                        {"A": 8, "B": None},
-                    ],
+                    "J": pd.Series(
+                        [
+                            {"A": 0, "B": 9},
+                            {"A": 1, "B": 10},
+                            {"A": 2, "B": 11},
+                            {"A": 3, "B": 12},
+                            {"A": 4, "B": 13},
+                            {"A": 5, "B": 14},
+                            {"A": 6, "B": 15},
+                            {"A": 7, "B": 16},
+                            None,
+                            {"A": 8, "B": None},
+                        ],
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [pa.field("A", pa.int8()), pa.field("B", pa.int32())]
+                            )
+                        ),
+                    ),
                 }
             ),
-            False,
             pd.DataFrame(
                 {
                     "I": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 9, 9],
@@ -273,7 +281,6 @@ def test_lateral_flatten_arrays(query, answer, memory_leak_check):
                     "I2": pd.Series([9, 27, 81, None, 729], dtype=pd.UInt16Dtype()),
                 }
             ),
-            False,
             pd.DataFrame(
                 {
                     "I": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4],
@@ -303,7 +310,6 @@ def test_lateral_flatten_arrays(query, answer, memory_leak_check):
                     "S2": ["A", "AB", "ABC", "A", "AB", "ABC", "A", "AB", "ABC", None],
                 }
             ),
-            False,
             pd.DataFrame(
                 {
                     "I": [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9],
@@ -334,9 +340,80 @@ def test_lateral_flatten_arrays(query, answer, memory_leak_check):
             ),
             id="flatten_struct_string-output_key_value-replicate_int",
         ),
+        pytest.param(
+            "SELECT F, lat.key as K, lat.value as V FROM table1, lateral flatten(OBJECT_CONSTRUCT_KEEP_NULL('regular', OBJECT_CONSTRUCT_KEEP_NULL('F', f, 'Fp', f+1), 'squared', OBJECT_CONSTRUCT_KEEP_NULL('F', f*f, 'Fp', f*f+1), 'cubed', OBJECT_CONSTRUCT_KEEP_NULL('F', POW(f, 0.5), 'Fp', POW(f, 0.5)+1))) lat",
+            pd.DataFrame({"F": [0.0, 1.0, 4.0, 0.25, 25.0]}),
+            pd.DataFrame(
+                {
+                    "F": pd.Series([0.0, 1.0, 4.0, 0.25, 25.0]).repeat(3).values,
+                    "K": ["regular", "squared", "root"] * 5,
+                    "V": [
+                        {"F": 0.0, "Fp": 1.0},
+                        {"F": 0.0, "Fp": 1.0},
+                        {"F": 0.0, "Fp": 1.0},
+                        {"F": 1.0, "Fp": 2.0},
+                        {"F": 1.0, "Fp": 2.0},
+                        {"F": 1.0, "Fp": 2.0},
+                        {"F": 4.0, "Fp": 5.0},
+                        {"F": 16.0, "Fp": 17.0},
+                        {"F": 2.0, "Fp": 3.0},
+                        {"F": 0.25, "Fp": 1.25},
+                        {"F": 0.0625, "Fp": 1.0625},
+                        {"F": 0.5, "Fp": 1.5},
+                        {"F": 25.0, "Fp": 26.0},
+                        {"F": 625.0, "Fp": 626.0},
+                        {"F": 5.0, "Fp": 6.0},
+                    ],
+                }
+            ),
+            id="flatten_struct_struct_float-output_key_value-replicate_float",
+            marks=pytest.mark.skip(
+                reason="[BSE-2102] TODO: support flatten on structs containing structs"
+            ),
+        ),
+        pytest.param(
+            "SELECT I, lat.key as K, lat.value as V FROM table1, lateral flatten(OBJECT_CONSTRUCT_KEEP_NULL('ordmap', M, 'wo_vowel', OBJECT_DELETE(M, 'A', 'E', 'I', 'O', 'U'))) lat",
+            pd.DataFrame(
+                {
+                    "I": [10, 20, 30, 40, 50],
+                    "M": pd.Series(
+                        [
+                            {char: ord(char) for char in word}
+                            for word in "ABC A  AEIOU RSTLNE".split(" ")
+                        ],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "F": pd.Series([10, 20, 30, 40, 50]).repeat(2).values,
+                    "K": ["ordmap", "wo_vowel"] * 5,
+                    "V": pd.Series(
+                        [
+                            {"A": 65, "B": 66, "C": 67},
+                            {"B": 66, "C": 67},
+                            {"A": 65},
+                            {},
+                            {},
+                            {},
+                            {"A": 65, "E": 69, "I": 73, "O": 79, "U": 85},
+                            {},
+                            {"R": 82, "S": 83, "T": 84, "L": 76, "N": 78, "E": 69},
+                            {"R": 82, "S": 83, "T": 84, "L": 76, "N": 78},
+                        ],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                    ),
+                }
+            ),
+            id="flatten_struct_map_int-output_key_value-replicate_int",
+            marks=pytest.mark.skip(
+                reason="[BSE-2102] TODO: support flatten on structs containing maps"
+            ),
+        ),
     ],
 )
-def test_lateral_flatten_json(query, df, use_map_arrays, answer, memory_leak_check):
+def test_lateral_flatten_json(query, df, answer, memory_leak_check):
     ctx = {"table1": df}
     check_query(
         query,
@@ -345,8 +422,5 @@ def test_lateral_flatten_json(query, df, use_map_arrays, answer, memory_leak_che
         expected_output=answer,
         check_names=False,
         check_dtype=False,
-        use_map_arrays=use_map_arrays,
-        # Can't use check_python because of intricacies of unboxing map arrays
-        only_jit_1DVar=True,
         sort_output=False,  # Sorting semi-structured data unsupported in Python
     )

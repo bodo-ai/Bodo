@@ -470,7 +470,7 @@ def test_json_extract_path_text_invalid(data, path):
     ],
 )
 @pytest.mark.parametrize(
-    "data, use_map, answer",
+    "data, answer",
     [
         pytest.param(
             pd.Series(
@@ -481,9 +481,17 @@ def test_json_extract_path_text_invalid(data, path):
                     {"first": "Rodel", "last": "Ituralde", "nation": "Arad Doman"},
                     {"first": "Faile", "last": "Aybara", "nation": "Saldea"},
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("first", pa.string()),
+                            pa.field("last", pa.string()),
+                            pa.field("nation", pa.string()),
+                        ]
+                    )
+                ),
             ),
-            False,
             pd.Series(
                 [
                     ["first", "last", "nation"],
@@ -492,7 +500,8 @@ def test_json_extract_path_text_invalid(data, path):
                     ["first", "last", "nation"],
                     ["first", "last", "nation"],
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
             ),
             id="struct_array",
         ),
@@ -510,18 +519,19 @@ def test_json_extract_path_text_invalid(data, path):
                     {},
                     {"A-": ["Computer Science", "Art"], "B-": ["Spanish", "German"]},
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.large_list(pa.string()))),
             ),
-            True,
             pd.Series(
                 [["A", "B+", "B-"], ["B"], None, ["A", "A-", "B+"], [], ["A-", "B-"]]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
             ),
             id="map_array",
         ),
     ],
 )
-def test_object_keys(data, use_map, answer, vector, memory_leak_check):
+def test_object_keys(data, answer, vector, memory_leak_check):
     def impl_vector(data):
         return pd.Series(bodo.libs.bodosql_array_kernels.object_keys(data))
 
@@ -534,7 +544,6 @@ def test_object_keys(data, use_map, answer, vector, memory_leak_check):
             (data,),
             py_output=answer,
             check_dtype=False,
-            use_map_arrays=use_map,
         )
     else:
         check_func(
@@ -542,7 +551,5 @@ def test_object_keys(data, use_map, answer, vector, memory_leak_check):
             (data,),
             py_output=answer[0],
             check_dtype=False,
-            use_map_arrays=use_map,
             distributed=False,
-            is_out_distributed=False,
         )

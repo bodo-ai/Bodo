@@ -1285,7 +1285,7 @@ def test_row_number(test, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "keys_to_drop, json_data, use_map_arrays, answer",
+    "keys_to_drop, json_data, answer",
     [
         pytest.param(
             ("A",),
@@ -1301,9 +1301,17 @@ def test_row_number(test, memory_leak_check):
                     {"A": None, "B": 80, "C": "ABC"},
                     {"A": 4, "B": None, "C": "A"},
                     {"A": 5, "B": 320, "C": None},
-                ]
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("A", pa.int32()),
+                            pa.field("B", pa.int32()),
+                            pa.field("C", pa.string()),
+                        ]
+                    )
+                ),
             ).values,
-            False,
             pd.Series(
                 [
                     {"B": 10, "C": ""},
@@ -1316,7 +1324,10 @@ def test_row_number(test, memory_leak_check):
                     {"B": 80, "C": "ABC"},
                     {"B": None, "C": "A"},
                     {"B": 320, "C": None},
-                ]
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct([pa.field("B", pa.int32()), pa.field("C", pa.string())])
+                ),
             ).values,
             id="struct-drop_literal_string",
         ),
@@ -1334,9 +1345,17 @@ def test_row_number(test, memory_leak_check):
                     {"A": None, "B": 80, "C": "ABC"},
                     {"A": 4, "B": None, "C": "A"},
                     {"A": 5, "B": 320, "C": None},
-                ]
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("A", pa.int32()),
+                            pa.field("B", pa.int32()),
+                            pa.field("C", pa.string()),
+                        ]
+                    )
+                ),
             ).values,
-            False,
             pd.Series(
                 [
                     {"A": 0, "B": 10, "C": ""},
@@ -1349,7 +1368,16 @@ def test_row_number(test, memory_leak_check):
                     {"A": None, "B": 80, "C": "ABC"},
                     {"A": 4, "B": None, "C": "A"},
                     {"A": 5, "B": 320, "C": None},
-                ]
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("A", pa.int32()),
+                            pa.field("B", pa.int32()),
+                            pa.field("C", pa.string()),
+                        ]
+                    )
+                ),
             ).values,
             id="struct-drop_nothing",
         ),
@@ -1376,7 +1404,6 @@ def test_row_number(test, memory_leak_check):
                 ],
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ).values,
-            True,
             pd.Series(
                 [
                     {"B": 1, "C": 2},
@@ -1417,7 +1444,6 @@ def test_row_number(test, memory_leak_check):
                 ],
                 dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ).values,
-            True,
             pd.Series(
                 [
                     {"B": 1, "C": 2},
@@ -1445,7 +1471,6 @@ def test_row_number(test, memory_leak_check):
         pytest.param(
             ("C", "A", "E"),
             {"A": 0, "B": 1, "C": 2, "D": None, "E": 3},
-            False,
             {"B": 1, "D": None},
             id="scalar_map-drop_3",
             marks=pytest.mark.skip(
@@ -1454,9 +1479,7 @@ def test_row_number(test, memory_leak_check):
         ),
     ],
 )
-def test_object_delete(
-    keys_to_drop, json_data, use_map_arrays, answer, memory_leak_check
-):
+def test_object_delete(keys_to_drop, json_data, answer, memory_leak_check):
     raw_arg_text = ", ".join(f"arg{i}" for i in range(len(keys_to_drop) + 1))
     arg_text = ["arg0"]
     for i in range(len(keys_to_drop)):
@@ -1479,7 +1502,6 @@ def test_object_delete(
         py_output=answer,
         check_dtype=False,
         reset_index=True,
-        use_map_arrays=use_map_arrays,
     )
 
 
@@ -1875,7 +1897,7 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
 
 
 @pytest.mark.parametrize(
-    "args, scalar_tup, use_map_arrays, answer",
+    "args, scalar_tup, answer",
     [
         pytest.param(
             (
@@ -1884,8 +1906,10 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 ),
             ),
             (False,),
-            False,
-            pd.Series([[1], [None], [4], [None], [16], [None], [64], [None], [256]]),
+            pd.Series(
+                [[1], [None], [4], [None], [16], [None], [64], [None], [256]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.int32())),
+            ),
             id="integer-1",
         ),
         pytest.param(
@@ -1896,7 +1920,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 np.int8(-1),
             ),
             (False, True),
-            False,
             pd.Series(
                 [
                     [1, -1],
@@ -1908,7 +1931,8 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     [64, -1],
                     [None, -1],
                     [256, -1],
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.int32())),
             ),
             id="integer-2",
         ),
@@ -1920,7 +1944,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 np.array([4, 5, -6, 7, 8], dtype=np.int8),
             ),
             (True, False, True, False),
-            False,
             pd.Series(
                 [
                     [None, 1, 3, 4],
@@ -1928,28 +1951,29 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     [None, 1, 3, -6],
                     [None, 2, 3, 7],
                     [None, 1, 3, 8],
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
             ),
             id="integer-4",
         ),
         pytest.param(
             ("",),
             (True,),
-            False,
             pd.array([""]),
             id="string_scalar-1",
         ),
         pytest.param(
             (pd.Series(["", None, "A", None, "AB", None, "ABC"] * 3),),
             (False,),
-            False,
-            pd.Series([[""], [None], ["A"], [None], ["AB"], [None], ["ABC"]] * 3),
+            pd.Series(
+                [[""], [None], ["A"], [None], ["AB"], [None], ["ABC"]] * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+            ),
             id="string-1",
         ),
         pytest.param(
             (pd.Series(["", None, "A", None, "AB", None, "ABC"] * 3), "foo"),
             (False, True),
-            False,
             pd.Series(
                 [
                     ["", "foo"],
@@ -1960,7 +1984,8 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     [None, "foo"],
                     ["ABC", "foo"],
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
             ),
             id="string-2",
         ),
@@ -1972,7 +1997,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 pd.Series(["", "A", "BC", "DEF", "GHIJ"]),
             ),
             (True, False, True, False),
-            False,
             pd.Series(
                 [
                     ["K", "1", None, ""],
@@ -1980,7 +2004,8 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     ["K", "2", None, "BC"],
                     ["K", None, None, "DEF"],
                     ["K", "3", None, "GHIJ"],
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
             ),
             id="string-4",
         ),
@@ -1990,7 +2015,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 pd.Series([b"23", None, b"456", None, b""] * 2),
             ),
             (True, False),
-            False,
             pd.Series(
                 [[b"1", b"23"], [b"1", None], [b"1", b"456"], [b"1", None], [b"1", b""]]
                 * 2
@@ -2003,8 +2027,10 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 pd.Series([True, False, None, True] * 2, dtype=pd.BooleanDtype()),
             ),
             (False, False),
-            False,
-            pd.Series([[True, True], [False, False], [True, None], [False, True]] * 2),
+            pd.Series(
+                [[True, True], [False, False], [True, None], [False, True]] * 2,
+                dtype=pd.ArrowDtype(pa.large_list(pa.bool_())),
+            ),
             id="boolean-2",
         ),
         pytest.param(
@@ -2013,8 +2039,10 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 pd.Series([-1.0, 0.0, None, 2.71828] * 2, dtype=pd.Float32Dtype()),
             ),
             (True, False),
-            False,
-            pd.Series([[3.14, -1.0], [3.14, 0.0], [3.14, None], [3.14, 2.71828]] * 2),
+            pd.Series(
+                [[3.14, -1.0], [3.14, 0.0], [3.14, None], [3.14, 2.71828]] * 2,
+                dtype=pd.ArrowDtype(pa.large_list(pa.float64())),
+            ),
             id="float-2",
         ),
         pytest.param(
@@ -2031,7 +2059,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 Decimal("0.025"),
             ),
             (False, True),
-            False,
             pd.Series(
                 [
                     [Decimal("0.0"), Decimal("0.025")],
@@ -2039,7 +2066,8 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     [Decimal("-1024.2048"), Decimal("0.025")],
                     [None, Decimal("0.025")],
                     [Decimal("1.23456789"), Decimal("0.025")],
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.decimal128(38, 18))),
             ),
             id="decimal-2",
         ),
@@ -2057,7 +2085,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 np.int64(0),
             ),
             (False, True),
-            False,
             pd.Series(
                 [
                     [Decimal("0.0"), Decimal("0.0")],
@@ -2065,7 +2092,8 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     [Decimal("-1024.2048"), Decimal("0.0")],
                     [None, Decimal("0.0")],
                     [Decimal("1.23456789"), Decimal("0.0")],
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.decimal128(38, 18))),
             ),
             id="decimal_int-2-upcasting",
         ),
@@ -2083,7 +2111,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 np.float64(3.1415),
             ),
             (False, True),
-            False,
             pd.Series(
                 [
                     [0.0, 3.1415],
@@ -2091,7 +2118,8 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     [-1024.2048, 3.1415],
                     [None, 3.1415],
                     [1.23456789, 3.1415],
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.float64())),
             ),
             id="decimal_float-2-upcasting",
         ),
@@ -2109,7 +2137,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 datetime.date(1999, 12, 31),
             ),
             (False, True),
-            False,
             pd.Series(
                 [
                     [datetime.date(2023, 10, 25), datetime.date(1999, 12, 31)],
@@ -2117,7 +2144,8 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     [datetime.date(1999, 12, 31), datetime.date(1999, 12, 31)],
                     [None, datetime.date(1999, 12, 31)],
                     [datetime.date(2008, 4, 1), datetime.date(1999, 12, 31)],
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.date32())),
             ),
             id="date-2",
         ),
@@ -2135,7 +2163,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 ),
             ),
             (True, False),
-            False,
             pd.Series(
                 [
                     [pd.Timestamp("2015-3-14 9:26:53.59"), pd.Timestamp("2023-1-1")],
@@ -2167,7 +2194,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 ),
             ),
             (True, False),
-            False,
             pd.Series(
                 [
                     [
@@ -2213,7 +2239,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 ),
             ),
             (False, False),
-            False,
             pd.Series(
                 [
                     [
@@ -2240,14 +2265,12 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
         pytest.param(
             (pd.Series([[1], [2, None], [], None, [5, 6], []] * 3),),
             (False,),
-            False,
             pd.Series([[[1]], [[2, None]], [[]], [None], [[5, 6]], [[]]] * 3),
             id="nested_integer-1",
         ),
         pytest.param(
             (pd.Series([["A"], ["BC", None], [], None, ["DEF", "", "GH"], []] * 3),),
             (False,),
-            False,
             pd.Series(
                 [[["A"]], [["BC", None]], [[]], [None], [["DEF", "", "GH"]], [[]]] * 3
             ),
@@ -2265,7 +2288,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 ),
             ),
             (False, False),
-            False,
             pd.Series(
                 [
                     [[1], []],
@@ -2292,7 +2314,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 ),
             ),
             (False, False),
-            False,
             pd.Series(
                 [
                     [["A"], ["A", "BC"]],
@@ -2336,7 +2357,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 ),
             ),
             (False, False),
-            False,
             pd.Series(
                 [
                     [{"X": 1, "Y": 3.1}, {"X": 5, "Y": 10.1}],
@@ -2374,7 +2394,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 ),
             ),
             (False, True, True, False),
-            False,
             pd.Series(
                 [
                     [
@@ -2433,7 +2452,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 ),
             ),
             (False, True, True, False),
-            False,
             pd.Series(
                 [
                     [
@@ -2483,7 +2501,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 ),
             ),
             (False,),
-            True,
             pd.Series(
                 [
                     [{"O": "A"}],
@@ -2526,7 +2543,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 ),
             ),
             (False, False),
-            True,
             pd.Series(
                 [
                     [{0: 9}, {6: 8}],
@@ -2564,7 +2580,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 ),
             ),
             (False, False),
-            True,
             pd.Series(
                 [
                     [{b"nyc": 9}, {b"chi": 8}],
@@ -2590,12 +2605,12 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                         {},
                         {4: 6, 5: 6},
                     ]
-                    * 3
+                    * 3,
+                    dtype=pd.ArrowDtype(pa.map_(pa.int32(), pa.int32())),
                 ),
                 {0: 1, 2: 3},
             ),
             (False, True),
-            True,
             pd.Series(
                 [
                     [{0: 9}, {0: 1, 2: 3}],
@@ -2604,13 +2619,14 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                     [{}, {0: 1, 2: 3}],
                     [{4: 6, 5: 6}, {0: 1, 2: 3}],
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.map_(pa.int32(), pa.int32()))),
             ),
             id="map_array_with_scalars-int_int-2",
         ),
     ],
 )
-def test_array_construct(args, scalar_tup, use_map_arrays, answer, memory_leak_check):
+def test_array_construct(args, scalar_tup, answer, memory_leak_check):
     def impl_scalar(A):
         return bodo.libs.bodosql_array_kernels.array_construct((A,), scalar_tup)
 
@@ -2648,7 +2664,6 @@ def test_array_construct(args, scalar_tup, use_map_arrays, answer, memory_leak_c
         py_output=answer,
         check_dtype=False,
         reset_index=True,
-        use_map_arrays=use_map_arrays,
     )
 
 

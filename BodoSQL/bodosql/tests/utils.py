@@ -1160,7 +1160,6 @@ def _check_query_equal(
             # set a dummy value to force type change
             bodosql_output.iloc[:, i] = 3
             bodosql_output.iloc[:, i] = S
-
     if convert_columns_to_pandas:
         bodosql_output = bodo.tests.utils.convert_non_pandas_columns(bodosql_output)
         expected_output = bodo.tests.utils.convert_non_pandas_columns(expected_output)

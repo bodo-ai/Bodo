@@ -1143,7 +1143,11 @@ def overload_arr_get_util(arr, ind, is_scalar_arr):
         arr's inner type/column of inner type: the element at ind of array arr
     """
 
-    if not is_array_item_array(arr) and not (is_scalar_arr and is_array_typ(arr, True)):
+    if (
+        not is_overload_none(arr)
+        and not is_array_item_array(arr)
+        and not (is_scalar_arr and is_array_typ(arr, True))
+    ):
         raise_bodo_error(
             f"Error in array GET: first argument must be a nested array, found {arr}"
         )
@@ -1154,9 +1158,20 @@ def overload_arr_get_util(arr, ind, is_scalar_arr):
     arg_types = [arr, ind, is_scalar_arr]
     propagate_null = [True, True, False]
 
-    out_dtype = bodo.utils.typing.to_nullable_type(
-        arr.data.dtype if bodo.hiframes.pd_series_ext.is_series_type(arr) else arr.dtype
-    )
+    if is_overload_none(arr):
+        out_dtype = bodo.null_array_type
+    else:
+        dtype = (
+            arr.data.dtype
+            if bodo.hiframes.pd_series_ext.is_series_type(arr)
+            else arr.dtype
+        )
+        arr_type = (
+            bodo.utils.typing.dtype_to_array_type(dtype)
+            if is_scalar_arr_bool
+            else dtype
+        )
+        out_dtype = bodo.utils.typing.to_nullable_type(arr_type)
 
     scalar_text = "if arg1 < 0 or arg1 >= len(arg0) or bodo.libs.array_kernels.isna(arg0, arg1):\n"
     scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"

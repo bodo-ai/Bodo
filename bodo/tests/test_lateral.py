@@ -116,7 +116,7 @@ def simulate_lateral_flatten_json(
     "output_idx, output_val, output_this",
     [
         pytest.param(False, False, False, id="output_nothing", marks=pytest.mark.slow),
-        pytest.param(False, True, False, id="output_value"),
+        pytest.param(False, True, False, id="output_value", marks=pytest.mark.slow),
         pytest.param(True, True, True, id="output_all"),
     ],
 )
@@ -209,21 +209,20 @@ def test_lateral_flatten_array(
 @pytest.mark.parametrize(
     "output_key, output_val, output_this",
     [
-        pytest.param(True, False, False, id="output_key"),
-        pytest.param(False, True, False, id="output_value"),
-        pytest.param(True, True, True, id="output_all", marks=pytest.mark.slow),
+        pytest.param(True, False, False, id="output_key", marks=pytest.mark.slow),
+        pytest.param(False, True, False, id="output_value", marks=pytest.mark.slow),
+        pytest.param(True, True, True, id="output_all"),
     ],
 )
 @pytest.mark.parametrize(
     "keep_cols",
     [
-        pytest.param((0,), id="keep_int", marks=pytest.mark.slow),
         pytest.param((2,), id="keep_string", marks=pytest.mark.slow),
         pytest.param((0, 1, 2), id="keep_all"),
     ],
 )
 @pytest.mark.parametrize(
-    "explode_col_values, val_type, use_map_arrays, ban_dictionary",
+    "explode_col_values, val_type",
     [
         pytest.param(
             [
@@ -234,8 +233,6 @@ def test_lateral_flatten_array(
                 {"hex": None, "name": "midnight"},
             ],
             pa.struct([pa.field("hex", pa.string()), pa.field("name", pa.string())]),
-            False,
-            False,
             id="explode_struct_string",
         ),
         pytest.param(
@@ -252,8 +249,6 @@ def test_lateral_flatten_array(
                     pa.field("scores", pa.list_(pa.float64())),
                 ]
             ),
-            False,
-            False,
             id="explode_struct_float_arrays",
         ),
         pytest.param(
@@ -279,8 +274,6 @@ def test_lateral_flatten_array(
                     pa.field("cities", pa.list_(pa.string())),
                 ]
             ),
-            False,
-            True,  # Array item array of dictionary encoded arrays not well supported in compilation
             id="explode_struct_string_arrays",
         ),
         pytest.param(
@@ -300,8 +293,6 @@ def test_lateral_flatten_array(
                     )
                 ]
             ),
-            False,
-            False,
             id="explode_struct_double_nested_int_arrays",
         ),
         pytest.param(
@@ -313,17 +304,36 @@ def test_lateral_flatten_array(
                 {},
             ],
             pa.map_(pa.string(), pa.int64()),
-            True,
-            False,
-            id="explode_map",
+            id="explode_map_int",
+        ),
+        pytest.param(
+            [
+                {
+                    "RPDR_S8": {"name": "BTDQ", "rank": 1},
+                    "RPDRAS_S3": {"name": "TM", "rank": 1},
+                },
+                {"RPDRAS_S2": {"name": "KZ", "rank": 2}, "RPDR_S2": None},
+                {"RPDR_S7": {"name": "VC", "rank": 1}},
+                {
+                    "RPDR_S1": {"name": "PC", "rank": 9},
+                    "RPDR_S12": {"name": "WVD", "rank": 7},
+                    "RPDR_S10": {"name": "VVM", "rank": 14},
+                },
+                {},
+            ],
+            pa.map_(
+                pa.string(),
+                pa.struct(
+                    [pa.field("name", pa.string()), pa.field("rank", pa.int32())]
+                ),
+            ),
+            id="explode_map_struct",
         ),
     ],
 )
 def test_lateral_flatten_json(
     explode_col_values,
     val_type,
-    use_map_arrays,
-    ban_dictionary,
     keep_cols,
     output_key,
     output_val,
@@ -372,8 +382,6 @@ def test_lateral_flatten_json(
         df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T2,), index_1, global_3)
         return df2
 
-    use_dict_encoded_strings = False if ban_dictionary else None
-
     check_func(
         impl,
         (df,),
@@ -381,8 +389,6 @@ def test_lateral_flatten_json(
         reset_index=True,
         check_dtype=False,
         check_names=False,
-        use_map_arrays=use_map_arrays,
-        use_dict_encoded_strings=use_dict_encoded_strings,
     )
 
 

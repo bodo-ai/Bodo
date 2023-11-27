@@ -2,6 +2,7 @@
 """
 Utility functions for testing such as check_func() that tests a function.
 """
+import datetime
 import io
 import os
 import random
@@ -1551,7 +1552,7 @@ def check_timing_func(func, args):
 
 
 def string_list_ent(x):
-    if isinstance(x, (int, np.int64, float)):
+    if isinstance(x, (int, np.int64, float, datetime.date, datetime.time)):
         return str(x)
     if isinstance(x, dict):
         l_str = []
@@ -1570,6 +1571,8 @@ def string_list_ent(x):
         ),
     ):
         l_str = []
+        if all(isinstance(elem, tuple) for elem in x):
+            return string_list_ent({k: v for k, v in x})
         for e_val in x:
             l_str.append(string_list_ent(e_val))
         return "[" + ",".join(l_str) + "]"
@@ -1657,6 +1660,7 @@ def convert_non_pandas_columns(df):
                             (
                                 list,
                                 dict,
+                                tuple,
                                 Decimal,
                                 np.ndarray,
                                 pd.arrays.IntegerArray,
@@ -1674,13 +1678,13 @@ def convert_non_pandas_columns(df):
                 nb_bytes += 1
         if nb_list_string > 0:
             col_names_list_string.append(e_col_name)
-        if nb_array_item > 0:
-            col_names_array_item.append(e_col_name)
-        if nb_arrow_array_item > 0:
+        elif nb_arrow_array_item > 0:
             col_names_arrow_array_item.append(e_col_name)
-        if nb_decimal > 0:
+        elif nb_array_item > 0:
+            col_names_array_item.append(e_col_name)
+        elif nb_decimal > 0:
             col_names_decimal.append(e_col_name)
-        if nb_bytes > 0:
+        elif nb_bytes > 0:
             col_names_bytes.append(e_col_name)
     for e_col_name in col_names_list_string:
         e_list_str = []
