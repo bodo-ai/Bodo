@@ -443,6 +443,8 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type, dict_encode=True):
     If the scalar is None or optional then we generate the result
     as all NA with the given array type. If the value is optional
     we also convert the array to a nullable type.
+
+    If the type scalar is already the required output array type, we return it.
     """
     # The array type always needs to be nullable for the gen_na_array case.
     _arr_typ = to_nullable_type(unwrap_typeref(arr_type))
@@ -452,8 +454,17 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type, dict_encode=True):
         )  # pragma: no cover
 
     if isinstance(_arr_typ, ArrayItemArrayType):
+        if scalar == _arr_typ:
+            # If the scalar is the same as the output array type we can just
+            # return the scalar.
+            return lambda scalar, length, arr_type, dict_encode=True: scalar
+
         # If the output array is ArrayItemArray
         data_arr_type = _arr_typ.dtype
+
+        assert (
+            scalar == data_arr_type
+        ), "Internal error in coerce_scalar_to_array: type of scalar does not match expected array type"
 
         def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover
             return array_to_repeated_array_item_array(scalar, length, data_arr_type)
