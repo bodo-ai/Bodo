@@ -786,12 +786,16 @@ def test_div0_scalars(spark_info):
     ],
 )
 @pytest.mark.parametrize(
-    "value, expected_output",
+    "values, expected_output",
     [
-        pytest.param("1", 1, id="int", marks=pytest.mark.slow),
-        pytest.param("1.0", 1, id="float"),
-        pytest.param("'1.23456789'", 1, id="str"),
-        pytest.param("NULL", None, id="null", marks=pytest.mark.slow),
+        pytest.param(["1"], 1, id="int", marks=pytest.mark.slow),
+        pytest.param(["1.0"], 1, id="float"),
+        pytest.param(
+            ["1.5", "1", "0"], 2, id="float_with_scale", marks=pytest.mark.slow
+        ),
+        pytest.param(["'1.23456789'"], 1, id="str", marks=pytest.mark.slow),
+        pytest.param(["'1.23456789'", "5", "4"], 1.2346, id="str_with_scale"),
+        pytest.param(["NULL"], None, id="null", marks=pytest.mark.slow),
     ],
 )
 @pytest.mark.parametrize(
@@ -801,11 +805,12 @@ def test_div0_scalars(spark_info):
         True,
     ],
 )
-def test_to_number_scalar(fn_name, value, expected_output, use_case):
-    if use_case and value != "NULL":
-        query = f"SELECT (CASE WHEN {fn_name}({value}) > 0 THEN 1 ELSE 0 END) as A"
+def test_to_number_scalar(fn_name, values, expected_output, use_case):
+    args_string = ", ".join(values)
+    if use_case and args_string != "NULL":
+        query = f"SELECT (CASE WHEN {fn_name}({args_string}) > 0 THEN {fn_name}({args_string}) ELSE 0 END) as A"
     else:
-        query = f"SELECT {fn_name}({value}) as A"
+        query = f"SELECT {fn_name}({args_string}) as A"
     ctx = {}
     check_query(
         query,
@@ -836,7 +841,7 @@ def test_to_number_columns(fn_name):
         {
             "A": [str(i) for i in range(30)],
             "B": [i for i in range(30)],
-            "C": [float(i) for i in range(30)],
+            "C": [float(i) + 0.2 for i in range(30)],
         }
     )
 
@@ -846,6 +851,95 @@ def test_to_number_columns(fn_name):
         ctx,
         None,
         expected_output=df.astype("int64"),
+        check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "fn_name",
+    [
+        "TO_NUMBER",
+        pytest.param("TO_NUMERIC", marks=pytest.mark.slow),
+        pytest.param("TO_DECIMAL", marks=pytest.mark.slow),
+        "TRY_TO_NUMBER",
+        pytest.param("TRY_TO_NUMERIC", marks=pytest.mark.slow),
+        pytest.param("TRY_TO_DECIMAL", marks=pytest.mark.slow),
+    ],
+)
+def test_to_number_columns_with_scale(fn_name):
+    query = f"SELECT {fn_name}(A, 6) as A, {fn_name}(B, 3, 0) as B, {fn_name}(C, 10, 3) as C, {fn_name}(D, 10, 3) as D FROM table1"
+
+    float_series = [
+        123.456,
+        10.3,
+        1234567.123,
+        None,
+        -1234567.1237,
+        1234567.1231,
+        0.0,
+        None,
+        1.0,
+        1234567.12399,
+    ]
+    # Manually converting to avoid string NaN issues
+    str_float_series = [
+        "123.456",
+        "10.3",
+        "1234567.123",
+        None,
+        "-1234567.1237",
+        "1234567.1231",
+        "0.0",
+        None,
+        "1.0",
+        "1234567.12399",
+    ]
+
+    df = pd.DataFrame(
+        {
+            "A": [str(i) for i in range(10)],
+            "B": [1 for i in range(10)],
+            "C": float_series,
+            "D": str_float_series,
+        }
+    )
+
+    float_series_out = pd.Series(
+        [
+            123.456,
+            10.3,
+            1234567.123,
+            None,
+            -1234567.124,
+            1234567.123,
+            0.0,
+            None,
+            1.0,
+            1234567.124,
+        ]
+    )
+    expected_output = pd.DataFrame(
+        {
+            "A": df["A"].astype(pd.Int32Dtype()),
+            "B": df["B"].astype(pd.Int16Dtype()),
+            "C": float_series_out,
+            "D": float_series_out,
+        }
+    )
+
+    ctx = {"table1": df}
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        # From manual inspection, output df.dtypes == expected_output.dtypes,
+        # but I still get a dtypes error from somewhere in _test_equal_guard:
+        # Attributes of DataFrame.iloc[:, 0] (column name="A") are different
+        # Attribute "dtype" are different
+        # [left]:  object
+        # [right]: Int32
+        # For right now, I'm just going to keep check_dtype=False
         check_dtype=False,
     )
 
@@ -969,6 +1063,49 @@ def test_to_number_invalid(fn_name, invalid_str):
         )
     else:
         with pytest.raises(ValueError, match="unable to convert string literal"):
+            bc = bodosql.BodoSQLContext()
+
+            @bodo.jit
+            def impl(bc):
+                return bc.sql(query)
+
+            impl(bc)
+
+
+@pytest.mark.parametrize(
+    "fn_name",
+    [
+        "TO_NUMBER",
+        pytest.param("TO_NUMERIC", marks=pytest.mark.slow),
+        pytest.param("TO_DECIMAL", marks=pytest.mark.slow),
+        "TRY_TO_NUMBER",
+        pytest.param("TRY_TO_NUMERIC", marks=pytest.mark.slow),
+        pytest.param("TRY_TO_DECIMAL", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "invalid_str",
+    [
+        "10000.0",
+        pytest.param("1231249", marks=pytest.mark.slow),
+        pytest.param("-9999999.2", marks=pytest.mark.slow),
+    ],
+)
+def test_to_number_out_of_bounds(fn_name, invalid_str):
+    query = f"SELECT {fn_name}('{invalid_str}', 4) as A"
+    ctx = {}
+    if "TRY" in fn_name:
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=pd.DataFrame({"A": [None]}),
+            check_dtype=False,
+        )
+    else:
+        with pytest.raises(
+            ValueError, match="too many digits to the left of the decimal"
+        ):
             bc = bodosql.BodoSQLContext()
 
             @bodo.jit

@@ -1,5 +1,11 @@
 package org.apache.calcite.sql.type;
 
+import com.bodosql.calcite.application.operatorTables.OperatorTableUtils;
+import com.google.common.collect.ImmutableList;
+import org.apache.calcite.util.Pair;
+
+import java.util.List;
+
 public class BodoOperandTypes {
   public static final SqlSingleOperandTypeChecker DATE_INTEGER =
       OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.INTEGER);
@@ -19,4 +25,27 @@ public class BodoOperandTypes {
       );
 
   public static final SqlSingleOperandTypeChecker CHARACTER_CHARACTER = OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER);
+
+  /**
+   * Creates an operand checker from a sequence of single-operand checkers.
+   * This is an copy of OperandTypes.sequence, that takes a list of rules instead of variable number of arguments.
+   */
+  public static SqlOperandTypeChecker sequence(String allowedSignatures,
+                                               List<SqlSingleOperandTypeChecker> rules) {
+    return new CompositeOperandTypeChecker(
+            CompositeOperandTypeChecker.Composition.SEQUENCE,
+            ImmutableList.copyOf(rules), allowedSignatures, null, null);
+  }
+
+  public static SqlOperandTypeChecker TO_NUMBER_OPERAND_TYPE_CHECKER = OperatorTableUtils.argumentRangeExplicit(1, "TO_NUMBER",
+          List.of(Pair.of(OperandTypes.NUMERIC.or(OperandTypes.CHARACTER), "NUMERIC or CHAR"),
+          Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL"),
+          Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL")));
+
+  public static SqlOperandTypeChecker TRY_TO_NUMBER_OPERAND_TYPE_CHECKER = OperatorTableUtils.argumentRangeExplicit(1, "TRY_TO_NUMBER",
+          List.of(Pair.of(OperandTypes.NUMERIC.or(OperandTypes.CHARACTER), "NUMERIC or CHAR"),
+                  Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL"),
+                  Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL")));
+
+
 }

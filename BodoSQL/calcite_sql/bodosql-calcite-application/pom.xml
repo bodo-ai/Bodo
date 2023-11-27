@@ -513,6 +513,7 @@
                                         <exclude>org/apache/calcite/tools/RelBuilder$RelOptTableFinder.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$Shifter.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/CompositeOperandTypeChecker.class</exclude>
                                     </excludes>
                                 </filter>
                             </filters>

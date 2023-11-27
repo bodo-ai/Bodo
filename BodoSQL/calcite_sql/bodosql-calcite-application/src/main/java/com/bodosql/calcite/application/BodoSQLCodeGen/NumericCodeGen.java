@@ -2,14 +2,18 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.ir.ExprKt.BodoSQLKernel;
 
+import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.None;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import kotlin.Pair;
+import org.apache.calcite.rex.RexLiteral;
+import org.apache.calcite.rex.RexNode;
 
 // List defining all numeric functions which will be mapped to their corresponding array kernel in
 // Python.
@@ -112,30 +116,45 @@ public class NumericCodeGen {
   }
 
   /**
-   * Helper function that handles the codegen for TO_NUMBER/TO_NUMERIC/TO_DECIMAL function
+   * Helper function that handles the codegen for TO_NUMBER/TO_NUMERIC/TO_DECIMAL functions, or the
+   * TRY_ versions.
    *
    * @param args The arguments to this call.
+   * @param is_try Is the call a TRY_TO_XXX function.
    * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
    *     we aren't in a streaming context.
+   * @param translator the RexToPandasTranslator class currently in use. Needed to handle passing
+   *     constant arguments
    * @return The Expr for the function call.
    */
   public static Expr generateToNumberCode(
-      List<Expr> args, List<Pair<String, Expr>> streamingNamedArgs) {
-    return BodoSQLKernel("to_number", args, streamingNamedArgs);
-  }
-
-  /**
-   * Helper function that handles the codegen for TRY_TO_NUMBER/TRY_TO_NUMERIC/TRY_TO_DECIMAL
-   * function
-   *
-   * @param args The arguments to this call.
-   * @param streamingNamedArgs The additional arguments used for streaming. This is an empty list if
-   *     we aren't in a streaming context.
-   * @return The Expr for the function call.
-   */
-  public static Expr generateTryToNumberCode(
-      List<Expr> args, List<Pair<String, Expr>> streamingNamedArgs) {
-    return BodoSQLKernel("try_to_number", args, streamingNamedArgs);
+      List<RexNode> args,
+      Boolean is_try,
+      List<Pair<String, Expr>> streamingNamedArgs,
+      RexToPandasTranslator translator) {
+    List<Expr> exprs = new ArrayList<>();
+    assert args.size() >= 1 && args.size() <= 3;
+    exprs.add(args.get(0).accept(translator));
+    // BodoSQL generally wraps all integer literals in calls to np.intx.
+    // This breaks constant propagation in Bodo, so we need to do some
+    // hacky stuff to get the literal values, so that Bodo can recognize
+    // the prec/scale values as constants
+    int prec;
+    int scale;
+    if (args.size() < 2) {
+      prec = 38;
+    } else {
+      prec = ((RexLiteral) (args.get(1))).getValueAs(Integer.class);
+    }
+    if (args.size() < 3) {
+      scale = 0;
+    } else {
+      scale = ((RexLiteral) (args.get(2))).getValueAs(Integer.class);
+    }
+    exprs.add(new Expr.IntegerLiteral(prec));
+    exprs.add(new Expr.IntegerLiteral(scale));
+    String name = is_try ? "try_to_number" : "to_number";
+    return BodoSQLKernel(name, exprs, streamingNamedArgs);
   }
 
   /**

@@ -401,3 +401,370 @@ def test_to_char_opt(args):
         reset_index=True,
         check_names=False,
     )
+
+
+@pytest.mark.parametrize(
+    "arr, prec, scale, answer",
+    [
+        pytest.param(
+            pd.Series([1, 2, 3, None, 5, 6, 7, None, 9, 10]),
+            3,
+            0,
+            pd.Series([1, 2, 3, None, 5, 6, 7, None, 9, 10]),
+            id="int_with_nulls_all_valid_no_scale",
+        ),
+        pytest.param(
+            pd.Series(["1", "2", "3", None, "5", "6", "7", None, "9", "10"]),
+            3,
+            0,
+            pd.Series([1, 2, 3, None, 5, 6, 7, None, 9, 10]),
+            id="string_with_nulls_all_valid_no_scale",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "1.5",
+                    "2.2",
+                    "3.11",
+                    None,
+                    "5.111111",
+                    "6.188",
+                    "7.9",
+                    None,
+                    "9.999",
+                    "10",
+                ]
+            ),
+            3,
+            1,
+            pd.Series([1.5, 2.2, 3.1, None, 5.1, 6.2, 7.9, None, 10.0, 10.0]),
+            id="string_with_nulls_all_valid_with_scale",
+        ),
+        pytest.param(
+            pd.Series([1.3, 2.5, 3.2, None, 5.7, 6.0, 7.1, None, 9.7, 10.9]),
+            3,
+            0,
+            pd.Series([1, 3, 3, None, 6, 6, 7, None, 10, 11]),
+            id="float_with_nulls_all_valid_no_scale",
+        ),
+        pytest.param(
+            pd.Series([1.3, 2.5, 3.2, None, 5.7, 6.0, 7.1, None, 9.7, 10.9]),
+            3,
+            1,
+            pd.Series([1.3, 2.5, 3.2, None, 5.7, 6.0, 7.1, None, 9.7, 10.9]),
+            id="float_with_nulls_all_valid_with_scale",
+        ),
+    ],
+)
+def test_to_number(arr, prec, scale, answer):
+    # Tests to_number with a number of different valid inputs
+
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.to_number(arr, prec, scale))
+
+    check_func(
+        impl,
+        (arr,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "arr, prec, scale, answer",
+    [
+        # Some invalid inputs
+        pytest.param(
+            pd.Series([1, 2, 113, None, 5, -600, 7, None, 129, 10]),
+            2,
+            0,
+            pd.Series([1, 2, None, None, 5, None, 7, None, None, 10]),
+            id="int_with_nulls_some_invalid_no_scale",
+        ),
+        pytest.param(
+            pd.Series(["1", "2", "-113", None, "5", "600", "7", None, "-129", "10"]),
+            2,
+            0,
+            pd.Series([1, 2, None, None, 5, None, 7, None, None, 10]),
+            id="string_with_nulls_some_invalid_no_scale",
+        ),
+        pytest.param(
+            pd.Series([1.3, 2.5, -113.2, None, 5.7, 600.0, 7.1, None, 129.7, 10.9]),
+            2,
+            0,
+            pd.Series([1, 3, None, None, 6, None, 7, None, None, 11]),
+            id="float_with_nulls_some_invalid_no_scale",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 113, None, 5, 600, 7, None, -129, 10]),
+            3,
+            1,
+            pd.Series([1.0, 2.0, None, None, 5.0, None, 7.0, None, None, 10.0]),
+            id="int_with_nulls_some_invalid_with_scale",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "1.55",
+                    "2.1",
+                    "113.2",
+                    None,
+                    "5.8",
+                    "600",
+                    "7.1",
+                    None,
+                    "129.2",
+                    "10.1",
+                ]
+            ),
+            3,
+            1,
+            pd.Series([1.6, 2.1, None, None, 5.8, None, 7.1, None, None, 10.1]),
+            id="string_with_nulls_some_invalid_with_scale",
+        ),
+        pytest.param(
+            pd.Series([1.3, 2.5, 113.2, None, 5.7, -600.0, 7.1, None, 129.7, 10.9]),
+            3,
+            1,
+            pd.Series([1.3, 2.5, None, None, 5.7, None, 7.1, None, None, 10.9]),
+            id="float_with_nulls_some_invalid_with_scale",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    10**9 + 10,
+                    10**9 + 0.5,
+                    10**11,
+                    None,
+                    10**9,
+                    10**13,
+                    10**9,
+                    None,
+                    10**7,
+                    10**9 + 0.4,
+                ]
+            ),
+            10,
+            0,
+            pd.Series(
+                [
+                    10**9 + 10,
+                    10**9 + 1,
+                    None,
+                    None,
+                    10**9,
+                    None,
+                    10**9,
+                    None,
+                    10**7,
+                    10**9,
+                ]
+            ),
+            id="test_precision_10",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    10**19,
+                    10**16,
+                    10**11,
+                    None,
+                    10**16 + 0.666,
+                    10**16 + 0.5,
+                    10**9 + 0.9999,
+                    None,
+                    10**20,
+                    10**10 + 0.4,
+                ]
+            ),
+            19,
+            2,
+            pd.Series(
+                [
+                    None,
+                    10**16,
+                    10**11,
+                    None,
+                    10**16 + 0.67,
+                    10**16 + 0.5,
+                    10**9 + 1,
+                    None,
+                    None,
+                    10**10 + 0.4,
+                ]
+            ),
+            id="test_precision_18",
+            marks=pytest.mark.skip(
+                "Int64 overflow issues: Anything larger than 10**18 overflows the bounds of an int64"
+            ),
+        ),
+    ],
+)
+def test_try_to_number(arr, prec, scale, answer):
+    # Tests try_to_number with a number of different valid/invalid inputs
+
+    def impl(arr):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.try_to_number(arr, prec, scale)
+        )
+
+    check_func(
+        impl,
+        (arr,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "arr, prec, scale, answer",
+    [
+        # scalars
+        pytest.param(
+            -100,
+            3,
+            0,
+            pd.Series(-100),
+            id="scalar_int_no_scale",
+        ),
+        pytest.param(
+            -100,
+            4,
+            1,
+            pd.Series(-100.0),
+            id="scalar_int_with_scale",
+        ),
+        pytest.param(
+            -100,
+            3,
+            1,
+            pd.Series([None], dtype=pd.Float64Dtype),
+            id="scalar_int_invalid",
+        ),
+        pytest.param(
+            10.123,
+            3,
+            0,
+            pd.Series(10),
+            id="scalar_float_no_scale",
+        ),
+        pytest.param(
+            10.173,
+            4,
+            1,
+            pd.Series(10.2),
+            id="scalar_float_with_scale",
+        ),
+        pytest.param(
+            10.123,
+            2,
+            1,
+            pd.Series([None], dtype=pd.Float64Dtype),
+            id="scalar_float_invalid",
+        ),
+        pytest.param(
+            "10.123",
+            3,
+            0,
+            pd.Series(10),
+            id="scalar_string_no_scale",
+        ),
+        pytest.param(
+            "10.173",
+            4,
+            1,
+            pd.Series(10.2),
+            id="scalar_string_with_scale",
+        ),
+        pytest.param(
+            "10.123",
+            2,
+            1,
+            pd.Series([None], dtype=pd.Float64Dtype),
+            id="scalar_string_invalid",
+        ),
+    ],
+)
+def test_try_to_number_scalar(arr, prec, scale, answer):
+    # Tests try_to_number with scalar inputs
+
+    def impl(arr):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.try_to_number(arr, prec, scale),
+            index=pd.RangeIndex(1),
+        )
+
+    expected_out = answer
+
+    check_func(
+        impl,
+        (arr,),
+        py_output=expected_out,
+        check_dtype=False,
+        reset_index=True,
+        check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "val",
+    [
+        "10000",
+        "-99999.2",
+    ],
+)
+def test_to_number_invalid_precision(val):
+    # Tests to_number with too many digits throws an error
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.to_number(arr, 3, 1)
+
+    with pytest.raises(
+        ValueError, match="Value has too many digits to the left of the decimal"
+    ):
+        bodo.jit(impl)(val)
+
+
+@pytest.fixture(
+    params=(
+        "0.1.2",
+        "1-2",
+        "--2",
+        "hello world",
+    ),
+)
+def invalid_to_number_string_inputs(request):
+    """Returns a number of scalar inputs that should result in
+    an error for to_number, or None for try_to_number"""
+    return request.param
+
+
+def test_try_to_number_invalid_inputs(invalid_to_number_string_inputs):
+    def impl(val):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.try_to_number(val, 38, 0),
+            index=pd.RangeIndex(1),
+        )
+
+    expected_out = pd.Series([None])
+
+    check_func(
+        impl,
+        (invalid_to_number_string_inputs,),
+        py_output=expected_out,
+        check_dtype=False,
+        reset_index=True,
+        check_names=False,
+    )
+
+
+def test_to_number_invalid_inputs(invalid_to_number_string_inputs):
+    def impl(val):
+        return bodo.libs.bodosql_array_kernels.to_number(val, 38, 0)
+
+    with pytest.raises(ValueError, match="unable to convert string literal"):
+        bodo.jit(impl)(invalid_to_number_string_inputs)

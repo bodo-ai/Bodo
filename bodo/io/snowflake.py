@@ -652,17 +652,46 @@ def _try_convert_decimal_type_to_integer_type(type: pa.Decimal128Type) -> pa.Dat
     # Note: We add a defensive isinstance check that shouldn't be necessary.
     if isinstance(type, pa.Decimal128Type) and type.scale == 0 and type.precision < 19:
         # The type fits in an integer
-        if type.precision < 3:
-            byte_size = 1
-        elif type.precision < 5:
-            byte_size = 2
-        elif type.precision < 10:
-            byte_size = 4
-        else:
-            byte_size = 8
-        return INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]
+        return INT_BITSIZE_TO_ARROW_DATATYPE[precision_to_byte_size(type.precision)]
     else:
         return type
+
+
+def precision_to_byte_size(precision: int) -> int:
+    """
+    Helper function that maps the precision value of a fixed point number
+    to the number of bytes needed to store it.
+
+    returns -1 if the precision cannot be supported without loss of precision
+    """
+    if precision < 3:
+        return 1
+    elif precision < 5:
+        return 2
+    elif precision < 10:
+        return 4
+    elif precision < 19:
+        return 8
+    else:
+        return -1
+
+
+def precision_to_numpy_dtype(precision: int) -> int:
+    """
+    Helper function that maps the precision value of a fixed point number
+    to a numpy dtype that can store it.
+
+    returns None if the precision cannot be supported without loss of precision
+    """
+    byte_size = precision_to_byte_size(precision)
+    if byte_size == 1:
+        return types.int8
+    elif byte_size == 2:
+        return types.int16
+    elif byte_size == 4:
+        return types.int32
+    elif byte_size == 8:
+        return types.int64
 
 
 def get_number_types_from_metadata(
@@ -1010,7 +1039,7 @@ def get_map_type_from_metadata(
 
     # TODO: Improve potential performance of query
     flatten_query = f"""\
-        SELECT out.value as V 
+        SELECT out.value as V
         FROM (SELECT * FROM ({sql_query}) SAMPLE (1000 ROWS)),
         LATERAL FLATTEN(input => {cur_colname}) out
     """
