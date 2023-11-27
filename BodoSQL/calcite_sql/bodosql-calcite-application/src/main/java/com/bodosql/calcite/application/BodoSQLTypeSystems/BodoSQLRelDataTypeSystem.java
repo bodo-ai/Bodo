@@ -174,7 +174,8 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
   // is correct by the ANSI SQL standard. However, for our purposes, it makes more sense
   // for this to upcast to double.
   public RelDataType deriveAvgAggType(RelDataTypeFactory typeFactory, RelDataType argumentType) {
-    return typeFactory.createSqlType(SqlTypeName.DOUBLE);
+    return typeFactory.createTypeWithNullability(
+        typeFactory.createSqlType(SqlTypeName.DOUBLE), argumentType.isNullable());
   }
 
   public BodoTZInfo getDefaultTZInfo() {
