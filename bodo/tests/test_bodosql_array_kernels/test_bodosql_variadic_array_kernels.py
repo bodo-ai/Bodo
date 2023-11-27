@@ -1961,9 +1961,6 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
                 * 2
             ),
             id="binary-2",
-            marks=pytest.mark.skip(
-                reason="[BSE-1776] TODO: support array_construct when inputs are binary"
-            ),
         ),
         pytest.param(
             (
