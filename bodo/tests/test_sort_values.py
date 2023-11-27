@@ -2438,7 +2438,6 @@ def nested_df(request):
             ),
             True,
             id="map_list_int",
-            marks=pytest.mark.skip("Blocked on BSE-1782"),
         ),
         pytest.param(
             pd.DataFrame(
@@ -2449,7 +2448,6 @@ def nested_df(request):
             ),
             True,
             id="map_map",
-            marks=pytest.mark.skip("Blocked on BSE-1782"),
         ),
         pytest.param(
             pd.DataFrame(

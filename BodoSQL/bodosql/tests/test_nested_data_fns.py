@@ -32,16 +32,16 @@ def use_case(request):
 @pytest.fixture(
     params=[
         pytest.param(
-            [5, 25, 625],
+            ([5, 25, 625], pa.int16()),
             id="integers",
         ),
         pytest.param(
-            [2.71828, 1024.5, -3.1415],
+            ([2.71828, 1024.5, -3.1415], pa.float64()),
             id="floats",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.array(
+            (
                 [
                     pd.Timestamp(s)
                     for s in [
@@ -49,13 +49,14 @@ def use_case(request):
                         "2023-10-31 18:30:00",
                         "2018-4-1",
                     ]
-                ]
+                ],
+                pa.timestamp("ns"),
             ),
             id="timestamp_ntz",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.array(
+            (
                 [
                     pd.Timestamp(s, tz="US/Eastern")
                     for s in [
@@ -63,41 +64,65 @@ def use_case(request):
                         "2021-11-12 13:14:15",
                         "2015-3-14 9:26:53",
                     ]
-                ]
+                ],
+                pa.timestamp("ns", "US/Eastern"),
             ),
             id="timestamp_ltz",
         ),
         pytest.param(
-            [
-                [0],
-                [0, 1, 2],
-                [1, 2],
-            ],
+            (
+                [
+                    [0],
+                    [0, 1, 2],
+                    [1, 2],
+                ],
+                pa.large_list(pa.int8()),
+            ),
             id="list_integer",
         ),
         pytest.param(
-            [
-                [["A"]],
-                [[]],
-                [],
-            ],
+            (
+                [
+                    [["A"]],
+                    [[]],
+                    [],
+                ],
+                pa.large_list(pa.large_list(pa.string())),
+            ),
             id="list_list_string",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            [
-                {"name": "Zuko", "nation": "Fire"},
-                {"name": "Katara", "nation": "Water"},
-                {"name": "Sokka", "nation": "Water"},
-            ],
+            (
+                [
+                    {"name": "Zuko", "nation": "Fire"},
+                    {"name": "Katara", "nation": "Water"},
+                    {"name": "Sokka", "nation": "Water"},
+                ],
+                pa.struct(
+                    [pa.field("name", pa.string()), pa.field("nation", pa.string())]
+                ),
+            ),
             id="struct",
+        ),
+        pytest.param(
+            (
+                [
+                    {"A": 65},
+                    {"B": 66, "?": None, "a": 97},
+                    {},
+                ],
+                pa.map_(pa.string(), pa.int32()),
+            ),
+            id="map",
         ),
     ],
 )
-def value_pool(request):
+def array_values(request):
     """
     Returns a list of 3 values of a certain type used to construct
-    nested arrays of various patterns using said type.
+    nested arrays of various patterns using said type, as well
+    as the corresponding pyarrow type.
     """
     return request.param
 
@@ -139,6 +164,38 @@ def test_to_array_scalars(basic_df, memory_leak_check):
         is_out_distributed=False,
         expected_output=py_output,
     )
+
+
+def is_array_dtype(pa_dtype):
+    """
+    Returns true if the input pyarrow dtype is a list dtype.
+    """
+    return pa_dtype.id in (pa.list_(pa.int32()).id, pa.large_list(pa.int32()).id)
+
+
+def is_struct_dtype(pa_dtype):
+    """
+    Returns true if the input pyarrow dtype is a struct dtype.
+    """
+    return pa_dtype.id == pa.struct([]).id
+
+
+def is_map_dtype(pa_dtype):
+    """
+    Returns true if the input pyarrow dtype is a map dtype.
+    """
+    return pa_dtype.id == pa.map_(pa.int32(), pa.int32()).id
+
+
+def ignore_scalar_dtype(pa_dtype):
+    """
+    Returns a pyarrow dtype if it is a semi-structured dtype, otherwise returns null.
+    Does so by comparing the id of the dtype to the id of lists/structs/maps with
+    dummy inner dtypes.
+    """
+    if is_array_dtype(pa_dtype) or is_struct_dtype(pa_dtype) or is_map_dtype(pa_dtype):
+        return pd.ArrowDtype(pa_dtype)
+    return None
 
 
 @pytest.fixture(
@@ -642,22 +699,22 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "data_values, use_map",
+    "data_values, dtype",
     [
         pytest.param(
             [0, 1, -2, 4],
-            False,
+            pd.Int32Dtype(),
             id="integers",
         ),
         pytest.param(
             ["", "Alphabet Soup", "#WEATTACKATDAWN", "Infinity(∞)"],
-            False,
+            None,
             id="strings",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             [[0, 1, None, 2], [], [2, 3, 5, 7], [4, 9, 16]],
-            False,
+            pd.ArrowDtype(pa.large_list(pa.int32())),
             id="nested_array",
             marks=pytest.mark.skip(
                 reason="[BSE-1780] TODO: fix array_construct when inputs are multiple arrays"
@@ -670,21 +727,25 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
                 {"i": 5, "s": 25.0},
                 {"i": 6, "s": -36.41},
             ],
-            False,
+            pd.ArrowDtype(
+                pa.struct(
+                    [
+                        pa.field("i", pa.int8()),
+                        pa.field("s", pa.float64()),
+                    ]
+                )
+            ),
             id="struct",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             [{"A": 0, "B": 1}, {"A": 2, "B": 3, "C": 4}, {"B": 5}, {"C": 6, "A": 7}],
-            True,
+            pd.ArrowDtype(pa.map_(pa.large_string(), pa.int16())),
             id="map",
-            marks=pytest.mark.skip(
-                reason="[BSE-1782] TODO: fix array_construct when inputs are map arrays with simple keys"
-            ),
         ),
     ],
 )
-def test_array_construct(data_values, use_case, use_map, memory_leak_check):
+def test_array_construct(data_values, dtype, use_case, memory_leak_check):
     """
     Test ARRAY_CONSTRUCT works correctly with different data type columns
     and with/without case statements.
@@ -714,7 +775,13 @@ def test_array_construct(data_values, use_case, use_map, memory_leak_check):
     vals_b = make_vals(pattern_b)
     answer = [make_vals(row) for row in pattern_answer]
     ctx = {
-        "table1": pd.DataFrame({"A": vals_a, "B": vals_b, "C": [True] * len(pattern_a)})
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(vals_a, dtype=dtype),
+                "B": pd.Series(vals_b, dtype=dtype),
+                "C": [True] * len(pattern_a),
+            }
+        )
     }
     check_query(
         query,
@@ -724,9 +791,7 @@ def test_array_construct(data_values, use_case, use_map, memory_leak_check):
         check_dtype=False,
         expected_output=pd.DataFrame({0: answer}),
         sort_output=False,
-        use_map_arrays=use_map,
-        # Can't use check_python because of intricacies of unboxing map arrays
-        only_jit_1DVar=True,
+        convert_columns_to_pandas=True,
     )
 
 
@@ -909,7 +974,7 @@ def test_array_to_string_scalar(basic_df, input, answer, memory_leak_check):
     )
 
 
-def test_arrays_overlap(value_pool, use_case, memory_leak_check):
+def test_arrays_overlap(array_values, use_case, memory_leak_check):
     """
     Test ARRAYS_OVERLAP works correctly with different data type columns
     and with/without case statements.
@@ -919,6 +984,7 @@ def test_arrays_overlap(value_pool, use_case, memory_leak_check):
     using ARRAYS_OVERLAP. Since the values are always placed in the columns
     in the same permutations, the answers should always be the same.
     """
+    value_pool, dtype = array_values
     if use_case:
         query = (
             "SELECT I, CASE WHEN ARRAYS_OVERLAP(A, B) THEN 'Y' ELSE 'N' END FROM table1"
@@ -930,8 +996,6 @@ def test_arrays_overlap(value_pool, use_case, memory_leak_check):
         if L is None:
             return None
         out = [None if idx is None else value_pool[idx] for idx in L]
-        if isinstance(value_pool, pd.arrays.DatetimeArray):
-            out = pd.Series(out)
         return out
 
     pattern_a = (
@@ -955,16 +1019,12 @@ def test_arrays_overlap(value_pool, use_case, memory_leak_check):
         [1, 1, 1, 1],
         [1, None, 1, 2],
     ]
-    vals_a = [make_vals(row) for row in pattern_a]
-    vals_b = [make_vals(row) for row in pattern_b]
-    if isinstance(value_pool, pd.arrays.DatetimeArray):
-        tz = value_pool.tz
-        vals_a = pd.Series(
-            vals_a, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
-        )
-        vals_b = pd.Series(
-            vals_b, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
-        )
+    vals_a = pd.array(
+        [make_vals(row) for row in pattern_a], dtype=pd.ArrowDtype(pa.large_list(dtype))
+    )
+    vals_b = pd.array(
+        [make_vals(row) for row in pattern_b], dtype=pd.ArrowDtype(pa.large_list(dtype))
+    )
     ctx = {
         "table1": pd.DataFrame(
             {
@@ -993,7 +1053,7 @@ def test_arrays_overlap(value_pool, use_case, memory_leak_check):
     )
 
 
-def test_array_contains(value_pool, use_case, memory_leak_check):
+def test_array_contains(array_values, use_case, memory_leak_check):
     """
     Test ARRAY_CONTAINS works correctly with different data type columns
     and with/without case statements.
@@ -1002,6 +1062,7 @@ def test_array_contains(value_pool, use_case, memory_leak_check):
     using ARRAYS_OVERLAP. Since the values are always placed in the columns
     in the same permutations, the answers should always be the same.
     """
+    value_pool, dtype = array_values
     if use_case:
         query = "SELECT I, CASE WHEN I IS NULL THEN ARRAY_CONTAINS(A, B) ELSE ARRAY_CONTAINS(A, B) END FROM table1"
     else:
@@ -1011,19 +1072,15 @@ def test_array_contains(value_pool, use_case, memory_leak_check):
         if L is None:
             return None
         out = [None if idx is None else value_pool[idx] for idx in L]
-        if isinstance(value_pool, pd.arrays.DatetimeArray):
-            out = pd.Series(out)
         return out
 
     pattern_a = [0] * 40 + [0, 1, 2, None] * 3
     pattern_b = [[0]] * 40 + [[1, None]] * 4 + [[], None, None, []] + [[0, 2]] * 4
-    vals_a = make_vals(pattern_a)
-    vals_b = [make_vals(row) for row in pattern_b]
-    if isinstance(value_pool, pd.arrays.DatetimeArray):
-        tz = value_pool.tz
-        vals_b = pd.Series(
-            vals_b, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
-        )
+    dtype_a = ignore_scalar_dtype(dtype)
+    vals_a = pd.array(make_vals(pattern_a), dtype=dtype_a)
+    vals_b = pd.array(
+        [make_vals(row) for row in pattern_b], dtype=pd.ArrowDtype(pa.large_list(dtype))
+    )
     ctx = {
         "table1": pd.DataFrame(
             {"I": list(range(len(vals_a))), "A": vals_a, "B": vals_b}
@@ -1047,7 +1104,7 @@ def test_array_contains(value_pool, use_case, memory_leak_check):
     )
 
 
-def test_array_position(value_pool, use_case, memory_leak_check):
+def test_array_position(array_values, use_case, memory_leak_check):
     """
     Test ARRAY_POSITION works correctly with different data type columns
     and with/without case statements.
@@ -1057,6 +1114,7 @@ def test_array_position(value_pool, use_case, memory_leak_check):
     using ARRAYS_OVERLAP. Since the values are always placed in the columns
     in the same permutations, the answers should always be the same.
     """
+    value_pool, dtype = array_values
     if use_case:
         query = "SELECT I, CASE WHEN I < 0 THEN -1 ELSE ARRAY_POSITION(A, B) END FROM table1"
     else:
@@ -1066,8 +1124,6 @@ def test_array_position(value_pool, use_case, memory_leak_check):
         if L is None:
             return None
         out = [None if idx is None else value_pool[idx] for idx in L]
-        if isinstance(value_pool, pd.arrays.DatetimeArray):
-            out = pd.Series(out)
         return out
 
     pattern_a = [0] * 40 + [0, 1, 2, None] * 4
@@ -1078,13 +1134,11 @@ def test_array_position(value_pool, use_case, memory_leak_check):
         + [[]] * 4
         + [[2, 1, None, 1, 2, None, None, 0]] * 4
     )
-    vals_a = make_vals(pattern_a)
-    vals_b = [make_vals(row) for row in pattern_b]
-    if isinstance(value_pool, pd.arrays.DatetimeArray):
-        tz = value_pool.tz
-        vals_b = pd.Series(
-            vals_b, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
-        )
+    dtype_a = ignore_scalar_dtype(dtype)
+    vals_a = pd.array(make_vals(pattern_a), dtype=dtype_a)
+    vals_b = pd.array(
+        [make_vals(row) for row in pattern_b], dtype=pd.ArrowDtype(pa.large_list(dtype))
+    )
     ctx = {
         "table1": pd.DataFrame(
             {
@@ -1112,7 +1166,7 @@ def test_array_position(value_pool, use_case, memory_leak_check):
     )
 
 
-def test_array_except(value_pool, use_case, memory_leak_check):
+def test_array_except(array_values, use_case, memory_leak_check):
     """
     Test ARRAY_EXCEPT works correctly with different data type columns
     and with/without case statements.
@@ -1126,6 +1180,7 @@ def test_array_except(value_pool, use_case, memory_leak_check):
     For case statements, uses the size of the output since BodoSQL is currently
     unable to infer the inner array dtype for case statements.
     """
+    value_pool, dtype = array_values
     if use_case:
         query = "SELECT I, CASE WHEN I < 0 THEN -1 ELSE NVL(ARRAY_SIZE(ARRAY_EXCEPT(A, B)), -1) END FROM table1"
     else:
@@ -1135,8 +1190,6 @@ def test_array_except(value_pool, use_case, memory_leak_check):
         if L is None:
             return None
         out = [None if idx is None else value_pool[idx] for idx in L]
-        if isinstance(value_pool, pd.arrays.DatetimeArray):
-            out = pd.Series(out)
         return out
 
     pattern_a = [[0, 0, 1, 0]] * 40 + [
@@ -1172,21 +1225,20 @@ def test_array_except(value_pool, use_case, memory_leak_check):
         [],
         [None, None, 1, None],
     ]
-    vals_a = [make_vals(row) for row in pattern_a]
-    vals_b = [make_vals(row) for row in pattern_b]
-    if isinstance(value_pool, pd.arrays.DatetimeArray):
-        tz = value_pool.tz
-        vals_a = pd.Series(
-            vals_a, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
-        )
-        vals_b = pd.Series(
-            vals_b, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
-        )
+    vals_a = pd.array(
+        [make_vals(row) for row in pattern_a], dtype=pd.ArrowDtype(pa.large_list(dtype))
+    )
+    vals_b = pd.array(
+        [make_vals(row) for row in pattern_b], dtype=pd.ArrowDtype(pa.large_list(dtype))
+    )
 
     if use_case:
         answer = [-1 if ans is None else len(ans) for ans in answer_pattern]
     else:
-        answer = [make_vals(row) for row in answer_pattern]
+        answer = pd.array(
+            [make_vals(row) for row in answer_pattern],
+            dtype=pd.ArrowDtype(pa.large_list(dtype)),
+        )
     ctx = {
         "table1": pd.DataFrame(
             {
@@ -1207,7 +1259,7 @@ def test_array_except(value_pool, use_case, memory_leak_check):
     )
 
 
-def test_array_intersection(value_pool, use_case, memory_leak_check):
+def test_array_intersection(array_values, use_case, memory_leak_check):
     """
     Test ARRAY_INTERSECTION works correctly with different data type columns
     and with/without case statements.
@@ -1221,6 +1273,7 @@ def test_array_intersection(value_pool, use_case, memory_leak_check):
     For case statements, uses the size of the output since BodoSQL is currently
     unable to infer the inner array dtype for case statements.
     """
+    value_pool, dtype = array_values
     if use_case:
         query = "SELECT I, CASE WHEN I < 0 THEN -1 ELSE NVL(ARRAY_SIZE(ARRAY_INTERSECTION(A, B)), -1) END FROM table1"
     else:
@@ -1230,8 +1283,6 @@ def test_array_intersection(value_pool, use_case, memory_leak_check):
         if L is None:
             return None
         out = [None if idx is None else value_pool[idx] for idx in L]
-        if isinstance(value_pool, pd.arrays.DatetimeArray):
-            out = pd.Series(out)
         return out
 
     pattern_a = [[0, 0, 1, 0, 1]] * 40 + [
@@ -1258,20 +1309,19 @@ def test_array_intersection(value_pool, use_case, memory_leak_check):
         None,
         [0, None, None, 1, None],
     ]
-    vals_a = [make_vals(row) for row in pattern_a]
-    vals_b = [make_vals(row) for row in pattern_b]
-    if isinstance(value_pool, pd.arrays.DatetimeArray):
-        tz = value_pool.tz
-        vals_a = pd.Series(
-            vals_a, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
-        )
-        vals_b = pd.Series(
-            vals_b, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
-        )
+    vals_a = pd.array(
+        [make_vals(row) for row in pattern_a], dtype=pd.ArrowDtype(pa.large_list(dtype))
+    )
+    vals_b = pd.array(
+        [make_vals(row) for row in pattern_b], dtype=pd.ArrowDtype(pa.large_list(dtype))
+    )
     if use_case:
         answer = [-1 if ans is None else len(ans) for ans in answer_pattern]
     else:
-        answer = [make_vals(row) for row in answer_pattern]
+        answer = pd.array(
+            [make_vals(row) for row in answer_pattern],
+            dtype=pd.ArrowDtype(pa.large_list(dtype)),
+        )
     ctx = {
         "table1": pd.DataFrame(
             {
@@ -1292,7 +1342,7 @@ def test_array_intersection(value_pool, use_case, memory_leak_check):
     )
 
 
-def test_array_cat(value_pool, use_case, memory_leak_check):
+def test_array_cat(array_values, use_case, memory_leak_check):
     """
     Test ARRAY_CAT works correctly with different data type columns
     and with/without case statements.
@@ -1306,6 +1356,7 @@ def test_array_cat(value_pool, use_case, memory_leak_check):
     For case statements, uses the size of the output since BodoSQL is currently
     unable to infer the inner array dtype for case statements.
     """
+    value_pool, dtype = array_values
     if use_case:
         query = "SELECT I, CASE WHEN I < 0 THEN -1 ELSE NVL(ARRAY_SIZE(ARRAY_CAT(A, B)), -1) END FROM table1"
     else:
@@ -1315,11 +1366,10 @@ def test_array_cat(value_pool, use_case, memory_leak_check):
         if L is None:
             return None
         out = [None if idx is None else value_pool[idx] for idx in L]
-        if isinstance(value_pool, pd.arrays.DatetimeArray):
-            out = pd.Series(out)
         return out
 
-    pattern_a = [[0, None, 1]] * 40 + [
+    pattern_a = [
+        [0, None, 1],
         [0, 0, 1, 0, 0, 1, 2, 1, 0],
         [0, 0, 1, 0, 0, 1, 2, 1, 0],
         [0, 0, 1, 0, 0, 1, 2, 1, 0],
@@ -1329,7 +1379,8 @@ def test_array_cat(value_pool, use_case, memory_leak_check):
         None,
         [None],
     ]
-    pattern_b = [[0, 2]] * 40 + [
+    pattern_b = [
+        [0, 2],
         [],
         None,
         [None],
@@ -1339,7 +1390,8 @@ def test_array_cat(value_pool, use_case, memory_leak_check):
         [0, 1],
         [0, 1],
     ]
-    answer_pattern = [[0, None, 1, 0, 2]] * 40 + [
+    answer_pattern = [
+        [0, None, 1, 0, 2],
         [0, 0, 1, 0, 0, 1, 2, 1, 0],
         None,
         [0, 0, 1, 0, 0, 1, 2, 1, 0, None],
@@ -1349,20 +1401,19 @@ def test_array_cat(value_pool, use_case, memory_leak_check):
         None,
         [None, 0, 1],
     ]
-    vals_a = [make_vals(row) for row in pattern_a]
-    vals_b = [make_vals(row) for row in pattern_b]
-    if isinstance(value_pool, pd.arrays.DatetimeArray):
-        tz = value_pool.tz
-        vals_a = pd.Series(
-            vals_a, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
-        )
-        vals_b = pd.Series(
-            vals_b, dtype=pd.ArrowDtype(pa.list_(pa.timestamp("ns", tz)))
-        )
+    vals_a = pd.array(
+        [make_vals(row) for row in pattern_a], dtype=pd.ArrowDtype(pa.large_list(dtype))
+    )
+    vals_b = pd.array(
+        [make_vals(row) for row in pattern_b], dtype=pd.ArrowDtype(pa.large_list(dtype))
+    )
     if use_case:
         answer = [-1 if ans is None else len(ans) for ans in answer_pattern]
     else:
-        answer = [make_vals(row) for row in answer_pattern]
+        answer = pd.array(
+            [make_vals(row) for row in answer_pattern],
+            dtype=pd.ArrowDtype(pa.large_list(dtype)),
+        )
     ctx = {
         "table1": pd.DataFrame(
             {
@@ -1380,17 +1431,19 @@ def test_array_cat(value_pool, use_case, memory_leak_check):
         check_dtype=False,
         expected_output=pd.DataFrame({0: list(range(len(vals_a))), 1: answer}),
         sort_output=False,
+        convert_columns_to_pandas=True,
     )
 
 
-def test_array_compact(value_pool, use_case, memory_leak_check):
+def test_array_compact(array_values, use_case, memory_leak_check):
     """
     Test ARRAY_COMPACT works correctly with different data type columns
     """
+    value_pool, dtype = array_values
     if use_case:
-        query = "SELECT CASE WHEN A IS NULL THEN ARRAY_COMPACT(A) ELSE ARRAY_COMPACT(A) END FROM table1"
+        query = "SELECT CASE WHEN ARRAY_SIZE(A) IS NULL THEN -1 ELSE ARRAY_SIZE(ARRAY_COMPACT(A)) END AS res FROM table1"
     else:
-        query = "SELECT ARRAY_COMPACT(A) FROM table1"
+        query = "SELECT ARRAY_COMPACT(A) AS res FROM table1"
 
     def make_vals(L):
         if L is None:
@@ -1405,16 +1458,25 @@ def test_array_compact(value_pool, use_case, memory_leak_check):
         None,
     ] * 2
     expected_pattern = [[0, 1, 2], [0, 2], [], [], None] * 2
-    data = [make_vals(row) for row in data_pattern]
+    data = pd.array(
+        [make_vals(row) for row in data_pattern],
+        dtype=pd.ArrowDtype(pa.large_list(dtype)),
+    )
     expected = [make_vals(row) for row in expected_pattern]
+    # Returning arrays/json from case statements not fully supported, so
+    # using a function like array_size to ensure the return type is different.
+    if use_case:
+        expected = [-1 if row is None else len(row) for row in expected]
     ctx = {"table1": pd.DataFrame({"A": data})}
     check_query(
         query,
         ctx,
         None,
         check_dtype=False,
+        check_names=False,
         sort_output=False,
-        expected_output=pd.DataFrame({"EXPR$0": expected}),
+        expected_output=pd.DataFrame({"res": expected}),
+        convert_columns_to_pandas=True,
     )
 
 

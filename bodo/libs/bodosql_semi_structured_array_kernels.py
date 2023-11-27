@@ -104,9 +104,18 @@ def overload_semi_safe_equals(arg0, arg1):
     if isinstance(arg0, types.DictType) and isinstance(arg1, types.DictType):
 
         def impl(arg0, arg1):  # pragma: no cover
-            return sorted(arg0.items(), key=lambda x: x[0]) == sorted(
-                arg1.items(), key=lambda x: x[0]
-            )
+            if len(arg0) != len(arg1):
+                return False
+            items_0 = sorted(arg0.items(), key=lambda x: x[0])
+            items_1 = sorted(arg1.items(), key=lambda x: x[0])
+            for i in range(len(items_0)):
+                k0, v0 = items_0[i]
+                k1, v1 = items_1[i]
+                if k0 != k1:
+                    return False
+                if not semi_safe_equals(v0, v1):
+                    return False
+            return True
 
         return impl
 

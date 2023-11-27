@@ -430,7 +430,7 @@ def test_nvl2(args, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "args, is_scalar_a, is_scalar_b, use_map_arrays, answer",
+    "args, is_scalar_a, is_scalar_b, answer",
     [
         pytest.param(
             (
@@ -439,7 +439,6 @@ def test_nvl2(args, memory_leak_check):
                     [0, 0, 0, 42, 42, 42, None, None, None], dtype=pd.Int32Dtype()
                 ),
             ),
-            False,
             False,
             False,
             pd.Series(
@@ -451,7 +450,6 @@ def test_nvl2(args, memory_leak_check):
             (pd.Series([0, 36, 42, None, -42, 1], dtype=pd.Int32Dtype()), 42),
             False,
             True,
-            False,
             pd.Series([False, False, True, False, False, False]),
             id="int32-vector-scalar",
             marks=pytest.mark.slow,
@@ -463,7 +461,6 @@ def test_nvl2(args, memory_leak_check):
             ),
             True,
             False,
-            False,
             pd.Series([True, False, False, False, False, False]),
             id="int32-scalar-vector",
             marks=pytest.mark.slow,
@@ -472,7 +469,6 @@ def test_nvl2(args, memory_leak_check):
             (pd.Series([0, 36, 42, None, -42, 1], dtype=pd.Int32Dtype()), None),
             False,
             True,
-            False,
             pd.Series([False, False, False, True, False, False]),
             id="int32-vector-null",
             marks=pytest.mark.slow,
@@ -484,21 +480,19 @@ def test_nvl2(args, memory_leak_check):
             ),
             True,
             False,
-            False,
             pd.Series([False, False, False, True, False, False]),
             id="int32-null-vector",
             marks=pytest.mark.slow,
         ),
-        pytest.param((42, 42), True, True, False, True, id="int64-scalar-scalar"),
-        pytest.param((39, None), True, True, False, False, id="int64-scalar-null"),
-        pytest.param((None, 42), True, True, False, False, id="int64-null-scalar"),
-        pytest.param((None, None), True, True, False, True, id="int64-null-null"),
+        pytest.param((42, 42), True, True, True, id="int64-scalar-scalar"),
+        pytest.param((39, None), True, True, False, id="int64-scalar-null"),
+        pytest.param((None, 42), True, True, False, id="int64-null-scalar"),
+        pytest.param((None, None), True, True, True, id="int64-null-null"),
         pytest.param(
             (
                 pd.Series(["A", "B", "a", "AAA", None] * 4),
                 pd.Series(["A", "B", "a", "AAA", None]).repeat(4),
             ),
-            False,
             False,
             False,
             pd.Series(
@@ -516,7 +510,6 @@ def test_nvl2(args, memory_leak_check):
                 pd.Series([True, False, None, True] * 4),
                 pd.Series([True, False, None, False]).repeat(4),
             ),
-            False,
             False,
             False,
             pd.Series(
@@ -539,7 +532,6 @@ def test_nvl2(args, memory_leak_check):
             ),
             False,
             False,
-            False,
             pd.Series(
                 [True, False, False, False]
                 + [False, True, False, False]
@@ -554,7 +546,6 @@ def test_nvl2(args, memory_leak_check):
                 pd.Series([[], [1], [1, 2], [1, 2, 3], [None, 2, 3], None] * 6),
                 pd.Series([[], [1], [1, 2], [1, 2, 3], [None, 2, 3], None]).repeat(6),
             ),
-            False,
             False,
             False,
             pd.Series(
@@ -576,7 +567,6 @@ def test_nvl2(args, memory_leak_check):
             ),
             True,
             False,
-            False,
             pd.Series([False, False, True, False, False, False, False, False]),
             id="int_array-scalar-vector",
         ),
@@ -587,7 +577,6 @@ def test_nvl2(args, memory_leak_check):
             ),
             True,
             True,
-            False,
             True,
             id="int_array-scalar-scalar",
         ),
@@ -595,15 +584,24 @@ def test_nvl2(args, memory_leak_check):
             (
                 pd.Series(
                     [{"A": 0, "B": "A"}, {"A": 1, "B": "B"}, None, {"A": 0, "B": "C"}]
-                    * 4
+                    * 4,
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [pa.field("A", pa.int32()), pa.field("B", pa.string())]
+                        )
+                    ),
                 ).values,
                 pd.Series(
-                    [{"A": 0, "B": "A"}, {"A": 1, "B": "B"}, None, {"A": 0, "B": "C"}]
+                    [{"A": 0, "B": "A"}, {"A": 1, "B": "B"}, None, {"A": 0, "B": "C"}],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [pa.field("A", pa.int32()), pa.field("B", pa.string())]
+                        )
+                    ),
                 )
                 .repeat(4)
                 .values,
             ),
-            False,
             False,
             False,
             pd.Series(
@@ -634,7 +632,26 @@ def test_nvl2(args, memory_leak_check):
                             "C": [{"D": 0, "E": "A"}, {"D": 0, "E": "C"}],
                         },
                     ]
-                    * 9
+                    * 9,
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("A", pa.int64()),
+                                pa.field("B", pa.large_list(pa.int32())),
+                                pa.field(
+                                    "C",
+                                    pa.large_list(
+                                        pa.struct(
+                                            [
+                                                pa.field("D", pa.int32()),
+                                                pa.field("E", pa.string()),
+                                            ]
+                                        )
+                                    ),
+                                ),
+                            ]
+                        )
+                    ),
                 ).values,
                 pd.Series(
                     [
@@ -653,12 +670,30 @@ def test_nvl2(args, memory_leak_check):
                             "B": [0, 1],
                             "C": [{"D": 0, "E": "A"}, {"D": 0, "E": "C"}],
                         },
-                    ]
+                    ],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("A", pa.int32()),
+                                pa.field("B", pa.large_list(pa.int32())),
+                                pa.field(
+                                    "C",
+                                    pa.large_list(
+                                        pa.struct(
+                                            [
+                                                pa.field("D", pa.int32()),
+                                                pa.field("E", pa.string()),
+                                            ]
+                                        )
+                                    ),
+                                ),
+                            ]
+                        )
+                    ),
                 )
                 .repeat(9)
                 .values,
             ),
-            False,
             False,
             False,
             pd.Series(
@@ -675,7 +710,6 @@ def test_nvl2(args, memory_leak_check):
             ),
             True,
             True,
-            False,
             True,
             id="map-scalar-scalar-match_exact",
         ),
@@ -687,7 +721,6 @@ def test_nvl2(args, memory_leak_check):
             True,
             True,
             False,
-            False,
             id="map-scalar-scalar-mismatch_value",
         ),
         pytest.param(
@@ -697,7 +730,6 @@ def test_nvl2(args, memory_leak_check):
             ),
             True,
             True,
-            False,
             False,
             id="map-scalar-scalar-mismatch_key",
         ),
@@ -712,20 +744,18 @@ def test_nvl2(args, memory_leak_check):
                         {"A": 0},  # Missing pair
                         None,
                         {"A": 0, "B": 1, "C": 2},  # Extra pair
-                    ]
+                    ],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
                 ).values,
             ),
             True,
             False,
-            True,
             pd.Series([True] * 2 + [False] * 4),
             id="map-scalar-vector",
         ),
     ],
 )
-def test_bool_equal_null(
-    args, is_scalar_a, is_scalar_b, use_map_arrays, answer, memory_leak_check
-):
+def test_bool_equal_null(args, is_scalar_a, is_scalar_b, answer, memory_leak_check):
     # Avoid distributed testing on mixed scalar-vector cases due
     # to complications with nested arrays.
     distributed = not (is_scalar_a or is_scalar_b)
@@ -769,7 +799,6 @@ def test_bool_equal_null(
         py_output=equal_null_answer,
         check_dtype=False,
         reset_index=True,
-        use_map_arrays=use_map_arrays,
         distributed=distributed,
         is_out_distributed=is_out_distributed,
         only_seq=only_seq,
@@ -781,7 +810,6 @@ def test_bool_equal_null(
         py_output=not_equal_null_answer,
         check_dtype=False,
         reset_index=True,
-        use_map_arrays=use_map_arrays,
         is_out_distributed=is_out_distributed,
         only_seq=only_seq,
         dist_test=dist_test,
@@ -1439,13 +1467,12 @@ def test_option_is_functions(memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "arr, ind, is_scalar_arr, use_map_arrays, expected",
+    "arr, ind, is_scalar_arr, expected",
     [
         pytest.param(
             np.array([1, 4, 9, 16, 25]),
             2,
             True,
-            False,
             9,
             id="int_array-scalar-scalar",
         ),
@@ -1453,7 +1480,6 @@ def test_option_is_functions(memory_leak_check):
             np.array([1, 2, 3, None, 4]),
             pd.Series([-1, 0, 1, 2, 3, 4, 5]),
             True,
-            False,
             pd.Series([None, 1, 2, 3, None, 4, None], dtype=pd.Int32Dtype()),
             id="int_array-scalar-vector",
         ),
@@ -1461,14 +1487,12 @@ def test_option_is_functions(memory_leak_check):
             pd.Series([[1, 2, 3, 4], [5, 6, None]] * 3),
             0,
             False,
-            False,
             pd.Series([1, 5] * 3),
             id="int_array-vector-scalar",
         ),
         pytest.param(
             pd.Series([[1, 2, 3, None, 4]] * 7),
             pd.Series([-1, 0, 1, 2, 3, 4, 5]),
-            False,
             False,
             pd.Series([None, 1, 2, 3, None, 4, None]),
             marks=pytest.mark.slow,
@@ -1478,30 +1502,33 @@ def test_option_is_functions(memory_leak_check):
             np.array(["abc", "def", "ghi", None] * 2),
             pd.Series([-1, 0, 1, 2, 3, 4, 8]),
             True,
-            False,
             pd.Series(
                 [None, "abc", "def", "ghi", None, "abc", None], dtype=pd.StringDtype()
             ),
             id="string_array-scalar-vector",
         ),
         pytest.param(
-            pd.Series([[1, 2], [3, 4], [5]] * 2).values,
+            pd.Series(
+                [[1, 2], [3, 4], [5]] * 2,
+                dtype=pd.ArrowDtype(pa.large_list(pa.int32())),
+            ).values,
             1,
             True,
-            False,
             pd.array([3, 4]),
             id="array_int_array-scalar-scalar",
         ),
         pytest.param(
-            pd.Series([[[1, 2], [3, 4], [5]] * 2] * 6),
+            pd.Series(
+                [[[1, 2], [3, 4], [5]] * 2] * 6,
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.int32()))),
+            ),
             pd.Series([1, 2] * 3),
-            False,
             False,
             pd.Series([[3, 4], [5]] * 3),
             id="array_int_array-vector-vector",
         ),
         pytest.param(
-            np.array(
+            pd.array(
                 [
                     {
                         "X": "AB",
@@ -1536,10 +1563,32 @@ def test_option_is_functions(memory_leak_check):
                     },
                 ]
                 * 2,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("X", pa.string()),
+                            pa.field("Y", pa.large_list(pa.float32())),
+                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
+                            pa.field(
+                                "W",
+                                pa.struct(
+                                    pa.struct(
+                                        [
+                                            pa.field(
+                                                "A",
+                                                pa.int32(),
+                                                pa.field("B", pa.string()),
+                                            )
+                                        ]
+                                    )
+                                ),
+                            ),
+                        ]
+                    )
+                ),
             ),
             0,
             True,
-            False,
             {
                 "X": "AB",
                 "Y": [1.1, 2.2],
@@ -1549,7 +1598,7 @@ def test_option_is_functions(memory_leak_check):
             id="struct_array-scalar-scalar",
         ),
         pytest.param(
-            np.array(
+            pd.array(
                 [
                     {
                         "X": "AB",
@@ -1584,10 +1633,28 @@ def test_option_is_functions(memory_leak_check):
                     },
                 ]
                 * 2,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("X", pa.string()),
+                            pa.field("Y", pa.large_list(pa.float32())),
+                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
+                            pa.field(
+                                "W",
+                                pa.struct(
+                                    [
+                                        pa.field(
+                                            "A", pa.int32(), pa.field("B", pa.string())
+                                        )
+                                    ]
+                                ),
+                            ),
+                        ]
+                    )
+                ),
             ),
             pd.Series([-1, 0, 1, 2, 3, 4]),
             True,
-            False,
             pd.Series(
                 [
                     None,
@@ -1617,6 +1684,25 @@ def test_option_is_functions(memory_leak_check):
                         "W": {"A": 1, "B": "AA"},
                     },
                 ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("X", pa.string()),
+                            pa.field("Y", pa.large_list(pa.float32())),
+                            pa.field("Z", pa.large_list(pa.large_list(pa.int64()))),
+                            pa.field(
+                                "W",
+                                pa.struct(
+                                    [
+                                        pa.field(
+                                            "A", pa.int32(), pa.field("B", pa.string())
+                                        )
+                                    ]
+                                ),
+                            ),
+                        ]
+                    )
+                ),
             ),
             marks=pytest.mark.slow,
             id="struct_array-scalar-vector",
@@ -1627,10 +1713,10 @@ def test_option_is_functions(memory_leak_check):
                     {"A": 0, "B": 1},
                     {"A": 2, "C": 3},
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(pa.map_(pa.large_string(), pa.int8())),
             ).values,
             0,
-            True,
             True,
             {"A": 0, "B": 1},
             id="map_array-scalar-scalar",
@@ -1640,10 +1726,10 @@ def test_option_is_functions(memory_leak_check):
                 [
                     {"A": 0, "B": 1},
                     {"A": 2, "C": 3},
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.large_string(), pa.int8())),
             ).values,
             pd.Series([0, 1] * 3),
-            True,
             True,
             pd.Series(
                 [
@@ -1651,6 +1737,7 @@ def test_option_is_functions(memory_leak_check):
                     {"A": 2, "C": 3},
                 ]
                 * 3,
+                dtype=pd.ArrowDtype(pa.map_(pa.large_string(), pa.int8())),
             ),
             marks=pytest.mark.slow,
             id="map_array-scalar-vector",
@@ -1663,26 +1750,26 @@ def test_option_is_functions(memory_leak_check):
                         {"A": 2, "C": 3},
                     ]
                 ]
-                * 6
+                * 6,
+                dtype=pd.ArrowDtype(
+                    pa.large_list(pa.map_(pa.large_string(), pa.int8()))
+                ),
             ),
             pd.Series([0, 1] * 3),
             False,
-            True,
             pd.Series(
                 [
                     {"A": 0, "B": 1},
                     {"A": 2, "C": 3},
                 ]
                 * 3,
-            ),
-            marks=pytest.mark.skip(
-                reason="[BSE-1962] Support slice index for map array setitem"
+                dtype=pd.ArrowDtype(pa.map_(pa.large_string(), pa.int8())),
             ),
             id="map_array-vector-vector",
         ),
     ],
 )
-def test_arr_get(arr, ind, is_scalar_arr, use_map_arrays, expected, memory_leak_check):
+def test_arr_get(arr, ind, is_scalar_arr, expected, memory_leak_check):
     both_scalar = is_scalar_arr and not isinstance(ind, pd.Series)
     no_scalar = not is_scalar_arr and isinstance(ind, pd.Series)
     if both_scalar:
@@ -1705,7 +1792,6 @@ def test_arr_get(arr, ind, is_scalar_arr, use_map_arrays, expected, memory_leak_
         distributed=no_scalar,
         is_out_distributed=no_scalar,
         dist_test=no_scalar,
-        use_map_arrays=use_map_arrays,
     )
 
 

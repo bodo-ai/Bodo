@@ -1665,65 +1665,62 @@ def test_array_agg_distinct(call, answer, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "value_pool, dtype, nullable, requires_struct",
+    "value_pool, dtype, val_arrow_type, nullable",
     [
         pytest.param(
             [0, -1, 2, -4, 8, -16, 32],
             pd.Int64Dtype(),
+            pa.int64(),
             True,
-            False,
             id="int64_nullable",
         ),
         pytest.param(
             [127, 63, 31, 15, 7, 3, 1],
             np.int8,
-            False,
+            pa.int8(),
             False,
             id="int8_numpy",
-            marks=pytest.mark.skip(
-                reason="[BSE-1952] TODO: fix unboxing issues with map arrays for gatherv"
-            ),
         ),
         pytest.param(
             ["A", "", "BC", "DEF", "GHIJ", "abc", "defghij"],
             None,
+            pa.string(),
             True,
-            False,
             id="string",
         ),
         pytest.param(
             [[1, 2], [], [3], [4, None], [5, 6, 7, 8], [9], [10, None, 11]],
             None,
+            pa.large_list(pa.int32()),
             True,
-            False,
             id="int_array",
         ),
         pytest.param(
             [{"n": i, "typ": ("EVEN" if i % 2 == 0 else "ODD")} for i in range(10, 17)],
             None,
-            True,
+            pa.struct([pa.field("n", pa.int32()), pa.field("typ", pa.string())]),
             True,
             id="struct",
         ),
         pytest.param(
             [datetime.date.fromordinal(737425 + int(3.5**i)) for i in range(7)],
             None,
+            pa.date32(),
             True,
-            False,
             id="date",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             [Time(millisecond=22**i) for i in range(3, 10)],
             None,
+            pa.time64("ns"),
             True,
-            False,
             id="time",
             marks=pytest.mark.slow,
         ),
     ],
 )
-def test_object_agg(value_pool, dtype, nullable, requires_struct, memory_leak_check):
+def test_object_agg(value_pool, dtype, val_arrow_type, nullable, memory_leak_check):
     """Tests OBJECT_AGG with GROUP BY"""
     query = "SELECT G AS G, OBJECT_AGG(K, V) AS J FROM table1 GROUP BY G"
     extra_val = None if nullable else value_pool[0]
@@ -1748,10 +1745,6 @@ def test_object_agg(value_pool, dtype, nullable, requires_struct, memory_leak_ch
                 j_data[k] = v
         pairs.append(j_data)
 
-    val_type = bodo.typeof(in_df["V"].values)
-    val_arrow_type, _ = bodo.io.helpers._numba_to_pyarrow_type(
-        val_type, use_dict_arr=True
-    )
     answer = pd.DataFrame(
         {
             "G": unique_keys.values,
@@ -1761,41 +1754,15 @@ def test_object_agg(value_pool, dtype, nullable, requires_struct, memory_leak_ch
         }
     )
 
-    if requires_struct:
-        # Test sequentially so that we don't run into issues with unboxing
-        # for gatherv.
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=answer,
-            check_names=False,
-            check_dtype=False,
-            sort_output=False,
-            use_map_arrays=False,
-            # [BSE-1952] TODO: support unboxing map arrays with dict encoding
-            use_dict_encoded_strings=False,
-            only_jit_seq=True,
-        )
-    else:
-        # Test in parallel with use_map_arrays=True so that
-        # we can correctly unbox the output as a map array for
-        # gatherv. Do not test with only_python=True to avoid issues
-        # with unboxing a map array vs a struct array.
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=answer,
-            check_names=False,
-            check_dtype=False,
-            sort_output=False,
-            # [BSE-1952] TODO: support unboxing map arrays with dict encoding
-            use_dict_encoded_strings=False,
-            use_map_arrays=True,
-            # [BSE-1952] TODO fix unboxing issues that prevent parallel testing
-            only_jit_seq=True,
-        )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+        convert_columns_to_pandas=True,
+    )
 
 
 @pytest.mark.parametrize(

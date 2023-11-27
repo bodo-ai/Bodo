@@ -26,10 +26,8 @@ pytestmark = pytest_slow_unless_codegen
                     -64,
                     128,
                 ],
-                pd.Int64Dtype(),
-                False,
-                False,
-                pa.map_(pa.string(), pa.int64()),
+                pd.Int32Dtype(),
+                pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
             ),
             id="int64",
         ),
@@ -47,9 +45,7 @@ pytestmark = pytest_slow_unless_codegen
                     "E",
                 ],
                 None,
-                False,
-                False,
-                pa.map_(pa.string(), pa.string()),
+                pd.ArrowDtype(pa.map_(pa.string(), pa.large_string())),
             ),
             id="string",
         ),
@@ -66,10 +62,8 @@ pytestmark = pytest_slow_unless_codegen
                     [3],
                     [1, 2],
                 ],
-                None,
-                False,
-                False,
-                pa.map_(pa.string(), pa.list_(pa.int64())),
+                pd.ArrowDtype(pa.list_(pa.int64())),
+                pd.ArrowDtype(pa.map_(pa.string(), pa.list_(pa.int64()))),
             ),
             id="array_int",
         ),
@@ -86,10 +80,8 @@ pytestmark = pytest_slow_unless_codegen
                     ["CD"],
                     ["", "A"],
                 ],
-                None,
-                False,
-                True,  # Dictionary encoding inside of array item arrays causes unboxing issues
-                pa.map_(pa.string(), pa.list_(pa.string())),
+                pd.ArrowDtype(pa.list_(pa.string())),
+                pd.ArrowDtype(pa.map_(pa.string(), pa.list_(pa.string()))),
             ),
             id="array_string",
         ),
@@ -106,18 +98,26 @@ pytestmark = pytest_slow_unless_codegen
                     {"lat": 41.4036, "lon": 2.1744, "name": "Sagrada Familia"},
                     {"lat": 13.4125, "lon": 103.8670, "name": "Angkor Wat"},
                 ],
-                None,
-                False,
-                False,
-                pa.map_(
-                    pa.string(),
+                pd.ArrowDtype(
                     pa.struct(
                         [
                             pa.field("lat", pa.float64()),
                             pa.field("lon", pa.float64()),
                             pa.field("name", pa.string()),
                         ]
-                    ),
+                    )
+                ),
+                pd.ArrowDtype(
+                    pa.map_(
+                        pa.string(),
+                        pa.struct(
+                            [
+                                pa.field("lat", pa.float64()),
+                                pa.field("lon", pa.float64()),
+                                pa.field("name", pa.string()),
+                            ]
+                        ),
+                    )
                 ),
             ),
             id="struct_simple",
@@ -159,16 +159,12 @@ pytestmark = pytest_slow_unless_codegen
                         "Grade": "A",
                     },
                 ],
-                None,
-                False,
-                False,
-                pa.map_(
-                    pa.string(),
+                pd.ArrowDtype(
                     pa.struct(
                         [
                             pa.field(
                                 "Exams",
-                                pa.list_(
+                                pa.large_list(
                                     pa.struct(
                                         [
                                             pa.field("Topic", pa.string()),
@@ -179,7 +175,28 @@ pytestmark = pytest_slow_unless_codegen
                             ),
                             pa.field("Grade", pa.string()),
                         ]
-                    ),
+                    )
+                ),
+                pd.ArrowDtype(
+                    pa.map_(
+                        pa.string(),
+                        pa.struct(
+                            [
+                                pa.field(
+                                    "Exams",
+                                    pa.list_(
+                                        pa.struct(
+                                            [
+                                                pa.field("Topic", pa.string()),
+                                                pa.field("Score", pa.float64()),
+                                            ]
+                                        )
+                                    ),
+                                ),
+                                pa.field("Grade", pa.string()),
+                            ]
+                        ),
+                    )
                 ),
             ),
             id="struct_nested",
@@ -198,9 +215,7 @@ pytestmark = pytest_slow_unless_codegen
                     {"H": 72, "M": 77},
                 ],
                 pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
-                True,
-                True,  # Dictionary encoding inside of array item arrays causes unboxing issues
-                pa.map_(pa.string(), pa.map_(pa.string(), pa.int64())),
+                pd.ArrowDtype(pa.map_(pa.string(), pa.map_(pa.string(), pa.int64()))),
             ),
             id="map_simple",
         ),
@@ -214,7 +229,7 @@ def object_agg_data(request):
     value_pool: a list of 9 values of a specific dtype that are used
     to construct the input column.
     """
-    vals, dtype, use_map_arrays, ban_dictionary, out_arrow_type = request.param
+    vals, val_dtype, out_dtype = request.param
     value_pool = vals + [None]
     group_keys_unique = list("ABCDEFGHIJ")
     counts = [0] * 10
@@ -237,7 +252,7 @@ def object_agg_data(request):
         {
             "group_key": group_keys,
             "json_key": json_keys,
-            "json_value": pd.Series(json_values, dtype=dtype),
+            "json_value": pd.Series(json_values, dtype=val_dtype),
         }
     )
 
@@ -252,7 +267,7 @@ def object_agg_data(request):
         json_out.append(json_obj)
 
     # Use Arrow MapArray to match Bodo output
-    json_out = pd.Series(json_out, dtype=pd.ArrowDtype(out_arrow_type))
+    json_out = pd.Series(json_out, dtype=out_dtype)
 
     expected_answer = pd.DataFrame(
         {
@@ -260,14 +275,14 @@ def object_agg_data(request):
             "res": json_out,
         }
     )
-    return in_data, expected_answer, use_map_arrays, ban_dictionary
+    return in_data, expected_answer
 
 
 def test_object_agg(object_agg_data, memory_leak_check):
     """
     Tests that calling OBJECT_AGG on various input data types
     """
-    in_data, expected_answer, use_map_arrays, ban_dictionary = object_agg_data
+    in_data, expected_answer = object_agg_data
 
     def impl(df):
         return df.groupby(
@@ -278,8 +293,6 @@ def test_object_agg(object_agg_data, memory_leak_check):
             ),
         )
 
-    use_dict_encoded_strings = False if ban_dictionary else None
-
     check_func(
         impl,
         (in_data,),
@@ -287,6 +300,4 @@ def test_object_agg(object_agg_data, memory_leak_check):
         sort_output=True,
         reset_index=True,
         convert_columns_to_pandas=True,
-        use_map_arrays=use_map_arrays,
-        use_dict_encoded_strings=use_dict_encoded_strings,
     )

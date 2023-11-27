@@ -149,7 +149,7 @@ def test_json_extract_path_text(json_extract_path_args, use_case, memory_leak_ch
     ],
 )
 @pytest.mark.parametrize(
-    "data, use_map, answer",
+    "data, answer",
     [
         pytest.param(
             pd.Series(
@@ -160,9 +160,18 @@ def test_json_extract_path_text(json_extract_path_args, use_case, memory_leak_ch
                     {"Q1": 50, "Q2": 256, "Q3": -10, "Q4": 64},
                     {"Q1": 26, "Q2": 128, "Q3": 72, "Q4": 512},
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("Q1", pa.int32()),
+                            pa.field("Q2", pa.int32()),
+                            pa.field("Q3", pa.int32()),
+                            pa.field("Q4", pa.int32()),
+                        ]
+                    )
+                ),
             ),
-            False,
             pd.Series(
                 [
                     ["Q1", "Q2", "Q3", "Q4"],
@@ -171,7 +180,8 @@ def test_json_extract_path_text(json_extract_path_args, use_case, memory_leak_ch
                     ["Q1", "Q2", "Q3", "Q4"],
                     ["Q1", "Q2", "Q3", "Q4"],
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
             ),
             id="struct_array",
         ),
@@ -184,9 +194,9 @@ def test_json_extract_path_text(json_extract_path_args, use_case, memory_leak_ch
                     {"Sep": [1], "Oct": [2, 3], "Nov": [], "Dec": [4, 5, 6]},
                     {},
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.large_list(pa.int32()))),
             ),
-            True,
             pd.Series(
                 [
                     ["Jan", "Feb", "Mar"],
@@ -195,13 +205,14 @@ def test_json_extract_path_text(json_extract_path_args, use_case, memory_leak_ch
                     ["Sep", "Oct", "Nov", "Dec"],
                     [],
                 ]
-                * 3
+                * 3,
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
             ),
             id="map_array",
         ),
     ],
 )
-def test_object_keys(data, use_map, use_case, answer, memory_leak_check):
+def test_object_keys(data, use_case, answer, memory_leak_check):
     if use_case:
         query = "SELECT CASE WHEN B THEN OBJECT_KEYS(J) ELSE OBJECT_KEYS(J_COPY) END FROM table1"
     else:
@@ -213,20 +224,17 @@ def test_object_keys(data, use_map, use_case, answer, memory_leak_check):
         expected_output=pd.DataFrame({0: answer}),
         check_dtype=False,
         check_names=False,
-        use_map_arrays=use_map,
-        # Can't use check_python because of intricacies of unboxing map arrays
-        only_jit_1DVar=True,
         # Can't sort output due to gaps when sorting columns of arrays
         sort_output=False,
+        convert_columns_to_pandas=True,
     )
 
 
 @pytest.mark.parametrize(
-    "query, use_map, answer",
+    "query, answer",
     [
         pytest.param(
             "SELECT OBJECT_CONSTRUCT_KEEP_NULL('id', I, 'tag', S) FROM table1",
-            False,
             pd.Series(
                 [
                     {"id": 1, "tag": "A"},
@@ -235,13 +243,20 @@ def test_object_keys(data, use_map, use_case, answer, memory_leak_check):
                     {"id": 8, "tag": "GHIJ"},
                     {"id": 16, "tag": "KLMNO"},
                 ]
-                * 3
-            ).values,
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("id", pa.int32()),
+                            pa.field("tag", pa.string()),
+                        ]
+                    )
+                ),
+            ),
             id="no_nested-no_null-no_case",
         ),
         pytest.param(
             "SELECT CASE WHEN DUMMY THEN OBJECT_CONSTRUCT_KEEP_NULL('id', I, 'tag', S) ELSE OBJECT_CONSTRUCT_KEEP_NULL('id', 0, 'tag', 'foo') END FROM table1",
-            False,
             pd.Series(
                 [
                     {"id": 1, "tag": "A"},
@@ -250,14 +265,21 @@ def test_object_keys(data, use_map, use_case, answer, memory_leak_check):
                     {"id": 8, "tag": "GHIJ"},
                     {"id": 16, "tag": "KLMNO"},
                 ]
-                * 3
-            ).values,
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("id", pa.int32()),
+                            pa.field("tag", pa.string()),
+                        ]
+                    )
+                ),
+            ),
             id="no_nested-no_null-with_case",
             marks=pytest.mark.skip(reason="[BSE-1889] Support JSON in CASE statements"),
         ),
         pytest.param(
             "SELECT OBJECT_CONSTRUCT_KEEP_NULL('arr', A, 'map', J) FROM table1",
-            False,
             pd.Series(
                 [
                     {"arr": [0], "map": {"A": 1, "B": "1", "C": [-1, 0, None, 1]}},
@@ -272,13 +294,29 @@ def test_object_keys(data, use_map, use_case, answer, memory_leak_check):
                         "map": {"A": 16, "B": "81", "C": [3, 4, None, 5]},
                     },
                 ]
-                * 3
-            ).values,
-            id="with_nested_no_map-no_null-no_case",
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("arr", pa.large_list(pa.int32())),
+                            pa.field(
+                                "map",
+                                pa.struct(
+                                    [
+                                        pa.field("A", pa.int32()),
+                                        pa.field("B", pa.string()),
+                                        pa.field("C", pa.large_list(pa.int32())),
+                                    ]
+                                ),
+                            ),
+                        ]
+                    )
+                ),
+            ),
+            id="with_nested-no_map-no_null-no_case",
         ),
         pytest.param(
-            "SELECT OBJECT_CONSTRUCT_KEEP_NULL('arr', A, 'map', J) FROM table1",
-            True,
+            "SELECT OBJECT_CONSTRUCT_KEEP_NULL('arr', A, 'map', M) FROM table1",
             pd.Series(
                 [
                     {"arr": [0], "map": {"B": 66}},
@@ -290,16 +328,20 @@ def test_object_keys(data, use_map, use_case, answer, memory_leak_check):
                         "map": {"F": 70, "G": 71, "H": 72, "I": 73, "J": 74},
                     },
                 ]
-                * 3
-            ).values,
-            id="with_nested_map-no_null-no_case",
-            marks=pytest.mark.skip(
-                reason="[BSE-1905] Fix bugs with object construct placing a map array inside of struct array"
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("arr", pa.large_list(pa.int32())),
+                            pa.field("map", pa.map_(pa.string(), pa.int32())),
+                        ]
+                    )
+                ),
             ),
+            id="with_nested-with_map-no_null-no_case",
         ),
         pytest.param(
             "SELECT OBJECT_CONSTRUCT_KEEP_NULL('id', I_N, 'tag', S_N) FROM table1",
-            False,
             pd.Series(
                 [
                     {"id": 1, "tag": "Alpha"},
@@ -308,13 +350,20 @@ def test_object_keys(data, use_map, use_case, answer, memory_leak_check):
                     {"id": None, "tag": None},
                     {"id": 256, "tag": "Gamma"},
                 ]
-                * 3
-            ).values,
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("id", pa.int32()),
+                            pa.field("tag", pa.string()),
+                        ]
+                    )
+                ),
+            ),
             id="no_nested-with_null-no_case",
         ),
         pytest.param(
             "SELECT OBJECT_CONSTRUCT_KEEP_NULL('arr', A_N, 'map', J_N) FROM table1",
-            False,
             pd.Series(
                 [
                     {"arr": [0], "map": {"A": 0, "B": 1}},
@@ -323,13 +372,28 @@ def test_object_keys(data, use_map, use_case, answer, memory_leak_check):
                     {"arr": None, "map": None},
                     {"arr": [3, None, 5], "map": {"A": 4, "B": 5}},
                 ]
-                * 3
-            ).values,
-            id="with_nested_no_map-with_null-no_case",
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("arr", pa.large_list(pa.int32())),
+                            pa.field(
+                                "map",
+                                pa.struct(
+                                    [
+                                        pa.field("A", pa.int32()),
+                                        pa.field("B", pa.int32()),
+                                    ]
+                                ),
+                            ),
+                        ]
+                    )
+                ),
+            ),
+            id="with_nested-no_map-with_null-no_case",
         ),
         pytest.param(
             "SELECT OBJECT_CONSTRUCT_KEEP_NULL('arr', A_N, 'map', M_N) FROM table1",
-            True,
             pd.Series(
                 [
                     {"arr": [0], "map": {"A": 0, "B": 1}},
@@ -338,16 +402,20 @@ def test_object_keys(data, use_map, use_case, answer, memory_leak_check):
                     {"arr": None, "map": None},
                     {"arr": [3, None, 5], "map": {"D": 3, "E": 4, "F": 5}},
                 ]
-                * 3
-            ).values,
-            id="with_nested_with_map-with_null-no_case",
-            marks=pytest.mark.skip(
-                reason="[BSE-1905] Fix bugs with object construct placing a map array inside of struct array"
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("arr", pa.large_list(pa.int32())),
+                            pa.field("map", pa.map_(pa.string(), pa.int32())),
+                        ]
+                    )
+                ),
             ),
+            id="with_nested-with_map-with_null-no_case",
         ),
         pytest.param(
             "SELECT OBJECT_CONSTRUCT_KEEP_NULL(*) FROM (SELECT I as col_1, I_N as COL_2, S as cOl_3, S_N as Col_4 FROM table1)",
-            False,
             pd.Series(
                 [
                     {"col_1": 1, "COL_2": 1, "cOl_3": "A", "Col_4": "Alpha"},
@@ -356,13 +424,23 @@ def test_object_keys(data, use_map, use_case, answer, memory_leak_check):
                     {"col_1": 8, "COL_2": None, "cOl_3": "GHIJ", "Col_4": None},
                     {"col_1": 16, "COL_2": 256, "cOl_3": "KLMNO", "Col_4": "Gamma"},
                 ]
-                * 3
-            ).values,
+                * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("col_1", pa.int32()),
+                            pa.field("COL_2", pa.int32()),
+                            pa.field("cOl_3", pa.string()),
+                            pa.field("Col_4", pa.string()),
+                        ]
+                    )
+                ),
+            ),
             id="star_syntax-no_nested-no_case",
         ),
     ],
 )
-def test_object_construct_keep_null(query, use_map, answer, memory_leak_check):
+def test_object_construct_keep_null(query, answer, memory_leak_check):
     ctx = {
         "table1": pd.DataFrame(
             {
@@ -373,31 +451,59 @@ def test_object_construct_keep_null(query, use_map, answer, memory_leak_check):
                 "S_N": ["Alpha", None, "Beta", None, "Gamma"] * 3,
                 "A": [[0], [1, 2], [], [3, None, 5], [6, 7, 8, None]] * 3,
                 "A_N": [[0], [1, 2], [6, 7, 8, None], None, [3, None, 5]] * 3,
-                "J": [
-                    {"A": 2**i, "B": str(3**i), "C": [i - 1, i, None, i + 1]}
-                    for i in range(5)
-                ]
-                * 3,
-                "J_N": [
-                    {"A": 0, "B": 1},
-                    {"A": 1, "B": 0},
-                    {"A": 2, "B": 3},
-                    None,
-                    {"A": 4, "B": 5},
-                ]
-                * 3,
-                "M": [
-                    {chr(i): i for i in range(65 + j, 65 + j * 2)} for j in range(1, 6)
-                ]
-                * 3,
-                "M_N": [
-                    {"A": 0, "B": 1},
-                    None,
-                    {"C": 2},
-                    None,
-                    {"D": 3, "E": 4, "F": 5},
-                ]
-                * 3,
+                "J": pd.Series(
+                    [
+                        {"A": 2**i, "B": str(3**i), "C": [i - 1, i, None, i + 1]}
+                        for i in range(5)
+                    ]
+                    * 3,
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("A", pa.int32()),
+                                pa.field("B", pa.string()),
+                                pa.field("C", pa.large_list(pa.int32())),
+                            ]
+                        )
+                    ),
+                ),
+                "J_N": pd.Series(
+                    [
+                        {"A": 0, "B": 1},
+                        {"A": 1, "B": 0},
+                        {"A": 2, "B": 3},
+                        None,
+                        {"A": 4, "B": 5},
+                    ]
+                    * 3,
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("A", pa.int32()),
+                                pa.field("B", pa.int32()),
+                            ]
+                        )
+                    ),
+                ),
+                "M": pd.Series(
+                    [
+                        {chr(i): i for i in range(65 + j, 65 + j * 2)}
+                        for j in range(1, 6)
+                    ]
+                    * 3,
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                ),
+                "M_N": pd.Series(
+                    [
+                        {"A": 0, "B": 1},
+                        None,
+                        {"C": 2},
+                        None,
+                        {"D": 3, "E": 4, "F": 5},
+                    ]
+                    * 3,
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+                ),
             }
         )
     }
@@ -408,16 +514,14 @@ def test_object_construct_keep_null(query, use_map, answer, memory_leak_check):
         expected_output=pd.DataFrame({0: answer}),
         check_dtype=False,
         check_names=False,
-        use_map_arrays=use_map,
-        # Can't use check_python because of intricacies of unboxing map arrays
-        only_jit_1DVar=True,
-        # Can't sort output due to gaps when sorting columns of arrays
+        # Can't sort semi-structured data outputs in Python
         sort_output=False,
+        convert_columns_to_pandas=True,
     )
 
 
 @pytest.mark.parametrize(
-    "query, df, use_map, answer",
+    "query, df, answer",
     [
         pytest.param(
             "SELECT OBJECT_DELETE(J, 'id') FROM table1",
@@ -449,7 +553,6 @@ def test_object_construct_keep_null(query, use_map, answer, memory_leak_check):
                     ]
                 }
             ),
-            False,
             [
                 {
                     "tags": [
@@ -488,7 +591,6 @@ def test_object_construct_keep_null(query, use_map, answer, memory_leak_check):
                     "K": ["A", "B", "C", "D"] * 11,
                 }
             ),
-            True,
             pd.Series(
                 [
                     {"B": 1, "C": 2, "D": 3},
@@ -532,7 +634,6 @@ def test_object_construct_keep_null(query, use_map, answer, memory_leak_check):
                     "K": ["A", "B", "C", "D"] * 11,
                 }
             ),
-            True,
             pd.Series(
                 [
                     {"B": 1, "C": 2},
@@ -552,7 +653,7 @@ def test_object_construct_keep_null(query, use_map, answer, memory_leak_check):
         ),
     ],
 )
-def test_object_delete(query, df, use_map, answer, memory_leak_check):
+def test_object_delete(query, df, answer, memory_leak_check):
     check_query(
         query,
         {"table1": df},
@@ -560,7 +661,6 @@ def test_object_delete(query, df, use_map, answer, memory_leak_check):
         expected_output=pd.DataFrame({0: answer}),
         check_dtype=False,
         check_names=False,
-        use_map_arrays=use_map,
-        only_jit_1DVar=True,
+        # Can't sort semi-structured data outputs in Python
         sort_output=False,
     )
