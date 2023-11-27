@@ -854,6 +854,9 @@ std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
 
     mpi_str_comm_info str_comm_info(in_arr, comm_info);
 
+    // NOTE: we pass extra_null_bytes to account for padding in null buffer
+    // for process boundaries (bits of two different processes cannot be packed
+    // in the same byte).
     std::shared_ptr<array_info> send_arr = alloc_array_top_level(
         comm_info.n_rows_send, str_comm_info.n_sub_send, 0, in_arr->arr_type,
         in_arr->dtype, -1, 2 * comm_info.n_pes, in_arr->num_categories);

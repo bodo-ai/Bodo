@@ -9,7 +9,7 @@ std::unique_ptr<array_info> alloc_empty_array(
     if (datatype->is_array()) {
         auto array_type = static_cast<bodo::ArrayType*>(datatype.get());
         auto inner_arr = alloc_empty_array(array_type->value_type, pool, mm);
-        return alloc_array_item(0, std::move(inner_arr), pool, mm);
+        return alloc_array_item(0, std::move(inner_arr), 0, pool, mm);
 
     } else if (datatype->is_struct()) {
         auto struct_type = static_cast<bodo::StructType*>(datatype.get());
@@ -19,7 +19,7 @@ std::unique_ptr<array_info> alloc_empty_array(
             arrs.push_back(alloc_empty_array(datatype, pool, mm));
         };
 
-        return alloc_struct(0, arrs, pool, mm);
+        return alloc_struct(0, arrs, 0, pool, mm);
     } else {
         return alloc_array_top_level(0, 0, 0, datatype->array_type,
                                      datatype->c_type, -1, 0, 0, false, false,
