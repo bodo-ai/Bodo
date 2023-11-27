@@ -137,8 +137,96 @@ def hash_join_common_impl(df1, df2, op_pool_size_bytes, build_outer, probe_outer
     return bodo.jit(distributed=["df1", "df2"])(impl)(df1, df2, op_pool_size_bytes)
 
 
+def _test_helper(
+    build_df,
+    probe_df,
+    build_outer,
+    probe_outer,
+    expected_partition_state,
+    expected_output_size,
+    op_pool_size_bytes,
+    broadcast,
+    capfd,
+    expected_log_messages,
+):
+    """
+    Helper for testing.
+    """
+    with set_broadcast_join(broadcast), temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1",
+            # Enable partitioning even though spilling is not setup
+            "BODO_STREAM_HASH_JOIN_ENABLE_PARTITIONING": "1",
+        }
+    ):
+        try:
+            (
+                output,
+                final_partition_state,
+                final_bytes_pinned,
+                final_bytes_allocated,
+            ) = hash_join_common_impl(
+                build_df, probe_df, op_pool_size_bytes, build_outer, probe_outer
+            )
+        except Exception:
+            out, err = capfd.readouterr()
+            with capfd.disabled():
+                print(f"STDOUT:\n{out}")
+                print(f"STDERR:\n{err}")
+            raise
+
+    out, err = capfd.readouterr()
+
+    ### Uncomment for debugging purposes ###
+    # with capfd.disabled():
+    #     for i in range(bodo.get_size()):
+    #         if bodo.get_rank() == i:
+    #             print(f"output:\n{output}")
+    #             print(f"stdout:\n{out}")
+    #             print(f"stderr:\n{err}")
+    #         bodo.barrier()
+    ###
+
+    comm = MPI.COMM_WORLD
+
+    # Verify that the expected log messages are present.
+    for expected_log_message in expected_log_messages:
+        assert_success = True
+        if expected_log_message is not None:
+            assert_success = expected_log_message in err
+        assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+        assert assert_success
+
+    output_size = comm.allreduce(output.shape[0], op=MPI.SUM)
+    assert (
+        output_size == expected_output_size
+    ), f"Final output size ({output_size}) is not as expected ({expected_output_size})"
+
+    # By the time we're done with the probe step, all memory should've been
+    # released:
+    assert_success = final_bytes_pinned == 0
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+    assert (
+        assert_success
+    ), f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
+
+    assert_success = final_bytes_allocated == 0
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+    assert (
+        assert_success
+    ), f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
+
+    assert_success = final_partition_state == expected_partition_state
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+    assert (
+        assert_success
+    ), f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+
+
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
-def test_split_during_append_table(build_probe_outer, broadcast, memory_leak_check):
+def test_split_during_append_table(
+    build_probe_outer, broadcast, memory_leak_check, capfd
+):
     """
     Test that re-partitioning works correctly when it happens
     during AppendBuildBatch on an input batch.
@@ -174,42 +262,41 @@ def test_split_during_append_table(build_probe_outer, broadcast, memory_leak_che
     # This will cause partition split during the "AppendBuildBatch"
     # In the broadcast case, we don't want it to re-partition.
     op_pool_size_bytes = 768 * 1024 if not broadcast else 2 * 1024 * 1024
-    with set_broadcast_join(broadcast), temp_env_override(
-        {
-            "BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1",
-            # Enable partitioning even though spilling is not setup
-            "BODO_STREAM_HASH_JOIN_ENABLE_PARTITIONING": "1",
-        }
-    ):
-        (
-            output,
-            final_partition_state,
-            final_bytes_pinned,
-            final_bytes_allocated,
-        ) = hash_join_common_impl(
-            build_df, probe_df, op_pool_size_bytes, build_outer, probe_outer
-        )
 
-    assert (
-        output.shape[0] == expected_output_size
-    ), f"Final output size ({output.shape[0]}) is not as expected ({expected_output_size})"
+    expected_log_msgs = []
+    if broadcast:
+        expected_log_msgs = [
+            "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 1."
+        ]
+    else:
+        expected_log_msgs = [
+            "[DEBUG] HashJoinState::AppendBuildBatch[3]: Encountered OperatorPoolThresholdExceededError.",
+            "[DEBUG] Splitting partition 0.",
+            "[DEBUG] HashJoinState::AppendBuildBatch[3]: Encountered OperatorPoolThresholdExceededError.",
+            "[DEBUG] Splitting partition 0.",
+            "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 3.",
+            "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 1.",
+            "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 1.",
+            "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 2.",
+            "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 2.",
+        ]
 
-    # By the time we're done with the probe step, all memory should've been
-    # released:
-    assert (
-        final_bytes_pinned == 0
-    ), f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
-    assert (
-        final_bytes_allocated == 0
-    ), f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
-
-    assert (
-        final_partition_state == expected_partition_state
-    ), f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    _test_helper(
+        build_df,
+        probe_df,
+        build_outer,
+        probe_outer,
+        expected_partition_state,
+        expected_output_size,
+        op_pool_size_bytes,
+        broadcast,
+        capfd,
+        expected_log_msgs,
+    )
 
 
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
-def test_split_during_finalize_build(build_probe_outer, memory_leak_check):
+def test_split_during_finalize_build(build_probe_outer, memory_leak_check, capfd):
     """
     Test that re-partitioning works correctly when it happens
     during FinalizeBuild.
@@ -245,43 +332,39 @@ def test_split_during_finalize_build(build_probe_outer, memory_leak_check):
 
     # This will cause partition split during the "FinalizeBuild"
     op_pool_size_bytes = 896 * 1024
-    with set_broadcast_join(False), temp_env_override(
-        {
-            "BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1",
-            # Enable partitioning even though spilling is not setup
-            "BODO_STREAM_HASH_JOIN_ENABLE_PARTITIONING": "1",
-        }
-    ):
-        (
-            output,
-            final_partition_state,
-            final_bytes_pinned,
-            final_bytes_allocated,
-        ) = hash_join_common_impl(
-            build_df, probe_df, op_pool_size_bytes, build_outer, probe_outer
-        )
+    expected_log_msgs = [
+        "[DEBUG] HashJoinState::AppendBuildBatch[3]: Encountered OperatorPoolThresholdExceededError.",
+        "[DEBUG] Splitting partition 0.",
+        "[DEBUG] HashJoinState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 1.",
+        "[DEBUG] Splitting partition 1.",
+        "[DEBUG] HashJoinState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 2.",
+        "[DEBUG] Splitting partition 2.",
+        "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 4.",
+        "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 1.",
+        "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 1.",
+        "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 2.",
+        "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 2.",
+        "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 3.",
+        "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 3.",
+    ]
 
-    assert (
-        output.shape[0] == expected_output_size
-    ), f"Final output size ({output.shape[0]}) is not as expected ({expected_output_size})"
-
-    # By the time we're done with the probe step, all memory should've been
-    # released:
-    assert (
-        final_bytes_pinned == 0
-    ), f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
-    assert (
-        final_bytes_allocated == 0
-    ), f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
-
-    assert (
-        final_partition_state == expected_partition_state
-    ), f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    _test_helper(
+        build_df,
+        probe_df,
+        build_outer,
+        probe_outer,
+        expected_partition_state,
+        expected_output_size,
+        op_pool_size_bytes,
+        False,
+        capfd,
+        expected_log_msgs,
+    )
 
 
 @pytest.mark.skipif(bodo.get_size() != 2, reason="Only calibrated for two cores case")
 def test_split_during_shuffle_append_table_and_diff_part_state(
-    build_probe_outer, memory_leak_check
+    build_probe_outer, memory_leak_check, capfd
 ):
     """
     Test that re-partitioning works correctly when it happens
@@ -295,8 +378,6 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
     This test is very specific to the implementation at this point
     and should be replaced with a more granular C++ unit test at some point.
     """
-
-    comm = MPI.COMM_WORLD
 
     build_df = pd.DataFrame(
         {
@@ -331,43 +412,34 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
     # This will cause partition split during the "AppendBuildBatch"
     # after the shuffle on rank 1.
     op_pool_size_bytes = 1024 * 1024
-    with set_broadcast_join(False), temp_env_override(
-        {
-            "BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1",
-            # Enable partitioning even though spilling is not setup
-            "BODO_STREAM_HASH_JOIN_ENABLE_PARTITIONING": "1",
-        }
-    ):
-        (
-            output,
-            final_partition_state,
-            final_bytes_pinned,
-            final_bytes_allocated,
-        ) = hash_join_common_impl(
-            build_df, probe_df, op_pool_size_bytes, build_outer, probe_outer
-        )
 
-    output_size = comm.allreduce(output.shape[0], op=MPI.SUM)
-    assert (
-        output_size == expected_output_size
-    ), f"Final output size ({output_size}) is not as expected ({expected_output_size})"
+    expected_log_msgs = []
+    if bodo.get_rank() == 0:
+        expected_log_msgs = [
+            "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 1.",
+        ] + ([None] * 8)
+    else:
+        expected_log_msgs = [
+            "[DEBUG] HashJoinState::AppendBuildBatch[2]: Encountered OperatorPoolThresholdExceededError.",
+            "[DEBUG] Splitting partition 0.",
+            "[DEBUG] HashJoinState::AppendBuildBatch[2]: Encountered OperatorPoolThresholdExceededError.",
+            "[DEBUG] Splitting partition 0.",
+            "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 3.",
+            "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 1.",
+            "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 1.",
+            "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 2.",
+            "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 2.",
+        ]
 
-    # By the time we're done with the probe step, all memory should've been
-    # released:
-    assert_success = final_bytes_pinned == 0
-    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert (
-        assert_success
-    ), f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
-
-    assert_success = final_bytes_allocated == 0
-    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert (
-        assert_success
-    ), f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
-
-    assert_success = final_partition_state == expected_partition_state
-    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert (
-        assert_success
-    ), f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    _test_helper(
+        build_df,
+        probe_df,
+        build_outer,
+        probe_outer,
+        expected_partition_state,
+        expected_output_size,
+        op_pool_size_bytes,
+        False,
+        capfd,
+        expected_log_msgs,
+    )
