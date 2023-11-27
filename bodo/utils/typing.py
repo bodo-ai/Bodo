@@ -1888,6 +1888,39 @@ def get_common_scalar_dtype(
         # Combine max_float (float) and base_out (float or int) types
         return get_common_scalar_dtype([max_float, base_out])
 
+    # Dict types are combinable if their key types and value types
+    # are also combinable.
+    if all(isinstance(t, types.DictType) for t in scalar_types):
+        key_type, key_downcast = get_common_scalar_dtype(
+            [t.key_type for t in scalar_types]
+        )
+        val_type, val_downcast = get_common_scalar_dtype(
+            [t.value_type for t in scalar_types]
+        )
+        if key_type is None or val_type is None:
+            return (None, False)
+        return (types.DictType(key_type, val_type), key_downcast or val_downcast)
+
+    # Struct types are combinable if they have the same field names, and each field type
+    # is combinable with the same filed in all the other types.
+    if all(isinstance(t, bodo.libs.struct_arr_ext.StructType) for t in scalar_types):
+        names = scalar_types[0].names
+        if not all(t.names == names for t in scalar_types):
+            return None, False
+        new_field_types = []
+        downcasted = False
+        for i in range(len(names)):
+            inner_types = [t.data[i] for t in scalar_types]
+            common_dtype, downcast = get_common_scalar_dtype(inner_types)
+            if common_dtype is None:
+                return (None, False)
+            new_field_types.append(common_dtype)
+            downcasted = downcasted or downcast
+        return (
+            bodo.libs.struct_arr_ext.StructType(tuple(new_field_types), names),
+            downcasted,
+        )
+
     # If we don't have a common type, then all types need to be equal.
     # See: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-identical
     grouped_types = itertools.groupby(scalar_types)

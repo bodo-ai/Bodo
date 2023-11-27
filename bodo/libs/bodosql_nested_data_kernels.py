@@ -358,13 +358,16 @@ def overload_array_cat_util(arr_0, arr_1, is_scalar_0, is_scalar_1):
     else:
         scalar_text += "inner_arr = bodo.utils.utils.alloc_type(length_0 + length_1, inner_dtype, (-1,))\n"
 
+    # Note: setitem with a slice is used to copy over elements from the original arrays
+    # to the answer to avoid flaws in getitem with map arrays.
+
     # Loop over each index in the first array and copy it (or a null) into the
     # same index of the result array
     scalar_text += "for idx0 in range(length_0):\n"
     scalar_text += "   if bodo.libs.array_kernels.isna(arg0, idx0):\n"
     scalar_text += "      bodo.libs.array_kernels.setna(inner_arr, idx0)\n"
     scalar_text += "   else:\n"
-    scalar_text += "      inner_arr[idx0] = arg0[idx0]\n"
+    scalar_text += "      inner_arr[idx0:idx0+1] = arg0[idx0:idx0+1]\n"
 
     # Loop over each index in the second array and copy it (or a null) into the
     # same index of the result array plus an offset to account for all of the
@@ -373,7 +376,8 @@ def overload_array_cat_util(arr_0, arr_1, is_scalar_0, is_scalar_1):
     scalar_text += "   if bodo.libs.array_kernels.isna(arg1, idx1):\n"
     scalar_text += "      bodo.libs.array_kernels.setna(inner_arr, length_0 + idx1)\n"
     scalar_text += "   else:\n"
-    scalar_text += "      inner_arr[length_0 + idx1] = arg1[idx1]\n"
+    scalar_text += "      write_idx = length_0 + idx1\n"
+    scalar_text += "      inner_arr[write_idx:write_idx+1] = arg1[idx1:idx1+1]\n"
     scalar_text += "res[i] = inner_arr"
 
     return gen_vectorized(
@@ -788,8 +792,10 @@ def array_size_util(arr, is_single_row):
     if not is_overload_constant_bool(is_single_row):  # pragma: no cover
         raise_bodo_error("array_size(): 'is_single_row' must be a constant boolean")
 
-    if not is_array_item_array(arr) and not (
-        bodo.utils.utils.is_array_typ(arr) and is_single_row
+    if (
+        not is_overload_none(arr)
+        and not is_array_item_array(arr)
+        and not (bodo.utils.utils.is_array_typ(arr) and is_single_row)
     ):  # pragma: no cover
         # When not is_single_row only array item ararys are supported
         # When is_single_row then all arrays are supported
@@ -857,8 +863,10 @@ def overload_array_compact_util(arr, is_scalar):
     arg_names = ["arr", "is_scalar"]
     arg_types = [arr, is_scalar]
     propagate_null = [True, False]
-    inner_arr_type = arr if is_scalar_bool else arr.dtype
-    out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(inner_arr_type)
+    if is_scalar_bool:
+        out_dtype = bodo.null_array_type
+    else:
+        out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(arr.dtype)
     scalar_text = "elems_to_keep = np.ones(len(arg0), dtype=np.bool_)\n"
     scalar_text += "for idx0 in range(len(arg0)):\n"
     scalar_text += "   if bodo.libs.array_kernels.isna(arg0, idx0):\n"
