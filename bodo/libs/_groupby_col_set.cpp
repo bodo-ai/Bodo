@@ -113,7 +113,7 @@ void FirstColSet::alloc_running_value_columns(
         std::shared_ptr<array_info> inner_arr =
             alloc_numpy(0, Bodo_CTypes::INT8, pool, mm);
         std::shared_ptr<array_info> out_col =
-            alloc_array_item(num_groups, inner_arr, pool, mm);
+            alloc_array_item(num_groups, inner_arr, 0, pool, mm);
         out_cols.push_back(out_col);
     } else if (in_col->arr_type == bodo_array_type::STRUCT) {
         // For STRUCT array, allocate dummy inner arrays for
@@ -124,7 +124,7 @@ void FirstColSet::alloc_running_value_columns(
             child_arrays.push_back(alloc_numpy(0, Bodo_CTypes::INT8, pool, mm));
         }
         std::shared_ptr<array_info> out_col =
-            alloc_struct(num_groups, child_arrays, pool, mm);
+            alloc_struct(num_groups, child_arrays, 0, pool, mm);
         out_cols.push_back(out_col);
     } else {
         BasicColSet::alloc_running_value_columns(num_groups, out_cols, pool,
@@ -1169,7 +1169,7 @@ void ArrayAggColSet::alloc_running_value_columns(
         alloc_array_top_level(0, 1, 1, in_col->arr_type, dtype, -1, 0, 0, false,
                               false, false, pool, mm);
     out_cols.push_back(
-        alloc_array_item(num_groups, inner_arr, pool, std::move(mm)));
+        alloc_array_item(num_groups, inner_arr, 0, pool, std::move(mm)));
 }
 
 void ArrayAggColSet::update(const std::vector<grouping_info>& grp_infos,
@@ -1235,7 +1235,7 @@ void ObjectAggColSet::alloc_running_value_columns(
     child_arrays.push_back(val_array);
     std::shared_ptr inner_arr = alloc_struct(in_length, child_arrays);
     out_cols.push_back(
-        alloc_array_item(num_groups, inner_arr, pool, std::move(mm)));
+        alloc_array_item(num_groups, inner_arr, 0, pool, std::move(mm)));
 }
 
 void ObjectAggColSet::update(const std::vector<grouping_info>& grp_infos,

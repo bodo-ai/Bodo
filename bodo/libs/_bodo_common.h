@@ -1068,8 +1068,12 @@ std::unique_ptr<array_info> alloc_numpy(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+//  NOTE: extra_null_bytes is used to account for padding in null buffer
+//  for process boundaries in shuffle (bits of two different processes cannot be
+//  packed in the same byte).
 std::unique_ptr<array_info> alloc_array_item(
     int64_t n_arrays, std::shared_ptr<array_info> inner_arr,
+    int64_t extra_null_bytes = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -1078,11 +1082,15 @@ std::unique_ptr<array_info> alloc_array_item(
  * @brief Allocate a STRUCT array
  * @param length length of the STRUCT array
  * @param child_arrays child arrays of the STRUCT array
+ * @param extra_null_bytes used to account for padding in null buffer
+ * for process boundaries in shuffle (bits of two different processes cannot be
+ * packed in the same byte).
  *
  * @return pointer to the allocated array_info
  */
 std::unique_ptr<array_info> alloc_struct(
     int64_t length, std::vector<std::shared_ptr<array_info>> child_arrays,
+    int64_t extra_null_bytes = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -1121,8 +1129,12 @@ std::unique_ptr<array_info> alloc_string_array(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+//  NOTE: extra_null_bytes is used to account for padding in null buffer
+//  for process boundaries in shuffle (bits of two different processes cannot be
+//  packed in the same byte).
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
+    int64_t extra_null_bytes = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -1180,6 +1192,9 @@ std::unique_ptr<array_info> create_dict_string_array(
 
 /**
  * The allocations array function for the function.
+ * NOTE: extra_null_bytes is used to account for padding in null buffer
+ * for process boundaries in shuffle (bits of two different processes cannot be
+ * packed in the same byte).
  *
  * In the case of NUMPY, CATEGORICAL, NULLABLE_INT_BOOL or STRUCT:
  * -- length is the number of rows, and n_sub_elems, n_sub_sub_elems do not
