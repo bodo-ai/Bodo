@@ -1,10 +1,13 @@
 package org.apache.calcite.sql.type;
 
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
+import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
 import com.google.common.base.Preconditions;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
+import org.apache.calcite.rel.type.StructKind;
+import org.apache.calcite.rel.type.RelRecordType;
 import org.apache.calcite.runtime.CalciteContextException;
 import org.apache.calcite.sql.SqlCollation;
 import org.apache.calcite.sql.SqlOperatorBinding;
@@ -53,6 +56,7 @@ public class BodoReturnTypes {
             };
 
     public static final SqlReturnTypeInference BOOL_AGG_RET_TYPE = ReturnTypes.BOOLEAN_NULLABLE.andThen(FORCE_NULLABLE_IF_EMPTY_GROUP);
+
 
     /**
      * Defines the return type for FLATTEN
@@ -319,6 +323,43 @@ public class BodoReturnTypes {
                 }
             };
 
+
+    public static final SqlReturnTypeInference TO_OBJECT_RETURN_TYPE_INFERENCE =
+            new SqlReturnTypeInference() {
+
+                /**
+                 * From SF docs:
+
+                 For a VARIANT value containing an OBJECT, returns the OBJECT.
+                 For NULL input, or for a VARIANT value containing only JSON null, returns NULL.
+                 For an OBJECT, returns the OBJECT itself.
+                 For all other input values, reports an error.
+                 */
+                @Override
+                public @Nullable RelDataType inferReturnType(SqlOperatorBinding opBinding) {
+                    RelDataType inputType = opBinding.getOperandType(0);
+                    SqlTypeFamily inputTypeFamily = inputType.getSqlTypeName().getFamily();
+
+                    boolean isMap = (inputTypeFamily != null && inputTypeFamily.equals(SqlTypeFamily.MAP));
+                    if (inputType.isStruct() || isMap){
+                        return inputType;
+                    }
+                    else if (inputType instanceof VariantSqlType) {
+                        // If we have JSON input, we currently map this to MAP(String, String) in Calcite.
+                        // The key should always be string, but we don't know the types here until runtime,
+                        // so we return MAP(STRING, VARIANT)
+                        RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
+                        if (!(typeFactory instanceof BodoTypeFactoryImpl)){
+                            throw new RuntimeException("Internal error in TO_OBJECT_RETURN_TYPE_INFERENCE.inferReturnType: Type factory is not a bodo type factory.");
+                        }
+                        BodoTypeFactoryImpl bodoTypeFactory = (BodoTypeFactoryImpl) typeFactory;
+                        return opBinding.getTypeFactory().createMapType(bodoTypeFactory.createSqlType(SqlTypeName.VARCHAR), bodoTypeFactory.createVariantSqlType());
+                    }
+
+                    return null;
+                }
+            };
+
     public static final SqlReturnTypeInference VARIANT_NULLABLE =
             VARIANT.andThen(SqlTypeTransforms.TO_NULLABLE);
 
@@ -550,7 +591,9 @@ public class BodoReturnTypes {
 
     public static final SqlReturnTypeInference TIME_FORCE_NULLABLE = ReturnTypes.TIME.andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
+
     public static final SqlReturnTypeInference TO_NULLABLE_VARYING_ARRAY = ReturnTypes.ARG0_NULLABLE_VARYING.andThen(SqlTypeTransforms.TO_ARRAY);
+
 
     public static final SqlTypeTransform TO_NULLABLE_ARG1 = (opBinding, typeToTransform) -> opBinding.getTypeFactory().createTypeWithNullability(typeToTransform, SqlTypeUtil.containsNullable(opBinding.getOperandType(1)));
 

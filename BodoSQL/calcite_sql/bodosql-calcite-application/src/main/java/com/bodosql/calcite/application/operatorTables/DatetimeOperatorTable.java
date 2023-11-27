@@ -25,6 +25,7 @@ import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlDatePartFunction;
+import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -211,7 +212,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           ReturnTypes.TIME_NULLABLE,
           OperandTypes.DATETIME
               .or(OperandTypes.CHARACTER)
-              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
+              .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER))
+              .or(BodoOperandTypes.VARIANT),
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIME = TO_TIME.withName("TIME");

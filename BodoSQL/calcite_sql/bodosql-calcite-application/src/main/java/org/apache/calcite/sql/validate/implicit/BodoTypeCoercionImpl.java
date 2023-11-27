@@ -1,5 +1,8 @@
 package org.apache.calcite.sql.validate.implicit;
 
+import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.BodoSQLTypeSystems.CoalesceTypeCastingUtils;
+import kotlin.Pair;
 import kotlin.jvm.functions.Function3;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.rel.type.RelDataType;
@@ -8,7 +11,11 @@ import org.apache.calcite.rel.type.RelDataTypeFactoryImpl;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlDynamicParam;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BodoSqlTypeUtil;
@@ -21,10 +28,15 @@ import org.apache.calcite.sql.validate.SqlValidatorScope;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static com.bodosql.calcite.application.operatorTables.CastingOperatorTable.TO_TIMESTAMP_LTZ;
+import static com.bodosql.calcite.application.operatorTables.CastingOperatorTable.TO_TIMESTAMP_TZ;
+import static com.bodosql.calcite.application.operatorTables.NumericOperatorTable.TO_NUMBER;
 import static java.util.Objects.requireNonNull;
+import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getScope;
 
 public class BodoTypeCoercionImpl extends TypeCoercionImpl {
   public BodoTypeCoercionImpl(RelDataTypeFactory typeFactory, SqlValidator validator) {
@@ -218,4 +230,102 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
       return new BodoTypeCoercionImpl(typeFactory, validator);
     }
   }
+
+  /**
+   * COALESCE type coercion, only used when not decomposing coalesce. In Bodo's version,
+   * we follow the snowflake typing semantics for COALESCE coercion. Snowflake semantics is
+   * a pairwise right fold, IE:
+   * COALESCE(typ1, typ2, typ3) == COALESCE(GET_COMMON(typ1, GET_COMMON(typ2, typ3))
+   *
+   * Our version of this type coercion can differ from snowflake's semantics due to evaluation order difference,
+   * but should otherwise be comprable
+   */
+  @Override public boolean coalesceCoercion(SqlCallBinding callBinding) {
+    // For sql statement like:
+    // `case when ... then (a, b, c) when ... then (d, e, f) else (g, h, i)`
+    // an exception throws when entering this method.
+    SqlCall call = callBinding.getCall();
+    assert call.getOperator().getKind() == SqlKind.COALESCE;
+    // Note, we have to create a newSqlNodeList here to use coerceColumnType
+    // set's on this node list will not affect the actual operand list of the call, so we have
+    // to propagate changes manually
+    SqlNodeList originalOperandList = new SqlNodeList(call.getOperandList(), call.getParserPosition());
+    List<RelDataType> originalArgTypes = new ArrayList<RelDataType>();
+    SqlValidatorScope scope = getScope(callBinding);
+    for (SqlNode node : originalOperandList) {
+      originalArgTypes.add(
+              validator.deriveType(
+                      scope, node));
+    }
+
+    Boolean coerced = false;
+    CoalesceTypeCastingUtils.SF_TYPE curRhsType = CoalesceTypeCastingUtils.Companion.TO_SF_TYPE(
+            originalArgTypes.get(originalArgTypes.size()-1));
+
+    // If we ever encounter a type that does not have an equivalent type in SF (Mainly interval types),
+    // default to the super class's handling to avoid breaking any existing functionality.
+    if (curRhsType == null) {
+      return super.coalesceCoercion(callBinding) || coerced;
+    }
+
+    for (int i = originalArgTypes.size() - 2; i >= 0; i--) {
+      CoalesceTypeCastingUtils.SF_TYPE lhsType = CoalesceTypeCastingUtils.Companion.TO_SF_TYPE(originalArgTypes.get(i));
+
+
+      // If we ever encounter a type that does not have an equivalent type in SF (Mainly interval types),
+      // default to the super class's handling to avoid breaking any existing functionality.
+      if (lhsType == null) {
+        return super.coalesceCoercion(callBinding) || coerced;
+      }
+
+      if (lhsType.equals(curRhsType)){
+        continue;
+      }
+      // If we ever get here, set coerced to true
+      coerced = true;
+
+      Pair<CoalesceTypeCastingUtils.SF_TYPE, SqlOperator> newRhsTypeAndCastingFn =
+              CoalesceTypeCastingUtils.Companion.sfGetCoalesceTypeAndCastingFn(lhsType, curRhsType);
+
+      CoalesceTypeCastingUtils.SF_TYPE newRhsType = newRhsTypeAndCastingFn.getFirst();
+      SqlOperator castingFn = newRhsTypeAndCastingFn.getSecond();
+      if (castingFn.equals(TO_TIMESTAMP_TZ)){
+        //We should never generate TIMESTAMP_TZ, even if that would be the SF behavior
+        castingFn = TO_TIMESTAMP_LTZ;
+      }
+
+      if (curRhsType.equals(newRhsType)) {
+        //In this case, only need to cast the LHS argument
+        SqlNode valToCast = call.getOperandList().get(i);
+        SqlNode newCall;
+        //Snowflake semantics, when casting string to int, we use 18, 5 for scale/precision
+        if (castingFn.equals(TO_NUMBER) && lhsType.equals(CoalesceTypeCastingUtils.SF_TYPE.VARCHAR)) {
+          newCall = castingFn.createCall(valToCast.getParserPosition(), valToCast, SqlLiteral.createExactNumeric("18", SqlParserPos.ZERO), SqlLiteral.createExactNumeric("5", SqlParserPos.ZERO));
+        } else {
+          newCall = castingFn.createCall(valToCast.getParserPosition(), valToCast);
+        }
+        call.setOperand(i, newCall);
+      } else{
+        //In this case, need to cast all the RHS arguments
+        for (int j = i + 1; j < originalArgTypes.size(); j++) {
+          SqlNode valToCast = call.getOperandList().get(j);
+          SqlNode newCall;
+          //Snowflake semantics, when casting string to int, we use 18, 5 for scale/precision
+          if (castingFn.equals(TO_NUMBER) && curRhsType.equals(CoalesceTypeCastingUtils.SF_TYPE.VARCHAR)) {
+            newCall = castingFn.createCall(valToCast.getParserPosition(), valToCast, SqlLiteral.createExactNumeric("18", SqlParserPos.ZERO), SqlLiteral.createExactNumeric("5", SqlParserPos.ZERO));
+          } else {
+            newCall = castingFn.createCall(valToCast.getParserPosition(), valToCast);
+          }
+          call.setOperand(j, newCall);
+        }
+      }
+
+      curRhsType = newRhsType;
+    }
+
+    // Finally,
+    // Call super to handle potential need to unify precisions etc.
+    return super.coalesceCoercion(callBinding) || coerced;
+  }
+
 }

@@ -9,6 +9,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -18,6 +19,7 @@ import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
+import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -45,6 +47,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           .or(OperandTypes.DATETIME)
           .or(OperandTypes.CHARACTER)
           .or(OperandTypes.NUMERIC_INTEGER)
+          .or(BodoOperandTypes.VARIANT)
           .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER));
 
   /** Returns the operator table, creating it if necessary. */
@@ -105,8 +108,9 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          // For conversion to boolean, snowflake allows a string or numeric expr.
-          OperandTypes.NUMERIC.or(OperandTypes.STRING),
+          // For conversion to boolean, snowflake allows a string, numeric expr, or variant
+          // (with runtime error being thrown if the underlying value is not string)
+          OperandTypes.NUMERIC.or(OperandTypes.STRING).or(BodoOperandTypes.VARIANT),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
@@ -183,6 +187,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           OperandTypes.DATETIME
               .or(OperandTypes.INTEGER)
               .or(OperandTypes.STRING)
+              .or(BodoOperandTypes.VARIANT)
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
           SqlFunctionCategory.TIMEDATE);
 
@@ -351,6 +356,19 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction TO_VARIANT =
+      SqlBasicFunction.create(SqlKind.OTHER_FUNCTION, BodoReturnTypes.VARIANT, OperandTypes.ANY)
+          .withName("TO_VARIANT");
+
+  public static final SqlFunction TO_OBJECT =
+      SqlBasicFunction.create(
+              SqlKind.OTHER_FUNCTION,
+              BodoReturnTypes.TO_OBJECT_RETURN_TYPE_INFERENCE,
+              OperandTypes.COLLECTION_OR_MAP
+                  .or(BodoOperandTypes.VARIANT)
+                  .or(OperandTypes.NULLABLE_LITERAL))
+          .withName("TO_OBJECT");
+
   public static final SqlFunction TRY_TO_DOUBLE =
       new SqlFunction(
           "TRY_TO_DOUBLE",
@@ -392,7 +410,9 @@ public class CastingOperatorTable implements SqlOperatorTable {
           TRY_TO_TIMESTAMP,
           TRY_TO_TIMESTAMP_LTZ,
           TRY_TO_TIMESTAMP_NTZ,
-          TRY_TO_TIMESTAMP_TZ);
+          TRY_TO_TIMESTAMP_TZ,
+          TO_VARIANT,
+          TO_OBJECT);
 
   @Override
   public void lookupOperatorOverloads(

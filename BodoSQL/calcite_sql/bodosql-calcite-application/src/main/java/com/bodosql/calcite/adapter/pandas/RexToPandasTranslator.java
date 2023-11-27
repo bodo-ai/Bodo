@@ -1072,6 +1072,13 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "TO_TIME":
       case "TRY_TO_TIME":
         return generateToTimeCode(operands, fnName, streamingNamedArgs);
+      case "ARRAY_TO_STRING":
+        assert operands.size() == 2;
+        return ExprKt.BodoSQLKernel("array_to_string", operands, List.of());
+      case "TO_VARIANT":
+        throw new BodoSQLCodegenException("TO_VARIANT not yet supported");
+      case "TO_OBJECT":
+        throw new BodoSQLCodegenException("TO_OBJECT not yet supported");
       default:
         throw new BodoSQLCodegenException(String.format("Unexpected Cast function: %s", fnName));
     }

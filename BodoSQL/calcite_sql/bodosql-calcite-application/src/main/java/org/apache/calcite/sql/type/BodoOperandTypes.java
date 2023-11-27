@@ -1,5 +1,9 @@
 package org.apache.calcite.sql.type;
 
+
+
+import com.bodosql.calcite.application.operatorTables.VariantOperandChecker;
+
 import com.bodosql.calcite.application.operatorTables.OperatorTableUtils;
 import com.google.common.collect.ImmutableList;
 import org.apache.calcite.util.Pair;
@@ -7,6 +11,10 @@ import org.apache.calcite.util.Pair;
 import java.util.List;
 
 public class BodoOperandTypes {
+
+
+  public static final SqlSingleOperandTypeChecker VARIANT = VariantOperandChecker.INSTANCE;
+
   public static final SqlSingleOperandTypeChecker DATE_INTEGER =
       OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.INTEGER);
   public static final SqlSingleOperandTypeChecker INTEGER_DATE =
