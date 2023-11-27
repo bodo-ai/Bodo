@@ -1535,6 +1535,41 @@ def test_object_delete(
             id="2-int_vector-struct_vector",
         ),
         pytest.param(
+            (
+                pd.Series([10, 11, 16] * 10 + [None, 23]).values,
+                pd.Series(
+                    [
+                        {"A": 1},
+                        {"B": 2, "C": 4},
+                        {"D": 5, "E": 25, "F": 33},
+                    ]
+                    * 10
+                    + [None, {"G": 4}],
+                    dtype=pd.ArrowDtype(pa.map_(pa.large_string(), pa.int64())),
+                ).values,
+            ),
+            ("id", "data"),
+            (False, False),
+            pd.Series(
+                [
+                    {"id": 10, "data": {"A": 1}},
+                    {"id": 11, "data": {"B": 2, "C": 4}},
+                    {"id": 16, "data": {"D": 5, "E": 25, "F": 33}},
+                ]
+                * 10
+                + [{"id": None, "data": None}, {"id": 23, "data": {"G": 4}}],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("id", pa.int64()),
+                            pa.field("data", pa.map_(pa.large_string(), pa.int64())),
+                        ]
+                    )
+                ),
+            ),
+            id="2-int_vector-map_vector",
+        ),
+        pytest.param(
             (pd.Series([1, 2, 3, None, 5, 6, 7]), None),
             ("i", "j"),
             (False, True),
