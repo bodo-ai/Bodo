@@ -90,6 +90,10 @@ public class SqlCoalesceFunction extends SqlFunction {
 
   private static RelDataType inferTypeFromValidator(
       SqlCallBinding callBinding) {
+
+    TypeCoercion typeCoercion = callBinding.getValidator().getTypeCoercion();
+    typeCoercion.coalesceCoercion(callBinding);
+
     SqlCall coalesceCall = callBinding.getCall();
     SqlNodeList arglist = new SqlNodeList(coalesceCall.getOperandList(),
         coalesceCall.getParserPosition());
@@ -125,7 +129,6 @@ public class SqlCoalesceFunction extends SqlFunction {
     if (null == ret) {
       boolean coerced = false;
       if (callBinding.isTypeCoercionEnabled()) {
-        TypeCoercion typeCoercion = callBinding.getValidator().getTypeCoercion();
         RelDataType commonType = typeCoercion.getWiderTypeFor(argTypes, true);
         // commonType is always with nullability as false, we do not consider the
         // nullability when deducing the common type. Use the deduced type

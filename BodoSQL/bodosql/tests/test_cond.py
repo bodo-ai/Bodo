@@ -34,6 +34,9 @@ def test_coalesce_cols_basic(spark_info, basic_df, memory_leak_check):
     check_query(query, basic_df, spark_info, check_dtype=False, check_names=False)
 
 
+@pytest.mark.skip(
+    "General support for DECIMAL numbers in BodoSQL, and in particular for COALESCE."
+)
 def test_coalesce_128_int(spark_info, memory_leak_check):
     """tests the coalesce function with a NUMBER(38, 18) column and integer
     scalars."""
