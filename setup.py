@@ -194,7 +194,10 @@ ext_metadata: dict[str, pt.Any] = dict(
     sources=[],
     depends=[],
     include_dirs=list(ind),
-    define_macros=[],
+    define_macros=[
+        # Required when using boost::stacktrace for debugging
+        ("BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED", "1"),
+    ],
     library_dirs=list(lid),
     libraries=[],
     extra_compile_args=list(eca),
@@ -301,6 +304,7 @@ ext_metadata["sources"] += [
     "bodo/libs/_crypto_funcs.cpp",
     "bodo/libs/_memory.cpp",
     "bodo/libs/_memory_budget.cpp",
+    "bodo/libs/_memory_budget_pymod.cpp",
     "bodo/libs/_murmurhash3.cpp",
     "bodo/libs/_quantile_alg.cpp",
     "bodo/libs/_lateral.cpp",
@@ -495,11 +499,18 @@ ext_memory = Extension(
         "bodo/libs/memory.pyx",
         "bodo/libs/_memory.cpp",
         "bodo/libs/_operator_pool.cpp",
+        "bodo/libs/_memory_budget.cpp",
+    ],
+    depends=[
+        "bodo/libs/_memory_budget.h",
     ],
     include_dirs=np_compile_args["include_dirs"]
     + ind
     + pa_compile_args["include_dirs"],
-    define_macros=[],
+    define_macros=[
+        # Required when using boost::stacktrace for debugging
+        ("BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED", "1"),
+    ],
     library_dirs=lid + pa_compile_args["library_dirs"],
     libraries=["arrow", "arrow_python"] + mpi_libs,
     # Cannot compile with -Werror yet because memory.cpp

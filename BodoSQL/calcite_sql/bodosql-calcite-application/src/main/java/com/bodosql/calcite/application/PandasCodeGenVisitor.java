@@ -2109,11 +2109,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.insertLoopOperationStartTimer();
     // Fetch the batch state
     StreamingPipelineFrame batchPipeline = generatedCode.getCurrentStreamingPipeline();
-    batchPipeline.addInitialization(
-        new Op.Stmt(
-            new Expr.Call(
-                "bodo.libs.memory_budget.increase_operator_budget",
-                new Expr.IntegerLiteral(operatorID))));
     Variable batchExitCond = batchPipeline.getExitCond();
     Variable newExitCond = genGenericTempVar();
     batchPipeline.endSection(newExitCond);

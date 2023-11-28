@@ -8,6 +8,7 @@ import bodo.io.snowflake
 import bodo.tests.utils
 from bodo.libs.stream_join import (
     delete_join_state,
+    get_op_pool_budget_bytes,
     get_op_pool_bytes_allocated,
     get_op_pool_bytes_pinned,
     get_partition_state,
@@ -95,6 +96,7 @@ def hash_join_common_impl(df1, df2, op_pool_size_bytes, build_outer, probe_outer
             _temp1 = _temp1 + 1
 
         final_partition_state = get_partition_state(join_state)
+        op_pool_budget_after_build = get_op_pool_budget_bytes(join_state)
 
         _temp2 = 0
         is_last2 = False
@@ -117,6 +119,7 @@ def hash_join_common_impl(df1, df2, op_pool_size_bytes, build_outer, probe_outer
 
         final_bytes_pinned = get_op_pool_bytes_pinned(join_state)
         final_bytes_allocated = get_op_pool_bytes_allocated(join_state)
+        final_op_pool_budget = get_op_pool_budget_bytes(join_state)
         delete_join_state(join_state)
         out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
         index_var = bodo.hiframes.pd_index_ext.init_range_index(
@@ -130,6 +133,8 @@ def hash_join_common_impl(df1, df2, op_pool_size_bytes, build_outer, probe_outer
             final_partition_state,
             final_bytes_pinned,
             final_bytes_allocated,
+            op_pool_budget_after_build,
+            final_op_pool_budget,
         )
 
     # We need a wrapper so that build_outer and probe_outer are treated
@@ -148,9 +153,13 @@ def _test_helper(
     broadcast,
     capfd,
     expected_log_messages,
+    expected_op_pool_budget_after_build=None,
 ):
     """
     Helper for testing.
+
+    expected_op_pool_budget_after_build: If not None, it must be a tuple that the value is expected
+     to be in the middle of.
     """
     with set_broadcast_join(broadcast), temp_env_override(
         {
@@ -165,6 +174,8 @@ def _test_helper(
                 final_partition_state,
                 final_bytes_pinned,
                 final_bytes_allocated,
+                op_pool_budget_after_build,
+                final_op_pool_budget,
             ) = hash_join_common_impl(
                 build_df, probe_df, op_pool_size_bytes, build_outer, probe_outer
             )
@@ -210,6 +221,12 @@ def _test_helper(
         assert_success
     ), f"Final bytes pinned by the Operator BufferPool ({final_bytes_pinned}) is not 0!"
 
+    assert_success = final_op_pool_budget == 0
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+    assert (
+        assert_success
+    ), f"Final operator pool budget ({final_op_pool_budget}) is not 0!"
+
     assert_success = final_bytes_allocated == 0
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
     assert (
@@ -221,6 +238,16 @@ def _test_helper(
     assert (
         assert_success
     ), f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+
+    assert_success = (expected_op_pool_budget_after_build is None) or (
+        expected_op_pool_budget_after_build[0]
+        <= op_pool_budget_after_build
+        <= expected_op_pool_budget_after_build[1]
+    )
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+    assert (
+        assert_success
+    ), f"Operator pool budget after build ({op_pool_budget_after_build}) is not as expected ({expected_op_pool_budget_after_build})"
 
 
 @pytest.mark.skipif(bodo.get_size() > 1, reason="Only calibrated for single core case")
@@ -264,22 +291,37 @@ def test_split_during_append_table(
     op_pool_size_bytes = 768 * 1024 if not broadcast else 2 * 1024 * 1024
 
     expected_log_msgs = []
+    expected_op_pool_budget_after_build = None
     if broadcast:
         expected_log_msgs = [
-            "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 1."
+            "[DEBUG] HashJoinState::FinalizeBuild: Successfully finalized partition 0. Estimated partition size: ",
+            "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 1.",
+            "Estimated max partition size: ",
+            "Total size of all partitions: ",
+            "Estimated required size of Op-Pool: ",
         ]
+        # It's between 310KiB and 315KiB depending on build_table_outer
+        expected_op_pool_budget_after_build = (310 * 1024, 315 * 1024)
     else:
         expected_log_msgs = [
             "[DEBUG] HashJoinState::AppendBuildBatch[3]: Encountered OperatorPoolThresholdExceededError.",
             "[DEBUG] Splitting partition 0.",
             "[DEBUG] HashJoinState::AppendBuildBatch[3]: Encountered OperatorPoolThresholdExceededError.",
             "[DEBUG] Splitting partition 0.",
+            "[DEBUG] HashJoinState::FinalizeBuild: Successfully finalized partition 0. Estimated partition size: ",
+            "[DEBUG] HashJoinState::FinalizeBuild: Successfully finalized partition 1. Estimated partition size: ",
+            "[DEBUG] HashJoinState::FinalizeBuild: Successfully finalized partition 2. Estimated partition size: ",
             "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 3.",
+            "Estimated max partition size: ",
+            "Total size of all partitions: ",
+            "Estimated required size of Op-Pool: ",
             "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 1.",
             "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 1.",
             "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 2.",
             "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 2.",
         ]
+        # It's between 566KiB and 572KiB depending on build_table_outer
+        expected_op_pool_budget_after_build = (566 * 1024, 572 * 1024)
 
     _test_helper(
         build_df,
@@ -292,6 +334,7 @@ def test_split_during_append_table(
         broadcast,
         capfd,
         expected_log_msgs,
+        expected_op_pool_budget_after_build,
     )
 
 
@@ -335,11 +378,17 @@ def test_split_during_finalize_build(build_probe_outer, memory_leak_check, capfd
     expected_log_msgs = [
         "[DEBUG] HashJoinState::AppendBuildBatch[3]: Encountered OperatorPoolThresholdExceededError.",
         "[DEBUG] Splitting partition 0.",
+        "[DEBUG] HashJoinState::FinalizeBuild: Successfully finalized partition 0. Estimated partition size: ",
         "[DEBUG] HashJoinState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 1.",
         "[DEBUG] Splitting partition 1.",
+        "[DEBUG] HashJoinState::FinalizeBuild: Successfully finalized partition 1. Estimated partition size: ",
         "[DEBUG] HashJoinState::FinalizeBuild: Encountered OperatorPoolThresholdExceededError while finalizing partition 2.",
         "[DEBUG] Splitting partition 2.",
-        "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 4.",
+        "[DEBUG] HashJoinState::FinalizeBuild: Successfully finalized partition 2. Estimated partition size: ",
+        "[DEBUG] HashJoinState::FinalizeBuild: Successfully finalized partition 3. Estimated partition size: ",
+        "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 4. Estimated max partition size: ",
+        "Total size of all partitions: ",
+        "Estimated required size of Op-Pool: ",
         "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 1.",
         "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 1.",
         "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 2.",
@@ -347,6 +396,8 @@ def test_split_during_finalize_build(build_probe_outer, memory_leak_check, capfd
         "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 3.",
         "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 3.",
     ]
+    # It's between 612KiB and 618KiB depending on build_table_outer
+    expected_op_pool_budget_after_build = (612 * 1024, 618 * 1024)
 
     _test_helper(
         build_df,
@@ -359,6 +410,7 @@ def test_split_during_finalize_build(build_probe_outer, memory_leak_check, capfd
         False,
         capfd,
         expected_log_msgs,
+        expected_op_pool_budget_after_build,
     )
 
 
@@ -414,22 +466,35 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
     op_pool_size_bytes = 1024 * 1024
 
     expected_log_msgs = []
+    expected_op_pool_budget_after_build = None
     if bodo.get_rank() == 0:
         expected_log_msgs = [
-            "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 1.",
-        ] + ([None] * 8)
+            "[DEBUG] HashJoinState::FinalizeBuild: Successfully finalized partition 0. Estimated partition size: ",
+            "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 1. Estimated max partition size: ",
+            "Total size of all partitions: ",
+            "Estimated required size of Op-Pool: ",
+        ] + ([None] * 10)
+        # It's between 267KiB and 270KiB depending on build_table_outer
+        expected_op_pool_budget_after_build = (267 * 1024, 270 * 1024)
     else:
         expected_log_msgs = [
             "[DEBUG] HashJoinState::AppendBuildBatch[2]: Encountered OperatorPoolThresholdExceededError.",
             "[DEBUG] Splitting partition 0.",
             "[DEBUG] HashJoinState::AppendBuildBatch[2]: Encountered OperatorPoolThresholdExceededError.",
             "[DEBUG] Splitting partition 0.",
-            "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 3.",
+            "[DEBUG] HashJoinState::FinalizeBuild: Successfully finalized partition 0. Estimated partition size: ",
+            "[DEBUG] HashJoinState::FinalizeBuild: Successfully finalized partition 1. Estimated partition size: ",
+            "[DEBUG] HashJoinState::FinalizeBuild: Successfully finalized partition 2. Estimated partition size: ",
+            "[DEBUG] HashJoinState::FinalizeBuild: Total number of partitions: 3. Estimated max partition size: ",
+            "Total size of all partitions: ",
+            "Estimated required size of Op-Pool: ",
             "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 1.",
             "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 1.",
             "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Starting probe finalization for partition 2.",
             "[DEBUG] HashJoinState::FinalizeProbeForInactivePartitions: Finalized probe for partition 2.",
         ]
+        # It's between 435KiB and 441KiB depending on build_table_outer
+        expected_op_pool_budget_after_build = (435 * 1024, 441 * 1024)
 
     _test_helper(
         build_df,
@@ -442,4 +507,5 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
         False,
         capfd,
         expected_log_msgs,
+        expected_op_pool_budget_after_build,
     )

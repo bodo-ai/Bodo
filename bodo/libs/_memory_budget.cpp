@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-#include "_bodo_common.h"
+#include "mpi.h"
 
 // Max iterations of the step 1 of the compute satisfiable budgets algorithms.
 #define SATISFIABLE_BUDGET_CALC_MAX_ITERS 100000
@@ -78,6 +78,8 @@ void OperatorComptroller::Initialize() {
             static_cast<double>(std::stoi(mem_percent_env_) / 100.0);
     }
 
+    this->budgets_enabled = this->memoryBudgetsEnabledHelper();
+
     // If a budget is not explicitly specified (common/default case), initialize
     // it with the total memory available (with some factor applied to the total
     // size to allow for non-budgeted memory usage.
@@ -129,7 +131,7 @@ void OperatorComptroller::RegisterOperator(int64_t operator_id,
 }
 
 int64_t OperatorComptroller::GetOperatorBudget(int64_t operator_id) const {
-    if (operator_id < 0) {
+    if (!this->budgets_enabled || operator_id < 0) {
         return -1;
     }
     return this->operator_allocated_budget[operator_id];
@@ -137,7 +139,7 @@ int64_t OperatorComptroller::GetOperatorBudget(int64_t operator_id) const {
 
 void OperatorComptroller::ReduceOperatorBudget(int64_t operator_id,
                                                size_t budget) {
-    if (!OperatorComptroller::memoryBudgetsEnabled()) {
+    if (!this->budgets_enabled || (operator_id < 0)) {
         return;
     }
 
@@ -149,8 +151,8 @@ void OperatorComptroller::ReduceOperatorBudget(int64_t operator_id,
                   << std::endl;
         return;
     }
-    auto old_budget = this->operator_allocated_budget[operator_id];
-    auto delta = old_budget - budget;
+    int64_t old_budget = this->operator_allocated_budget[operator_id];
+    int64_t delta = old_budget - static_cast<int64_t>(budget);
     auto& req = this->requests_per_operator[operator_id];
     // Set remaining to 0 so that it's not considered in future
     // adjustments, regardless of whether it's a relative
@@ -160,34 +162,82 @@ void OperatorComptroller::ReduceOperatorBudget(int64_t operator_id,
     // Reduce budget for this operator
     this->operator_allocated_budget[operator_id] = budget;
     // Add the freed budget back to pipeline_remaining_budget so that operators
-    // that call IncreaseOperatorBudget can take advantage of it.
+    // that call RequestAdditionalBudget can take advantage of it.
     // Remove the operator from its pipelines remaining operator ids list.
     for (const int64_t pipeline_id : req.pipeline_ids) {
         this->pipeline_remaining_budget[pipeline_id] += delta;
         this->pipeline_to_remaining_operator_ids[pipeline_id].erase(
             operator_id);
     }
+
+    // Log this budget update.
+    if (this->debug_level >= 1) {
+        std::cerr << "[DEBUG] OperatorComptroller::ReduceOperatorBudget: "
+                     "Reduced budget for operator "
+                  << operator_id << " from "
+                  << BytesToHumanReadableString(old_budget) << " to "
+                  << BytesToHumanReadableString(budget) << "." << std::endl;
+    }
 }
 
-void OperatorComptroller::IncreaseOperatorBudget(int64_t operator_id) {
-    if (!OperatorComptroller::memoryBudgetsEnabled()) {
-        return;
+size_t OperatorComptroller::RequestAdditionalBudget(int64_t operator_id,
+                                                    int64_t addln_budget) {
+    if (!this->budgets_enabled || (operator_id < 0)) {
+        return 0;
+    }
+    if (addln_budget < -1) {
+        throw std::runtime_error(
+            "OperatorComptroller::RequestAdditionalBudget called with "
+            "addln_budget < -1!");
     }
     const auto& req = this->requests_per_operator[operator_id];
-    size_t max_update = std::numeric_limits<size_t>::max();
+    size_t max_possible_update = std::numeric_limits<size_t>::max();
     // Determine the largest amount of budget we can allocate for this operator
     for (const int64_t pipeline_id : req.pipeline_ids) {
-        max_update =
-            std::min(max_update, this->pipeline_remaining_budget[pipeline_id]);
+        max_possible_update = std::min(
+            max_possible_update, this->pipeline_remaining_budget[pipeline_id]);
+    }
+
+    size_t addln_assigned_budget = 0;
+    if (addln_budget != -1) {
+        // If the operator asked for a specific amount, try to fulfill it
+        // completely:
+        addln_assigned_budget =
+            std::min(max_possible_update, static_cast<size_t>(addln_budget));
+    } else {
+        // If the operator is asking for more memory in general, we will assign
+        // it all of the remaining budget.
+        // Currently, only Join-Build or Groupby-Build can request additional
+        // budget. Only one of them can exist in one pipeline, so there is no
+        // possibility of sharing the remaining budget at this point. We may
+        // change this behavior in the future as more operators are supported
+        // and more combinations are possible.
+        addln_assigned_budget = max_possible_update;
     }
 
     // If we are able to increase the budget, then do so.
-    if (max_update) {
-        this->operator_allocated_budget[operator_id] += max_update;
+    if (addln_assigned_budget > 0) {
+        const int64_t old_budget = this->operator_allocated_budget[operator_id];
+        this->operator_allocated_budget[operator_id] += addln_assigned_budget;
         for (const int64_t pipeline_id : req.pipeline_ids) {
-            this->pipeline_remaining_budget[pipeline_id] -= max_update;
+            this->pipeline_remaining_budget[pipeline_id] -=
+                addln_assigned_budget;
+        }
+        // Log this budget update.
+        if (this->debug_level >= 1) {
+            std::cerr
+                << "[DEBUG] OperatorComptroller::RequestAdditionalBudget: "
+                   "Increased budget for operator "
+                << operator_id << " by "
+                << BytesToHumanReadableString(addln_assigned_budget)
+                << " (from " << BytesToHumanReadableString(old_budget) << " to "
+                << BytesToHumanReadableString(
+                       this->operator_allocated_budget[operator_id])
+                << ")." << std::endl;
         }
     }
+
+    return addln_assigned_budget;
 }
 
 void OperatorComptroller::assignAdditionalBudgetToOperator(
@@ -314,7 +364,7 @@ inline void OperatorComptroller::assignBudgetProportionalToRemEstimate(
 }
 
 void OperatorComptroller::ComputeSatisfiableBudgets() {
-    if (!OperatorComptroller::memoryBudgetsEnabled()) {
+    if (!this->budgets_enabled) {
         // Until more work is done to refine the memory estimates, disable
         // memory budgeting by default so that performance doesn't degrade.
         for (int64_t op_id = 0;
@@ -345,6 +395,9 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
 
     // Reset pipeline_to_remaining_operator_ids:
     this->refreshPipelineToRemainingOperatorIds();
+
+    int myrank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     // STEP 1: Do an iterative algorithm to distribute budgets.
     size_t num_iterations = 0;
@@ -487,7 +540,7 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
         }
         num_iterations++;
         if (num_iterations > SATISFIABLE_BUDGET_CALC_MAX_ITERS) {
-            if (this->debug_level >= 1) {
+            if ((this->debug_level >= 1) && (myrank == 0)) {
                 std::cerr << "[WARNING] "
                              "OperatorComptroller::ComputeSatisfiableBudgets: "
                              "Could not converge on a budget in "
@@ -499,7 +552,7 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
         }
     }
 
-    if (this->debug_level >= 2) {
+    if ((this->debug_level >= 2) && (myrank == 0)) {
         std::cerr
             << "[DEBUG] OperatorComptroller::ComputeSatisfiableBudgets: After "
             << num_iterations << " iterations of step 1:" << std::endl;
@@ -509,8 +562,9 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
     // STEP 2: Give budget to single pipeline operators.
     // For each pipeline, if there's still some budget left,
     // give it to the operators that are only in that pipeline.
-    // First to the abs req ops (if any not fulfilled), and then to the rel req
-    // ops. Mark the ops as done after this since there's no more budget
+    // We only do it for the abs req ops (if any not fulfilled),
+    // since the rel req ops can request additional budget dynamically.
+    // We will mark the ops as done after this since there's no more budget
     // to assign to ops that only exist in this pipeline.
     for (size_t pipeline_id = 0; pipeline_id < this->num_pipelines;
          pipeline_id++) {
@@ -518,7 +572,7 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
         // provided absolute estimates and those that provided
         // relative estimates. Only select the ones that are only
         // in this pipeline.
-        auto [abs_req_op_ids, rel_req_op_ids, abs_req_sum, rel_req_sum] =
+        auto [abs_req_op_ids, _, abs_req_sum, __] =
             this->splitRemainingSinglePipelineOperatorsIntoAbsoluteAndRelative(
                 pipeline_id);
 
@@ -537,47 +591,10 @@ void OperatorComptroller::ComputeSatisfiableBudgets() {
                 abs_req_op_ids, abs_req_sum,
                 this->pipeline_remaining_budget[pipeline_id]);
         }
-
-        // Now do it for relative estimate operators:
-        this->assignBudgetProportionalToRemEstimate(
-            rel_req_op_ids, rel_req_sum,
-            this->pipeline_remaining_budget[pipeline_id]);
     }
 
-    if (this->debug_level >= 2) {
-        std::cerr << "[DEBUG] OperatorComptroller::ComputeSatisfiableBudgets: "
-                     "After step 2:"
-                  << std::endl;
-        this->PrintBudgetAllocations(std::cerr);
-    }
-
-    // STEP 3: Give budget to multi-pipeline operators.
-    // For every op, check if all its pipeline have some budget left. If they
-    // do, take the min of the rem budgets from these pipelines
-    // (that it belongs to) and assign it that budget.
-    for (int64_t op_id = 0;
-         op_id < static_cast<int64_t>(this->operator_allocated_budget.size());
-         op_id++) {
-        auto& req = this->requests_per_operator[op_id];
-        if (req.rem_estimate == 0) {
-            continue;
-        }
-
-        size_t available_allocation = std::numeric_limits<size_t>::max();
-        for (const int64_t pipeline_id : req.pipeline_ids) {
-            available_allocation =
-                std::min(this->pipeline_remaining_budget[pipeline_id],
-                         available_allocation);
-        }
-        this->assignAdditionalBudgetToOperator(op_id, available_allocation);
-    }
-
-    int myrank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    // Only print on rank-0 if debug level is 1. If debug level is higher than
-    // or equal to 2, print it on every rank.
-    if (((this->debug_level == 1) && (myrank == 0)) ||
-        (this->debug_level >= 2)) {
+    // Only print on rank-0.
+    if ((this->debug_level >= 1) && (myrank == 0)) {
         std::cerr << "[DEBUG] OperatorComptroller::ComputeSatisfiableBudgets: "
                      "Final budget allocation:"
                   << std::endl;
@@ -589,6 +606,13 @@ void OperatorComptroller::PrintBudgetAllocations(std::ostream& os) {
     os << "\n======================================= MEMORY BUDGET "
           "======================================="
        << std::endl;
+    if (!this->budgets_enabled) {
+        os << "NOT ENABLED." << std::endl;
+        os << "================================================================"
+              "============================="
+           << std::endl;
+        return;
+    }
     os << "Number of Pipelines: " << this->num_pipelines << std::endl;
     os << "Number of Operators: " << this->num_operators << std::endl;
     os << "Total Budget: " << BytesToHumanReadableString(this->total_budget)
@@ -644,49 +668,4 @@ void OperatorComptroller::PrintBudgetAllocations(std::ostream& os) {
     os << "===================================================================="
           "========================="
        << std::endl;
-}
-
-void init_operator_comptroller() {
-    OperatorComptroller::Default()->Initialize();
-}
-
-void register_operator(int64_t operator_id, int64_t operator_type,
-                       int64_t min_pipeline_id, int64_t max_pipeline_id,
-                       int64_t estimate) {
-    if (estimate < 0) {
-        estimate = bodo::BufferPool::Default()->get_memory_size_bytes();
-    }
-    OperatorComptroller::Default()->RegisterOperator(
-        operator_id, static_cast<OperatorType>(operator_type), min_pipeline_id,
-        max_pipeline_id, static_cast<size_t>(estimate));
-}
-
-void reduce_operator_budget(int64_t operator_id, size_t new_estimate) {
-    OperatorComptroller::Default()->ReduceOperatorBudget(operator_id,
-                                                         new_estimate);
-}
-
-void increase_operator_budget(int64_t operator_id) {
-    OperatorComptroller::Default()->IncreaseOperatorBudget(operator_id);
-}
-
-void compute_satisfiable_budgets() {
-    OperatorComptroller::Default()->ComputeSatisfiableBudgets();
-}
-
-PyMODINIT_FUNC PyInit_memory_budget_cpp(void) {
-    PyObject* m;
-    MOD_DEF(m, "memory_budget", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
-    }
-
-    bodo_common_init();
-
-    SetAttrStringFromVoidPtr(m, init_operator_comptroller);
-    SetAttrStringFromVoidPtr(m, register_operator);
-    SetAttrStringFromVoidPtr(m, reduce_operator_budget);
-    SetAttrStringFromVoidPtr(m, increase_operator_budget);
-    SetAttrStringFromVoidPtr(m, compute_satisfiable_budgets);
-    return m;
 }
