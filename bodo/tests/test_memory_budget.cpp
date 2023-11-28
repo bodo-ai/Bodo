@@ -99,24 +99,50 @@ bodo::tests::suite memory_budget_tests([] {
         comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 50);
         comptroller->ComputeSatisfiableBudgets();
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
-        comptroller->IncreaseOperatorBudget(0);
+        comptroller->RequestAdditionalBudget(0);
         bodo::tests::check(comptroller->GetOperatorBudget(0) == 100);
     });
 
-    bodo::tests::test(
-        "test_increase_budget_unsatisfiable_becomes_satisfiable", [] {
-            auto comptroller = OperatorComptroller::Default();
-            comptroller->Initialize(100);
-            comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 75);
-            comptroller->RegisterOperator(1, OperatorType::UNKNOWN, 0, 0, 75);
-            comptroller->ComputeSatisfiableBudgets();
-            bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
-            bodo::tests::check(comptroller->GetOperatorBudget(1) == 50);
-            comptroller->ReduceOperatorBudget(0, 25);
-            comptroller->IncreaseOperatorBudget(1);
-            bodo::tests::check(comptroller->GetOperatorBudget(0) == 25);
-            bodo::tests::check(comptroller->GetOperatorBudget(1) == 75);
-        });
+    bodo::tests::test("test_request_additional_budget", [] {
+        auto comptroller = OperatorComptroller::Default();
+        comptroller->Initialize(100);
+        comptroller->RegisterOperator(0, OperatorType::UNKNOWN, 0, 0, 75);
+        comptroller->RegisterOperator(1, OperatorType::UNKNOWN, 0, 0, 75);
+        comptroller->ComputeSatisfiableBudgets();
+        bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
+        bodo::tests::check(comptroller->GetOperatorBudget(1) == 50);
+        comptroller->ReduceOperatorBudget(0, 25);
+        comptroller->RequestAdditionalBudget(1, 10);
+        bodo::tests::check(comptroller->GetOperatorBudget(0) == 25);
+        bodo::tests::check(comptroller->GetOperatorBudget(1) == 60);
+        comptroller->RequestAdditionalBudget(1, -1);
+        bodo::tests::check(comptroller->GetOperatorBudget(0) == 25);
+        bodo::tests::check(comptroller->GetOperatorBudget(1) == 75);
+    });
+
+    bodo::tests::test("test_request_additional_budget_2", [] {
+        auto comptroller = OperatorComptroller::Default();
+        comptroller->Initialize(100);
+        comptroller->RegisterOperator(0, OperatorType::GROUPBY, 0, 0, 75);
+        comptroller->RegisterOperator(1, OperatorType::GROUPBY, 0, 0, 75);
+        comptroller->ComputeSatisfiableBudgets();
+        bodo::tests::check(comptroller->GetOperatorBudget(0) == 50);
+        bodo::tests::check(comptroller->GetOperatorBudget(1) == 50);
+        comptroller->ReduceOperatorBudget(0, 25);
+        // Requesting 100, but will only get an additional 25 since that's all
+        // that is possible.
+        comptroller->RequestAdditionalBudget(1, 100);
+        bodo::tests::check(comptroller->GetOperatorBudget(0) == 25);
+        bodo::tests::check(comptroller->GetOperatorBudget(1) == 75);
+        // Reduce budget again
+        comptroller->ReduceOperatorBudget(0, 0);
+        bodo::tests::check(comptroller->GetOperatorBudget(0) == 0);
+        bodo::tests::check(comptroller->GetOperatorBudget(1) == 75);
+        // Request budget again
+        comptroller->RequestAdditionalBudget(1, 100);
+        bodo::tests::check(comptroller->GetOperatorBudget(0) == 0);
+        bodo::tests::check(comptroller->GetOperatorBudget(1) == 100);
+    });
 
     bodo::tests::test("test_join_groupby_write", [] {
         auto comptroller = OperatorComptroller::Default();

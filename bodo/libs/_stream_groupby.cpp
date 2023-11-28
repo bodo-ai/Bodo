@@ -1110,6 +1110,7 @@ GroupbyState::GroupbyState(std::vector<int8_t> in_arr_c_types,
                            int64_t op_pool_size_bytes)
     :  // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
+          op_id_,
           ((op_pool_size_bytes == -1)
                ? static_cast<uint64_t>(
                      bodo::BufferPool::Default()->get_memory_size_bytes() *

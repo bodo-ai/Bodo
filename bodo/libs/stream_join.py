@@ -59,6 +59,7 @@ ll.add_symbol(
 ll.add_symbol("delete_join_state", stream_join_cpp.delete_join_state)
 
 # The following are used for debugging and testing purposes only:
+ll.add_symbol("join_get_op_pool_budget_bytes", stream_join_cpp.get_op_pool_budget_bytes)
 ll.add_symbol("join_get_op_pool_bytes_pinned", stream_join_cpp.get_op_pool_bytes_pinned)
 ll.add_symbol(
     "join_get_op_pool_bytes_allocated", stream_join_cpp.get_op_pool_bytes_allocated
@@ -1357,6 +1358,34 @@ def delete_join_state(
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     sig = types.void(join_state)
+    return sig, codegen
+
+
+@intrinsic
+def get_op_pool_budget_bytes(
+    typingctx,
+    join_state,
+):
+    """
+    Get the current budget (in bytes) of this join operator.
+    This is only used for testing and debugging purposes.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(64),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="join_get_op_pool_budget_bytes"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.uint64(join_state)
     return sig, codegen
 
 

@@ -3,6 +3,12 @@
 #include "_memory_budget.h"
 #include "_shuffle.h"
 
+// When estimating the required size of the OperatorBufferPool, we add some
+// headroom to be conservative. These macros define the bounds of this headroom.
+// The headroom is at most 16MiB or 5% of the size of the largest partition.
+#define OP_POOL_EST_MAX_HEADROOM 16UL * 1024 * 1024
+#define OP_POOL_EST_HEADROOM_FRACTION 0.05
+
 /* --------------------------- HashHashJoinTable -------------------------- */
 
 uint32_t HashHashJoinTable::operator()(const int64_t iRow) const {
@@ -1059,6 +1065,7 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
                 probe_parallel_, output_batch_size_, sync_iter_),
       // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
+          op_id_,
           ((op_pool_size_bytes == -1)
                ? static_cast<uint64_t>(
                      bodo::BufferPool::Default()->get_memory_size_bytes() *
@@ -1394,6 +1401,8 @@ void HashJoinState::FinalizeBuild() {
 
     // Finalize all the partitions and split them as needed:
     size_t total_rows = 0;
+    size_t max_partition_size = 0;
+    size_t total_partitions_size = 0;
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
         // TODO Add logic to check if partition is too big
         // (build_table_buffer size + approximate hash table size) and needs
@@ -1412,8 +1421,24 @@ void HashJoinState::FinalizeBuild() {
                 this->partitions[i_part]->FinalizeBuild();
                 total_rows += this->partitions[i_part]
                                   ->build_table_buffer->data_table->nrows();
+                // The partition size is roughly the number of bytes pinned
+                // through the OperatorBufferPool at this point. All other
+                // partitions are either unfinalized (i.e. they don't have any
+                // memory allocated directly through the op-pool) or are
+                // unpinned.
+                size_t est_partition_size = this->op_pool->bytes_pinned();
+                total_partitions_size += est_partition_size;
+                max_partition_size =
+                    std::max(max_partition_size, est_partition_size);
                 // Unpin the partition once we're done.
                 this->partitions[i_part]->unpin();
+                if (this->debug_partitioning) {
+                    std::cerr << "[DEBUG] HashJoinState::FinalizeBuild: "
+                                 "Successfully finalized partition "
+                              << i_part << ". Estimated partition size: "
+                              << BytesToHumanReadableString(est_partition_size)
+                              << std::endl;
+                }
                 break;
             } catch (
                 bodo::OperatorBufferPool::OperatorPoolThresholdExceededError&) {
@@ -1437,10 +1462,33 @@ void HashJoinState::FinalizeBuild() {
         }
     }
 
+    // The estimated required size of the pool is at least the size of the
+    // biggest partition.
+    size_t est_req_pool_size = max_partition_size;
+    // At this point, all partitions are unpinned, so op_pool->bytes_pinned() is
+    // the amount of bytes that *cannot* be unpinned (they go through malloc),
+    // so we need to account for it. It is likely that we are over-counting
+    // these since they might be part of the max_partition_size already, but its
+    // impact should be minimal. This shouldn't be large in practice since these
+    // buffers must be <12KiB and there are only a finite number of buffers.
+    est_req_pool_size += this->op_pool->bytes_pinned();
+    // Add a 5% headroom (or 16MiB, whichever is lower).
+    est_req_pool_size +=
+        std::min(OP_POOL_EST_MAX_HEADROOM,
+                 static_cast<size_t>(std::ceil(OP_POOL_EST_HEADROOM_FRACTION *
+                                               est_req_pool_size)));
+
     if (this->debug_partitioning) {
         std::cerr << "[DEBUG] HashJoinState::FinalizeBuild: Total number of "
                      "partitions: "
-                  << this->partitions.size() << "." << std::endl;
+                  << this->partitions.size()
+                  << ". Estimated max partition size: "
+                  << BytesToHumanReadableString(max_partition_size)
+                  << ". Total size of all partitions: "
+                  << BytesToHumanReadableString(total_partitions_size)
+                  << ". Estimated required size of Op-Pool: "
+                  << BytesToHumanReadableString(est_req_pool_size) << "."
+                  << std::endl;
     }
 
     // Add the tracing information.
@@ -1456,6 +1504,16 @@ void HashJoinState::FinalizeBuild() {
     // not when the state goes out of scope
     finalizeBuildEvent.finalize();
     this->build_event.finalize();
+
+    // We won't be making any new allocations, so we can move
+    // the error threshold to 1.0 now. This is required for reducing
+    // the budget since that's predicated on having entire budget available.
+    this->op_pool->SetErrorThreshold(1.0);
+    // If the est_req_pool_size is lower than the original budget, report this
+    // new number to the OperatorComptroller.
+    if (est_req_pool_size < this->op_pool->get_operator_budget_bytes()) {
+        this->op_pool->SetBudget(est_req_pool_size);
+    }
 }
 
 void HashJoinState::FinalizeProbe() {
@@ -1479,6 +1537,20 @@ void HashJoinState::FinalizeProbe() {
     // not when the state goes out of scope
     finalizeProbeEvent.finalize();
     this->probe_event.finalize();
+
+    // Give all the budget back in case other operators in this pipeline can
+    // benefit from it.
+    // XXX We can change it to an assert once they're enabled.
+    if (this->op_pool->bytes_pinned() != 0 ||
+        this->op_pool->bytes_allocated() != 0) {
+        throw std::runtime_error(
+            "HashJoinState::FinalizeProbe: Number of pinned bytes (" +
+            std::to_string(this->op_pool->bytes_pinned()) +
+            ") or allocated bytes (" +
+            std::to_string(this->op_pool->bytes_allocated()) + ") is not 0!");
+    }
+    this->op_pool->SetErrorThreshold(1.0);
+    this->op_pool->SetBudget(0);
 }
 
 void HashJoinState::InitProbeInputBuffers() {
@@ -1578,6 +1650,10 @@ HashJoinState::GetDictionaryHashesForKeys() {
         }
     }
     return dict_hashes;
+}
+
+uint64_t HashJoinState::op_pool_budget_bytes() const {
+    return this->op_pool->get_operator_budget_bytes();
 }
 
 uint64_t HashJoinState::op_pool_bytes_pinned() const {
@@ -2558,6 +2634,10 @@ void delete_join_state(JoinState* join_state_) {
     }
 }
 
+uint64_t get_op_pool_budget_bytes(JoinState* join_state) {
+    return ((HashJoinState*)join_state)->op_pool_budget_bytes();
+}
+
 uint64_t get_op_pool_bytes_pinned(JoinState* join_state) {
     return ((HashJoinState*)join_state)->op_pool_bytes_pinned();
 }
@@ -2618,6 +2698,7 @@ PyMODINIT_FUNC PyInit_stream_join_cpp(void) {
     SetAttrStringFromVoidPtr(m, delete_join_state);
     SetAttrStringFromVoidPtr(m, nested_loop_join_build_consume_batch_py_entry);
     SetAttrStringFromVoidPtr(m, generate_array_id);
+    SetAttrStringFromVoidPtr(m, get_op_pool_budget_bytes);
     SetAttrStringFromVoidPtr(m, get_op_pool_bytes_pinned);
     SetAttrStringFromVoidPtr(m, get_op_pool_bytes_allocated);
     SetAttrStringFromVoidPtr(m, get_num_partitions);

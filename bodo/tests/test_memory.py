@@ -3389,6 +3389,60 @@ def test_operator_pool_set_threshold():
     del op_pool
 
 
+def test_operator_pool_set_budget():
+    """
+    Test that updating/reducing the budget works as expected.
+    """
+
+    # Create a small operator pool (512KiB)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024)
+
+    # Verify defaults
+    assert op_pool.operator_budget_bytes == 512 * 1024
+    assert op_pool.error_threshold == 0.5
+    assert op_pool.memory_error_threshold == 256 * 1024
+
+    # Trying to increase budget should raise an exception
+    with pytest.raises(
+        RuntimeError,
+        match="OperatorBufferPool::SetBudget: Increasing the budget is not supported through this API.",
+    ):
+        op_pool.set_budget(1024 * 1024)
+
+    # Reduce the budget and verify that the attributes are as expected
+    op_pool.set_budget(500 * 1024)
+    assert op_pool.operator_budget_bytes == 500 * 1024
+    assert op_pool.error_threshold == 0.5
+    assert op_pool.memory_error_threshold == 250 * 1024
+
+    # If threshold enforcement is enabled and more bytes are pinned
+    # than new memory error threshold, it should raise
+    # OperatorPoolThresholdExceededError and not update budget.
+    allocation: BufferPoolAllocation = op_pool.allocate(225 * 1024)
+    assert op_pool.threshold_enforcement_enabled
+    with pytest.raises(
+        RuntimeError,
+        match="OperatorPoolThresholdExceededError: Tried allocating more space than what's allowed to be pinned!",
+    ):
+        op_pool.set_budget(400 * 1024)
+    assert op_pool.operator_budget_bytes == 500 * 1024
+    assert op_pool.error_threshold == 0.5
+    assert op_pool.memory_error_threshold == 250 * 1024
+
+    # The same should be fine to do if threshold enforcement is disabled.
+    op_pool.disable_threshold_enforcement()
+    op_pool.set_budget(400 * 1024)
+    assert op_pool.operator_budget_bytes == 400 * 1024
+    assert op_pool.error_threshold == 0.5
+    assert op_pool.memory_error_threshold == 200 * 1024
+
+    # Cleanup
+    op_pool.free(allocation)
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.bytes_allocated() == 0
+    del op_pool
+
+
 def test_operator_pool_allocation():
     """
     Test multiple allocation/free scenarios, including

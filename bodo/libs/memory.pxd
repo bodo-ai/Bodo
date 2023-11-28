@@ -99,8 +99,9 @@ cdef extern from "_operator_pool.h" namespace "bodo" nogil:
 
     cdef cppclass COperatorBufferPool" bodo::OperatorBufferPool"(CIBufferPool):
 
-        COperatorBufferPool(uint64_t operator_budget_bytes, shared_ptr[CBufferPool] parent_pool, double error_threshold)
+        COperatorBufferPool(int64_t operator_id, uint64_t operator_budget_bytes, shared_ptr[CBufferPool] parent_pool, double error_threshold)
         void SetErrorThreshold(double error_threshold) except +
+        void SetBudget(uint64_t new_operator_budget) except +
         CStatus Allocate(int64_t size, int64_t alignment, uint8_t** out) except +
         CStatus Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) except +
         void Free(uint8_t* buffer, int64_t size, int64_t alignment) except +
