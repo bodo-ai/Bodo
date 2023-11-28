@@ -462,9 +462,14 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type, dict_encode=True):
         # If the output array is ArrayItemArray
         data_arr_type = _arr_typ.dtype
 
-        assert (
-            scalar == data_arr_type
-        ), "Internal error in coerce_scalar_to_array: type of scalar does not match expected array type"
+        # Ideally, we would have some sort of compile time check that the scalar type is
+        # compatible with the output array type, so we can throw a readable error if
+        # it weren't the case. However, we run into complications due to differences
+        # between our nullable types, and Numba's array types. For example,
+        # ArrayItemArrayType(BooleanArrayType())'s dtype is Array(bool, 1, 'C', False, aligned=True)
+        # NOT BooleanArrayType().
+        # For now, we're not doing any checks, and just let the code fail with
+        # a numba type coercion error.
 
         def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover
             return array_to_repeated_array_item_array(scalar, length, data_arr_type)
