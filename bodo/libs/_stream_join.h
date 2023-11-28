@@ -799,6 +799,9 @@ class HashJoinState : public JoinState {
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
     GetDictionaryHashesForKeys();
 
+    /// @brief Get the current budget of the op-pool for this Join operator.
+    uint64_t op_pool_budget_bytes() const;
+
     /// @brief Get the number of bytes allocated through this Join operator's
     /// OperatorBufferPool that are currently pinned.
     uint64_t op_pool_bytes_pinned() const;

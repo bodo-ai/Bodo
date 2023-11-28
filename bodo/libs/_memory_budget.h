@@ -133,11 +133,6 @@ class OperatorComptroller {
         return comptroller_;
     }
 
-    static bool memoryBudgetsEnabled() {
-        static bool enabled = memoryBudgetsEnabledHelper();
-        return enabled;
-    }
-
     // Called by init_operator_comptroller
     void Initialize();
 
@@ -166,17 +161,27 @@ class OperatorComptroller {
 
     /**
      * @brief Reduce the budget for an operator. Note that the new budget must
-     * be <= the old budget
+     * be <= the old budget.
      * @param operator_id The operator to modify
      * @param budget The new budget
      */
     void ReduceOperatorBudget(int64_t operator_id, size_t budget);
 
     /**
-     * @brief Increase the budget for a given operator to the maximum possible.
-     * @param operator_id The operator to modify
+     * @brief Grant additional budget to operator if possible.
+     * This API is called by the OperatorBufferPool (for HashJoin and Groupby)
+     * to get additional budget at runtime that may be available
+     * in their pipelines or that might've been given back by other
+     * operators.
+     *
+     * @param operator_id The operator requesting additional budget.
+     * @param addln_budget Maximum additional budget that the operator is
+     * requesting. -1 implies it's asking for all possible additional budget
+     * that can be allocated to it.
+     * @return size_t Additional budget being allocated to this operator.
      */
-    void IncreaseOperatorBudget(int64_t operator_id);
+    size_t RequestAdditionalBudget(int64_t operator_id,
+                                   int64_t addln_budget = -1);
 
     /**
      * @brief Compute budgets for all known operators and pipelines. This must
@@ -205,6 +210,7 @@ class OperatorComptroller {
 
     size_t debug_level = 0;
     double memory_usage_fraction = BODO_MEMORY_BUDGET_DEFAULT_USAGE_FRACTION;
+    bool budgets_enabled = false;
 
     /// Helpers for ComputeSatisfiableBudgets:
 
@@ -271,7 +277,7 @@ class OperatorComptroller {
                                                       size_t ops_rem_est_sum,
                                                       size_t budget);
 
-    static bool memoryBudgetsEnabledHelper() {
+    bool memoryBudgetsEnabledHelper() {
         char* use_mem_budget_env_ = std::getenv("BODO_USE_MEMORY_BUDGETS");
         if (use_mem_budget_env_) {
             // Use operator budgets based on the env var value if

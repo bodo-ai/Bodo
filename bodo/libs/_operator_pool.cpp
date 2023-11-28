@@ -1,4 +1,5 @@
 #include "_operator_pool.h"
+#include "_memory_budget.h"
 
 namespace bodo {
 
@@ -14,7 +15,6 @@ void OperatorBufferPool::SetErrorThreshold(double error_threshold) {
     if (error_threshold < this->error_threshold_) {
         if (this->threshold_enforcement_enabled_ &&
             (this->bytes_pinned() > new_memory_error_threshold_)) {
-            // XXX TODO Maybe use arrow::Status instead?
             throw OperatorPoolThresholdExceededError();
         }
     }
@@ -22,13 +22,71 @@ void OperatorBufferPool::SetErrorThreshold(double error_threshold) {
     this->memory_error_threshold_ = new_memory_error_threshold_;
 }
 
-inline void OperatorBufferPool::enforce_threshold(int64_t size) const {
+void OperatorBufferPool::SetBudget(uint64_t new_operator_budget) {
+    int64_t delta = static_cast<int64_t>(new_operator_budget) -
+                    static_cast<int64_t>(this->operator_budget_bytes_);
+    if (delta > 0) {
+        throw std::runtime_error(
+            "OperatorBufferPool::SetBudget: Increasing the budget is not "
+            "supported through this API.");
+    }
+    // Update budget at the pool level
+    this->update_budget(delta);
+    // If the update was successful, notify the OperatorComptroller about
+    // the new budget. This will allow other operators to receive the
+    // additional budget should they need it.
+    OperatorComptroller::Default()->ReduceOperatorBudget(this->operator_id,
+                                                         new_operator_budget);
+}
+
+inline void OperatorBufferPool::update_budget(int64_t diff) {
+    if (diff < ((-1L) * static_cast<int64_t>(this->operator_budget_bytes_))) {
+        throw std::runtime_error("OperatorBufferPool::update_budget: diff (" +
+                                 std::to_string(diff) +
+                                 ") would make the budget negative!");
+    }
+
+    uint64_t new_operator_budget_bytes_ = this->operator_budget_bytes_ + diff;
+    uint64_t new_memory_error_threshold_ = static_cast<uint64_t>(
+        this->error_threshold_ * new_operator_budget_bytes_);
+
+    // If the new budget is smaller than before and threshold enforcement is
+    // enabled, then check that number of bytes that are currently pinned is
+    // lesser than the new threshold.
+    if ((diff < 0) && this->threshold_enforcement_enabled_ &&
+        (this->bytes_pinned() > new_memory_error_threshold_)) {
+        throw OperatorPoolThresholdExceededError();
+    }
+
+    // Update state:
+    this->operator_budget_bytes_ = new_operator_budget_bytes_;
+    this->memory_error_threshold_ = new_memory_error_threshold_;
+}
+
+inline void OperatorBufferPool::try_increase_budget() {
+    // Request all available budget from the comptroller.
+    size_t addln_budget =
+        OperatorComptroller::Default()->RequestAdditionalBudget(
+            this->operator_id, -1);
+    // If additional budget was allocated, update the pool state:
+    if (addln_budget > 0) {
+        this->update_budget(addln_budget);
+    }
+}
+
+inline void OperatorBufferPool::enforce_threshold(int64_t size) {
     // If threshold enforcement is turned on, then check if this
     // allocation would cross the threshold. If it does, throw
     // a custom error.
     if (this->threshold_enforcement_enabled_ &&
         ((size + this->bytes_pinned()) > this->memory_error_threshold_)) {
-        throw OperatorPoolThresholdExceededError();
+        // Try to get additional budget from OperatorComptroller.
+        this->try_increase_budget();
+        // If we still don't have sufficient budget, raise
+        // OperatorPoolThresholdExceededError.
+        if ((size + this->bytes_pinned()) > this->memory_error_threshold_) {
+            throw OperatorPoolThresholdExceededError();
+        }
     }
 }
 

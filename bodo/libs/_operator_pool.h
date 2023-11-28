@@ -21,6 +21,8 @@ class OperatorBufferPool final : public IBufferPool {
     /**
      * @brief Constructor for OperatorBufferPool.
      *
+     * @param operator_id_ Operator ID of the operator this pool is associated
+     * with.
      * @param operator_budget_bytes The budget assigned to this operator.
      * The absolute threshold values will be based on this budget.
      * @param parent_pool The parent pool that this OperatorBufferPool
@@ -30,13 +32,19 @@ class OperatorBufferPool final : public IBufferPool {
      * when threshold enforcement is enabled.
      */
     explicit OperatorBufferPool(
-        uint64_t operator_budget_bytes,
+        int64_t operator_id_, uint64_t operator_budget_bytes,
         std::shared_ptr<BufferPool> parent_pool = BufferPool::Default(),
         double error_threshold = 0.5)
-        : parent_pool_(std::move(parent_pool)),
+        : operator_id(operator_id_),
+          parent_pool_(std::move(parent_pool)),
           operator_budget_bytes_(operator_budget_bytes) {
         this->SetErrorThreshold(error_threshold);
     }
+
+    /// @brief Operator ID of the operator this pool is associated with. This
+    /// will primarily be used to interface with the OperatorComptroller to get
+    /// and update budgets for this operator.
+    const int64_t operator_id = -1;
 
     /**
      * @brief Change the error threshold. The absolute error
@@ -46,10 +54,33 @@ class OperatorBufferPool final : public IBufferPool {
      * threshold would be, we will raise a
      * OperatorPoolThresholdExceededError. The threshold
      * won't be updated in this case.
+     * NOTE: We won't try to get an increased budget from the
+     * OperatorComptroller in this case.
      *
      * @param error_threshold New threshold. Must be <= 1.0
      */
     void SetErrorThreshold(double error_threshold);
+
+    /**
+     * @brief Update the budget for this operator pool.
+     * At this point, only decreasing the budget is supported, i.e.
+     * new_operator_budget must be lesser than the existing budget.
+     * Note that if threshold enforcement is enabled and the
+     * number of bytes pinned is greater than what the new
+     * threshold would be, we will raise a
+     * OperatorPoolThresholdExceededError. The budget
+     * won't be updated in this case.
+     * NOTE: We won't try to get an increased budget from the
+     * OperatorComptroller in this case.
+     *
+     * If the budget update is successful, this will also inform
+     * the OperatorComptroller about this updated budget so that
+     * this budget can be made available to another operator
+     * that might need it.
+     *
+     * @param new_operator_budget New budget for this operator.
+     */
+    void SetBudget(uint64_t new_operator_budget);
 
     /**
      * @brief Allocates a buffer of 'size' bytes. The allocated buffer will be
@@ -180,6 +211,11 @@ class OperatorBufferPool final : public IBufferPool {
 
     /**
      * @brief Enable threshold enforcement.
+     * If the number of pinned bytes is larger than
+     * memory_error_threshold_, an OperatorPoolThresholdExceededError will be
+     * raised and threshold enforcement will not be enabled.
+     * NOTE: We won't try to get an increased budget from the
+     * OperatorComptroller in this case.
      *
      */
     void EnableThresholdEnforcement();
@@ -214,9 +250,7 @@ class OperatorBufferPool final : public IBufferPool {
     const std::shared_ptr<BufferPool> parent_pool_;
 
     /// @brief Memory budget for this operator (in bytes).
-    /// Currently, this is fixed after initialization, but in the future this
-    /// may be adjusted during execution.
-    const uint64_t operator_budget_bytes_;
+    uint64_t operator_budget_bytes_;
     /// @brief The current error threshold. This is relative to
     /// the operator budget. This must be <= 1.0.
     double error_threshold_;
@@ -229,6 +263,27 @@ class OperatorBufferPool final : public IBufferPool {
     /// @brief Number of bytes currently pinned
     /// TODO: Integrate into stats_ class at some point?
     std::atomic<uint64_t> bytes_pinned_;
+
+    /**
+     * @brief Helper function to try to get additional budget from
+     * the OperatorComptroller. If additional budget is allocated,
+     * it will update the pool state to reflect the new budget.
+     *
+     */
+    inline void try_increase_budget();
+
+    /**
+     * @brief Helper function to update the pool budget
+     * (and the memory_error_threshold).
+     * Note that if threshold enforcement is enabled and the
+     * number of bytes pinned is greater than what the new
+     * threshold would be, we will raise a
+     * OperatorPoolThresholdExceededError. The budget
+     * won't be updated in this case.
+     *
+     * @param diff Delta between the new and old budget.
+     */
+    inline void update_budget(int64_t diff);
 
     /**
      * @brief Atomically update the number of pinned bytes in the
@@ -245,10 +300,13 @@ class OperatorBufferPool final : public IBufferPool {
      * enforcement is enabled and if
      * currently pinned bytes + size would be over the
      * memory threshold ('memory_error_threshold_').
+     * Before raising the error, we will attempt to increase
+     * our available budget. If we're still short, we will
+     * raise the error.
      *
      * @param size Number of additional bytes to pin/allocate.
      */
-    inline void enforce_threshold(int64_t size) const;
+    inline void enforce_threshold(int64_t size);
 };
 
 }  // namespace bodo

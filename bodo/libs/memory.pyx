@@ -769,7 +769,10 @@ cdef class OperatorBufferPool(IBufferPool):
         if parent_pool is None:
             parent_pool = BufferPool.default()
 
-        self.c_pool = make_shared[COperatorBufferPool](operator_budget_bytes,
+        # We pass operator Id as -1 since this is only used for unit
+        # testing purposes and the operator ID is non-consequential at
+        # this point.
+        self.c_pool = make_shared[COperatorBufferPool](-1, operator_budget_bytes,
                                                        parent_pool.c_pool,
                                                        error_threshold)
 
@@ -824,7 +827,16 @@ cdef class OperatorBufferPool(IBufferPool):
         Set the error threshold ratio.
         """
         self.c_set_error_threshold(error_threshold)
-
+    
+    cdef void c_set_budget(self, int new_operator_budget) except *:
+        (deref(self.c_pool)).SetBudget(new_operator_budget)
+    
+    def set_budget(self, new_operator_budget: int):
+        """
+        Update the budget. The new budget must be lower
+        than the existing budget.
+        """
+        self.c_set_budget(new_operator_budget)
 
     cdef void c_enable_threshold_enforcement(self) except *:
         (deref(self.c_pool)).EnableThresholdEnforcement()

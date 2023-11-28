@@ -12,10 +12,16 @@ import bodo
 from bodo.ext import memory_budget_cpp
 
 ll.add_symbol("init_operator_comptroller", memory_budget_cpp.init_operator_comptroller)
+ll.add_symbol(
+    "init_operator_comptroller_with_budget",
+    memory_budget_cpp.init_operator_comptroller_with_budget,
+)
 ll.add_symbol("register_operator", memory_budget_cpp.register_operator)
 ll.add_symbol(
     "compute_satisfiable_budgets", memory_budget_cpp.compute_satisfiable_budgets
 )
+
+## Only used for unit testing purposes
 ll.add_symbol("reduce_operator_budget", memory_budget_cpp.reduce_operator_budget)
 ll.add_symbol("increase_operator_budget", memory_budget_cpp.increase_operator_budget)
 
@@ -45,6 +51,28 @@ def init_operator_comptroller(typingctx):
         return context.get_dummy_value()
 
     sig = types.none()
+    return sig, codegen
+
+
+@intrinsic
+def init_operator_comptroller_with_budget(typingctx, budget):
+    """Wrapper for init_operator_comptroller_with_budget in _memory_budget.cpp"""
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(64),
+            ],
+        )
+        fn_typ = cgutils.get_or_insert_function(
+            builder.module, fnty, name="init_operator_comptroller_with_budget"
+        )
+        builder.call(fn_typ, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return context.get_dummy_value()
+
+    sig = types.none(budget)
     return sig, codegen
 
 
@@ -79,8 +107,31 @@ def register_operator(
 
 
 @intrinsic
+def compute_satisfiable_budgets(typingctx):
+    """Wrapper for compute_satisfiable_budgets in _memory_budget.cpp"""
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [],
+        )
+        fn_typ = cgutils.get_or_insert_function(
+            builder.module, fnty, name="compute_satisfiable_budgets"
+        )
+        builder.call(fn_typ, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return
+
+    sig = types.none()
+    return sig, codegen
+
+
+@intrinsic
 def reduce_operator_budget(typingctx, operator_id, new_estimate):
-    """Wrapper for reduce_operator_budget in _memory_budget.cpp"""
+    """
+    Wrapper for reduce_operator_budget in _memory_budget.cpp
+    Only used for unit testing purposes.
+    """
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -103,7 +154,10 @@ def reduce_operator_budget(typingctx, operator_id, new_estimate):
 
 @intrinsic
 def increase_operator_budget(typingctx, operator_id):
-    """Wrapper for increase_operator_budget in _memory_budget.cpp"""
+    """
+    Wrapper for increase_operator_budget in _memory_budget.cpp
+    Only used for unit testing purposes.
+    """
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(64)])
@@ -115,24 +169,4 @@ def increase_operator_budget(typingctx, operator_id):
         return
 
     sig = types.none(operator_id)
-    return sig, codegen
-
-
-@intrinsic
-def compute_satisfiable_budgets(typingctx):
-    """Wrapper for compute_satisfiable_budgets in _memory_budget.cpp"""
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [],
-        )
-        fn_typ = cgutils.get_or_insert_function(
-            builder.module, fnty, name="compute_satisfiable_budgets"
-        )
-        builder.call(fn_typ, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return
-
-    sig = types.none()
     return sig, codegen
