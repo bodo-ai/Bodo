@@ -1317,6 +1317,13 @@ def test_snowflake_to_sql_bodo_datatypes_part3(df, memory_leak_check):
 
     passed = 1
     if bodo.get_rank() == 0:
+        # Sort output as data read via read_sql doesn't necessarily have to have
+        # the same row ordering
+        bodo_result["SORT_COLUMN"] = bodo_result["A"].apply(lambda x: hash(tuple(x)))
+        df["SORT_COLUMN"] = df["A"].apply(lambda x: hash(tuple(x)))
+
+        bodo_result = bodo_result.sort_values("SORT_COLUMN").reset_index(drop=True)
+        df = df.sort_values("SORT_COLUMN").reset_index(drop=True)
         try:
             pd.testing.assert_frame_equal(
                 bodo_result,
