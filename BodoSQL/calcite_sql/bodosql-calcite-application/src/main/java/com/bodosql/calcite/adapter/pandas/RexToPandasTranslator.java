@@ -1348,9 +1348,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "TO_ARRAY":
       case "ARRAY_TO_STRING":
       case "ARRAY_COMPACT":
+      case "ARRAY_SLICE":
         kwargs.add(new Pair<>("is_scalar", new Expr.BooleanLiteral(argScalars.get(0))));
         break;
-        // functions which need is_scalar indicators for the first two argument
+        // functions which need is_scalar indicators for the first two arguments
       case "ARRAYS_OVERLAP":
       case "ARRAY_CONTAINS":
       case "ARRAY_POSITION":
@@ -1970,6 +1971,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "ARRAY_CAT":
           case "ARRAYS_OVERLAP":
           case "ARRAY_SIZE":
+          case "ARRAY_SLICE":
           case "ARRAY_TO_STRING":
           case "TO_ARRAY":
             return visitNestedArrayFunc(fnName, operands, argScalars);

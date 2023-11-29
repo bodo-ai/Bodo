@@ -238,6 +238,19 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction ARRAY_SLICE =
+      new SqlFunction(
+          "ARRAY_SLICE",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.sequence(
+              "ARRAY_SLICE(ARRAY, INTEGER, INTEGER)",
+              OperandTypes.ARRAY,
+              OperandTypes.INTEGER,
+              OperandTypes.INTEGER),
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           TO_ARRAY,
@@ -250,6 +263,7 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           ARRAY_AGG,
           ARRAY_UNIQUE_AGG,
           ARRAY_SIZE,
+          ARRAY_SLICE,
           ARRAYS_OVERLAP,
           ARRAY_CONTAINS,
           ARRAY_POSITION);

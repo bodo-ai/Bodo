@@ -3085,6 +3085,13 @@ Bodo currently supports the following functions that operate on columns of array
     [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/array_size).
 
 
+#### ARRAY_SLICE
+-   `#!sql ARRAY_SLICE(arr, from, to)`
+
+    Returns an array constructed from a specified subset of elements of the input array `arr[from:to]`.
+    Returns `NULL` if one of `arr`, `from` and `to` is `NULL`.
+
+
 ### Window Functions
 
 Window functions can be used to compute an aggregation across a
