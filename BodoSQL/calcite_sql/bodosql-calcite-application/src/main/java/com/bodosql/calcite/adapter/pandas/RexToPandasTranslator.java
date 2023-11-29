@@ -1072,7 +1072,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         assert operands.size() == 2;
         return ExprKt.BodoSQLKernel("array_to_string", operands, List.of());
       case "TO_VARIANT":
-        throw new BodoSQLCodegenException("TO_VARIANT not yet supported");
+        // TO_VARIANT is currently implemented as a no-op that serves as a type-hint for the calcite
+        // side but has no effect on the generated code.
+        assert operands.size() == 1;
+        return operands.get(0);
       case "TO_OBJECT":
         throw new BodoSQLCodegenException("TO_OBJECT not yet supported");
       default:
@@ -1662,8 +1665,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TO_BINARY":
           case "TO_CHAR":
           case "TO_VARCHAR":
+          case "TO_VARIANT":
           case "TO_NUMBER":
           case "TO_NUMERIC":
+          case "TO_OBJECT":
           case "TO_DECIMAL":
           case "TRY_TO_NUMBER":
           case "TRY_TO_NUMERIC":
