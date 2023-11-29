@@ -4,8 +4,8 @@ import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.application.utils.RelCostAndMetaDataWriter;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
-import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
-import com.bodosql.calcite.schema.LocalSchemaImpl;
+import com.bodosql.calcite.catalog.SnowflakeCatalog;
+import com.bodosql.calcite.schema.LocalSchema;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
@@ -50,14 +50,14 @@ public class SnowflakeGenTest {
     Map envVars = System.getenv();
     Properties prop = new Properties();
     BodoSQLCatalog catalog =
-        new SnowflakeCatalogImpl(
+        new SnowflakeCatalog(
             (String) envVars.get("SF_USERNAME"),
             (String) envVars.get("SF_PASSWORD"),
             (String) envVars.get("SF_ACCOUNT"),
             (String) envVars.get("SF_DATABASE"),
             "DEMO_WH",
             prop);
-    LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
+    LocalSchema schema = new LocalSchema("__bodolocal__");
 
     // Add a local table to also resolve
     ArrayList arr = new ArrayList();

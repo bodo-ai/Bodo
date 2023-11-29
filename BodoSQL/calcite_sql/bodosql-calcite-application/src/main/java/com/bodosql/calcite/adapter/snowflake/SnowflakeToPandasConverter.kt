@@ -134,7 +134,9 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     }
 
     private fun getTableName(input: SnowflakeRel) = input.getCatalogTable().name
-    private fun getSchemaName(input: SnowflakeRel) = input.getCatalogTable().fullPath[0]
+    private fun getSchemaName(input: SnowflakeRel) = input.getCatalogTable().fullPath[1]
+
+    private fun getDatabaseName(input: SnowflakeRel) = input.getCatalogTable().fullPath[0]
 
     /**
      * Generate the code required to read a table. This path is necessary because the Snowflake
@@ -143,10 +145,11 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     private fun sqlReadTable(tableScan: SnowflakeTableScan, ctx: PandasRel.BuildContext): Expr.Call {
         val tableName = getTableName(tableScan)
         val schemaName = getSchemaName(tableScan)
+        val databaseName = getDatabaseName(tableScan)
         val relInput = input as SnowflakeRel
         val args = listOf(
             StringLiteral(tableName),
-            StringLiteral(relInput.generatePythonConnStr(schemaName)),
+            StringLiteral(relInput.generatePythonConnStr(databaseName, schemaName)),
         )
         return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, true, Expr.None, Expr.None))
     }
@@ -188,13 +191,12 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         } else {
             Expr.None
         }
-
         val args = listOf(
             StringLiteral(sql),
             // We don't use a schema name because we've already fully qualified
-            // all table references and it's better if this doesn't have any
+            // all table references, and it's better if this doesn't have any
             // potentially unexpected behavior.
-            StringLiteral(relInput.generatePythonConnStr("")),
+            StringLiteral(relInput.generatePythonConnStr("", "")),
         )
         return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, false, bodoTableNameExpr, originalIndices))
     }

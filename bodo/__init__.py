@@ -101,7 +101,7 @@ stream_loop_sync_iters = int(os.environ.get("BODO_STREAM_LOOP_SYNC_ITERS", -1))
 # NOTE: should be the same as DEFAULT_SYNC_ITERS in _shuffle.h
 default_stream_loop_sync_iters = 1000
 # If BodoSQL encounters a view should it attempt to inline it?
-bodosql_try_inline_views = os.environ.get("BODO_TRY_INLINE_VIEWS", "0") != "0"
+bodosql_try_inline_views = os.environ.get("BODO_TRY_INLINE_VIEWS", "1") != "0"
 
 #### END STREAMING CONFIGURATION ####
 

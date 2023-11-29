@@ -8,7 +8,6 @@ import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.prepare.PlannerImpl;
 import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
-import com.bodosql.calcite.schema.CatalogSchema;
 import com.bodosql.calcite.schema.RootSchema;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -16,7 +15,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Locale;
 import java.util.function.BiConsumer;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelTraitSet;
@@ -138,11 +137,10 @@ public class RelationalAlgebraGenerator {
    * Constructor for the relational algebra generator class. It will take the schema store it in the
    * config and then set up the program for optimizing and the {@link #planner} for parsing.
    *
-   * @param newSchema This is the schema which we will be using to validate our query against. This
-   *     gets stored in the {@link #planner}
+   * @param localSchema This is the schema which contains any of our local tables.
    */
   public RelationalAlgebraGenerator(
-      BodoSqlSchema newSchema,
+      BodoSqlSchema localSchema,
       String namedParamTableName,
       int plannerType,
       int verboseLevel,
@@ -157,7 +155,7 @@ public class RelationalAlgebraGenerator {
     List<SchemaPlus> defaultSchemas =
         setupSchema(
             (root, defaults) -> {
-              defaults.add(root.add(newSchema.getName(), newSchema));
+              defaults.add(root.add(localSchema.getName(), localSchema));
             });
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
     this.typeSystem = typeSystem;
@@ -176,7 +174,7 @@ public class RelationalAlgebraGenerator {
    */
   public RelationalAlgebraGenerator(
       BodoSQLCatalog catalog,
-      BodoSqlSchema newSchema,
+      BodoSqlSchema localSchema,
       String namedParamTableName,
       // int is a bad choice for this variable, but we're limited by either
       // forcing py4j to initialize another Java object or use some plain old data
@@ -194,10 +192,10 @@ public class RelationalAlgebraGenerator {
     this.hideCredentials = hideCredentials;
     this.tryInlineViews = tryInlineViews;
     System.setProperty("calcite.default.charset", "UTF-8");
+    String currentDatabase = catalog.getDefaultSchema(0).get(0);
     List<SchemaPlus> defaultSchemas =
         setupSchema(
             (root, defaults) -> {
-              String catalogName = catalog.getCatalogName();
               // Create a schema object with the name of the catalog,
               // and register all the schemas with this catalog as sub-schemas
               // Note that the order of adding to default matters. Earlier
@@ -210,34 +208,30 @@ public class RelationalAlgebraGenerator {
               //     (table_identifier) (Note: this case will never yield a match,
               //     as the root schema is currently always empty. This may change
               //     in the future)
-              root.add(catalogName, new CatalogSchema(catalogName, catalog));
-              Set<String> remainingSchemaNamesToAdd = catalog.getSchemaNames();
+              SchemaPlus defaultDatabase = root.getSubSchema(currentDatabase);
+              if (defaultDatabase == null) {
+                throw new RuntimeException(
+                    String.format(
+                        Locale.ROOT, "Unable to find default database: %s", currentDatabase));
+              }
+              root.getSubSchemaNames();
 
-              for (String schemaName : catalog.getDefaultSchema()) {
-                SchemaPlus schema =
-                    root.getSubSchema(catalogName)
-                        .add(schemaName, new CatalogSchema(schemaName, catalog));
-                defaults.add(schema);
-                assert schemaName.contains(schemaName)
-                    : "Error in RelationalAlgebraGenerator: catalog.getDefaultSchema() returned"
-                        + " schema "
-                        + schemaName
-                        + ", which is not present in catalog.getDefaultSchemaNames()";
-                remainingSchemaNamesToAdd.remove(schemaName);
+              for (String schemaName : catalog.getDefaultSchema(1)) {
+                SchemaPlus defaultSchema = defaultDatabase.getSubSchema(schemaName);
+                if (defaultSchema == null) {
+                  throw new RuntimeException(
+                      String.format(Locale.ROOT, "Unable to find default schema: %s", schemaName));
+                }
+                defaults.add(defaultSchema);
               }
-              for (String schemaName : remainingSchemaNamesToAdd) {
-                root.getSubSchema(catalogName)
-                    .add(schemaName, new CatalogSchema(schemaName, catalog));
-              }
-              defaults.add(root.getSubSchema(catalogName));
-              defaults.add(root.add(newSchema.getName(), newSchema));
+              defaults.add(defaultDatabase);
+              defaults.add(root.add(localSchema.getName(), localSchema));
             });
 
     // Create a type system with the correct default Timezone.
     BodoTZInfo tzInfo = catalog.getDefaultTimezone();
     Integer weekStart = catalog.getWeekStart();
     Integer weekOfYearPolicy = catalog.getWeekOfYearPolicy();
-    String currentDatabase = catalog.getCatalogName();
     RelDataTypeSystem typeSystem =
         new BodoSQLRelDataTypeSystem(tzInfo, weekStart, weekOfYearPolicy, currentDatabase);
     this.typeSystem = typeSystem;

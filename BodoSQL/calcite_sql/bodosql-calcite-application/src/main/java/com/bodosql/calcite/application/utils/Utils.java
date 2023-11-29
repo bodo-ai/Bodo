@@ -3,11 +3,10 @@ package com.bodosql.calcite.application.utils;
 import static com.bodosql.calcite.application.utils.IsScalar.isScalar;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
 import com.bodosql.calcite.ir.Expr.IntegerLiteral;
 import com.bodosql.calcite.ir.Expr.StringLiteral;
 import com.bodosql.calcite.table.BodoSqlTable;
-import com.bodosql.calcite.table.CatalogTable;
+import com.bodosql.calcite.table.SnowflakeCatalogTable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -331,8 +330,7 @@ public class Utils {
   }
 
   public static boolean isSnowflakeCatalogTable(BodoSqlTable table) {
-    return table instanceof CatalogTable
-        && ((CatalogTable) table).getCatalog() instanceof SnowflakeCatalogImpl;
+    return table instanceof SnowflakeCatalogTable;
   }
 
   /**

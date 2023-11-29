@@ -1465,9 +1465,9 @@ def get_schema(
 
     if len(query_args) != 0 and SF_READ_AUTO_DICT_ENCODE_ENABLED:
         if orig_table != None:
-            # The original table should be passed as schema.table_name.
+            # The original table should be passed as database_name.schema.table_name.
             # Therefore, we split the . here.
-            schema_name, table_name = orig_table.split(".")
+            database_name, schema_name, table_name = orig_table.split(".")
             dict_encode_timeout_info = _detect_column_dict_encoding(
                 table_name,
                 query_args,
@@ -1476,7 +1476,8 @@ def get_schema(
                 cursor,
                 col_types,
                 True,  # is_table_input
-                schema_name,
+                # We pass the schema with the full path.
+                f"{database_name}.{schema_name}",
             )
         else:
             dict_encode_timeout_info = _detect_column_dict_encoding(

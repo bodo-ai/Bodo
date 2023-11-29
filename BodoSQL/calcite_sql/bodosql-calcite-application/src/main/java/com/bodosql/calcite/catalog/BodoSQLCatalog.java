@@ -3,12 +3,12 @@ package com.bodosql.calcite.catalog;
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
-import com.bodosql.calcite.schema.BodoSqlSchema;
+import com.bodosql.calcite.schema.CatalogSchema;
 import com.bodosql.calcite.table.CatalogTable;
+import com.google.common.collect.ImmutableList;
 import java.util.List;
 import java.util.Set;
 import javax.annotation.Nullable;
-import org.apache.calcite.schema.Schema;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
 
@@ -40,46 +40,46 @@ public interface BodoSQLCatalog {
   /**
    * Returns a set of all table names with the given schema name.
    *
-   * @param schemaName Name of the schema in the catalog.
+   * @param schemaPath The list of schemas to traverse before finding the table.
    * @return Set of table names.
    */
-  Set<String> getTableNames(String schemaName);
+  Set<String> getTableNames(ImmutableList<String> schemaPath);
 
   /**
    * Returns a table with the given name and found in the given schema.
    *
-   * @param schema BodoSQL schema containing the table.
+   * @param schemaPath The list of schemas to traverse before finding the table.
    * @param tableName Name of the table.
    * @return The table object.
    */
-  CatalogTable getTable(BodoSqlSchema schema, String tableName);
+  CatalogTable getTable(ImmutableList<String> schemaPath, String tableName);
 
   /**
-   * Get the top level schemas available for this catalog. Each individual catalog will decide what
-   * the "top level" is.
+   * Get the available subSchema names for the given path.
    *
+   * @param schemaPath The parent schema path to check.
    * @return Set of available schema names.
    */
-  Set<String> getSchemaNames();
+  Set<String> getSchemaNames(ImmutableList<String> schemaPath);
 
   /**
-   * Returns a top level schema with the given name in the catalog. Each individual catalog will
-   * decide what the "top level" is.
+   * Returns a schema found within the given parent path.
    *
+   * @param schemaPath The parent schema path to check.
    * @param schemaName Name of the schema to fetch.
    * @return A schema object.
    */
-  Schema getSchema(String schemaName);
+  CatalogSchema getSchema(ImmutableList<String> schemaPath, String schemaName);
 
   /**
    * Return the list of implicit/default schemas for the given catalog, in the order that they
-   * should be prioritized during table resolution. We choose to implement this behavior at the
-   * catalog level, as different catalogs may have different rules for how ambiguous table
-   * identifiers are resolved.
+   * should be prioritized during table resolution. The provided depth gives the "level" at which to
+   * provide the default.
    *
+   * @param depth The depth at which to find the default.
    * @return List of default Schema for this catalog.
    */
-  List<String> getDefaultSchema();
+  List<String> getDefaultSchema(int depth);
 
   /**
    * Generates the code necessary to produce an append write expression from the given catalog.
@@ -218,9 +218,18 @@ public interface BodoSQLCatalog {
   Integer getWeekOfYearPolicy();
 
   /**
-   * Return the top level name of the Catalog.
+   * Returns if a schema with the given depth is allowed to contain tables.
    *
-   * @return The top level name of the Catalog.
+   * @param depth The number of parent schemas that would need to be visited to reach the root.
+   * @return Can a schema at that depth contain tables.
    */
-  String getCatalogName();
+  boolean schemaDepthMayContainsTables(int depth);
+
+  /**
+   * Returns if a schema with the given depth is allowed to contain subSchemas.
+   *
+   * @param depth The number of parent schemas that would need to be visited to reach the root.
+   * @return Can a schema at that depth contain subSchemas.
+   */
+  boolean schemaDepthMayContainSubSchemas(int depth);
 }

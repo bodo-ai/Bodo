@@ -23,14 +23,12 @@ if bodo.get_rank() == 0:
         )
         ColumnClass = gateway.jvm.com.bodosql.calcite.table.BodoSQLColumnImpl
         LocalTableClass = gateway.jvm.com.bodosql.calcite.table.LocalTable
-        LocalSchemaClass = gateway.jvm.com.bodosql.calcite.schema.LocalSchemaImpl
+        LocalSchemaClass = gateway.jvm.com.bodosql.calcite.schema.LocalSchema
         RelationalAlgebraGeneratorClass = (
             gateway.jvm.com.bodosql.calcite.application.RelationalAlgebraGenerator
         )
         PropertiesClass = gateway.jvm.java.util.Properties
-        SnowflakeCatalogImplClass = (
-            gateway.jvm.com.bodosql.calcite.catalog.SnowflakeCatalogImpl
-        )
+        SnowflakeCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.SnowflakeCatalog
         BodoTZInfoClass = gateway.jvm.org.apache.calcite.sql.type.BodoTZInfo
         # Note: Although this isn't used it must be imported.
         SnowflakeDriver = gateway.jvm.net.snowflake.client.jdbc.SnowflakeDriver
@@ -49,7 +47,7 @@ else:
     LocalSchemaClass = None
     RelationalAlgebraGeneratorClass = None
     PropertiesClass = None
-    SnowflakeCatalogImplClass = None
+    SnowflakeCatalogClass = None
     BodoTZInfoClass = None
     SnowflakeDriver = None
     CommonsExceptionUtilsClass = None

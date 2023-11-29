@@ -7,10 +7,14 @@ import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.CatalogTable
 import com.google.common.collect.ImmutableList
+import org.apache.calcite.DataContext
 import org.apache.calcite.jdbc.CalciteSchema
+import org.apache.calcite.linq4j.tree.Expression
+import org.apache.calcite.linq4j.tree.Expressions
 import org.apache.calcite.schema.SchemaPlus
 import org.apache.calcite.schema.Table
 import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
+import org.apache.calcite.util.BuiltInMethod
 
 /**
  * Implementation of the BodoSQL root schema with optional catalog support.
@@ -22,7 +26,7 @@ class RootSchema {
     /**
      * Implementation of a root schema with a catalog.
      */
-    private class CatalogRootSchema(catalog: BodoSQLCatalog) : CatalogSchema(rootName, catalog) {
+    private class CatalogRootSchema(catalog: BodoSQLCatalog) : CatalogSchema(rootName, rootDepth, ImmutableList.of(), catalog) {
 
         // The root schema should not support loading tables.
         // In a followup PR we will refactor getTableNames()
@@ -81,7 +85,7 @@ class RootSchema {
     /**
      * Implementation of a root schema without a catalog.
      */
-    private class LocalRootSchema : LocalSchemaImpl(rootName) {
+    private class LocalRootSchema : LocalSchema(rootName, rootDepth) {
         // These are operations that are disabled
         override fun getTable(name: String): Table? {
             return null
@@ -94,11 +98,26 @@ class RootSchema {
         override fun getTableNames(): Set<String> {
             return HashSet()
         }
+
+        // Copied from Calcite root schema implementation.
+        // This is just used for testing.
+        override fun getExpression(
+            parentSchema: SchemaPlus?,
+            name: String,
+        ): Expression? {
+            return Expressions.call(
+                DataContext.ROOT,
+                BuiltInMethod.DATA_CONTEXT_GET_ROOT_SCHEMA.method,
+            )
+        }
     }
 
     companion object {
         @JvmStatic
         private val rootName = ""
+
+        @JvmStatic
+        private val rootDepth = 0
 
         @JvmStatic
         private val rootMap: HashMap<BodoSQLCatalog?, BodoSqlSchema> = HashMap()
