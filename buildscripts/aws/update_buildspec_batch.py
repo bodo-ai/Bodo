@@ -103,7 +103,7 @@ def add_sonar(build_graph):
 def add_maven_unit_tests(build_graph, images):
     for image_name, image_path in images.items():
         buildspec = "buildscripts/aws/buildspecs/maven_unittest_buildspec.yml"
-        compute_type = "BUILD_GENERAL1_SMALL"
+        compute_type = "BUILD_GENERAL1_LARGE"
         identifier = image_name.replace(" ", "_") + "_" + "_MAVEN_UNIT_TESTS"
         # Now create the env dict portion
         env_dict = dict()
