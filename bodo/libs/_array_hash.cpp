@@ -63,7 +63,7 @@ static void hash_array_inner(const hashes_t& out_hashes, T* data, size_t n_rows,
             }
         }
     } else {
-        for (size_t i = 0; i < n_rows; i++)
+        for (size_t i = 0; i < n_rows; i++) {
             if (use_murmurhash) {
                 hash_inner_murmurhash3_x86_32<T>(&data[start_row_offset + i],
                                                  seed, &out_hashes[i]);
@@ -71,6 +71,61 @@ static void hash_array_inner(const hashes_t& out_hashes, T* data, size_t n_rows,
                 hash_inner_32<T>(&data[start_row_offset + i], seed,
                                  &out_hashes[i]);
             }
+        }
+    }
+}
+
+/*
+ * Copied largely from Numpy
+ * https://github.com/numpy/numpy/blob/548bc6826b597ab79b9c1451b79ec8d23db9d444/numpy/core/src/common/npy_pycompat.h#L7
+ *
+ * In Python 3.10a7 (or b1), python started using the identity for the hash
+ * when a value is NaN.  See https://bugs.python.org/issue43475
+ */
+#if PY_VERSION_HEX > 0x030a00a6
+#define Npy_HashDouble _Py_HashDouble
+#else
+static inline Py_hash_t Npy_HashDouble(PyObject* __UNUSED__(identity),
+                                       double val) {
+    return _Py_HashDouble(val);
+}
+#endif
+
+// Discussion on hashing floats:
+// https://stackoverflow.com/questions/4238122/hash-function-for-floats
+template <typename T, typename hashes_t>
+    requires(std::floating_point<T> && hashes_arr_type<hashes_t>)
+static void hash_array_inner(const hashes_t& out_hashes, T* data, size_t n_rows,
+                             const uint32_t seed, uint8_t* null_bitmask,
+                             bool use_murmurhash = false,
+                             size_t start_row_offset = 0) {
+    if (null_bitmask) {
+        uint32_t na_hash;
+        hash_na_val(seed, &na_hash, use_murmurhash);
+        for (size_t i = 0; i < n_rows; i++) {
+            Py_hash_t py_hash =
+                Npy_HashDouble(nullptr, data[start_row_offset + i]);
+            if (use_murmurhash) {
+                hash_inner_murmurhash3_x86_32<Py_hash_t>(&py_hash, seed,
+                                                         &out_hashes[i]);
+            } else {
+                hash_inner_32<Py_hash_t>(&py_hash, seed, &out_hashes[i]);
+            }
+            if (!GetBit(null_bitmask, start_row_offset + i)) {
+                out_hashes[i] = na_hash;
+            }
+        }
+    } else {
+        for (size_t i = 0; i < n_rows; i++) {
+            Py_hash_t py_hash =
+                Npy_HashDouble(nullptr, data[start_row_offset + i]);
+            if (use_murmurhash) {
+                hash_inner_murmurhash3_x86_32<Py_hash_t>(&py_hash, seed,
+                                                         &out_hashes[i]);
+            } else {
+                hash_inner_32<Py_hash_t>(&py_hash, seed, &out_hashes[i]);
+            }
+        }
     }
 }
 
@@ -110,41 +165,6 @@ static void hash_array_inner_nullable_boolean(const hashes_t& out_hashes,
         }
         if (!GetBit(null_bitmask, start_row_offset + i)) {
             out_hashes[i] = na_hash;
-        }
-    }
-}
-
-/*
- * Copied largely from Numpy
- * https://github.com/numpy/numpy/blob/548bc6826b597ab79b9c1451b79ec8d23db9d444/numpy/core/src/common/npy_pycompat.h#L7
- *
- * In Python 3.10a7 (or b1), python started using the identity for the hash
- * when a value is NaN.  See https://bugs.python.org/issue43475
- */
-#if PY_VERSION_HEX > 0x030a00a6
-#define Npy_HashDouble _Py_HashDouble
-#else
-static inline Py_hash_t Npy_HashDouble(PyObject* __UNUSED__(identity),
-                                       double val) {
-    return _Py_HashDouble(val);
-}
-#endif
-
-// Discussion on hashing floats:
-// https://stackoverflow.com/questions/4238122/hash-function-for-floats
-
-template <typename T, typename hashes_t>
-    requires(hashes_arr_type<hashes_t> && std::floating_point<T>)
-static void hash_array_inner(const hashes_t& out_hashes, T* data, size_t n_rows,
-                             const uint32_t seed, bool use_murmurhash = false,
-                             size_t start_row_offset = 0) {
-    for (size_t i = 0; i < n_rows; i++) {
-        Py_hash_t py_hash = Npy_HashDouble(nullptr, data[start_row_offset + i]);
-        if (use_murmurhash) {
-            hash_inner_murmurhash3_x86_32<Py_hash_t>(&py_hash, seed,
-                                                     &out_hashes[i]);
-        } else {
-            hash_inner_32<Py_hash_t>(&py_hash, seed, &out_hashes[i]);
         }
     }
 }
@@ -595,14 +615,14 @@ void hash_array(const hashes_t& out_hashes, std::shared_ptr<array_info> array,
             (uint8_t*)array->null_bitmask(), use_murmurhash, start_row_offset);
     }
     if (array->dtype == Bodo_CTypes::FLOAT32) {
-        return hash_array_inner<float>(out_hashes, (float*)array->data1(),
-                                       n_rows, seed, use_murmurhash,
-                                       start_row_offset);
+        return hash_array_inner<float>(
+            out_hashes, (float*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash, start_row_offset);
     }
     if (array->dtype == Bodo_CTypes::FLOAT64) {
-        return hash_array_inner<double>(out_hashes, (double*)array->data1(),
-                                        n_rows, seed, use_murmurhash,
-                                        start_row_offset);
+        return hash_array_inner<double>(
+            out_hashes, (double*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash, start_row_offset);
     }
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash");
 }
@@ -686,12 +706,30 @@ template <class T, typename hashes_t>
     requires(hashes_arr_type<hashes_t> && std::floating_point<T>)
 static void hash_array_combine_inner(const hashes_t& out_hashes, T* data,
                                      size_t n_rows, const uint32_t seed,
+                                     uint8_t* null_bitmask,
                                      size_t start_row_offset = 0) {
-    uint32_t out_hash = 0;
-    for (size_t i = 0; i < n_rows; i++) {
-        Py_hash_t py_hash = Npy_HashDouble(nullptr, data[start_row_offset + i]);
-        hash_inner_32<Py_hash_t>(&py_hash, seed, &out_hash);
-        hash_combine_boost(out_hashes[i], out_hash);
+    if (null_bitmask) {
+        uint32_t na_hash;
+        hash_na_val(seed, &na_hash);
+        uint32_t out_hash = 0;
+        for (size_t i = 0; i < n_rows; i++) {
+            if (!GetBit(null_bitmask, start_row_offset + i)) {
+                out_hash = na_hash;
+            } else {
+                Py_hash_t py_hash =
+                    Npy_HashDouble(nullptr, data[start_row_offset + i]);
+                hash_inner_32<Py_hash_t>(&py_hash, seed, &out_hash);
+            }
+            hash_combine_boost(out_hashes[i], out_hash);
+        }
+    } else {
+        uint32_t out_hash = 0;
+        for (size_t i = 0; i < n_rows; i++) {
+            Py_hash_t py_hash =
+                Npy_HashDouble(nullptr, data[start_row_offset + i]);
+            hash_inner_32<Py_hash_t>(&py_hash, seed, &out_hash);
+            hash_combine_boost(out_hashes[i], out_hash);
+        }
     }
 }
 
@@ -896,12 +934,13 @@ void hash_array_combine(const hashes_t& out_hashes,
     }
     if (array->dtype == Bodo_CTypes::FLOAT32) {
         return hash_array_combine_inner<float>(
-            out_hashes, (float*)array->data1(), n_rows, seed, start_row_offset);
+            out_hashes, (float*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), start_row_offset);
     }
     if (array->dtype == Bodo_CTypes::FLOAT64) {
-        return hash_array_combine_inner<double>(out_hashes,
-                                                (double*)array->data1(), n_rows,
-                                                seed, start_row_offset);
+        return hash_array_combine_inner<double>(
+            out_hashes, (double*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), start_row_offset);
     }
     if (array->dtype == Bodo_CTypes::DECIMAL ||
         array->dtype == Bodo_CTypes::INT128) {
