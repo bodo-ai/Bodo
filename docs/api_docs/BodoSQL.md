@@ -2990,6 +2990,11 @@ BodoSQL currently supports the following JSON functions:
 ### Array Functions
 Bodo currently supports the following functions that operate on columns of arrays:
 
+#### GET
+-   `#!sql GET(arr, idx)`
+-   `#!sql arr[idx]`
+
+    Returns the element found at the specified index in the array. Inexing is 0 based, not 1 based. Returns NULL if the index is outside of the boundaries of the array.
 
 #### TO_ARRAY
 -   `#!sql TO_ARRAY(arr)`

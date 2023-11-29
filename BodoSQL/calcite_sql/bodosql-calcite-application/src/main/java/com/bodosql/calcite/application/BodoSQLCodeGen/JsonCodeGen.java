@@ -7,6 +7,7 @@ import com.bodosql.calcite.ir.Expr;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import kotlin.Pair;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexLiteral;
 
@@ -76,5 +77,21 @@ public class JsonCodeGen {
     }
 
     return new Expr.Call(jsonFnMap.get(fnName), operands);
+  }
+
+  /**
+   * Helper function that Handles the codegen for indexing operations into arrays. This will be
+   * updated to handle map indexing at a later time.
+   *
+   * @param arrayScalar Is the input array scalar
+   * @param operands The inputs to the operand as Codgen Exprs
+   * @return A codegen Expr for the indexing operation
+   */
+  public static Expr visitArrayMapIndexOp(boolean arrayScalar, List<Expr> operands) {
+    assert operands.size() == 2;
+    kotlin.Pair isScalarArg =
+        new kotlin.Pair("is_scalar_arr", new Expr.BooleanLiteral(arrayScalar));
+    List<Pair<String, Expr>> namedArgs = List.of(isScalarArg);
+    return new Expr.Call("bodo.libs.bodosql_array_kernels.arr_get", operands, namedArgs);
   }
 }

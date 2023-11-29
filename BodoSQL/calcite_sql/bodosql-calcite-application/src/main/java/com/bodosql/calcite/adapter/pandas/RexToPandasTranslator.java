@@ -83,6 +83,7 @@ import static com.bodosql.calcite.application.utils.IsScalar.isScalar;
 import static com.bodosql.calcite.application.utils.Utils.expectScalarArgument;
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.DateTimeType;
+import com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
@@ -272,15 +273,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
   private Expr visitSpecialOp(RexCall node) {
     List<Expr> operands = visitList(node.operands);
-    Expr output = null;
     switch (node.getKind()) {
       case ITEM:
         assert operands.size() == 2;
-        boolean inputScalar = isOperandScalar(node.getOperands().get(0));
-        kotlin.Pair isScalarArg =
-            new kotlin.Pair("is_scalar_arr", new Expr.BooleanLiteral(inputScalar));
-        List<Pair<String, Expr>> namedArgs = List.of(isScalarArg);
-        return new Expr.Call("bodo.libs.bodosql_array_kernels.arr_get", operands, namedArgs);
+        return JsonCodeGen.visitArrayMapIndexOp(isOperandScalar(node.operands.get(0)), operands);
       default:
         throw new BodoSQLCodegenException(
             "Internal Error: Calcite Plan Produced an Unsupported special operand call: "
@@ -1490,6 +1486,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         return visitPosition(operands);
       case RANDOM:
         return generateRandomFnInfo(input, isSingleRow);
+      case ITEM:
+        assert operands.size() == 2;
+        return JsonCodeGen.visitArrayMapIndexOp(
+            isOperandScalar(fnOperation.operands.get(0)), operands);
       case OTHER:
       case OTHER_FUNCTION:
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */

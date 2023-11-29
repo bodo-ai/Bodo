@@ -1761,6 +1761,13 @@ def test_array_size_scalar(basic_df, input, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "syntax",
+    [
+        pytest.param(True, id="Index_syntax", marks=pytest.mark.slow),
+        pytest.param(False, id="GET_syntax"),
+    ],
+)
+@pytest.mark.parametrize(
     "args",
     [
         pytest.param(
@@ -1770,14 +1777,17 @@ def test_array_size_scalar(basic_df, input, memory_leak_check):
         pytest.param(("True", True), marks=pytest.mark.slow),
     ],
 )
-def test_array_index_scalar(args, memory_leak_check):
+def test_array_index_scalar(args, syntax, memory_leak_check):
     """
     Test Array indexing works correctly with different data type scalars
     """
 
     expr = args[0]
 
-    query = f"SELECT CASE WHEN ARRAY_CONSTRUCT({expr})[0] = {expr} THEN ARRAY_CONSTRUCT({expr})[0] ELSE NULL END as out_col FROM TABLE1"
+    arr_expr = f"ARRAY_CONSTRUCT({expr})"
+    idx_call = f"{arr_expr}[0]" if syntax else f"GET({arr_expr}, 0)"
+
+    query = f"SELECT CASE WHEN {idx_call} = {expr} THEN {idx_call} ELSE NULL END as out_col FROM TABLE1"
     ctx = {"table1": pd.DataFrame({"unused_col": list(range(10))})}
     py_output = pd.DataFrame({"out_col": [args[1]] * 10})
 
@@ -1793,6 +1803,13 @@ def test_array_index_scalar(args, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "syntax",
+    [
+        pytest.param(True, id="Index_syntax", marks=pytest.mark.slow),
+        pytest.param(False, id="GET_syntax"),
+    ],
+)
+@pytest.mark.parametrize(
     "args",
     [
         pytest.param(("1", 1), marks=pytest.mark.slow),
@@ -1802,14 +1819,14 @@ def test_array_index_scalar(args, memory_leak_check):
         ),
     ],
 )
-def test_array_index_column(args, memory_leak_check):
+def test_array_index_column(args, syntax, memory_leak_check):
     """
     Test Array indexing works correctly with different data type
     """
 
     expr = args[0]
-
-    query = f"SELECT arr_col[0] as out_col from (SELECT ARRAY_CONSTRUCT({expr}) as arr_col FROM TABLE1)"
+    idx_call = "arr_col[0]" if syntax else "GET(arr_col, 0)"
+    query = f"SELECT {idx_call} as out_col from (SELECT ARRAY_CONSTRUCT({expr}) as arr_col FROM TABLE1)"
     ctx = {"table1": pd.DataFrame({"unused_col": list(range(10))})}
     py_output = pd.DataFrame({"out_col": [args[1]] * 10})
 
@@ -1832,8 +1849,9 @@ def test_array_index_stress_test(memory_leak_check):
 
     query = f"""
     SELECT
-        ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(0)[0])[ARRAY_CONSTRUCT(0)[0]])[0] as out_col_1,
-        arr_col[arr_col[arr_col[arr_col[arr_col[0]]]] + 1] as out_col_2
+        GET(ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(GET(ARRAY_CONSTRUCT(0), 0))[ARRAY_CONSTRUCT(0)[0]]), 0) as out_col_1,
+        arr_col[arr_col[arr_col[arr_col[arr_col[0]]]] + 1] as out_col_2,
+        GET(arr_col, GET(arr_col, GET( arr_col, GET(arr_col, GET(arr_col, 0)))) + 1) as out_col_3
     from
     (SELECT ARRAY_CONSTRUCT(int_col_0, int_col_1, int_col_2) as arr_col FROM TABLE1)
     """
@@ -1852,6 +1870,7 @@ def test_array_index_stress_test(memory_leak_check):
         {
             "out_col_1": [0] * 12,
             "out_col_2": list(range(12)),
+            "out_col_3": list(range(12)),
         }
     )
 
