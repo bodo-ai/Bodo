@@ -880,3 +880,62 @@ def overload_array_compact_util(arr, is_scalar):
         out_dtype,
         are_arrays=[not is_scalar_bool, False],
     )
+
+
+def array_slice(arr, from_, to, is_scalar=False):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(array_slice, no_unliteral=True)
+def overload_array_slice(arr, from_, to, is_scalar=False):  # pragma: no cover
+    """
+    Handles cases where ARRAY_SLICE receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    args = [arr, from_, to]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.array_slice",
+                ["arr", "from_", "to", "is_scalar"],
+                i,
+                default_map={"is_scalar": False},
+            )
+
+    def impl(arr, from_, to, is_scalar=False):
+        return array_slice_util(arr, from_, to, is_scalar)
+
+    return impl
+
+
+def array_slice_util(arr, from_, to, is_scalar):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(array_slice_util, no_unliteral=True)
+def overload_array_slice_util(arr, from_, to, is_scalar):  # pragma: no cover
+    is_scalar_bool = get_overload_const_bool(is_scalar)
+    arg_names = ["arr", "from_", "to", "is_scalar"]
+    arg_types = [arr, from_, to, is_scalar]
+    propagate_null = [True, True, True, False]
+    if is_overload_none(arr):
+        out_dtype = bodo.null_array_type
+    else:
+        inner_arr_type = arr if is_scalar_bool else arr.dtype
+        out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(inner_arr_type)
+    scalar_text = "res[i] = arg0[arg1:arg2]"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=[
+            not is_scalar_bool,
+            bodo.utils.utils.is_array_typ(from_),
+            bodo.utils.utils.is_array_typ(to),
+            False,
+        ],
+    )

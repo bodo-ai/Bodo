@@ -944,6 +944,29 @@ def test_option_array_cat(flag0, flag1, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize("flag0", [True, False])
+@pytest.mark.parametrize("flag1", [True, False])
+@pytest.mark.parametrize("flag2", [True, False])
+@pytest.mark.slow
+def test_option_array_slice(flag0, flag1, flag2, memory_leak_check):
+    def impl(A, B, C, flag0, flag1, flag2):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        arg2 = C if flag2 else None
+        return bodo.libs.bodosql_array_kernels.array_slice(arg0, arg1, arg2, True)
+
+    check_func(
+        impl,
+        (pd.array([0, 1, 4, 9], pd.Int32Dtype()), 1, 3, flag0, flag1, flag2),
+        py_output=pd.array([1, 4], pd.Int32Dtype())
+        if flag0 and flag1 and flag2
+        else None,
+        distributed=False,
+        is_out_distributed=False,
+        dist_test=False,
+    )
+
+
 @pytest.mark.parametrize(
     "arr, is_scalar, expected",
     [
@@ -1879,6 +1902,206 @@ def test_array_position(
         is_out_distributed=not all_scalar,
         dist_test=not any_scalar,
         only_seq=any_scalar,
+    )
+
+
+@pytest.mark.parametrize(
+    "arr, from_, to, is_scalar, expected",
+    [
+        pytest.param(
+            pd.array([1, 2, 3, None, 4, 5, None], pd.Int32Dtype()),
+            1,
+            5,
+            True,
+            pd.array([2, 3, None, 4], pd.Int32Dtype()),
+            id="int-scalar-scalar-scalar",
+        ),
+        pytest.param(
+            pd.array([1, 2, 3, None, 4, 5, None], pd.Int32Dtype()),
+            pd.array([-10, -10, -12, 12, 10, -3], pd.Int32Dtype()),
+            pd.array([-6, -12, -10, 10, 12, 10], pd.Int32Dtype()),
+            True,
+            pd.array(
+                [[1], [], [], [], [], [4, 5, None]],
+                pd.ArrowDtype(pa.large_list(pa.int32())),
+            ),
+            id="int_out_of_bound-scalar-vector-vector",
+        ),
+        pytest.param(
+            pd.array(["foo", "bar", None, "ok", "a"], "string[pyarrow]"),
+            1,
+            4,
+            True,
+            pd.array(["bar", None, "ok"], "string[pyarrow]"),
+            id="string-scalar-scalar-scalar",
+        ),
+        pytest.param(
+            pd.Series([[1, 2], [3, None], None, [4], [None], [5, 6, 7]]).values,
+            1,
+            6,
+            True,
+            pd.Series([[3, None], None, [4], [None], [5, 6, 7]]).values,
+            id="int_array-scalar-scalar-scalar",
+        ),
+        pytest.param(
+            pd.Series([[[1, 2], [3, None], None, [4], [None], [5, 6, 7]]] * 16),
+            pd.Series(
+                [0, 1, 2, 3, 4, 5, 6] + [-5, 2, -4] + [-10, 8, -1, -20] + [2, None]
+            ),
+            pd.Series([6] * 7 + [3, -2, -2] + [-11, 9, 9, 2] + [None, 3]),
+            False,
+            pd.Series(
+                [
+                    [[1, 2], [3, None], None, [4], [None], [5, 6, 7]],
+                    [[3, None], None, [4], [None], [5, 6, 7]],
+                    [None, [4], [None], [5, 6, 7]],
+                    [[4], [None], [5, 6, 7]],
+                    [[None], [5, 6, 7]],
+                    [[5, 6, 7]],
+                    [],
+                    [[3, None], None],
+                    [None, [4]],
+                    [None, [4]],
+                    [],
+                    [],
+                    [[5, 6, 7]],
+                    [[1, 2], [3, None]],
+                    None,
+                    None,
+                ]
+            ),
+            id="int_array-vector-vector-vector",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {"A": 0, "B": [0, 1]},
+                    {"A": 1, "B": [1, 2]},
+                    None,
+                    {"A": 2, "B": [2, 3]},
+                ]
+            ).values,
+            pd.Series([0, 1, 2, 3, 4]),
+            4,
+            True,
+            pd.Series(
+                [
+                    [
+                        {"A": 0, "B": [0, 1]},
+                        {"A": 1, "B": [1, 2]},
+                        None,
+                        {"A": 2, "B": [2, 3]},
+                    ],
+                    [{"A": 1, "B": [1, 2]}, None, {"A": 2, "B": [2, 3]}],
+                    [None, {"A": 2, "B": [2, 3]}],
+                    [{"A": 2, "B": [2, 3]}],
+                    [],
+                ]
+            ),
+            id="struct-vector-vector-scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    {"name": "pomegranate"},
+                    {"hex": "660c21", "name": "pomegranate"},
+                    {},
+                    {"hex": "660c21"},
+                    {"hex": "660c21", "name": "red"},
+                    {"hex": "#660c21", "read": "pomegranate"},
+                    None,
+                    {"hex": "660c21", "name": "pomegranate"},
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+            ).values,
+            0,
+            pd.Series([1, 3, 5, 7, 9, 11, None]),
+            True,
+            pd.Series(
+                [
+                    [
+                        {"name": "pomegranate"},
+                    ],
+                    [
+                        {"name": "pomegranate"},
+                        {"hex": "660c21", "name": "pomegranate"},
+                        {},
+                    ],
+                    [
+                        {"name": "pomegranate"},
+                        {"hex": "660c21", "name": "pomegranate"},
+                        {},
+                        {"hex": "660c21"},
+                        {"hex": "660c21", "name": "red"},
+                    ],
+                    [
+                        {"name": "pomegranate"},
+                        {"hex": "660c21", "name": "pomegranate"},
+                        {},
+                        {"hex": "660c21"},
+                        {"hex": "660c21", "name": "red"},
+                        {"hex": "#660c21", "read": "pomegranate"},
+                        None,
+                    ],
+                    [
+                        {"name": "pomegranate"},
+                        {"hex": "660c21", "name": "pomegranate"},
+                        {},
+                        {"hex": "660c21"},
+                        {"hex": "660c21", "name": "red"},
+                        {"hex": "#660c21", "read": "pomegranate"},
+                        None,
+                        {"hex": "660c21", "name": "pomegranate"},
+                    ],
+                    [
+                        {"name": "pomegranate"},
+                        {"hex": "660c21", "name": "pomegranate"},
+                        {},
+                        {"hex": "660c21"},
+                        {"hex": "660c21", "name": "red"},
+                        {"hex": "#660c21", "read": "pomegranate"},
+                        None,
+                        {"hex": "660c21", "name": "pomegranate"},
+                    ],
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.map_(pa.string(), pa.string()))),
+            ),
+            id="map-vector-scalar-vector",
+            marks=pytest.mark.skip(
+                reason="[BSE-2126] fix value error with writing to column of arrays of map arrays"
+            ),
+        ),
+    ],
+)
+def test_array_slice(arr, from_, to, is_scalar, expected, memory_leak_check):
+    all_scalar = (
+        is_scalar and not isinstance(from_, pd.Series) and not isinstance(to, pd.Series)
+    )
+    no_scalar = (
+        not is_scalar and isinstance(from_, pd.Series) and isinstance(to, pd.Series)
+    )
+    if all_scalar:
+
+        def impl(arr, from_, to):
+            return bodo.libs.bodosql_array_kernels.array_slice(
+                arr, from_, to, is_scalar
+            )
+
+    else:
+
+        def impl(arr, from_, to):
+            return pd.Series(
+                bodo.libs.bodosql_array_kernels.array_slice(arr, from_, to, is_scalar)
+            )
+
+    check_func(
+        impl,
+        (arr, from_, to),
+        py_output=expected,
+        distributed=no_scalar,
+        is_out_distributed=no_scalar,
+        dist_test=no_scalar,
     )
 
 
