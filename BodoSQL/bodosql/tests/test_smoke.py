@@ -118,7 +118,7 @@ def test_smoke_raw_select(smoke_ctx, spark_info, memory_leak_check):
     Tests using SELECT without a table provided
     """
     query = """
-        SELECT 
+        SELECT
             'alphabet' LIKE 'a%',
             'alphabet' LIKE '%a',
             GREATEST(Timestamp '2022-1-1', Timestamp '2022-10-1', Timestamp '2022-1-1 10:35:32'),
@@ -237,7 +237,7 @@ def test_smoke_window(smoke_ctx, spark_info, memory_leak_check):
     Tests window functions
     """
     query = """
-    SELECT 
+    SELECT
         *,
         ROW_NUMBER() OVER (PARTITION BY A ORDER BY D),
         NTILE(10) OVER (PARTITION BY A ORDER BY D)
@@ -260,12 +260,12 @@ def test_smoke_qualify(smoke_ctx, spark_info, memory_leak_check):
     query = """
     SELECT A, B, C, D
     FROM table1
-    QUALIFY MIN(D) OVER (PARTITION BY B ORDER BY A ASC NULLS FIRST, D ASC ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) = D
+    QUALIFY MIN(D) OVER (PARTITION BY B ORDER BY A ASC NULLS FIRST, D ASC ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) = D;
     """
     spark_query = """
     SELECT A, B, C, D
     FROM (
-        SELECT 
+        SELECT
             A, B, C, D,
             MIN(D) OVER (PARTITION BY B ORDER BY A ASC NULLS FIRST, D ASC ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS M
         FROM table1
@@ -361,14 +361,14 @@ def test_smoke_having(smoke_ctx, spark_info, memory_leak_check):
     Tests GROUP BY aggregation with a HAVING clause
     """
     query = """
-    SELECT 
+    SELECT
         A,
         AVG(D),
         MIN(D),
         MAX(D)
     FROM table1
     GROUP BY A
-    HAVING COUNT(*) >= 100
+    HAVING COUNT(*) >= 100;
     """
     check_query(
         query,
@@ -441,7 +441,7 @@ def test_smoke_subquery_ops(smoke_ctx, spark_info, memory_leak_check):
         SELECT D, 'IN'
         FROM table1
         WHERE D::INTEGER IN (SELECT Z::INTEGER FROM table2)
-    )
+    );
     """
     spark_query = """
     (

@@ -2,19 +2,14 @@ package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
-import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
-import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
 import java.util.*;
-import java.util.function.Supplier;
-import javax.annotation.Nullable;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
@@ -29,8 +24,6 @@ import org.jetbrains.annotations.NotNull;
  * @author bodo
  */
 public class CatalogTable extends BodoSqlTable implements TranslatableTable {
-  // Hold the statistics for this table.
-  private final Statistic statistic = new StatisticImpl();
   // The catalog that holds this table's origin.
   @NotNull private final BodoSQLCatalog catalog;
 
@@ -248,38 +241,8 @@ public class CatalogTable extends BodoSqlTable implements TranslatableTable {
   }
 
   @Override
-  public Statistic getStatistic() {
-    return statistic;
-  }
-
-  @Override
   public RelNode toRel(RelOptTable.ToRelContext toRelContext, RelOptTable relOptTable) {
     throw new UnsupportedOperationException(
         "toRel() must be implemented by specific catalog table implementations");
-  }
-
-  private class StatisticImpl implements Statistic {
-    private final Supplier<Double> rowCount = Suppliers.memoize(this::estimateRowCount);
-
-    /**
-     * Retrieves the estimated row count for this table. This value is memoized.
-     *
-     * @return estimated row count for this table.
-     */
-    @Override
-    public @Nullable Double getRowCount() {
-      return rowCount.get();
-    }
-
-    /**
-     * Retrieves the estimated row count for this table. It performs a query every time this is
-     * invoked.
-     *
-     * @return estimated row count for this table.
-     */
-    private @Nullable Double estimateRowCount() {
-      SnowflakeCatalogImpl catalog = (SnowflakeCatalogImpl) CatalogTable.this.catalog;
-      return catalog.estimateRowCount(getFullPath());
-    }
   }
 }

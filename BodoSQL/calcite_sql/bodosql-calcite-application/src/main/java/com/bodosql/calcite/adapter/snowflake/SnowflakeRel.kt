@@ -28,9 +28,9 @@ interface SnowflakeRel : RelNode {
         val CONVENTION = Convention.Impl("SNOWFLAKE", SnowflakeRel::class.java)
     }
 
-    fun generatePythonConnStr(schema: String): String {
+    fun generatePythonConnStr(databaseName: String, schemaName: String): String {
         val catalog = getCatalogTable().catalog
-        return catalog.generatePythonConnStr(schema)
+        return catalog.generatePythonConnStr(databaseName, schemaName)
     }
 
     /**

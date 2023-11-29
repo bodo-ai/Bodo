@@ -1,34 +1,42 @@
 package com.bodosql.calcite.table
 
-import com.bodosql.calcite.adapter.pandas.logicalProject
+import com.bodosql.calcite.adapter.pandas.calciteLogicalProject
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan.Companion.create
 import com.bodosql.calcite.application.PythonLoggers
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.utils.checkTablePermissions.Companion.canRead
-import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
+import com.bodosql.calcite.catalog.SnowflakeCatalog
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan.Companion.canRequestColumnDistinctiveness
 import com.bodosql.calcite.schema.ExpandViewInput
 import com.bodosql.calcite.schema.InlineViewMetadata
+import com.google.common.base.Suppliers
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.schema.Statistic
 import org.apache.calcite.sql.util.SqlString
 import java.util.*
+import java.util.function.Supplier
 
 /**
  * Implementation of CatalogTable for Snowflake Catalogs.
  *
+ * Note: This class is open, so we can extend it in testing.
+ *
  */
-public open class SnowflakeCatalogTable(
+open class SnowflakeCatalogTable(
     name: String,
     schemaPath: ImmutableList<String>,
     columns: List<BodoSQLColumn>,
-    private val catalog: SnowflakeCatalogImpl,
+    private val catalog: SnowflakeCatalog,
 ) :
     CatalogTable(name, schemaPath, columns, catalog) {
 
+    // Hold the statistics for this table.
+    private val statistic: Statistic = StatisticImpl()
+
     /** Interface to get the Snowflake Catalog.  */
-    override fun getCatalog(): SnowflakeCatalogImpl {
+    override fun getCatalog(): SnowflakeCatalog {
         return catalog
     }
 
@@ -118,7 +126,7 @@ public open class SnowflakeCatalogTable(
 
     /**
      * Submits a Submits the specified query to Snowflake for evaluation, with a timeout. See
-     * SnowflakeCatalogImpl#trySubmitIntegerMetadataQuery for the full documentation.
+     * SnowflakeCatalog#trySubmitIntegerMetadataQuery for the full documentation.
      * @return A long result from the query or NULL.
      */
     fun trySubmitLongMetadataQuerySnowflakeInternal(
@@ -165,7 +173,7 @@ public open class SnowflakeCatalogTable(
                 input.defaultPath,
                 input.viewPath,
             )
-            val rel = root.logicalProject()
+            val rel = root.calciteLogicalProject()
             // Verify that we can read before inlining.
             if (canRead(rel)) {
                 return rel
@@ -204,9 +212,8 @@ public open class SnowflakeCatalogTable(
         val input = ExpandViewInput(
             baseRelNode.rowType,
             viewDefinition,
-            // TODO: FIXME to avoid dependence on the catalog
-            listOf(catalog.catalogName, parentFullPath[0]),
-            listOf(catalog.catalogName, parentFullPath[0], name),
+            parentFullPath,
+            fullPath,
         )
         // Check the cache.
         val result: RelNode?
@@ -330,6 +337,33 @@ public open class SnowflakeCatalogTable(
             tryGetViewMetadata()!!.viewDefinition
         } else {
             null
+        }
+    }
+
+    override fun getStatistic(): Statistic {
+        return statistic
+    }
+
+    private inner class StatisticImpl : Statistic {
+        private val rowCount: Supplier<Double?> = Suppliers.memoize { estimateRowCount() }
+
+        /**
+         * Retrieves the estimated row count for this table. This value is memoized.
+         *
+         * @return estimated row count for this table.
+         */
+        override fun getRowCount(): Double? {
+            return rowCount.get()
+        }
+
+        /**
+         * Retrieves the estimated row count for this table. It performs a query every time this is
+         * invoked.
+         *
+         * @return estimated row count for this table.
+         */
+        private fun estimateRowCount(): Double? {
+            return catalog.estimateRowCount(fullPath)
         }
     }
 }

@@ -217,9 +217,16 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
     }
     ensure(State.STATE_2_READY);
     SqlParser parser = SqlParser.create(reader, parserConfig);
-    SqlNode sqlNode = parser.parseStmt();
+    // Bodo Change: Add support for reading multiple statements,
+    // so we enable trailing semicolons. However, we do not actually support multiple statements.
+    List<SqlNode> stmtList = parser.parseStmtList();
+    if (stmtList.size() != 1) {
+      throw new RuntimeException(
+          "parse failed: Multiple statements encountered when parsing. Bodo only supports a single"
+              + " statement.");
+    }
     state = State.STATE_3_PARSED;
-    return sqlNode;
+    return stmtList.get(0);
   }
 
   @EnsuresNonNull("validator")
@@ -294,7 +301,14 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
     SqlParser parser = SqlParser.create(queryString, parserConfig);
     SqlNode sqlNode;
     try {
-      sqlNode = parser.parseQuery();
+      List<SqlNode> stmtList = parser.parseStmtList();
+      if (stmtList.size() == 1) {
+        sqlNode = stmtList.get(0);
+      } else {
+        throw new RuntimeException(
+            "parse failed: Multiple statements encountered when expanding views. View expansion"
+                + " only supports a single statement.");
+      }
     } catch (SqlParseException e) {
       throw new RuntimeException("parse failed", e);
     }
@@ -318,7 +332,11 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander {
     final RelRoot root = sqlToRelConverter.convertQuery(sqlNode, true, false);
     final RelRoot root2 = root.withRel(sqlToRelConverter.flattenTypes(root.rel, true));
     final RelBuilder relBuilder = config.getRelBuilderFactory().create(cluster, null);
-    return root2.withRel(BodoRelDecorrelator.decorrelateQuery(root.rel, relBuilder));
+    final RelRoot root3 = root2.withRel(BodoRelDecorrelator.decorrelateQuery(root.rel, relBuilder));
+    // Bodo Change: Make sure the final result is cast to the row type.
+    return RelRoot.of(root3.rel, rowType, root3.kind)
+        .withCollation(root3.collation)
+        .withHints(root3.hints);
   }
 
   // CalciteCatalogReader is stateless; no need to store one
