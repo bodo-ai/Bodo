@@ -8,6 +8,7 @@ import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.SqlAggFunction;
+import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -17,6 +18,7 @@ import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
+import org.apache.calcite.sql.type.BodoOperandTypes;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -121,6 +123,38 @@ public class ArrayOperatorTable implements SqlOperatorTable {
               "ARRAY_UNIQUE_AGG", SqlKind.OTHER_FUNCTION, ReturnTypes.TO_ARRAY, OperandTypes.ANY)
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
+
+  public static final SqlFunction ARRAY_MAP_GET =
+      SqlBasicFunction.create(
+              // What SqlKind should match?
+              SqlKind.ITEM,
+              // What Value should the return type be
+              BodoReturnTypes.ARRAY_MAP_GETITEM,
+              // The input can be any data type, any number of times.
+              // TODO: this may need to be variant as well.
+
+              // I can't do OperandTypes.or(OperandTypes.CHARACTER, OperandTypes.INTEGER)
+              // due to a bug with family operand.or with family operand types when checking
+              // arguments
+              // not in the 0-th index. I think the solution is modify
+              // CompositeSingleOperandTypeChecker.java
+              // similar to the changes we've made to fix to
+              // CompositeOperandTypeChecker.java
+              // ... but I'm not certain this is the correct fix, and I don't want to modify Calcite
+              // source
+              // files when there exists a very easy workaround. So for now, we'll just do an OR of
+              // the two
+              // sequences.
+              OperandTypes.or(
+                  OperandTypes.sequence(
+                      "GET(ARRAY_OR_MAP, CHARACTER)",
+                      BodoOperandTypes.ARRAY_OR_MAP,
+                      OperandTypes.CHARACTER),
+                  OperandTypes.sequence(
+                      "GET(ARRAY_OR_MAP, INTEGER)",
+                      BodoOperandTypes.ARRAY_OR_MAP,
+                      OperandTypes.INTEGER)))
+          .withName("GET");
 
   /** Nulls are dropped by arrayAgg, so return a non-null array of the input type. */
   public static RelDataType ArrayAggReturnType(SqlOperatorBinding binding) {
@@ -266,7 +300,8 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           ARRAY_SLICE,
           ARRAYS_OVERLAP,
           ARRAY_CONTAINS,
-          ARRAY_POSITION);
+          ARRAY_POSITION,
+          ARRAY_MAP_GET);
 
   @Override
   public void lookupOperatorOverloads(
