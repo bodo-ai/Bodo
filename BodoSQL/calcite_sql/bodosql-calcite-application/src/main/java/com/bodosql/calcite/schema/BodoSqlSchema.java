@@ -25,12 +25,28 @@ public abstract class BodoSqlSchema implements Schema {
   private final String name;
 
   /**
+   * The depth level for the given schema. We define the depth as the number of parents that must be
+   * visited before reaching the root. The root schema should have a depth of 0 and be the only
+   * schema with depth 0.
+   */
+  private final int depth;
+
+  // Full path of schemas to reach this, including the
+  // table name.
+  private final ImmutableList<String> fullPath;
+
+  /**
    * Constructor utilized by implementing constructors.
    *
    * @param name The schema's name.
    */
-  protected BodoSqlSchema(String name) {
+  protected BodoSqlSchema(String name, int depth, ImmutableList<String> schemaPath) {
     this.name = name;
+    this.depth = depth;
+    ImmutableList.Builder<String> builder = new ImmutableList.Builder<>();
+    builder.addAll(schemaPath);
+    builder.add(name);
+    fullPath = builder.build();
   }
 
   /** @return The schema's name. */
@@ -41,13 +57,10 @@ public abstract class BodoSqlSchema implements Schema {
   /**
    * Get the full path of schemas traversed from the root to reach this schema.
    *
-   * <p>This currently just returns the name because we don't support multiple levels of schemas
-   * yet.
-   *
    * @return An immutable list wrapping the name.
    */
   public ImmutableList<String> getFullPath() {
-    return ImmutableList.of(this.name);
+    return fullPath;
   }
 
   /**
@@ -89,11 +102,11 @@ public abstract class BodoSqlSchema implements Schema {
   }
 
   /**
-   * Returns a subschema with the given name. This will be replaced by implementations with multiple
+   * Returns a subSchema with the given name. This will be replaced by implementations with multiple
    * levels of schema.
    *
-   * @param schemaName Name of the subschema.
-   * @return The subschema object.
+   * @param schemaName Name of the subSchema.
+   * @return The subSchema object.
    */
   @Override
   public Schema getSubSchema(String schemaName) {
@@ -101,10 +114,10 @@ public abstract class BodoSqlSchema implements Schema {
   }
 
   /**
-   * Returns the names of all possible subschemas. This will be replaced by implementations with
+   * Returns the names of all possible subSchemas. This will be replaced by implementations with
    * multiple levels of schema.
    *
-   * @return The Set of subschema names.
+   * @return The Set of subSchema names.
    */
   @Override
   public Set<String> getSubSchemaNames() {
@@ -162,5 +175,16 @@ public abstract class BodoSqlSchema implements Schema {
   @Override
   public Schema snapshot(SchemaVersion sv) {
     throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  /**
+   * Return the depth level for the given schema. We will define the depth as the length of the path
+   * to the root including the root. As a result, the root has schemaDepth 0 and a schema just below
+   * the root would have depth 1.
+   *
+   * @return The depth of the schema.
+   */
+  int getSchemaDepth() {
+    return depth;
   }
 }

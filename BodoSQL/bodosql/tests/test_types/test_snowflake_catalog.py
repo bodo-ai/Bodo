@@ -2724,25 +2724,19 @@ def test_simple_inline_view(test_db_snowflake_catalog, memory_leak_check):
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
-    try:
-        # Ensure we always inline views
-        old_inline = bodo.bodosql_try_inline_views
-        bodo.bodosql_try_inline_views = True
-        with set_logging_stream(logger, 2):
-            check_func(
-                impl,
-                (bc, query),
-                py_output=py_output,
-                check_dtype=False,
-                sort_output=True,
-                reset_index=True,
-            )
-            # Verify that NICK_BASE_TABLE is found in the logger message so the
-            # view was inlined.
-            check_logger_msg(stream, "NICK_BASE_TABLE")
-    finally:
-        # Reset the inlining flag
-        bodo.bodosql_try_inline_views = old_inline
+    # Ensure we always inline views
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            check_dtype=False,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that NICK_BASE_TABLE is found in the logger message so the
+        # view was inlined.
+        check_logger_msg(stream, "NICK_BASE_TABLE")
 
 
 def test_secure_view_no_inlining(test_db_snowflake_catalog, memory_leak_check):
@@ -2771,25 +2765,18 @@ def test_secure_view_no_inlining(test_db_snowflake_catalog, memory_leak_check):
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
-    try:
-        # Ensure we always inline views
-        old_inline = bodo.bodosql_try_inline_views
-        bodo.bodosql_try_inline_views = True
-        with set_logging_stream(logger, 2):
-            check_func(
-                impl,
-                (bc, query),
-                py_output=py_output,
-                check_dtype=False,
-                sort_output=True,
-                reset_index=True,
-            )
-            # Verify that NICK_BASE_TABLE is not found in the logger message
-            # so the view was not inlined.
-            check_logger_no_msg(stream, "NICK_BASE_TABLE")
-    finally:
-        # Reset the inlining flag
-        bodo.bodosql_try_inline_views = old_inline
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            check_dtype=False,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that NICK_BASE_TABLE is not found in the logger message
+        # so the view was not inlined.
+        check_logger_no_msg(stream, "NICK_BASE_TABLE")
 
 
 def test_separate_schema_inline_view(test_db_snowflake_catalog, memory_leak_check):
@@ -2816,25 +2803,84 @@ def test_separate_schema_inline_view(test_db_snowflake_catalog, memory_leak_chec
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
-    try:
-        # Ensure we always inline views
-        old_inline = bodo.bodosql_try_inline_views
-        bodo.bodosql_try_inline_views = True
-        with set_logging_stream(logger, 2):
-            check_func(
-                impl,
-                (bc, query),
-                py_output=py_output,
-                check_dtype=False,
-                sort_output=True,
-                reset_index=True,
-            )
-            # Verify that REGION is found in the logger message so the
-            # view was inlined.
-            check_logger_msg(stream, "REGION")
-    finally:
-        # Reset the inlining flag
-        bodo.bodosql_try_inline_views = old_inline
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            check_dtype=False,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that REGION is found in the logger message so the
+        # view was inlined.
+        check_logger_msg(stream, "REGION")
+
+
+def test_separate_database_read(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests reading from a table with a different database than the default.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select * from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.REGION"
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string(
+            test_db_snowflake_catalog.database,
+            test_db_snowflake_catalog.connection_params["schema"],
+        ),
+    )
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    check_func(
+        impl,
+        (bc, query),
+        py_output=py_output,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+def test_separate_database_inline_view(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that the a view defined in a separate database as every
+    table it uses is properly inlined.
+
+    If you need to recreate this in snowflake, these are the relevant defintions:
+
+    create view TEST_DB.PUBLIC.WRONG_DATABASE_VIEW as
+        select * from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.region
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select * from wrong_database_view"
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string(
+            test_db_snowflake_catalog.database,
+            test_db_snowflake_catalog.connection_params["schema"],
+        ),
+    )
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            check_dtype=False,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that REGION is found in the logger message so the
+        # view was inlined.
+        check_logger_msg(stream, "REGION")
 
 
 def test_missing_select_permission_no_inline(
@@ -2876,23 +2922,56 @@ def test_missing_select_permission_no_inline(
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
-    try:
-        # Ensure we always inline views
-        old_inline = bodo.bodosql_try_inline_views
-        bodo.bodosql_try_inline_views = True
-        with set_logging_stream(logger, 2):
-            check_func(
-                impl,
-                (bc, query),
-                py_output=py_output,
-                check_dtype=False,
-                sort_output=True,
-                reset_index=True,
-            )
-            # Verify that CANNOT_READ_TABLE is not found in the logger message
-            # so the view was not inlined and CAN_READ_VIEW is found.
-            check_logger_msg(stream, "CAN_READ_VIEW")
-            check_logger_no_msg(stream, "CANNOT_READ_TABLE")
-    finally:
-        # Reset the inlining flag
-        bodo.bodosql_try_inline_views = old_inline
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            check_dtype=False,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that CANNOT_READ_TABLE is not found in the logger message
+        # so the view was not inlined and CAN_READ_VIEW is found.
+        check_logger_msg(stream, "CAN_READ_VIEW")
+        check_logger_no_msg(stream, "CANNOT_READ_TABLE")
+
+
+def test_simple_inline_view_semicolon(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that the a view defined in the same database and schema as every
+    table it uses is properly inlined.
+
+    If you need to recreate this in snowflake, these are the relevant defintions:
+
+    create table nick_base_table as (select length(r_comment) as A from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.REGION)
+
+    create view basic_view_semicolon as select * from nick_base_table;
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select * from basic_view_semicolon"
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string(
+            test_db_snowflake_catalog.database,
+            test_db_snowflake_catalog.connection_params["schema"],
+        ),
+    )
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            check_dtype=False,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that NICK_BASE_TABLE is found in the logger message so the
+        # view was inlined.
+        check_logger_msg(stream, "NICK_BASE_TABLE")

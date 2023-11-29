@@ -30,7 +30,7 @@ from bodo.utils.typing import (
 from bodosql import DatabaseCatalog, DatabaseCatalogType
 from bodosql.imported_java_classes import (
     PropertiesClass,
-    SnowflakeCatalogImplClass,
+    SnowflakeCatalogClass,
 )
 
 
@@ -111,7 +111,7 @@ def _create_java_snowflake_catalog(
     for key, value in connection_params.items():
         properties.put(key, value)
     # Create the Snowflake catalog
-    return SnowflakeCatalogImplClass(
+    return SnowflakeCatalogClass(
         username, password, account, database, warehouse, properties
     )
 

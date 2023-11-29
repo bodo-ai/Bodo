@@ -1,11 +1,12 @@
 package com.bodosql.calcite.schema;
 
 import com.bodosql.calcite.table.BodoSqlTable;
+import com.google.common.collect.ImmutableList;
 import java.util.HashMap;
 import java.util.Set;
 import org.apache.calcite.schema.Table;
 
-public class LocalSchemaImpl extends BodoSqlSchema {
+public class LocalSchema extends BodoSqlSchema {
   /**
    * Definition of a Schema that is used for local tables that are not part of any catalog. These
    * include in memory DataFrames and the table path API.
@@ -16,13 +17,23 @@ public class LocalSchemaImpl extends BodoSqlSchema {
   private HashMap<String, Table> tables;
 
   /**
-   * Support constructor for a Local Schema.
+   * Full constructor to allow specifying depth. This is used for constructing a root schema.
    *
    * @param name Name of the schema.
+   * @param depth The depth to the root schema.
    */
-  public LocalSchemaImpl(String name) {
-    super(name);
+  public LocalSchema(String name, int depth) {
+    super(name, depth, ImmutableList.of());
     this.tables = new HashMap<>();
+  }
+
+  /**
+   * Default constructor for actual
+   *
+   * @param name
+   */
+  public LocalSchema(String name) {
+    this(name, 1);
   }
 
   /**

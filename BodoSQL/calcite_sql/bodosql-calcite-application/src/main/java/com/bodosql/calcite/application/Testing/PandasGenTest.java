@@ -2,7 +2,7 @@ package com.bodosql.calcite.application.Testing;
 
 import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
-import com.bodosql.calcite.schema.LocalSchemaImpl;
+import com.bodosql.calcite.schema.LocalSchema;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
@@ -20,7 +20,7 @@ public class PandasGenTest {
     String sql = "select CURRENT_DATE()";
     int plannerChoice = RelationalAlgebraGenerator.STREAMING_PLANNER;
 
-    LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
+    LocalSchema schema = new LocalSchema("__bodolocal__");
     ArrayList arr = new ArrayList();
     BodoSQLColumnDataType dataType = BodoSQLColumnDataType.INT64;
     BodoSQLColumnDataType paramType = BodoSQLColumnDataType.INT64;

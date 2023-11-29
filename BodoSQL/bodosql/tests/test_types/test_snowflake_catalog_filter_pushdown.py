@@ -2847,3 +2847,136 @@ def test_projection_pushdown_rename(test_db_snowflake_catalog, memory_leak_check
     # In both cases the column isn't dict encoded because we don't depend on the filter.
     check_func(impl1, (bc,), py_output=False, check_dtype=False, reset_index=True)
     check_func(impl2, (bc,), py_output=False, check_dtype=False, reset_index=True)
+
+
+def test_separate_database_read(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests reading from a table with a different database than the default
+    in a manner that includes filter pushdown. This is primarily intended to
+    ensure the filter pushdown code generation can load the original table.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select * from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.REGION WHERE R_COMMENT IS NOT NULL"
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string(
+            test_db_snowflake_catalog.database,
+            test_db_snowflake_catalog.connection_params["schema"],
+        ),
+    )
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    # make sure filter pushdown worked
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            check_dtype=False,
+            sort_output=True,
+            reset_index=True,
+        )
+
+        # Pushdown happens in the planner. Check the timer message instead.
+        check_logger_msg(
+            stream,
+            f'WHERE "R_COMMENT" IS NOT NULL',
+        )
+
+
+def test_inline_view_filter_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that the a view defined in the same database and schema as every
+    table it uses is properly inlined and filter pushdown sill works as expected.
+
+    If you need to recreate this in snowflake, these are the relevant defintions:
+
+    create table nick_base_table as (select length(r_comment) as A from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.REGION)
+
+    create view basic_view as select * from nick_base_table
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select * from basic_view where A > 1"
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string(
+            test_db_snowflake_catalog.database,
+            test_db_snowflake_catalog.connection_params["schema"],
+        ),
+    )
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    # Ensure we always inline views
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            check_dtype=False,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that NICK_BASE_TABLE is found in the logger message so the
+        # view was inlined.
+        check_logger_msg(stream, "NICK_BASE_TABLE")
+        # Pushdown happens in the planner. Check the timer message instead.
+        check_logger_msg(
+            stream,
+            f'WHERE "A" > 1',
+        )
+
+
+def test_inline_filter_view_filter_pushdown(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that the a view defined to contain a filter still has its filter pushed
+    down once it has been inlined.
+
+    If you need to recreate this in snowflake, these are the relevant defintions:
+
+    create table nick_base_table as (select length(r_comment) as A from SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.REGION)
+
+    create view filter_view as select * from nick_base_table where A > 1
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select * from filter_view"
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string(
+            test_db_snowflake_catalog.database,
+            test_db_snowflake_catalog.connection_params["schema"],
+        ),
+    )
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    # Ensure we always inline views
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            check_dtype=False,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that NICK_BASE_TABLE is found in the logger message so the
+        # view was inlined.
+        check_logger_msg(stream, "NICK_BASE_TABLE")
+        # Pushdown happens in the planner. Check the timer message instead.
+        check_logger_msg(
+            stream,
+            f'WHERE "A" > 1',
+        )

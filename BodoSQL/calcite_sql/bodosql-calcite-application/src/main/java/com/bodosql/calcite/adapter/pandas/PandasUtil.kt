@@ -4,6 +4,7 @@ import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelRoot
 import org.apache.calcite.rel.core.LogicalTableCreate
+import org.apache.calcite.rel.logical.LogicalProject
 import org.apache.calcite.sql.SqlKind
 import java.lang.AssertionError
 
@@ -67,6 +68,23 @@ private fun RelRoot.createLogicalProjectNode(input: RelNode): RelNode {
     return BodoLogicalProject.create(input, listOf(), projects, validatedRowType)
 }
 
+private fun RelRoot.createCalciteLogicalProjectNode(input: RelNode): RelNode {
+    val rexBuilder = input.cluster.rexBuilder
+    val projects = fields.map { (i, _) ->
+        val inputRef = rexBuilder.makeInputRef(input, i)
+        val expectedType = validatedRowType.fieldList[i].type
+        // Its possible the literal values may not match the Bodo
+        // expected types. This notably occurs when inlining views
+        // if we treat Number(38, 0) as BIGINT.
+        if (inputRef.type != expectedType) {
+            rexBuilder.makeCast(expectedType, inputRef)
+        } else {
+            inputRef
+        }
+    }
+    return LogicalProject.create(input, listOf(), projects, validatedRowType)
+}
+
 /**
  * Transforms a [RelRoot] to a [RelNode] that can be used for output plan
  * generation. This is not needed for core functionality, but it is included
@@ -102,4 +120,34 @@ fun RelRoot.logicalProject(): RelNode =
         this.rel.copy(this.rel.traitSet, listOf(newInput))
     } else {
         createLogicalProjectNode(this.rel)
+    }
+
+/**
+ * Equivalent to RelRoot.project() for creating Calcite
+ * logical nodes, but with the additional difference that
+ * it checks for aliases and that it allows for type casting
+ * if the generated type doesn't match the validated type.
+ */
+fun RelRoot.calciteLogicalProject(): RelNode =
+    if (isRefTrivial && kind.belongsTo(SqlKind.DML)) {
+        // No transformation is needed.
+        // DML operations are special in that the validated node type
+        // is for the inner SELECT and is not related to the output.
+        this.rel
+    } else if (isRefTrivial && isNameTrivial && this.rel.getRowType() == validatedRowType) {
+        // No transformation is needed because types match exactly.
+        this.rel
+    } else if (kind == SqlKind.CREATE_TABLE) {
+        // Create table is special because the validated type is for the actual
+        // select. We need to check that the names and columns match the expectations
+        // for the RelRoot.
+        // TODO: Add other DDL operations?
+        if (this.rel !is LogicalTableCreate) {
+            throw AssertionError("Input create sqlkind doesn't match a supported node")
+        }
+        // Insert the projection before the CREATE_TABLE
+        val newInput = createCalciteLogicalProjectNode(this.rel.getInput(0))
+        this.rel.copy(this.rel.traitSet, listOf(newInput))
+    } else {
+        createCalciteLogicalProjectNode(this.rel)
     }
