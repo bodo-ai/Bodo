@@ -689,9 +689,9 @@ def table_builder_reset(
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="table_builder_reset"
         )
-        table_ret = builder.call(fn_tp, args)
+        builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return table_ret
+        return
 
     sig = types.none(builder_state)
     return sig, codegen
