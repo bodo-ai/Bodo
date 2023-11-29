@@ -127,6 +127,68 @@ def array_values(request):
     return request.param
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(
+            ([0, 1, -2, 4], pd.Int32Dtype()),
+            id="integers",
+        ),
+        pytest.param(
+            (["", "Alphabet Soup", "#WEATTACKATDAWN", "Infinity(∞)"], None),
+            id="strings",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                [[0, 1, None, 2], [], [2, 3, 5, 7], [4, 9, 16]],
+                pd.ArrowDtype(pa.large_list(pa.int32())),
+            ),
+            id="nested_array",
+        ),
+        pytest.param(
+            (
+                [
+                    {"i": 3, "s": 9.9},
+                    {"i": 4, "s": 16.3},
+                    {"i": 5, "s": 25.0},
+                    {"i": 6, "s": -36.41},
+                ],
+                pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("i", pa.int8()),
+                            pa.field("s", pa.float64()),
+                        ]
+                    )
+                ),
+            ),
+            id="struct",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                [
+                    {"A": 0, "B": 1},
+                    {"A": 2, "B": 3, "C": 4},
+                    {"B": 5},
+                    {"C": 6, "A": 7},
+                ],
+                pd.ArrowDtype(pa.map_(pa.large_string(), pa.int16())),
+            ),
+            id="map",
+        ),
+    ],
+)
+def data_values(request):
+    """
+    Returns a list of 4 values of a certain type used to construct
+    nested arrays of various patterns using said type, as well
+    as the corresponding pyarrow type.
+    Only used by test_array_construct and test_array_construct_compact
+    """
+    return request.param
+
+
 def test_to_array_scalars(basic_df, memory_leak_check):
     """Test TO_ARRAY works correctly with scalar inputs"""
     query_fmt = "TO_ARRAY({!s})"
@@ -698,54 +760,7 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
     )
 
 
-@pytest.mark.parametrize(
-    "data_values, dtype",
-    [
-        pytest.param(
-            [0, 1, -2, 4],
-            pd.Int32Dtype(),
-            id="integers",
-        ),
-        pytest.param(
-            ["", "Alphabet Soup", "#WEATTACKATDAWN", "Infinity(∞)"],
-            None,
-            id="strings",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            [[0, 1, None, 2], [], [2, 3, 5, 7], [4, 9, 16]],
-            pd.ArrowDtype(pa.large_list(pa.int32())),
-            id="nested_array",
-            marks=pytest.mark.skip(
-                reason="[BSE-1780] TODO: fix array_construct when inputs are multiple arrays"
-            ),
-        ),
-        pytest.param(
-            [
-                {"i": 3, "s": 9.9},
-                {"i": 4, "s": 16.3},
-                {"i": 5, "s": 25.0},
-                {"i": 6, "s": -36.41},
-            ],
-            pd.ArrowDtype(
-                pa.struct(
-                    [
-                        pa.field("i", pa.int8()),
-                        pa.field("s", pa.float64()),
-                    ]
-                )
-            ),
-            id="struct",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            [{"A": 0, "B": 1}, {"A": 2, "B": 3, "C": 4}, {"B": 5}, {"C": 6, "A": 7}],
-            pd.ArrowDtype(pa.map_(pa.large_string(), pa.int16())),
-            id="map",
-        ),
-    ],
-)
-def test_array_construct(data_values, dtype, use_case, memory_leak_check):
+def test_array_construct(data_values, use_case, memory_leak_check):
     """
     Test ARRAY_CONSTRUCT works correctly with different data type columns
     and with/without case statements.
@@ -754,6 +769,9 @@ def test_array_construct(data_values, dtype, use_case, memory_leak_check):
     to construct 2 columns of arrays of these values, then uses them to
     build a column of arrays.
     """
+    data_values, dtype = data_values
+    if any(isinstance(elem, list) for elem in data_values) and use_case:
+        pytest.skip(reason="[BSE-511] TODO: support array in CASE statements")
     if any(isinstance(elem, dict) for elem in data_values) and use_case:
         pytest.skip(
             reason="[BSE-1889] TODO: support returning JSON or arrays of JSON in CASE statements"
@@ -790,6 +808,66 @@ def test_array_construct(data_values, dtype, use_case, memory_leak_check):
         check_names=False,
         check_dtype=False,
         expected_output=pd.DataFrame({0: answer}),
+        sort_output=False,
+        convert_columns_to_pandas=True,
+    )
+
+
+def test_array_construct_compact(data_values, use_case, memory_leak_check):
+    """
+    Test ARRAY_CONSTRUCT_COMPACT works correctly with different data
+    type columns and with/without case statements.
+
+    Takes in a list of 4 distinct values of the desired type and uses them
+    to construct 2 columns of arrays of these values, then uses them to
+    build a column of arrays.
+    """
+    data_values, dtype = data_values
+    if any(isinstance(elem, list) for elem in data_values) and use_case:
+        pytest.skip(reason="[BSE-511] TODO: support array in CASE statements")
+    if any(isinstance(elem, dict) for elem in data_values) and use_case:
+        pytest.skip(
+            reason="[BSE-1889] TODO: support returning JSON or arrays of JSON in CASE statements"
+        )
+    if use_case:
+        query = "SELECT CASE WHEN C THEN ARRAY_CONSTRUCT_COMPACT(A, B) ELSE ARRAY_CONSTRUCT_COMPACT(B, A) END FROM table1"
+    else:
+        query = "SELECT ARRAY_CONSTRUCT_COMPACT(A, B) FROM table1"
+
+    def make_vals(L):
+        if L is None:
+            return None
+        return [None if idx is None else data_values[idx] for idx in L]
+
+    def make_ans(A, B):
+        ret = []
+        if A is not None:
+            ret.append(A)
+        if B is not None:
+            ret.append(B)
+        return ret
+
+    pattern_a = [0] * 5 + [1] * 5 + [2] * 5 + [3] * 5 + [None] * 5
+    pattern_b = [0, 1, 2, 3, None] * 5
+    pattern_answer = [make_ans(a, b) for a, b in zip(pattern_a, pattern_b)]
+    vals_a = make_vals(pattern_a)
+    vals_b = make_vals(pattern_b)
+    answer = [make_vals(row) for row in pattern_answer]
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(vals_a, dtype=dtype),
+                "B": pd.Series(vals_b, dtype=dtype),
+                "C": [True] * len(pattern_a),
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        expected_output=pd.DataFrame({"EXPR$0": answer}),
         sort_output=False,
         convert_columns_to_pandas=True,
     )

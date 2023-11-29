@@ -43,6 +43,15 @@ public class ArrayOperatorTable implements SqlOperatorTable {
     return instance;
   }
 
+  public static final SqlFunction ARRAY_COMPACT =
+      new SqlFunction(
+          "ARRAY_COMPACT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.ARRAY,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction ARRAY_CONSTRUCT =
       new SqlFunction(
           "ARRAY_CONSTRUCT",
@@ -67,13 +76,15 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlFunction ARRAY_COMPACT =
+  public static final SqlFunction ARRAY_CONSTRUCT_COMPACT =
       new SqlFunction(
-          "ARRAY_COMPACT",
+          "ARRAY_CONSTRUCT_COMPACT",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.ARG0_NULLABLE,
+          ReturnTypes.LEAST_RESTRICTIVE
+              .andThen(SqlTypeTransforms.TO_ARRAY)
+              .andThen(SqlTypeTransforms.TO_NULLABLE),
           null,
-          OperandTypes.ARRAY,
+          OperandTypes.ONE_OR_MORE,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction TO_ARRAY =
@@ -290,6 +301,7 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           TO_ARRAY,
           ARRAY_COMPACT,
           ARRAY_CONSTRUCT,
+          ARRAY_CONSTRUCT_COMPACT,
           ARRAY_EXCEPT,
           ARRAY_INTERSECTION,
           ARRAY_CAT,
