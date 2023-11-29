@@ -15,6 +15,7 @@ import kotlin.Pair;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.TZAwareSqlType;
+import org.apache.calcite.sql.type.VariantSqlType;
 
 /** Class that returns the generated code for Cast calls after all inputs have been visited. */
 public class CastCodeGen {
@@ -83,6 +84,9 @@ public class CastCodeGen {
           break;
         }
       default:
+        if (outputType instanceof VariantSqlType) {
+          return arg;
+        }
         StringBuilder asTypeBuilder = new StringBuilder();
         SqlTypeName typeName = outputType.getSqlTypeName();
         String dtype = sqlTypenameToPandasTypename(typeName, outputScalar);
