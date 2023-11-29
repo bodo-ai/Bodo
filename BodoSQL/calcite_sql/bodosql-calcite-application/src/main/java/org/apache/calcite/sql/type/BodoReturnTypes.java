@@ -81,6 +81,11 @@ public class BodoReturnTypes {
                     type4 = factory.createTypeWithNullability(inputType.getValueType(), true);
                 } else if (inputType instanceof ArraySqlType) {
                     type4 = factory.createTypeWithNullability(inputType.getComponentType(), true);
+                } else if (inputType instanceof VariantSqlType) {
+                    if (!(factory instanceof BodoRelDataTypeFactory)) {
+                        throw new RuntimeException("Internal Error: Unexpected RelDataTypeFactory");
+                    }
+                    type4 = ((BodoRelDataTypeFactory) factory).createVariantSqlType();
                 } else {
                     throw new CalciteContextException("", BODO_SQL_RESOURCE.requiresArrayOrJson("FLATTEN", "INPUT").ex());
                 }
