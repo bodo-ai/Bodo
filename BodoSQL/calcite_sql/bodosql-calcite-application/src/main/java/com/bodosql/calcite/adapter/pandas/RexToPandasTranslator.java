@@ -895,6 +895,16 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "ARRAY_CONSTRUCT":
         result = visitArrayConstruct(codeExprs, isSingleRow, argScalars);
         break;
+      case "ARRAY_CONSTRUCT_COMPACT":
+        result = visitArrayConstruct(codeExprs, isSingleRow, argScalars);
+        boolean isScalar = true;
+        for (Boolean i : argScalars) {
+          if (!i) {
+            isScalar = false;
+            break;
+          }
+        }
+        return visitNestedArrayFunc("ARRAY_COMPACT", List.of(result), List.of(isScalar));
       case "HASH":
         result = visitHash(fnName, codeExprs);
         break;
@@ -1418,6 +1428,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         || fnName == "NVL"
         || fnName == "NVL2"
         || fnName == "ARRAY_CONSTRUCT"
+        || fnName == "ARRAY_CONSTRUCT_COMPACT"
         || fnName == "BOOLAND"
         || fnName == "BOOLOR"
         || fnName == "BOOLXOR"
