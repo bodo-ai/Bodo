@@ -5,6 +5,7 @@ Test correctness of SQL cast queries on BodoSQL
 import datetime
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -935,3 +936,47 @@ def test_try_cast_error_handling(basic_df, memory_leak_check):
     ):
         bc = bodosql.BodoSQLContext(basic_df)
         bc.sql(query2)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT TO_VARIANT(X) from table1",
+        "SELECT CAST(X as VARIANT) from table1",
+        "SELECT X::VARIANT from table1",
+    ],
+)
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(pd.Series(["a"] * 10 + [None]), id="string"),
+        pytest.param(pd.Series([7] * 10 + [None]), id="int"),
+        pytest.param(pd.Series([1.1] * 10 + [None]), id="float"),
+        pytest.param(
+            pd.Series(
+                [{"a": 0}] * 10, dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64()))
+            ),
+            id="map",
+        ),
+        pytest.param(
+            pd.Series(
+                [{"a": 0}] * 10,
+                dtype=pd.ArrowDtype(pa.struct([pa.field("A", pa.int32())])),
+            ),
+            id="struct",
+        ),
+    ],
+)
+def test_cast_to_variant(query, data):
+    df = pd.DataFrame({"X": data})
+    ctx = {"table1": df}
+    expected_output = pd.DataFrame({0: data})
+    check_query(
+        query,
+        ctx,
+        None,
+        sort_output=False,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_output,
+    )
