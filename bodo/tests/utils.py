@@ -2654,6 +2654,7 @@ def _pytest_snowflake_rerun_filter(err, *args):
         "HTTP 503: Service Unavailable" in str_err
         or "HTTP 504: Gateway Timeout" in str_err
         or "Could not connect to Snowflake backend after " in str_err
+        or "snowflake.connector.vendored.requests.exceptions.ReadTimeout" in str_err
     )
     if should_rerun:
         global pytest_snowflake_is_rerunning
