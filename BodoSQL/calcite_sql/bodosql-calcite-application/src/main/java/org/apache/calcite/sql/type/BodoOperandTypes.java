@@ -34,6 +34,12 @@ public class BodoOperandTypes {
 
   public static final SqlSingleOperandTypeChecker CHARACTER_CHARACTER = OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER);
 
+
+  public static final SqlSingleOperandTypeChecker ARRAY_OR_MAP =
+          OperandTypes.family(SqlTypeFamily.ARRAY)
+                  .or(OperandTypes.family(SqlTypeFamily.MAP))
+                  .or(OperandTypes.family(SqlTypeFamily.ANY));
+
   /**
    * Creates an operand checker from a sequence of single-operand checkers.
    * This is an copy of OperandTypes.sequence, that takes a list of rules instead of variable number of arguments.
@@ -54,6 +60,7 @@ public class BodoOperandTypes {
           List.of(Pair.of(OperandTypes.NUMERIC.or(OperandTypes.CHARACTER), "NUMERIC or CHAR"),
                   Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL"),
                   Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL")));
+
 
 
 }

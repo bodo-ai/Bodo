@@ -5,6 +5,7 @@ import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
 import com.google.common.base.Preconditions;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rel.type.StructKind;
 import org.apache.calcite.rel.type.RelRecordType;
@@ -23,7 +24,9 @@ import static com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataT
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCharset;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCollation;
+import static org.apache.calcite.sql.type.NonNullableAccessors.getComponentTypeOrThrow;
 import static org.apache.calcite.sql.type.ReturnTypes.ARG0_NULLABLE;
+import static org.apache.calcite.sql.validate.SqlNonNullableAccessors.getOperandLiteralValueOrThrow;
 import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 import static org.apache.calcite.util.Static.RESOURCE;
 
@@ -619,6 +622,82 @@ public class BodoReturnTypes {
         }
     }
 
+
+
+    public static SqlReturnTypeInference ARRAY_MAP_GETITEM = opBinding -> inferReturnTypeArrayMapGetItem(opBinding);
+
+    /**
+     * Directly copied from
+     * org.apache.calcite.sql.fun.SqlItemOperator#inferReturnType, with no changes.
+     * So that we can correctly type our "GET" function, which is syntactic sugar for the getItem operator.
+     *
+     * Since this is copied, I'm pasting the Calcite License:
+     *
+     *  * Licensed to the Apache Software Foundation (ASF) under one or more
+     *  * contributor license agreements.  See the NOTICE file distributed with
+     *  * this work for additional information regarding copyright ownership.
+     *  * The ASF licenses this file to you under the Apache License, Version 2.0
+     *  * (the "License"); you may not use this file except in compliance with
+     *  * the License.  You may obtain a copy of the License at
+     *  *
+     *  * http://www.apache.org/licenses/LICENSE-2.0
+     *  *
+     *  * Unless required by applicable law or agreed to in writing, software
+     *  * distributed under the License is distributed on an "AS IS" BASIS,
+     *  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     *  * See the License for the specific language governing permissions and
+     *  * limitations under the License.
+     */
+    static public RelDataType inferReturnTypeArrayMapGetItem(SqlOperatorBinding opBinding) {
+        final RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
+        final RelDataType operandType = opBinding.getOperandType(0);
+        switch (operandType.getSqlTypeName()) {
+            case ARRAY:
+                return typeFactory.createTypeWithNullability(
+                        getComponentTypeOrThrow(operandType), true);
+            case MAP:
+                return typeFactory.createTypeWithNullability(
+                        requireNonNull(operandType.getValueType(),
+                                () -> "operandType.getValueType() is null for " + operandType),
+                        true);
+            case ROW:
+                RelDataType fieldType;
+                RelDataType indexType = opBinding.getOperandType(1);
+
+                if (SqlTypeUtil.isString(indexType)) {
+                    final String fieldName = getOperandLiteralValueOrThrow(opBinding, 1, String.class);
+                    RelDataTypeField field = operandType.getField(fieldName, false, false);
+                    if (field == null) {
+                        throw new AssertionError("Cannot infer type of field '"
+                                + fieldName + "' within ROW type: " + operandType);
+                    } else {
+                        fieldType = field.getType();
+                    }
+                } else if (SqlTypeUtil.isIntType(indexType)) {
+                    Integer index = opBinding.getOperandLiteralValue(1, Integer.class);
+                    if (index == null || index < 1 || index > operandType.getFieldCount()) {
+                        throw new AssertionError("Cannot infer type of field at position "
+                                + index + " within ROW type: " + operandType);
+                    } else {
+                        fieldType = operandType.getFieldList().get(index - 1).getType(); // 1 indexed
+                    }
+                } else {
+                    throw new AssertionError("Unsupported field identifier type: '"
+                            + indexType + "'");
+                }
+                if (fieldType != null && operandType.isNullable()) {
+                    fieldType = typeFactory.createTypeWithNullability(fieldType, true);
+                }
+                return fieldType;
+            case ANY:
+            case DYNAMIC_STAR:
+                return typeFactory.createTypeWithNullability(
+                        typeFactory.createSqlType(SqlTypeName.ANY), true);
+            default:
+                throw new AssertionError();
+        }
+    }
+
     public static final SqlReturnTypeInference TO_NUMBER_RET_TYPE =  ToNumberRetTypeHelper(true);
 
     public static final SqlReturnTypeInference TRY_TO_NUMBER_RET_TYPE = ToNumberRetTypeHelper(false);
@@ -655,6 +734,7 @@ public class BodoReturnTypes {
             return retType.andThen(SqlTypeTransforms.TO_NULLABLE);
         } else {
             return retType.andThen(SqlTypeTransforms.FORCE_NULLABLE);
+
         }
     }
 

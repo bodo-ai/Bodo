@@ -1499,6 +1499,14 @@ def test_option_is_functions(memory_leak_check):
             id="int_array-vector-vector",
         ),
         pytest.param(
+            pd.Series([[1.5, 2.333, -3.1, None, 4.0]] * 7),
+            pd.Series([-1, 0, 1, 2, 3, 4, 5]),
+            False,
+            pd.Series([None, 1.5, 2.333, -3.1, None, 4.0, None]),
+            marks=pytest.mark.slow,
+            id="float_array-vector-vector",
+        ),
+        pytest.param(
             np.array(["abc", "def", "ghi", None] * 2),
             pd.Series([-1, 0, 1, 2, 3, 4, 8]),
             True,
@@ -1506,6 +1514,68 @@ def test_option_is_functions(memory_leak_check):
                 [None, "abc", "def", "ghi", None, "abc", None], dtype=pd.StringDtype()
             ),
             id="string_array-scalar-vector",
+        ),
+        pytest.param(
+            pd.Series([[True, False, None]] * 5),
+            pd.Series([-1, 0, 1, 2, 3]),
+            False,
+            pd.Series([None, True, False, None, None]),
+            marks=pytest.mark.slow,
+            id="bool_array-vector-vector",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [
+                        pd.Timestamp("2023-11-27", tz="UTC"),
+                        pd.Timestamp("2023-11-27 21:11:54.764555+0000", tz="UTC"),
+                        pd.Timestamp("2022-01-01 13:01:59", tz="UTC"),
+                        pd.Timestamp("1999-09-09 09:09:09", tz="UTC"),
+                        None,
+                    ]
+                ]
+                * 7
+            ),
+            pd.Series([-1, 0, 1, 2, 3, 4, 5]),
+            False,
+            pd.Series(
+                [
+                    None,
+                    pd.Timestamp("2023-11-27", tz="UTC"),
+                    pd.Timestamp("2023-11-27 21:11:54.764555+0000", tz="UTC"),
+                    pd.Timestamp("2022-01-01 13:01:59", tz="UTC"),
+                    pd.Timestamp("1999-09-09 09:09:09", tz="UTC"),
+                    None,
+                    None,
+                ]
+            ),
+            marks=pytest.mark.slow,
+            id="timestamp_tz_array-vector-vector",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [
+                        pd.Timestamp("2023-11-27"),
+                        pd.Timestamp("2023-11-27 21:11:54.764555"),
+                        pd.Timestamp("2022-01-01 13:01:59"),
+                    ]
+                ]
+                * 5
+            ),
+            pd.Series([-1, 0, 1, 2, -1]),
+            False,
+            pd.Series(
+                [
+                    None,
+                    pd.Timestamp("2023-11-27"),
+                    pd.Timestamp("2023-11-27 21:11:54.764555"),
+                    pd.Timestamp("2022-01-01 13:01:59"),
+                    None,
+                ]
+            ),
+            marks=pytest.mark.slow,
+            id="timestamp_ntz_array-vector-vector",
         ),
         pytest.param(
             pd.Series(
