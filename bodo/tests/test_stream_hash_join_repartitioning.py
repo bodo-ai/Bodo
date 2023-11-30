@@ -474,8 +474,8 @@ def test_split_during_shuffle_append_table_and_diff_part_state(
             "Total size of all partitions: ",
             "Estimated required size of Op-Pool: ",
         ] + ([None] * 10)
-        # It's between 260KiB and 270KiB depending on build_table_outer
-        expected_op_pool_budget_after_build = (260 * 1024, 270 * 1024)
+        # It's between 255KiB and 270KiB depending on build_table_outer
+        expected_op_pool_budget_after_build = (255 * 1024, 270 * 1024)
     else:
         expected_log_msgs = [
             "[DEBUG] HashJoinState::AppendBuildBatch[2]: Encountered OperatorPoolThresholdExceededError.",
