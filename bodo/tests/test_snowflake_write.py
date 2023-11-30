@@ -188,8 +188,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
 
     def test_impl_do_upload_and_cleanup(cursor, chunk_path, stage_name):
         with bodo.objmode():
-            th = do_upload_and_cleanup(cursor, 0, chunk_path, stage_name)
-            th.join()
+            do_upload_and_cleanup(cursor, 0, chunk_path, stage_name)
 
     bodo_impl = bodo.jit()(test_impl_do_upload_and_cleanup)
 
@@ -696,85 +695,6 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
     bodo.barrier()
 
 
-def test_snowflake_write_join_all_threads(memory_leak_check):
-    """
-    Test that joining all threads will broadcast exceptions raised on any individual rank
-    """
-    from bodo.io.helpers import ExceptionPropagatingThread, join_all_threads
-
-    def thread_target_success(s):
-        return s
-
-    def thread_target_failure(s):
-        raise ValueError(s)
-
-    # All threads succeed
-    @bodo.jit
-    def test_join_all_threads_impl_1():
-        thread_list = []
-        for i in range(4):
-            with bodo.objmode(th="exception_propagating_thread_type"):
-                th = ExceptionPropagatingThread(
-                    target=thread_target_success,
-                    args=(f"rank{bodo.get_rank()}_thread{i}",),
-                )
-                th.start()
-            thread_list.append(th)
-
-        with bodo.objmode():
-            join_all_threads(thread_list, _is_parallel=bodo.get_size() != 1)
-
-    test_join_all_threads_impl_1()
-
-    # Threads 1 and 3 fail on every rank.
-    # Each rank should raise its own exception
-    def test_join_all_threads_impl_2():
-        thread_list = []
-        for i in range(4):
-            with bodo.objmode(th="exception_propagating_thread_type"):
-                if i == 1 or i == 3:
-                    thread_target = thread_target_failure
-                else:
-                    thread_target = thread_target_success
-
-                th = ExceptionPropagatingThread(
-                    target=thread_target, args=(f"rank{bodo.get_rank()}_thread{i}",)
-                )
-                th.start()
-            thread_list.append(th)
-
-        with bodo.objmode():
-            join_all_threads(thread_list, _is_parallel=bodo.get_size() != 1)
-
-    err_msg = f"rank{bodo.get_rank()}_thread1"
-    with pytest.raises(ValueError, match=err_msg):
-        test_join_all_threads_impl_2()
-
-    # Threads 0 and 3 fail only on rank 0
-    # Rank 0 should raise its own exception, and all other ranks should raise Rank 0's
-    def test_join_all_threads_impl_3():
-        thread_list = []
-        for i in range(4):
-            with bodo.objmode(th="exception_propagating_thread_type"):
-                if bodo.get_rank() == 0 and (i == 0 or i == 3):
-                    thread_target = thread_target_failure
-                else:
-                    thread_target = thread_target_success
-
-                th = ExceptionPropagatingThread(
-                    target=thread_target, args=(f"rank{bodo.get_rank()}_thread{i}",)
-                )
-                th.start()
-            thread_list.append(th)
-
-        with bodo.objmode():
-            join_all_threads(thread_list, _is_parallel=bodo.get_size() != 1)
-
-    err_msg = f"rank0_thread0"
-    with pytest.raises(ValueError, match=err_msg):
-        test_join_all_threads_impl_3()
-
-
 def test_to_sql_wrong_password():
     """
     Tests that df.to_sql produces a reasonable exception if
@@ -843,10 +763,6 @@ def test_to_sql_table_name(table_names):
 
 @pytest.mark.parametrize("df_size", [17000 * 3, 2, 0])
 @pytest.mark.parametrize(
-    "sf_write_overlap",
-    [pytest.param(True, id="with-overlap"), pytest.param(False, id="no-overlap")],
-)
-@pytest.mark.parametrize(
     "sf_write_use_put",
     [pytest.param(True, id="with-put"), pytest.param(False, id="no-put")],
 )
@@ -854,9 +770,7 @@ def test_to_sql_table_name(table_names):
     "snowflake_user",
     [pytest.param(1, id="s3"), pytest.param(3, id="adls", marks=pytest.mark.slow)],
 )
-def test_to_sql_snowflake(
-    df_size, sf_write_overlap, sf_write_use_put, snowflake_user, memory_leak_check
-):
+def test_to_sql_snowflake(df_size, sf_write_use_put, snowflake_user, memory_leak_check):
     """
     Tests that df.to_sql works as expected. Since Snowflake has a limit of ~16k
     per insert, we insert 17k rows per rank to emulate a "large" insert.
@@ -866,16 +780,6 @@ def test_to_sql_snowflake(
     # Skip test if env vars with snowflake creds required for this test are not set.
     if not snowflake_cred_env_vars_present(snowflake_user):
         pytest.skip(reason="Required env vars with Snowflake credentials not set")
-
-    if (
-        ("AGENT_NAME" in os.environ)
-        and sf_write_overlap
-        and sf_write_use_put
-        and (snowflake_user == 3)
-    ):
-        pytest.skip(
-            reason="[BE-3758] This test fails on Azure pipelines for a yet to be determined reason."
-        )
 
     db = "TEST_DB"
     schema = "PUBLIC"
@@ -909,11 +813,9 @@ def test_to_sql_snowflake(
         bodo.barrier()
 
     # Specify Snowflake write hyperparameters
-    old_sf_write_overlap = bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD
     old_sf_write_use_put = bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT
 
     try:
-        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = sf_write_overlap
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
 
         with ensure_clean_snowflake_table(conn) as name:
@@ -962,7 +864,6 @@ def test_to_sql_snowflake(
             assert n_passed == bodo.get_size()
             bodo.barrier()
     finally:
-        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = old_sf_write_overlap
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_sf_write_use_put
 
 
@@ -1658,13 +1559,6 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "sf_write_overlap",
-    [
-        pytest.param(True, id="with-overlap"),
-        pytest.param(False, id="no-overlap"),
-    ],
-)
-@pytest.mark.parametrize(
     "sf_write_use_put",
     [
         pytest.param(True, id="with-put"),
@@ -1701,7 +1595,6 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
     ],
 )
 def test_batched_write_agg(
-    sf_write_overlap,
     sf_write_use_put,
     sf_write_streaming_num_files,
     is_distributed,
@@ -1753,12 +1646,10 @@ def test_batched_write_agg(
 
     # To test multiple COPY INTO, temporarily reduce Parquet write chunk size
     # and the number of files included in each streaming COPY INTO
-    old_overlap = bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD
     old_use_put = bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT
     old_chunk_size = bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE
     old_streaming_num_files = bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES
     try:
-        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = sf_write_overlap
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
         bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE = int(256e3)
         bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES = sf_write_streaming_num_files
@@ -1838,7 +1729,6 @@ def test_batched_write_agg(
             )
 
     finally:
-        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = old_overlap
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_use_put
         bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE = old_chunk_size
         bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES = old_streaming_num_files
