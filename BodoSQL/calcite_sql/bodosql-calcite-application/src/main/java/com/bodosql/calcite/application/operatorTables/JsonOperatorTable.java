@@ -6,6 +6,7 @@ import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.SqlAggFunction;
+import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -102,14 +103,15 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           OperandTypes.family(SqlTypeFamily.MAP),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlFunction OBJECT_CONSTRUCT_KEEP_NULL =
-      new SqlFunction(
+  public static final SqlBasicFunction OBJECT_CONSTRUCT_KEEP_NULL =
+      SqlBasicFunction.create(
           "OBJECT_CONSTRUCT_KEEP_NULL",
-          SqlKind.OTHER_FUNCTION,
           BodoReturnTypes.MAP_VARIANT,
-          null,
           OPERAND_CONSTRUCT_TYPE_CHECKER,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlBasicFunction OBJECT_CONSTRUCT =
+      OBJECT_CONSTRUCT_KEEP_NULL.withName("OBJECT_CONSTRUCT");
 
   private List<SqlOperator> functionList =
       Arrays.asList(
@@ -118,6 +120,7 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           JSON_EXTRACT_PATH_TEXT,
           OBJECT_KEYS,
           OBJECT_CONSTRUCT_KEEP_NULL,
+          OBJECT_CONSTRUCT,
           OBJECT_AGG);
 
   @Override
