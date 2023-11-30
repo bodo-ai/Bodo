@@ -100,16 +100,6 @@ def sf_write_num_files(request):
 
 @pytest.fixture(
     params=[
-        # pytest.param(True, id="with-overlap"),
-        pytest.param(False, id="no-overlap")
-    ]
-)
-def sf_write_overlap(request):
-    return request.param
-
-
-@pytest.fixture(
-    params=[
         # pytest.param(True, id="with-put"),
         pytest.param(False, id="no-put")
     ]
@@ -127,7 +117,6 @@ def test_streaming_write(
     sf_write_chunk_size,
     sf_read_chunk_size,
     sf_write_num_files,
-    sf_write_overlap,
     sf_write_use_put,
     verbose,
 ):
@@ -173,12 +162,10 @@ def test_streaming_write(
 
     # To test multiple COPY INTO, temporarily reduce Parquet write chunk size
     # and the number of files included in each streaming COPY INTO
-    old_overlap = bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD
     old_use_put = bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT
     old_chunk_size = bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE
     old_streaming_num_files = bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES
     try:
-        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = sf_write_overlap
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
         bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE = sf_write_chunk_size
         bodo.io.snowflake.SF_WRITE_STREAMING_COPY_INTO_FILES = sf_write_num_files
@@ -245,7 +232,6 @@ def test_streaming_write(
         print(f"Streaming R/W time={write_time:.3f}s")
 
     finally:
-        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = old_overlap
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_use_put
         bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE = old_chunk_size
         bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES = old_streaming_num_files
@@ -264,7 +250,6 @@ def test_nonstream_write(
     it,
     warehouse_name,
     table_name,
-    sf_write_overlap,
     sf_write_use_put,
     snowflake_user,
     verbose,
@@ -311,10 +296,8 @@ def test_nonstream_write(
 
     # To test multiple COPY INTO, temporarily reduce Parquet write chunk size
     # and the number of files included in each streaming COPY INTO
-    old_overlap = bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD
     old_use_put = bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT
     try:
-        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = sf_write_overlap
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
 
         @bodo.jit(cache=False, distributed=["df"])
@@ -348,7 +331,6 @@ def test_nonstream_write(
         bodo.barrier()
 
     finally:
-        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = old_overlap
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_use_put
 
         if bodo.get_rank() == 0:

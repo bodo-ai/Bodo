@@ -561,12 +561,12 @@ basic read and write functionality.
 Bodo supports reading Iceberg tables stored in a directory on HDFS, either locally or from S3,
 through Pandas' `read_sql_table` API.
 
--   Bodo's Iceberg Connector python package needs to be installed using conda: 
+-   Bodo's Iceberg Connector python package needs to be installed using conda:
     `conda install bodo-iceberg-connector -c bodo.ai -c conda-forge`.
 -   For tables on S3, the credentials should be set either using environment variables,
     or AWS configuration in `~/.aws` or using an instance profile on the EC2 instance.
 
-Iceberg connection strings vary by catalog, but in general are of the form `iceberg<+conn>://<path><?params>` where 
+Iceberg connection strings vary by catalog, but in general are of the form `iceberg<+conn>://<path><?params>` where
 - `<conn>://<path>` is the location of the catalog or Iceberg warehouse
 - `params` is a list of properties to pass to the catalog. Each parameter must be of the form `<key>=<value>` and separated with `&`, similar to HTTP URLs.
 
@@ -618,7 +618,7 @@ Example code for reading:
 @bodo.jit
 def example_read_iceberg():
     df = pd.read_sql_table(
-            table_name="<NAME OF ICEBERG TABLE", 
+            table_name="<NAME OF ICEBERG TABLE",
             con="<SEE PREVIOUS SECTION ON HOW TO FORMAT THIS FOR DIFFERENT CATALOGS>",
             schema="<NAME OF ICEBERG DATABASE SCHEMA>"
          )
@@ -633,13 +633,13 @@ def example_read_iceberg():
 
 !!! warning
     - Tables with [delete files](https://iceberg.apache.org/spec/#delete-formats){target="blank"}
-      or those that have gone through 
+      or those that have gone through
       [schema evolution](https://iceberg.apache.org/docs/latest/evolution/){target="blank"}
       are not supported yet.
 
 
 Bodo has basic support for writing Iceberg tables from Pandas Dataframes using the `to_sql` API, including
-support for appending to tables with an existing [partition spec](https://iceberg.apache.org/spec/#partitioning){target="blank"} 
+support for appending to tables with an existing [partition spec](https://iceberg.apache.org/spec/#partitioning){target="blank"}
 and/or [sort order](https://iceberg.apache.org/spec/#sorting){target="blank"}.
 
 Example code for writing:
@@ -660,7 +660,7 @@ def write_iceberg_table(df: pandas.DataFrame):
     - Writing Pandas Dataframe index to an Iceberg table is not supported. If `index` and `index_label`
       are provided, they will be ignored.
     - `chunksize`, `dtype` and `method` arguments are not supported and will be ignored if provided.
-    - While Bodo can *append* to tables with an existing partition spec and/or sort order, it does not 
+    - While Bodo can *append* to tables with an existing partition spec and/or sort order, it does not
       support creating new tables with a Partition Spec or Sort Order.
 
 
@@ -792,7 +792,7 @@ cause errors in Bodo programs.
 
 Hadoop Filesystem sources its credentials from the first available
 `core-site.xml` file on the `CLASSPATH`. When Hadoop is set up (including
-on Bodo Platform), this file is usually created at 
+on Bodo Platform), this file is usually created at
 `$HADOOP_HOME/etc/hadoop/core-site.xml` automatically.
 You can edit this file and set credentials appropriately.
 
@@ -888,12 +888,12 @@ require slightly different core-site configurations. Here are some examples:
     etl_job()
     ```
 
-    
+
 
 - Using a SAS Token
 
     To use SAS Tokens, you need to install the `bodo-azurefs-sas-token-provider`
-    package (it can be installed using 
+    package (it can be installed using
     `conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge`).
     This is already installed on the Bodo Platform.
     Then in your program, do the following:
@@ -933,7 +933,7 @@ require slightly different core-site configurations. Here are some examples:
     if bodo.get_rank() in bodo.get_nodes_first_ranks():
         with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
             f.write(CORE_SITE_SPEC)
-    
+
     # Load the SAS token here.
     SAS_TOKEN = "..."
 
@@ -1080,7 +1080,7 @@ def read_snowflake(db_name, table_name):
     return df
 df = read_snowflake(db_name, temp_table_name)
 ```
-- `_bodo_read_as_dict` is a Bodo specific argument which forces 
+- `_bodo_read_as_dict` is a Bodo specific argument which forces
     the specified string columns to be read with dictionary-encoding. Bodo automatically loads string columns using dictionary encoding when it determines it would be beneficial based on a heuristic. Dictionary-encoding stores data in memory in an efficient manner and is most effective when the column has many repeated values. Read more about dictionary-encoded layout [here](https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout){target=blank}.
     Bodo will raise a warning if the specified columns are not present in the schema or if they are not of type string.
 
@@ -1156,7 +1156,7 @@ must be an owner of the table, in addition to having the permissions listed in t
 ***Appending to an existing table***
 
 To append to an existing table (i.e. when using `if_exists='append'`), the role
-must have the `INSERT` permission at the table level, in addition to the 
+must have the `INSERT` permission at the table level, in addition to the
 permissions listed in the [create section](#snowflake-write-perms-create)
 (at the Database and Schema level).
 
@@ -1208,21 +1208,21 @@ Direct Upload (preferred) or Put Upload.
     Snowflake accounts, respectively). Note that Bodo will drop the
     temporary stage once the data has been written. Temporary stages
     are also automatically cleaned up by Snowflake after the session ends.
-    
+
     !!! note
         For writing to ADLS based stages, you must have Hadoop setup
         correctly (see more details [here](#HDFS))
         and have the `bodo-azurefs-sas-token-provider` package installed (it
-        can be installed using 
+        can be installed using
         `conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge`).
         Bodo will fall back to the Put Upload strategy if both these
         conditions are not met. Also see
         [Interleaving HDFS/ADLS I/O with Snowflake Write](#interleave-adls-snowflake-write).
-    
+
         Note that this is only applicable to
         on-prem use cases since all of this is pre-configured on
         the Bodo Platform.
-   
+
 2.  Put Upload: In this strategy, Bodo creates a 'named' stage, writes
     parquet files to a temporary directory locally and then uses the
     Snowflake Python Connector to upload these files to this named stage
@@ -1232,10 +1232,10 @@ Direct Upload (preferred) or Put Upload.
     This is used for GCS based stages (used by GCP based Snowflake
     accounts), or when the user environment doesn't have all the
     required packages and modules to use the Direct Upload strategy.
-   
+
     Similar to the Direct Upload strategy, Bodo will drop the named stage
     after the data has been written to the table.
-    
+
     !!! note
         In some cases, e.g. during abnormal exits, Bodo may not be able
         to drop these stages, which may require manual cleanup by the
@@ -1243,14 +1243,14 @@ Direct Upload (preferred) or Put Upload.
         "bodo_io_snowflake_{random-uuid}". You can list all stages
         created by Bodo in Snowflake by executing the
         [`SHOW STAGES` command](https://docs.snowflake.com/en/sql-reference/sql/show-stages.html){target=blank}:
-        
+
         ```sql
         show stages like 'bodo_io_snowflake_%';
         ```
-        
+
         and then delete them using the
         [`DROP STAGE` command](https://docs.snowflake.com/en/sql-reference/sql/drop-stage.html){target=blank}, e.g.:
-        
+
         ```sql
         drop stage "bodo_io_snowflake_02ca9beb-eaf6-4957-a6ff-ff426441cd7a";
         ```
@@ -1287,12 +1287,6 @@ the write process further (for advanced users only):
   memory usage of the dataframe (in bytes). Note that when provided,
   `df.to_sql`'s `chunksize` parameter (see description in note in
   the [Usage section](#snowflake-write-usage)) overrides this value.
-- `SF_WRITE_OVERLAP_UPLOAD`: For maximum performance, the Put Upload
-  strategy writes intermediate parquet files to local disk and uploads
-  them to the stage in parallel. To alter this behavior, i.e.
-  write the parquet files and upload them sequentially, this configuration
-  variable can be set to `False`. Note that this is only applicable
-  when using the Put Upload strategy.
 
 
 These can be set as follows:

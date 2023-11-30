@@ -26,7 +26,6 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import TableType
-from bodo.io.helpers import exception_propagating_thread_type
 from bodo.io.parquet_pio import parquet_write_table_cpp
 from bodo.io.snowflake import (
     snowflake_connector_cursor_type,
@@ -96,12 +95,6 @@ snowflake_writer_payload_members = (
     ("is_initialized", types.boolean),
     # File count for previous COPY INTO command
     ("file_count_global_prev", types.int64),
-    # If we are using the PUT command to upload files, a list of upload
-    # threads currently in progress
-    ("upload_threads", types.List(exception_propagating_thread_type)),
-    # Whether the `upload_threads` list exists. Needed for typing purposes,
-    # as initializing an empty list in `init()` causes an error
-    ("upload_threads_exists", types.boolean),
     # Snowflake connection cursor. Only on rank 0, unless PUT method is used
     ("cursor", snowflake_connector_cursor_type),
     # Python TemporaryDirectory object, which stores Parquet files during PUT upload
@@ -497,7 +490,6 @@ def gen_snowflake_writer_init_impl(
         writer["copy_into_sfqids_exists"] = False
         writer["copy_into_sfqids"] = ""
         writer["file_count_global_prev"] = 0
-        writer["upload_threads_exists"] = False
         writer["batches"] = bodo.libs.table_builder.init_table_builder_state(
             operator_id,
             table_builder_state_type,
@@ -727,31 +719,14 @@ def gen_snowflake_writer_append_table_impl_inner(
                     file_count_local = writer["file_count_local"]
                     stage_name = writer["stage_name"]
                     copy_into_dir = writer["copy_into_dir"]
-                    if bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:
-                        with numba.objmode(
-                            upload_thread="exception_propagating_thread_type"
-                        ):
-                            upload_thread = bodo.io.snowflake.do_upload_and_cleanup(
-                                cursor,
-                                file_count_local,
-                                chunk_path,
-                                stage_name,
-                                copy_into_dir,
-                            )
-                        if writer["upload_threads_exists"]:
-                            writer["upload_threads"].append(upload_thread)
-                        else:
-                            writer["upload_threads_exists"] = True
-                            writer["upload_threads"] = [upload_thread]
-                    else:
-                        with bodo.objmode():
-                            bodo.io.snowflake.do_upload_and_cleanup(
-                                cursor,
-                                file_count_local,
-                                chunk_path,
-                                stage_name,
-                                copy_into_dir,
-                            )
+                    with bodo.objmode():
+                        bodo.io.snowflake.do_upload_and_cleanup(
+                            cursor,
+                            file_count_local,
+                            chunk_path,
+                            stage_name,
+                            copy_into_dir,
+                        )
                 writer["file_count_local"] += 1
                 ev_upload_table.finalize()
             bodo.libs.table_builder.table_builder_reset(table_builder_state)
@@ -773,19 +748,6 @@ def gen_snowflake_writer_append_table_impl_inner(
             or writer["file_count_global"]
             > bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES
         ):
-            if (
-                writer["upload_using_snowflake_put"]
-                and bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD
-            ):
-                parallel = writer["parallel"]
-                if writer["upload_threads_exists"]:
-                    upload_threads = writer["upload_threads"]
-                    with bodo.objmode():
-                        bodo.io.helpers.join_all_threads(upload_threads, parallel)
-                    writer["upload_threads"].clear()
-                else:
-                    with bodo.objmode():
-                        bodo.io.helpers.join_all_threads([], parallel)
             # For the first COPY INTO, begin the transaction and create table if it doesn't exist
             if not writer["is_initialized"]:
                 cursor = writer["cursor"]
