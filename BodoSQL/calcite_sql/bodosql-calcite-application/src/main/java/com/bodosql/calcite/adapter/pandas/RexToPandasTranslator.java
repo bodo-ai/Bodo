@@ -1367,6 +1367,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case "ARRAY_EXCEPT":
       case "ARRAY_INTERSECTION":
       case "ARRAY_CAT":
+      case "ARRAY_REMOVE":
         kwargs.add(new Pair<>("is_scalar_0", new Expr.BooleanLiteral(argScalars.get(0))));
         kwargs.add(new Pair<>("is_scalar_1", new Expr.BooleanLiteral(argScalars.get(1))));
         break;
@@ -1987,6 +1988,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "ARRAY_CAT":
           case "ARRAYS_OVERLAP":
           case "ARRAY_SIZE":
+          case "ARRAY_REMOVE":
           case "ARRAY_SLICE":
           case "ARRAY_TO_STRING":
           case "TO_ARRAY":
