@@ -749,41 +749,6 @@ class ExceptionPropagatingThread(threading.Thread):
         return self.ret
 
 
-# Register opaque type for bodo.io.helpers.ExceptionPropagatingThread so it
-# can be shared between different sections of jitted code
-class ExceptionPropagatingThreadType(types.Opaque):
-    """Type for ExceptionPropagatingThread"""
-
-    def __init__(self):
-        super(ExceptionPropagatingThreadType, self).__init__(
-            name="ExceptionPropagatingThreadType"
-        )
-
-
-exception_propagating_thread_type = ExceptionPropagatingThreadType()
-types.exception_propagating_thread_type = exception_propagating_thread_type  # type: ignore
-register_model(ExceptionPropagatingThreadType)(models.OpaqueModel)
-
-
-@unbox(ExceptionPropagatingThreadType)
-def unbox_exception_propagating_thread_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return NativeValue(val)
-
-
-@box(ExceptionPropagatingThreadType)
-def box_exception_propagating_thread_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return val
-
-
-@typeof_impl.register(ExceptionPropagatingThread)
-def typeof_exception_propagating_thread(val, c):
-    return exception_propagating_thread_type
-
-
 def get_table_iterator(rhs: "ir.Inst", func_ir: "ir.FunctionIR") -> str:
     """pattern match "table, is_last = read_arrow_next(reader)" and return the reader
     variable name.
@@ -823,29 +788,6 @@ def get_table_iterator(rhs: "ir.Inst", func_ir: "ir.FunctionIR") -> str:
         == ("read_arrow_next", "bodo.io.arrow_reader")
     )
     return tup_def.args[0].name
-
-
-def join_all_threads(thread_list, _is_parallel=False):  # pragma: no cover
-    """Given a list of threads, call `th.join()` on all threads in the list.
-
-    Args
-        thread_list (List(threading.Thread)): A list of threads to join
-        _is_parallel (bool): Whether join is occurring in parallel
-    """
-    ev = tracing.Event("join_all_threads", is_parallel=_is_parallel)
-
-    err = None
-    try:
-        for th in thread_list:
-            if isinstance(th, threading.Thread):
-                th.join()
-    except Exception as e:
-        err = e
-
-    try:
-        sync_and_reraise_error(err, _is_parallel)
-    finally:
-        ev.finalize()
 
 
 def sync_and_reraise_error(err, _is_parallel=False):  # pragma: no cover

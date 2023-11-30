@@ -4366,7 +4366,6 @@ def to_sql_overload(
     # Snowflake write imports
     # We need to import so that the types are in numba's type registry
     # when executing the code.
-    from bodo.io.helpers import exception_propagating_thread_type  # noqa
     from bodo.io.parquet_pio import parquet_write_table_cpp
     from bodo.io.snowflake import snowflake_connector_cursor_python_type  # noqa
 
@@ -4562,7 +4561,6 @@ def to_sql_overload(
     # upon fallback to snowflake PUT. In the fallback case, we execute the
     # PUT command later to perform the actual upload
     func_text += "        ev_upload_df = tracing.Event('upload_df', is_parallel=False)           \n"
-    func_text += "        upload_threads_in_progress = []\n"
     func_text += "        num_files = len(range(0, len(df), chunksize))\n"
     func_text += "        for chunk_idx, i in enumerate(range(0, len(df), chunksize)):           \n"
 
@@ -4637,21 +4635,10 @@ def to_sql_overload(
         "            ev_pq_write_cpp.finalize()\n"
         # If needed, upload local parquet to internal stage using objmode PUT
         "            if upload_using_snowflake_put:\n"
-        "                if bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:\n"
-        "                    with bodo.objmode(upload_thread='exception_propagating_thread_type'):\n"
-        "                        upload_thread = bodo.io.snowflake.do_upload_and_cleanup(\n"
-        "                            cursor, chunk_idx, chunk_path, stage_name,\n"
-        "                        )\n"
-        "                    upload_threads_in_progress.append(upload_thread)\n"
-        "                else:\n"
-        "                    with bodo.objmode():\n"
-        "                        bodo.io.snowflake.do_upload_and_cleanup(\n"
-        "                            cursor, chunk_idx, chunk_path, stage_name,\n"
-        "                        )\n"
-        # Wait for all upload threads to finish
-        "        if upload_using_snowflake_put and bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:\n"
-        "            with bodo.objmode():\n"
-        "                bodo.io.helpers.join_all_threads(upload_threads_in_progress, _is_parallel)\n"
+        "                with bodo.objmode():\n"
+        "                    bodo.io.snowflake.do_upload_and_cleanup(\n"
+        "                        cursor, chunk_idx, chunk_path, stage_name,\n"
+        "                    )\n"
         "        ev_upload_df.finalize()\n"
     )
 

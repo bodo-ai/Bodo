@@ -364,14 +364,6 @@ def gen_snowflake_schema(
 # (https://docs.snowflake.com/en/sql-reference/sql/copy-into-table.html#copy-options-copyoptions)
 SF_WRITE_COPY_INTO_ON_ERROR = "abort_statement"
 
-# SF_WRITE_OVERLAP_UPLOAD (bool):
-# If True, attempt to overlap writing dataframe to Parquet files and
-#     uploading Parquet files to Snowflake internal stage using Python
-#     threads on each rank. This speeds up the upload process by
-#     overlapping compute-heavy and I/O-heavy steps.
-# If False, perform these steps in sequence without spawning threads.
-SF_WRITE_OVERLAP_UPLOAD = True
-
 # SF_WRITE_PARQUET_CHUNK_SIZE (int):
 # Chunk size to use when writing dataframe to Parquet files, measured by
 # the uncompressed memory usage of the dataframe to be compressed (in bytes).
@@ -1834,57 +1826,33 @@ def do_upload_and_cleanup(
 ):  # pragma: no cover
     """Upload the parquet file at the given file stream or path to Snowflake
     internal stage in a parallel thread, and perform needed cleanup.
-
     Args
         cursor: Snowflake connection cursor
         chunk_idx: Index of the current parquet chunk
         chunk_path: Path to the file to upload
         stage_name: Snowflake internal stage name to upload files to
         stage_dir (str or None): Optionally, specify a directory within internal stage
-
-    Returns
-        upload_thread (exception_propagating_thread_type):
-            If SF_WRITE_OVERLAP_UPLOAD is True, return the upload responsible
-            for uploading this chunk. Call `bodo.io.helpers.join_all_threads()`
-            on a list of generated threads to complete the upload.
-            If SF_WRITE_OVERLAP_UPLOAD is False, return None.
+    Returns None.
     """
 
-    def upload_cleanup_thread_func(
-        chunk_idx,
-        chunk_path,
-        stage_name,
-        stage_dir,
-    ):
-        ev_upload_parquet = tracing.Event(
-            f"upload_parquet_file{chunk_idx}", is_parallel=False
-        )
+    ev_upload_parquet = tracing.Event(
+        f"upload_parquet_file{chunk_idx}", is_parallel=False
+    )
 
-        if stage_dir is None:
-            stage_name_with_dir = f'@"{stage_name}"'
-        else:
-            stage_name_with_dir = f'@"{stage_name}"/{stage_dir}/'
-
-        upload_sql = (
-            f"PUT 'file://{chunk_path}' {stage_name_with_dir} AUTO_COMPRESS=FALSE "
-            f"/* io.snowflake.do_upload_and_cleanup() */"
-        )
-        cursor.execute(upload_sql, _is_internal=True).fetchall()  # type: ignore
-        ev_upload_parquet.finalize()
-
-        # Remove chunk file
-        os.remove(chunk_path)
-
-    if SF_WRITE_OVERLAP_UPLOAD:
-        th = ExceptionPropagatingThread(
-            target=upload_cleanup_thread_func,
-            args=(chunk_idx, chunk_path, stage_name, stage_dir),
-        )
-        th.start()
+    if stage_dir is None:
+        stage_name_with_dir = f'@"{stage_name}"'
     else:
-        upload_cleanup_thread_func(chunk_idx, chunk_path, stage_name, stage_dir)
-        th = None
-    return th
+        stage_name_with_dir = f'@"{stage_name}"/{stage_dir}/'
+
+    upload_sql = (
+        f"PUT 'file://{chunk_path}' {stage_name_with_dir} AUTO_COMPRESS=FALSE "
+        f"/* io.snowflake.do_upload_and_cleanup() */"
+    )
+    cursor.execute(upload_sql, _is_internal=True).fetchall()  # type: ignore
+    ev_upload_parquet.finalize()
+
+    # Remove chunk file
+    os.remove(chunk_path)
 
 
 def create_table_handle_exists(
