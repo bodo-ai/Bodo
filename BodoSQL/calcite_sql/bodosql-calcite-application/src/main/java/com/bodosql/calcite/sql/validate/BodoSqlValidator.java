@@ -128,8 +128,8 @@ public class BodoSqlValidator extends SqlValidatorImpl {
         }
       }
     }
-    // OBJECT_CONSTRUCT_KEEP_NULL only allows a * when it is the only operand
-    else if (name.equals("OBJECT_CONSTRUCT_KEEP_NULL")) {
+    // OBJECT_CONSTRUCT(_KEEP_NULL) only allows a * when it is the only operand
+    else if (name.equals("OBJECT_CONSTRUCT") || name.equals("OBJECT_CONSTRUCT_KEEP_NULL")) {
       if (call.getOperandList().size() == 1) {
         SqlNode operand = call.getOperandList().get(0);
         if (operand instanceof SqlIdentifier && ((SqlIdentifier) operand).isStar()) {
@@ -156,7 +156,7 @@ public class BodoSqlValidator extends SqlValidatorImpl {
     if (name.equals("HASH")) {
       return new SqlBasicCall(call.getOperator(), newArgs, call.getParserPosition());
     }
-    if (name.equals("OBJECT_CONSTRUCT_KEEP_NULL")) {
+    if (name.equals("OBJECT_CONSTRUCT") || name.equals("OBJECT_CONSTRUCT_KEEP_NULL")) {
       ArrayList<SqlNode> objectArgs = new ArrayList<>();
       for (int i = 0; i < newArgs.size(); i++) {
         SqlLiteral key =

@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from numba.core import types
 from numba.extending import overload
+from numba.typed import Dict
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
@@ -33,7 +34,7 @@ def object_construct_keep_null(values, names, scalars):  # pragma: no cover
 
 @overload(object_construct_keep_null)
 def overload_object_construct_keep_null(values, names, scalars):
-    """A dedicated kernel for the SQL function OBJECT_CONSTRUCT_keep_null which
+    """A dedicated kernel for the SQL function OBJECT_CONSTRUCT_KEEP_NULL which
        takes in a variable number of key-value pairs as arguments and turns them
        into JSON data.
 
@@ -110,6 +111,153 @@ def overload_object_construct_keep_null(values, names, scalars):
         arg_string,
         arg_sources,
         are_arrays=are_arrays,
+    )
+
+
+def object_construct(values, names, scalars):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(object_construct)
+def overload_object_construct(values, names, scalars):
+    """A dedicated kernel for the SQL function OBJECT_CONSTRUCT which
+       takes in a variable number of key-value pairs as arguments and turns them
+       into JSON data, ignoring any key-value pairs when the value is null.
+
+    Args:
+        values (any tuple): the values for each key-value pair
+        names (string tuple): the names of the JSON fields for each key-value pair
+        scalars (boolean tuple): a boolean for each value indicating if it is a scalar
+
+    Returns:
+        the inputs combined into a JSON value
+    """
+    names = bodo.utils.typing.unwrap_typeref(names).meta
+    scalars = bodo.utils.typing.unwrap_typeref(scalars).meta
+    if len(values) != len(names) or len(values) != len(scalars) or len(values) == 0:
+        raise_bodo_error("object_construct_keep_null: invalid argument lengths")
+
+    arg_names = []
+    arg_types = []
+    arr_types = []
+    are_arrays = []
+    optionals = []
+    # Extract the underlying types of each element so that the corresponding
+    # map type can be derived.
+    for i, arr_typ in enumerate(values):
+        arg_name = f"v{i}"
+        arg_names.append(arg_name)
+        arg_types.append(arr_typ)
+        is_optional = False
+        if scalars[i]:
+            # Represent null as a dummy type in the struct
+            if arr_typ == bodo.none:
+                arr_typ = bodo.null_array_type
+            if isinstance(arr_typ, types.optional):
+                arr_typ = arr_typ.type
+                is_optional = True
+            arr_types.append(bodo.utils.typing.dtype_to_array_type(arr_typ))
+            are_arrays.append(False)
+        else:
+            if bodo.hiframes.pd_series_ext.is_series_type(arr_typ):
+                arr_types.append((arr_typ.data))
+            else:
+                arr_types.append((arr_typ))
+            are_arrays.append(True)
+        optionals.append(is_optional)
+
+    combined_dtype = bodo.libs.bodosql_array_kernels.get_combined_type(
+        arr_types, "object_construct"
+    )
+
+    # TODO: optimize so the keys are dictionary encoded
+    out_dtype = bodo.MapArrayType(bodo.string_array_type, combined_dtype)
+
+    propagate_null = [False] * len(arg_names)
+
+    # Create the mapping from the tuple to the local variable.
+    arg_string = "values, names, scalars"
+    arg_sources = {f"v{i}": f"values[{i}]" for i in range(len(values))}
+
+    # For each of the value arguments, generate an expression to determine
+    # if that particular key-value pair should be kept or dropped.
+    nulls = []
+    for i in range(len(values)):
+        if values[i] == bodo.none:
+            nulls.append("True")
+        elif are_arrays[i]:
+            nulls.append(f"bodo.libs.array_kernels.isna(v{i}, i)")
+        elif optionals[i]:
+            nulls.append(f"v{i} is None")
+        else:
+            nulls.append("False")
+
+    # At this point, the implementations diverge depending on if the result
+    # is a scalar or an array.
+    extra_globals = {}
+    key_type = out_dtype.key_arr_type
+    val_type = out_dtype.value_arr_type
+    prefix_code = ""
+
+    if any(are_arrays):
+        # If any of the inputs are arrays, build a struct array to insert
+        # into the final map array.
+        extra_globals["struct_typ_tuple"] = (key_type, val_type)
+        extra_globals["map_struct_names"] = bodo.utils.typing.ColNamesMetaType(
+            ("key", "value")
+        )
+        # Build an array of booleans to determine which pairs from the current
+        # row should be kept.
+        scalar_text = f"pairs_to_keep = np.zeros({len(names)}, dtype=np.bool_)\n"
+        for i in range(len(values)):
+            scalar_text += f"if not ({nulls[i]}):\n"
+            scalar_text += f"  pairs_to_keep[{i}] = True\n"
+        # Based on the number to be kept, allocate a struct array to store that many
+        # key-value pairs.
+        scalar_text += "n_keep = pairs_to_keep.sum()\n"
+        scalar_text += "struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(n_keep, (-1,), struct_typ_tuple, ('key', 'value'))\n"
+        # For each pair, if it is to be kept, write a struct containing that pair
+        # into he struct array.
+        scalar_text += "write_idx = 0\n"
+        for i in range(len(values)):
+            scalar_text += f"if pairs_to_keep[{i}]:\n"
+            if isinstance(values[i], bodo.MapArrayType):
+                prefix_code += f"  in_offsets_{i} = bodo.libs.array_item_arr_ext.get_offsets(v{i}._data)\n"
+                prefix_code += f"  in_struct_arr_{i} = bodo.libs.array_item_arr_ext.get_data(v{i}._data)\n"
+                scalar_text += f"  start_offset_{i} = in_offsets_{i}[np.int64(i)]\n"
+                scalar_text += f"  end_offset_{i} = in_offsets_{i}[np.int64(i+1)]\n"
+                scalar_text += f"  val_arg_{i} = in_struct_arr_{i}[start_offset_{i} : end_offset_{i}]\n"
+                val_arg = f"val_arg_{i}"
+            else:
+                val_arg = f"arg{i}"
+            scalar_text += f"  struct_arr[write_idx] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({repr(names[i])}, {val_arg}), (False, False), map_struct_names)\n"
+            scalar_text += "  write_idx += 1\n"
+        scalar_text += "res[i] = struct_arr\n"
+
+    else:
+        # If all of the values are scalars, build a numba typed dict
+        extra_globals["key_type"] = key_type.dtype
+        extra_globals["val_type"] = val_type.dtype
+        extra_globals["Dict"] = Dict
+        scalar_text = "out_dict = Dict.empty(key_type, val_type)\n"
+        # For each value, if that value is non-null, add it to the dict
+        for i in range(len(values)):
+            scalar_text += f"if not ({nulls[i]}):\n"
+            scalar_text += f"  out_dict[{repr(names[i])}] = arg{i}\n"
+        scalar_text += "res[i] = out_dict\n"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        arg_string,
+        arg_sources,
+        are_arrays=are_arrays,
+        extra_globals=extra_globals,
+        prefix_code=prefix_code,
     )
 
 

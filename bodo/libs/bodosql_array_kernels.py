@@ -284,5 +284,6 @@ broadcasted_variadic_functions = {
     "sql_hash",
     "greatest",
     "least",
+    "object_construct",
     "object_construct_keep_null",
 }
