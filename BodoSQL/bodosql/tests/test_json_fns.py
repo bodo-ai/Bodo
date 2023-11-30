@@ -521,6 +521,82 @@ def test_object_construct_keep_null(query, answer, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "query, answer",
+    [
+        pytest.param(
+            "SELECT OBJECT_CONSTRUCT('linear', I, 'polynomial', ISQ, 'exponential', I2EXP) FROM table1",
+            pd.array(
+                [
+                    {"linear": 0, "polynomial": 0, "exponential": 1},
+                    {},
+                    {"polynomial": 4, "exponential": 4},
+                    {"linear": 3},
+                    {"polynomial": 16},
+                    {"exponential": 32},
+                    {"linear": 6, "polynomial": 36},
+                    {"linear": 7, "exponential": 128},
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            ),
+            id="integers-no_case",
+        ),
+        pytest.param(
+            "SELECT CASE WHEN DUMMY THEN ARRAY_SIZE(OBJECT_KEYS(OBJECT_CONSTRUCT('linear', I, 'polynomial', ISQ, 'exponential', I2EXP))) ELSE -1 END FROM table1",
+            pd.array([3, 0, 2, 1, 1, 1, 2, 2]),
+            id="integers-with_case",
+        ),
+        pytest.param(
+            "SELECT OBJECT_CONSTRUCT('full', names[idx], 'abbr', upper(left(names[idx], 3))) FROM table1",
+            pd.array(
+                [
+                    {"full": "Golden Gate Bridge", "abbr": "GOL"},
+                    {"full": "Taj Mahal", "abbr": "TAJ"},
+                    {"full": "Eiffel Tower", "abbr": "EIF"},
+                    {},
+                    {"full": "Golden Gate Bridge", "abbr": "GOL"},
+                    {"full": "Taj Mahal", "abbr": "TAJ"},
+                    {"full": "Eiffel Tower", "abbr": "EIF"},
+                    {},
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+            ),
+            id="strings-no_case",
+        ),
+    ],
+)
+def test_object_construct(query, answer, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "DUMMY": [True] * 8,
+                "names": [["Golden Gate Bridge", "Taj Mahal", "Eiffel Tower"]] * 8,
+                "idx": [0, 1, 2, 3] * 2,
+                "I": pd.Series(
+                    [0, None, None, 3, None, None, 6, 7], dtype=pd.Int8Dtype()
+                ),
+                "ISQ": pd.Series(
+                    [0, None, 4, None, 16, None, 36, None], dtype=pd.Int16Dtype()
+                ),
+                "I2EXP": pd.Series(
+                    [1, None, 4, None, None, 32, None, 128], dtype=pd.Int32Dtype()
+                ),
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=pd.DataFrame({0: answer}),
+        check_dtype=False,
+        check_names=False,
+        # Can't sort semi-structured data outputs in Python
+        sort_output=False,
+        convert_columns_to_pandas=True,
+    )
+
+
+@pytest.mark.parametrize(
     "query, df, answer",
     [
         pytest.param(

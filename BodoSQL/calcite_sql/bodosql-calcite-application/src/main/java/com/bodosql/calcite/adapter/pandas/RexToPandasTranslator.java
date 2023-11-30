@@ -858,8 +858,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       List<Boolean> argScalars) {
     String fnName = fnOperation.getOperator().getName();
     List<Expr> codeExprs = new ArrayList<>();
-    if (fnName.equals("OBJECT_CONSTRUCT_KEEP_NULL")) {
-      return getObjectConstructKeepNullCode(fnOperation, argScalars, this, visitor);
+    if (fnName.equals("OBJECT_CONSTRUCT") || fnName.equals("OBJECT_CONSTRUCT_KEEP_NULL")) {
+      return getObjectConstructKeepNullCode(fnName, fnOperation, argScalars, this, visitor);
     }
     for (RexNode operand : fnOperation.operands) {
       Expr operandInfo = operand.accept(this);
@@ -1440,6 +1440,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         || fnName == "IF"
         || fnName == "IFF"
         || fnName == "DECODE"
+        || fnName == "OBJECT_CONSTRUCT"
         || fnName == "OBJECT_CONSTRUCT_KEEP_NULL"
         || fnName == "HASH") {
       return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, argScalars);

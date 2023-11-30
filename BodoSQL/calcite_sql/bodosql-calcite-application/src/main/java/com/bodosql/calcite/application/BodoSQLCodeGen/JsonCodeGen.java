@@ -4,9 +4,11 @@ import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import kotlin.Pair;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexLiteral;
@@ -23,14 +25,15 @@ public class JsonCodeGen {
 
   /**
    * Function that return the necessary generated code for the JSON function
-   * OBJECT_CONSTRUCT_KEEP_NULL.
+   * OBJECT_CONSTRUCT_KEEP_NULL or OBJECT_CONSTRUCT.
    *
-   * @param operation The call to OBJECT_CONSTRUCT_KEEP_NULL
+   * @param operation The call to OBJECT_CONSTRUCT_KEEP_NULL/OBJECT_CONSTRUCT
    * @param argScalars A list indicating which arguments are scalars
    * @param rexToPandas A visitor to transform each operand into Python code
    * @return The Expression to calculate the function call.
    */
   public static Expr getObjectConstructKeepNullCode(
+      String fnName,
       RexCall operation,
       List<Boolean> argScalars,
       RexToPandasTranslator rexToPandas,
@@ -56,8 +59,8 @@ public class JsonCodeGen {
     }
     Expr keyGlobal = visitor.lowerAsColNamesMetaType(new Expr.Tuple(keyExprs));
     Expr scalarGlobal = visitor.lowerAsMetaType(new Expr.Tuple(scalarExprs));
-    return new Expr.Call(
-        "bodo.libs.bodosql_array_kernels.object_construct_keep_null",
+    return ExprKt.BodoSQLKernel(
+        fnName.toLowerCase(Locale.ROOT),
         List.of(new Expr.Tuple(valExprs), keyGlobal, scalarGlobal),
         List.of());
   }

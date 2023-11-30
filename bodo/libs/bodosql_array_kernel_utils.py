@@ -1773,7 +1773,6 @@ def gen_windowed(
                 func_text += f"               elem{i} = arr{i}[entering]\n"
         func_text += indent_block(enter_block, 15)
     func_text += "   return res"
-
     loc_vars = {}
     if extra_globals is None:
         extra_globals = {}
@@ -1863,3 +1862,101 @@ def overload_check_insert_args(pos, len):
         assert len >= 0, "<len> argument must be at least 0!"
 
     return impl
+
+
+def get_combined_type(in_types, calling_func):
+    """
+    Takes in a tuple of types representing various field types from a struct array
+    and returns the common array type used when a lateral flatten operation
+    combines all of the fields into one column.
+
+    Args:
+        in_types (tuple): the array types of the struct fields
+        calling_func (string): what function is this utility being used for
+
+    Returns:
+        dtype: the array type used to store the combined values.
+
+    Raise:
+        BodoError: if the types are not able to be harmonized
+    """
+    if len(in_types) == 0:
+        raise_bodo_error(f"{calling_func}: must have non-empty types tuple")
+
+    seed_type = in_types[0]
+
+    # If the first type is a string array or dictionary encoded array,
+    # verify that all of the inputs are one of those two.
+    if bodo.utils.typing.is_str_arr_type(seed_type):
+        if not all(
+            bodo.utils.typing.is_str_arr_type(typ) for typ in in_types
+        ):  # pragma: no cover
+            raise_bodo_error(f"{calling_func}: unsupported mix of types {in_types}")
+        return bodo.string_array_type
+
+    # If the first type is is an array item array, verify that all of
+    # the other types are also array item arrays and then recursively
+    # repeat the procedure on all of the inner types.
+    if isinstance(seed_type, bodo.ArrayItemArrayType):
+        if not all(
+            isinstance(typ, bodo.ArrayItemArrayType) for typ in in_types
+        ):  # pragma: no cover
+            raise_bodo_error(f"{calling_func}: unsupported mix of types {in_types}")
+        inner_dtypes = [typ.dtype for typ in in_types]
+        combined_inner_dtype = get_combined_type(inner_dtypes, calling_func)
+        return bodo.ArrayItemArrayType(combined_inner_dtype)
+
+    # For map arrays, recursively ensure the two child arrays match
+    if isinstance(seed_type, (bodo.MapArrayType, types.DictType)):
+        if not all(
+            isinstance(typ, (bodo.MapArrayType, types.DictType)) for typ in in_types
+        ):  # pragma: no cover
+            raise_bodo_error(f"{calling_func}: unsupported mix of types {in_types}")
+        key_types = []
+        val_types = []
+        for typ in in_types:
+            if isinstance(typ, bodo.MapArrayType):
+                key_types.append(typ.key_arr_type)
+                val_types.append(typ.value_arr_type)
+            else:
+                key_types.append(bodo.utils.typing.dtype_to_array_type(typ.key_type))
+                val_types.append(bodo.utils.typing.dtype_to_array_type(typ.value_type))
+        combined_key_type = get_combined_type(key_types, calling_func)
+        combined_val_type = get_combined_type(val_types, calling_func)
+        return bodo.MapArrayType(combined_key_type, combined_val_type)
+
+    # For struct arrays, match the names recursively ensure the all child arrays match
+    if isinstance(
+        seed_type, (bodo.StructArrayType, bodo.libs.struct_arr_ext.StructType)
+    ):
+        if not all(
+            isinstance(typ, (bodo.StructArrayType, bodo.libs.struct_arr_ext.StructType))
+            and typ.names == seed_type.names
+            for typ in in_types
+        ):  # pragma: no cover
+            raise_bodo_error(f"{calling_func}: unsupported mix of types {in_types}")
+        data_types = []
+        for i in range(len(seed_type.names)):
+            field_types = []
+            for typ in in_types:
+                if isinstance(typ, bodo.StructArrayType):
+                    field_types.append(typ.data[i])
+                else:
+                    field_types.append(
+                        bodo.utils.typing.dtype_to_array_type(typ.data[i])
+                    )
+            data_types.append(get_combined_type(field_types, calling_func))
+        return bodo.StructArrayType(tuple(data_types), seed_type.names)
+
+    # For all other array types, get the common scalar type if possible
+    dtypes = [typ.dtype for typ in in_types]
+    common_dtype, _ = bodo.utils.typing.get_common_scalar_dtype(dtypes)
+    if common_dtype is None:  # pragma: no cover
+        raise_bodo_error(f"{calling_func}: unsupported mix of types {in_types}")
+
+    # If any of the inputs are nullable, the output is also nullable
+    common_dtype = bodo.utils.typing.dtype_to_array_type(common_dtype)
+    if any(bodo.utils.typing.is_nullable(typ) for typ in in_types):
+        common_dtype = bodo.utils.typing.to_nullable_type(common_dtype)
+
+    return common_dtype

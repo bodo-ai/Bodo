@@ -1866,6 +1866,393 @@ def test_object_construct_keep_null(values, keys, scalars, answer, memory_leak_c
 
 
 @pytest.mark.parametrize(
+    "values, keys, scalars, answer",
+    [
+        pytest.param(
+            (pd.array([1, 2, 3, 4, 5, 6, 7, 8, 9, None, 11], dtype=pd.Int32Dtype()),),
+            ("i",),
+            (False,),
+            pd.Series(
+                [{"i": i} for i in range(1, 10)] + [{}, {"i": 11}],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            ),
+            id="1-int_vector",
+        ),
+        pytest.param(
+            # TODO: fix this test with gatherv
+            (
+                pd.array(
+                    [1, None, 3, None, 5, None, 7, None] * 5, dtype=pd.Int32Dtype()
+                ),
+                pd.array(
+                    [8, 9, None, None, 12, 13, None, None] * 5, dtype=pd.Int32Dtype()
+                ),
+                pd.array(
+                    [16, 17, 18, 19, None, None, None, None] * 5, dtype=pd.Int32Dtype()
+                ),
+            ),
+            ("alpha", "beta", "gamma"),
+            (False, False, False),
+            pd.Series(
+                [
+                    {"alpha": 1, "beta": 8, "gamma": 16},
+                    {"beta": 9, "gamma": 17},
+                    {"alpha": 3, "gamma": 18},
+                    {"gamma": 19},
+                    {"alpha": 5, "beta": 12},
+                    {"beta": 13},
+                    {"alpha": 7},
+                    {},
+                ]
+                * 5,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
+            ),
+            id="3-int_vector-int_vector-int_vector",
+        ),
+        pytest.param(
+            (
+                "hymenoptera",
+                pd.Series(
+                    [
+                        "hylaeus",
+                        None,
+                        "ophion",
+                        None,
+                        "vespula",
+                        None,
+                        "proctorenyxa incredibilis",
+                        None,
+                        "cleptes",
+                    ]
+                ).values,
+            ),
+            ("order", "genus"),
+            (True, False),
+            pd.Series(
+                [
+                    {"order": "hymenoptera", "genus": "hylaeus"},
+                    {"order": "hymenoptera"},
+                    {"order": "hymenoptera", "genus": "ophion"},
+                    {"order": "hymenoptera"},
+                    {"order": "hymenoptera", "genus": "vespula"},
+                    {"order": "hymenoptera"},
+                    {"order": "hymenoptera", "genus": "proctorenyxa incredibilis"},
+                    {"order": "hymenoptera"},
+                    {"order": "hymenoptera", "genus": "cleptes"},
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.string())),
+            ),
+            id="2-string_scalar-string_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series([[1]] * 3 + [[]] * 3 + [[2, 3, 4]] * 3 + [None] * 3).values,
+                pd.Series([[5, 6], None, [7, None]] * 4).values,
+                pd.array([8, 9, 10, 11]),
+            ),
+            ("A1", "A2", "A3"),
+            (False, False, True),
+            pd.Series(
+                [
+                    {"A1": [1], "A2": [5, 6], "A3": [8, 9, 10, 11]},
+                    {"A1": [1], "A3": [8, 9, 10, 11]},
+                    {"A1": [1], "A2": [7, None], "A3": [8, 9, 10, 11]},
+                    {"A1": [], "A2": [5, 6], "A3": [8, 9, 10, 11]},
+                    {"A1": [], "A3": [8, 9, 10, 11]},
+                    {"A1": [], "A2": [7, None], "A3": [8, 9, 10, 11]},
+                    {"A1": [2, 3, 4], "A2": [5, 6], "A3": [8, 9, 10, 11]},
+                    {"A1": [2, 3, 4], "A3": [8, 9, 10, 11]},
+                    {"A1": [2, 3, 4], "A2": [7, None], "A3": [8, 9, 10, 11]},
+                    {"A2": [5, 6], "A3": [8, 9, 10, 11]},
+                    {"A3": [8, 9, 10, 11]},
+                    {"A2": [7, None], "A3": [8, 9, 10, 11]},
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.large_list(pa.int32()))),
+            ),
+            id="3-int_array_vector-int_array_vector-int_array_scalar",
+        ),
+        pytest.param(
+            (
+                datetime.date(2023, 1, 14),
+                pd.Series(
+                    [
+                        None
+                        if i % 2 == 1
+                        else datetime.date.fromordinal(738534 + 2**i)
+                        for i in range(10)
+                    ]
+                ).values,
+            ),
+            ("start_date", "end_date"),
+            (True, False),
+            pd.Series(
+                [
+                    {
+                        "start_date": datetime.date(2023, 1, 14),
+                        "end_date": datetime.date(2023, 1, 15),
+                    },
+                    {"start_date": datetime.date(2023, 1, 14)},
+                    {
+                        "start_date": datetime.date(2023, 1, 14),
+                        "end_date": datetime.date(2023, 1, 18),
+                    },
+                    {"start_date": datetime.date(2023, 1, 14)},
+                    {
+                        "start_date": datetime.date(2023, 1, 14),
+                        "end_date": datetime.date(2023, 1, 30),
+                    },
+                    {"start_date": datetime.date(2023, 1, 14)},
+                    {
+                        "start_date": datetime.date(2023, 1, 14),
+                        "end_date": datetime.date(2023, 3, 19),
+                    },
+                    {"start_date": datetime.date(2023, 1, 14)},
+                    {
+                        "start_date": datetime.date(2023, 1, 14),
+                        "end_date": datetime.date(2023, 9, 27),
+                    },
+                    {"start_date": datetime.date(2023, 1, 14)},
+                ],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.date32())),
+            ),
+            id="2-date_scalar-date_vector",
+        ),
+        pytest.param(
+            (
+                pd.array(
+                    [
+                        {"male": 1, "female": 1},
+                        None,
+                        None,
+                        None,
+                        {"male": 0, "female": 1},
+                    ],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("male", pa.int32()),
+                                pa.field("female", pa.int32()),
+                            ]
+                        )
+                    ),
+                ),
+                pd.array(
+                    [
+                        {"male": 1, "female": 0},
+                        {"male": 1, "female": 3},
+                        None,
+                        None,
+                        None,
+                    ],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("male", pa.int32()),
+                                pa.field("female", pa.int32()),
+                            ]
+                        )
+                    ),
+                ),
+                pd.array(
+                    [
+                        {"male": 0, "female": 1},
+                        None,
+                        {"male": 1, "female": 1},
+                        None,
+                        {"male": 4, "female": 0},
+                    ],
+                    dtype=pd.ArrowDtype(
+                        pa.struct(
+                            [
+                                pa.field("male", pa.int32()),
+                                pa.field("female", pa.int32()),
+                            ]
+                        )
+                    ),
+                ),
+            ),
+            ("parents", "siblings", "children"),
+            (False, False, False),
+            pd.Series(
+                [
+                    {
+                        "parents": {"male": 1, "female": 1},
+                        "siblings": {"male": 1, "female": 0},
+                        "children": {"male": 0, "female": 1},
+                    },
+                    {"siblings": {"male": 1, "female": 3}},
+                    {"children": {"male": 1, "female": 1}},
+                    {},
+                    {
+                        "parents": {"male": 0, "female": 1},
+                        "children": {"male": 4, "female": 0},
+                    },
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.map_(
+                        pa.string(),
+                        pa.struct(
+                            [
+                                pa.field("male", pa.int32()),
+                                pa.field("female", pa.int32()),
+                            ]
+                        ),
+                    )
+                ),
+            ),
+            id="3-struct-vector_vector_vector",
+        ),
+        pytest.param(
+            (
+                pd.array(
+                    [
+                        {"male": 1, "female": 1},
+                        None,
+                        None,
+                        None,
+                        {"female": 1},
+                    ],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                ),
+                pd.array(
+                    [
+                        {"male": 1},
+                        {"male": 1, "female": 3},
+                        None,
+                        None,
+                        None,
+                    ],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                ),
+                pd.array(
+                    [
+                        {"female": 1},
+                        {},
+                        {"male": 1, "female": 1},
+                        None,
+                        {"male": 4},
+                    ],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                ),
+            ),
+            ("parents", "siblings", "children"),
+            (False, False, False),
+            pd.Series(
+                [
+                    {
+                        "parents": {"male": 1, "female": 1},
+                        "siblings": {"male": 1},
+                        "children": {"male": 1},
+                    },
+                    {"siblings": {"male": 1, "female": 3}, "children": {}},
+                    {"children": {"male": 1, "female": 1}},
+                    {},
+                    {"parents": {"female": 1}, "children": {"male": 4}},
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.map_(pa.string(), pa.map_(pa.string(), pa.int64()))
+                ),
+            ),
+            id="3-map-vector_vector_vector",
+            marks=pytest.mark.skip(
+                reason="[BSE-2148] TODO: fix runtime error with map arrays in object_construct"
+            ),
+        ),
+        pytest.param(
+            (
+                pd.array(
+                    [
+                        {"A": 1, "E": 1, "I": 1, "O": 1, "U": 1, "Y": None},
+                        None,
+                        {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5},
+                        {"Q": 10, "Z": 10, "J": 8, "X": 8},
+                        {},
+                    ],
+                    dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                ),
+                {"C": 1, "I": 1, "O": 1, "R": 1, "S": 4},
+            ),
+            ("points", "char_counts"),
+            (False, True),
+            pd.Series(
+                [
+                    {
+                        "points": {"A": 1, "E": 1, "I": 1, "O": 1, "U": 1, "Y": None},
+                        "char_counts": {"C": 1, "I": 1, "O": 1, "R": 1, "S": 4},
+                    },
+                    {"char_counts": {"C": 1, "I": 1, "O": 1, "R": 1, "S": 4}},
+                    {
+                        "points": {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5},
+                        "char_counts": {"C": 1, "I": 1, "O": 1, "R": 1, "S": 4},
+                    },
+                    {
+                        "points": {"Q": 10, "Z": 10, "J": 8, "X": 8},
+                        "char_counts": {"C": 1, "I": 1, "O": 1, "R": 1, "S": 4},
+                    },
+                    {
+                        "points": {},
+                        "char_counts": {"C": 1, "I": 1, "O": 1, "R": 1, "S": 4},
+                    },
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.map_(pa.string(), pa.map_(pa.string(), pa.int64()))
+                ),
+            ),
+            id="2-map-vector_scalar",
+        ),
+    ],
+)
+def test_object_construct(values, keys, scalars, answer, memory_leak_check):
+    keys_meta = ColNamesMetaType(keys)
+    scalars_meta = MetaType(scalars)
+
+    def impl1(v0):
+        return pd.DataFrame(
+            {
+                "res": bodo.libs.bodosql_array_kernels.object_construct(
+                    (v0,), keys_meta, scalars_meta
+                )
+            }
+        )
+
+    def impl2(v0, v1):
+        return pd.DataFrame(
+            {
+                "res": bodo.libs.bodosql_array_kernels.object_construct(
+                    (v0, v1), keys_meta, scalars_meta
+                )
+            }
+        )
+
+    def impl3(v0, v1, v2):
+        return pd.DataFrame(
+            {
+                "res": bodo.libs.bodosql_array_kernels.object_construct(
+                    (v0, v1, v2), keys_meta, scalars_meta
+                )
+            }
+        )
+
+    mixed_scalar_vector = any(scalars) != all(scalars)
+
+    if len(values) == 1:
+        impl = impl1
+    elif len(values) == 2:
+        impl = impl2
+    elif len(values) == 3:
+        impl = impl3
+
+    check_func(
+        impl,
+        values,
+        check_dtype=False,
+        py_output=pd.DataFrame({"res": answer}),
+        dist_test=not mixed_scalar_vector,
+        convert_to_nullable_float=True,
+    )
+
+
+@pytest.mark.parametrize(
     "is_none_0, is_none_1",
     [
         pytest.param(False, False, id="scalar-scalar"),
@@ -1890,6 +2277,53 @@ def test_object_construct_keep_null_optional(is_none_0, is_none_1, memory_leak_c
     check_func(
         impl,
         (42, True, is_none_0, is_none_1),
+        py_output=answer,
+        check_dtype=False,
+        dist_test=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "is_none_0, is_none_1",
+    [
+        pytest.param(False, False, id="scalar-scalar"),
+        pytest.param(True, False, id="null-scalar"),
+        pytest.param(False, True, id="scalar-null"),
+        pytest.param(True, True, id="null-null"),
+    ],
+)
+@pytest.mark.parametrize(
+    "first_val, second_val",
+    [
+        pytest.param(True, False, id="boolean"),
+        pytest.param(np.int8(15), np.int64(-(2**60 - 1)), id="integers"),
+        pytest.param("alpha", "beta", id="strings"),
+        pytest.param(pd.array([3.14, 2.7]), pd.array([-1.0]), id="float_arrays"),
+        pytest.param({"A": 0, "B": 1}, {"A": 2, "E": 3, "I": 4}, id="int_map"),
+    ],
+)
+def test_object_construct_optional(
+    first_val, second_val, is_none_0, is_none_1, memory_leak_check
+):
+    names = ColNamesMetaType(("first_key", "second_key"))
+    scalars = MetaType((True, True))
+
+    def impl(A, B, is_none_0, is_none_1):
+        arg0 = None if is_none_0 else A
+        arg1 = None if is_none_1 else B
+        return bodo.libs.bodosql_array_kernels.object_construct(
+            (arg0, arg1), names, scalars
+        )
+
+    answer = {}
+    if not is_none_0:
+        answer["first_key"] = first_val
+    if not is_none_1:
+        answer["second_key"] = second_val
+
+    check_func(
+        impl,
+        (first_val, second_val, is_none_0, is_none_1),
         py_output=answer,
         check_dtype=False,
         dist_test=False,

@@ -190,10 +190,10 @@ def construct_array_column_type(arr_type, col_name):
             str(dtype.tz), "int" if isinstance(dtype.tz, int) else "str"
         )
         elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.TZ_AWARE_TIMESTAMP.value)
-    elif isinstance(arr_type, bodo.TimeArrayType):
+    elif isinstance(dtype, bodo.TimeArrayType):
         precision = dtype.precision
         elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Time.value)
-    elif isinstance(arr_type, bodo.ArrayItemArrayType):
+    elif isinstance(dtype, bodo.ArrayItemArrayType):
         # TODO: Support nested array element type
         elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Array.value)
     elif dtype.dtype in _numba_to_sql_column_type_map:
