@@ -2,12 +2,12 @@ package com.bodosql.calcite.adapter.pandas;
 
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.google.common.collect.ImmutableList;
-import javax.annotation.Nullable;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.rules.TransformationRule;
 import org.apache.calcite.rex.RexNode;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.immutables.value.Value;
 
 /**

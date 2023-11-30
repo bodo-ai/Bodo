@@ -110,22 +110,22 @@ public class BodoSQLSqlConformance extends SqlAbstractConformance {
   }
 
   /**
-   * Whether to allow coercion string literal to array literal
+   * Whether to allow lenient type coercions.
    *
-   * <p>For example,
+   * <p>Coercions include:
    *
-   * <blockquote>
-   *
-   * <pre>SELECT ARRAY[0,1,2] == '{0,1,2}'
-   * </pre>
-   *
-   * </blockquote>
+   * <ul>
+   *   <li>Coercion of string literal to array literal. For example, {@code SELECT ARRAY[0,1,2] ==
+   *       '{0,1,2}'}
+   *   <li>Casting {@code BOOLEAN} values to one of the following numeric types: {@code TINYINT},
+   *       {@code SMALLINT}, {@code INTEGER}, {@code BIGINT}.
+   * </ul>
    *
    * <p>Among the built-in conformance levels, true in {@link SqlConformanceEnum#BABEL}, false
    * otherwise.
    */
   @Override
-  public boolean allowCoercionStringToArray() {
+  public boolean allowLenientCoercion() {
     return false;
   }
 }

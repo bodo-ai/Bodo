@@ -3,23 +3,17 @@ package com.bodosql.calcite.prepare
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.rex.RexNamedParam
-import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.bodosql.calcite.sql.func.SqlLikeQuantifyOperator
 import com.bodosql.calcite.sql.func.SqlNamedParameterOperator
-import com.google.common.collect.ImmutableList
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexUtil
 import org.apache.calcite.sql.SqlCall
-import org.apache.calcite.sql.SqlDataTypeSpec
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlLiteral
-import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlNodeList
-import org.apache.calcite.sql.SqlUtil
 import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeFamily
-import org.apache.calcite.sql.validate.SqlValidatorImpl
 import org.apache.calcite.sql2rel.SqlRexContext
 import org.apache.calcite.sql2rel.SqlRexConvertlet
 import org.apache.calcite.sql2rel.StandardConvertletTable
@@ -32,33 +26,10 @@ import org.apache.calcite.sql2rel.StandardConvertletTableConfig
  */
 class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConvertletTable(config) {
     init {
-        registerOp(SqlBodoOperatorTable.TRY_CAST, this::convertTryCast)
         registerOp(SqlNamedParameterOperator.INSTANCE, this::convertNamedParam)
     }
 
     constructor() : this(StandardConvertletTableConfig(true, true))
-
-    private fun convertTryCast(cx: SqlRexContext, call: SqlCall): RexNode {
-        val typeFactory = cx.typeFactory
-        assert(call.kind == SqlKind.TRY_CAST)
-        val left = call.operand<SqlNode>(0)
-        val right = call.operand<SqlNode>(1)
-        val dataType = right as SqlDataTypeSpec
-        var type = dataType.deriveType(cx.validator)
-        if (type == null) {
-            type = cx.validator.getValidatedNodeType(dataType.typeName)
-        }
-        val arg = cx.convertExpression(left)
-        if (arg.type.isNullable) {
-            type = typeFactory.createTypeWithNullability(type, true)
-        }
-        if (SqlUtil.isNullLiteral(left, false)) {
-            val validator = cx.validator as SqlValidatorImpl
-            validator.setValidatedNodeType(left, type)
-            return cx.convertExpression(left)
-        }
-        return cx.rexBuilder.makeCall(type, SqlBodoOperatorTable.TRY_CAST, ImmutableList.of(arg))
-    }
 
     private fun convertNamedParam(cx: SqlRexContext, call: SqlCall): RexNode {
         val name = call.operand<SqlLiteral>(0).getValueAs(String::class.java)

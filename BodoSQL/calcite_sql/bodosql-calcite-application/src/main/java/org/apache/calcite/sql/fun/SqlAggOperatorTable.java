@@ -15,7 +15,7 @@ import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.util.Optionality;
 
-import javax.annotation.Nullable;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import java.util.Arrays;
 import java.util.List;
 
@@ -53,13 +53,29 @@ public class SqlAggOperatorTable implements SqlOperatorTable {
     public static final SqlAggFunction PERCENTILE_CONT =
             SqlBasicAggFunction
                     // Force nullable in case there is an empty group.
-                    .create(SqlKind.PERCENTILE_CONT, ReturnTypes.DOUBLE.andThen(SqlTypeTransforms.FORCE_NULLABLE),
+                    .create(SqlKind.PERCENTILE_CONT, ReturnTypes.DOUBLE.andThen(SqlTypeTransforms.TO_NULLABLE).andThen(BodoReturnTypes.FORCE_NULLABLE_IF_EMPTY_GROUP),
                             OperandTypes.UNIT_INTERVAL_NUMERIC_LITERAL)
                     .withFunctionType(SqlFunctionCategory.SYSTEM)
                     .withGroupOrder(Optionality.MANDATORY)
                     .withPercentile(true);
 
-    private List<SqlOperator> aggOperatorList = Arrays.asList(LISTAGG, PERCENTILE_CONT);
+    // Override PERCENTILE_DISC because it has the wrong return type.
+    /**
+     * {@code PERCENTILE_DISC} inverse distribution aggregate function.
+     *
+     * <p>The argument must be a numeric literal in the range 0 to 1 inclusive
+     * (representing a percentage), and the return type is the type of the
+     * {@code ORDER BY} expression.
+     */public static final SqlAggFunction PERCENTILE_DISC =
+            SqlBasicAggFunction
+                    // Force nullable in case there is an empty group.
+                    .create(SqlKind.PERCENTILE_DISC, ReturnTypes.PERCENTILE_DISC_CONT.andThen(BodoReturnTypes.FORCE_NULLABLE_IF_EMPTY_GROUP),
+                            OperandTypes.UNIT_INTERVAL_NUMERIC_LITERAL)
+                    .withFunctionType(SqlFunctionCategory.SYSTEM)
+                    .withGroupOrder(Optionality.MANDATORY)
+                    .withPercentile(true);
+
+    private List<SqlOperator> aggOperatorList = Arrays.asList(LISTAGG, PERCENTILE_CONT, PERCENTILE_DISC);
 
     @Override
     public void lookupOperatorOverloads(

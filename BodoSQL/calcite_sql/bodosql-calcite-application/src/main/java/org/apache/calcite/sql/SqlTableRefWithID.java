@@ -27,10 +27,10 @@ import java.util.List;
 import static java.util.Objects.requireNonNull;
 
 /**
- *  A <code>SqlTableRefWithID</code> is a node of a parse tree which represents
- *  a table reference containing a SqlTableIdentifierWithID.
+ * A <code>SqlTableRefWithID</code> is a node of a parse tree which represents
+ * a table reference containing a SqlTableIdentifierWithID.
  *
- *  <p>It can be attached with a sql hint statement, see {@link SqlHint} for details.
+ * <p>It can be attached with a sql hint statement, see {@link SqlHint} for details.
  */
 public class SqlTableRefWithID extends SqlCall {
 

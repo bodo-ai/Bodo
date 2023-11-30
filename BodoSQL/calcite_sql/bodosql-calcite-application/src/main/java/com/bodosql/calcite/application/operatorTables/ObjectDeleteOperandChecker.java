@@ -1,11 +1,11 @@
 package com.bodosql.calcite.application.operatorTables;
 
 import java.util.List;
-import javax.annotation.Nullable;
 import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.type.SameOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class ObjectDeleteOperandChecker extends SameOperandTypeChecker {
   /**

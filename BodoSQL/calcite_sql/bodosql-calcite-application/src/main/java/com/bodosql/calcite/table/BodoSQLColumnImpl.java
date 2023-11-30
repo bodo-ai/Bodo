@@ -2,10 +2,10 @@ package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Variable;
-import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.type.BodoTZInfo;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  *

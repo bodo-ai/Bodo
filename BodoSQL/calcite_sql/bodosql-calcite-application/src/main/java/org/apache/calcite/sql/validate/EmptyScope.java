@@ -203,14 +203,14 @@ class EmptyScope implements SqlValidatorScope {
       }
       //Return early if we can't find any further sub schemas
       if (namespace != null) {
-        resolved.found(namespace, false, null, path, remainingNames);
+        resolved.found(namespace, false, this, path, remainingNames);
         return;
       }
     }
 
     //Return if we've iterated through all the names in the identifier
     if (namespace != null) {
-      resolved.found(namespace, false, null, path, remainingNames);
+      resolved.found(namespace, false, this, path, remainingNames);
     }
 
   }
@@ -261,13 +261,13 @@ class EmptyScope implements SqlValidatorScope {
           table2 = RelOptTableImpl.create(relOptSchema, rowType, entry, null);
         }
         namespace = new TableNamespace(validator, table2, extensionFields);
-        resolved.found(namespace, false, null, path, remainingNames);
+        resolved.found(namespace, false, this, path, remainingNames);
         return;
       }
       // neither sub-schema nor table
       if (namespace != null
           && !remainingNames.equals(names)) {
-        resolved.found(namespace, false, null, path, remainingNames);
+        resolved.found(namespace, false, this, path, remainingNames);
       }
       return;
     }

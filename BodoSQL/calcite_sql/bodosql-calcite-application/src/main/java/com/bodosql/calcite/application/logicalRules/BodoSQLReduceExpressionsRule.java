@@ -41,6 +41,7 @@ import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rules.SubstitutionRule;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.BodoRexSimplify;
 import org.apache.calcite.rex.RexBuilder;
@@ -634,7 +635,8 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
         // If we make 'abc' of type VARCHAR(4), we may later encounter
         // the same expression in a Project's digest where it has
         // type VARCHAR(3), and that's wrong.
-        replacement = simplify.rexBuilder.makeAbstractCast(call.getType(), replacement);
+        RelDataType type = call.getType();
+        replacement = simplify.rexBuilder.makeAbstractCast(type, replacement, false);
       }
       return replacement;
     }

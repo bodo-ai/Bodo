@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake;
 
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.rel.core.BodoLogicalRelFactories;
 import org.apache.calcite.rel.core.Aggregate;
 import org.immutables.value.Value;
 import org.jetbrains.annotations.NotNull;
@@ -24,6 +25,7 @@ public class SnowflakeAggregateRule extends AbstractSnowflakeAggregateRule {
                             b1 ->
                                 b1.operand(SnowflakeToPandasConverter.class)
                                     .oneInput(b2 -> b2.operand(SnowflakeRel.class).anyInputs())))
+            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .as(Config.class);
 
     @Override

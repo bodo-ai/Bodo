@@ -16,18 +16,34 @@
  */
 package com.bodosql.calcite.sql.validate;
 
-import static org.apache.calcite.sql.validate.SqlValidatorImpl.*;
 import static org.apache.calcite.util.Static.RESOURCE;
 
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.JoinConditionType;
+import org.apache.calcite.sql.JoinType;
+import org.apache.calcite.sql.SqlBasicCall;
+import org.apache.calcite.sql.SqlCall;
+import org.apache.calcite.sql.SqlCharStringLiteral;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlInsert;
+import org.apache.calcite.sql.SqlJoin;
+import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlOperatorTable;
+import org.apache.calcite.sql.SqlSelect;
+import org.apache.calcite.sql.SqlUpdate;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.type.BodoSqlTypeCoercionRule;
+import org.apache.calcite.sql.type.SqlTypeMappingRule;
 import org.apache.calcite.sql.type.SqlTypeUtil;
-import org.apache.calcite.sql.validate.*;
+import org.apache.calcite.sql.validate.SqlValidator;
+import org.apache.calcite.sql.validate.SqlValidatorImpl;
+import org.apache.calcite.sql.validate.SqlValidatorScope;
 
 /** Duplication of the CalciteSqlValidator class from Calcite. */
 public class BodoSqlValidator extends SqlValidatorImpl {
@@ -167,5 +183,11 @@ public class BodoSqlValidator extends SqlValidatorImpl {
       return new SqlBasicCall(call.getOperator(), objectArgs, call.getParserPosition());
     }
     return call;
+  }
+
+  /** Returns the type mapping rule. */
+  @Override
+  public SqlTypeMappingRule getTypeMappingRule() {
+    return BodoSqlTypeCoercionRule.instance();
   }
 }

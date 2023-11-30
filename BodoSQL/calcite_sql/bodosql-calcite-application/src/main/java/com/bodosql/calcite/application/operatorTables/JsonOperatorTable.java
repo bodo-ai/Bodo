@@ -2,7 +2,6 @@ package com.bodosql.calcite.application.operatorTables;
 
 import java.util.Arrays;
 import java.util.List;
-import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.SqlAggFunction;
@@ -23,6 +22,7 @@ import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.util.Optionality;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public final class JsonOperatorTable implements SqlOperatorTable {
 

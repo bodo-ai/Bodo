@@ -3,7 +3,6 @@ package com.bodosql.calcite.application.operatorTables;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import javax.annotation.Nullable;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SnowflakeNamedArgumentSqlTableFunction;
@@ -21,6 +20,7 @@ import org.apache.calcite.sql.type.SnowflakeNamedOperandMetadataImpl;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Operator table for builtin functions that return a table, such as FLATTEN and SPLIT_TO_TABLE. */
 public class TableFunctionOperatorTable implements SqlOperatorTable {

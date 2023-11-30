@@ -1,11 +1,11 @@
 package com.bodosql.calcite.application.BodoSQLTypeSystems;
 
-import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystemImpl;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Class for the RelDataTypeSystem used by BodoSQL. */
 public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {

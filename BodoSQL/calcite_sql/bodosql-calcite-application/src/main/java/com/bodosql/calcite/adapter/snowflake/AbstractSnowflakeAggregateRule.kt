@@ -1,9 +1,12 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable
+import com.bodosql.calcite.application.utils.Utils.literalAggPrunedAggList
 import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelRule
 import org.apache.calcite.rel.core.Aggregate
+import org.apache.calcite.rel.core.AggregateCall
+import org.apache.calcite.rex.RexNode
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.util.Util.isDistinct
 import org.immutables.value.Value
@@ -18,16 +21,48 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
         }
         val (aggregate, rel) = extractNodes(call)
         val catalogTable = rel.getCatalogTable()
-
-        val newNode = SnowflakeAggregate.create(
+        // Do we need a transformation with a projection for any literal values.
+        val needsProjection = aggregate.aggCallList.any { x -> x.aggregation.kind == SqlKind.LITERAL_AGG }
+        // Filter out any literals from the Snowflake Pushdown.
+        val usedCallList = literalAggPrunedAggList(aggregate.aggCallList)
+        val newAggregate = SnowflakeAggregate.create(
             aggregate.cluster,
             aggregate.traitSet,
             rel,
             aggregate.groupSet,
             aggregate.groupSets,
-            aggregate.aggCallList.toList(),
+            usedCallList,
             catalogTable,
         )
+        val newNode = if (needsProjection) {
+            // Generate a wrapping projection if necessary.
+            val builder = call.builder()
+            builder.push(newAggregate)
+            // Track the offset for any functions that were pushed down.
+            var offset = aggregate.groupCount
+            val rexNodes: ArrayList<RexNode> = ArrayList()
+            for (i in 0 until aggregate.getRowType().fieldCount) {
+                if (i < aggregate.groupCount) {
+                    rexNodes.add(builder.field(i))
+                } else {
+                    val callListOffset = i - aggregate.groupCount
+                    if (aggregate.aggCallList[callListOffset].aggregation.kind == SqlKind.LITERAL_AGG) {
+                        // Safety check for unsupported patterns.
+                        if (aggregate.aggCallList[callListOffset].rexList.size != 1) {
+                            return
+                        }
+                        rexNodes.add(aggregate.aggCallList[callListOffset].rexList[0])
+                    } else {
+                        // We have encountered a regular call. Extract it from the result.
+                        rexNodes.add(builder.field(offset))
+                        offset += 1
+                    }
+                }
+            }
+            builder.project(rexNodes, aggregate.getRowType().fieldNames).build()
+        } else {
+            newAggregate
+        }
         call.transformTo(newNode)
     }
 
@@ -46,6 +81,12 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
             SqlKind.COUNTIF,
             SqlKind.MIN,
             SqlKind.MAX,
+            // Note: We support pushing aggregates that contain SqlKind.LITERAL_AGG,
+            // but since SqlKind.LITERAL_AGG is meant to be a literal/scalar that
+            // can be evaluated without any filter we will transform the aggregate
+            // into an Aggregate that can be pushed into Snowflake without the literal
+            // and a projection adding the literal afterwards.
+            SqlKind.LITERAL_AGG,
             // We want to add these function, but until we add proper
             // decimal support this will be problematic for large table as
             // we won't be able to properly sample/infer the TYPEOF for the
@@ -56,6 +97,15 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
         )
 
         /**
+         * Determine if the aggregate call list will be equivalent to only
+         * keys (e.g. distinct) after transformations.
+         */
+        @JvmStatic
+        private fun transformsToDistinct(aggCallList: List<AggregateCall>): Boolean {
+            return aggCallList.isEmpty() || aggCallList.all { x -> x.aggregation.kind == SqlKind.LITERAL_AGG }
+        }
+
+        /**
          * Determine if an Aggregate matches a distinct operation that we
          * want to push to Snowflake. Right now we just check that it matches
          * a distinct but in the future we may want to check metadata for if
@@ -63,7 +113,7 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
          */
         @JvmStatic
         private fun isPushableDistinct(aggregate: Aggregate): Boolean {
-            return aggregate.aggCallList.isEmpty() && Aggregate.isSimple(aggregate)
+            return transformsToDistinct(aggregate.aggCallList) && Aggregate.isSimple(aggregate)
         }
 
         @JvmStatic

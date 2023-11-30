@@ -1,5 +1,6 @@
 package org.apache.calcite.sql.type
 
+import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeComparability
 import org.apache.calcite.rel.type.RelDataTypeFamily
 
@@ -39,6 +40,16 @@ class VariantSqlType(nullable: Boolean) : AbstractSqlType(SqlTypeName.OTHER, nul
 
     override fun getFamily(): RelDataTypeFamily {
         return typeFamily
+    }
+
+    // If we extract the key or value type (map operations)
+    // the result is defined to be variant
+    override fun getValueType(): RelDataType? {
+        return this
+    }
+
+    override fun getKeyType(): RelDataType? {
+        return this
     }
 
     /** Define a variant family so all Variant types even if

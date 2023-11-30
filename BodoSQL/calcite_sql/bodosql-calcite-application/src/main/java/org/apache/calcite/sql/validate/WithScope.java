@@ -21,6 +21,8 @@ import org.apache.calcite.rel.type.StructKind;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlWithItem;
 
+import com.google.common.collect.ImmutableList;
+
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.List;
@@ -28,14 +30,14 @@ import java.util.List;
 /** Scope providing the objects that are available after evaluating an item
  * in a WITH clause.
  *
- * <p>For example, in</p>
+ * <p>For example, in
  *
  * <blockquote>{@code WITH t1 AS (q1) t2 AS (q2) q3}</blockquote>
  *
  * <p>{@code t1} provides a scope that is used to validate {@code q2}
  * (and therefore {@code q2} may reference {@code t1}),
  * and {@code t2} provides a scope that is used to validate {@code q3}
- * (and therefore q3 may reference {@code t1} and {@code t2}).</p>
+ * (and therefore q3 may reference {@code t1} and {@code t2}).
  */
 class WithScope extends ListScope {
   private final SqlWithItem withItem;
@@ -65,7 +67,7 @@ class WithScope extends ListScope {
       final SqlValidatorNamespace ns = validator.getNamespaceOrThrow(withItem);
       final Step path2 = path
           .plus(ns.getRowType(), 0, names.get(0), StructKind.FULLY_QUALIFIED);
-      resolved.found(ns, false, null, path2, null);
+      resolved.found(ns, false, this, path2, ImmutableList.of());
       return;
     }
     super.resolveTable(names, nameMatcher, path, resolved, extensionFields);
