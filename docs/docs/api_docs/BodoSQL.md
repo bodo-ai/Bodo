@@ -3041,18 +3041,12 @@ BodoSQL currently supports the following JSON functions:
 ### Array Functions
 Bodo currently supports the following functions that operate on columns of arrays:
 
+
 #### GET
 -   `#!sql GET(arr, idx)`
 -   `#!sql arr[idx]`
 
     Returns the element found at the specified index in the array. Inexing is 0 based, not 1 based. Returns NULL if the index is outside of the boundaries of the array.
-
-#### TO_ARRAY
--   `#!sql TO_ARRAY(arr)`
-
-    Converts the input expression to a single-element array containing this value. If the input
-    is an ARRAY, or VARIANT containing an array value, the result is unchanged. Returns `NULL`
-    for `NULL` or a JSON null input.
 
 
 #### ARRAY_TO_STRING
@@ -3133,19 +3127,27 @@ Bodo currently supports the following functions that operate on columns of array
     will look for the first `NULL` in the array input.
 
 
+#### ARRAY_REMOVE
+-   `#!sql ARRAY_REMOVE(array, to_remove)`
+
+    Given a source `array`, returns an array with all elements equal to the specified
+    value `to_remove` removed. Returns `NULL` if `array` or `to_remove` is `NULL`.
+
+
+#### ARRAY_REMOVE_AT
+-   `#!sql ARRAY_REMOVE_AT(array, pos)`
+
+    Given a source `array`, returns an array with the element at the specified position
+    `pos` removed. Returns `NULL` if `array` or `pos` is `NULL`.
+    Negative indexing is supported. No element is removed of the index `pos` is out of bound.
+
+
 #### ARRAY_SIZE
 -   `#!sql ARRAY_SIZE(array)`
 
     Returns the size of array, size includes inner elements that are `NULL``.
     Returns `NULL` if array is `NULL`.
     [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/array_size).
-
-
-#### ARRAY_REMOVE
--   `#!sql ARRAY_REMOVE(array, to_remove)`
-
-    Given a source `array`, returns an array with all elements equal to the specified
-    value `to_remove` removed. Returns `NULL` if `array` or `to_remove` is `NULL`.
 
 
 #### ARRAY_SLICE
@@ -3867,6 +3869,13 @@ BodoSQL currently supports the following casting/conversion functions:
 
     Equivalent to `#!sql TRY_TO_TIMESTAMP` except that it uses the local time zone, or keeps
     the original timezone if the input is a timezone-aware timestamp.
+
+#### TO_ARRAY
+-   `#!sql TO_ARRAY(EXPR)`
+
+    Converts the input expression to a single-element array containing this value. If the input
+    is an ARRAY, or VARIANT containing an array value, the result is unchanged. Returns `NULL`
+    for `NULL` or a JSON null input.
 
 
 ### Table Functions

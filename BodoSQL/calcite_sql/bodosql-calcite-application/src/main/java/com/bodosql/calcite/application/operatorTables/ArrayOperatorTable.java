@@ -242,6 +242,16 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           OperandTypes.sequence("ARRAY_REMOVE(ARRAY, ANY)", OperandTypes.ARRAY, OperandTypes.ANY),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction ARRAY_REMOVE_AT =
+      new SqlFunction(
+          "ARRAY_REMOVE_AT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.sequence(
+              "ARRAY_REMOVE_AT(ARRAY, INTEGER)", OperandTypes.ARRAY, OperandTypes.INTEGER),
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction ARRAY_EXCEPT =
       new SqlFunction(
           "ARRAY_EXCEPT",
@@ -319,6 +329,7 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           ARRAY_UNIQUE_AGG,
           ARRAY_SIZE,
           ARRAY_REMOVE,
+          ARRAY_REMOVE_AT,
           ARRAY_SLICE,
           ARRAYS_OVERLAP,
           ARRAY_CONTAINS,

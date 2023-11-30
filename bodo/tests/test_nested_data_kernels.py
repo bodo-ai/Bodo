@@ -9,6 +9,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func
+from bodo.utils.utils import is_array_typ
 
 
 @pytest.mark.parametrize(
@@ -941,6 +942,215 @@ def test_option_array_cat(flag0, flag1, memory_leak_check):
         is_out_distributed=False,
         dist_test=False,
         only_seq=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "arr, pos, arr_is_scalar, expected",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    [0, 1, 4, 9, 16, 3],
+                    None,
+                    [2, None, 3, None, 5],
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.int32())),
+            )
+            .repeat(5)
+            .values,
+            pd.array([0, 10, None, -3, -10] * 3, dtype=pd.Int32Dtype()),
+            False,
+            pd.array(
+                [
+                    [1, 4, 9, 16, 3],
+                    [0, 1, 4, 9, 16, 3],
+                    None,
+                    [0, 1, 4, 16, 3],
+                    [0, 1, 4, 9, 16, 3],
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    [None, 3, None, 5],
+                    [2, None, 3, None, 5],
+                    None,
+                    [2, None, None, 5],
+                    [2, None, 3, None, 5],
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.int32())),
+            ),
+            id="int_array-vector-vector",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    list("ABCDEFGHIJABCDEFGHIJ"),
+                    list("Alphabet Soup Is Delicious"),
+                    "ALPHABET SOUP IS DELICIOUS".split(),
+                    None,
+                    ["A", None, "E", "AI", None, "OU", None],
+                    list("EIEIO"),
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+            ),
+            2,
+            False,
+            pd.array(
+                [
+                    list("ABDEFGHIJABCDEFGHIJ"),
+                    list("Alhabet Soup Is Delicious"),
+                    "ALPHABET SOUP DELICIOUS".split(),
+                    None,
+                    ["A", None, "AI", None, "OU", None],
+                    list("EIIO"),
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.string())),
+            ),
+            id="string_array-vector-scalar",
+        ),
+        pytest.param(
+            pd.array(
+                [[1], [], None, [1, 2], [1, 2, 3]],
+                pd.ArrowDtype(pa.large_list(pa.int32())),
+            ),
+            pd.array([0, 1, 2, 3, 10, None], dtype=pd.Int32Dtype()),
+            True,
+            pd.array(
+                [
+                    [[], None, [1, 2], [1, 2, 3]],
+                    [[1], None, [1, 2], [1, 2, 3]],
+                    [[1], [], [1, 2], [1, 2, 3]],
+                    [[1], [], None, [1, 2, 3]],
+                    [[1], [], None, [1, 2], [1, 2, 3]],
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.int32()))),
+            ),
+            id="int_array_array-scalar-vector",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    [
+                        {"A": 0, "B": "foo"},
+                        None,
+                        {"A": 1, "B": "bar"},
+                        None,
+                        {"A": 2, "B": "fizz"},
+                    ],
+                    [{"A": 3, "B": "buzz"}, {"A": 4, "B": "foo"}],
+                    [{"A": 5, "B": "bar"}],
+                    [
+                        {"A": 6, "B": "fizz"},
+                        None,
+                        {"A": 7, "B": "buzz"},
+                        None,
+                        {"A": 8, "B": "foo"},
+                    ],
+                    [{"A": 9, "B": "bar"}, {"A": 0, "B": "fizz"}],
+                    [],
+                ]
+                * 2,
+                dtype=pd.ArrowDtype(
+                    pa.large_list(
+                        pa.struct(
+                            [pa.field("A", pa.int32()), pa.field("B", pa.string())]
+                        )
+                    )
+                ),
+            ),
+            pd.array(
+                [
+                    0,
+                    1,
+                    2,
+                    None,
+                    -2,
+                    0,
+                ]
+                * 2,
+                dtype=pd.Int32Dtype(),
+            ),
+            False,
+            pd.array(
+                [
+                    [
+                        None,
+                        {"A": 1, "B": "bar"},
+                        None,
+                        {"A": 2, "B": "fizz"},
+                    ],
+                    [{"A": 3, "B": "buzz"}],
+                    [{"A": 5, "B": "bar"}],
+                    None,
+                    [{"A": 0, "B": "fizz"}],
+                    [],
+                ]
+                * 2,
+                dtype=pd.ArrowDtype(
+                    pa.large_list(
+                        pa.struct(
+                            [pa.field("A", pa.int32()), pa.field("B", pa.string())]
+                        )
+                    )
+                ),
+            ),
+            id="struct_array-vector-vector",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    [{"A": [0], "B": None, "C": [1, 2]}, {"D": [3]}],
+                    [],
+                    [{"E": [4], "F": [5, 6]}, {"A": [7]}, None, {"B": [8]}],
+                    [{"D": [3]}, None, {}, {"D": [3]}, None],
+                    [{"D": [3], "A": [7]}, None, {"D": [3, None]}],
+                    None,
+                    [{"A": [0, 1], "D": [3]}, {}],
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.large_list(pa.map_(pa.string(), pa.large_list(pa.int32())))
+                ),
+            ),
+            pd.array([0, 1, 20, None, -3, -1, -10], dtype=pd.Int32Dtype()),
+            False,
+            pd.array(
+                [
+                    [{"D": [3]}],
+                    [],
+                    [{"E": [4], "F": [5, 6]}, {"A": [7]}, None, {"B": [8]}],
+                    None,
+                    [None, {"D": [3, None]}],
+                    None,
+                    [{"A": [0, 1], "D": [3]}, {}],
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.large_list(pa.map_(pa.string(), pa.large_list(pa.int32())))
+                ),
+            ),
+            id="map_array-vector-vector",
+        ),
+    ],
+)
+def test_array_remove_at(
+    arr,
+    pos,
+    arr_is_scalar,
+    expected,
+    memory_leak_check,
+):
+    check_func(
+        lambda arr, pos: bodo.libs.bodosql_array_kernels.array_remove_at(
+            arr, pos, arr_is_scalar
+        ),
+        (arr, pos),
+        py_output=expected,
+        check_dtype=False,
+        distributed=not arr_is_scalar and is_array_typ(pos),
+        is_out_distributed=not arr_is_scalar and is_array_typ(pos),
+        dist_test=not arr_is_scalar and is_array_typ(pos),
     )
 
 
