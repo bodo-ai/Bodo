@@ -24,7 +24,7 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <kotlin.compiler.incremental>true</kotlin.compiler.incremental>
         <org.slf4j-version>1.7.29</org.slf4j-version>
-        <org.apache.calcite-version>1.34.0</org.apache.calcite-version>
+        <org.apache.calcite-version>1.35.0</org.apache.calcite-version>
         <org.apache.calcite.avatica-version>1.23.0</org.apache.calcite.avatica-version>
         <com.google.protobuf-version>3.21.5</com.google.protobuf-version>
         <!-- TODO(njriasan): Upgrade to 3.14.1. This changes retry behavior so we need to test -->
@@ -84,6 +84,15 @@
             <artifactId>hamcrest</artifactId>
             <version>2.1</version>
             <scope>test</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.google.code.findbugs/jsr305 -->
+        <!-- TODO: Remove when Calcite removes the @javax.annotation.Nullable -->
+        <!-- from the RelRule.java definition. -->
+        <dependency>
+            <groupId>com.google.code.findbugs</groupId>
+            <artifactId>jsr305</artifactId>
+            <version>3.0.2</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.googlecode.json-simple/json-simple -->
@@ -281,6 +290,11 @@
                                         <!-- List of all class files we overwrite from Calcite. -->
                                         <!-- Ideally, this list is empty and classes should only be added here sparingly or removed. -->
                                         <!-- The existence of this list is a maintenance nightmare. -->
+                                        <exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator$1.class</exclude>
+                                        <exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator$InputGetter.class</exclude>
+                                        <exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator$InputGetterImpl.class</exclude>
+                                        <exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator$Result.class</exclude>
+                                        <exclude>org/apache/calcite/adapter/enumerable/RexToLixTranslator.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptAbstractTable.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptMaterialization$1.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptMaterialization$ProjectFilterTable.class</exclude>
@@ -315,6 +329,7 @@
                                         <exclude>org/apache/calcite/rex/RexSimplify$RexSargBuilder.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSimplify$SafeRexVisitor.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSimplify$SargCollector.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexSimplify$VariableCollector.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSimplify.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable$EquivConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable.class</exclude>
@@ -452,7 +467,6 @@
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$3.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$4.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$5.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$AggConverter.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$AggregateFinder.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$Blackboard$1.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$Blackboard.class</exclude>
@@ -483,6 +497,7 @@
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$TimestampDiffConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$TimestampSubConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$TrimConvertlet.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$TruncConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTableConfig.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/RelDecorrelator.class</exclude>
@@ -520,7 +535,6 @@
                                         <exclude>org/apache/calcite/tools/RelBuilder$RelOptTableFinder.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$Shifter.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder.class</exclude>
-                                        <exclude>org/apache/calcite/sql/type/CompositeOperandTypeChecker.class</exclude>
                                     </excludes>
                                 </filter>
                             </filters>

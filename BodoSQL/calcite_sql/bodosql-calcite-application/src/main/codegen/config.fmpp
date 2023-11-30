@@ -28,34 +28,36 @@ data: {
     # Example: "org.apache.calcite.sql.*", "java.util.List".
     imports: [
       "java.util.HashMap"
-      "com.bodosql.calcite.application.operatorTables.ContextOperatorTable",
-      "com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable",
-      "com.bodosql.calcite.application.operatorTables.NumericOperatorTable",
-      "com.bodosql.calcite.application.operatorTables.JsonOperatorTable",
-      "com.bodosql.calcite.application.operatorTables.StringOperatorTable",
-      "com.bodosql.calcite.sql.ddl.SqlCopyIntoTable",
-      "com.bodosql.calcite.sql.ddl.SqlCopyIntoLocation",
-      "com.bodosql.calcite.sql.ddl.SqlSnowflakeFileFormat",
-      "com.bodosql.calcite.sql.ddl.SqlSnowflakeColumnDeclaration",
-      "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTable",
-      "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableAs",
-      "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableLike",
-      "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableClone",
-      "com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate",
-      "com.bodosql.calcite.sql.ddl.SqlDropTable",
-      "com.bodosql.calcite.sql.ddl.SqlAlterTable",
-      "com.bodosql.calcite.sql.ddl.SqlAlterTableRenameTable",
-      "com.bodosql.calcite.sql.ddl.SqlAlterTableSwapTable",
-      "com.bodosql.calcite.sql.ddl.SqlAlterTableAddCol",
-      "com.bodosql.calcite.sql.ddl.SqlAlterTableRenameCol",
-      "com.bodosql.calcite.sql.ddl.SqlAlterTableDropCol",
-      "com.bodosql.calcite.sql.ddl.SqlTruncateTable",
-      "com.bodosql.calcite.sql.func.SqlBodoOperatorTable",
-      "org.apache.calcite.sql.SqlCreate",
-      "org.apache.calcite.sql.SqlDrop",
-      "org.apache.calcite.sql.SqlDdl",
-      "org.apache.calcite.sql.SqlTzAwareTypeNameSpec",
-      "org.apache.calcite.sql.ddl.SqlDdlNodes",
+      "com.bodosql.calcite.application.operatorTables.ContextOperatorTable"
+      "com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable"
+      "com.bodosql.calcite.application.operatorTables.NumericOperatorTable"
+      "com.bodosql.calcite.application.operatorTables.JsonOperatorTable"
+      "com.bodosql.calcite.application.operatorTables.StringOperatorTable"
+      "com.bodosql.calcite.sql.ddl.SqlCopyIntoTable"
+      "com.bodosql.calcite.sql.ddl.SqlCopyIntoLocation"
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeFileFormat"
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeColumnDeclaration"
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTable"
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableAs"
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableLike"
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableClone"
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate"
+      "com.bodosql.calcite.sql.ddl.SqlDropTable"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTable"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableRenameTable"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableSwapTable"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableAddCol"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableRenameCol"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableDropCol"
+      "com.bodosql.calcite.sql.ddl.SqlTruncateTable"
+      "com.bodosql.calcite.sql.func.SqlBodoOperatorTable"
+      "org.apache.calcite.sql.SqlCreate"
+      "org.apache.calcite.sql.SqlDrop"
+      "org.apache.calcite.sql.SqlDdl"
+      "org.apache.calcite.sql.SqlTruncate"
+      "org.apache.calcite.sql.SqlTzAwareTypeNameSpec"
+      "org.apache.calcite.sql.ddl.SqlDdlNodes"
+      "org.apache.calcite.sql.fun.SqlAggOperatorTable"
     ]
 
     # List of new keywords. Example: "DATABASES", "TABLES". If the keyword is
@@ -125,14 +127,12 @@ data: {
       "D",
       "DD",
       "DAYOFMONTH",
-      "DAYOFWEEK",
       "WEEKDAY",
       "DW",
       "DAYOFWEEKISO",
       "WEEKDAY_ISO",
       "DOW_ISO",
       "DW_ISO",
-      "DAYOFYEAR",
       "YEARDAY",
       "DY",
       "W",
@@ -427,7 +427,6 @@ data: {
 
     statementParserMethods: [
         "SqlAlterTable()",
-        "SqlTruncate()",
         "SqlCopyInto()",
     ]
 
@@ -453,6 +452,13 @@ data: {
     # but aren't fully unreserved.
     argumentNameUnreserveList: [
         "OUTER",
+    ]
+
+    # List of methods for parsing extensions to "TRUNCATE" calls.
+    # Each must accept arguments "(SqlParserPos pos)".
+    # Example: "SqlTruncateTable".
+    truncateStatementParserMethods: [
+      "SqlTruncateTable"
     ]
 
 

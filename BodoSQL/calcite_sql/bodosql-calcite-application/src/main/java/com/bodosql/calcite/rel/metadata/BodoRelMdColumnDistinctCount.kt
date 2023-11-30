@@ -224,6 +224,9 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             val groupSetList = rel.groupSet.asList()
             return if (groupSetList.size == 0) {
                 1.0
+            } else if (column >= rel.groupSet.asList().size && rel.aggCallList[column - rel.groupSet.asList().size].aggregation.kind == SqlKind.LITERAL_AGG) {
+                // A LITERAL_AGG is always a single value.
+                return 1.0
             } else if (rel.groupSets.size != 1 || column >= rel.groupSet.asList().size) {
                 return null
             } else {

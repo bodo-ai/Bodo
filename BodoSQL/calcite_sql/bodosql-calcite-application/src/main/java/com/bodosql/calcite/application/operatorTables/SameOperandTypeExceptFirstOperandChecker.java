@@ -6,7 +6,6 @@ import static org.apache.calcite.util.Static.RESOURCE;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
-import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlOperator;
@@ -15,6 +14,7 @@ import org.apache.calcite.sql.SqlUtil;
 import org.apache.calcite.sql.type.SameOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class SameOperandTypeExceptFirstOperandChecker extends SameOperandTypeChecker {
   // ~ Instance fields --------------------------------------------------------

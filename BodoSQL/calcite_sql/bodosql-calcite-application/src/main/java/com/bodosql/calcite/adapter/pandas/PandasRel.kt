@@ -118,6 +118,12 @@ interface PandasRel : RelNode {
         fun lowerAsGlobal(expression: Expr): Variable
 
         /**
+         * Lowers an expression into a global MetaType variable that can be retrieved using
+         * the returned [Variable].
+         */
+        fun lowerAsMetaType(expression: Expr): Variable
+
+        /**
          * Returns a PandasToRexTranslator that works in this build context.
          */
         fun rexTranslator(input: BodoEngineTable): RexToPandasTranslator
@@ -161,6 +167,12 @@ interface PandasRel : RelNode {
          * a row type instead of a node.
          */
         fun convertDfToTable(df: Variable?, rowType: RelDataType): BodoEngineTable
+
+        /**
+         * An overload of convertDfToTable that works the same but accepts
+         * the number of fields instead of a node or type.
+         */
+        fun convertDfToTable(df: Variable?, numCols: Int): BodoEngineTable
 
         /**
          * Converts a Table into a DataFrame.

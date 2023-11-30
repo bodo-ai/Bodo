@@ -31,6 +31,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
+import org.apache.calcite.runtime.PairList;
 import org.apache.calcite.schema.CustomColumnResolvingTable;
 import org.apache.calcite.schema.ExtensibleTable;
 import org.apache.calcite.schema.Table;
@@ -83,6 +84,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
 
+import static org.apache.calcite.linq4j.Nullness.castNonNullList;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCharset;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCollation;
 import static org.apache.calcite.util.Static.RESOURCE;
@@ -177,14 +179,11 @@ public class SqlValidatorUtil {
         extTable == null
             ? table.getRowType().getFieldCount()
             : extTable.getExtendedColumnOffset();
-    for (final Pair<SqlIdentifier, SqlDataTypeSpec> pair : pairs(extendedColumns)) {
-      final SqlIdentifier identifier = pair.left;
-      final SqlDataTypeSpec type = pair.right;
-      extendedFields.add(
-          new RelDataTypeFieldImpl(identifier.toString(),
-              extendedFieldOffset++,
-              type.deriveType(requireNonNull(validator, "validator"))));
-    }
+    pairs(extendedColumns).forEachIndexed((i, identifier, type) ->
+        extendedFields.add(
+            new RelDataTypeFieldImpl(identifier.toString(),
+                extendedFieldOffset + i,
+                type.deriveType(requireNonNull(validator, "validator")))));
     return extendedFields.build();
   }
 
@@ -192,9 +191,9 @@ public class SqlValidatorUtil {
    * (of the form [name0, type0, name1, type1, ...])
    * into a list of (name, type) pairs. */
   @SuppressWarnings({"unchecked", "rawtypes"})
-  private static List<Pair<SqlIdentifier, SqlDataTypeSpec>> pairs(
+  private static PairList<SqlIdentifier, SqlDataTypeSpec> pairs(
       SqlNodeList extendedColumns) {
-    return Util.pairs((List) extendedColumns);
+    return PairList.backedBy((List) extendedColumns.getList());
   }
 
   /**
@@ -219,7 +218,9 @@ public class SqlValidatorUtil {
   }
 
   /**
-   * Gets the bit-set to the column ordinals in the source for columns that intersect in the target.
+   * Gets the bit-set to the column ordinals in the source for columns that
+   * intersect in the target.
+   *
    * @param sourceRowType The source upon which to ordinate the bit set.
    * @param targetRowType The target to overlay on the source to create the bit set.
    */
@@ -434,7 +435,7 @@ public class SqlValidatorUtil {
    * @return List of unique strings
    */
   @Deprecated // to be removed before 2.0
-  public static List<String> uniquify(List<String> nameList) {
+  public static List<String> uniquify(List<? extends @Nullable String> nameList) {
     return uniquify(nameList, EXPR_SUGGESTER, true);
   }
 
@@ -452,7 +453,8 @@ public class SqlValidatorUtil {
    * @return List of unique strings
    */
   @Deprecated // to be removed before 2.0
-  public static List<String> uniquify(List<String> nameList, Suggester suggester) {
+  public static List<String> uniquify(List<? extends @Nullable String> nameList,
+      Suggester suggester) {
     return uniquify(nameList, suggester, true);
   }
 
@@ -467,7 +469,7 @@ public class SqlValidatorUtil {
    *     distinct
    * @return List of unique strings
    */
-  public static List<String> uniquify(List<String> nameList,
+  public static List<String> uniquify(List<? extends @Nullable String> nameList,
       boolean caseSensitive) {
     return uniquify(nameList, EXPR_SUGGESTER, caseSensitive);
   }
@@ -488,9 +490,17 @@ public class SqlValidatorUtil {
       List<? extends @Nullable String> nameList,
       Suggester suggester,
       boolean caseSensitive) {
-    final Set<String> used = caseSensitive
-        ? new LinkedHashSet<>()
-        : new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    final Set<String> used;
+    if (caseSensitive) {
+      // Shortcut (avoiding creating a hash map) if the list is short and has
+      // no nulls.
+      if (Util.isDefinitelyDistinctAndNonNull(nameList)) {
+        return castNonNullList(nameList);
+      }
+      used = new LinkedHashSet<>();
+    } else {
+      used = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    }
     int changeCount = 0;
     final List<String> newNameList = new ArrayList<>();
     for (String name : nameList) {
@@ -501,7 +511,7 @@ public class SqlValidatorUtil {
       newNameList.add(uniqueName);
     }
     return changeCount == 0
-        ? (List<String>) nameList
+        ? castNonNullList(nameList)
         : newNameList;
   }
 
@@ -526,7 +536,7 @@ public class SqlValidatorUtil {
       RelDataTypeFactory typeFactory,
       @Nullable List<String> fieldNameList,
       List<RelDataTypeField> systemFieldList) {
-    assert systemFieldList != null;
+    requireNonNull(systemFieldList, "systemFieldList");
     switch (joinType) {
     case LEFT:
       rightType =
@@ -699,7 +709,7 @@ public class SqlValidatorUtil {
     }
   }
 
-  public static @Nullable SelectScope getEnclosingSelectScope(@Nullable SqlValidatorScope scope) {
+  public static @Nullable SelectScope getEnclosingSelectScope(SqlValidatorScope scope) {
     while (scope instanceof DelegatingScope) {
       if (scope instanceof SelectScope) {
         return (SelectScope) scope;
@@ -834,9 +844,9 @@ public class SqlValidatorUtil {
       return;
     case ROLLUP:
     case CUBE: {
-      // GROUPING SETS ( (a), ROLLUP(c,b), CUBE(d,e) )
+      // GROUPING SETS ((a), ROLLUP(c,b), CUBE(d,e))
       // is EQUIVALENT to
-      // GROUPING SETS ( (a), (c,b), (b) ,(), (d,e), (d), (e) ).
+      // GROUPING SETS ((a), (c,b), (b) ,(), (d,e), (d), (e)).
       // Expand all ROLLUP/CUBE nodes
       List<ImmutableBitSet> operandBitSet =
           analyzeGroupTuple(scope, groupAnalyzer,

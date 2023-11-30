@@ -8,9 +8,9 @@ import com.bodosql.calcite.table.CatalogTable;
 import com.google.common.collect.ImmutableList;
 import java.util.List;
 import java.util.Set;
-import javax.annotation.Nullable;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public interface BodoSQLCatalog {
   /**

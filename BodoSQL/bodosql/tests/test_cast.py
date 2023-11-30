@@ -917,24 +917,24 @@ def test_try_cast(try_cast_argument, memory_leak_check):
     )
 
 
-def test_try_cast_error_handling(basic_df, memory_leak_check):
+def test_try_cast_error_handling(memory_leak_check):
     """
     Tests TRY_CAST function can throw correct error when input is wrong
     """
-    query1 = "SELECT TRY_CAST('binary' AS BINARY)"
+    query1 = "SELECT TRY_CAST(A AS BINARY) from table1"
     with pytest.raises(
         Exception,
         match="BINARY is not supported by TRY_CAST",
     ):
-        bc = bodosql.BodoSQLContext(basic_df)
+        bc = bodosql.BodoSQLContext({"table1": pd.DataFrame({"A": ["a", "b", "c"]})})
         bc.sql(query1)
 
-    query2 = "SELECT TRY_CAST(123 AS DOUBLE) from table1"
+    query2 = "SELECT TRY_CAST(A AS DOUBLE) from table1"
     with pytest.raises(
         Exception,
         match="TRY_CAST only supports casting from strings",
     ):
-        bc = bodosql.BodoSQLContext(basic_df)
+        bc = bodosql.BodoSQLContext({"table1": pd.DataFrame({"A": [1, 2, 3]})})
         bc.sql(query2)
 
 

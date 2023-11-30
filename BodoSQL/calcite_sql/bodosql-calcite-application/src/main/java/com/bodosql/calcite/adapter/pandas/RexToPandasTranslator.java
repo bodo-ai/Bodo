@@ -104,7 +104,6 @@ import com.bodosql.calcite.ir.Op.Function;
 import com.bodosql.calcite.ir.Op.If;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.rex.RexNamedParam;
-import com.bodosql.calcite.sql.func.BodoSqlTryCastFunction;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -114,7 +113,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import javax.annotation.Nullable;
 import kotlin.Pair;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataType;
@@ -157,6 +155,7 @@ import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.util.Sarg;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.NotNull;
 
 /** Translates a RexNode into a Pandas expression. */
@@ -254,9 +253,12 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     } else if (call.getOperator() instanceof SqlCaseOperator) {
       return visitCaseOp(call);
     } else if (call.getOperator() instanceof SqlCastFunction) {
-      return visitCastScan(call);
-    } else if (call.getOperator() instanceof BodoSqlTryCastFunction) {
-      return visitTryCastScan(call);
+      if (call.getKind() == SqlKind.CAST) {
+        return visitCastScan(call);
+      } else {
+        assert call.getKind() == SqlKind.SAFE_CAST;
+        return visitTryCastScan(call);
+      }
     } else if (call.getOperator() instanceof SqlExtractFunction) {
       return visitExtractScan(call);
     } else if (call.getOperator() instanceof SqlSubstringFunction) {
@@ -611,7 +613,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
 
     public List<String> getNamedParams() {
-      return ImmutableList.sortedCopyOf(namedParams);
+      return ImmutableList.copyOf(namedParams);
     }
 
     public int size() {

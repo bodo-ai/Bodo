@@ -34,6 +34,7 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.type.VariantSqlType;
 import org.apache.calcite.util.Bug;
+import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.RangeSets;
 import org.apache.calcite.util.Sarg;
@@ -43,6 +44,7 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableRangeSet;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
@@ -199,7 +201,7 @@ public class RexSimplify {
                 && SqlTypeUtil.equalSansNullability(rexBuilder.typeFactory, e2.getType(), e.getType())) {
             return e2;
         }
-        final RexNode e3 = rexBuilder.makeCast(e.getType(), e2, matchNullability);
+        final RexNode e3 = rexBuilder.makeCast(e.getType(), e2, matchNullability, false);
         if (e3.equals(e)) {
             return e;
         }
@@ -209,7 +211,7 @@ public class RexSimplify {
     /**
      * Simplifies a boolean expression.
      *
-     * <p>In particular:</p>
+     * <p>In particular:
      * <ul>
      * <li>{@code simplify(x = 1 OR NOT x = 1 OR x IS NULL)}
      * returns {@code TRUE}</li>
@@ -293,6 +295,7 @@ public class RexSimplify {
             case COALESCE:
                 return simplifyCoalesce((RexCall) e);
             case CAST:
+            case SAFE_CAST:
                 return simplifyCast((RexCall) e);
             case CEIL:
             case FLOOR:
@@ -980,6 +983,12 @@ public class RexSimplify {
         if (!a.getType().isNullable() && isSafeExpression(a)) {
             return rexBuilder.makeLiteral(true);
         }
+        if (RexUtil.isLosslessCast(a)) {
+            if (!a.getType().isNullable()) {
+                return rexBuilder.makeLiteral(true);
+            }
+            return rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL, RexUtil.removeCast(a));
+        }
         if (predicates.pulledUpPredicates.contains(a)) {
             return rexBuilder.makeLiteral(true);
         }
@@ -1028,6 +1037,12 @@ public class RexSimplify {
         a = simplify(a, UNKNOWN);
         if (!a.getType().isNullable() && isSafeExpression(a)) {
             return rexBuilder.makeLiteral(false);
+        }
+        if (RexUtil.isLosslessCast(a)) {
+            if (!a.getType().isNullable()) {
+                return rexBuilder.makeLiteral(false);
+            }
+            return rexBuilder.makeCall(SqlStdOperatorTable.IS_NULL, RexUtil.removeCast(a));
         }
         if (RexUtil.isNull(a)) {
             return rexBuilder.makeLiteral(true);
@@ -1207,7 +1222,7 @@ public class RexSimplify {
             if (sameTypeOrNarrowsNullability(caseType, value.getType())) {
                 return value;
             } else {
-                return rexBuilder.makeAbstractCast(caseType, value);
+                return rexBuilder.makeAbstractCast(caseType, value, false);
             }
         }
 
@@ -1427,7 +1442,7 @@ public class RexSimplify {
             final RexNode cond = isTrue(branch.cond);
             final RexNode value;
             if (!branchType.equals(branch.value.getType())) {
-                value = rexBuilder.makeAbstractCast(branchType, branch.value);
+                value = rexBuilder.makeAbstractCast(branchType, branch.value, false);
             } else {
                 value = branch.value;
             }
@@ -1608,7 +1623,6 @@ public class RexSimplify {
         final Set<RexNode> negatedTerms = new HashSet<>();
         final Set<RexNode> nullOperands = new HashSet<>();
         final Set<RexNode> notNullOperands = new LinkedHashSet<>();
-        final Set<RexNode> comparedOperands = new HashSet<>();
 
         // Add the predicates from the source to the range terms.
         for (RexNode predicate : predicates.pulledUpPredicates) {
@@ -1656,19 +1670,7 @@ public class RexSimplify {
                 case GREATER_THAN_OR_EQUAL:
                     RexCall call = (RexCall) term;
                     final RexNode left = call.getOperands().get(0);
-                    comparedOperands.add(left);
-                    // if it is a cast, we include the inner reference
-                    if (left.getKind() == SqlKind.CAST) {
-                        RexCall leftCast = (RexCall) left;
-                        comparedOperands.add(leftCast.getOperands().get(0));
-                    }
                     final RexNode right = call.getOperands().get(1);
-                    comparedOperands.add(right);
-                    // if it is a cast, we include the inner reference
-                    if (right.getKind() == SqlKind.CAST) {
-                        RexCall rightCast = (RexCall) right;
-                        comparedOperands.add(rightCast.getOperands().get(0));
-                    }
                     final Comparison comparison = Comparison.of(term);
                     // Check for comparison with null values
                     if (comparison != null
@@ -1728,12 +1730,6 @@ public class RexSimplify {
                         }
                     }
                     break;
-                case IN:
-                    comparedOperands.add(((RexCall) term).operands.get(0));
-                    break;
-                case BETWEEN:
-                    comparedOperands.add(((RexCall) term).operands.get(1));
-                    break;
                 case IS_NOT_NULL:
                     notNullOperands.add(((RexCall) term).getOperands().get(0));
                     terms.remove(i);
@@ -1745,12 +1741,6 @@ public class RexSimplify {
                 default:
                     break;
             }
-        }
-        // If one column should be null and is in a comparison predicate,
-        // it is not satisfiable.
-        // Example. IS NULL(x) AND x < 5  - not satisfiable
-        if (!Collections.disjoint(nullOperands, comparedOperands)) {
-            return rexBuilder.makeLiteral(false);
         }
         // Check for equality of two refs wrt equality with constants
         // Example #1. x=5 AND y=5 AND x=y : x=5 AND y=5
@@ -1776,15 +1766,6 @@ public class RexSimplify {
                 terms.remove(ref2.right);
             }
         }
-        // Remove not necessary IS NOT NULL expressions.
-        //
-        // Example. IS NOT NULL(x) AND x < 5  : x < 5
-        for (RexNode operand : notNullOperands) {
-            if (!comparedOperands.contains(operand)) {
-                terms.add(
-                        rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL, operand));
-            }
-        }
         // If one of the not-disjunctions is a disjunction that is wholly
         // contained in the disjunctions list, the expression is not
         // satisfiable.
@@ -1802,14 +1783,51 @@ public class RexSimplify {
                 return rexBuilder.makeLiteral(false);
             }
         }
-        // Add the NOT disjunctions back in.
-        for (RexNode notDisjunction : notTerms) {
-            terms.add(not(notDisjunction));
-        }
         // The negated terms: only deterministic expressions
         for (RexNode negatedTerm : negatedTerms) {
             if (termsSet.contains(negatedTerm)) {
                 return rexBuilder.makeLiteral(false);
+            }
+        }
+        // Add the NOT disjunctions back in.
+        for (RexNode notDisjunction : notTerms) {
+            terms.add(not(notDisjunction));
+        }
+        // Find operands that make will let whole expression evaluate to FALSE if set to NULL
+        final Set<RexNode> strongOperands = new HashSet<>();
+        for (RexNode term : terms) {
+            if (!RexUtil.isDeterministic(term)) {
+                continue;
+            }
+            final VariableCollector collector = new VariableCollector();
+            term.accept(collector);
+            for (RexInputRef ref : collector.refs) {
+                final boolean strong = Strong.isNotTrue(term, ImmutableBitSet.of(ref.index));
+                if (strong) {
+                    strongOperands.add(ref);
+                }
+            }
+            final RexUtil.FieldAccessFinder fieldAccessFinder = new RexUtil.FieldAccessFinder();
+            term.accept(fieldAccessFinder);
+            for (RexFieldAccess rexFieldAccess : fieldAccessFinder.getFieldAccessList()) {
+                final boolean strong = Strong.of(ImmutableSet.of(rexFieldAccess)).isNotTrue(term);
+                if (strong) {
+                    strongOperands.add(rexFieldAccess);
+                }
+            }
+        }
+        // If one column should be null and is in a comparison predicate,
+        // it is not satisfiable.
+        // Example. IS NULL(x) AND x < 5  - not satisfiable
+        if (!Collections.disjoint(nullOperands, strongOperands)) {
+            return rexBuilder.makeLiteral(false);
+        }
+        // Remove not necessary IS NOT NULL expressions.
+        // Example. IS NOT NULL(x) AND x < 5  : x < 5
+        for (RexNode operand : notNullOperands) {
+            if (!strongOperands.contains(operand)) {
+                terms.add(
+                    rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL, operand));
             }
         }
         return RexUtil.composeConjunction(rexBuilder, terms);
@@ -1891,11 +1909,10 @@ public class RexSimplify {
                 case GREATER_THAN:
                 case GREATER_THAN_OR_EQUAL:
                     final RexCall call = (RexCall) predicate;
-                    if (call.operands.get(0).equals(ref)
-                            && call.operands.get(1) instanceof RexLiteral) {
-                        final RexLiteral literal = (RexLiteral) call.operands.get(1);
-                        final C c1 = literal.getValueAs(clazz);
-                        assert c1 != null : "value must not be null in " + literal;
+                    final Comparison comparison = Comparison.of(call);
+                    if (comparison != null && comparison.ref.equals(ref)) {
+                        final C c1 = comparison.literal.getValueAs(clazz);
+                        assert c1 != null : "value must not be null in " + comparison.literal;
                         switch (predicate.getKind()) {
                             case NOT_EQUALS:
                                 // We want to intersect result with the range set of everything but
@@ -1910,7 +1927,7 @@ public class RexSimplify {
                                 result = RangeSets.minus(result, pointRange);
                                 break;
                             default:
-                                final Range<C> r1 = range(predicate.getKind(), c1);
+                                final Range<C> r1 = range(comparison.kind, c1);
                                 if (result.encloses(r1)) {
                                     // Given these predicates, term is always satisfied.
                                     // e.g. r0 is "$0 < 10", r1 is "$0 < 5"
@@ -2129,7 +2146,8 @@ public class RexSimplify {
             RexLiteral literal = (RexLiteral) call.getOperands().get(1);
             final Sarg sarg = castNonNull(literal.getValueAs(Sarg.class));
             if (sarg.isAll() || sarg.isNone()) {
-                return RexUtil.simpleSarg(rexBuilder, a, sarg, unknownAs);
+                RexNode rexNode = RexUtil.simpleSarg(rexBuilder, a, sarg, unknownAs);
+                return simplify(rexNode, unknownAs);
             }
             // Remove null from sarg if the left-hand side is never null
             if (sarg.nullAs != UNKNOWN) {
@@ -2203,6 +2221,7 @@ public class RexSimplify {
                 return rexBuilder.makeCast(e.getType(), intExpr);
             }
         }
+        final boolean safe = e.getKind() == SqlKind.SAFE_CAST;
         switch (operand.getKind()) {
             case LITERAL:
                 // Bodo Change: Disallow simplifying cast to Variant.
@@ -2237,7 +2256,8 @@ public class RexSimplify {
                         break;
                 }
                 final List<RexNode> reducedValues = new ArrayList<>();
-                final RexNode simplifiedExpr = rexBuilder.makeCast(e.getType(), operand);
+                final RexNode simplifiedExpr =
+                    rexBuilder.makeCast(e.getType(), operand, safe, safe);
                 executor.reduce(rexBuilder, ImmutableList.of(simplifiedExpr), reducedValues);
                 return requireNonNull(
                         Iterables.getOnlyElement(reducedValues));
@@ -2245,7 +2265,7 @@ public class RexSimplify {
                 if (operand == e.getOperands().get(0)) {
                     return e;
                 } else {
-                    return rexBuilder.makeCast(e.getType(), operand);
+                    return rexBuilder.makeCast(e.getType(), operand, safe, safe);
                 }
         }
     }
@@ -2609,6 +2629,22 @@ public class RexSimplify {
          * operands. */
         default boolean allowedInOr(RelOptPredicateList predicates) {
             return true;
+        }
+    }
+
+    /**
+      * Visitor which finds all inputs used by an expressions.
+      */
+    private static class VariableCollector extends RexVisitorImpl<Void> {
+        private final Set<RexInputRef> refs = new HashSet<>();
+
+        VariableCollector() {
+            super(true);
+        }
+
+        @Override public Void visitInputRef(RexInputRef inputRef) {
+            refs.add(inputRef);
+            return super.visitInputRef(inputRef);
         }
     }
 

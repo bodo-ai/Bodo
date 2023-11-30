@@ -148,6 +148,10 @@ public class LiteralCodeGen {
           case VARCHAR:
             // extract value without specific sql type info.
             return new Expr.StringLiteral(node.getValue2().toString());
+          case BINARY:
+          case VARBINARY:
+            // extract value without specific sql type info.
+            return new Expr.BinaryLiteral(node.getValue2().toString());
           case TIMESTAMP:
             {
               GregorianCalendar calendar = (GregorianCalendar) node.getValue();

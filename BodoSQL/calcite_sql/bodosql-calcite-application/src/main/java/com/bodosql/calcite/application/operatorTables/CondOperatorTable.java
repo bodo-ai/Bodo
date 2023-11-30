@@ -4,7 +4,6 @@ import static org.apache.calcite.sql.type.BodoReturnTypes.BOOL_AGG_RET_TYPE;
 
 import java.util.Arrays;
 import java.util.List;
-import javax.annotation.Nullable;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
@@ -22,6 +21,7 @@ import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.util.Optionality;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class CondOperatorTable implements SqlOperatorTable {
   private static @Nullable CondOperatorTable instance;

@@ -10,7 +10,6 @@ import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSyst
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 import com.google.common.collect.Sets;
 import java.util.*;
-import javax.annotation.Nullable;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -35,6 +34,7 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public final class DatetimeOperatorTable implements SqlOperatorTable {
   /**

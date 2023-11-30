@@ -5,7 +5,6 @@ import static org.apache.calcite.sql.type.BodoReturnTypes.SPLIT_RETURN_TYPE;
 
 import java.util.Arrays;
 import java.util.List;
-import javax.annotation.Nullable;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -23,6 +22,7 @@ import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public final class StringOperatorTable implements SqlOperatorTable {
 
