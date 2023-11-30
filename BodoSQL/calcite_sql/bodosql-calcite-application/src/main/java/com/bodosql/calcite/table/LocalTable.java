@@ -6,13 +6,13 @@ import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
-import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.TZAwareSqlType;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Definition of a table that is not associated with any schema. These tables include in memory

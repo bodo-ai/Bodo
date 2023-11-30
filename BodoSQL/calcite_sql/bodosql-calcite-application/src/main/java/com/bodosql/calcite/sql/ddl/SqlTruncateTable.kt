@@ -14,7 +14,7 @@ class SqlTruncateTable(pos: SqlParserPos, val ifExists: Boolean, val name: SqlId
     companion object {
         @JvmStatic
         val OPERATOR: SqlOperator =
-            SqlSpecialOperator("TRUNCATE TABLE", SqlKind.OTHER_DDL)
+            SqlSpecialOperator("TRUNCATE TABLE", SqlKind.TRUNCATE_TABLE)
     }
 
     override fun getOperandList(): List<SqlNode> = ImmutableList.of(name)

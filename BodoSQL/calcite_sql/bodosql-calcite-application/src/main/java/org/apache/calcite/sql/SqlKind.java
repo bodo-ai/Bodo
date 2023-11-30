@@ -30,7 +30,7 @@ import java.util.Set;
  *
  * <p>The values are immutable, canonical constants, so you can use Kinds to
  * find particular types of expressions quickly. To identity a call to a common
- * operator such as '=', use {@link org.apache.calcite.sql.SqlNode#isA}:</p>
+ * operator such as '=', use {@link org.apache.calcite.sql.SqlNode#isA}:
  *
  * <blockquote>
  * exp.{@link org.apache.calcite.sql.SqlNode#isA isA}({@link #EQUALS})
@@ -38,9 +38,9 @@ import java.util.Set;
  *
  * <p>Only commonly-used nodes have their own type; other nodes are of type
  * {@link #OTHER}. Some of the values, such as {@link #SET_QUERY}, represent
- * aggregates.</p>
+ * aggregates.
  *
- * <p>To quickly choose between a number of options, use a switch statement:</p>
+ * <p>To quickly choose between a number of options, use a switch statement:
  *
  * <blockquote>
  * <pre>switch (exp.getKind()) {
@@ -54,12 +54,12 @@ import java.util.Set;
  * </blockquote>
  *
  * <p>Note that we do not even have to check that a {@code SqlNode} is a
- * {@link SqlCall}.</p>
+ * {@link SqlCall}.
  *
  * <p>To identify a category of expressions, use {@code SqlNode.isA} with
  * an aggregate SqlKind. The following expression will return <code>true</code>
  * for calls to '=' and '&gt;=', but <code>false</code> for the constant '5', or
- * a call to '+':</p>
+ * a call to '+':
  *
  * <blockquote>
  * <pre>exp.isA({@link #COMPARISON SqlKind.COMPARISON})</pre>
@@ -67,13 +67,13 @@ import java.util.Set;
  *
  * <p>RexNode also has a {@code getKind} method; {@code SqlKind} values are
  * preserved during translation from {@code SqlNode} to {@code RexNode}, where
- * applicable.</p>
+ * applicable.
  *
  * <p>There is no water-tight definition of "common", but that's OK. There will
  * always be operators that don't have their own kind, and for these we use the
  * {@code SqlOperator}. But for really the common ones, e.g. the many places
  * where we are looking for {@code AND}, {@code OR} and {@code EQUALS}, the enum
- * helps.</p>
+ * helps.
  *
  * <p>(If we were using Scala, {@link SqlOperator} would be a case
  * class, and we wouldn't need {@code SqlKind}. But we're not.)</p>
@@ -115,7 +115,7 @@ public enum SqlKind {
    *
    * <p>A FROM clause with more than one table is represented as if it were a
    * join. For example, "FROM x, y, z" is represented as
-   * "JOIN(x, JOIN(x, y))".</p>
+   * "JOIN(x, JOIN(x, y))".
    */
   JOIN,
 
@@ -151,6 +151,12 @@ public enum SqlKind {
    * </ul>
    */
   SET_SEMANTICS_TABLE,
+
+  /** {@code CONVERT} function. */
+  CONVERT,
+
+  /** {@code TRANSLATE} function. */
+  TRANSLATE,
 
   /** POSITION function. */
   POSITION,
@@ -435,6 +441,12 @@ public enum SqlKind {
   /** The two-argument {@code CONCAT} function (Oracle). */
   CONCAT2,
 
+  /** The {@code CONCAT} function (Postgresql and MSSQL) that ignores NULL. */
+  CONCAT_WITH_NULL,
+
+  /** The {@code CONCAT_WS} function (MSSQL). */
+  CONCAT_WS_MSSQL,
+
   /** The "IF" function (BigQuery, Hive, Spark). */
   IF,
 
@@ -443,6 +455,9 @@ public enum SqlKind {
 
   /** {@code DATE_ADD} function (BigQuery Semantics). */
   DATE_ADD,
+
+  /** {@code DATE_TRUNC} function (BigQuery). */
+  DATE_TRUNC,
 
   /** {@code DATE_SUB} function (BigQuery). */
   DATE_SUB,
@@ -592,42 +607,42 @@ public enum SqlKind {
    * The field access operator, ".".
    *
    * <p>(Only used at the RexNode level; at
-   * SqlNode level, a field-access is part of an identifier.)</p>
+   * SqlNode level, a field-access is part of an identifier.)
    */
   FIELD_ACCESS,
 
   /**
    * Reference to an input field.
    *
-   * <p>(Only used at the RexNode level.)</p>
+   * <p>(Only used at the RexNode level.)
    */
   INPUT_REF,
 
   /**
    * Reference to an input field, with a qualified name and an identifier.
    *
-   * <p>(Only used at the RexNode level.)</p>
+   * <p>(Only used at the RexNode level.)
    */
   TABLE_INPUT_REF,
 
   /**
    * Reference to an input field, with pattern var as modifier.
    *
-   * <p>(Only used at the RexNode level.)</p>
+   * <p>(Only used at the RexNode level.)
    */
   PATTERN_INPUT_REF,
   /**
    * Reference to a sub-expression computed within the current relational
    * operator.
    *
-   * <p>(Only used at the RexNode level.)</p>
+   * <p>(Only used at the RexNode level.)
    */
   LOCAL_REF,
 
   /**
    * Reference to correlation variable.
    *
-   * <p>(Only used at the RexNode level.)</p>
+   * <p>(Only used at the RexNode level.)
    */
   CORREL_VARIABLE,
 
@@ -656,10 +671,9 @@ public enum SqlKind {
    */
   CAST,
 
-  /**
-   * The "TRY_CAST" operator.
-   */
-  TRY_CAST,
+  /** The {@code SAFE_CAST} function, which is similar to {@link #CAST} but
+   * returns NULL rather than throwing an error if the conversion fails. */
+  SAFE_CAST,
 
   /**
    * The "NEXT VALUE OF sequence" operator.
@@ -689,11 +703,92 @@ public enum SqlKind {
   /** {@code EXTRACT} function. */
   EXTRACT,
 
+  /** {@code ARRAY_APPEND} function (Spark semantics). */
+  ARRAY_APPEND,
+
+  /** {@code ARRAY_COMPACT} function (Spark semantics). */
+  ARRAY_COMPACT,
+
   /** {@code ARRAY_CONCAT} function (BigQuery semantics). */
   ARRAY_CONCAT,
 
+  /** {@code ARRAY_CONTAINS} function (Spark semantics). */
+  ARRAY_CONTAINS,
+
+  /** {@code ARRAY_DISTINCT} function (Spark semantics). */
+  ARRAY_DISTINCT,
+
+  /** {@code ARRAY_EXCEPT} function (Spark semantics). */
+  ARRAY_EXCEPT,
+
+  /** {@code ARRAY_INTERSECT} function (Spark semantics). */
+  ARRAY_INTERSECT,
+
+  /** {@code ARRAY_JOIN} function (Spark semantics). */
+  ARRAY_JOIN,
+
+  /** {@code ARRAY_LENGTH} function (Spark semantics). */
+  ARRAY_LENGTH,
+
+  /** {@code ARRAY_MAX} function (Spark semantics). */
+  ARRAY_MAX,
+
+  /** {@code ARRAY_MIN} function (Spark semantics). */
+  ARRAY_MIN,
+
+  /** {@code ARRAY_POSITION} function (Spark semantics). */
+  ARRAY_POSITION,
+
+  /** {@code ARRAY_PREPEND} function (Spark semantics). */
+  ARRAY_PREPEND,
+
+  /** {@code ARRAY_REMOVE} function (Spark semantics). */
+  ARRAY_REMOVE,
+
+  /** {@code ARRAY_REPEAT} function (Spark semantics). */
+  ARRAY_REPEAT,
+
   /** {@code ARRAY_REVERSE} function (BigQuery semantics). */
   ARRAY_REVERSE,
+
+  /** {@code ARRAY_SIZE} function (Spark semantics). */
+  ARRAY_SIZE,
+
+  /** {@code ARRAY_TO_STRING} function (BigQuery semantics). */
+  ARRAY_TO_STRING,
+
+  /** {@code ARRAY_UNION} function (Spark semantics). */
+  ARRAY_UNION,
+
+  /** {@code ARRAYS_OVERLAP} function (Spark semantics). */
+  ARRAYS_OVERLAP,
+
+  /** {@code ARRAYS_ZIP} function (Spark semantics). */
+  ARRAYS_ZIP,
+
+  /** {@code SORT_ARRAY} function (Spark semantics). */
+  SORT_ARRAY,
+
+  /** {@code MAP_CONCAT} function (Spark semantics). */
+  MAP_CONCAT,
+
+  /** {@code MAP_ENTRIES} function (Spark semantics). */
+  MAP_ENTRIES,
+
+  /** {@code MAP_KEYS} function (Spark semantics). */
+  MAP_KEYS,
+
+  /** {@code MAP_VALUES} function (Spark semantics). */
+  MAP_VALUES,
+
+  /** {@code MAP_FROM_ARRAYS} function (Spark semantics). */
+  MAP_FROM_ARRAYS,
+
+  /** {@code MAP_FROM_ENTRIES} function (Spark semantics). */
+  MAP_FROM_ENTRIES,
+
+  /** {@code STR_TO_MAP} function (Spark semantics). */
+  STR_TO_MAP,
 
   /** {@code REVERSE} function (SQL Server, MySQL). */
   REVERSE,
@@ -768,6 +863,14 @@ public enum SqlKind {
   CURSOR,
 
   // internal operators (evaluated in validator) 200-299
+
+  /** The {@code LITERAL_AGG} aggregate function that always returns the same
+   * literal (even if the group is empty).
+   *
+   * <p>Useful during optimization because it allows you to, say, generate a
+   * non-null value (to detect outer joins) in an Aggregate without an extra
+   * Project. */
+  LITERAL_AGG,
 
   /**
    * Literal chain operator (for composite string literals).
@@ -1077,6 +1180,9 @@ public enum SqlKind {
   /** {@code DROP TABLE} DDL statement. */
   DROP_TABLE,
 
+  /** {@code TRUNCATE TABLE} DDL statement. */
+  TRUNCATE_TABLE,
+
   /** {@code CREATE VIEW} DDL statement. */
   CREATE_VIEW,
 
@@ -1188,7 +1294,7 @@ public enum SqlKind {
   public static final EnumSet<SqlKind> DDL =
       EnumSet.of(COMMIT, ROLLBACK, ALTER_SESSION,
           CREATE_SCHEMA, CREATE_FOREIGN_SCHEMA, DROP_SCHEMA,
-          CREATE_TABLE, ALTER_TABLE, DROP_TABLE,
+          CREATE_TABLE, ALTER_TABLE, DROP_TABLE, TRUNCATE_TABLE,
           CREATE_FUNCTION, DROP_FUNCTION,
           CREATE_VIEW, ALTER_VIEW, DROP_VIEW,
           CREATE_MATERIALIZED_VIEW, ALTER_MATERIALIZED_VIEW,
@@ -1226,6 +1332,7 @@ public enum SqlKind {
    * {@link #JOIN},
    * {@link #OTHER_FUNCTION},
    * {@link #CAST},
+   * {@link #CONVERT},
    * {@link #TRIM},
    * {@link #LITERAL_CHAIN},
    * {@link #JDBC_FN},
@@ -1240,7 +1347,7 @@ public enum SqlKind {
   public static final Set<SqlKind> EXPRESSION =
       EnumSet.complementOf(
           concat(
-              EnumSet.of(AS, ARGUMENT_ASSIGNMENT, DEFAULT,
+              EnumSet.of(AS, ARGUMENT_ASSIGNMENT, CONVERT, TRANSLATE, DEFAULT,
                   RUNNING, FINAL, LAST, FIRST, PREV, NEXT,
                   FILTER, WITHIN_GROUP, IGNORE_NULLS, RESPECT_NULLS, SEPARATOR,
                   DESCENDING, CUBE, ROLLUP, GROUPING_SETS, EXTEND, LATERAL,
@@ -1265,10 +1372,12 @@ public enum SqlKind {
    * Category consisting of regular and special functions.
    *
    * <p>Consists of regular functions {@link #OTHER_FUNCTION} and special
-   * functions {@link #ROW}, {@link #TRIM}, {@link #CAST}, {@link #REVERSE}, {@link #JDBC_FN}.
+   * functions {@link #ROW}, {@link #TRIM}, {@link #CAST}, {@link #REVERSE},
+   * {@link #JDBC_FN}.
    */
   public static final Set<SqlKind> FUNCTION =
-      EnumSet.of(OTHER_FUNCTION, ROW, TRIM, LTRIM, RTRIM, CAST, REVERSE, JDBC_FN, POSITION);
+      EnumSet.of(OTHER_FUNCTION, ROW, TRIM, LTRIM, RTRIM, CAST, REVERSE,
+          JDBC_FN, POSITION, CONVERT);
 
   /**
    * Category of SqlAvgAggFunction.
@@ -1352,8 +1461,11 @@ public enum SqlKind {
   /**
    * Category of operators that do not depend on the argument order.
    *
-   * <p>For instance: {@link #AND}, {@link #OR}, {@link #EQUALS}, {@link #LEAST}</p>
-   * <p>Note: {@link #PLUS} does depend on the argument oder if argument types are different</p>
+   * <p>For instance: {@link #AND}, {@link #OR}, {@link #EQUALS},
+   * {@link #LEAST}.
+   *
+   * <p>Note: {@link #PLUS} does depend on the argument oder if argument types
+   * are different.
    */
   @API(since = "1.22", status = API.Status.EXPERIMENTAL)
   public static final Set<SqlKind> SYMMETRICAL =
@@ -1363,14 +1475,14 @@ public enum SqlKind {
           GREATEST, LEAST);
 
   /**
-   * Category of operators that do not depend on the argument order if argument types are equal.
+   * Category of operators that do not depend on the argument order if argument
+   * types are equal.
    *
-   * <p>For instance: {@link #PLUS}, {@link #TIMES}</p>
+   * <p>For instance: {@link #PLUS}, {@link #TIMES}.
    */
   @API(since = "1.22", status = API.Status.EXPERIMENTAL)
   public static final Set<SqlKind> SYMMETRICAL_SAME_ARG_TYPE =
-      EnumSet.of(
-          PLUS, TIMES);
+      EnumSet.of(PLUS, TIMES);
 
   /**
    * Simple binary operators are those operators which expects operands from the same Domain.

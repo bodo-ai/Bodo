@@ -41,7 +41,7 @@ class BodoRelMdRowCount : RelMdRowCount() {
             // submit metadata queries, the number of unused metadata queries will also increase
             // Therefore, should we ever extend this, we should look into a more robust way
             // of limiting the number what metadata queries we submit to snowflake
-            (rel as SnowflakeRel).tryGetExpectedRowCountFromSFQuery() ?: super.getRowCount(rel, mq)
+            rel.tryGetExpectedRowCountFromSFQuery() ?: super.getRowCount(rel, mq)
         } else {
             // Otherwise, just use the default
             super.getRowCount(rel, mq)

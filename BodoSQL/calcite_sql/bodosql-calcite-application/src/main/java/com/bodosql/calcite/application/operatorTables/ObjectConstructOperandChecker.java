@@ -4,12 +4,12 @@ import static org.apache.calcite.util.Static.RESOURCE;
 
 import java.util.Collections;
 import java.util.List;
-import javax.annotation.Nullable;
 import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.type.SameOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class ObjectConstructOperandChecker extends SameOperandTypeChecker {
   /**

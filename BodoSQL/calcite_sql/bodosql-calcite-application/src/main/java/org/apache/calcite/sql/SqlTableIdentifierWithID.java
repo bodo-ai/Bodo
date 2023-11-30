@@ -33,7 +33,6 @@ import org.checkerframework.dataflow.qual.Pure;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * A <code>SqlTableIdentifierWithID</code> is an identifier, possibly compound.
@@ -297,8 +296,7 @@ public class SqlTableIdentifierWithID extends SqlNode {
         && componentPositions.get(i).isQuoted();
   }
 
-  @Override public SqlMonotonicity getMonotonicity(@Nullable SqlValidatorScope scope) {
-    Objects.requireNonNull(scope, "scope");
+  @Override public SqlMonotonicity getMonotonicity(SqlValidatorScope scope) {
     final SqlValidator validator = scope.getValidator();
     try {
       validator.requireNonCall(this);

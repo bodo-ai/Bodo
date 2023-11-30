@@ -108,12 +108,12 @@ public abstract class DelegatingScope implements SqlValidatorScope {
   }
 
   /** If a record type allows implicit references to fields, recursively looks
-   * into the fields. Otherwise returns immediately. */
+   * into the fields. Otherwise, returns immediately. */
   void resolveInNamespace(SqlValidatorNamespace ns, boolean nullable,
       List<String> names, SqlNameMatcher nameMatcher, Path path,
       Resolved resolved) {
     if (names.isEmpty()) {
-      resolved.found(ns, nullable, this, path, null);
+      resolved.found(ns, nullable, this, path, names);
       return;
     }
     final RelDataType rowType = ns.getRowType();
@@ -528,10 +528,8 @@ public abstract class DelegatingScope implements SqlValidatorScope {
               identifier, RESOURCE.columnNotFound(name));
         }
         final RelDataTypeField field0 =
-            requireNonNull(
-                step.rowType,
-                () -> "rowType of step " + step.name
-            ).getFieldList().get(step.i);
+            requireNonNull(step.rowType, () -> "rowType of step " + step.name)
+                .getFieldList().get(step.i);
         final String fieldName = field0.getName();
         switch (step.kind) {
         case PEEK_FIELDS:

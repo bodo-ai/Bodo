@@ -2,9 +2,13 @@ package com.bodosql.calcite.application.utils;
 
 import static com.bodosql.calcite.application.utils.IsScalar.isScalar;
 
+import com.bodosql.calcite.adapter.pandas.ArrayRexToPandasTranslator;
+import com.bodosql.calcite.adapter.pandas.PandasRel;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.ir.*;
 import com.bodosql.calcite.ir.Expr.IntegerLiteral;
 import com.bodosql.calcite.ir.Expr.StringLiteral;
+import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.SnowflakeCatalogTable;
 import java.util.ArrayList;
@@ -13,6 +17,8 @@ import java.util.List;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexLiteral;
@@ -359,5 +365,72 @@ public class Utils {
       output.add(new IntegerLiteral(i));
     }
     return output;
+  }
+
+  public static List<AggregateCall> literalAggPrunedAggList(List<AggregateCall> aggregateCallList) {
+    return aggregateCallList.stream()
+        .filter(x -> x.getAggregation().getKind() != SqlKind.LITERAL_AGG)
+        .collect(Collectors.toList());
+  }
+
+  /**
+   * Given a table that contains the outputs of an aggregate, this inserts any LITERAL_AGG values,
+   * which are just literals added to the original locations.
+   *
+   * @param builder The builder used for generating intermediate code.
+   * @param ctx The ctx used to generate code for literals.
+   * @param inputTable The table with the aggregate output.
+   * @param node The aggregation node.
+   * @return A BodoEngineTable concatenating the literals into the table.
+   */
+  public static BodoEngineTable concatenateLiteralAggValue(
+      final Module.Builder builder,
+      PandasRel.BuildContext ctx,
+      final BodoEngineTable inputTable,
+      final Aggregate node) {
+    final List<IntegerLiteral> indices = new ArrayList<>();
+    final List<Expr> literalArrays = new ArrayList<>();
+    final int numGroupCols = node.getGroupCount();
+    for (int i = 0; i < numGroupCols; i++) {
+      indices.add(new IntegerLiteral(i));
+    }
+    // Generate the literal arrays
+    final List<AggregateCall> aggregateCallList = node.getAggCallList();
+    final int numAggCols =
+        node.getRowType().getFieldCount()
+            - (aggregateCallList.size() - literalAggPrunedAggList(aggregateCallList).size());
+    ArrayRexToPandasTranslator translator = ctx.arrayRexTranslator(inputTable);
+    int seenLiterals = 0;
+    int keptColumns = numGroupCols;
+    for (int i = 0; i < aggregateCallList.size(); i++) {
+      final AggregateCall call = aggregateCallList.get(i);
+      final IntegerLiteral outputIndex;
+      if (call.getAggregation().getKind() == SqlKind.LITERAL_AGG) {
+        // Generate the code for the literal array.
+        if (call.rexList.size() != 1) {
+          throw new RuntimeException(
+              "Internal Error: LITERAL_AGG encountered with more than 1 literal.");
+        }
+        literalArrays.add(translator.apply(call.rexList.get(0)));
+        outputIndex = new IntegerLiteral(numAggCols + seenLiterals);
+        seenLiterals += 1;
+      } else {
+        outputIndex = new IntegerLiteral(keptColumns);
+        keptColumns += 1;
+      }
+      indices.add(outputIndex);
+    }
+    // Concatenate the arrays to the table.
+    Variable outVar = builder.getSymbolTable().genTableVar();
+    Variable buildIndices = ctx.lowerAsMetaType(new Expr.Tuple(indices));
+    Expr tablExpr =
+        new Expr.Call(
+            "bodo.hiframes.table.logical_table_to_table",
+            inputTable,
+            new Expr.Tuple(literalArrays),
+            buildIndices,
+            new Expr.IntegerLiteral(numAggCols));
+    builder.add(new Op.Assign(outVar, tablExpr));
+    return new BodoEngineTable(outVar.emit(), node);
   }
 }

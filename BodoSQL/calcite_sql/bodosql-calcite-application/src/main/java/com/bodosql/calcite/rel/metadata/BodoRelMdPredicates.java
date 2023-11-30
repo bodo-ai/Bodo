@@ -243,6 +243,7 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
         case SEMI:
         case INNER:
         case LEFT:
+        case ANTI:
           infer(
               leftChildPredicates,
               allExprs,
@@ -310,6 +311,7 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
           return RelOptPredicateList.of(
               rexBuilder, pulledUpPredicates, leftInferredPredicates, rightInferredPredicates);
         case LEFT:
+        case ANTI:
           return RelOptPredicateList.of(
               rexBuilder,
               RelOptUtil.conjunctions(leftChildPredicates),

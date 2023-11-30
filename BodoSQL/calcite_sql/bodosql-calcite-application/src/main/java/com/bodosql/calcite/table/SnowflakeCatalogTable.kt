@@ -16,7 +16,6 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.schema.Statistic
 import org.apache.calcite.sql.util.SqlString
 import java.util.*
-import java.util.function.Supplier
 
 /**
  * Implementation of CatalogTable for Snowflake Catalogs.
@@ -345,7 +344,7 @@ open class SnowflakeCatalogTable(
     }
 
     private inner class StatisticImpl : Statistic {
-        private val rowCount: Supplier<Double?> = Suppliers.memoize { estimateRowCount() }
+        private val rowCount: com.google.common.base.Supplier<Double?> = Suppliers.memoize { estimateRowCount() }
 
         /**
          * Retrieves the estimated row count for this table. This value is memoized.

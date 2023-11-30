@@ -21,9 +21,11 @@ import static com.bodosql.calcite.application.JoinCondVisitor.getStreamingJoinKe
 import static com.bodosql.calcite.application.JoinCondVisitor.visitJoinCond;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitNonEquiConditions;
 import static com.bodosql.calcite.application.utils.AggHelpers.aggContainsFilter;
+import static com.bodosql.calcite.application.utils.Utils.concatenateLiteralAggValue;
 import static com.bodosql.calcite.application.utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.utils.Utils.integerLiteralArange;
 import static com.bodosql.calcite.application.utils.Utils.isSnowflakeCatalogTable;
+import static com.bodosql.calcite.application.utils.Utils.literalAggPrunedAggList;
 import static com.bodosql.calcite.application.utils.Utils.makeQuoted;
 import static com.bodosql.calcite.application.utils.Utils.sqlTypenameToPandasTypename;
 import static com.bodosql.calcite.application.utils.Utils.stringsToStringLiterals;
@@ -1520,14 +1522,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<String> expectedOutputCols = node.getRowType().getFieldNames();
     Variable outVar = this.genDfVar();
     final List<AggregateCall> aggCallList = node.getAggCallList();
+    // Remove any LITERAL_AGG nodes.
+    final List<AggregateCall> filteredAggregateCallList = literalAggPrunedAggList(aggCallList);
 
     // Expected output column names according to the calcite plan, contains any/all
     // of the
     // expected aliases
 
     List<String> aggCallNames = new ArrayList<>();
-    for (int i = 0; i < aggCallList.size(); i++) {
-      AggregateCall aggregateCall = aggCallList.get(i);
+    for (int i = 0; i < filteredAggregateCallList.size(); i++) {
+      AggregateCall aggregateCall = filteredAggregateCallList.get(i);
 
       if (aggregateCall.getName() == null) {
         aggCallNames.add(expectedOutputCols.get(groupingVariables.size() + i));
@@ -1564,20 +1568,25 @@ public class PandasCodeGenVisitor extends RelVisitor {
             /* First rename any input keys to the output. */
 
             /* group without aggregation : e.g. select B from table1 groupby A */
-            if (aggCallList.isEmpty()) {
+            if (filteredAggregateCallList.isEmpty()) {
               curGroupAggExpr = generateAggCodeNoAgg(inVar, inputColumnNames, curGroup);
             }
             /* aggregate without group : e.g. select sum(A) from table1 */
             else if (curGroup.isEmpty()) {
               curGroupAggExpr =
                   generateAggCodeNoGroupBy(
-                      inVar, inputColumnNames, aggCallList, aggCallNames, distIfNoGroup, this);
+                      inVar,
+                      inputColumnNames,
+                      filteredAggregateCallList,
+                      aggCallNames,
+                      distIfNoGroup,
+                      this);
             }
             /* group with aggregation : e.g. select sum(B) from table1 groupby A */
             else {
               Pair<Expr, @Nullable Op> curGroupAggExprAndAdditionalGeneratedCode =
                   handleLogicalAggregateWithGroups(
-                      inVar, inputColumnNames, aggCallList, aggCallNames, curGroup);
+                      inVar, inputColumnNames, filteredAggregateCallList, aggCallNames, curGroup);
 
               curGroupAggExpr = curGroupAggExprAndAdditionalGeneratedCode.getKey();
               @Nullable Op prependOp = curGroupAggExprAndAdditionalGeneratedCode.getValue();
@@ -1644,7 +1653,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
           } else {
             finalOutVar = new Variable(outputDfNames.get(0));
           }
-          BodoEngineTable outTable = ctx.convertDfToTable(finalOutVar, node);
+          // Generate a table using just the node members that aren't LITERAL_AGG
+          final int numCols =
+              node.getRowType().getFieldCount()
+                  - (aggCallList.size() - filteredAggregateCallList.size());
+          BodoEngineTable intermediateTable = ctx.convertDfToTable(finalOutVar, numCols);
+          final BodoEngineTable outTable;
+          if (node.getRowType().getFieldCount() != numCols) {
+            // Insert the LITERAL_AGG results
+            outTable = concatenateLiteralAggValue(this.generatedCode, ctx, intermediateTable, node);
+          } else {
+            outTable = intermediateTable;
+          }
           RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
           operatorCache.tryCacheNode(node, outTable);
           tableGenStack.push(outTable);
@@ -1676,11 +1696,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     StateVariable groupbyStateVar = genStateVar();
     List<Expr.IntegerLiteral> keyIndiciesList = getStreamingGroupByKeyIndices(node.getGroupSet());
     Variable keyIndices = this.lowerAsMetaType(new Expr.Tuple(keyIndiciesList));
+    List<AggregateCall> filteredAggCallList = literalAggPrunedAggList(node.getAggCallList());
     Pair<Variable, Variable> offsetAndCols =
-        getStreamingGroupByOffsetAndCols(node.getAggCallList(), this, keyIndiciesList.get(0));
+        getStreamingGroupByOffsetAndCols(filteredAggCallList, this, keyIndiciesList.get(0));
     Variable offset = offsetAndCols.left;
     Variable cols = offsetAndCols.right;
-    Variable fnames = getStreamingGroupbyFnames(node.getAggCallList(), this);
+    Variable fnames = getStreamingGroupbyFnames(filteredAggCallList, this);
     Expr.Call stateCall =
         new Expr.Call(
             "bodo.libs.stream_groupby.init_groupby_state",
@@ -1734,6 +1755,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
             List.of(groupbyStateVar, outputControl));
     timerInfo.insertLoopOperationStartTimer();
     generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), outputCall));
+    BodoEngineTable intermediateTable = new BodoEngineTable(outTable.emit(), node);
+    final BodoEngineTable table;
+    if (filteredAggCallList.size() != node.getAggCallList().size()) {
+      // Append any Literal data if it exists.
+      final BuildContext ctx = new BuildContext(node);
+      table = concatenateLiteralAggValue(this.generatedCode, ctx, intermediateTable, node);
+    } else {
+      table = intermediateTable;
+    }
     timerInfo.insertLoopOperationEndTimer();
 
     // Append the code to delete the state
@@ -1743,7 +1773,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 "bodo.libs.stream_groupby.delete_groupby_state", List.of(groupbyStateVar)));
     outputPipeline.addTermination(deleteState);
     // Add the table to the stack
-    BodoEngineTable table = new BodoEngineTable(outTable.emit(), node);
     tableGenStack.push(table);
     // Update the cache.
     RelationalOperatorCache operatorCache = generatedCode.getRelationalOperatorCache();
@@ -2385,6 +2414,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     @NotNull
     @Override
+    public Variable lowerAsMetaType(@NotNull final Expr expression) {
+      return PandasCodeGenVisitor.this.lowerAsMetaType(expression);
+    }
+
+    @NotNull
+    @Override
     public RexToPandasTranslator rexTranslator(@NotNull final BodoEngineTable input) {
       return getRexTranslator(node.getId(), input);
     }
@@ -2422,20 +2457,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     @NotNull
     @Override
     public BodoEngineTable convertDfToTable(Variable df, RelNode node) {
-      Variable outVar = generatedCode.getSymbolTable().genTableVar();
-      int numBuildCols = node.getRowType().getFieldCount();
-      List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numBuildCols);
-      Variable buildColNums = lowerAsMetaType(new Expr.Tuple(buildIndices));
-      Expr dfData = new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", df);
-      Expr tablExpr =
-          new Expr.Call(
-              "bodo.hiframes.table.logical_table_to_table",
-              dfData,
-              new Expr.Tuple(),
-              buildColNums,
-              new Expr.IntegerLiteral(numBuildCols));
-      generatedCode.add(new Op.Assign(outVar, tablExpr));
-      return new BodoEngineTable(outVar.emit(), node);
+      return convertDfToTable(df, node.getRowType().getFieldCount());
     }
 
     /**
@@ -2450,9 +2472,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
     @NotNull
     @Override
     public BodoEngineTable convertDfToTable(Variable df, RelDataType rowType) {
+      return convertDfToTable(df, rowType.getFieldCount());
+    }
+
+    @NotNull
+    @Override
+    public BodoEngineTable convertDfToTable(Variable df, int numCols) {
       Variable outVar = generatedCode.getSymbolTable().genTableVar();
-      int numBuildCols = rowType.getFieldCount();
-      List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numBuildCols);
+      List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numCols);
       Variable buildColNums = lowerAsMetaType(new Expr.Tuple(buildIndices));
       Expr dfData = new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", df);
       Expr tablExpr =
@@ -2461,7 +2488,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               dfData,
               new Expr.Tuple(),
               buildColNums,
-              new Expr.IntegerLiteral(numBuildCols));
+              new Expr.IntegerLiteral(numCols));
       generatedCode.add(new Op.Assign(outVar, tablExpr));
       return new BodoEngineTable(outVar.emit(), node);
     }

@@ -661,21 +661,6 @@ boolean CascadeOpt() :
     { return cascade; }
 }
 
-SqlDdl SqlTruncate() :
-{
-    final Span s;
-    final SqlDdl ddl;
-}
-{
-    <TRUNCATE> { s = span(); }
-    (
-        ddl = SqlTruncateTable(s)
-    )
-    {
-        return ddl;
-    }
-}
-
 SqlTruncateTable SqlTruncateTable(Span s) :
 {
     final boolean ifExists;
@@ -687,6 +672,26 @@ SqlTruncateTable SqlTruncateTable(Span s) :
     id = CompoundIdentifier()
     {
         return new SqlTruncateTable(s.end(this), ifExists, id);
+    }
+}
+
+// Note: This is the Calcite implementation that doesn't match Snowflake.
+SqlTruncate CalciteSqlTruncateTable(Span s) :
+{
+    final SqlIdentifier id;
+    final boolean continueIdentity;
+}
+{
+      <TABLE> id = CompoundIdentifier()
+    (
+      <CONTINUE> <IDENTITY> { continueIdentity = true; }
+      |
+      <RESTART> <IDENTITY> { continueIdentity = false; }
+      |
+      { continueIdentity = true; }
+    )
+    {
+        return SqlDdlNodes.truncateTable(s.end(this), id, continueIdentity);
     }
 }
 

@@ -5,8 +5,10 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.util.Util;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -127,5 +129,16 @@ public class SnowflakeNamedOperandMetadataImpl extends OperandMetadataImpl {
          * @return The RexNode matching the default value
          */
         @NotNull RexNode getDefaultValue(RexBuilder builder, int argNumber);
+    }
+
+    // Extend checkSingleOperandType for FamilyOperandType to allow
+    // having multiple type families.
+    @Override public boolean checkSingleOperandType(
+            SqlCallBinding callBinding,
+            SqlNode node,
+            int iFormalOperand,
+            boolean throwOnFailure) {
+        return checkSingleOperandType(
+                callBinding, node, iFormalOperand, families.get(iFormalOperand), throwOnFailure);
     }
 }

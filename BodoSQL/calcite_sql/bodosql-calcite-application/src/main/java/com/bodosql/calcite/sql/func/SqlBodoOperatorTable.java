@@ -123,19 +123,6 @@ public class SqlBodoOperatorTable extends ReflectiveSqlOperatorTable {
   public static final SqlFunction TIMESTAMP_DIFF = new BodoSqlTimestampDiffFunction();
 
   /**
-   * The Snowflake <code>TRY_CAST</code> operator.
-   *
-   * <p>The SQL syntax is
-   *
-   * <blockquote>
-   *
-   * <code>TRY_CAST(<i>expression</i> AS <i>type</i>)</code>
-   *
-   * </blockquote>
-   */
-  public static final SqlFunction TRY_CAST = new BodoSqlTryCastFunction();
-
-  /**
    * The Snowflake <code>DATE</code> function. The SQL syntaxs are
    *
    * <p>DATE(string_expr [, format]) DATE(timestamp_expr) DATE('integer') DATE(variant_expr) For
