@@ -30,8 +30,8 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
     
 
     cdef enum CStorageType" bodo::StorageType":
-        Local = 1
-
+        Local = 0
+        S3 = 1
 
     cdef cppclass CStorageOptions" bodo::StorageOptions":
         int64_t usable_size
