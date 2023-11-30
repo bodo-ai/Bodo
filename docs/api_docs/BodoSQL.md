@@ -3090,6 +3090,13 @@ Bodo currently supports the following functions that operate on columns of array
     [See here for Snowflake documentation](https://docs.snowflake.com/en/sql-reference/functions/array_size).
 
 
+#### ARRAY_REMOVE
+-   `#!sql ARRAY_REMOVE(array, to_remove)`
+
+    Given a source `array`, returns an array with all elements equal to the specified
+    value `to_remove` removed. Returns `NULL` if `array` or `to_remove` is `NULL`.
+
+
 #### ARRAY_SLICE
 -   `#!sql ARRAY_SLICE(arr, from, to)`
 

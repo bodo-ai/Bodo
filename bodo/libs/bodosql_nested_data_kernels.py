@@ -882,6 +882,85 @@ def overload_array_compact_util(arr, is_scalar):
     )
 
 
+def array_remove(
+    arr, to_remove, is_scalar_0=False, is_scalar_1=False
+):  # pragma: no cover
+    pass
+
+
+@overload(array_remove, no_unliteral=True)
+def overload_array_remove(
+    arr, to_remove, is_scalar_0=False, is_scalar_1=False
+):  # pragma: no cover
+    """
+    Handles cases where ARRAY_REMOVE receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    args = [arr, to_remove]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.array_remove",
+                ["arr", "to_remove", "is_scalar_0", "is_scalar_1"],
+                i,
+                default_map={"is_scalar_0": False, "is_scalar_1": False},
+            )
+
+    def impl(arr, to_remove, is_scalar_0=False, is_scalar_1=False):
+        return array_remove_util(arr, to_remove, is_scalar_0, is_scalar_1)
+
+    return impl
+
+
+def array_remove_util(arr, to_remove, is_scalar_0, is_scalar_1):  # pragma: no cover
+    pass
+
+
+@overload(array_remove_util, no_unliteral=True)
+def overload_array_remove_util(
+    arr, to_remove, is_scalar_0, is_scalar_1
+):  # pragma: no cover
+    """
+    A dedicated kernel for the SQL function ARRAY_REMOVE which takes
+    in an array and an element to remove, and remove all elements
+    that equal to the provided element from the given array.
+
+    Args:
+        arr (array scalar/array item array): the original array
+        to_remove (scalar/vector): the element to remove
+
+    Returns:
+        array: arr with all elements equal to to_remove dropped
+    """
+    arg_names = ["arr", "to_remove", "is_scalar_0", "is_scalar_1"]
+    arg_types = [arr, to_remove, is_scalar_0, is_scalar_1]
+    propagate_null = [True, True, False, False]
+    are_arrays = [
+        not get_overload_const_bool(is_scalar_0),
+        not get_overload_const_bool(is_scalar_1),
+        False,
+        False,
+    ]
+    if is_overload_none(arr):
+        out_dtype = bodo.null_array_type
+    else:
+        out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(
+            arr.dtype if are_arrays[0] else arr
+        )
+    scalar_text = "elems_to_keep = np.empty(len(arg0), np.bool_)\n"
+    scalar_text += "for idx0 in range(len(arg0)):\n"
+    scalar_text += "   elems_to_keep[idx0] = bodo.libs.array_kernels.isna(arg0, idx0) or not bodo.libs.bodosql_array_kernels.semi_safe_equals(arg0[idx0], arg1)\n"
+    scalar_text += "res[i] = arg0[elems_to_keep]"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=are_arrays,
+    )
+
+
 def array_slice(arr, from_, to, is_scalar=False):  # pragma: no cover
     # Dummy function used for overload
     return
