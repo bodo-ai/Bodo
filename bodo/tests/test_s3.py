@@ -15,8 +15,8 @@ pytestmark = pytest.mark.s3
 
 
 @pytest.mark.parquet
-def test_no_use_ssl(datapath, minio_server, s3_bucket):
-    _, _, address = minio_server
+def test_no_use_ssl(datapath, minio_server_with_s3_envs, s3_bucket):
+    _, _, address = minio_server_with_s3_envs
 
     def test_impl(address, fpath):
         return pd.read_parquet(
@@ -40,7 +40,7 @@ def test_no_use_ssl(datapath, minio_server, s3_bucket):
 # Memory leak check is disabled because to_parquet lowers a
 # constant, which has a leak
 # TODO: Readd memory_leak_check
-def test_partition_cols(minio_server, s3_bucket):
+def test_partition_cols(minio_server_with_s3_envs, s3_bucket):
     """Test s3 to_parquet partition_cols."""
     for case in [0, 1]:
         bd_fname = f"s3://{s3_bucket}/bd_file.pq"
@@ -72,7 +72,9 @@ def test_partition_cols(minio_server, s3_bucket):
         ("s3_bucket_us_west_2", "bodo-test-2"),
     ],
 )
-def test_s3_csv_data1(minio_server, bucket_fixture, datapath, bucket_name, request):
+def test_s3_csv_data1(
+    minio_server_with_s3_envs, bucket_fixture, datapath, bucket_name, request
+):
     """
     test s3 read_csv
     reading from s3_bucket_us_west_2 will check if the s3 auto region
@@ -109,7 +111,9 @@ def test_s3_csv_data1(minio_server, bucket_fixture, datapath, bucket_name, reque
         ("s3_bucket_us_west_2", "bodo-test-2"),
     ],
 )
-def test_s3_csv_dir(minio_server, bucket_fixture, datapath, bucket_name, request):
+def test_s3_csv_dir(
+    minio_server_with_s3_envs, bucket_fixture, datapath, bucket_name, request
+):
     """
     test s3 read_csv directory
     reading from s3_bucket_us_west_2 will check if the s3 auto region
@@ -140,7 +144,7 @@ def test_s3_csv_dir(minio_server, bucket_fixture, datapath, bucket_name, request
     check_func(test_impl_with_dtype, (fname_dir_multi,), py_output=py_out)
 
 
-def test_s3_csv_data1_compressed(minio_server, s3_bucket, datapath):
+def test_s3_csv_data1_compressed(minio_server_with_s3_envs, s3_bucket, datapath):
     """
     test s3 read_csv
     """
@@ -162,7 +166,7 @@ def test_s3_csv_data1_compressed(minio_server, s3_bucket, datapath):
     check_func(test_impl_bz2, (), py_output=py_output, check_dtype=False)
 
 
-def test_s3_csv_data_date1(minio_server, s3_bucket, datapath):
+def test_s3_csv_data_date1(minio_server_with_s3_envs, s3_bucket, datapath):
     """
     test s3 read_csv
     """
@@ -241,7 +245,9 @@ def test_s3_pq_anon_public_dataset(memory_leak_check):
     "bucket_fixture,bucket_name",
     [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2")],
 )
-def test_s3_pq_asof1(minio_server, bucket_fixture, datapath, bucket_name, request):
+def test_s3_pq_asof1(
+    minio_server_with_s3_envs, bucket_fixture, datapath, bucket_name, request
+):
     """
     test s3 read_parquet
     reading from s3_bucket_us_west_2 will check if the s3 auto region
@@ -257,7 +263,7 @@ def test_s3_pq_asof1(minio_server, bucket_fixture, datapath, bucket_name, reques
     check_func(test_impl, (f"s3://{bucket_name}/asof1.pq",), py_output=py_output)
 
 
-def test_s3_pq_groupby3(minio_server, s3_bucket, datapath):
+def test_s3_pq_groupby3(minio_server_with_s3_envs, s3_bucket, datapath):
     """
     test s3 read_parquet
     """
@@ -271,7 +277,7 @@ def test_s3_pq_groupby3(minio_server, s3_bucket, datapath):
 
 
 def test_s3_pq_input_file_name_col(
-    minio_server, s3_bucket, datapath, memory_leak_check
+    minio_server_with_s3_envs, s3_bucket, datapath, memory_leak_check
 ):
     """
     test s3 read_parquet input_file_name_col functionality
@@ -290,7 +296,9 @@ def test_s3_pq_input_file_name_col(
     check_func(test_impl, (), py_output=py_output)
 
 
-def test_s3_pq_list_files(minio_server, s3_bucket, datapath, memory_leak_check):
+def test_s3_pq_list_files(
+    minio_server_with_s3_envs, s3_bucket, datapath, memory_leak_check
+):
     """
     test s3 read_parquet list of files
     """
@@ -315,7 +323,9 @@ def test_s3_pq_list_files(minio_server, s3_bucket, datapath, memory_leak_check):
     "bucket_fixture,bucket_name",
     [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2")],
 )
-def test_s3_read_json(minio_server, bucket_fixture, datapath, bucket_name, request):
+def test_s3_read_json(
+    minio_server_with_s3_envs, bucket_fixture, datapath, bucket_name, request
+):
     """
     test read_json from s3
     reading from s3_bucket_us_west_2 will check if the s3 auto region
@@ -375,7 +385,7 @@ def test_df(request):
 # constant, which has a leak
 # TODO: Readd memory_leak_check
 def test_s3_parquet_write_seq(
-    minio_server, bucket_fixture, test_df, bucket_name, request
+    minio_server_with_s3_envs, bucket_fixture, test_df, bucket_name, request
 ):
     """
     test s3 to_parquet sequentially
@@ -394,7 +404,7 @@ def test_s3_parquet_write_seq(
 # Memory leak check is disabled because to_parquet lowers a
 # constant, which has a leak
 # TODO: Readd memory_leak_check
-def test_s3_parquet_write_1D(minio_server, s3_bucket, test_df):
+def test_s3_parquet_write_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_parquet in 1D distributed
     """
@@ -409,7 +419,7 @@ def test_s3_parquet_write_1D(minio_server, s3_bucket, test_df):
 # Memory leak check is disabled because to_parquet lowers a
 # constant, which has a leak
 # TODO: Readd memory_leak_check
-def test_s3_parquet_write_1D_var(minio_server, s3_bucket, test_df):
+def test_s3_parquet_write_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_parquet in 1D var
     """
@@ -425,7 +435,9 @@ def test_s3_parquet_write_1D_var(minio_server, s3_bucket, test_df):
     "bucket_fixture,bucket_name",
     [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2")],
 )
-def test_s3_csv_write_seq(minio_server, bucket_fixture, test_df, bucket_name, request):
+def test_s3_csv_write_seq(
+    minio_server_with_s3_envs, bucket_fixture, test_df, bucket_name, request
+):
     """
     test s3 to_csv sequentially
     writing to s3_bucket_us_west_2 will check if the s3 auto region
@@ -444,7 +456,7 @@ def test_s3_csv_write_seq(minio_server, bucket_fixture, test_df, bucket_name, re
     bodo_write(test_df, f"s3://{bucket_name}/test_df_bodo_seq.csv")
 
 
-def test_s3_csv_write_1D(minio_server, s3_bucket, test_df):
+def test_s3_csv_write_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv in 1D distributed
     """
@@ -456,7 +468,7 @@ def test_s3_csv_write_1D(minio_server, s3_bucket, test_df):
     bodo_write(_get_dist_arg(test_df, False))
 
 
-def test_s3_csv_write_1D_var(minio_server, s3_bucket, test_df):
+def test_s3_csv_write_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv in 1D var
     """
@@ -470,7 +482,7 @@ def test_s3_csv_write_1D_var(minio_server, s3_bucket, test_df):
     bodo_write(_get_dist_arg(test_df, False, True))
 
 
-def test_s3_csv_write_header_seq(minio_server, s3_bucket, test_df):
+def test_s3_csv_write_header_seq(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv with header sequentially
     """
@@ -482,7 +494,7 @@ def test_s3_csv_write_header_seq(minio_server, s3_bucket, test_df):
     bodo_write(test_df)
 
 
-def test_s3_csv_write_header_1D(minio_server, s3_bucket, test_df):
+def test_s3_csv_write_header_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv with header in 1D distributed
     """
@@ -494,7 +506,7 @@ def test_s3_csv_write_header_1D(minio_server, s3_bucket, test_df):
     bodo_write(_get_dist_arg(test_df, False))
 
 
-def test_s3_csv_write_header_1D_var(minio_server, s3_bucket, test_df):
+def test_s3_csv_write_header_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_csv with header in 1D var
     """
@@ -506,7 +518,7 @@ def test_s3_csv_write_header_1D_var(minio_server, s3_bucket, test_df):
     bodo_write(_get_dist_arg(test_df, False, True))
 
 
-def test_s3_csv_write_file_prefix(minio_server, s3_bucket, test_df):
+def test_s3_csv_write_file_prefix(minio_server_with_s3_envs, s3_bucket, test_df):
     """Test S3 to_csv with unique distributed file prefix"""
 
     def test_write(test_df):
@@ -527,7 +539,7 @@ def test_s3_csv_write_file_prefix(minio_server, s3_bucket, test_df):
 
 
 @pytest.mark.timeout(1000)
-def test_s3_json_write_file_prefix(minio_server, s3_bucket, test_df):
+def test_s3_json_write_file_prefix(minio_server_with_s3_envs, s3_bucket, test_df):
     """Test S3 to_json with unique distributed file prefix"""
 
     def test_write(test_df):
@@ -553,7 +565,7 @@ def test_s3_json_write_file_prefix(minio_server, s3_bucket, test_df):
     [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2")],
 )
 def test_s3_json_write_records_lines_seq(
-    minio_server, bucket_fixture, test_df, bucket_name, request
+    minio_server_with_s3_envs, bucket_fixture, test_df, bucket_name, request
 ):
     """
     test s3 to_json(orient="records", lines=True) sequentially
@@ -574,7 +586,7 @@ def test_s3_json_write_records_lines_seq(
 
 
 @pytest.mark.timeout(1000)
-def test_s3_json_write_records_lines_1D(minio_server, s3_bucket, test_df):
+def test_s3_json_write_records_lines_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     test s3 to_json(orient="records", lines=True) in 1D distributed
     """
@@ -589,7 +601,9 @@ def test_s3_json_write_records_lines_1D(minio_server, s3_bucket, test_df):
 
 
 @pytest.mark.timeout(1000)
-def test_s3_json_write_records_lines_1D_var(minio_server, s3_bucket, test_df):
+def test_s3_json_write_records_lines_1D_var(
+    minio_server_with_s3_envs, s3_bucket, test_df
+):
     """
     test s3 to_json(orient="records", lines=True) in 1D var
     """
@@ -603,7 +617,7 @@ def test_s3_json_write_records_lines_1D_var(minio_server, s3_bucket, test_df):
     bodo_write(_get_dist_arg(test_df, False, True))
 
 
-def test_s3_parquet_read_seq(minio_server, s3_bucket, test_df):
+def test_s3_parquet_read_seq(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_parquet
     test the parquet file we just wrote sequentially
@@ -615,7 +629,7 @@ def test_s3_parquet_read_seq(minio_server, s3_bucket, test_df):
     check_func(test_read, (), py_output=test_df)
 
 
-def test_s3_parquet_read_1D(minio_server, s3_bucket, test_df, datapath):
+def test_s3_parquet_read_1D(minio_server_with_s3_envs, s3_bucket, test_df, datapath):
     """
     read_parquet
     test the parquet file we just wrote in 1D
@@ -627,7 +641,7 @@ def test_s3_parquet_read_1D(minio_server, s3_bucket, test_df, datapath):
     check_func(test_read, (), py_output=test_df)
 
 
-def test_s3_parquet_read_1D_var(minio_server, s3_bucket, test_df):
+def test_s3_parquet_read_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_parquet
     test the parquet file we just wrote  in 1D Var
@@ -639,7 +653,7 @@ def test_s3_parquet_read_1D_var(minio_server, s3_bucket, test_df):
     check_func(test_read, (), py_output=test_df)
 
 
-def test_s3_csv_read_seq(minio_server, s3_bucket, test_df):
+def test_s3_csv_read_seq(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_csv
     test the csv file we just wrote sequentially
@@ -655,7 +669,7 @@ def test_s3_csv_read_seq(minio_server, s3_bucket, test_df):
     check_func(test_read, (), py_output=test_df)
 
 
-def test_s3_csv_read_1D(minio_server, s3_bucket, test_df):
+def test_s3_csv_read_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_csv
     test the csv file we just wrote in 1D
@@ -671,7 +685,7 @@ def test_s3_csv_read_1D(minio_server, s3_bucket, test_df):
     check_func(test_read, (), py_output=test_df)
 
 
-def test_s3_csv_read_1D_var(minio_server, s3_bucket, test_df):
+def test_s3_csv_read_1D_var(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_csv
     test the csv file we just wrote in 1D Var
@@ -687,7 +701,7 @@ def test_s3_csv_read_1D_var(minio_server, s3_bucket, test_df):
     check_func(test_read, (), py_output=test_df)
 
 
-def test_s3_csv_read_header_seq(minio_server, s3_bucket, test_df):
+def test_s3_csv_read_header_seq(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_csv with header and infer dtypes
     test the csv file we just wrote sequentially
@@ -701,7 +715,7 @@ def test_s3_csv_read_header_seq(minio_server, s3_bucket, test_df):
     check_func(test_read, (), py_output=test_df)
 
 
-def test_s3_csv_read_header_1D(minio_server, s3_bucket, test_df):
+def test_s3_csv_read_header_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_csv with header and infer dtypes
     test the csv file we just wrote in 1D
@@ -715,7 +729,7 @@ def test_s3_csv_read_header_1D(minio_server, s3_bucket, test_df):
     check_func(test_read, (), py_output=test_df)
 
 
-def test_s3_csv_read_1D_header_var(minio_server, s3_bucket, test_df):
+def test_s3_csv_read_1D_header_var(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_csv with header and infer dtypes
     test the csv file we just wrote in 1D Var
@@ -734,7 +748,7 @@ def test_np_arr(request):
     return request.param
 
 
-def test_s3_np_tofile_seq(minio_server, s3_bucket, test_np_arr):
+def test_s3_np_tofile_seq(minio_server_with_s3_envs, s3_bucket, test_np_arr):
     """
     test s3 to_file
     """
@@ -746,7 +760,7 @@ def test_s3_np_tofile_seq(minio_server, s3_bucket, test_np_arr):
     bodo_write(test_np_arr)
 
 
-def test_s3_np_tofile_1D(minio_server, s3_bucket, test_np_arr):
+def test_s3_np_tofile_1D(minio_server_with_s3_envs, s3_bucket, test_np_arr):
     """
     test s3 to_file in 1D distributed
     """
@@ -758,7 +772,7 @@ def test_s3_np_tofile_1D(minio_server, s3_bucket, test_np_arr):
     bodo_write(_get_dist_arg(test_np_arr, True))
 
 
-def test_s3_np_tofile_1D_var(minio_server, s3_bucket, test_np_arr):
+def test_s3_np_tofile_1D_var(minio_server_with_s3_envs, s3_bucket, test_np_arr):
     """
     test s3 to_file in 1D Var
     """
@@ -770,7 +784,7 @@ def test_s3_np_tofile_1D_var(minio_server, s3_bucket, test_np_arr):
     bodo_write(_get_dist_arg(test_np_arr, True, True))
 
 
-def test_s3_np_fromfile_seq(minio_server, s3_bucket, test_np_arr):
+def test_s3_np_fromfile_seq(minio_server_with_s3_envs, s3_bucket, test_np_arr):
     """
     fromfile
     test the dat file we just wrote sequentially
@@ -783,7 +797,9 @@ def test_s3_np_fromfile_seq(minio_server, s3_bucket, test_np_arr):
     check_func(test_read, (), py_output=test_np_arr)
 
 
-def test_s3_np_fromfile_seq_count_offset(minio_server, s3_bucket, test_np_arr):
+def test_s3_np_fromfile_seq_count_offset(
+    minio_server_with_s3_envs, s3_bucket, test_np_arr
+):
     """
     fromfile with count and offset
     """
@@ -803,7 +819,9 @@ def test_s3_np_fromfile_seq_count_offset(minio_server, s3_bucket, test_np_arr):
     check_func(test_read, (), py_output=test_np_arr[offset : offset + count])
 
 
-def test_s3_np_fromfile_seq_large_count(minio_server, s3_bucket, test_np_arr):
+def test_s3_np_fromfile_seq_large_count(
+    minio_server_with_s3_envs, s3_bucket, test_np_arr
+):
     """
     fromfile with count larger than the length of the data
     test to read all the data and not throw an error
@@ -819,7 +837,9 @@ def test_s3_np_fromfile_seq_large_count(minio_server, s3_bucket, test_np_arr):
     check_func(test_read, (), py_output=test_np_arr[:count])
 
 
-def test_s3_np_fromfile_seq_large_offset(minio_server, s3_bucket, test_np_arr):
+def test_s3_np_fromfile_seq_large_offset(
+    minio_server_with_s3_envs, s3_bucket, test_np_arr
+):
     """
     fromfile with offset larger than the length of the data
     this setup raises a ValueError which is expected
@@ -839,7 +859,7 @@ def test_s3_np_fromfile_seq_large_offset(minio_server, s3_bucket, test_np_arr):
         bodo.jit(distributed=False)(test_read)()
 
 
-def test_s3_np_fromfile_1D(minio_server, s3_bucket, test_np_arr):
+def test_s3_np_fromfile_1D(minio_server_with_s3_envs, s3_bucket, test_np_arr):
     """
     fromfile
     test the dat file we just wrote in 1D
@@ -852,7 +872,7 @@ def test_s3_np_fromfile_1D(minio_server, s3_bucket, test_np_arr):
     check_func(test_read, (), py_output=test_np_arr)
 
 
-def test_s3_np_fromfile_1D_var(minio_server, s3_bucket, test_np_arr):
+def test_s3_np_fromfile_1D_var(minio_server_with_s3_envs, s3_bucket, test_np_arr):
     """
     fromfile
     test the dat file we just wrote in 1D
@@ -866,7 +886,7 @@ def test_s3_np_fromfile_1D_var(minio_server, s3_bucket, test_np_arr):
 
 
 @pytest.mark.timeout(1000)
-def test_s3_json_read_records_lines_seq(minio_server, s3_bucket, test_df):
+def test_s3_json_read_records_lines_seq(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_json(orient="records", lines=True)
     test the json file we just wrote sequentially
@@ -892,7 +912,7 @@ def test_s3_json_read_records_lines_seq(minio_server, s3_bucket, test_df):
 
 
 @pytest.mark.timeout(1000)
-def test_s3_json_read_records_lines_1D(minio_server, s3_bucket, test_df):
+def test_s3_json_read_records_lines_1D(minio_server_with_s3_envs, s3_bucket, test_df):
     """
     read_json(orient="records", lines=True)
     test the json file we just wrote in 1D
@@ -917,7 +937,9 @@ def test_s3_json_read_records_lines_1D(minio_server, s3_bucket, test_df):
 
 
 @pytest.mark.timeout(1000)
-def test_s3_json_read_records_lines_1D_var(minio_server, s3_bucket, test_df):
+def test_s3_json_read_records_lines_1D_var(
+    minio_server_with_s3_envs, s3_bucket, test_df
+):
     """
     read_json(orient="records", lines=True)
     test the json file we just wrote in 1D Var
@@ -944,7 +966,9 @@ def test_s3_json_read_records_lines_1D_var(minio_server, s3_bucket, test_df):
 
 @pytest.mark.slow
 @pytest.mark.timeout(1000)
-def test_s3_json_data_has_path(minio_server, s3_bucket, datapath, memory_leak_check):
+def test_s3_json_data_has_path(
+    minio_server_with_s3_envs, s3_bucket, datapath, memory_leak_check
+):
     """
     test s3 read_json where data includes ://path
     """
@@ -957,7 +981,7 @@ def test_s3_json_data_has_path(minio_server, s3_bucket, datapath, memory_leak_ch
 
 
 @pytest.mark.skip("DeltaTable doesn't seem to support custom S3 endpoints")
-def test_read_parquet_from_s3_deltalake(minio_server, s3_bucket):
+def test_read_parquet_from_s3_deltalake(minio_server_with_s3_envs, s3_bucket):
     """
     DeltaTable doesn't seem to support custom S3 endpoints, so we can't test
     using MinIO on CI for now.
@@ -1004,7 +1028,9 @@ def test_read_parquet_from_s3_deltalake(minio_server, s3_bucket):
 
 
 @pytest.mark.timeout(1000)
-def test_read_parquet_glob_s3(minio_server, s3_bucket, datapath, memory_leak_check):
+def test_read_parquet_glob_s3(
+    minio_server_with_s3_envs, s3_bucket, datapath, memory_leak_check
+):
     def test_impl(filename):
         df = pd.read_parquet(filename)
         return df
@@ -1020,7 +1046,7 @@ def test_read_parquet_glob_s3(minio_server, s3_bucket, datapath, memory_leak_che
 
 @pytest.mark.timeout(1000)
 def test_read_parquet_trailing_sep_s3(
-    minio_server, s3_bucket, datapath, memory_leak_check
+    minio_server_with_s3_envs, s3_bucket, datapath, memory_leak_check
 ):
     def test_impl():
         df = pd.read_parquet("s3://bodo-test/int_nulls_multi.pq/")
@@ -1079,7 +1105,9 @@ def test_s3_json_anon_public_dataset(memory_leak_check):
 
 
 @pytest.mark.timeout(1000)
-def test_read_parquet_invalid_list_of_files(minio_server, s3_bucket, datapath):
+def test_read_parquet_invalid_list_of_files(
+    minio_server_with_s3_envs, s3_bucket, datapath
+):
     def test_impl(fnames):
         df = pd.read_parquet(fnames)
         return df

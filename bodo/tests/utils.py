@@ -2781,7 +2781,7 @@ pytest_perf_regression = [
 
 
 @contextmanager
-def temp_env_override(env_vars):
+def temp_env_override(env_vars: dict[str, Optional[str]]):
     """Update the current environment variables with key-value pairs provided
     in a dictionary and then restore it after.
 

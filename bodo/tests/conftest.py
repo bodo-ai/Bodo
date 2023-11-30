@@ -18,6 +18,7 @@ from numba.core.runtime import rtsys
 
 import bodo
 import bodo.utils.allocation_tracking
+from bodo.tests.utils import temp_env_override
 
 # Disable broadcast join as the default
 os.environ["BODO_BCAST_JOIN_THRESHOLD"] = "0"
@@ -268,12 +269,10 @@ def minio_server():
     #         time.sleep(1)
 
     # Session level environment variables used for S3 Testing.
-    os.environ["AWS_ACCESS_KEY_ID"] = "bodotest1"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "bodosecret1"
 
     host, port = "127.0.0.1", "9000"
-    access_key = os.environ["AWS_ACCESS_KEY_ID"]
-    secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
+    access_key = "bodotest1"
+    secret_key = "bodosecret1"
     address = "{}:{}".format(host, port)
 
     os.environ["MINIO_ROOT_USER"] = access_key
@@ -306,6 +305,17 @@ def minio_server():
             if proc is not None:
                 proc.kill()
             shutil.rmtree(cwd + "/Data")
+
+
+@pytest.fixture(scope="function")
+def minio_server_with_s3_envs(minio_server: tuple[str, str, str]):
+    with temp_env_override(
+        {
+            "AWS_ACCESS_KEY_ID": minio_server[0],
+            "AWS_SECRET_ACCESS_KEY": minio_server[1],
+        }
+    ):
+        yield minio_server
 
 
 def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):

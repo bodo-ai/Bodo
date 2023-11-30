@@ -307,7 +307,7 @@ cdef class StorageOptions(_Weakrefable):
         # Underlying C++ object for storing the information.
         shared_ptr[CStorageOptions] options
 
-    def __init__(self, location, usable_size=None):
+    def __init__(self, location, storage_type=None, usable_size=None):
         """
         Constructor for StorageOptions.
         If the attributes are not provided, they default
@@ -317,6 +317,8 @@ cdef class StorageOptions(_Weakrefable):
         deref(self.options).location = location
         if usable_size is not None:
             deref(self.options).usable_size = usable_size
+        if storage_type is not None:
+            deref(self.options).type = storage_type
 
     cdef void cinit(self, shared_ptr[CStorageOptions] options):
         self.options = options
