@@ -6,6 +6,8 @@ import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.rel.core.FlattenBase
+import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
@@ -78,6 +80,10 @@ class PandasFlatten(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode,
      */
     override fun deleteStateVariable(ctx: PandasRel.BuildContext, stateVar: StateVariable) {
         TODO("Not yet implemented")
+    }
+
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+        return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
     }
 
     companion object {
