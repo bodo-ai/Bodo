@@ -233,6 +233,15 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction ARRAY_REMOVE =
+      new SqlFunction(
+          "ARRAY_REMOVE",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.sequence("ARRAY_REMOVE(ARRAY, ANY)", OperandTypes.ARRAY, OperandTypes.ANY),
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction ARRAY_EXCEPT =
       new SqlFunction(
           "ARRAY_EXCEPT",
@@ -309,6 +318,7 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           ARRAY_AGG,
           ARRAY_UNIQUE_AGG,
           ARRAY_SIZE,
+          ARRAY_REMOVE,
           ARRAY_SLICE,
           ARRAYS_OVERLAP,
           ARRAY_CONTAINS,
