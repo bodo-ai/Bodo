@@ -1,23 +1,15 @@
 #include "_memory.h"
+
+#include <cmath>
+#include <iostream>
+#include <optional>
+
 #ifdef __linux__
 // Needed for 'malloc_trim'
 #include <malloc.h>
 #endif
-#include <sys/mman.h>
-#include <algorithm>
-#include <cerrno>
-#include <cmath>
-#include <iostream>
-#include <optional>
-#include <sstream>
-
-#include <arrow/util/bit_util.h>
-
-#include <boost/uuid/uuid.hpp>             // uuid class
-#include <boost/uuid/uuid_generators.hpp>  // generators
-#include <boost/uuid/uuid_io.hpp>          // streaming operators etc.
-
 #include <mpi.h>
+#include <sys/mman.h>
 
 #define MAX_NUM_STORAGE_MANAGERS 4
 
@@ -79,105 +71,6 @@ Swip construct_unswizzled_swip(uint8_t size_class_idx,
     uint64_t size_class_enc = static_cast<uint64_t>(size_class_idx) << 57;
     uint64_t storage_class_enc = static_cast<uint64_t>(storage_class_idx) << 55;
     return (Swip)((1ull << 63) | size_class_enc | storage_class_enc | block_id);
-}
-
-//// StorageManager
-
-StorageManager::StorageManager(std::shared_ptr<StorageOptions> options)
-    : options(options) {
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    // Generate Unique UUID per Rank
-    boost::uuids::uuid _uuid = boost::uuids::random_generator()();
-    std::string uuid = boost::uuids::to_string(_uuid);
-
-    this->uuid = std::to_string(rank) + "-" + uuid;
-}
-
-arrow::Status LocalStorageManager::ReadBlock(uint64_t block_id, int64_t n_bytes,
-                                             uint8_t* out_ptr) {
-    // Construct File Path
-    std::filesystem::path fname = this->location / this->uuid /
-                                  std::to_string(n_bytes) /
-                                  std::to_string(block_id);
-
-    // Read File Contents to Frame
-    std::shared_ptr<arrow::io::InputStream> in_stream;
-    CHECK_ARROW_AND_ASSIGN(
-        this->fs.OpenInputStream(fname.string()),
-        "LocalStorageManager::ReadBlock: Unable to Open FileReader -",
-        in_stream);
-
-    int64_t n_bytes_read;
-    CHECK_ARROW_AND_ASSIGN(
-        in_stream->Read(n_bytes, (void*)out_ptr),
-        "LocalStorageManager::ReadBlock: Unable to Read Block File -",
-        n_bytes_read);
-
-    CHECK_ARROW_MEM_RET(
-        in_stream->Close(),
-        "LocalStorageManager::ReadBlock: Unable to Close FileReader -");
-
-    if (n_bytes_read != n_bytes) {
-        return arrow::Status::Invalid(
-            "LocalStorageManager::ReadBlock: Read Fewer Bytes (" +
-            std::to_string(n_bytes_read) + ") than expected (" +
-            std::to_string(n_bytes) + ")");
-    }
-
-    return this->DeleteBlock(block_id, n_bytes);
-}
-
-arrow::Result<uint64_t> LocalStorageManager::WriteBlock(uint8_t* in_ptr,
-                                                        uint64_t n_bytes) {
-    if (!this->CanSpillTo(n_bytes)) {
-        return arrow::Status::OutOfMemory(
-            "Can not spill to storage manager. Not enough space available");
-    }
-
-    uint64_t block_id = this->GetNewBlockID();
-
-    // Construct File Path
-    std::filesystem::path fpath =
-        this->location / this->uuid / std::to_string(n_bytes);
-    std::filesystem::path fname = fpath / std::to_string(block_id);
-
-    CHECK_ARROW_MEM_RET(
-        this->fs.CreateDir(fpath.string(), true),
-        "LocalStorageManager::WriteBlock: Unable to Create Directory -");
-
-    std::shared_ptr<arrow::io::OutputStream> out_stream;
-    CHECK_ARROW_AND_ASSIGN(
-        this->fs.OpenOutputStream(fname.string()),
-        "LocalStorageManager::WriteBlock: Unable to Open FileWriter -",
-        out_stream);
-
-    CHECK_ARROW_MEM_RET(
-        out_stream->Write(in_ptr, (int64_t)n_bytes),
-        "LocalStorageManager::WriteBlock: Unable to Write Block to File -");
-
-    CHECK_ARROW_MEM_RET(
-        out_stream->Close(),
-        "LocalStorageManager::WriteBlock: Unable to Close Writer -");
-
-    this->UpdateSpilledBytes(n_bytes);
-    return block_id;
-}
-
-arrow::Status LocalStorageManager::DeleteBlock(uint64_t block_id,
-                                               int64_t n_bytes) {
-    // Construct File Path
-    std::filesystem::path fname = this->location / this->uuid /
-                                  std::to_string(n_bytes) /
-                                  std::to_string(block_id);
-
-    CHECK_ARROW_MEM_RET(
-        this->fs.DeleteFile(fname.string()),
-        "LocalStorageManager::DeleteBlock: Unable to Delete Block File -");
-
-    this->UpdateSpilledBytes(-n_bytes);
-    return arrow::Status::OK();
 }
 
 //// SizeClass
@@ -619,99 +512,6 @@ static std::tuple<int, int> dist_get_ranks_on_node() {
     return std::make_tuple(npes_node, rank_on_node);
 }
 
-std::shared_ptr<StorageOptions> StorageOptions::Defaults(uint8_t tier) {
-    std::shared_ptr<StorageOptions> options = nullptr;
-    // TODO: Use fmt::format when available
-
-    // Get the comma-delimited list of drive locations for this storage option
-    std::vector<std::string> locations;
-    auto location_env_str = std::string("BODO_BUFFER_POOL_STORAGE_CONFIG_") +
-                            std::to_string(tier) + std::string("_DRIVES");
-    if (const char* location_env_ = std::getenv(location_env_str.c_str())) {
-        std::stringstream ss(location_env_);
-        while (ss.good()) {
-            std::string substr;
-            std::getline(ss, substr, ',');
-
-            // TODO: Check for StorageType
-            if (substr.starts_with("s3://") || substr.starts_with("abfs://")) {
-                // Spilling to S3 or ABFS is not supported yet.
-                return nullptr;
-            }
-
-            locations.push_back(substr);
-        }
-    } else {
-        // If no location env, assume that no storage option was
-        // defined for this tier.
-        return nullptr;
-    }
-
-    // Compute the number of bytes available for this storage location
-    auto gb_available_env_str =
-        std::string("BODO_BUFFER_POOL_STORAGE_CONFIG_") + std::to_string(tier) +
-        std::string("_SPACE_PER_DRIVE_GiB");
-
-    if (const char* gb_available_env_ =
-            std::getenv(gb_available_env_str.c_str())) {
-        // Create Options
-        options = std::make_shared<StorageOptions>();
-
-        // Assign Location
-        auto [num_ranks_on_node, rank_on_node] = dist_get_ranks_on_node();
-        int loc_idx = rank_on_node % locations.size();
-        options->location = locations[loc_idx];
-
-        // Parse GB Storage Numbers
-        int gb_in_storage = std::stoi(gb_available_env_);
-
-        // If gb_in_storage < 0, assume unlimited storage
-        // Indicated by a -1
-        if (gb_in_storage < 0) {
-            options->usable_size = -1;
-            return options;
-        }
-
-        int64_t bytes_in_storage = gb_in_storage * 1024ll * 1024ll * 1024ll;
-
-        // What percentage of the total available space in storage
-        // should be used for the buffer pool. For now, the default
-        // will be 90% unless specified by the environment variable
-        double space_percent = 0.90;
-        auto space_percent_env_str =
-            std::string("BODO_BUFFER_POOL_STORAGE_CONFIG_") +
-            std::to_string(tier) + std::string("_USABLE_PERCENTAGE");
-        if (const char* space_percent_env_ =
-                std::getenv(space_percent_env_str.c_str())) {
-            // We expect this to be in percentages and not fraction,
-            // i.e. it should be set to 45 if we want to use 45% (or 0.45)
-            // of the total available space.
-            space_percent = std::stod(space_percent_env_) / 100.0;
-        }
-        double bytes_available = bytes_in_storage * space_percent;
-
-        // Determine the number of bytes each rank gets by evenly
-        // distributing ranks to available locations in a round
-        // robin fashion
-        // Ex: If node has 5 ranks and 3 locations of 20GB each
-        // - Rank 0 and 3 use Location 1 and max 10GB
-        // - Rank 1 and 4 use Location 2 and max 10GB
-        // - Rank 2 uses Location 3 and max 20GB
-
-        // Compute Even Storage for Ranks Using Same Location
-        int leftover_ranks = num_ranks_on_node % locations.size();
-        int min_ranks_per_loc =
-            (num_ranks_on_node - leftover_ranks) / locations.size();
-        int num_ranks_on_loc =
-            min_ranks_per_loc + (rank_on_node < leftover_ranks);
-        int64_t storage_for_rank =
-            static_cast<int64_t>(bytes_available / (double)num_ranks_on_loc);
-        options->usable_size = storage_for_rank;
-    }
-
-    return options;
-}
-
 BufferPoolOptions BufferPoolOptions::Defaults() {
     BufferPoolOptions options;
 
@@ -851,17 +651,8 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
     : options_(std::move(options)),
       // Convert MiB to bytes
       memory_size_bytes_(options.memory_size * 1024 * 1024) {
-    for (auto storage_option : this->options_.storage_options) {
-        std::unique_ptr<StorageManager> manager;
-
-        switch (storage_option->type) {
-            case StorageType::Local:
-                manager = std::make_unique<LocalStorageManager>(storage_option);
-                break;
-        }
-
-        CHECK_ARROW_MEM(manager->Initialize(),
-                        "Failed to Initialize Storage Manager:");
+    for (auto& storage_option : this->options_.storage_options) {
+        auto manager = MakeStorageManager(storage_option);
         // std::move is needed to push a unique_ptr
         this->storage_managers_.push_back(std::move(manager));
     }

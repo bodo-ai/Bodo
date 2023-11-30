@@ -324,6 +324,8 @@ ext_metadata["sources"] += [
     "bodo/libs/_window_compute.cpp",
     "bodo/libs/_stream_dict_encoding.cpp",
     "bodo/libs/_stream_shuffle.cpp",
+    "bodo/libs/_storage_manager.cpp",
+    "bodo/libs/_utils.cpp",
 ]
 ext_metadata["depends"] += [
     "bodo/io/_bodo_file_reader.h",
@@ -385,6 +387,8 @@ ext_metadata["depends"] += [
     "bodo/libs/_pinnable.h",
     "bodo/libs/_nested_loop_join_impl.h",
     "bodo/libs/_stream_shuffle.h",
+    "bodo/libs/_storage_manager.h",
+    "bodo/libs/_utils.h",
 ]
 
 if is_testing:
@@ -499,9 +503,13 @@ ext_memory = Extension(
         "bodo/libs/memory.pyx",
         "bodo/libs/_memory.cpp",
         "bodo/libs/_operator_pool.cpp",
+        "bodo/libs/_utils.cpp",
+        "bodo/libs/_storage_manager.cpp",
         "bodo/libs/_memory_budget.cpp",
     ],
     depends=[
+        "bodo/libs/_storage_manager.h",
+        "bodo/libs/_utils.h",
         "bodo/libs/_memory_budget.h",
     ],
     include_dirs=np_compile_args["include_dirs"]

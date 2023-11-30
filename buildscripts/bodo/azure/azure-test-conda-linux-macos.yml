@@ -22,6 +22,7 @@ jobs:
 - job: ${{ parameters.name }}
   timeoutInMinutes: 360
   variables:
+    - group: AWS-427-S3-Access-Keys
     - group: SnowflakeCredentials
     - name: CONDA_ENV
       value: 'bodo'
@@ -223,6 +224,8 @@ jobs:
       SF_PASSWORD2: $(SNOWFLAKE_PASSWORD2)
       SF_AZURE_USER: $(SF_AZURE_USER)
       SF_AZURE_PASSWORD: $(SF_AZURE_PASSWORD)
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: ${{ parameters.BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST }}
     displayName: 'Test Bodo'
 

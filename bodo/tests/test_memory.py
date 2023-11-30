@@ -3,12 +3,15 @@ import mmap
 import re
 import sys
 from pathlib import Path
+from uuid import uuid4
 
+import boto3
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.lib
 import pytest
+import s3fs
 
 import bodo
 from bodo.libs.memory import (
@@ -33,6 +36,19 @@ from bodo.utils.typing import BodoWarning
 pytestmark = pytest.mark.filterwarnings(
     "error::pytest.PytestUnraisableExceptionWarning"
 )
+
+
+@pytest.fixture
+def tmp_s3_path():
+    """
+    Create a temporary S3 path for testing.
+    """
+
+    s3 = boto3.resource("s3")
+    bucket = s3.Bucket("engine-unit-tests-tmp-bucket")
+    folder_name = str(uuid4())
+    yield f"s3://engine-unit-tests-tmp-bucket/{folder_name}/"
+    bucket.objects.filter(Prefix=folder_name).delete()
 
 
 def test_default_buffer_pool_options():
@@ -470,6 +486,27 @@ def test_default_storage_options(tmp_path: Path):
         assert options.storage_options[1].location == bytes(tmp_path / "inner")
         assert options.storage_options[2].location == bytes(tmp_path / "inner2")
         assert options.storage_options[3].location == bytes(tmp_path / "inner3")
+
+
+@pytest.mark.s3
+def test_default_s3_storage_options(tmp_s3_path: str):
+    """
+    Test that StorageOptions detection for S3 locations works
+    as expected
+    """
+
+    with temp_env_override(
+        {
+            # Flag necessary to enable S3 storage
+            "BODO_BUFFER_POOL_ENABLE_REMOTE_SPILLING": "1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": tmp_s3_path,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "-1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
+        }
+    ):
+        options = StorageOptions.defaults(1)
+        assert options.location == bytes(tmp_s3_path, "utf-8")
+        assert options.usable_size == -1
 
 
 def test_malloc_allocation():
@@ -3238,6 +3275,68 @@ def test_malloc_trim():
 
     assert pool.bytes_allocated() == 0
     assert pool.bytes_pinned() == 0
+    del pool
+
+
+@pytest.mark.s3
+def test_spill_to_s3(tmp_s3_path: str):
+    """
+    Test that data spilled to S3 and read back is
+    correctly preserved.
+    """
+
+    s3_opt = StorageOptions(
+        usable_size=-1, storage_type=1, location=tmp_s3_path.encode()
+    )
+    options: BufferPoolOptions = BufferPoolOptions(
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        spill_on_unpin=True,
+        enforce_max_limit_during_allocation=True,
+        storage_options=[s3_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Make an allocation that goes through a SizeClass
+    write_bytes = b"Hello BufferPool from Bodo!"
+    allocation_1: BufferPoolAllocation = pool.allocate(3.5 * 1024 * 1024)
+    allocation_1.write_bytes(write_bytes)
+
+    # Unpin it
+    pool.unpin(allocation_1)
+
+    # Verify that it's been spilled to S3 and contents are correct
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
+
+    # Look for spilled file in expected location
+    # First Folder Expected to Have Prepended Rank
+    fs = s3fs.S3FileSystem()
+    paths = fs.glob(tmp_s3_path + str(bodo.get_rank()) + "-*")
+    assert len(paths) == 1
+    inner_path: str = paths[0]
+    # Block File should be in {size_class}/{block_id}
+    file_path = inner_path + "/" + str(4 * 1024 * 1024) + "/" + "0"
+
+    # Check file contents
+    expected_contents = (
+        write_bytes
+        + b"\x00"
+        + (255 - len(write_bytes)) * b"\xcb"
+        + (4 * 1024 * 1024 - 256) * b"\x00"
+    )
+    assert fs.cat_file(file_path) == expected_contents
+
+    # Pin it back and verify contents
+    pool.pin(allocation_1)
+    contents_after_pin_back = allocation_1.read_bytes(int(3.5 * 1024 * 1024))
+    assert contents_after_pin_back == write_bytes
+
+    pool.free(allocation_1)
+    pool.cleanup()
     del pool
 
 
