@@ -1406,6 +1406,76 @@ def test_array_remove(array_values, use_case, memory_leak_check):
     )
 
 
+def test_array_remove_at(array_values, use_case, memory_leak_check):
+    """
+    Test ARRAY_REMOVE_AT works correctly with different data type columns
+    and with/without case statements.
+
+    Takes in a list of 3 distinct values of the desired type and uses them
+    to construct 2 columns of arrays of these values, then modifies them
+    using ARRAY_EXCEPT. Since the values are always placed in the columns
+    in the same permutations, the answers should always be the orderings of
+    the original values.
+    """
+    value_pool, dtype = array_values
+    if use_case:
+        query = "SELECT CASE WHEN A IS NULL THEN ARRAY_REMOVE_AT(A, B) ELSE ARRAY_REMOVE_AT(A, B) END FROM table1"
+    else:
+        query = "SELECT ARRAY_REMOVE_AT(A, B) FROM table1"
+
+    def make_vals(L):
+        if L is None:
+            return None
+        return [None if idx is None else value_pool[idx] for idx in L]
+
+    pattern_a = [
+        [0, 1, 2, None],
+        [0, 1, 2, None],
+        [0, 1, 2, None],
+        [0, None, 1, 2],
+        [0, None, 1, 2],
+        [],
+        [],
+        None,
+        [0, 1, 2, None],
+    ]
+    expected_pattern = [
+        [1, 2, None],
+        [0, 2, None],
+        [0, 1, 2],
+        [0, None, 1, 2],
+        [0, None, 1, 2],
+        [],
+        [],
+        None,
+        None,
+    ]
+    vals_a = pd.array(
+        [make_vals(row) for row in pattern_a], dtype=pd.ArrowDtype(pa.large_list(dtype))
+    )
+    vals_b = pd.array([0, 1, -1, -7, 8, 0, -1, 0, None], dtype=pd.Int32Dtype())
+    expected = pd.array(
+        [make_vals(row) for row in expected_pattern],
+        dtype=pd.ArrowDtype(pa.large_list(dtype)),
+    )
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": vals_a,
+                "B": vals_b,
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        expected_output=pd.DataFrame({"EXPR$0": expected}),
+        sort_output=False,
+    )
+
+
 def test_array_intersection(array_values, use_case, memory_leak_check):
     """
     Test ARRAY_INTERSECTION works correctly with different data type columns

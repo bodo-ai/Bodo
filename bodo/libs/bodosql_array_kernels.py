@@ -51,6 +51,7 @@ broadcasted_fixed_arg_functions = {
     "array_position",
     "array_size",
     "array_remove",
+    "array_remove_at",
     "array_slice",
     "array_to_string",
     "arrays_overlap",

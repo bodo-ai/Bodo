@@ -961,6 +961,71 @@ def overload_array_remove_util(
     )
 
 
+def array_remove_at(arr, pos, is_scalar=False):  # pragma: no cover
+    pass
+
+
+@overload(array_remove_at, no_unliteral=True)
+def overload_array_remove_at(arr, pos, is_scalar=False):  # pragma: no cover
+    """
+    Handles cases where ARRAY_REMOVE receives optional arguments and
+    forwards to the appropriate version of the real implementation
+    """
+    args = [arr, pos]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.array_remove_at",
+                ["arr", "pos", "is_scalar"],
+                i,
+                default_map={"is_scalar": False},
+            )
+
+    def impl(arr, pos, is_scalar=False):
+        return array_remove_at_util(arr, pos, is_scalar)
+
+    return impl
+
+
+def array_remove_at_util(arr, pos, is_scalar):  # pragma: no cover
+    pass
+
+
+@overload(array_remove_at_util, no_unliteral=True)
+def overload_array_remove_at_util(arr, pos, is_scalar):
+    """
+    A dedicated kernel for the SQL function ARRAY_REMOVE_AT which takes
+    in an array and an index, and remove the element at that index from the array.
+    Args:
+        arr (array scalar/array item array): the original array
+        pos (scalar/vector): the index of the element to remove
+    Returns:
+        array: arr with element of index pos removed
+    """
+    verify_int_arg(pos, "ARRAY_REMOVE_AT", "pos")
+    arg_names = ["arr", "pos", "is_scalar"]
+    arg_types = [arr, pos, is_scalar]
+    propagate_null = [True, True, False]
+    are_arrays = [not get_overload_const_bool(is_scalar), is_array_typ(pos), False]
+    out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(
+        arr.dtype if are_arrays[0] else arr
+    )
+    scalar_text = "if -len(arg0) <= arg1 and arg1 < len(arg0):\n"
+    scalar_text += "   elems_to_keep = np.ones(len(arg0), np.bool_)\n"
+    scalar_text += "   elems_to_keep[arg1] = False\n"
+    scalar_text += "   res[i] = arg0[elems_to_keep]\n"
+    scalar_text += "else:\n"
+    scalar_text += "   res[i] = arg0"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        are_arrays=are_arrays,
+    )
+
+
 def array_slice(arr, from_, to, is_scalar=False):  # pragma: no cover
     # Dummy function used for overload
     return
