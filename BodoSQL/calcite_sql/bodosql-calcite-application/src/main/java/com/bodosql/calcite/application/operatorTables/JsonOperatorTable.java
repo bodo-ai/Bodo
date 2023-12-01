@@ -60,33 +60,27 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
   public static final SqlFunction GET_PATH =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "GET_PATH",
-          SqlKind.OTHER_FUNCTION,
           // Returns null if path is invalid
           BodoReturnTypes.VARIANT_FORCE_NULLABLE,
-          null,
           OperandTypes.sequence(
               "GET_PATH(SEMI_STRUCTURED, STRING_LITERAL)", SEMI_STRUCTURED, OperandTypes.CHARACTER),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction JSON_EXTRACT_PATH_TEXT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "JSON_EXTRACT_PATH_TEXT",
-          SqlKind.OTHER_FUNCTION,
           // Cannot statically determine the precision
           // returns null if path is invalid
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_FORCE_NULLABLE,
-          null,
           OperandTypes.STRING_STRING,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction OBJECT_DELETE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "OBJECT_DELETE",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.ARG0,
-          null,
           OBJECT_DELETE_TYPE_CHECKER,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
@@ -101,15 +95,13 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction OBJECT_KEYS =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "OBJECT_KEYS",
-          SqlKind.OTHER_FUNCTION,
           opBinding -> {
             RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
             RelDataType inputType = opBinding.getOperandType(0);
             return typeFactory.createArrayType(inputType.getKeyType(), -1);
           },
-          null,
           OperandTypes.family(SqlTypeFamily.MAP),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 

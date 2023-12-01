@@ -5,6 +5,7 @@ import static org.apache.calcite.sql.type.BodoReturnTypes.BOOL_AGG_RET_TYPE;
 import java.util.Arrays;
 import java.util.List;
 import org.apache.calcite.sql.SqlAggFunction;
+import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -46,54 +47,28 @@ public class CondOperatorTable implements SqlOperatorTable {
     return instance;
   }
 
-  public static final SqlFunction REGR_VALX =
-      new SqlFunction(
+  public static final SqlBasicFunction REGR_VALX =
+      SqlBasicFunction.create(
           "REGR_VALX",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. It accepts two doubles
           OperandTypes.NUMERIC_NUMERIC,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction REGR_VALY =
-      new SqlFunction(
-          "REGR_VALY",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.DOUBLE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept. It accepts two doubles
-          OperandTypes.NUMERIC_NUMERIC,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.STRING);
+  public static final SqlFunction REGR_VALY = REGR_VALX.withName("REGR_VALY");
 
   // TODO: Extend the Library Operator and use the builtin Libraries
-  public static final SqlFunction IF_FUNC =
-      new SqlFunction(
+  public static final SqlBasicFunction IF_FUNC =
+      SqlBasicFunction.create(
           "IF",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // The return type consists of the least restrictive of arguments 1 and 2
           // and if either is null.
           // null is considered false for this function, so we don't need to consider its
           // nullability
           // when determining output nullability
           BodoReturnTypes.leastRestrictiveSubsetNullable(1, 3),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts
           // a boolean arg0 and two matching args
           BOOLEAN_SAME_SAME,
@@ -101,85 +76,40 @@ public class CondOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   // TODO: Extend the Library Operator and use the builtin Libraries
-  public static final SqlFunction IFF_FUNC =
-      new SqlFunction(
-          "IFF",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // The return type consists of the least restrictive of arguments 1 and 2
-          // and if either is null.
-          // null is considered false for this function, so we don't need to consider its
-          // nullability
-          // when determining output nullability
-          BodoReturnTypes.leastRestrictiveSubsetNullable(1, 3),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept. This function accepts
-          // a boolean arg0 and two matching args
-          BOOLEAN_SAME_SAME,
-          // TODO: Add a proper category
-          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+  public static final SqlFunction IFF_FUNC = IF_FUNC.withName("IFF");
 
-  public static final SqlFunction BOOLAND =
-      new SqlFunction(
+  public static final SqlBasicFunction BOOLAND =
+      SqlBasicFunction.create(
           "BOOLAND",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.BOOLEAN_NULLABLE,
-          null,
           OperandTypes.NUMERIC_NUMERIC,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlFunction BOOLOR =
-      new SqlFunction(
-          "BOOLOR",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BOOLEAN_NULLABLE,
-          null,
-          OperandTypes.NUMERIC_NUMERIC,
-          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+  public static final SqlFunction BOOLOR = BOOLAND.withName("BOOLOR");
 
-  public static final SqlFunction BOOLXOR =
-      new SqlFunction(
-          "BOOLXOR",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BOOLEAN_NULLABLE,
-          null,
-          OperandTypes.NUMERIC_NUMERIC,
-          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+  public static final SqlFunction BOOLXOR = BOOLAND.withName("BOOLXOR");
 
   public static final SqlFunction BOOLNOT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "BOOLNOT",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.BOOLEAN_NULLABLE,
-          null,
           OperandTypes.NUMERIC,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction EQUAL_NULL =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "EQUAL_NULL",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.BOOLEAN,
-          null,
           OperandTypes.SAME_SAME,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction IFNULL_FUNC =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "IFNULL",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // LEAST_RESTRICTIVE will cast the return type to the least restrictive union of the
           // Two input types, and LEAST_NULLABLE will cast that type to a nullable type
           // If both of the two inputs are a nullable type.
           ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.LEAST_NULLABLE),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts two
           // matching input types
           OperandTypes.SAME_SAME,
@@ -187,16 +117,10 @@ public class CondOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction NULLIFZERO =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "NULLIFZERO",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // The output type is the same as the input type, but nullable
           ReturnTypes.ARG0_FORCE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts two
           // matching input types
           OperandTypes.NUMERIC,
@@ -204,18 +128,12 @@ public class CondOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction NVL =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "NVL",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // LEAST_RESTRICTIVE will cast the return type to the least restrictive union of the
           // Two input types, and LEAST_NULLABLE will cast that type to a nullable type
           // If both of the two inputs are a nullable type.
           ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.LEAST_NULLABLE),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts two
           // matching input types
           OperandTypes.SAME_SAME,
@@ -223,17 +141,11 @@ public class CondOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction NVL2 =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "NVL2",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // The return type consists of the least restrictive of arguments 1 and 2
           // and if either is null.
           BodoReturnTypes.leastRestrictiveSubsetNullable(1, 3),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts two
           // matching input types
           OperandTypes.SAME_SAME_SAME,
@@ -241,16 +153,10 @@ public class CondOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction ZEROIFNULL =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ZEROIFNULL",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // The output type is the same as the input type
           ReturnTypes.ARG0.andThen(SqlTypeTransforms.TO_NOT_NULLABLE),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts two
           // matching input types
           OperandTypes.NUMERIC,
@@ -267,15 +173,9 @@ public class CondOperatorTable implements SqlOperatorTable {
           OperandTypes.BOOLEAN);
 
   public static final SqlFunction DECODE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "DECODE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           BodoReturnTypes.DECODE_RETURN_TYPE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. See DecodeOperandChecker
           // for the rules
           DECODE_VARIADIC,
@@ -283,11 +183,9 @@ public class CondOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction HASH =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "HASH",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.BIGINT,
-          null,
           OperandTypes.VARIADIC,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 

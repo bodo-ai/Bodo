@@ -25,7 +25,6 @@ import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SameOperandTypeChecker;
-import org.apache.calcite.sql.type.SqlOperandTypeInference;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
@@ -52,116 +51,52 @@ public final class NumericOperatorTable implements SqlOperatorTable {
 
   // TODO: Extend the Library Operator and use the builtin Libraries
 
-  public static final SqlFunction BITAND =
-      new SqlFunction(
+  public static final SqlBasicFunction BITAND =
+      SqlBasicFunction.create(
           "BITAND",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.ARG0_NULLABLE,
-          null,
           OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
           SqlFunctionCategory.NUMERIC);
 
-  public static final SqlFunction BITOR =
-      new SqlFunction(
-          "BITOR",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.ARG0_NULLABLE,
-          null,
-          OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
-          SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction BITOR = BITAND.withName("BITOR");
 
-  public static final SqlFunction BITXOR =
-      new SqlFunction(
-          "BITXOR",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.ARG0_NULLABLE,
-          null,
-          OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
-          SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction BITXOR = BITAND.withName("BITXOR");
 
   public static final SqlFunction BITNOT =
-      new SqlFunction(
-          "BITNOT",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.ARG0_NULLABLE,
-          null,
-          OperandTypes.INTEGER,
-          SqlFunctionCategory.NUMERIC);
+      SqlBasicFunction.create(
+          "BITNOT", ReturnTypes.ARG0_NULLABLE, OperandTypes.INTEGER, SqlFunctionCategory.NUMERIC);
 
-  public static final SqlFunction BITSHIFTLEFT =
-      new SqlFunction(
-          "BITSHIFTLEFT",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.ARG0_NULLABLE,
-          null,
-          OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
-          SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction BITSHIFTLEFT = BITAND.withName("BITSHIFTLEFT");
 
-  public static final SqlFunction BITSHIFTRIGHT =
-      new SqlFunction(
-          "BITSHIFTRIGHT",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.ARG0_NULLABLE,
-          null,
-          OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
-          SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction BITSHIFTRIGHT = BITAND.withName("BITSHIFTRIGHT");
 
-  public static final SqlFunction GETBIT =
-      new SqlFunction(
-          "GETBIT",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.ARG0_NULLABLE,
-          null,
-          OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
-          SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction GETBIT = BITAND.withName("GETBIT");
 
-  public static final SqlFunction SNOWFLAKE_CEIL =
-      new SqlFunction(
+  public static final SqlBasicFunction SNOWFLAKE_CEIL =
+      SqlBasicFunction.create(
           "CEIL",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.ARG0_NULLABLE,
-          null,
           argumentRange(1, SqlTypeFamily.NUMERIC, SqlTypeFamily.INTEGER),
           // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
-  public static final SqlFunction SNOWFLAKE_FLOOR =
-      new SqlFunction(
-          "FLOOR",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.ARG0_NULLABLE,
-          null,
-          argumentRange(1, SqlTypeFamily.NUMERIC, SqlTypeFamily.INTEGER),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.NUMERIC);
+  public static final SqlFunction SNOWFLAKE_FLOOR = SNOWFLAKE_CEIL.withName("FLOOR");
 
   public static final SqlFunction CEILING =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "CEILING",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts one numeric argument
           OperandTypes.NUMERIC,
           // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction DIV0 =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "DIV0",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts two numerics
           // arguments
           OperandTypes.NUMERIC_NUMERIC,
@@ -169,16 +104,10 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction HAVERSINE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "HAVERSINE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts four numeric arguments
           OperandTypes.family(
               SqlTypeFamily.NUMERIC,
@@ -189,16 +118,10 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction LOG =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "LOG",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           // This function one or two numeric argument
           OperandTypes.NUMERIC.or(OperandTypes.NUMERIC_NUMERIC),
@@ -206,41 +129,27 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction LOG2 =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "LOG2",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts one numeric argument
           OperandTypes.NUMERIC,
           // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction POW =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "POW",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.DOUBLE_NULLABLE,
-          (SqlOperandTypeInference) null,
           OperandTypes.NUMERIC_NUMERIC,
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction CONV =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "CONV",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // precision cannot be statically determined
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts one string,
           // and two numeric arguments
           OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.NUMERIC, SqlTypeFamily.NUMERIC),
@@ -248,16 +157,10 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction WIDTH_BUCKET =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "WIDTH_BUCKET",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts three numeric
           // arguments
           OperandTypes.family(
@@ -269,60 +172,36 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction ACOSH =
-      new SqlFunction(
-          "ACOSH",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.DOUBLE_NULLABLE,
-          null,
-          OperandTypes.NUMERIC,
-          SqlFunctionCategory.NUMERIC);
+      SqlBasicFunction.create(
+          "ACOSH", ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC, SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction ASINH =
-      new SqlFunction(
-          "ASINH",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.DOUBLE_NULLABLE,
-          null,
-          OperandTypes.NUMERIC,
-          SqlFunctionCategory.NUMERIC);
+      SqlBasicFunction.create(
+          "ASINH", ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC, SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction ATANH =
-      new SqlFunction(
-          "ATANH",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.DOUBLE_NULLABLE,
-          null,
-          OperandTypes.NUMERIC,
-          SqlFunctionCategory.NUMERIC);
+      SqlBasicFunction.create(
+          "ATANH", ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC, SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction FACTORIAL =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "FACTORIAL",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.BIGINT_NULLABLE,
-          null,
           OperandTypes.INTEGER,
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction SQUARE =
-      new SqlFunction(
-          "SQUARE",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.DOUBLE_NULLABLE,
-          null,
-          OperandTypes.NUMERIC,
-          SqlFunctionCategory.NUMERIC);
+      SqlBasicFunction.create(
+          "SQUARE", ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC, SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction COSH = SqlLibraryOperators.COSH;
   public static final SqlFunction SINH = SqlLibraryOperators.SINH;
   public static final SqlFunction TANH = SqlLibraryOperators.TANH;
 
   public static final SqlFunction UNIFORM =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "UNIFORM",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.LEAST_RESTRICTIVE,
-          null,
           OperandTypes.sequence(
               "UNIFORM(NUMERIC, NUMERIC, NUMERIC)",
               OperandTypes.NUMERIC,

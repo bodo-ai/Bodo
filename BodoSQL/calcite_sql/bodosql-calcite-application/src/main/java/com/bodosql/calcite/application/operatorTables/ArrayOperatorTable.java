@@ -44,29 +44,21 @@ public class ArrayOperatorTable implements SqlOperatorTable {
   }
 
   public static final SqlFunction ARRAY_COMPACT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ARRAY_COMPACT",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.ARG0_NULLABLE,
-          null,
           OperandTypes.ARRAY,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction ARRAY_CONSTRUCT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ARRAY_CONSTRUCT",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           // TODO: This function can return an arary with different types, see
           //  https://docs.snowflake.com/en/sql-reference/functions/array_construct
           //  I'm not sure how we're handling this, so for now we're just disallowing
           //  anything that doesn't coerce to a common type
           ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_ARRAY),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // The input can be any data type, any number of times.
           // We require there to be at least one input type, otherwise
           // ReturnTypes.LEAST_RESTRICTIVE will throw an error. This isn't an easy
@@ -77,43 +69,29 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction ARRAY_CONSTRUCT_COMPACT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ARRAY_CONSTRUCT_COMPACT",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.LEAST_RESTRICTIVE
               .andThen(SqlTypeTransforms.TO_ARRAY)
               .andThen(SqlTypeTransforms.TO_NULLABLE),
-          null,
           OperandTypes.ONE_OR_MORE,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction TO_ARRAY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TO_ARRAY",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           opBinding -> toArrayReturnType(opBinding),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // The input can be any data type.
           OperandTypes.ANY,
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction ARRAY_TO_STRING =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ARRAY_TO_STRING",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Final precision cannot be statically determined.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // The input can be any data type.
           OperandTypes.sequence(
               "ARRAY_TO_STRING(ARRAY, STRING)", OperandTypes.ARRAY, OperandTypes.STRING),
@@ -175,139 +153,78 @@ public class ArrayOperatorTable implements SqlOperatorTable {
   }
 
   public static final SqlFunction ARRAY_CONTAINS =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ARRAY_CONTAINS",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.BOOLEAN.andThen(BodoReturnTypes.TO_NULLABLE_ARG1),
-          null,
           OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ARRAY),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction ARRAYS_OVERLAP =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ARRAYS_OVERLAP",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BOOLEAN_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // The input can be any data type.
           OperandTypes.family(SqlTypeFamily.ARRAY, SqlTypeFamily.ARRAY),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction ARRAY_POSITION =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ARRAY_POSITION",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           // return value is null if the value doesn't exist in the array, so FORCE_NULLABLE is
           // needed
           BodoReturnTypes.INTEGER_FORCE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // The input can be any data type.
           OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ARRAY),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction ARRAY_SIZE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ARRAY_SIZE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // The input can be any data type.
           OperandTypes.ARRAY,
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction ARRAY_REMOVE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ARRAY_REMOVE",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.ARG0_NULLABLE,
-          null,
           OperandTypes.sequence("ARRAY_REMOVE(ARRAY, ANY)", OperandTypes.ARRAY, OperandTypes.ANY),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction ARRAY_REMOVE_AT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ARRAY_REMOVE_AT",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.ARG0_NULLABLE,
-          null,
           OperandTypes.sequence(
               "ARRAY_REMOVE_AT(ARRAY, INTEGER)", OperandTypes.ARRAY, OperandTypes.INTEGER),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlFunction ARRAY_EXCEPT =
-      new SqlFunction(
+  public static final SqlBasicFunction ARRAY_EXCEPT =
+      SqlBasicFunction.create(
           "ARRAY_EXCEPT",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.ARG0_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // The input can be any data type.
           OperandTypes.sequence(
               "ARRAY_EXCEPT(ARRAY, ARRAY)", OperandTypes.ARRAY, OperandTypes.ARRAY),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlFunction ARRAY_INTERSECTION =
-      new SqlFunction(
-          "ARRAY_INTERSECTION",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.ARG0_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // The input can be any data type.
-          OperandTypes.sequence(
-              "ARRAY_INTERSECTION(ARRAY, ARRAY)", OperandTypes.ARRAY, OperandTypes.ARRAY),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+  public static final SqlFunction ARRAY_INTERSECTION = ARRAY_EXCEPT.withName("ARRAY_INTERSECTION");
 
-  public static final SqlFunction ARRAY_CAT =
-      new SqlFunction(
-          "ARRAY_CAT",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.ARG0_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // The input can be any data type.
-          OperandTypes.sequence("ARRAY_CAT(ARRAY, ARRAY)", OperandTypes.ARRAY, OperandTypes.ARRAY),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+  public static final SqlFunction ARRAY_CAT = ARRAY_EXCEPT.withName("ARRAY_CAT");
 
   public static final SqlFunction ARRAY_SLICE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ARRAY_SLICE",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.ARG0_NULLABLE,
-          null,
           OperandTypes.sequence(
               "ARRAY_SLICE(ARRAY, INTEGER, INTEGER)",
               OperandTypes.ARRAY,
