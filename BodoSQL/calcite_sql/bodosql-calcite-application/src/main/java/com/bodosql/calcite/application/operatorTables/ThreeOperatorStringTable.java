@@ -2,10 +2,10 @@ package com.bodosql.calcite.application.operatorTables;
 
 import java.util.Arrays;
 import java.util.List;
+import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
@@ -38,16 +38,10 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
 
   // TODO: Extend the Library Operator and use the builtin Libraries
   public static final SqlFunction LPAD =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "LPAD",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Output precision cannot be statically determined.
           BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
-          // What should be used to infer operand types. We don't use
-          // this, so we set it to NULL.
-          null,
           // What Input Types does the function accept? This function accepts only
           // (string, binary)
           // Takes in 3 arguments.
@@ -63,16 +57,10 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction RPAD =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "RPAD",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Output precision cannot be statically determined.
           BodoReturnTypes.ARG0_NULLABLE_VARYING_UNDEFINED_PRECISION,
-          // What should be used to infer operand types. We don't use
-          // this, so we set it to NULL.
-          null,
           // What Input Types does the function accept? This function accepts only
           // (string, binary)
           // Takes in 3 arguments.
@@ -89,16 +77,10 @@ public final class ThreeOperatorStringTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction REPLACE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "REPLACE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Output precision cannot be statically determined.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this, so we set it to None.
-          null,
           // What Input Types does the function accept.
           // Note: Calcite already defines REPLACE with 3 arguments
           // in the SqlStdOperatorTable, so we just define when

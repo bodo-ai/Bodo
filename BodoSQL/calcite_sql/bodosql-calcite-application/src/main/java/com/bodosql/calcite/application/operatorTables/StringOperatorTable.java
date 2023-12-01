@@ -5,6 +5,7 @@ import static org.apache.calcite.sql.type.BodoReturnTypes.SPLIT_RETURN_TYPE;
 
 import java.util.Arrays;
 import java.util.List;
+import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -43,265 +44,143 @@ public final class StringOperatorTable implements SqlOperatorTable {
 
   // TODO: Extend the Library Operator and use the builtin Libraries
   public static final SqlFunction CONCAT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "CONCAT",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Concat sums together all input precision.
           // DYADIC_STRING_SUM always expects at least two arguments, which means that we need
           // special logic to handle the single argument version of CONCAT.
           BodoReturnTypes.CONCAT_RETURN_TYPE,
-          // What should be used to infer operand types. We don't use
-          // this, so we set it to None.
-          null,
           OperandTypes.repeat(SqlOperandCountRanges.from(1), OperandTypes.BINARY)
               .or(OperandTypes.repeat(SqlOperandCountRanges.from(1), OperandTypes.CHARACTER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction CONCAT_WS =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "CONCAT_WS",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Concat sums together all input precision and
           // includes the separator where appropriate.
           // Unlike CONCAT, CONCAT_WS always takes at least two arguments - the separator and the
           // variadic list of expressions. This means it's safe to always call DYADIC_STRING_SUM
           // which expects at least 2 args.
           BodoReturnTypes.CONCAT_WS_RETURN_TYPE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           OperandTypes.repeat(SqlOperandCountRanges.from(2), OperandTypes.BINARY)
               .or(OperandTypes.repeat(SqlOperandCountRanges.from(2), OperandTypes.CHARACTER)),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction MID =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "MID",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Match input precision. The substring is at most the same string.
           ReturnTypes.ARG0_NULLABLE_VARYING,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. CHAR_INT_INT
           OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction SUBSTR =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "SUBSTR",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // Match input precision. The substring is at most the same string.
           ReturnTypes.ARG0_NULLABLE_VARYING,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept. CHAR_INT_INT or CHAR_INT (length is
-          // optional)
           OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER)
               .or(OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER)),
-          // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction INSTR =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "INSTR",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           // currently, MSQL returns 0 on failure, so I'm doing the same
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.STRING_STRING,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction LEFT =
-      new SqlFunction(
+  public static final SqlBasicFunction LEFT =
+      SqlBasicFunction.create(
           "LEFT",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Match input precision. The substring is at most the same string.
           ReturnTypes.ARG0_NULLABLE_VARYING,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.STRING_INTEGER,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction RIGHT =
-      new SqlFunction(
-          "RIGHT",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // Match input precision. The substring is at most the same string.
-          ReturnTypes.ARG0_NULLABLE_VARYING,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.STRING_INTEGER,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.STRING);
+  public static final SqlFunction RIGHT = LEFT.withName("RIGHT");
 
   public static final SqlFunction REPEAT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "REPEAT",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Repeat has an unknown static output precision.
           BodoReturnTypes.ARG0_NULLABLE_VARYING_UNKNOWN_PRECISION,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.STRING_INTEGER,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction STRCMP =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "STRCMP",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.STRING_STRING,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction EDITDISTANCE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "EDITDISTANCE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.STRING_STRING.or(OperandTypes.STRING_STRING_INTEGER),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction JAROWINKLER_SIMILARITY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "JAROWINKLER_SIMILARITY",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.STRING_STRING,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction FORMAT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "FORMAT",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Return type has an unknown precision, but it should only be
           // null if there is a null input.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.sequence(
               "FORMAT(NUMERIC, INTEGER)", OperandTypes.NUMERIC, OperandTypes.INTEGER),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction UCASE =
-      new SqlFunction(
+  public static final SqlBasicFunction UCASE =
+      SqlBasicFunction.create(
           "UCASE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.ARG0,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.STRING,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction LCASE =
-      new SqlFunction(
-          "LCASE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.ARG0,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.STRING,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.STRING);
+  public static final SqlFunction LCASE = UCASE.withName("LCASE");
 
-  public static final SqlFunction REVERSE =
-      new SqlFunction(
-          "REVERSE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.ARG0,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.STRING,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.STRING);
+  public static final SqlFunction REVERSE = UCASE.withName("REVERSE");
 
   public static final SqlFunction LEN =
       new SqlFunction(
           "LEN",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
           null,
           // What Input Types does the function accept.
           OperandTypes.STRING,
@@ -311,13 +190,9 @@ public final class StringOperatorTable implements SqlOperatorTable {
   public static final SqlFunction LENGTH =
       new SqlFunction(
           "LENGTH",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
           null,
           // What Input Types does the function accept.
           OperandTypes.STRING,
@@ -325,113 +200,64 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction ORD =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ORD",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.STRING,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction CHAR =
-      new SqlFunction(
+  public static final SqlBasicFunction CHAR =
+      SqlBasicFunction.create(
           "CHAR",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Char outputs a single character
           BodoReturnTypes.VARCHAR_1_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.INTEGER,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction CHR =
-      new SqlFunction(
-          "CHR",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // Char outputs a single character
-          BodoReturnTypes.VARCHAR_1_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.INTEGER,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.STRING);
+  public static final SqlFunction CHR = CHAR.withName("CHR");
 
   public static final SqlFunction RTRIMMED_LENGTH =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "RTRIMMED_LENGTH",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.CHARACTER,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction SPACE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "SPACE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.INTEGER,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction STARTSWITH =
-      new SqlFunction(
+  public static final SqlBasicFunction STARTSWITH =
+      SqlBasicFunction.create(
           "STARTSWITH",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.BOOLEAN_NULLABLE,
-          null,
           OperandTypes.STRING_STRING,
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction ENDSWITH =
-      new SqlFunction(
-          "ENDSWITH",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BOOLEAN_NULLABLE,
-          null,
-          OperandTypes.STRING_STRING,
-          SqlFunctionCategory.STRING);
+  public static final SqlFunction ENDSWITH = STARTSWITH.withName("ENDSWITH");
 
   public static final SqlFunction INSERT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "INSERT",
-          SqlKind.OTHER_FUNCTION,
           // Snowflake calculates the resulting precision
           // as 2 * arg0 + arg3. This seems like an error,
           // as the max possible precision should be arg0 + arg3,
           // but we will match Snowflake.
           BodoReturnTypes.INSERT_RETURN_TYPE,
-          null,
           OperandTypes.family(
               SqlTypeFamily.STRING,
               SqlTypeFamily.INTEGER,
@@ -439,52 +265,37 @@ public final class StringOperatorTable implements SqlOperatorTable {
               SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction CHARINDEX =
-      new SqlFunction(
+  public static final SqlBasicFunction CHARINDEX =
+      SqlBasicFunction.create(
           "CHARINDEX",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.INTEGER_NULLABLE,
-          null,
           argumentRange(2, SqlTypeFamily.STRING, SqlTypeFamily.STRING, SqlTypeFamily.INTEGER),
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction POSITION =
-      new SqlFunction(
-          "POSITION",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.INTEGER_NULLABLE,
-          null,
-          argumentRange(2, SqlTypeFamily.STRING, SqlTypeFamily.STRING, SqlTypeFamily.INTEGER),
-          SqlFunctionCategory.STRING);
+  public static final SqlFunction POSITION = CHARINDEX.withName("POSITION");
 
   public static final SqlFunction SPLIT_PART =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "SPLIT_PART",
-          SqlKind.OTHER_FUNCTION,
           // The precision is the same as in the worst
           // case we keep the same string.
           ReturnTypes.ARG0_NULLABLE_VARYING,
-          null,
           OperandTypes.STRING_STRING_INTEGER,
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction STRTOK =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "STRTOK",
-          SqlKind.OTHER_FUNCTION,
           // The precision is the same as in the worst
           // case we keep the same string.
           ReturnTypes.ARG0_NULLABLE_VARYING,
-          null,
           OperandTypes.STRING.or(OperandTypes.STRING_STRING).or(OperandTypes.STRING_STRING_INTEGER),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction STRTOK_TO_ARRAY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "STRTOK_TO_ARRAY",
-          SqlKind.OTHER_FUNCTION,
           BodoReturnTypes.TO_NULLABLE_VARYING_ARRAY,
-          null,
           OperandTypes.CHARACTER.or(BodoOperandTypes.CHARACTER_CHARACTER),
           SqlFunctionCategory.STRING);
 
@@ -509,28 +320,20 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction SUBSTRING_INDEX =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "SUBSTRING_INDEX",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // In the worst case we return the whole string,
           // so maintain the precision.
           ReturnTypes.ARG0_NULLABLE_VARYING,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts a collection
           OperandTypes.STRING_STRING_INTEGER,
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction REGEXP_LIKE =
-      new SqlFunction(
+  public static final SqlBasicFunction REGEXP_LIKE =
+      SqlBasicFunction.create(
           "REGEXP_LIKE",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.BOOLEAN_NULLABLE,
-          null,
           argumentRange(
               2, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
           SqlFunctionCategory.STRING);
@@ -539,22 +342,12 @@ public final class StringOperatorTable implements SqlOperatorTable {
    * RLIKE(<subject>, <pattern>, [<parameters>]) as opposed to the RLIKE SqlLikeOperator
    * which supports SQL queries of the form: <subject> RLIKE <pattern>
    * */
-  public static final SqlFunction RLIKE =
-      new SqlFunction(
-          "RLIKE",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BOOLEAN_NULLABLE,
-          null,
-          argumentRange(
-              2, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
-          SqlFunctionCategory.STRING);
+  public static final SqlFunction RLIKE = REGEXP_LIKE.withName("RLIKE");
 
   public static final SqlFunction REGEXP_COUNT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "REGEXP_COUNT",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.INTEGER_NULLABLE,
-          null,
           argumentRange(
               2,
               SqlTypeFamily.CHARACTER,
@@ -564,12 +357,10 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction REGEXP_REPLACE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "REGEXP_REPLACE",
-          SqlKind.OTHER_FUNCTION,
           // Return string has an unknown precision.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          null,
           argumentRange(
               2,
               SqlTypeFamily.CHARACTER,
@@ -581,13 +372,11 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction REGEXP_SUBSTR =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "REGEXP_SUBSTR",
-          SqlKind.OTHER_FUNCTION,
           // Match precision because this is a substring
           // returns null if substring DNE
           BodoReturnTypes.ARG0_FORCE_NULLABLE_VARYING,
-          null,
           argumentRange(
               2,
               SqlTypeFamily.CHARACTER,
@@ -599,11 +388,9 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction REGEXP_INSTR =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "REGEXP_INSTR",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.INTEGER_NULLABLE,
-          null,
           argumentRange(
               2,
               SqlTypeFamily.CHARACTER,
@@ -616,182 +403,131 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction INITCAP =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "INITCAP",
-          SqlKind.OTHER_FUNCTION,
           // This is a mappable function so the precision is the same.
           ReturnTypes.ARG0_NULLABLE,
-          null,
           OperandTypes.STRING.or(OperandTypes.STRING_STRING),
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction CONTAINS =
-      new SqlFunction(
-          "CONTAINS",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.BOOLEAN,
-          null,
-          OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.STRING),
-          SqlFunctionCategory.STRING);
+  public static final SqlFunction CONTAINS = STARTSWITH.withName("CONTAINS");
 
   public static final SqlFunction SPLIT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "SPLIT",
-          SqlKind.OTHER_FUNCTION,
           // Return type for split is the exact same as TO_ARRAY
           SPLIT_RETURN_TYPE,
-          null,
           OperandTypes.CHARACTER_CHARACTER,
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction SHA2 =
-      new SqlFunction(
+  public static final SqlBasicFunction SHA2 =
+      SqlBasicFunction.create(
           "SHA2",
-          SqlKind.OTHER_FUNCTION,
           // SHA2 outputs at most 128 characters.
           BodoReturnTypes.VARCHAR_128_NULLABLE,
-          null,
           OperandTypes.STRING.or(OperandTypes.STRING_INTEGER),
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction SHA2_HEX =
-      new SqlFunction(
-          "SHA2_HEX",
-          SqlKind.OTHER_FUNCTION,
-          // SHA2 outputs at most 128 characters.
-          BodoReturnTypes.VARCHAR_128_NULLABLE,
-          null,
-          OperandTypes.STRING.or(OperandTypes.STRING_INTEGER),
-          SqlFunctionCategory.STRING);
+  public static final SqlFunction SHA2_HEX = SHA2.withName("SHA2_HEX");
 
-  public static final SqlFunction MD5 =
-      new SqlFunction(
+  public static final SqlBasicFunction MD5 =
+      SqlBasicFunction.create(
           "MD5",
-          SqlKind.OTHER_FUNCTION,
           // MD5 outputs at most 32 characters.
           BodoReturnTypes.VARCHAR_32_NULLABLE,
-          null,
           OperandTypes.STRING,
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction MD5_HEX =
-      new SqlFunction(
-          "MD5_HEX",
-          SqlKind.OTHER_FUNCTION,
-          // MD5 outputs at most 32 characters.
-          BodoReturnTypes.VARCHAR_32_NULLABLE,
-          null,
-          OperandTypes.STRING,
-          SqlFunctionCategory.STRING);
+  public static final SqlFunction MD5_HEX = MD5.withName("MD5_HEX");
 
   public static final SqlFunction HEX_ENCODE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "HEX_ENCODE",
-          SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.INTEGER),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction HEX_DECODE_STRING =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "HEX_DECODE_STRING",
-          SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          null,
           OperandTypes.STRING,
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction HEX_DECODE_BINARY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "HEX_DECODE_BINARY",
-          SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
           ReturnTypes.explicit(SqlTypeName.VARBINARY).andThen(SqlTypeTransforms.TO_NULLABLE),
-          null,
           OperandTypes.STRING,
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction TRY_HEX_DECODE_STRING =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_HEX_DECODE_STRING",
-          SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_FORCE_NULLABLE,
-          null,
           OperandTypes.STRING,
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction TRY_HEX_DECODE_BINARY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_HEX_DECODE_BINARY",
-          SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
           BodoReturnTypes.VARBINARY_FORCE_NULLABLE,
-          null,
           OperandTypes.STRING,
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction BASE64_ENCODE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "BASE64_ENCODE",
-          SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction BASE64_DECODE_STRING =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "BASE64_DECODE_STRING",
-          SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction TRY_BASE64_DECODE_STRING =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_BASE64_DECODE_STRING",
-          SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_FORCE_NULLABLE,
-          null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction BASE64_DECODE_BINARY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "BASE64_DECODE_BINARY",
-          SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
           ReturnTypes.explicit(SqlTypeName.VARBINARY).andThen(SqlTypeTransforms.TO_NULLABLE),
-          null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction TRY_BASE64_DECODE_BINARY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_BASE64_DECODE_BINARY",
-          SqlKind.OTHER_FUNCTION,
           // [BSE-1714] TODO: calculate the output precision in terms of the input precision
           // and the second argument.
 
           BodoReturnTypes.VARBINARY_FORCE_NULLABLE,
-          null,
           argumentRange(1, SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
 
