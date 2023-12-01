@@ -887,7 +887,7 @@ def get_overload_const_float(val) -> float:
     raise BodoError("{} not constant float".format(val))
 
 
-def get_overload_const_bool(val) -> bool:
+def get_overload_const_bool(val, f_name=None, a_name=None) -> bool:
     if isinstance(val, bool):
         return val
     if isinstance(val, types.Omitted):
@@ -897,7 +897,14 @@ def get_overload_const_bool(val) -> bool:
     if isinstance(val, types.BooleanLiteral):
         assert isinstance(val.literal_value, bool)
         return val.literal_value
-    raise BodoError("{} not constant boolean".format(val))
+    raise BodoError(
+        ("" if f_name is None else f"Internal error in {f_name}: ")
+        + (
+            f"{val} not constant boolean"
+            if a_name is None
+            else f"{a_name} must be constant boolean, but get {val}"
+        )
+    )
 
 
 def is_const_func_type(t) -> bool:
