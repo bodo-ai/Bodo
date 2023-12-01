@@ -1422,6 +1422,16 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         "object_filter_keys", List.of(new Expr.Tuple(tupleArgs)), List.of());
   }
 
+  protected static Expr visitVariantFunc(String fnName, List<Expr> operands) {
+    switch (fnName) {
+      case "IS_ARRAY":
+      case "IS_OBJECT":
+        return ExprKt.BodoSQLKernel(fnName.toLowerCase(Locale.ROOT), operands, List.of());
+      default:
+        throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
+    }
+  }
+
   protected Expr visitNestedArrayFunc(
       String fnName, List<Expr> operands, List<Boolean> argScalars) {
     return visitNestedArrayFunc(fnName, operands, argScalars, List.of());
@@ -1883,6 +1893,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return visitObjectDelete(operands);
           case "OBJECT_PICK":
             return visitObjectPick(operands);
+          case "IS_ARRAY":
+          case "IS_OBJECT":
+            return visitVariantFunc(fnName, operands);
           case "RLIKE":
           case "REGEXP_LIKE":
           case "REGEXP_COUNT":
