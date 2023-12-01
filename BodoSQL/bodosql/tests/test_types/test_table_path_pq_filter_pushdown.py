@@ -428,9 +428,11 @@ def test_coalesce_lower_filter_pushdown(datapath, memory_leak_check):
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"
         )
+        # Note this is simplifed in the planner to:
+        # lower(A) = val OR A IS NULL
         check_logger_msg(
             stream,
-            "(((pa.compute.coalesce(pa.compute.utf8_lower(ds.field('A')), ds.scalar(f1)) == ds.scalar(f2))))",
+            "(((pa.compute.utf8_lower(ds.field('A')) == ds.scalar(f1))) | ((pa.compute.utf8_lower(ds.field('A')).is_null())))",
         )
 
 

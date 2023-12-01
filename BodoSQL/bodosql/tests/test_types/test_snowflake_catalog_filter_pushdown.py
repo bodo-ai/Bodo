@@ -280,9 +280,11 @@ def test_snowflake_coalesce_lower_pushdown(
             )
             check_logger_msg(stream, "Columns loaded ['b']")
             # Pushdown happens in the planner. Check the timer message instead.
+            # Note this optimized in the planner
+            # TODO(njriasan) [BS-1231]: Determine how to say LOWER(A) IS NULL -> A IS NULL
             check_logger_msg(
                 stream,
-                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE COALESCE(LOWER("A"), $$macedonia$$) = $$macedonia$$',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE LOWER("A") = $$macedonia$$ OR LOWER("A") IS NULL',
             )
 
 
@@ -2737,9 +2739,10 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
                 check_dtype=False,
             )
             # Pushdown happens in the planner. Check the timer message instead.
+            # Note this is optimized in the planner because the second value is always True.
             check_logger_msg(
                 stream,
-                f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE COALESCE("L_COMMITDATE", TIMESTAMP '2023-06-20 00:00:00') >= TIMESTAMP '2023-01-20 00:00:00'""",
+                f"""FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE "L_COMMITDATE" IS NULL OR "L_COMMITDATE" >= TIMESTAMP '2023-01-20 00:00:00'""",
             )
 
 
