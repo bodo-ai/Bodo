@@ -188,8 +188,8 @@ jobs:
       fi
 
       # release and weekly conda variant file builds Python 3.9/3.10/3.11,
-      # but the nightly one builds only Python 3.11 (nightly tests use 3.11)
-      if [[ ! -z $IS_RELEASE ]] || [[ "${{ parameters.weeklyTest }}" == "True" ]]; then
+      # but the nightly one and the platform release only builds only Python 3.11 (nightly tests and platform build only use 3.11)
+      if ([[ ! -z $IS_RELEASE ]] || [[ "${{ parameters.weeklyTest }}" == "True" ]]) && [[ "${{ parameters.platformBuild }}" != "True" ]]; then
         export CONDA_VARIANT_ARG="-e release_conda_build_config.yaml"
       else
         export CONDA_VARIANT_ARG="-e nightly_conda_build_config.yaml"
