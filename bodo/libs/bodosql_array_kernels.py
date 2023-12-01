@@ -21,6 +21,7 @@ from bodo.libs.bodosql_string_array_kernels import *  # noqa
 from bodo.libs.bodosql_time_array_kernels import *  # noqa
 from bodo.libs.bodosql_trig_array_kernels import *  # noqa
 from bodo.libs.bodosql_variadic_array_kernels import *  # noqa
+from bodo.libs.bodosql_variant_array_kernels import *  # noqa
 from bodo.libs.bodosql_window_agg_array_kernels import *  # noqa
 
 broadcasted_fixed_arg_functions = {
@@ -159,10 +160,12 @@ broadcasted_fixed_arg_functions = {
     "int_to_days",
     "interval_add_interval",
     "interval_multiply",
+    "is_array",
     "is_false",
     "is_not_false",
     "is_not_true",
     "is_true",
+    "is_object",
     "jarowinkler_similarity",
     "json_extract_path_text",
     "last_day_month",

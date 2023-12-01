@@ -123,6 +123,14 @@ public final class JsonOperatorTable implements SqlOperatorTable {
   public static final SqlBasicFunction OBJECT_CONSTRUCT =
       OBJECT_CONSTRUCT_KEEP_NULL.withName("OBJECT_CONSTRUCT");
 
+  public static final SqlBasicFunction IS_ARRAY =
+      SqlBasicFunction.create(
+          "IS_ARRAY",
+          ReturnTypes.BOOLEAN_NULLABLE,
+          OperandTypes.family(SqlTypeFamily.ANY),
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+  public static final SqlFunction IS_OBJECT = IS_ARRAY.withName("IS_OBJECT");
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           GET_PATH,
@@ -132,7 +140,9 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           OBJECT_KEYS,
           OBJECT_CONSTRUCT_KEEP_NULL,
           OBJECT_CONSTRUCT,
-          OBJECT_AGG);
+          OBJECT_AGG,
+          IS_ARRAY,
+          IS_OBJECT);
 
   @Override
   public void lookupOperatorOverloads(
