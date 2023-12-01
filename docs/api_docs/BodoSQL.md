@@ -4015,6 +4015,22 @@ Bodo currently supports the following functions that produce tables:
     | 75 | 1   | "blue"   |
 
 
+###   Type Predicates
+
+#### IS_ARRAY
+-   `#!sql IS_ARRAY(variant_expr)`
+
+    Returns `TRUE` for all rows where `variant_expr` is an array, `NULL` if the
+    row is `NULL`, and `FALSE` otherwise.
+
+
+#### IS_OBJECT
+-   `#!sql IS_OBJECT(variant_expr)`
+
+    Returns `TRUE` for all rows where `variant_expr` is an object, `NULL` if the
+    row is `NULL`, and `FALSE` otherwise.
+
+
 ###   Context Functions (Session Object)
 
 #### CURRENT_DATABASE
