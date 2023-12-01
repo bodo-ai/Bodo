@@ -53,7 +53,7 @@ def to_time_util(
     arg_types = [arr, format_str, _try, dict_encoding_state, func_id]
     propagate_null = [True, False, False, False, False]
 
-    _try = get_overload_const_bool(_try)
+    _try = get_overload_const_bool(_try, "to_time", "_try")
 
     if is_valid_string_arg(arr) or is_overload_none(arr):
         if is_overload_none(format_str):

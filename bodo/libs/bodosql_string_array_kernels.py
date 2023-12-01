@@ -2671,8 +2671,8 @@ def hex_decode_util(msg, _try, _is_str, dict_encoding_state, func_id):
         String scalar/column: the original string such that calling HEX_ENCODE
         with the output with the same arguments would produce the input to this function.
     """
-    _try_bool = get_overload_const_bool(_try)
-    _is_str_bool = get_overload_const_bool(_is_str)
+    _try_bool = get_overload_const_bool(_try, "hex_decode", "_try")
+    _is_str_bool = get_overload_const_bool(_is_str, "hex_decode", "_is_str")
     func_name = "HEX_DECODE"
     if _try_bool:
         func_name = "TRY_" + func_name
@@ -2910,8 +2910,8 @@ def base64_decode_util(msg, alphabet, _try, _is_str, dict_encoding_state, func_i
         String scalar/column: the original string such that calling BASE64_ENCODE
         with the output with the same arguments would produce the input to this function.
     """
-    _try_bool = get_overload_const_bool(_try)
-    _is_str_bool = get_overload_const_bool(_is_str)
+    _try_bool = get_overload_const_bool(_try, "base64_decode", "_try")
+    _is_str_bool = get_overload_const_bool(_is_str, "base64_decode", "_is_str")
     func_name = "BASE64_DECODE"
     if _try_bool:
         func_name = "TRY_" + func_name

@@ -141,8 +141,8 @@ def overload_array_except_util(arr, to_remove, is_scalar_0, is_scalar_1):
     arg_types = [arr, to_remove, is_scalar_0, is_scalar_1]
     propagate_null = [True] * 2 + [False] * 2
     are_arrays = [
-        not get_overload_const_bool(is_scalar_0),
-        not get_overload_const_bool(is_scalar_1),
+        not get_overload_const_bool(is_scalar_0, "array_except", "is_scalar_0"),
+        not get_overload_const_bool(is_scalar_1, "array_except", "is_scalar_0"),
         False,
         False,
     ]
@@ -239,8 +239,8 @@ def overload_array_intersection_util(arr_0, arr_1, is_scalar_0, is_scalar_1):
     arg_types = [arr_0, arr_1, is_scalar_0, is_scalar_1]
     propagate_null = [True] * 2 + [False] * 2
     are_arrays = [
-        not get_overload_const_bool(is_scalar_0),
-        not get_overload_const_bool(is_scalar_1),
+        not get_overload_const_bool(is_scalar_0, "array_intersection", "is_scalar_0"),
+        not get_overload_const_bool(is_scalar_1, "array_intersection", "is_scalar_1"),
         False,
         False,
     ]
@@ -333,8 +333,8 @@ def overload_array_cat_util(arr_0, arr_1, is_scalar_0, is_scalar_1):
     arg_names = ["arr_0", "arr_1", "is_scalar_0", "is_scalar_1"]
     arg_types = [arr_0, arr_1, is_scalar_0, is_scalar_1]
     propagate_null = [True] * 2 + [False] * 2
-    is_scalar_0 = get_overload_const_bool(is_scalar_0)
-    is_scalar_1 = get_overload_const_bool(is_scalar_1)
+    is_scalar_0 = get_overload_const_bool(is_scalar_0, "array_cat", "is_scalar_0")
+    is_scalar_1 = get_overload_const_bool(is_scalar_1, "array_cat", "is_scalar_1")
     are_arrays = [
         not is_scalar_0,
         not is_scalar_1,
@@ -429,7 +429,7 @@ def to_array_util(arr, is_scalar, dict_encoding_state, func_id):  # pragma: no c
 
 @overload(to_array_util, no_unliteral=True)
 def overload_to_array_util(arr, is_scalar, dict_encoding_state, func_id):
-    is_scalar_bool = get_overload_const_bool(is_scalar)
+    is_scalar_bool = get_overload_const_bool(is_scalar, "to_array", "is_scalar")
     arg_names = ["arr", "is_scalar", "dict_encoding_state", "func_id"]
     arg_types = [arr, is_scalar, dict_encoding_state, func_id]
     propagate_null = [True, False, False, False]
@@ -493,8 +493,12 @@ def arrays_overlap_util(array_0, array_1, is_scalar_0, is_scalar_1):
     Returns:
         boolean scalar/vector: whether the arrays have any common elements
     """
-    is_scalar_0_bool = get_overload_const_bool(is_scalar_0)
-    is_scalar_1_bool = get_overload_const_bool(is_scalar_1)
+    is_scalar_0_bool = get_overload_const_bool(
+        is_scalar_0, "arrays_overlap", "is_scalar_0"
+    )
+    is_scalar_1_bool = get_overload_const_bool(
+        is_scalar_1, "arrays_overlap", "is_scalar_1"
+    )
     arg_names = ["array_0", "array_1", "is_scalar_0", "is_scalar_1"]
     arg_types = [array_0, array_1, is_scalar_0, is_scalar_1]
     propagate_null = [True, True, False, False]
@@ -559,8 +563,12 @@ def array_position_util(elem, container, elem_is_scalar, container_is_scalar):
         integer scalar/vector: the index of the first match to elem in container
         (zero-indexed), or null if there is no match.
     """
-    elem_is_scalar_bool = get_overload_const_bool(elem_is_scalar)
-    container_is_scalar_bool = get_overload_const_bool(container_is_scalar)
+    elem_is_scalar_bool = get_overload_const_bool(
+        elem_is_scalar, "array_position", "elem_is_scalar"
+    )
+    container_is_scalar_bool = get_overload_const_bool(
+        container_is_scalar, "array_position", "container_is_scalar"
+    )
     arg_names = ["elem", "container", "elem_is_scalar", "container_is_scalar"]
     arg_types = [elem, container, elem_is_scalar, container_is_scalar]
     propagate_null = [False, True, False, False]
@@ -648,8 +656,12 @@ def overload_array_contains_util(
     Returns:
         boolean scalar/vector: if elem is contained in container, and null if container is null.
     """
-    elem_is_scalar_bool = get_overload_const_bool(elem_is_scalar)
-    container_is_scalar_bool = get_overload_const_bool(container_is_scalar)
+    elem_is_scalar_bool = get_overload_const_bool(
+        elem_is_scalar, "array_contains", "elem_is_scalar"
+    )
+    container_is_scalar_bool = get_overload_const_bool(
+        container_is_scalar, "array_contains", "container_is_scalar"
+    )
     arg_names = ["elem", "container", "elem_is_scalar", "container_is_scalar"]
     arg_types = [elem, container, elem_is_scalar, container_is_scalar]
     propagate_null = [False, True, False, False]
@@ -723,7 +735,7 @@ def overload_array_to_string_util(arr, separator, is_scalar):  # pragma: no cove
         A string scalar/array: the result string(s)
     """
     verify_string_arg(separator, "ARRAY_TO_STRING", "separator")
-    is_scalar_bool = get_overload_const_bool(is_scalar)
+    is_scalar_bool = get_overload_const_bool(is_scalar, "array_to_string", "is_scalar")
     arg_names = ["arr", "separator", "is_scalar"]
     arg_types = [arr, separator, is_scalar]
     propagate_null = [True, True, False]
@@ -812,7 +824,9 @@ def overload_array_size_util(arr, is_scalar):  # pragma: no cover
         )
 
     # Whether to call len on each element or on arr itself
-    arr_is_array = is_array_item_array(arr) and not get_overload_const_bool(is_scalar)
+    arr_is_array = is_array_item_array(arr) and not get_overload_const_bool(
+        is_scalar, "array_size", "is_scalar"
+    )
 
     scalar_text = "res[i] = len(arg0)"
     arg_names = ["arr", "is_scalar"]
@@ -865,7 +879,7 @@ def array_compact_util(arr, is_scalar):  # pragma: no cover
 
 @overload(array_compact_util, no_unliteral=True)  # pragma: no cover
 def overload_array_compact_util(arr, is_scalar):
-    is_scalar_bool = get_overload_const_bool(is_scalar)
+    is_scalar_bool = get_overload_const_bool(is_scalar, "array_compact", "is_scalar")
     arg_names = ["arr", "is_scalar"]
     arg_types = [arr, is_scalar]
     propagate_null = [True, False]
@@ -942,8 +956,8 @@ def overload_array_remove_util(
     arg_types = [arr, to_remove, is_scalar_0, is_scalar_1]
     propagate_null = [True, True, False, False]
     are_arrays = [
-        not get_overload_const_bool(is_scalar_0),
-        not get_overload_const_bool(is_scalar_1),
+        not get_overload_const_bool(is_scalar_0, "array_remove", "is_scalar_0"),
+        not get_overload_const_bool(is_scalar_1, "array_remove", "is_scalar_1"),
         False,
         False,
     ]
@@ -1012,7 +1026,11 @@ def overload_array_remove_at_util(arr, pos, is_scalar):
     arg_names = ["arr", "pos", "is_scalar"]
     arg_types = [arr, pos, is_scalar]
     propagate_null = [True, True, False]
-    are_arrays = [not get_overload_const_bool(is_scalar), is_array_typ(pos), False]
+    are_arrays = [
+        not get_overload_const_bool(is_scalar, "array_remove_at", "is_scalar"),
+        is_array_typ(pos),
+        False,
+    ]
     out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(
         arr.dtype if are_arrays[0] else arr
     )
@@ -1066,7 +1084,7 @@ def array_slice_util(arr, from_, to, is_scalar):  # pragma: no cover
 
 @overload(array_slice_util, no_unliteral=True)
 def overload_array_slice_util(arr, from_, to, is_scalar):  # pragma: no cover
-    is_scalar_bool = get_overload_const_bool(is_scalar)
+    is_scalar_bool = get_overload_const_bool(is_scalar, "array_slice", "is_scalar")
     arg_names = ["arr", "from_", "to", "is_scalar"]
     arg_types = [arr, from_, to, is_scalar]
     propagate_null = [True, True, True, False]

@@ -641,8 +641,8 @@ def equal_null_util(A, B, is_scalar_a, is_scalar_b, dict_encoding_state, func_id
     Returns:
         boolean series/scalar: whether the number(s) are equal, or both null
     """
-    is_scalar_a = get_overload_const_bool(is_scalar_a)
-    is_scalar_b = get_overload_const_bool(is_scalar_b)
+    is_scalar_a = get_overload_const_bool(is_scalar_a, "equal_null", "is_scalar_a")
+    is_scalar_b = get_overload_const_bool(is_scalar_b, "equal_null", "is_scalar_b")
 
     are_arrays = [not is_scalar_a, not is_scalar_b, False, False, False, False]
     typ_a = A.data if bodo.hiframes.pd_series_ext.is_series_type(A) else A
@@ -1153,7 +1153,9 @@ def overload_arr_get_util(arr, ind, is_scalar_arr):
         )
 
     verify_int_arg(ind, "GET", "ind")
-    is_scalar_arr_bool = get_overload_const_bool(is_scalar_arr)
+    is_scalar_arr_bool = get_overload_const_bool(
+        is_scalar_arr, "arr_get", "is_scalar_arr"
+    )
     arg_names = ["arr", "ind", "is_scalar_arr"]
     arg_types = [arr, ind, is_scalar_arr]
     propagate_null = [True, True, False]
