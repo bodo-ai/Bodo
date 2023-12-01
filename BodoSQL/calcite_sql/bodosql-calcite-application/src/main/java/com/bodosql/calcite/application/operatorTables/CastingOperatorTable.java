@@ -64,32 +64,20 @@ public class CastingOperatorTable implements SqlOperatorTable {
   }
 
   public static final SqlFunction TO_BINARY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TO_BINARY",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           BodoReturnTypes.VARBINARY_NULLABLE_UNKNOWN_PRECISION,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // The input can be a string or binary
           OperandTypes.STRING,
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction TRY_TO_BINARY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_TO_BINARY",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           BodoReturnTypes.VARBINARY_FORCE_NULLABLE_UNKNOWN_PRECISION,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // The input can be a string or binary
           OperandTypes.STRING,
           // What group of functions does this fall into?
@@ -99,15 +87,10 @@ public class CastingOperatorTable implements SqlOperatorTable {
   // compile
   // time as of right now, we do this check in our code.
   public static final SqlFunction TO_BOOLEAN =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TO_BOOLEAN",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BOOLEAN_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // For conversion to boolean, snowflake allows a string, numeric expr, or variant
           // (with runtime error being thrown if the underlying value is not string)
           OperandTypes.NUMERIC.or(OperandTypes.STRING).or(BodoOperandTypes.VARIANT),
@@ -115,33 +98,23 @@ public class CastingOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction TRY_TO_BOOLEAN =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_TO_BOOLEAN",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           // TRY_TO_BOOLEAN will return null for invalid conversions, so we have to force the output
           // to be nullable
           ReturnTypes.BOOLEAN_FORCE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // For conversion to boolean, snowflake allows a string or numeric expr.
           OperandTypes.NUMERIC.or(OperandTypes.STRING),
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction TO_CHAR =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TO_CHAR",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
           // TO_CHAR only converts nullable types to NULL
           // and has unknown precision
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // For conversion to string, snowflake any expresison type. If the first argument is
           // numeric,
           // datetime/timestamp, or binary, then an optional format string is allowed as a second
@@ -154,16 +127,11 @@ public class CastingOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction TO_VARCHAR =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TO_VARCHAR",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
           // TO_VARCHAR only converts nullable types to NULL
           // and has unknown precision
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // For conversion to string, snowflake any expression type. If the first argument is
           // numeric,
           // datetime/timestamp, or binary, then an optional format string is allowed as a second
@@ -192,13 +160,11 @@ public class CastingOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TRY_TO_DATE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_TO_DATE",
-          SqlKind.OTHER_FUNCTION,
           // TRY_TO_X functions can create null outputs for non-null inputs if the conversion is
           // invalid
           BodoReturnTypes.DATE_FORCE_NULLABLE,
-          null,
           // For conversion to date, snowflake allows a string, datetime, or integer.
           // If the first argument is string, an optional format string is allowed
           // as a second argument.
@@ -258,95 +224,74 @@ public class CastingOperatorTable implements SqlOperatorTable {
   // TO_TIMESTAMP defaults to _NTZ unless the session parameter (which isn't
   // supported yet) says otherwise.
   public static final SqlFunction TO_TIMESTAMP =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TO_TIMESTAMP",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.TIMESTAMP_NULLABLE,
-          null,
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TRY_TO_TIMESTAMP =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_TO_TIMESTAMP",
-          SqlKind.OTHER_FUNCTION,
           BodoReturnTypes.TIMESTAMP_FORCE_NULLABLE,
-          null,
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TO_TIMESTAMP_NTZ =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TO_TIMESTAMP_NTZ",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.TIMESTAMP_NULLABLE,
-          null,
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TRY_TO_TIMESTAMP_NTZ =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_TO_TIMESTAMP_NTZ",
-          SqlKind.OTHER_FUNCTION,
           BodoReturnTypes.TIMESTAMP_FORCE_NULLABLE,
-          null,
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TO_TIMESTAMP_LTZ =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TO_TIMESTAMP_LTZ",
-          SqlKind.OTHER_FUNCTION,
           opBinding -> toTimestampTZReturnType(opBinding, false, false),
-          null,
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TRY_TO_TIMESTAMP_LTZ =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_TO_TIMESTAMP_LTZ",
-          SqlKind.OTHER_FUNCTION,
           opBinding -> toTimestampTZReturnType(opBinding, true, false),
-          null,
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TO_TIMESTAMP_TZ =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TO_TIMESTAMP_TZ",
-          SqlKind.OTHER_FUNCTION,
           opBinding -> toTimestampTZReturnType(opBinding, false, true),
-          null,
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TRY_TO_TIMESTAMP_TZ =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_TO_TIMESTAMP_TZ",
-          SqlKind.OTHER_FUNCTION,
           opBinding -> toTimestampTZReturnType(opBinding, true, true),
-          null,
           // Use the accepted operand types for all TO_TIMESTAMP functions variant
           toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TO_DOUBLE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TO_DOUBLE",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // For conversion to double, snowflake allows a string, numeric, or variant expr.
           // If the first argument is string, an optional format string is allowed as a second
           // argument.
@@ -370,15 +315,10 @@ public class CastingOperatorTable implements SqlOperatorTable {
           .withName("TO_OBJECT");
 
   public static final SqlFunction TRY_TO_DOUBLE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_TO_DOUBLE",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           BodoReturnTypes.DOUBLE_FORCE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // For conversion to double, snowflake allows a string, numeric, or variant expr.
           // If the first argument is string, an optional format string is allowed as a second
           // argument.

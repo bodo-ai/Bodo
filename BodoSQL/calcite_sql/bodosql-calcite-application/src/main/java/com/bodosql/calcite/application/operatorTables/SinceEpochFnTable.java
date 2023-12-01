@@ -2,10 +2,10 @@ package com.bodosql.calcite.application.operatorTables;
 
 import java.util.Arrays;
 import java.util.List;
+import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
@@ -32,16 +32,10 @@ public final class SinceEpochFnTable implements SqlOperatorTable {
   }
 
   public static final SqlFunction TO_DAYS =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TO_DAYS",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this, so we set it to None.
-          null,
           // What Input Types does the function accept?
           // Note: When have proper Date type support this should be restricted to just date.
           OperandTypes.DATETIME,
@@ -49,64 +43,40 @@ public final class SinceEpochFnTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TO_SECONDS =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TO_SECONDS",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this, so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction FROM_DAYS =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "FROM_DAYS",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.TIMESTAMP_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this, so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.INTEGER,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction UNIX_TIMESTAMP =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "UNIX_TIMESTAMP",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.NILADIC,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction FROM_UNIXTIME =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "FROM_UNIXTIME",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.TIMESTAMP_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.INTEGER,
           // What group of functions does this fall into?

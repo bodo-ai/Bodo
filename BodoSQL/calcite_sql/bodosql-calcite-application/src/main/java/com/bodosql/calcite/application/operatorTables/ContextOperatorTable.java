@@ -2,10 +2,10 @@ package com.bodosql.calcite.application.operatorTables;
 
 import java.util.Arrays;
 import java.util.List;
+import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
@@ -32,17 +32,11 @@ public final class ContextOperatorTable implements SqlOperatorTable {
   }
 
   public static final SqlFunction CURRENT_DATABASE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "CURRENT_DATABASE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           // Snowflake returns VARCHAR(16K)
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.NILADIC,
           // What group of functions does this fall into?

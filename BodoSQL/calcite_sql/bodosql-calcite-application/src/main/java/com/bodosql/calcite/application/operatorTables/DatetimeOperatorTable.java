@@ -18,7 +18,6 @@ import org.apache.calcite.sql.SqlCallBinding;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorBinding;
 import org.apache.calcite.sql.SqlOperatorTable;
@@ -158,11 +157,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   }
 
   public static final SqlFunction DATEADD =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "DATEADD",
-          SqlKind.OTHER_FUNCTION,
           opBinding -> dateaddReturnType(opBinding),
-          null,
           OperandTypes.sequence(
                   "DATEADD(UNIT, VALUE, DATETIME)",
                   OperandTypes.ANY,
@@ -175,11 +172,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIMEADD =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TIMEADD",
-          SqlKind.OTHER_FUNCTION,
           opBinding -> snowflakeDateaddReturnType(opBinding, "TIMEADD"),
-          null,
           OperandTypes.sequence(
               "TIMEADD(UNIT, VALUE, TIME)",
               OperandTypes.ANY,
@@ -189,16 +184,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
 
   // TODO: Extend the Library Operator and use the builtin Libraries
   public static final SqlFunction DATE_ADD =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "DATE_ADD",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           opBinding -> mySqlDateaddReturnType(opBinding),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           OperandTypes.DATETIME_INTERVAL
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME_INTERVAL))
               .or(OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.INTEGER))
@@ -219,15 +208,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction TIME = TO_TIME.withName("TIME");
 
   public static final SqlFunction TRY_TO_TIME =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRY_TO_TIME",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           BodoReturnTypes.TIME_FORCE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           OperandTypes.DATETIME
               .or(OperandTypes.CHARACTER)
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
@@ -354,16 +338,11 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction TIMESTAMPLTZFROMPARTS =
       TIMESTAMP_LTZ_FROM_PARTS.withName("TIMESTAMPLTZFROMPARTS");
 
-  public static final SqlFunction TIMESTAMP_TZ_FROM_PARTS =
-      new SqlFunction(
+  public static final SqlBasicFunction TIMESTAMP_TZ_FROM_PARTS =
+      SqlBasicFunction.create(
           "TIMESTAMP_TZ_FROM_PARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           opBinding -> timestampConstructionOutputType(opBinding, false),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           argumentRange(
               6,
               SqlTypeFamily.NUMERIC,
@@ -378,27 +357,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIMESTAMPTZFROMPARTS =
-      new SqlFunction(
-          "TIMESTAMPTZFROMPARTS",
-          // What SqlKind should match?
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          opBinding -> timestampConstructionOutputType(opBinding, false),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          argumentRange(
-              6,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.STRING),
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
+      TIMESTAMP_TZ_FROM_PARTS.withName("TIMESTAMPTZFROMPARTS");
 
   public static final SqlBasicFunction DATE_SUB =
       SqlBasicFunction.create(
@@ -412,16 +371,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction SUBDATE = DATE_SUB.withName("SUBDATE");
   public static final SqlFunction ADDDATE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ADDDATE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           opBinding -> mySqlDateaddReturnType(opBinding),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts either
           // (Datetime, Interval) or (Datetime, Integer)
           OperandTypes.DATETIME_INTERVAL
@@ -432,16 +385,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction DATEDIFF =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "DATEDIFF",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts only
           // (Datetime, Datetime)
 
@@ -459,16 +406,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIMEDIFF =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TIMEDIFF",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           OperandTypes.sequence(
               "TIMEDIFF(UNIT, TIMESTAMP/DATE/TIME, TIMESTAMP/DATE/TIME)",
               OperandTypes.ANY,
@@ -478,17 +419,11 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction STR_TO_DATE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "STR_TO_DATE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           // returns null if the string doesn't match the provided format
           BodoReturnTypes.TIMESTAMP_FORCE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts only
           // (String, Literal String)
           OperandTypes.sequence(
@@ -496,17 +431,11 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction GETDATE =
-      new SqlFunction(
+  public static final SqlBasicFunction GETDATE =
+      SqlBasicFunction.create(
           "GETDATE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           BodoReturnTypes.TZAWARE_TIMESTAMP,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.NILADIC,
           // What group of functions does this fall into?
@@ -518,37 +447,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   // LOCALTIMESTAMP is already supported inside Calcite and will be picked
   // up automatically. No need to implement it again here
 
-  public static final SqlFunction SYSTIMESTAMP =
-      new SqlFunction(
-          "SYSTIMESTAMP",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          BodoReturnTypes.TZAWARE_TIMESTAMP,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.NILADIC,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
+  public static final SqlFunction SYSTIMESTAMP = GETDATE.withName("SYSTIMESTAMP");
 
-  public static final SqlFunction NOW =
-      new SqlFunction(
-          "NOW",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          BodoReturnTypes.TZAWARE_TIMESTAMP,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.NILADIC,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
+  public static final SqlFunction NOW = GETDATE.withName("NOW");
 
   // CURRENT_TIME is already supported inside Calcite and will be picked
   // up automatically. No need to implement it again here
@@ -556,53 +457,19 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   // LOCALTIME is already supported inside Calcite and will be picked
   // up automatically. No need to implement it again here
 
-  public static final SqlFunction UTC_TIMESTAMP =
-      new SqlFunction(
+  public static final SqlBasicFunction UTC_TIMESTAMP =
+      SqlBasicFunction.create(
           "UTC_TIMESTAMP",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.TIMESTAMP,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.NILADIC,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction UTC_DATE =
-      new SqlFunction(
-          "UTC_DATE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.TIMESTAMP,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.NILADIC,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
+  public static final SqlFunction UTC_DATE = UTC_TIMESTAMP.withName("UTC_DATE");
 
-  public static final SqlFunction SYSDATE =
-      new SqlFunction(
-          "SYSDATE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.TIMESTAMP,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.NILADIC,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
+  public static final SqlFunction SYSDATE = UTC_TIMESTAMP.withName("SYSDATE");
 
   public static final SqlFunction MICROSECOND =
       new SqlDatePartFunction("MICROSECOND", TimeUnit.MICROSECOND);
@@ -616,16 +483,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction WEEKISO = new SqlDatePartFunction("WEEKISO", TimeUnit.WEEK);
 
   public static final SqlFunction DAYNAME =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "DAYNAME",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // This always returns a 3 letter value.
           BodoReturnTypes.VARCHAR_3_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.DATETIME,
           // What group of functions does this fall into?
@@ -646,63 +507,39 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction MONTH_NAME = MONTHNAME.withName("MONTH_NAME");
   public static final SqlFunction MONTHS_BETWEEN =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "MONTHS_BETWEEN",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           /// What Input Types does the function accept.
           OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.DATETIME),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction ADD_MONTHS =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "ADD_MONTHS",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.ARG0_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.NUMERIC),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction CURDATE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "CURDATE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.DATE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.NILADIC,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction DATE_FORMAT =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "DATE_FORMAT",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Precision cannot be statically determined.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept. This function accepts only
           // (String, Literal String)
           OperandTypes.sequence(
@@ -716,16 +553,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction MAKEDATE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "MAKEDATE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.DATE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.sequence(
               "MAKEDATE(INTEGER, INTEGER)", OperandTypes.INTEGER, OperandTypes.INTEGER),
@@ -733,48 +564,30 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction WEEKDAY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "WEEKDAY",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction YEARWEEK =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "YEARWEEK",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.TIMESTAMP,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction DATE_TRUNC =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "DATE_TRUNC",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           opBinding -> datetruncReturnType(opBinding),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.sequence(
               "DATE_TRUNC(UNIT, DATETIME)", OperandTypes.ANY, OperandTypes.DATETIME),
@@ -782,16 +595,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIME_SLICE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TIME_SLICE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.ARG0_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.sequence(
                   "TIME_SLICE(DATETIME, INT, UNIT)",
@@ -820,58 +627,38 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   }
 
   public static final SqlFunction TRUNC =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TRUNC",
-          SqlKind.OTHER_FUNCTION,
           opBinding -> truncReturnType(opBinding),
-          null,
           // What Input Types does the function accept.
           OperandTypes.sequence("TRUNC(UNIT, DATETIME)", OperandTypes.ANY, OperandTypes.DATETIME)
               .or(argumentRange(1, SqlTypeFamily.NUMERIC, SqlTypeFamily.INTEGER)),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   public static final SqlFunction YEAROFWEEK =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "YEAROFWEEK",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
   public static final SqlFunction YEAROFWEEKISO =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "YEAROFWEEKISO",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction NEXT_DAY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "NEXT_DAY",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.DATE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this, so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.CHARACTER)
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
@@ -879,16 +666,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction PREVIOUS_DAY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "PREVIOUS_DAY",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.DATE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this, so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.CHARACTER)
               .or(OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER)),
@@ -898,108 +679,70 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction DAY = new SqlDatePartFunction("DAY", TimeUnit.DAY);
 
   public static final SqlFunction CONVERT_TIMEZONE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "CONVERT_TIMEZONE",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.TIMESTAMP_NULLABLE,
-          null,
           OperandTypes.CHARACTER_CHARACTER_DATETIME.or(
               OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME)),
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction EPOCH_SECOND =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "EPOCH_SECOND",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction EPOCH_MILLISECOND =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "EPOCH_MILLISECOND",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction EPOCH_MICROSECOND =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "EPOCH_MICROSECOND",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction EPOCH_NANOSECOND =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "EPOCH_NANOSECOND",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIMEZONE_HOUR =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TIMEZONE_HOUR",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Note: This is the max type the SF return precision.
           // It seems like a tinyint should be possible.
           BodoReturnTypes.SMALLINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIMEZONE_MINUTE =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "TIMEZONE_MINUTE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
           // Note: This is the max type the SF return precision.
           // It seems like a tinyint should be possible.
           BodoReturnTypes.SMALLINT_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
           // What Input Types does the function accept.
           OperandTypes.DATETIME,
           // What group of functions does this fall into?

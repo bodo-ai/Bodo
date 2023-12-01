@@ -1,5 +1,6 @@
 package com.bodosql.calcite.sql.func;
 
+import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
@@ -146,11 +147,9 @@ public class SqlBodoOperatorTable extends ReflectiveSqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction LAST_DAY =
-      new SqlFunction(
+      SqlBasicFunction.create(
           "LAST_DAY",
-          SqlKind.OTHER_FUNCTION,
           ReturnTypes.DATE_NULLABLE,
-          null,
           OperandTypes.or(
               OperandTypes.DATETIME,
               OperandTypes.sequence(
