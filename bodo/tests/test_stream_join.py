@@ -4033,3 +4033,108 @@ def test_nested_loop_join_tuple_array(memory_leak_check):
         convert_columns_to_pandas=True,
         sort_output=True,
     )
+
+
+# Note we mark this as slow because the volume of data in
+# the output makes checking correctness slow.
+@pytest.mark.slow
+def test_shuffle_batching(memory_leak_check):
+    assert (
+        bodo.bodosql_streaming_batch_size < 10000
+    ), "If the batch size is more than 10k there will only be one batch and this won't test anything"
+    build = pd.DataFrame({"A": np.arange(60000), "B": [1, 2, 3, 4, 5, 6] * 10000})
+    probe = pd.DataFrame({"C": np.arange(60000), "D": [1, 2, 3, 4, 5, 6] * 10000})
+    expected_df = pd.DataFrame(
+        {
+            "A": np.arange(60000),
+            "B": [1, 2, 3, 4, 5, 6] * 10000,
+            "C": np.arange(60000),
+            "D": [1, 2, 3, 4, 5, 6] * 10000,
+        }
+    )
+    prev_batch_size = bodo.bodosql_streaming_batch_size
+    build_keys_inds = bodo.utils.typing.MetaType((0,))
+    probe_keys_inds = bodo.utils.typing.MetaType((0,))
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+
+    def shuffle_batching(df1, df2):
+        join_state = init_join_state(
+            -1,
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+        )
+        _temp1 = 0
+        is_last1 = False
+        tt = bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1)
+        T1 = bodo.hiframes.table.logical_table_to_table(tt, (), kept_cols, 2)
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
+            )
+            is_last1 = (_temp1 * 4000) >= len(df1)
+            _temp1 = _temp1 + 1
+            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+
+        _temp2 = 0
+        is_last2 = False
+        is_last3 = False
+        T3 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2),
+            (),
+            kept_cols,
+            2,
+        )
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+
+        while not is_last3:
+            T4 = bodo.hiframes.table.table_local_filter(
+                T3, slice((_temp2 * 4000), ((_temp2 + 1) * 4000))
+            )
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            _temp2 = _temp2 + 1
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, T4, is_last2, True
+            )
+            bodo.libs.table_builder.table_builder_append(_table_builder, out_table)
+
+        delete_join_state(join_state)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+        return df
+
+    check_func(
+        shuffle_batching,
+        (build, probe),
+        py_output=expected_df,
+        reset_index=True,
+        sort_output=True,
+    )

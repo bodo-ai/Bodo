@@ -2,6 +2,7 @@
 #include "_distributed.h"
 #include "_memory_budget.h"
 #include "_shuffle.h"
+#include "_stream_shuffle.h"
 
 // When estimating the required size of the OperatorBufferPool, we add some
 // headroom to be conservative. These macros define the bounds of this headroom.
@@ -16,7 +17,8 @@ uint32_t HashHashJoinTable::operator()(const int64_t iRow) const {
         return (*(
             this->join_partition->build_table_join_hashes_guard.value()))[iRow];
     } else {
-        return this->join_partition->probe_table_hashes[-iRow - 1];
+        return this->join_partition->probe_table_hashes
+            [-(iRow + this->join_partition->probe_table_hashes_offset) - 1];
     }
 }
 
@@ -689,6 +691,9 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     const bool build_needs_reduction,
     const std::shared_ptr<ChunkedTableBuilder>& output_buffer) {
     assert(this->pinned_);
+    // This should always be 0 here but just in case
+    this->probe_table_hashes_offset = 0;
+
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
     // Raw array pointers from arrays for passing to non-equijoin condition
@@ -1994,12 +1999,12 @@ bool join_build_consume_batch(HashJoinState* join_state,
             join_state->build_shuffle_state.ShuffleIfRequired(is_last);
         if (new_data_.has_value()) {
             std::shared_ptr<table_info> new_data = new_data_.value();
-            dict_hashes = join_state->GetDictionaryHashesForKeys();
             // NOTE: Partition hashes need to be consistent across ranks, so
             // need to use dictionary hashes. Since we are using dictionary
             // hashes, we don't need dictionaries to be global. In fact,
             // hash_keys_table will ignore the dictionaries entirely when
             // dict_hashes are provided.
+            dict_hashes = join_state->GetDictionaryHashesForKeys();
             std::shared_ptr<uint32_t[]> batch_hashes_partition =
                 hash_keys_table(new_data, join_state->n_keys,
                                 SEED_HASH_PARTITION, /*is_parallel*/ true,
@@ -2221,55 +2226,86 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             join_state->probe_shuffle_state.ShuffleIfRequired(is_last);
         if (new_data_.has_value()) {
             std::shared_ptr<table_info> new_data = new_data_.value();
-            // probe hash table with new data
-            std::shared_ptr<uint32_t[]> batch_hashes_join =
-                hash_keys_table(new_data, join_state->n_keys, SEED_HASH_JOIN,
-                                shuffle_possible, false);
             active_partition->probe_table = new_data;
-            active_partition->probe_table_hashes = batch_hashes_join.get();
+            for (size_t batch_start_row = 0;
+                 batch_start_row < new_data->nrows();
+                 batch_start_row += STREAMING_BATCH_SIZE) {
+                // probe hash table with new data
+                std::shared_ptr<uint32_t[]> batch_hashes_join = hash_keys_table(
+                    new_data, join_state->n_keys, SEED_HASH_JOIN,
+                    shuffle_possible, false, nullptr, batch_start_row,
+                    STREAMING_BATCH_SIZE);
+                active_partition->probe_table_hashes = batch_hashes_join.get();
+                // Since we only have the hashes for this batch we need an
+                // offset to the row when indexing into the hashtable
+                active_partition->probe_table_hashes_offset = batch_start_row;
 
-            // Fetch the raw array pointers from the arrays for passing
-            // to the non-equijoin condition
-            std::vector<array_info*> build_table_info_ptrs,
-                probe_table_info_ptrs;
-            // Vectors for data
-            std::vector<void*> build_col_ptrs, probe_col_ptrs;
-            // Vectors for null bitmaps for fast null checking from the cfunc
-            std::vector<void*> build_null_bitmaps, probe_null_bitmaps;
-            if (non_equi_condition) {
-                std::tie(build_table_info_ptrs, build_col_ptrs,
-                         build_null_bitmaps) =
-                    get_gen_cond_data_ptrs(
-                        active_partition->build_table_buffer->data_table);
-                std::tie(probe_table_info_ptrs, probe_col_ptrs,
-                         probe_null_bitmaps) =
-                    get_gen_cond_data_ptrs(active_partition->probe_table);
-            }
-            join_state->num_processed_probe_table_rows += new_data->nrows();
+                // Fetch the raw array pointers from the arrays for passing
+                // to the non-equijoin condition
+                std::vector<array_info*> build_table_info_ptrs,
+                    probe_table_info_ptrs;
+                // Vectors for data
+                std::vector<void*> build_col_ptrs, probe_col_ptrs;
+                // Vectors for null bitmaps for fast null checking from the
+                // cfunc
+                std::vector<void*> build_null_bitmaps, probe_null_bitmaps;
+                if (non_equi_condition) {
+                    std::tie(build_table_info_ptrs, build_col_ptrs,
+                             build_null_bitmaps) =
+                        get_gen_cond_data_ptrs(
+                            active_partition->build_table_buffer->data_table);
+                    std::tie(probe_table_info_ptrs, probe_col_ptrs,
+                             probe_null_bitmaps) =
+                        get_gen_cond_data_ptrs(active_partition->probe_table);
+                }
+                size_t nrows = std::min<size_t>(
+                    STREAMING_BATCH_SIZE, new_data->nrows() - batch_start_row);
+                join_state->num_processed_probe_table_rows += nrows;
 
-            if (join_state->partitions.size() > 1) {
-                // NOTE: partition hashes need to be consistent across ranks so
-                // need to use dictionary hashes
-                std::shared_ptr<
-                    bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
-                    new_data_dict_hashes =
-                        join_state->GetDictionaryHashesForKeys();
-                // NOTE: Partition hashes need to be consistent across ranks, so
-                // need to use dictionary hashes. Since we are using dictionary
-                // hashes, we don't need dictionaries to be global. In fact,
-                // hash_keys_table will ignore the dictionaries entirely when
-                // dict_hashes are provided.
-                std::shared_ptr<uint32_t[]> batch_hashes_partition =
-                    hash_keys_table(new_data, join_state->n_keys,
-                                    SEED_HASH_PARTITION, shuffle_possible,
-                                    /*global_dict_needed*/ false,
-                                    new_data_dict_hashes);
-
-                append_to_probe_inactive_partition.resize(new_data->nrows(),
-                                                          false);
-                for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
-                    if (active_partition->is_in_partition(
-                            batch_hashes_partition[i_row])) {
+                if (join_state->partitions.size() > 1) {
+                    // NOTE: partition hashes need to be consistent across ranks
+                    // so need to use dictionary hashes
+                    std::shared_ptr<
+                        bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+                        new_data_dict_hashes =
+                            join_state->GetDictionaryHashesForKeys();
+                    // NOTE: Partition hashes need to be consistent across
+                    // ranks, so need to use dictionary hashes. Since we are
+                    // using dictionary hashes, we don't need dictionaries to be
+                    // global. In fact, hash_keys_table will ignore the
+                    // dictionaries entirely when dict_hashes are provided. They
+                    // are only needed when there is more than 1 partition.
+                    std::shared_ptr<uint32_t[]> batch_hashes_partition =
+                        hash_keys_table(new_data, join_state->n_keys,
+                                        SEED_HASH_PARTITION, shuffle_possible,
+                                        /*global_dict_needed*/ false,
+                                        new_data_dict_hashes, batch_start_row,
+                                        STREAMING_BATCH_SIZE);
+                    append_to_probe_inactive_partition.resize(
+                        STREAMING_BATCH_SIZE, false);
+                    for (size_t i_row = batch_start_row;
+                         i_row < batch_start_row + nrows; i_row++) {
+                        if (active_partition->is_in_partition(
+                                batch_hashes_partition[i_row])) {
+                            handle_probe_input_for_partition<
+                                build_table_outer, probe_table_outer,
+                                non_equi_condition>(
+                                join_state->cond_func, active_partition.get(),
+                                i_row, build_idxs, probe_idxs,
+                                build_table_info_ptrs, probe_table_info_ptrs,
+                                build_col_ptrs, probe_col_ptrs,
+                                build_null_bitmaps, probe_null_bitmaps);
+                        } else {
+                            append_to_probe_inactive_partition[i_row] = true;
+                        }
+                    }
+                    join_state->AppendProbeBatchToInactivePartition(
+                        new_data, batch_hashes_join, batch_hashes_partition,
+                        append_to_probe_inactive_partition);
+                } else {
+                    // Fast path for the single partition case:
+                    for (size_t i_row = batch_start_row;
+                         i_row < batch_start_row + nrows; i_row++) {
                         handle_probe_input_for_partition<build_table_outer,
                                                          probe_table_outer,
                                                          non_equi_condition>(
@@ -2278,38 +2314,23 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                             build_table_info_ptrs, probe_table_info_ptrs,
                             build_col_ptrs, probe_col_ptrs, build_null_bitmaps,
                             probe_null_bitmaps);
-                    } else {
-                        append_to_probe_inactive_partition[i_row] = true;
                     }
                 }
-                join_state->AppendProbeBatchToInactivePartition(
-                    new_data, batch_hashes_join, batch_hashes_partition,
-                    append_to_probe_inactive_partition);
+
+                // Reset active partition state
+                active_partition->probe_table_hashes = nullptr;
+                active_partition->probe_table_hashes_offset = 0;
+
+                batch_hashes_join.reset();
                 batch_hashes_partition.reset();
-            } else {
-                // Fast path for the single partition case:
-                for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
-                    handle_probe_input_for_partition<build_table_outer,
-                                                     probe_table_outer,
-                                                     non_equi_condition>(
-                        join_state->cond_func, active_partition.get(), i_row,
-                        build_idxs, probe_idxs, build_table_info_ptrs,
-                        probe_table_info_ptrs, build_col_ptrs, probe_col_ptrs,
-                        build_null_bitmaps, probe_null_bitmaps);
-                }
+
+                join_state->output_buffer->AppendJoinOutput(
+                    active_partition->build_table_buffer->data_table, new_data,
+                    build_idxs, probe_idxs, build_kept_cols, probe_kept_cols);
+                build_idxs.clear();
+                probe_idxs.clear();
             }
-
-            // Reset active partition state
-            active_partition->probe_table_hashes = nullptr;
             active_partition->probe_table = nullptr;
-            batch_hashes_join.reset();
-
-            join_state->output_buffer->AppendJoinOutput(
-                active_partition->build_table_buffer->data_table,
-                std::move(new_data), build_idxs, probe_idxs, build_kept_cols,
-                probe_kept_cols);
-            build_idxs.clear();
-            probe_idxs.clear();
         }
     }
 

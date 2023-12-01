@@ -57,6 +57,7 @@ void hash_array_combine(
  * @param start_row_offset Index of the first row to hash. Defaults to 0. This
  * is useful in streaming hash join when we want to compute hashes incrementally
  * on the tables.
+ * @param num_rows: Number of rows to hash. Defaults to -1, which means all rows
  * @return hash keys
  *
  */
@@ -65,7 +66,7 @@ std::unique_ptr<uint32_t[]> hash_keys(
     const uint32_t seed, bool is_parallel, bool global_dict_needed = true,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes = nullptr,
-    size_t start_row_offset = 0);
+    size_t start_row_offset = 0, int64_t num_rows = -1);
 
 /**
  * @brief Same as above, except we provide a pre-allocated array to populate.
@@ -87,6 +88,7 @@ std::unique_ptr<uint32_t[]> hash_keys(
  * @param start_row_offset: Index of the first row to hash. Defaults to 0. This
  * is useful in streaming hash join when we want to compute hashes incrementally
  * on the tables.
+ * @param num_rows: Number of rows to hash. Defaults to -1, which means all rows
  */
 template <typename hashes_t>
     requires(hashes_arr_type<hashes_t>)
@@ -96,7 +98,7 @@ void hash_keys(
     const uint32_t seed, bool is_parallel, bool global_dict_needed = true,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes = nullptr,
-    size_t start_row_offset = 0);
+    size_t start_row_offset = 0, int64_t num_rows = -1);
 
 std::unique_ptr<uint32_t[]> coherent_hash_keys(
     std::vector<std::shared_ptr<array_info>> const& key_arrs,
@@ -131,6 +133,7 @@ void hash_array(const hashes_t& out_hashes, std::shared_ptr<array_info> array,
  * @param start_row_offset: Index of the first row to hash. Defaults to 0. This
  * is useful in streaming hash join when we want to compute hashes incrementally
  * on the tables.
+ * @param num_rows: Number of rows to hash. Defaults to -1, which means all rows
  * @return hash keys
  *
  */
@@ -139,12 +142,12 @@ inline std::unique_ptr<uint32_t[]> hash_keys_table(
     bool is_parallel, bool global_dict_needed = true,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes = nullptr,
-    size_t start_row_offset = 0) {
+    size_t start_row_offset = 0, int64_t num_rows = -1) {
     tracing::Event ev("hash_keys_table", is_parallel);
     std::vector<std::shared_ptr<array_info>> key_arrs(
         in_table->columns.begin(), in_table->columns.begin() + num_keys);
     return hash_keys(key_arrs, seed, is_parallel, global_dict_needed,
-                     dict_hashes, start_row_offset);
+                     dict_hashes, start_row_offset, num_rows);
 }
 
 /**
@@ -170,6 +173,7 @@ inline std::unique_ptr<uint32_t[]> hash_keys_table(
  * @param start_row_offset: Index of the first row to hash. Defaults to 0. This
  * is useful in streaming hash join when we want to compute hashes incrementally
  * on the tables.
+ * @param num_rows: Number of rows to hash. Defaults to -1, which means all rows
  */
 template <typename hashes_t>
     requires(hashes_arr_type<hashes_t>)
@@ -179,12 +183,12 @@ inline void hash_keys_table(
     bool global_dict_needed = true,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes = nullptr,
-    size_t start_row_offset = 0) {
+    size_t start_row_offset = 0, int64_t num_rows = -1) {
     tracing::Event ev("hash_keys_table", is_parallel);
     std::vector<std::shared_ptr<array_info>> key_arrs(
         in_table->columns.begin(), in_table->columns.begin() + num_keys);
     hash_keys(out_hashes, key_arrs, seed, is_parallel, global_dict_needed,
-              dict_hashes, start_row_offset);
+              dict_hashes, start_row_offset, num_rows);
 }
 
 inline std::unique_ptr<uint32_t[]> coherent_hash_keys_table(

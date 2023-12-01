@@ -198,6 +198,12 @@ class JoinPartition {
     // Temporary state during probe step. These will be
     // reset between iterations.
     std::shared_ptr<table_info> probe_table;
+
+    // Offset into the probe table hashes. This is used when processing
+    // the probe shuffle buffer. We need to use this since we only have hashes
+    // for the current probe shuffle buffer batch, but we need to use the global
+    // row when adding the output to the output buffer.
+    int64_t probe_table_hashes_offset = 0;
     // Dummy probe table. Useful for the build_table_outer case.
     std::shared_ptr<table_info> dummy_probe_table;
     // Join hashes corresponding to data in probe_table.
