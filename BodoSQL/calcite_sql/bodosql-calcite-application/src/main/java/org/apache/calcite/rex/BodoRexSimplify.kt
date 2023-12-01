@@ -7,6 +7,7 @@ import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import org.apache.calcite.avatica.util.TimeUnitRange
 import org.apache.calcite.plan.RelOptPredicateList
+import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.sql.SqlBinaryOperator
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlOperator
@@ -375,6 +376,51 @@ class BodoRexSimplify(
             bodoLiteralTimes(call, call.operands[0] as RexLiteral, call.operands[1] as RexLiteral)
         } else {
             call
+        }
+    }
+
+    /**
+     * Simplify a comparison involving a coalesce and a literal
+     */
+    private fun simplifyCoalesceComparison(call: RexCall): RexNode {
+        val firstArg = call.operands[0]
+        val secondArg = call.operands[1]
+        val op = call.op
+        val retType = call.getType()
+        val (lit, coalesceCall, litFirst) = if (firstArg is RexLiteral) {
+            Triple(firstArg, secondArg as RexCall, true)
+        } else {
+            Triple(secondArg as RexLiteral, firstArg as RexCall, false)
+        }
+        // Break down the coalesce call.
+        val makeComparison = {
+                coalesceArg: RexNode, literal: RexLiteral -> rexBuilder.makeCall(retType, op, if (litFirst) { listOf(literal, coalesceArg) } else { listOf(coalesceArg, literal) })
+        }
+        // Decompose COMP((COL, LIT2), LIT1) into OR(COMP(COL, LIT1), AND(IS_NULL(COL), COMP(LIT2, LIT1)))
+        val columnComparison = makeComparison(coalesceCall.operands[0], lit)
+        val columnNullCheck = rexBuilder.makeCall(SqlStdOperatorTable.IS_NULL, listOf(coalesceCall.operands[0]))
+        val literalComparison = makeComparison(coalesceCall.operands[1], lit)
+        val andVal = rexBuilder.makeCall(retType, SqlStdOperatorTable.AND, listOf(columnNullCheck, literalComparison))
+        return rexBuilder.makeCall(retType, SqlStdOperatorTable.OR, listOf(columnComparison, andVal))
+    }
+
+    /**
+     * Determine if an expression is a comparison containing coalesce that can be simplified
+     * because a literal argument may be possible to remove.
+     */
+    private fun isCoalesceComparison(node: RexNode): Boolean {
+        val supportedComparison = setOf(SqlKind.EQUALS, SqlKind.NOT_EQUALS, SqlKind.NULL_EQUALS, SqlKind.LESS_THAN, SqlKind.GREATER_THAN, SqlKind.LESS_THAN_OR_EQUAL, SqlKind.GREATER_THAN_OR_EQUAL)
+        return if (node is RexCall && supportedComparison.contains(node.kind)) {
+            // Note: Comparison operators shouldn't have more than two args,
+            // but double check in case a future change doesn't chain equalities.
+            val firstArg = node.operands[0]
+            val secondArg = node.operands[1]
+            // Note: Comparison operators shouldn't have more than two args,
+            // but double check to ensure a future change doesn't chain equalities.
+            val isValidCoalesceFunction = {r: RexNode -> r is RexCall && r.operator.name == SqlStdOperatorTable.COALESCE.name && r.operands.size == 2 && r.operands[1] is RexLiteral }
+            return node.operands.size == 2 && (firstArg is RexLiteral && isValidCoalesceFunction(secondArg)) || (secondArg is RexLiteral && isValidCoalesceFunction(firstArg))
+        } else {
+            false
         }
     }
 
@@ -781,6 +827,7 @@ class BodoRexSimplify(
                 isSnowflakeDateaddOp(e) -> simplifySnowflakeDateaddOp(e as RexCall)
                 isCompareLeastGreatest(e, 0) -> simplifyCompareLeastGreatest(e as RexCall)
                 isCompareLeastGreatest(e, 1) -> simplifyCompareLeastGreatest(reverseComparison(e as RexCall) as RexCall)
+                isCoalesceComparison(e) -> simplifyCoalesceComparison(e as RexCall)
                 isLength(e) -> simplifyLength(e as RexCall)
                 else -> e
             }

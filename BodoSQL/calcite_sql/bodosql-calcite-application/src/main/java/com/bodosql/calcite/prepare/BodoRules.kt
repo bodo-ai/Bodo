@@ -22,7 +22,6 @@ import com.bodosql.calcite.application.logicalRules.LogicalFilterReorderConditio
 import com.bodosql.calcite.application.logicalRules.MinRowNumberFilterRule
 import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
-import com.bodosql.calcite.application.logicalRules.RexSimplificationRule
 import com.bodosql.calcite.application.logicalRules.TrivialProjectJoinTransposeRule
 import com.bodosql.calcite.prepare.MultiJoinRules.FILTER_MULTI_JOIN_MERGE
 import com.bodosql.calcite.prepare.MultiJoinRules.JOIN_TO_MULTI_JOIN
@@ -398,12 +397,6 @@ object BodoRules {
             .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
             .toRule()
 
-    @JvmField
-    val REX_SIMPLIFICATION_RULE: RelOptRule =
-        RexSimplificationRule.Config.DEFAULT
-            .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
-            .toRule()
-
     /**
      * Extract the join condition to the filter rule to allow invalid join
      * conditions to be utilized.
@@ -568,7 +561,6 @@ object BodoRules {
      * These are rules used for simplification of expressions.
      */
     val SIMPLIFICATION_RULES: List<RelOptRule> = listOf(
-        REX_SIMPLIFICATION_RULE,
         PROJECT_REDUCE_EXPRESSIONS_RULE,
         FILTER_REDUCE_EXPRESSIONS_RULE,
         // simplifies constants after aggregates
@@ -708,7 +700,6 @@ object BodoRules {
         PROJECTION_SUBCOLUMN_ELIMINATION_RULE,
         FILTER_EXTRACT_CASE_RULE,
         PROJECT_FILTER_PROJECT_COLUMN_ELIMINATION_RULE,
-        REX_SIMPLIFICATION_RULE,
         JOIN_COMMUTE_RULE,
         LOPT_OPTIMIZE_JOIN_RULE,
         UNION_MERGE_RULE,
