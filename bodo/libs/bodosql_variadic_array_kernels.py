@@ -14,12 +14,13 @@ import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     get_common_scalar_dtype,
+    get_overload_const_bool,
     get_overload_const_list,
     get_overload_const_str,
     get_overload_const_tuple,
     is_bin_arr_type,
+    is_overload_constant_bool,
     is_overload_constant_list,
-    is_overload_constant_tuple,
     is_overload_none,
     is_str_arr_type,
     raise_bodo_error,
@@ -806,21 +807,21 @@ def decode_util(A, dict_encoding_state, func_id):
     )
 
 
-def object_delete(A):  # pragma: no cover
+def object_filter_keys(A):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
-@overload(object_delete, no_unliteral=True)
-def overload_object_delete(A):
-    """Handles cases where OBJECT_DELETE receives optional arguments and forwards
+@overload(object_filter_keys, no_unliteral=True)
+def overload_object_filter_keys(A):
+    """Handles cases where OBJECT_PICK/OBJECT_DELETE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if not isinstance(A, (types.Tuple, types.UniTuple)):
-        raise_bodo_error("OBJECT_DELETE argument must be a tuple")
+        raise_bodo_error("OBJECT_PICK/OBJECT_DELETE argument must be a tuple")
     for i, val in enumerate(A):
         if isinstance(val, types.optional):
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.object_delete",
+                "bodo.libs.bodosql_array_kernels.object_filter_keys",
                 ["A"],
                 0,
                 container_arg=i,
@@ -828,19 +829,19 @@ def overload_object_delete(A):
             )
 
     def impl(A):  # pragma: no cover
-        return object_delete_util(A)
+        return object_filter_keys_util(A)
 
     return impl
 
 
-def object_delete_util(A):  # pragma: no cover
+def object_filter_keys_util(A):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
-@overload(object_delete, no_unliteral=True)
-def overload_object_delete_util(A):
-    """A dedicated kernel for the SQL function OBJECT_DELETE which
+@overload(object_filter_keys_util, no_unliteral=True)
+def overload_object_filter_keys_util(A):
+    """BodoSQL kernel for the SQL functions OBJECT_PICK/OBJECT_DELETE which
        takes in a variable number of strings and removes the entries
        whose keys match one of those strings from the data.
 
@@ -851,9 +852,20 @@ def overload_object_delete_util(A):
     Returns:
         (json column/scalar) the json data with the specified keys dropped
     """
+
+    keep_keys = A[0]
+    if not is_overload_constant_bool(keep_keys):
+        raise_bodo_error(
+            "OBJECT_PICK/OBJECT_DELETE keep_keys argument must be a const bool"
+        )
+
+    keep_mode = get_overload_const_bool(keep_keys)
+    func_name = "object_pick" if keep_mode else "object_filter_keys"
+
     args_tup = get_overload_const_tuple(A)
-    n_keys_to_drop = len(args_tup) - 1
-    json_data = A[0]
+    n_keys_to_drop = len(args_tup) - 2
+
+    json_data = A[1]
     json_type = json_data
     if bodo.hiframes.pd_series_ext.is_series_type(json_type):
         json_type = json_type.data
@@ -869,17 +881,19 @@ def overload_object_delete_util(A):
         struct_mode = False
         map_mode = False
     else:
-        raise_bodo_error(f"object_delete: unsupported type for json data '{json_data}'")
+        raise_bodo_error(
+            f"object_filter_keys: unsupported type for json data '{json_data}'"
+        )
 
     key_names = [f"k{i}" for i in range(n_keys_to_drop)]
     key_arg_names = [f"arg{i+1}" for i in range(n_keys_to_drop)]
     arg_names = ["json_data"] + key_names
-    arg_types = list(A)
+    arg_types = list(A)[1:]
 
     # Create the mapping from the tuple to the local variable.
     arg_string = "A"
-    arg_sources = {f"k{i}": f"A[{i+1}]" for i in range(n_keys_to_drop)}
-    arg_sources["json_data"] = "A[0]"
+    arg_sources = {f"k{i}": f"A[{i+2}]" for i in range(n_keys_to_drop)}
+    arg_sources["json_data"] = "A[1]"
 
     propagate_null = [True] * (n_keys_to_drop + 1)
     extra_globals = {}
@@ -890,15 +904,18 @@ def overload_object_delete_util(A):
         # 1. extract all of the key names to drop at compile time since this affects
         # the type of the returned struct. This means all the remaining arguments must
         # be string literals.
-        keys_to_drop = list(A)[1:]
-        string_names_to_drop = []
+        keys_to_drop = list(A)[2:]
+        string_names_to_filter = []
         for k in keys_to_drop:
             if not is_overload_constant_str(k):
                 raise_bodo_error(
-                    "object_delete unsupported on struct arrays with non-constant keys"
+                    f"{func_name} unsupported on struct arrays with non-constant keys"
                 )
-            string_names_to_drop.append(get_overload_const_str(k))
-
+            string_names_to_filter.append(get_overload_const_str(k))
+        if keep_mode:
+            keep_condition = lambda k: k in string_names_to_filter
+        else:
+            keep_condition = lambda k: k not in string_names_to_filter
         # 2. For each field in the struct, determine if it is kept or dropped at compile
         # time based on whether the field name matches one of the names to drop.
         data = []
@@ -908,7 +925,7 @@ def overload_object_delete_util(A):
         n_fields = len(json_type.data)
         for i in range(n_fields):
             name = json_type.names[i]
-            if name not in string_names_to_drop:
+            if keep_condition(name):
                 null_check = (
                     f"bodo.libs.struct_arr_ext.is_field_value_null(arg0, '{name}')"
                 )
@@ -925,6 +942,8 @@ def overload_object_delete_util(A):
         extra_globals["names"] = bodo.utils.typing.ColNamesMetaType(tuple(names))
 
     else:
+        keep_condition = "in" if keep_mode else "not in"
+
         # Generated code for when the json data comes from a MapArray or a scalar dictionary.
 
         # 1. Generate an array of booleans per key in the dictionary determining whether each
@@ -932,9 +951,7 @@ def overload_object_delete_util(A):
         scalar_text = "keys = list(arg0)\n"
         scalar_text += "pairs_to_keep = np.empty(len(keys), dtype=np.bool_)\n"
         scalar_text += "for idx, json_key in enumerate(keys):\n"
-        scalar_text += (
-            f"   pairs_to_keep[idx] = json_key not in [{', '.join(key_arg_names)}]\n"
-        )
+        scalar_text += f"   pairs_to_keep[idx] = json_key {keep_condition} [{', '.join(key_arg_names)}]\n"
         scalar_text += "n_keep = pairs_to_keep.sum()\n"
         if map_mode:
             # The rest of the path but specifically for MapArrays:
@@ -968,9 +985,9 @@ def overload_object_delete_util(A):
             # 4. Store the struct array in the current row of the map array
             scalar_text += "res[i] = struct_arr\n"
             out_dtype = json_type
-        else:
+        else:  # pragma: no cover
             # Dictionary scalars not supported yet
-            raise_bodo_error("[BSE-1945] TODO: support object_delete on dict scalars")
+            raise_bodo_error(f"[BSE-1945] TODO: support {func_name} on dict scalars")
 
     return gen_vectorized(
         arg_names,
