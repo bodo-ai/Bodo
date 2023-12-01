@@ -1285,9 +1285,86 @@ def test_row_number(test, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "keys_to_drop, json_data, answer",
+    "keep_mode, keys_to_filter, json_data,  answer",
     [
         pytest.param(
+            True,
+            ("A",),
+            pd.Series(
+                [
+                    {"A": 0, "B": 10, "C": ""},
+                    {"A": 1, "B": 20, "C": "A"},
+                    {"A": 2, "B": 40, "C": "AB"},
+                ]
+                * 10
+                + [
+                    None,
+                    {"A": None, "B": 80, "C": "ABC"},
+                    {"A": 4, "B": None, "C": "A"},
+                    {"A": 5, "B": 320, "C": None},
+                ]
+            ).values,
+            pd.Series(
+                [{"A": 0}, {"A": 1}, {"A": 2}] * 10
+                + [None, {"A": None}, {"A": 4}, {"A": 5}]
+            ).values,
+            id="struct-keep_literal_string",
+        ),
+        pytest.param(
+            True,
+            ("A",),
+            pd.Series(
+                [
+                    {"A": 0, "B": 1, "C": 2},
+                    {"B": 3, "C": 4},
+                    {"A": 5, "C": 6},
+                    {"A": 7, "B": 8},
+                    {"A": 9},
+                    {"B": 10},
+                    {"C": 11},
+                ]
+                + [
+                    None,
+                    {"A": None, "B": None},
+                    {},
+                    {"A": 16, "B": None},
+                    {"B": 42},
+                    {"A": 42},
+                ]
+            ).values,
+            pd.Series(
+                [
+                    {"A": 0},
+                    {},
+                    {"A": 5},
+                    {"A": 7},
+                    {"A": 9},
+                    {},
+                    {},
+                ]
+                + [
+                    None,
+                    {"A": None},
+                    {},
+                    {"A": 16},
+                    {},
+                    {"A": 42},
+                ]
+            ).values,
+            id="map-keep_literal_string",
+        ),
+        pytest.param(
+            True,
+            ("C", "A", "E"),
+            {"A": 0, "B": 1, "C": 2, "D": None, "E": 3},
+            {"B": 1, "D": None},
+            id="scalar_map-drop_3",
+            marks=pytest.mark.skip(
+                reason="[BSE-1945] TODO: support dict scalars with OBJECT_PICK"
+            ),
+        ),
+        pytest.param(
+            False,
             ("A",),
             pd.Series(
                 [
@@ -1332,6 +1409,7 @@ def test_row_number(test, memory_leak_check):
             id="struct-drop_literal_string",
         ),
         pytest.param(
+            False,
             ("D", "E", "a", "b,c"),
             pd.Series(
                 [
@@ -1382,6 +1460,7 @@ def test_row_number(test, memory_leak_check):
             id="struct-drop_nothing",
         ),
         pytest.param(
+            False,
             ("A",),
             pd.Series(
                 [
@@ -1421,6 +1500,7 @@ def test_row_number(test, memory_leak_check):
             id="map-drop_literal_string",
         ),
         pytest.param(
+            False,
             (pd.Series(["A", "B"] * 43),),
             pd.Series(
                 [
@@ -1469,6 +1549,7 @@ def test_row_number(test, memory_leak_check):
             id="map-drop_column",
         ),
         pytest.param(
+            False,
             ("C", "A", "E"),
             {"A": 0, "B": 1, "C": 2, "D": None, "E": 3},
             {"B": 1, "D": None},
@@ -1477,19 +1558,75 @@ def test_row_number(test, memory_leak_check):
                 reason="[BSE-1945] TODO: support dict scalars with OBJECT_DELETE"
             ),
         ),
+        pytest.param(
+            False,
+            (pd.Series(["A"] * 10),),
+            pd.Series(
+                [{"A": 0}] * 10,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+            ).values,
+            pd.Series(
+                [{}] * 10,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+            ),
+            id="map-drop_all",
+        ),
+        pytest.param(
+            True,
+            (pd.Series(["B"] * 10),),
+            pd.Series(
+                [{"A": 0}] * 10,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+            ).values,
+            pd.Series(
+                [{}] * 10,
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+            ),
+            id="map-keep_none",
+        ),
+        pytest.param(
+            False,
+            ("A",),
+            pd.Series(
+                [{"A": 0}] * 10,
+                dtype=pd.ArrowDtype(pa.struct([pa.field("A", pa.int32())])),
+            ).values,
+            pd.Series(
+                [{}] * 10,
+                dtype=pd.ArrowDtype(pa.struct([])),
+            ),
+            id="struct-drop_all",
+            marks=pytest.mark.skip(reason="[BSE-2160] TODO: support empty structs"),
+        ),
+        pytest.param(
+            True,
+            ("B",),
+            pd.Series(
+                [{"A": 0}] * 10,
+                dtype=pd.ArrowDtype(pa.struct([pa.field("A", pa.int32())])),
+            ).values,
+            pd.Series(
+                [{}] * 10,
+                dtype=pd.ArrowDtype(pa.struct([])),
+            ),
+            id="struct-keep_none",
+            marks=pytest.mark.skip(reason="[BSE-2160] TODO: support empty structs"),
+        ),
     ],
 )
-def test_object_delete(keys_to_drop, json_data, answer, memory_leak_check):
-    raw_arg_text = ", ".join(f"arg{i}" for i in range(len(keys_to_drop) + 1))
+def test_object_filter_keys(
+    keep_mode, keys_to_filter, json_data, answer, memory_leak_check
+):
+    raw_arg_text = ", ".join(f"arg{i}" for i in range(len(keys_to_filter) + 1))
     arg_text = ["arg0"]
-    for i in range(len(keys_to_drop)):
-        if isinstance(keys_to_drop[i], str):
-            arg_text.append(repr(keys_to_drop[i]))
+    for i in range(len(keys_to_filter)):
+        if isinstance(keys_to_filter[i], str):
+            arg_text.append(repr(keys_to_filter[i]))
         else:
             arg_text.append(f"arg{i+1}")
     func_text = f"def impl({raw_arg_text}):\n"
-    func_text += f"   res = bodo.libs.bodosql_array_kernels.object_delete(({', '.join(arg_text)},))\n"
-    if any(isinstance(arg, pd.Series) for arg in keys_to_drop + (json_data,)):
+    func_text += f"   res = bodo.libs.bodosql_array_kernels.object_filter_keys(({keep_mode}, {', '.join(arg_text)},))\n"
+    if any(isinstance(arg, pd.Series) for arg in keys_to_filter + (json_data,)):
         func_text += "   res = pd.Series(res)\n"
     func_text += "   return res\n"
     loc_vars = {}
@@ -1498,7 +1635,7 @@ def test_object_delete(keys_to_drop, json_data, answer, memory_leak_check):
 
     check_func(
         impl,
-        (json_data, *keys_to_drop),
+        (json_data, *keys_to_filter),
         py_output=answer,
         check_dtype=False,
         reset_index=True,
@@ -3127,3 +3264,31 @@ def test_array_construct_optional(is_none_0, is_none_1, memory_leak_check):
         check_dtype=False,
         dist_test=False,
     )
+
+
+def test_object_filter_keys_errors(memory_leak_check):
+    with pytest.raises(
+        BodoError, match=re.escape("keep_keys argument must be a const bool")
+    ):
+
+        @bodo.jit
+        def impl(B, A):
+            return bodo.libs.bodosql_array_kernels.object_filter_keys((B, A, "A"))
+
+        impl(True, pd.Series([{"a": 0}]))
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape("unsupported on struct arrays with non-constant keys"),
+    ):
+
+        @bodo.jit
+        def impl(B, A):
+            return bodo.libs.bodosql_array_kernels.object_filter_keys((True, A, B))
+
+        impl(
+            pd.Series(["a"]),
+            pd.Series(
+                [{"a": 0}], dtype=pd.ArrowDtype(pa.struct([pa.field("a", pa.int32())]))
+            ),
+        )

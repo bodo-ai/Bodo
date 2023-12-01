@@ -600,6 +600,154 @@ def test_object_construct(query, answer, memory_leak_check):
     "query, df, answer",
     [
         pytest.param(
+            "SELECT OBJECT_PICK(J, 'id') FROM table1",
+            pd.DataFrame(
+                {
+                    "J": pd.Series(
+                        [
+                            {
+                                "id": i,
+                                "tags": [
+                                    "abcdefghij"[(i**2) % 10 : (i**3) % 10 + j]
+                                    for j in range(1 + (i**2) % 7)
+                                ],
+                                "attrs": {"A": i, "B": str(i), "C": [i]},
+                            }
+                            for i in range(50)
+                        ]
+                        + [
+                            None,
+                            {
+                                "id": None,
+                                "tags": [],
+                                "attrs": {"A": None, "B": None, "C": []},
+                            },
+                            {
+                                "id": -1,
+                                "tags": None,
+                                "attrs": {"A": None, "B": None, "C": None},
+                            },
+                        ],
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [
+                                    pa.field("id", pa.int32()),
+                                    pa.field("tags", pa.large_list(pa.string())),
+                                    pa.field(
+                                        "attrs",
+                                        pa.struct(
+                                            [
+                                                pa.field("A", pa.int32()),
+                                                pa.field("B", pa.string()),
+                                                pa.field(
+                                                    "C", pa.large_list(pa.int32())
+                                                ),
+                                            ]
+                                        ),
+                                    ),
+                                ]
+                            )
+                        ),
+                    )
+                }
+            ),
+            pd.Series(
+                [{"id": i} for i in range(50)] + [None, {"id": None}, {"id": -1}],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [
+                            pa.field("id", pa.int32()),
+                        ]
+                    )
+                ),
+            ),
+            id="struct-pick_literal-no_case",
+        ),
+        pytest.param(
+            "SELECT OBJECT_PICK(J, K) FROM table1",
+            pd.DataFrame(
+                {
+                    "J": pd.Series(
+                        (
+                            [{"A": 0, "B": 1, "C": 2, "D": 3}] * 4
+                            + [{"A": 4, "C": 5}] * 4
+                        )
+                        * 5
+                        + [
+                            None,
+                            {"A": 6, "B": 7, "C": None, "D": None},
+                            {},
+                            {"A": 8, "B": 9, "C": None, "D": None},
+                        ],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                    ),
+                    "K": ["A", "B", "C", "D"] * 11,
+                }
+            ),
+            pd.Series(
+                [{"A": 0}, {"B": 1}, {"C": 2}, {"D": 3}, {"A": 4}, {}, {"C": 5}, {}] * 5
+                + [None, {"B": 7}, {}, {"D": None}],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+            ),
+            id="map-pick_column-no_case",
+        ),
+        pytest.param(
+            "SELECT OBJECT_PICK(J, 'D', K, 'E', 'A') FROM table1",
+            pd.DataFrame(
+                {
+                    "J": pd.Series(
+                        (
+                            [{"A": 0, "B": 1, "C": 2, "D": 3}] * 4
+                            + [{"A": 4, "C": 5}] * 4
+                        )
+                        * 5
+                        + [
+                            None,
+                            {"A": 6, "B": 7, "C": None, "D": None},
+                            {},
+                            {"A": 8, "B": 9, "C": None, "D": None},
+                        ],
+                        dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+                    ),
+                    "K": ["A", "B", "C", "D"] * 11,
+                }
+            ),
+            pd.Series(
+                [
+                    {"A": 0, "D": 3},
+                    {"A": 0, "B": 1, "D": 3},
+                    {"A": 0, "C": 2, "D": 3},
+                    {"A": 0, "D": 3},
+                    {"A": 4},
+                    {"A": 4},
+                    {"A": 4, "C": 5},
+                    {"A": 4},
+                ]
+                * 5
+                + [None, {"A": 6, "B": 7, "D": None}, {}, {"A": 8, "D": None}],
+                dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int64())),
+            ),
+            id="map-pick_mixed-no_case",
+        ),
+    ],
+)
+def test_object_pick(query, df, answer, memory_leak_check):
+    check_query(
+        query,
+        {"table1": df},
+        None,
+        expected_output=pd.DataFrame({0: answer}),
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+        sort_output=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "query, df, answer",
+    [
+        pytest.param(
             "SELECT OBJECT_DELETE(J, 'id') FROM table1",
             pd.DataFrame(
                 {

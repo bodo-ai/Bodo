@@ -1412,8 +1412,17 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    * @return Expr containing the code generated for the relational expression.
    */
   public static Expr visitObjectDelete(List<Expr> codeExprs) {
-    return new Expr.Call(
-        "bodo.libs.bodosql_array_kernels.object_delete", List.of(new Expr.Tuple(codeExprs)));
+    List<Expr> tupleArgs = new ArrayList<>(codeExprs);
+    tupleArgs.add(0, new Expr.BooleanLiteral(false));
+    return ExprKt.BodoSQLKernel(
+        "object_filter_keys", List.of(new Expr.Tuple(tupleArgs)), List.of());
+  }
+
+  public static Expr visitObjectPick(List<Expr> codeExprs) {
+    List<Expr> tupleArgs = new ArrayList<>(codeExprs);
+    tupleArgs.add(0, new Expr.BooleanLiteral(true));
+    return ExprKt.BodoSQLKernel(
+        "object_filter_keys", List.of(new Expr.Tuple(tupleArgs)), List.of());
   }
 
   protected Expr visitNestedArrayFunc(
@@ -1875,6 +1884,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return visitJsonFunc(fnName, operands);
           case "OBJECT_DELETE":
             return visitObjectDelete(operands);
+          case "OBJECT_PICK":
+            return visitObjectPick(operands);
           case "RLIKE":
           case "REGEXP_LIKE":
           case "REGEXP_COUNT":
