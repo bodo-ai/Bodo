@@ -1700,9 +1700,10 @@ BodoSQL currently supports the following Timestamp functions:
     Constructs a date from the integer inputs specified, e.g. `(2020, 7, 4)`
     will output July 4th, 2020.
 
-    Note: month does not have to be in the 1-12 range, and day does not have to
-    be in the 1-31 range. Values out of bounds are overflowed logically,
-    e.g. `(2020, 14, -1)` will output January 31st, 2021.
+    !!! note 
+        Month does not have to be in the 1-12 range, and day does not have to
+        be in the 1-31 range. Values out of bounds are overflowed logically,
+        e.g. `(2020, 14, -1)` will output January 31st, 2021.
 
 
 #### DATEFROMPARTS
@@ -1744,7 +1745,8 @@ BodoSQL currently supports the following Timestamp functions:
     timezone-naive. Note that if any numeric argument cannot be converted to
     an int64, then it will become NULL.
 
-    Note: timezone argument is not supported at this time.
+    !!! note
+        Timezone argument is not supported at this time.
 
     The second overload constructs the timestamp by combining the date and time
     arguments. The output of this function is always timestamp-naive.
@@ -1793,7 +1795,8 @@ BodoSQL currently supports the following Timestamp functions:
     except the default behavior if no timezone is provided is to use the local
     timezone instead of timezone-naive.
 
-    Note: timezone argument is not supported at this time.
+    !!! note
+        Timezone argument is not supported at this time.
 
 
 #### TIMESTAMPTZFROMPARTS
@@ -2842,7 +2845,7 @@ BodoSQL currently supports the following JSON functions:
     | "Lyndon" | "Baines" | "Johnson"    |
     | "James"  | NULL     | "Madison"    |
 
-    Then `SELECT OBJECT_CONSTRUCT(*) as name FROM T` returns the following table:
+    Then `SELECT OBJECT_CONSTRUCT_KEEP_NULL(*) as name FROM T` returns the following table:
 
     | name                                                      |
     |-----------------------------------------------------------|
@@ -2853,13 +2856,14 @@ BodoSQL currently supports the following JSON functions:
 
 
 #### OBJECT_CONSTRUCT
--   `#!sql OBJECT_CONSTRUCT_(key1, value1[, key2, value2, ...])`
+-   `#!sql OBJECT_CONSTRUCT(key1, value1[, key2, value2, ...])`
 
     The same as `#!sql OBJECT_CONSTRUCT_KEEP_NULL` except that for any rows where any input value 
     (e.g. `value1`, `value2`, ...) is null have that key-value pair dropped from the row's final JSON output.
 
-    !!! note: BodoSQL only supports this function under narrow conditions where all of the values
-    are either of the same type or of easily reconciled types.
+    !!! note
+        BodoSQL only supports this function under narrow conditions where all of the values
+        are either of the same type or of easily reconciled types.
 
     The full Snowflake specification: https://docs.snowflake.com/en/sql-reference/functions/object_construct.html
 
@@ -2911,8 +2915,9 @@ BodoSQL currently supports the following JSON functions:
     with all of those keys removed. If a specified key is not present in
     `data`, it is ignored.
 
-    !!! note: BodoSQL supports when the keys are passed in as string literals,
-    but only sometimes supports when they are passed in as columns of strings.
+    !!! note
+        BodoSQL supports when the keys are passed in as string literals,
+        but only sometimes supports when they are passed in as columns of strings.
 
 
 #### JSON_EXTRACT_PATH_TEXT
@@ -3088,9 +3093,10 @@ Bodo currently supports the following functions that operate on columns of array
     Takes in a variable number of arguments and produces an array containing
     all of those values (including any null values).
 
-    Note: Snowflake allows any number of arguments (even zero arguments) of any
-    type. BodoSQL currently requires 1+ arguments, and requires all arguments
-    to be easily reconciled into a common type.
+    !!! note
+        Snowflake allows any number of arguments (even zero arguments) of any
+        type. BodoSQL currently requires 1+ arguments, and requires all arguments
+        to be easily reconciled into a common type.
 
 
 #### ARRAY_EXCEPT
@@ -3916,10 +3922,12 @@ Bodo currently supports the following functions that produce tables:
     - `#!sql RECURSIVE` (optional): a boolean indicating if flattening should occur recursively, as opposed to just on the data referenced by `PATH`. BodoSQL currently only supports when this argument is omitted or is false (which is the default).
     - `#!sql MODE` (optional): a string literal that can be either `'OBJECT'`, `'ARRAY'` or `'BOTH'`, indicating what type of flattening rule should be done. BodoSQL currently only supports when this argument is omitted or is `'BOTH'` (which is the default).
 
-    !!! Note: Snowflake supports the input being an array, JSON,
-    or variant, and also allows several different input arguments
-    to further control the behavior [(see here for more details)](https://docs.snowflake.com/en/sql-reference/functions/flatten). BodoSQL has more limited type support; it can handle
-    arrays and JSON with values of the same type.
+    !!! note
+        Snowflake supports the input being an array, JSON,
+        or variant, and also allows several different input arguments
+        to further control the behavior [(see here for more details)](https://docs.snowflake.com/en/sql-reference/functions/flatten). 
+        BodoSQL has more limited type support; it can handle
+        arrays and JSON with values of the same type.
 
 
     Below is an example of a query using the `#!sql FLATTEN` function with the
@@ -3986,8 +3994,9 @@ Bodo currently supports the following functions that produce tables:
     - `#!sql INDEX`: which index in the splitted string did the current seciton come from.
     - `#!sql VALUE`: the current section of the splitted string.
 
-    !!! Note: Currently, BodoSQL supports this function as an alias
-    for `#!sql FLATTEN(SPLIT(str, delim))`.
+    !!! note
+        Currently, BodoSQL supports this function as an alias
+        for `#!sql FLATTEN(SPLIT(str, delim))`.
 
     Below is an example of a query using the `#!sql SPLIT_TO_TABLE` function with the
     `#!sql LATERAL` keyword to explode an string column while also
