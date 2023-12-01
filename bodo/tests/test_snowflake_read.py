@@ -2993,7 +2993,7 @@ def test_bodo_read_sql_bodo_orig_table_name_arg(memory_leak_check):
             "SELECT * FROM KEATON_TESTING_TABLE_STRING_ALL_UNIQUE",
             conn,
             # Note: BodoSQL always provides SCHEMA.TABLENAME as the _bodo_orig_table_name.
-            _bodo_orig_table_name='"PUBLIC"."KEATON_TESTING_TABLE_STRING_ALL_DUPLICATE"',
+            _bodo_orig_table_name='"TEST_DB"."PUBLIC"."KEATON_TESTING_TABLE_STRING_ALL_DUPLICATE"',
             # Note: BodoSQL always provides _bodo_orig_table_indices if it provides
             # _bodo_orig_table_name.
             _bodo_orig_table_indices=(0,),
