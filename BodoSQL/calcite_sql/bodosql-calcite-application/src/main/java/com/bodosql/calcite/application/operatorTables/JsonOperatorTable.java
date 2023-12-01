@@ -90,6 +90,16 @@ public final class JsonOperatorTable implements SqlOperatorTable {
           OBJECT_DELETE_TYPE_CHECKER,
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  // TODO(aneesh): [BSE-2122] this is using the same type checker as OBJECT_DELETE for now, but
+  // OBJECT_PICK has an additional overload where the names to pick can be passed as an array
+  // instead of a variadic list.
+  public static final SqlBasicFunction OBJECT_PICK =
+      SqlBasicFunction.create(
+          "OBJECT_PICK",
+          ReturnTypes.ARG0,
+          OBJECT_DELETE_TYPE_CHECKER,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction OBJECT_KEYS =
       new SqlFunction(
           "OBJECT_KEYS",
@@ -117,6 +127,7 @@ public final class JsonOperatorTable implements SqlOperatorTable {
       Arrays.asList(
           GET_PATH,
           OBJECT_DELETE,
+          OBJECT_PICK,
           JSON_EXTRACT_PATH_TEXT,
           OBJECT_KEYS,
           OBJECT_CONSTRUCT_KEEP_NULL,
