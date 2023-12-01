@@ -49,12 +49,7 @@ def bodosql_listagg(
     Basically performs checks, re-arranges the dataframe in the expected order,
     and calls the sequential/parallel impl.
     """
-
-    # Perform Sanity checks
-    assert is_overload_constant_bool(
-        is_parallel
-    ), "Internal error in bodosql_listagg: is_parallel must be constant"
-    is_parallel = get_overload_const_bool(is_parallel)
+    is_parallel = get_overload_const_bool(is_parallel, "bodosql_listagg", "is_parallel")
 
     if not is_overload_constant_str(agg_col):
         raise_bodo_error(
