@@ -2918,6 +2918,23 @@ def test_option_array_contains(memory_leak_check):
             )
 
 
+@pytest.mark.parametrize("flag", [True, False])
+@pytest.mark.slow
+def test_option_array_size(flag, memory_leak_check):
+    def impl(A, flag):
+        arg0 = A if flag else None
+        return bodo.libs.bodosql_array_kernels.array_size(arg0, True)
+
+    check_func(
+        impl,
+        (pd.array([0, 1, 4, 9], pd.Int32Dtype()), flag),
+        py_output=4 if flag else None,
+        distributed=False,
+        is_out_distributed=False,
+        dist_test=False,
+    )
+
+
 @pytest.mark.slow
 def test_option_array_remove(memory_leak_check):
     def impl(A, B, flag0, flag1):

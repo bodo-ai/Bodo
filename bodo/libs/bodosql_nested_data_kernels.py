@@ -486,9 +486,9 @@ def arrays_overlap_util(array_0, array_1, is_scalar_0, is_scalar_1):
     arrays (or columns of arrays) and returns whether they have overlap
 
     Args:
-        arr (array scalar/array item array): the first array(s) to compare
-        arr (array scalar/array item array): the second array(s) to compare
-        is_single_row (boolean): if true, treats the inputs as scalar arrays
+        array_0 (array scalar/array item array): the first array(s) to compare
+        array_1 (array scalar/array item array): the second array(s) to compare
+        is_scalar (boolean): if true, treats the inputs as scalar arrays
 
     Returns:
         boolean scalar/vector: whether the arrays have any common elements
@@ -750,69 +750,75 @@ def overload_array_to_string_util(arr, separator, is_scalar):  # pragma: no cove
     )
 
 
-@numba.generated_jit(nopython=True)
-def array_size(arr, is_single_row):
+def array_size(arr, is_scalar=False):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(array_size, no_unliteral=True)
+def overload_array_size(arr, is_scalar=False):  # pragma: no cover
     """
     Handles cases where ARRAY_SIZE receives optional arguments and
     forwards to the appropriate version of the real implementation
     """
-    if isinstance(arr, types.optional):  # pragma: no cover
+    if isinstance(arr, types.optional):
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.array_size",
-            [
-                "arr",
-                "is_single_row",
-            ],
+            ["arr", "is_scalar"],
             0,
+            default_map={"is_scalar": False},
         )
 
-    def impl(arr, is_single_row):  # pragma: no cover
-        return array_size_util(arr, is_single_row)
+    def impl(arr, is_scalar=False):
+        return array_size_util(arr, is_scalar)
 
     return impl
 
 
-@numba.generated_jit(nopython=True)
-def array_size_util(arr, is_single_row):
+def array_size_util(arr, is_scalar):  # pragma: no cover
+    # Dummy function used for overload
+    pass
+
+
+@overload(array_size_util, no_unliteral=True)
+def overload_array_size_util(arr, is_scalar):  # pragma: no cover
     """
     A dedicated kernel for the SQL function ARRAY_SIZE which takes in an
            array, (or array column). If it is an array it returns the size, if it is a column
            it returns the size of each array in the column.
     Args:
         arr (array scalar/array item array): the array(s) to get the size of
-        is_single_row (bool literal): Whether this is called in a single row context, necessary
+        is_scalar (bool literal): Whether this is called in a single row context, necessary
         to determine whether to return the length of a nested array or an array of the lengths
         of it's children in a case statment
     Returns:
         An integer scalar/array: the result lengths
     """
     if is_overload_none(arr):
-        return lambda arr, is_single_row: None
+        return lambda arr, is_scalar: None
 
-    if not is_overload_constant_bool(is_single_row):  # pragma: no cover
-        raise_bodo_error("array_size(): 'is_single_row' must be a constant boolean")
+    if not is_overload_constant_bool(is_scalar):
+        raise_bodo_error("array_size(): 'is_scalar' must be a constant boolean")
 
     if (
         not is_overload_none(arr)
         and not is_array_item_array(arr)
-        and not (bodo.utils.utils.is_array_typ(arr) and is_single_row)
-    ):  # pragma: no cover
-        # When not is_single_row only array item ararys are supported
-        # When is_single_row then all arrays are supported
+        and not (bodo.utils.utils.is_array_typ(arr) and is_scalar)
+    ):
+        # When not is_scalar only array item ararys are supported
+        # When is_scalar then all arrays are supported
         raise_bodo_error(
-            f"array_size(): unsupported for type {arr} when is_single_row={is_single_row}"
+            f"array_size(): unsupported for type {arr} when is_scalar={is_scalar}"
         )
 
     # Whether to call len on each element or on arr itself
-    arr_is_array = is_array_item_array(arr) and not get_overload_const_bool(
-        is_single_row
-    )
+    arr_is_array = is_array_item_array(arr) and not get_overload_const_bool(is_scalar)
 
     scalar_text = "res[i] = len(arg0)"
-    arg_names = ["arr", "is_single_row"]
+    arg_names = ["arr", "is_scalar"]
     arg_types = [
         bodo.utils.conversion.coerce_to_array(arr),
-        is_single_row,
+        is_scalar,
     ]
     propagate_null = [True, False, False, False]
     out_dtype = bodo.IntegerArrayType(types.int32)
