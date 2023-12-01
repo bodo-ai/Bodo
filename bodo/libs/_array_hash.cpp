@@ -1427,9 +1427,12 @@ void hash_keys(
     const uint32_t seed, bool is_parallel, bool global_dict_needed,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes,
-    size_t start_row_offset) {
+    size_t start_row_offset, int64_t n_rows_) {
     tracing::Event ev("hash_keys", is_parallel);
-    size_t n_rows = (size_t)key_arrs[0]->length - start_row_offset;
+    size_t n_rows = key_arrs[0]->length - start_row_offset;
+    if (n_rows_ != -1) {
+        n_rows = std::min<size_t>(n_rows_, n_rows);
+    }
     // hash first array
     hash_array(out_hashes, key_arrs[0], n_rows, seed, is_parallel,
                global_dict_needed, false,
@@ -1452,7 +1455,7 @@ template void hash_keys<std::unique_ptr<uint32_t[]>>(
     const uint32_t seed, bool is_parallel, bool global_dict_needed,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes,
-    size_t start_row_offset);
+    size_t start_row_offset, int64_t n_rows_);
 
 template void hash_keys<std::shared_ptr<uint32_t[]>>(
     const std::shared_ptr<uint32_t[]>& out_hashes,
@@ -1460,19 +1463,22 @@ template void hash_keys<std::shared_ptr<uint32_t[]>>(
     const uint32_t seed, bool is_parallel, bool global_dict_needed,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes,
-    size_t start_row_offset);
+    size_t start_row_offset, int64_t n_rows_);
 
 std::unique_ptr<uint32_t[]> hash_keys(
     std::vector<std::shared_ptr<array_info>> const& key_arrs,
     const uint32_t seed, bool is_parallel, bool global_dict_needed,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes,
-    size_t start_row_offset) {
-    size_t n_rows = (size_t)key_arrs[0]->length - start_row_offset;
+    size_t start_row_offset, int64_t n_rows_) {
+    size_t n_rows = key_arrs[0]->length - start_row_offset;
+    if (n_rows_ != -1) {
+        n_rows = std::min<size_t>(n_rows_, n_rows);
+    }
     std::unique_ptr<uint32_t[]> out_hashes =
         std::make_unique<uint32_t[]>(n_rows);
     hash_keys(out_hashes, key_arrs, seed, is_parallel, global_dict_needed,
-              dict_hashes, start_row_offset);
+              dict_hashes, start_row_offset, n_rows);
     return out_hashes;
 }
 
