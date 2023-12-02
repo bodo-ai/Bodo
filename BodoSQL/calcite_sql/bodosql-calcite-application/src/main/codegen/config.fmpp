@@ -181,6 +181,12 @@ data: {
       "EPOCH_NANOSECONDS",
       "TZH",
       "TZM",
+      "COMMENT",
+      "SECURE",
+      "TAG",
+      "MASKING",
+      "ACCESS",
+      "POLICY",
     ]
 
     # List of non-reserved keywords to add;
@@ -225,7 +231,6 @@ data: {
         "CLONE",
         "CLUSTER",
         "COPY",
-        "GRANTS",
         "COMPRESSION",
         "RECORD_DELIMITER",
         "FIELD_DELIMITER",
@@ -393,6 +398,10 @@ data: {
         "TZH",
         "TZM",
         "LAST_DAY",
+        "COMMENT",
+        "SECURE",
+        "ACCESS",
+        "POLICY",
     ]
 
     # List of additional join types. Each is a method with no arguments.

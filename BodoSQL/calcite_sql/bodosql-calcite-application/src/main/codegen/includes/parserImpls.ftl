@@ -158,6 +158,98 @@ SqlNode ColumnWithType() :
     }
 }
 
+SqlNodeList ViewColumns() :
+{
+final Span s;
+List<SqlNode> list = new ArrayList<SqlNode>();
+    SqlNode col;
+}
+{
+    <LPAREN> { s = span(); }
+    col = ColumnWithOptionalType() { list.add(col); }
+    (
+        <COMMA> col = ColumnWithOptionalType() { list.add(col); }
+    )*
+    <RPAREN>
+    {
+        return new SqlNodeList(list, s.end(this));
+    }
+}
+
+void WithTags() :
+{
+ // TODO: add way to store tags
+}
+{
+    [ <WITH> ] <TAG>
+    <LPAREN>
+        CompoundIdentifier() <EQ> StringLiteral()
+        ( <COMMA> CompoundIdentifier() <EQ> StringLiteral() )*
+    <RPAREN>
+}
+
+void WithMaskingPolicy() :
+{
+// TODO: add way to store masking policy
+}
+{
+    [ <WITH> ] <MASKING> <POLICY>
+    CompoundIdentifier()
+    [
+        <USING>
+        <LPAREN>
+        CompoundIdentifier()
+        ( <COMMA> Expression(ExprContext.ACCEPT_SUB_QUERY) )+
+        <RPAREN>
+    ]
+}
+
+void WithRowAccessPolicy() :
+{
+// TODO: add way to store row access policy
+}
+{
+    [ <WITH> ] <ROW> <ACCESS> <POLICY>
+    CompoundIdentifier()
+    <ON>
+    <LPAREN>
+        CompoundIdentifier()
+        ( <COMMA> CompoundIdentifier() )*
+    <RPAREN>
+}
+
+SqlNode ColumnWithOptionalType() :
+{
+    SqlIdentifier id;
+    SqlDataTypeSpec type = new SqlDataTypeSpec(new SqlBasicTypeNameSpec(SqlTypeName.UNKNOWN, SqlParserPos.ZERO), SqlParserPos.ZERO);
+    boolean nullable = true;
+    final Span s = Span.of();
+    SqlNode defaultExpr = null;
+    Pair<SqlLiteral,SqlLiteral> incrementExpr = null;
+    SqlLiteral incrementStart = null;
+    SqlLiteral incrementStep = null;
+}
+{
+    id = CompoundIdentifier()
+    [ type = DataType() ]
+    // Any of the following additional column modifiers can appear in any order
+    (
+        ( <NOT> <NULL> { nullable = false; } )
+    |   WithTags()
+    |   WithMaskingPolicy()
+    )*
+    {
+        return new SqlSnowflakeColumnDeclaration(
+            s.add(id).end(this),
+            id,
+            type.withNullable(nullable),
+            null,
+            null,
+            null
+        );
+    }
+}
+
 /* Parse a CLUSTER BY clause for a CREATE TABLE statement */
 SqlNodeList ClusterBy() :
 {
@@ -1169,6 +1261,8 @@ SqlIntervalQualifier BodoIntervalQualifier() : {
 
 /**
  * Copied from Calcite. Generates a call to createView.
+ * NOTE: TAG and MASKING should be non-reserved, but are reserved for the time being since
+ * they create a parsing ambiguity if they are non-reserved in the CREATE VIEW syntax.
  */
 SqlCreate SqlCreateView(Span s, boolean replace) :
 {
@@ -1177,8 +1271,19 @@ SqlCreate SqlCreateView(Span s, boolean replace) :
     final SqlNode query;
 }
 {
-    <VIEW> id = CompoundIdentifier()
-    [ columnList = ParenthesizedSimpleIdentifierList() ]
+    [ <SECURE> ]
+    [ [ <LOCAL> | <GLOBAL> ] ( <TEMP> | <TEMPORARY> | <VOLATILE> ) ]
+    [ <RECURSIVE> ]
+    <VIEW>
+    IfNotExistsOpt()
+    id = CompoundIdentifier()
+    [ columnList = ViewColumns() ]
+    (
+      ( <COPY> <GRANTS> )
+    |   WithTags()
+    |   WithRowAccessPolicy()
+    | ( <COMMENT> <EQ> StringLiteral() )
+    ) *
     <AS> query = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY) {
         return SqlDdlNodes.createView(s.end(this), replace, id, columnList,
             query);

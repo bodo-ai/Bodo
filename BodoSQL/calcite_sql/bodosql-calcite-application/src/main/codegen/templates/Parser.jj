@@ -4832,10 +4832,14 @@ SqlCreate SqlCreate() :
         }
     ]
     (
+        // Need a larger lookahead to tell the difference between CREATE TABLE
+        // vs CREATE VIEW since they can have large prefixes before the TABLE
+        // or VIEW keywords.
+        LOOKAHEAD(3)
 <#-- additional literal parser methods are included here -->
 <#list (parser.createStatementParserMethods!default.parser.createStatementParserMethods) as method>
         create = ${method}(s, replace)
-        <#sep>| LOOKAHEAD(2) </#sep>
+        <#sep>| LOOKAHEAD(3) </#sep>
 </#list>
     )
     {
