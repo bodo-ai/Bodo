@@ -1431,6 +1431,7 @@ def overload_array_construct(A, scalar_tup):
     propagate_null = [False] * len(arg_names)
 
     inner_arr_type = get_common_broadcasted_type(arg_types, "ARRAY_CONSTRUCT")
+
     # Currently not able to support writing a dictionary encoded inner array
     # [BSE-1831] TODO: see if we can optimize ARRAY_CONSTRUCT for dictionary encoding
     if inner_arr_type == bodo.dict_str_arr_type:
@@ -1438,6 +1439,11 @@ def overload_array_construct(A, scalar_tup):
     if inner_arr_type == bodo.none:
         inner_arr_type = bodo.null_array_type
     out_dtype = bodo.libs.array_item_arr_ext.ArrayItemArrayType(inner_arr_type)
+
+    if all(are_scalars) and any(
+        is_array_typ(t, include_index_series=True) for t in arg_types
+    ):  # pragma: no cover
+        inner_arr_type = bodo.libs.array_item_arr_ext.ArrayItemArrayType(inner_arr_type)
 
     extra_globals = {"inner_arr_type": inner_arr_type}
 

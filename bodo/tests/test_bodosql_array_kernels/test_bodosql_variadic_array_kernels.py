@@ -2876,6 +2876,24 @@ def test_object_construct_optional(
         pytest.param(
             (
                 pd.Series(
+                    [1, 2, 3] * 3,
+                    dtype=np.int64,
+                ),
+                pd.Series(
+                    [4, 5, 6] * 3,
+                    dtype=np.int64,
+                ),
+            ),
+            (True, True),
+            pd.Series(
+                [[1, 2, 3] * 3, [4, 5, 6] * 3],
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+            ),
+            id="nested_integer_scalar-2",
+        ),
+        pytest.param(
+            (
+                pd.Series(
                     [["A"], ["BC", None], [], None, ["DEF", "", "GH"], []] * 3,
                     dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
                 ),
@@ -2899,6 +2917,32 @@ def test_object_construct_optional(
             ),
             id="nested_string-2",
             marks=pytest.mark.skip(reason="[BSE-2123] TODO: fix segfault on 2 ranks"),
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    ["a", "b", "c"],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+                ),
+                pd.Series(
+                    ["d", "e", "f"],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+                ),
+                pd.Series(
+                    ["g", "h", "i"],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+                ),
+                pd.Series(
+                    ["j", "k", "l"],
+                    dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+                ),
+            ),
+            (True, True, True, True),
+            pd.Series(
+                [["a", "b", "c"], ["d", "e", "f"], ["g", "h", "i"], ["j", "k", "l"]],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
+            id="nested_string_scalar-4",
         ),
         pytest.param(
             (
@@ -3216,6 +3260,7 @@ def test_array_construct(args, scalar_tup, answer, memory_leak_check):
             bodo.libs.bodosql_array_kernels.array_construct((A, B, C, D), scalar_tup)
         )
 
+    dist_test = True
     if len(args) == 1 and not isinstance(args[0], pd.Series):
         impl = impl_scalar
         is_out_distributed = False
@@ -3227,11 +3272,15 @@ def test_array_construct(args, scalar_tup, answer, memory_leak_check):
         }
         impl = implementations[len(args)]
         is_out_distributed = None
+        # If every input is marked as scalar, we don't want to distributed the
+        # input, and there's no distributed semantics to test.
+        dist_test = not all(scalar_tup)
 
     check_func(
         impl,
         args,
         is_out_distributed=is_out_distributed,
+        dist_test=dist_test,
         py_output=answer,
         check_dtype=False,
         reset_index=True,
