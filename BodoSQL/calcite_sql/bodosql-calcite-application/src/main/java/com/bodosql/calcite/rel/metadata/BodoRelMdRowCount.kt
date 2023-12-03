@@ -4,6 +4,7 @@ import com.bodosql.calcite.adapter.pandas.PandasCostEstimator
 import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.rel.core.Flatten
+import com.bodosql.calcite.rel.core.RowSample
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
@@ -15,10 +16,8 @@ import org.apache.calcite.rex.RexDynamicParam
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
-import org.apache.calcite.rex.RexUtil.getSelectivity
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.util.Util
-import java.lang.Math.pow
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -46,6 +45,11 @@ class BodoRelMdRowCount : RelMdRowCount() {
             // Otherwise, just use the default
             super.getRowCount(rel, mq)
         }
+    }
+
+    fun getRowCount(rel: RowSample, mq: RelMetadataQuery): Double? {
+        val inputRowCount = mq.getRowCount(rel.input)
+        return inputRowCount?.let { min(it, rel.rowSamplingParameters.numberOfRows.toDouble()) }
     }
 
     fun getRowCount(rel: SnowflakeFilter, mq: RelMetadataQuery?): Double? {

@@ -2,6 +2,7 @@ package com.bodosql.calcite.rel.metadata;
 
 import static java.util.Objects.requireNonNull;
 
+import com.bodosql.calcite.rel.core.RowSample;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import java.util.ArrayList;
@@ -65,6 +66,12 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
   @Override
   public MetadataDef<BuiltInMetadata.Predicates> getDef() {
     return BuiltInMetadata.Predicates.DEF;
+  }
+
+  /** Infers predicates for a RowSample. */
+  public RelOptPredicateList getPredicates(RowSample sample, RelMetadataQuery mq) {
+    RelNode input = sample.getInput();
+    return mq.getPulledUpPredicates(input);
   }
 
   /**

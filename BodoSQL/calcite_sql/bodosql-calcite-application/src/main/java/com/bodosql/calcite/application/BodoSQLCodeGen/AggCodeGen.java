@@ -317,7 +317,7 @@ public class AggCodeGen {
       // routes.
       if (distOutput) {
         List<kotlin.Pair<String, Expr>> namedParams =
-            List.of(new kotlin.Pair<String, Expr>("scalar_to_arr_len", new Expr.IntegerLiteral(1)));
+            List.of(new kotlin.Pair("scalar_to_arr_len", new Expr.IntegerLiteral(1)));
         aggExpr =
             new Expr.Call("bodo.utils.conversion.coerce_to_array", List.of(aggExpr), namedParams);
       } else {

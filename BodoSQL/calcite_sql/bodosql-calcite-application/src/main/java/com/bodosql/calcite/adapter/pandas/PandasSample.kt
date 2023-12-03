@@ -19,11 +19,11 @@ class PandasSample(
 
     override fun explainTerms(pw: RelWriter): RelWriter {
         return super.explainTerms(pw)
-            .item("mode", if (params.isBernoulli()) "bernoulli" else "system")
-            .item("rate", params.getSamplingPercentage())
+            .item("mode", if (params.isBernoulli) "bernoulli" else "system")
+            .item("rate", params.sampleRate)
             .item(
                 "repeatableSeed",
-                if (params.isRepeatable()) params.getRepeatableSeed() else "-",
+                if (params.isRepeatable) params.repeatableSeed else "-",
             )
     }
 

@@ -657,9 +657,10 @@ public class RelDecorrelator implements ReflectiveVisitor {
                         requireNonNull(combinedMap.get(oldPos),
                                 () -> "combinedMap.get(" + oldPos + ")"));
             }
-            final int filterArg = oldAggCall.filterArg < 0 ? oldAggCall.filterArg
+            final int filterArg =
+                oldAggCall.filterArg < 0 ? oldAggCall.filterArg
                     : requireNonNull(combinedMap.get(oldAggCall.filterArg),
-                    () -> "combinedMap.get(" + oldAggCall.filterArg + ")");
+                        () -> "combinedMap.get(" + oldAggCall.filterArg + ")");
 
             newAggCalls.add(
                     oldAggCall.adaptTo(newProject, aggArgs, filterArg,
@@ -2520,7 +2521,8 @@ public class RelDecorrelator implements ReflectiveVisitor {
                     }
                 }
 
-                int filterArg = aggCall.filterArg < 0 ? aggCall.filterArg
+                int filterArg =
+                    aggCall.filterArg < 0 ? aggCall.filterArg
                         : aggCall.filterArg + groupCount;
                 newAggCalls.add(
                         aggCall.adaptTo(joinOutputProject, argList, filterArg,
