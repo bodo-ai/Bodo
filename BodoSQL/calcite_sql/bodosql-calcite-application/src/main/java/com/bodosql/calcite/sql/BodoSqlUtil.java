@@ -1,13 +1,13 @@
 package com.bodosql.calcite.sql;
 
 import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
+import static org.apache.calcite.util.Static.RESOURCE;
 
 import java.math.BigDecimal;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.SqlNumericLiteral;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlSampleSpec;
 import org.apache.calcite.sql.SqlUtil;
@@ -21,11 +21,10 @@ public class BodoSqlUtil {
   public static @Nullable SqlSampleSpec createTableSample(
       @NonNull SqlParserPos pos,
       boolean isBernoulli,
-      @NonNull SqlNumericLiteral sampleRate,
+      BigDecimal rate,
       boolean sampleByRows,
       boolean isRepeatable,
       int repeatableSeed) {
-    BigDecimal rate = sampleRate.bigDecimalValue();
     if (rate == null) {
       return null;
     }
@@ -48,19 +47,14 @@ public class BodoSqlUtil {
           pos, BODO_SQL_RESOURCE.invalidSampleSize(BigDecimal.ZERO, oneHundred));
     }
 
-    // Treat TABLESAMPLE(0) and TABLESAMPLE(100) as no table
-    // sampling at all.  Not strictly correct: TABLESAMPLE(0)
-    // should produce no output, but it simplifies implementation
-    // to know that some amount of sampling will occur.
-    // In practice values less than ~1E-43% are treated as 0.0 and
-    // values greater than ~99.999997% are treated as 1.0
-    float fRate = rate.divide(oneHundred).floatValue();
-    if (fRate <= 0.0f || fRate >= 1.0f) {
-      return null;
+    BigDecimal samplePercentage = rate.divide(oneHundred);
+    if (samplePercentage.compareTo(BigDecimal.ZERO) < 0
+        || samplePercentage.compareTo(BigDecimal.ONE) > 0) {
+      throw SqlUtil.newContextException(pos, RESOURCE.invalidSampleSize());
     }
     return isRepeatable
-        ? SqlSampleSpec.createTableSample(isBernoulli, fRate, repeatableSeed)
-        : SqlSampleSpec.createTableSample(isBernoulli, fRate);
+        ? SqlSampleSpec.createTableSample(isBernoulli, samplePercentage, repeatableSeed)
+        : SqlSampleSpec.createTableSample(isBernoulli, samplePercentage);
   }
 
   /**

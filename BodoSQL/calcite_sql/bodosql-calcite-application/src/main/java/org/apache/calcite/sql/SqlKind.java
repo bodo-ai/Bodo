@@ -206,6 +206,9 @@ public enum SqlKind {
   /** Item in WITH clause. */
   WITH_ITEM,
 
+  /** Represents a recursive CTE as a table ref. */
+  WITH_ITEM_TABLE_REF,
+
   /** Item expression. */
   ITEM,
 
@@ -721,6 +724,9 @@ public enum SqlKind {
   /** {@code ARRAY_EXCEPT} function (Spark semantics). */
   ARRAY_EXCEPT,
 
+  /** {@code ARRAY_INSERT} function (Spark semantics). */
+  ARRAY_INSERT,
+
   /** {@code ARRAY_INTERSECT} function (Spark semantics). */
   ARRAY_INTERSECT,
 
@@ -793,6 +799,9 @@ public enum SqlKind {
   /** {@code REVERSE} function (SQL Server, MySQL). */
   REVERSE,
 
+  /** {@code SOUNDEX} function (Spark semantics). */
+  SOUNDEX_SPARK,
+
   /** {@code SUBSTR} function (BigQuery semantics). */
   SUBSTR_BIG_QUERY,
 
@@ -861,6 +870,9 @@ public enum SqlKind {
   /** {@code CURSOR} constructor, for example, <code>SELECT * FROM
    * TABLE(udx(CURSOR(SELECT ...), x, y, z))</code>. */
   CURSOR,
+
+  /** {@code CONTAINS_SUBSTR} function (BigQuery semantics). */
+  CONTAINS_SUBSTR,
 
   // internal operators (evaluated in validator) 200-299
 
@@ -1174,6 +1186,9 @@ public enum SqlKind {
   /** {@code CREATE TABLE} DDL statement. */
   CREATE_TABLE,
 
+  /** {@code CREATE TABLE LIKE} DDL statement. */
+  CREATE_TABLE_LIKE,
+
   /** {@code ALTER TABLE} DDL statement. */
   ALTER_TABLE,
 
@@ -1294,7 +1309,8 @@ public enum SqlKind {
   public static final EnumSet<SqlKind> DDL =
       EnumSet.of(COMMIT, ROLLBACK, ALTER_SESSION,
           CREATE_SCHEMA, CREATE_FOREIGN_SCHEMA, DROP_SCHEMA,
-          CREATE_TABLE, ALTER_TABLE, DROP_TABLE, TRUNCATE_TABLE,
+          CREATE_TABLE, CREATE_TABLE_LIKE,
+          ALTER_TABLE, DROP_TABLE, TRUNCATE_TABLE,
           CREATE_FUNCTION, DROP_FUNCTION,
           CREATE_VIEW, ALTER_VIEW, DROP_VIEW,
           CREATE_MATERIALIZED_VIEW, ALTER_MATERIALIZED_VIEW,

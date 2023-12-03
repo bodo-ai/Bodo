@@ -24,7 +24,7 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <kotlin.compiler.incremental>true</kotlin.compiler.incremental>
         <org.slf4j-version>1.7.29</org.slf4j-version>
-        <org.apache.calcite-version>1.35.0</org.apache.calcite-version>
+        <org.apache.calcite-version>1.36.0</org.apache.calcite-version>
         <org.apache.calcite.avatica-version>1.23.0</org.apache.calcite.avatica-version>
         <com.google.protobuf-version>3.21.5</com.google.protobuf-version>
         <!-- TODO(njriasan): Upgrade to 3.14.1. This changes retry behavior so we need to test -->
@@ -524,7 +524,6 @@
                                         <exclude>org/apache/calcite/tools/RelBuilder$AggCallImpl2.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$AggCallPlus.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$Config.class</exclude>
-                                        <exclude>org/apache/calcite/tools/RelBuilder$Field.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$Frame.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$GroupKey.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$GroupKeyImpl.class</exclude>
@@ -532,7 +531,6 @@
                                         <exclude>org/apache/calcite/tools/RelBuilder$OverCallImpl$1.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$OverCallImpl.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$Registrar.class</exclude>
-                                        <exclude>org/apache/calcite/tools/RelBuilder$RelOptTableFinder.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$Shifter.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder.class</exclude>
                                     </excludes>

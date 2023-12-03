@@ -2,10 +2,10 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.plan.RelOptRowSamplingParameters;
 import java.util.ArrayList;
 import java.util.List;
 import kotlin.Pair;
-import com.bodosql.calcite.plan.RelOptRowSamplingParameters;
 import org.apache.calcite.plan.RelOptSamplingParameters;
 
 /**
@@ -26,7 +26,7 @@ public class SampleCodeGen {
     }
 
     List<Pair<String, Expr>> args = new ArrayList<>();
-    args.add(new Pair("frac", new Expr.DoubleLiteral(params.getSamplingPercentage())));
+    args.add(new Pair("frac", new Expr.DoubleLiteral(params.sampleRate.doubleValue())));
 
     if (params.isRepeatable()) {
       args.add(new Pair("random_state", new Expr.IntegerLiteral(params.getRepeatableSeed())));

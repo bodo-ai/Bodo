@@ -19,11 +19,11 @@ class PandasRowSample(
 
     override fun explainTerms(pw: RelWriter): RelWriter {
         return super.explainTerms(pw)
-            .item("mode", if (params.isBernoulli()) "bernoulli" else "system")
-            .item("rows", params.getNumberOfRows())
+            .item("mode", if (params.isBernoulli) "bernoulli" else "system")
+            .item("rows", params.numberOfRows)
             .item(
                 "repeatableSeed",
-                if (params.isRepeatable()) params.getRepeatableSeed() else "-",
+                if (params.isRepeatable) params.repeatableSeed else "-",
             )
     }
 

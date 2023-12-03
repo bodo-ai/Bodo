@@ -25,7 +25,7 @@ import org.apache.calcite.linq4j.tree.TableExpressionFactory;
 import org.apache.calcite.plan.BodoRelOptUtil;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
-import org.apache.calcite.plan.RelOptSamplingParameters;
+import org.apache.calcite.plan.RelOptSchema;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelTraitSet;
@@ -53,7 +53,6 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.LogicalTableCreate;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.RelFactories;
-import org.apache.calcite.rel.core.Sample;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.hint.HintStrategyTable;
 import org.apache.calcite.rel.hint.Hintable;
@@ -178,6 +177,7 @@ import org.apache.calcite.sql.validate.SqlValidatorNamespace;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
 import org.apache.calcite.sql.validate.SqlValidatorTable;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
+import org.apache.calcite.sql.validate.SqlWithItemTableRef;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.calcite.tools.ValidationException;
@@ -226,9 +226,11 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.collect.ImmutableList.toImmutableList;
 
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
 import static org.apache.calcite.runtime.FlatLists.append;
+import static org.apache.calcite.sql.SqlUtil.containsDefault;
 import static org.apache.calcite.sql.SqlUtil.containsIn;
 import static org.apache.calcite.sql.SqlUtil.getAliasedString;
 import static org.apache.calcite.sql.SqlUtil.stripAs;
@@ -300,6 +302,10 @@ public class SqlToRelConverter {
    */
   private final Deque<String> datasetStack = new ArrayDeque<>();
 
+  /** Stack that contains the SqlInsert operator that is currently being
+   * processed. It is used used for resolving DEFAULT expressions. */
+  private final Deque<SqlCall> callStack = new ArrayDeque<>();
+
   /**
    * Mapping of non-correlated sub-queries that have been converted to their
    * equivalent constants. Used to avoid re-evaluating the sub-query if it's
@@ -366,7 +372,9 @@ public class SqlToRelConverter {
     this.exprConverter = new SqlNodeToRexConverterImpl(convertletTable);
     this.explainParamCount = 0;
     this.config = requireNonNull(config, "config");
-    this.relBuilder = config.getRelBuilderFactory().create(cluster, null)
+    this.relBuilder =
+            config.getRelBuilderFactory().create(cluster,
+             validator != null ? validator.getCatalogReader().unwrap(RelOptSchema.class) : null)
         .transform(config.getRelBuilderConfigTransform());
     this.hintStrategies = config.getHintStrategyTable();
 
@@ -2525,13 +2533,16 @@ public class SqlToRelConverter {
         SqlSampleSpec.SqlTableSampleSpec tableSampleSpec =
             (SqlSampleSpec.SqlTableSampleSpec) sampleSpec;
         convertFrom(bb, operands.get(0));
-        RelOptSamplingParameters params =
-            new RelOptSamplingParameters(
-                tableSampleSpec.isBernoulli(),
-                tableSampleSpec.getSamplePercentage(),
-                tableSampleSpec.isRepeatable(),
-                tableSampleSpec.getRepeatableSeed());
-        bb.setRoot(new Sample(cluster, bb.root(), params), false);
+
+        bb.setRoot(
+            relBuilder.push(bb.root())
+                .sample(tableSampleSpec.isBernoulli(),
+                    tableSampleSpec.sampleRate,
+                    tableSampleSpec.isRepeatable()
+                        ? tableSampleSpec.getRepeatableSeed()
+                        : null)
+                .build(),
+            true);
       } else {
         throw new AssertionError("unknown TABLESAMPLE type: " + sampleSpec);
       }
@@ -2548,6 +2559,11 @@ public class SqlToRelConverter {
 
     case TABLE_IDENTIFIER_WITH_ID:
       convertTableIdentifierWithID(bb, (SqlTableIdentifierWithID) from, null, null);
+      return;
+
+    case WITH_ITEM_TABLE_REF:
+      SqlWithItemTableRef withItemTableRef = (SqlWithItemTableRef) from;
+      convertTransientScan(bb, withItemTableRef.getWithItem());
       return;
 
     case EXTEND:
@@ -2879,7 +2895,7 @@ public class SqlToRelConverter {
         valueList.add(
             Pair.of(alias,
                 nodeList.stream().map(bb::convertExpression)
-                    .collect(Util.toImmutableList()))));
+                    .collect(toImmutableList()))));
 
     final RelNode rel =
         relBuilder.pivot(groupKey, aggCalls, axes, valueList.build())
@@ -2898,10 +2914,10 @@ public class SqlToRelConverter {
 
     final List<String> measureNames = unpivot.measureList.stream()
         .map(node -> ((SqlIdentifier) node).getSimple())
-        .collect(Util.toImmutableList());
+        .collect(toImmutableList());
     final List<String> axisNames = unpivot.axisList.stream()
         .map(node -> ((SqlIdentifier) node).getSimple())
-        .collect(Util.toImmutableList());
+        .collect(toImmutableList());
     final ImmutableList.Builder<Pair<List<RexLiteral>, List<RexNode>>> axisMap =
         ImmutableList.builder();
     unpivot.forEachNameValues((nodeList, valueList) -> {
@@ -2920,7 +2936,7 @@ public class SqlToRelConverter {
       });
       final List<RexNode> nodes = nodeList.stream()
           .map(unpivotBb::convertExpression)
-          .collect(Util.toImmutableList());
+          .collect(toImmutableList());
       axisMap.add(Pair.of(literals, nodes));
     });
     relBuilder.unpivot(unpivot.includeNulls, measureNames, axisNames,
@@ -2928,6 +2944,14 @@ public class SqlToRelConverter {
     relBuilder.convert(getNamespace(unpivot).getRowType(), false);
 
     bb.setRoot(relBuilder.build(), true);
+  }
+
+  private void convertTransientScan(Blackboard bb, SqlWithItem withItem) {
+    final SqlValidatorNamespace fromNamespace = getNamespace(withItem).resolve();
+    bb.setRoot(
+        relBuilder.transientScan(withItem.name.getSimple(),
+            fromNamespace.getRowType()).build(),
+        true);
   }
 
   private void convertIdentifier(Blackboard bb, SqlIdentifier id,
@@ -3734,9 +3758,6 @@ public class SqlToRelConverter {
     for (SqlNode e : r.groupExprList) {
       aggConverter.addGroupExpr(e);
     }
-    for (SqlNode e : r.measureExprList) {
-      aggConverter.addMeasureExpr(e);
-    }
 
     final RexNode havingExpr;
     final PairList<RexNode, String> projects = PairList.of();
@@ -4145,6 +4166,30 @@ public class SqlToRelConverter {
     }
   }
 
+  private RelNode createUnion(SqlCall call,
+      RelNode left,
+      RelNode right) {
+    SqlValidatorNamespace nameSpace = this.validator().getNamespace(call);
+    boolean all = all(call);
+    if (nameSpace != null) {
+      SqlNode enclosingNode = nameSpace.getEnclosingNode();
+      if (enclosingNode != null) {
+        String name = "";
+        if (enclosingNode.getKind() == SqlKind.WITH_ITEM) {
+          name = ((SqlWithItem) enclosingNode).name.getSimple();
+        }
+        if (RelOptUtil.findTable(right, name) != null) {
+          return this.relBuilder.
+              push(left).
+              push(right).
+              repeatUnion(name, all).
+              build();
+        }
+      }
+    }
+    return LogicalUnion.create(ImmutableList.of(left, right), all);
+  }
+
   /**
    * Converts a set operation (UNION, INTERSECT, MINUS) into relational
    * expressions.
@@ -4159,7 +4204,7 @@ public class SqlToRelConverter {
         convertQueryRecursive(call.operand(1), false, null).project();
     switch (call.getKind()) {
     case UNION:
-      return LogicalUnion.create(ImmutableList.of(left, right), all(call));
+      return createUnion(call, left, right);
 
     case INTERSECT:
       return LogicalIntersect.create(ImmutableList.of(left, right), all(call));
@@ -4179,12 +4224,16 @@ public class SqlToRelConverter {
   protected RelNode convertInsert(SqlInsert call) {
     RelOptTable targetTable = getTargetTable(call);
 
+    callStack.push(call);
+
     final RelDataType targetRowType =
         validator().getValidatedNodeType(call);
     assert targetRowType != null;
     RelNode sourceRel =
         convertQueryRecursive(call.getSource(), true, targetRowType).project();
     RelNode massagedRel = convertColumnList(call, sourceRel);
+
+    callStack.pop();
 
     return createModify(targetTable, massagedRel);
   }
@@ -5833,8 +5882,13 @@ public class SqlToRelConverter {
   }
 
   /**
-   * Converts a values clause (as in "INSERT INTO T(x,y) VALUES (1,2)") into a
-   * relational expression.
+   * Converts a VALUES clause into a relational expression.
+   *
+   * <p>Example:
+   * <blockquote><pre>{@code
+   * INSERT INTO T(x, y)
+   * VALUES (1, 2), (2, DEFAULT)
+   * }</pre></blockquote>
    *
    * @param bb            Blackboard
    * @param values        Call to SQL VALUES operator
@@ -5858,15 +5912,56 @@ public class SqlToRelConverter {
       return;
     }
 
-    for (SqlNode rowConstructor1 : values.getOperandList()) {
-      SqlCall rowConstructor = (SqlCall) rowConstructor1;
+    final SqlCall insertOp = callStack.peek();
+    // resolve presence of default params
+    boolean processDefaults = (insertOp != null) && containsDefault(values);
+
+    if (targetRowType == null) {
+      RelDataType listType = validator().getValidatedNodeType(values);
+      targetRowType = SqlTypeUtil.promoteToRowType(typeFactory, listType, null);
+    }
+
+    assert insertOp instanceof SqlInsert || !processDefaults
+        : "operation: " + insertOp;
+
+    final InitializerExpressionFactory initializerFactory;
+    final RelOptTable targetTable;
+    final int[] mapping;
+    if (processDefaults) {
+      requireNonNull(insertOp, "insertOp");
+      requireNonNull(targetRowType, "targetRowType");
+      targetTable = getTargetTable(insertOp);
+      initializerFactory =
+          getInitializerFactory(getNamespace(insertOp).getTable());
+      mapping = processColumnsMapping(targetRowType, targetTable);
+    } else {
+      initializerFactory = null;
+      targetTable = null;
+      mapping = null;
+    }
+
+    for (SqlNode rowConstructor : values.getOperandList()) {
+      SqlCall newRowConst = (SqlCall) rowConstructor;
       Blackboard tmpBb = createBlackboard(bb.scope, null, false);
       replaceSubQueries(tmpBb, rowConstructor,
           RelOptUtil.Logic.TRUE_FALSE_UNKNOWN);
       final PairList<RexNode, String> exps = PairList.of();
-      Ord.forEach(rowConstructor.getOperandList(), (operand, i) ->
-          exps.add(tmpBb.convertExpression(operand),
-              SqlValidatorUtil.alias(operand, i)));
+      Ord.forEach(newRowConst.getOperandList(), (operand, i) -> {
+        RexNode def;
+        if (processDefaults
+            && operand.getKind() == SqlKind.DEFAULT
+            && requireNonNull(mapping, "mapping")[i] != -1) {
+          // obtain expression for appropriate default
+          requireNonNull(initializerFactory, "initializerFactory");
+          requireNonNull(targetTable, "targetTable");
+          def =
+              initializerFactory.newColumnDefaultValue(targetTable,
+                  mapping[i], bb);
+        } else {
+          def = tmpBb.convertExpression(operand);
+        }
+        exps.add(def, SqlValidatorUtil.alias(operand, i));
+      });
       RelNode in =
           (null == tmpBb.root)
               ? LogicalValues.createOneRow(cluster)
@@ -5879,6 +5974,34 @@ public class SqlToRelConverter {
         relBuilder.union(true, values.getOperandList().size())
             .build(),
         true);
+  }
+
+  /** Processes names matching between incoming row and appropriate dataset
+   * definition. Returns incoming fields positions in relation to dataset
+   * representation. */
+  private static int[] processColumnsMapping(RelDataType targetRowType,
+      RelOptTable targetTable) {
+    List<ColumnStrategy> strategies = targetTable.getColumnStrategies();
+    List<String> targetFields = targetRowType.getFieldNames();
+    List<RelDataTypeField> fields = targetTable.getRowType().getFieldList();
+
+    final int[] mapping = new int[targetFields.size()];
+    Arrays.fill(mapping, -1);
+    Ord.forEach(fields, (field, i) -> {
+      if (strategies.get(i) == ColumnStrategy.DEFAULT) {
+        int pos = targetFields.indexOf(field.getName());
+        if (pos != -1) {
+          mapping[pos] = i;
+        }
+      }
+    });
+
+    if (mapping.length != targetFields.size()) {
+      throw new AssertionError("Columns partially mapped; src=" + targetFields
+          + ", dest=" + Util.transform(fields, RelDataTypeField::getName));
+    }
+
+    return mapping;
   }
 
   //~ Inner Classes ----------------------------------------------------------

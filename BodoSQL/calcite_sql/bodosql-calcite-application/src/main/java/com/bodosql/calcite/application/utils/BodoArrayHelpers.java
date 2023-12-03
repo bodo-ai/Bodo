@@ -81,7 +81,7 @@ public class BodoArrayHelpers {
   public static Expr sqlTypeToBodoArrayType(RelDataType type, boolean strAsDict) {
     boolean nullable = type.isNullable();
     // TODO: Create type exprs
-    String typeName = "";
+    final String typeName;
     switch (type.getSqlTypeName()) {
       case NULL:
         typeName = "bodo.null_array_type";
