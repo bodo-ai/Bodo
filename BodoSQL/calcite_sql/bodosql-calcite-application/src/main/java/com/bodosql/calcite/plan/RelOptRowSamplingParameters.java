@@ -26,7 +26,7 @@ package com.bodosql.calcite.plan;
 public class RelOptRowSamplingParameters {
   // ~ Instance fields --------------------------------------------------------
 
-  private final boolean isBernoulli;
+  private final boolean bernoulli;
   private final int numberOfRows;
   private final boolean isRepeatable;
   private final int repeatableSeed;
@@ -34,8 +34,8 @@ public class RelOptRowSamplingParameters {
   // ~ Constructors -----------------------------------------------------------
 
   public RelOptRowSamplingParameters(
-      boolean isBernoulli, int numberOfRows, boolean isRepeatable, int repeatableSeed) {
-    this.isBernoulli = isBernoulli;
+      boolean bernoulli, int numberOfRows, boolean isRepeatable, int repeatableSeed) {
+    this.bernoulli = bernoulli;
     this.numberOfRows = numberOfRows;
     this.isRepeatable = isRepeatable;
     this.repeatableSeed = repeatableSeed;
@@ -51,7 +51,7 @@ public class RelOptRowSamplingParameters {
    * @return true if Bernoulli sampling is configured, false for system sampling
    */
   public boolean isBernoulli() {
-    return isBernoulli;
+    return bernoulli;
   }
 
   /**

@@ -41,11 +41,14 @@ import java.util.List;
  */
 class WithScope extends ListScope {
   private final SqlWithItem withItem;
+  protected final @Nullable WithRecursiveScope recursiveScope;
 
   /** Creates a WithScope. */
-  WithScope(SqlValidatorScope parent, SqlWithItem withItem) {
+  WithScope(SqlValidatorScope parent, SqlWithItem withItem,
+      @Nullable WithRecursiveScope recursiveScope) {
     super(parent);
     this.withItem = withItem;
+    this.recursiveScope = recursiveScope;
   }
 
   @Override public SqlNode getNode() {
@@ -72,4 +75,5 @@ class WithScope extends ListScope {
     }
     super.resolveTable(names, nameMatcher, path, resolved, extensionFields);
   }
+
 }

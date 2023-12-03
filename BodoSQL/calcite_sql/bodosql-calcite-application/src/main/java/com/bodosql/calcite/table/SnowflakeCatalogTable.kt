@@ -9,6 +9,7 @@ import com.bodosql.calcite.catalog.SnowflakeCatalog
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan.Companion.canRequestColumnDistinctiveness
 import com.bodosql.calcite.schema.ExpandViewInput
 import com.bodosql.calcite.schema.InlineViewMetadata
+import com.google.common.base.Supplier
 import com.google.common.base.Suppliers
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptTable
@@ -344,7 +345,7 @@ open class SnowflakeCatalogTable(
     }
 
     private inner class StatisticImpl : Statistic {
-        private val rowCount: com.google.common.base.Supplier<Double?> = Suppliers.memoize { estimateRowCount() }
+        private val rowCount: Supplier<Double?> = Suppliers.memoize { estimateRowCount() }
 
         /**
          * Retrieves the estimated row count for this table. This value is memoized.

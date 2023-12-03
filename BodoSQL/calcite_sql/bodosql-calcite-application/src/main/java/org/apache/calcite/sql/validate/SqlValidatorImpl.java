@@ -132,6 +132,7 @@ import com.google.common.collect.Sets;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apiguardian.api.API;
 import org.checkerframework.checker.nullness.qual.KeyFor;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.nullness.qual.PolyNull;
 import org.checkerframework.dataflow.qual.Pure;
@@ -1232,6 +1233,15 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       List<SqlNode> operands = ((SqlCall) node).getOperandList();
       SqlSampleSpec sampleSpec = SqlLiteral.sampleValue(operands.get(1));
       if (sampleSpec instanceof SqlSampleSpec.SqlTableSampleSpec) {
+        // The sampling percentage must be between 0 (0%) and 1 (100%).
+        BigDecimal samplePercentage =
+            ((SqlSampleSpec.SqlTableSampleSpec) sampleSpec).sampleRate;
+        // Check the samplePercentage whether is between 0 and 1
+        if (samplePercentage.compareTo(BigDecimal.ZERO) < 0
+            || samplePercentage.compareTo(BigDecimal.ONE) > 0) {
+          throw SqlUtil.newContextException(node.getParserPosition(),
+              RESOURCE.invalidSampleSize());
+        }
         validateFeature(RESOURCE.sQLFeature_T613(), node.getParserPosition());
       } else if (sampleSpec
           instanceof SqlSampleSpec.SqlSubstitutionSampleSpec) {
@@ -2673,14 +2683,17 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       @Nullable String alias,
       SqlValidatorNamespace ns,
       boolean forceNullable) {
-
-    namespaces.put(
-        requireNonNull(ns.getNode(), () -> "ns.getNode() for " + ns), ns);
+    SqlValidatorNamespace namespace =
+        namespaces.get(requireNonNull(ns.getNode(), () -> "ns.getNode() for " + ns));
+    if (namespace == null) {
+      namespaces.put(requireNonNull(ns.getNode()), ns);
+      namespace = ns;
+    }
 
     if (usingScope != null) {
       assert alias != null : "Registering namespace " + ns + ", into scope " + usingScope
           + ", so alias must not be null";
-      usingScope.addChild(ns, alias, forceNullable);
+      usingScope.addChild(namespace, alias, forceNullable);
     }
   }
 
@@ -2757,7 +2770,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       case PIVOT:
       case UNPIVOT:
       case MATCH_RECOGNIZE:
-
+      case WITH:
         // give this anonymous construct a name since later
         // query processing stages rely on it
         alias = SqlValidatorUtil.alias(node, nextGeneratedId++);
@@ -3365,7 +3378,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
           parentScope,
           usingScope,
           node,
-          node,
+          enclosingNode,
           alias,
           forceNullable);
       break;
@@ -3594,9 +3607,23 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
 
     // A setop is in the same scope as its parent.
     scopes.put(call, parentScope);
-    for (SqlNode operand : call.getOperandList()) {
+    @NonNull SqlValidatorScope recursiveScope = parentScope;
+    if (enclosingNode.getKind() == SqlKind.WITH_ITEM) {
+      if (node.getKind() != SqlKind.UNION) {
+        throw newValidationError(node, RESOURCE.recursiveWithMustHaveUnionSetOp());
+      } else if (call.getOperandList().size() > 2) {
+        throw newValidationError(node, RESOURCE.recursiveWithMustHaveTwoChildUnionSetOp());
+      }
+      final WithScope scope = (WithScope) scopes.get(enclosingNode);
+      // recursive scope is only set for the recursive queries.
+      recursiveScope = scope != null && scope.recursiveScope != null
+          ? Objects.requireNonNull(scope.recursiveScope) : parentScope;
+    }
+    for (int i = 0; i < call.getOperandList().size(); i++) {
+      SqlNode operand = call.getOperandList().get(i);
+      @NonNull SqlValidatorScope scope = i == 0 ? parentScope : recursiveScope;
       registerQuery(
-          parentScope,
+          scope,
           null,
           operand,
           operand,
@@ -3621,11 +3648,16 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     SqlValidatorScope scope = parentScope;
     for (SqlNode withItem_ : with.withList) {
       final SqlWithItem withItem = (SqlWithItem) withItem_;
-      final WithScope withScope = new WithScope(scope, withItem);
+
+      final boolean isRecursiveWith = withItem.recursive.booleanValue();
+      final SqlValidatorScope withScope =
+          new WithScope(scope, withItem,
+              isRecursiveWith ? new WithRecursiveScope(scope, withItem) : null);
       scopes.put(withItem, withScope);
 
-      registerQuery(scope, null, withItem.query, with,
-          withItem.name.getSimple(), false);
+      registerQuery(scope, null, withItem.query,
+          withItem.recursive.booleanValue() ? withItem : with, withItem.name.getSimple(),
+          forceNullable);
       registerNamespace(null, alias,
           new WithItemNamespace(this, withItem, enclosingNode),
           false);
@@ -4165,10 +4197,11 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     // Which join types require/allow a ON/USING condition, or allow
     // a NATURAL keyword?
     switch (joinType) {
+    case LEFT_ANTI_JOIN:
     case LEFT_SEMI_JOIN:
       if (!this.config.conformance().isLiberal()) {
         throw newValidationError(join.getJoinTypeNode(),
-            RESOURCE.dialectDoesNotSupportFeature("LEFT SEMI JOIN"));
+            RESOURCE.dialectDoesNotSupportFeature(joinType.name()));
       }
       // fall through
     case INNER:
@@ -5492,7 +5525,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
 
       // Validate insert values against the view constraint.
       final List<SqlNode> values = ((SqlCall) source).getOperandList();
-      for (final int colIndex: constrainedTargetColumns) {
+      for (final int colIndex : constrainedTargetColumns) {
         final String colName = tableFields.get(colIndex).getName();
         final RelDataTypeField targetField = tableIndexToTargetField.get(colIndex);
         for (SqlNode row : values) {
@@ -5947,7 +5980,18 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     SqlValidatorTable table = targetNamespace.getTable();
     validateAccess(call.getTargetTable(), table, SqlAccessEnum.UPDATE);
 
-    RelDataType targetRowType = unknownType;
+    // Bodo Change: The target row type for merge into should always match
+    // the original type of the target table because the only valid options
+    // are to:
+    //
+    // 1. Insert rows
+    // 2. Update rows
+    // 3. Delete rows
+    //
+    // None of these options can result in deleting a column or modifying
+    // its type.
+    //
+    RelDataType targetRowType = table.getRowType();
 
     validateSelect(sqlSelect, targetRowType);
 
@@ -5986,6 +6030,25 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
                 BODO_SQL_RESOURCE.mergeClauseUnconditionalPrecedesConditional());
       }
       validateInsert(insertCallAfterValidate);
+      // Throw if select list contains NULL literal and target is NOT NULL
+      if (insertCallAfterValidate.getSource() instanceof SqlSelect) {
+        final SqlSelect sourceSelect = (SqlSelect) insertCallAfterValidate.getSource();
+        final SqlNodeList sourceSelectList = sourceSelect.getSelectList();
+        // Bodo Change: Update to match Calcite's code for deriving the row
+        // type to check for each individual insert. This seems like it shouldn't
+        // be necessary, but may help future proof the code.
+        //
+        // TODO: Extend this check to update as well, athough that is missing from Calcite.
+        final RelDataType prunedTargetRowType = createTargetRowType(table, insertCallAfterValidate.getTargetColumnList(), false);
+        for (int j = 0; j < sourceSelectList.size(); j++) {
+          final RelDataTypeField targetField = prunedTargetRowType.getFieldList().get(j);
+          final SqlNode selectItem = sourceSelect.getSelectList().get(j);
+          if (!targetField.getType().isNullable() && SqlUtil.isNullLiteral(selectItem, true)) {
+            throw newValidationError(selectItem,
+                RESOURCE.columnNotNullable(targetField.getName()));
+          }
+        }
+      }
 
       SqlNode cond = insertCallAfterValidate.getCondition();
 
@@ -7104,13 +7167,6 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
             return types.size();
           }
         });
-  }
-
-  @Override public void validateColumnListParams(
-      SqlFunction function,
-      List<RelDataType> argTypes,
-      List<SqlNode> operands) {
-    throw new UnsupportedOperationException();
   }
 
   private static boolean isPhysicalNavigation(SqlKind kind) {

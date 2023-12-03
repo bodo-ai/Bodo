@@ -21,6 +21,7 @@ import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.bodosql.calcite.table.SnowflakeCatalogTable;
 import com.google.common.collect.ImmutableList;
 import java.io.UnsupportedEncodingException;
+import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -43,7 +44,6 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNodeList;
-import org.apache.calcite.sql.SqlNumericLiteral;
 import org.apache.calcite.sql.SqlSampleSpec;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
@@ -1363,9 +1363,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
             SqlStdOperatorTable.APPROX_COUNT_DISTINCT.createCall(
                 SqlParserPos.ZERO, new SqlIdentifier(columnName, SqlParserPos.ZERO)));
     SqlNodeList from = SqlNodeList.of(new SqlIdentifier(tableName, SqlParserPos.ZERO));
-    final String samplingRate = "1";
-    SqlNumericLiteral samplePercentage =
-        SqlLiteral.createExactNumeric(samplingRate, SqlParserPos.ZERO);
+    BigDecimal samplePercentage = BigDecimal.ONE;
     SqlSampleSpec tableSampleSpec =
         BodoSqlUtil.createTableSample(SqlParserPos.ZERO, false, samplePercentage, false, false, -1);
     SqlLiteral tableSampleLiteral = SqlLiteral.createSample(tableSampleSpec, SqlParserPos.ZERO);

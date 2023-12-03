@@ -34,6 +34,8 @@ import org.checkerframework.dataflow.qual.Pure;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.google.common.collect.ImmutableList.toImmutableList;
+
 /**
  * A <code>SqlIdentifier</code> is an identifier, possibly compound.
  */
@@ -84,8 +86,9 @@ public class SqlIdentifier extends SqlNode {
     super(pos);
     this.names = ImmutableList.copyOf(names);
     this.collation = collation;
-    this.componentPositions = componentPositions == null ? null
-        : ImmutableList.copyOf(componentPositions);
+    this.componentPositions =
+        componentPositions == null ? null
+            : ImmutableList.copyOf(componentPositions);
     for (String name : names) {
       assert name != null;
     }
@@ -167,8 +170,9 @@ public class SqlIdentifier extends SqlNode {
    */
   public void setNames(List<String> names, @Nullable List<SqlParserPos> poses) {
     this.names = ImmutableList.copyOf(names);
-    this.componentPositions = poses == null ? null
-        : ImmutableList.copyOf(poses);
+    this.componentPositions =
+        poses == null ? null
+            : ImmutableList.copyOf(poses);
   }
 
   /** Returns an identifier that is the same as this except one modified name.
@@ -277,7 +281,7 @@ public class SqlIdentifier extends SqlNode {
     final SqlIdentifier id = this.plus("*", SqlParserPos.ZERO);
     return new SqlIdentifier(
         id.names.stream().map(s -> s.equals("*") ? "" : s)
-            .collect(Util.toImmutableList()),
+            .collect(toImmutableList()),
         null, id.pos, id.componentPositions);
   }
 

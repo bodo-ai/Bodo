@@ -61,6 +61,8 @@ import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.rex.RexUnknownAs;
 import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.rex.RexVisitorImpl;
+import org.apache.calcite.rex.RexWindow;
+import org.apache.calcite.rex.RexWindowBound;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlRowOperator;
@@ -758,10 +760,26 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
       return null;
     }
 
+    void processWindowBound(RexWindowBound bound) {
+      RexNode offset = bound.getOffset();
+      if (offset == null) {
+        return;
+      }
+      bound.accept(this);
+      Constancy constancy = Util.last(stack);
+      if (constancy == Constancy.REDUCIBLE_CONSTANT) {
+        addResult(offset);
+      }
+      Util.last(stack, 1).clear();
+    }
+
     @Override
     public Void visitOver(RexOver over) {
       // assume non-constant (running SUM(1) looks constant but isn't)
       analyzeCall(over, BodoSQLReduceExpressionsRule.ReducibleExprLocator.Constancy.NON_CONSTANT);
+      final RexWindow window = over.getWindow();
+      this.processWindowBound(window.getLowerBound());
+      this.processWindowBound(window.getUpperBound());
       return null;
     }
 

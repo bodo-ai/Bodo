@@ -95,8 +95,10 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
       case INTERVAL_SECOND:
         return SqlTypeName.MAX_INTERVAL_START_PRECISION;
       case BOOLEAN:
+      case CHAR:
         return 1;
       case BINARY:
+      case VARCHAR:
         return RelDataType.PRECISION_NOT_SPECIFIED;
         // Snowflake:
         // INT , INTEGER , BIGINT , SMALLINT , TINYINT , BYTEINT
