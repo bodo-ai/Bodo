@@ -141,7 +141,9 @@ def test_getitem_int(map_arr_value):
         return map_arr[idx]
 
     idx = 1
-    check_func(impl, (map_arr_value, idx), py_output=map_arr_value[idx], only_seq=True)
+    check_func(
+        impl, (map_arr_value, idx), py_output=dict(map_arr_value[idx]), only_seq=True
+    )
 
 
 def test_getitem_bool(map_arr_value):
