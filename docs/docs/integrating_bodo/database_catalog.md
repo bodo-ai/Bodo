@@ -63,4 +63,4 @@ bodo_platform_utils.catalog.get_data("catalog_name")
 
 !!! seealso
 
-    [Database Catalogs][database-catalogs], [BodoSDK Catalog API][catalog]
+    [Database Catalogs][database-catalogs], [BodoSDK Catalog API](https://pypi.org/project/bodosdk/#catalog)
