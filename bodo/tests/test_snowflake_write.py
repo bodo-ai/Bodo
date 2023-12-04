@@ -2022,15 +2022,15 @@ def test_write_with_timestamp_time_precision(memory_leak_check):
     global_1 = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D", "E", "F"))
     global_2 = bodo.utils.typing.MetaType((0, 1, 2, 3, 4, 5))
     # Note: BodoSQL shouldn't generate -1, but we check just in case.
-    global_3 = bodo.utils.typing.MetaType((-1, 0, -1, 4, -1, 5))
+    global_3 = bodo.utils.typing.MetaType((-1, 0, -1, 6, -1, 6))
     # Column B is written without any precision info, so we default to the maximum
     expected_types = [
         "TIMESTAMP_NTZ(9)",
         "TIMESTAMP_NTZ(0)",
         "TIMESTAMP_LTZ(9)",
-        "TIMESTAMP_LTZ(4)",
+        "TIMESTAMP_LTZ(6)",
         "TIME(9)",
-        "TIME(5)",
+        "TIME(6)",
     ]
     snowflake_user = 1
     conn = bodo.tests.utils.get_snowflake_connection_string(
@@ -2085,11 +2085,27 @@ def test_write_with_timestamp_time_precision(memory_leak_check):
                         writer, T, global_1, True, iter_val, global_3
                     )
                     iter_val += 1
+                return df
 
-            bodo.jit(cache=False)(impl)(conn)
+            expected_df = bodo.jit(cache=False)(impl)(conn)
+            expected_df.columns = map(str.lower, expected_df.columns)
             table_info = pd.read_sql(f"DESCRIBE TABLE {table_name}", conn)
             # Column B was written without any precision info, so we default to the maximum
             assert table_info["type"].to_list() == expected_types
+
+            def read_impl(conn, table_name):
+                df = pd.read_sql(f"select * from {table_name}", conn)
+                return df
+
+            check_func(
+                read_impl,
+                (conn, table_name),
+                py_output=expected_df,
+                sort_output=True,
+                reset_index=True,
+                only_1DVar=True,
+            )
+
     finally:
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_use_put
 

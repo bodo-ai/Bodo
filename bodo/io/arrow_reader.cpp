@@ -1216,8 +1216,8 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
 
     arrow::ChunkedArrayVector new_cols;
     for (int i = 0; i < table->num_columns(); i++) {
-        // We should do a quick check to ensure that we only perform
-        // upcasting and no nullability changes
+        //  We should do a quick check to ensure that we only perform
+        //  upcasting and no nullability changes
         auto col = table->column(i);
 
         auto exp_type = this->schema->field(i)->type();
@@ -1236,7 +1236,8 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
         // converting NA to NaN or NaT) Thus, we shouldn't bother checking
         // for nullability in these cases
         if (exp_type->id() == Type::FLOAT || exp_type->id() == Type::DOUBLE ||
-            exp_type->id() == Type::TIMESTAMP) {
+            exp_type->id() == Type::TIMESTAMP ||
+            exp_type->id() == Type::TIME64 || exp_type->id() == Type::TIME32) {
             nullable_eq = true;
         } else if (exp_type->id() == Type::INT8 ||
                    exp_type->id() == Type::INT16 ||
@@ -1252,6 +1253,16 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
                 // There are no nulls so just mark this conversion as ok.
                 nullable_eq = true;
             }
+        }
+
+        // We need to be able to cast between time types of the same
+        // width with different units
+        bool same_time_type = false;
+        if ((exp_type->id() == Type::TIME64 &&
+             act_type->id() == Type::TIME64) ||
+            (exp_type->id() == Type::TIME32 &&
+             act_type->id() == Type::TIME32)) {
+            same_time_type = true;
         }
 
         if (act_type->Equals(exp_type) && nullable_eq) {
@@ -1311,7 +1322,8 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
         // Int -> Wider Int
         // Int -> Wider Decimal
         // Float / Double -> Wider Decimal
-        else if ((act_type->bit_width() < exp_type->bit_width()) &&
+        else if ((act_type->bit_width() < exp_type->bit_width() ||
+                  same_time_type) &&
                  nullable_eq) {
             // Check if upcast is possible in this case
             // Dont bother checking if types are compatible, should
