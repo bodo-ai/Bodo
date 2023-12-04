@@ -6,6 +6,7 @@ For MySql reference used, see https://dev.mysql.com/doc/refman/8.0/en/literals.h
 """
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodo.tests.utils import pytest_slow_unless_codegen
@@ -433,4 +434,65 @@ def test_large_day_literals(bodosql_date_types, memory_leak_check):
         None,
         expected_output=expected_output,
         check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "args, answer",
+    [
+        pytest.param(
+            "1, 2, 3",
+            pd.Series([[1, 2, 3]] * 5, dtype=pd.ArrowDtype(pa.large_list(pa.int64()))),
+            marks=pytest.mark.skip(
+                reason="[BSE-2203] constructing arrays from literal ints causes a compiler error"
+            ),
+            id="integer_literals",
+        ),
+        pytest.param(
+            "'a', 'b', 'c'",
+            pd.Series(
+                [["a", "b", "c"]] * 5, dtype=pd.ArrowDtype(pa.large_list(pa.string()))
+            ),
+            id="string_literals",
+        ),
+        pytest.param(
+            "OBJECT_CONSTRUCT('a', 0, 'b', '1')",
+            pd.Series(
+                [[{"a": 0, "b": "1"}]] * 5,
+                dtype=pd.ArrowDtype(
+                    pa.large_list(
+                        pa.struct(
+                            [pa.field("a", pa.int32()), pa.field("b", pa.string())]
+                        )
+                    )
+                ),
+            ),
+            marks=pytest.mark.skip(reason="[BSE-2208] MAP array type is unsupported"),
+            id="objects",
+        ),
+        pytest.param(
+            "['a'], ['b'], ['c']",
+            pd.Series(
+                [[["a"], ["b"], ["c"]]] * 5,
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.string()))),
+            ),
+            id="nested_strings",
+        ),
+        pytest.param(
+            "0, A",
+            pd.Series([[0, 1]] * 5, dtype=pd.ArrowDtype(pa.large_list(pa.int64()))),
+            id="integers_mixed",
+        ),
+    ],
+)
+def test_array_literals(args, answer, memory_leak_check):
+    query = f"SELECT [{args}] FROM table1"
+    check_query(
+        query,
+        {"table1": pd.DataFrame({"A": [1] * 5})},
+        None,
+        expected_output=pd.DataFrame({0: answer}),
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
     )

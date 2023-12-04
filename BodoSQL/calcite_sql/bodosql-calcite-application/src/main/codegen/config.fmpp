@@ -28,6 +28,7 @@ data: {
     # Example: "org.apache.calcite.sql.*", "java.util.List".
     imports: [
       "java.util.HashMap"
+      "com.bodosql.calcite.application.operatorTables.ArrayOperatorTable",
       "com.bodosql.calcite.application.operatorTables.ContextOperatorTable"
       "com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable"
       "com.bodosql.calcite.application.operatorTables.NumericOperatorTable"
@@ -416,6 +417,7 @@ data: {
         "DatePartFunctionCall()",
         "LastDayFunctionCall()",
         "TimestampAddFunctionCall()",
+        "BodoArrayLiteral()",
     ]
 
     # List of methods for parsing extensions to "CREATE [OR REPLACE]" calls.

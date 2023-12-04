@@ -4092,12 +4092,29 @@ operation to a nullable, signed version of the type.
 
 BodoSQL supports the following literal types:
 
+-   `#!sql array_literal`
 -   `#!sql boolean_literal`
 -   `#!sql datetime_literal`
 -   `#!sql float_literal`
 -   `#!sql integer_literal`
 -   `#!sql interval_literal`
 -   `#!sql string_literal`
+
+### Array Literal {#array_literal}
+
+**Syntax**:
+
+```sql
+<[> [expr[, expr...]] <]>
+```
+
+where `<[>` and `<]>` indicate literal `[` and `]`s, and `expr` is any expression.
+
+Array literals are lists of comma seperated expressions wrapped in square brackets.
+
+Note that BodoSQL currently only supports homogenous lists, and all `expr`s
+must coerce to a single type.
+
 
 ### Boolean Literal {#boolean_literal}
 
