@@ -32,7 +32,8 @@ import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.struct_arr_ext import StructArrayType
-from bodo.utils.typing import BodoError, is_list_like_index_type
+from bodo.utils.indexing import add_nested_counts, init_nested_counts
+from bodo.utils.typing import BodoError, is_list_like_index_type, unwrap_typeref
 
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
 from bodo.libs import array_ext, hdist  # isort:skip
@@ -493,3 +494,34 @@ def list_map_val_overload(val):
         return out
 
     return list_map_val_impl
+
+
+def scalar_to_map_array(scalar_val, length, _arr_typ):
+    pass
+
+
+@overload(scalar_to_map_array)
+def overload_array_to_repeated_map_array(scalar_val, length, _arr_typ):
+    """
+    Create an MapArray of length `length` by repeating scalar_val `length` times
+
+    Args:
+        scalar_val (MapScalarType): The map value to be repeated
+        length (int): Length of the output MapArray
+        _arr_typ (types.Type): MapArrayType for output
+    Returns:
+        An MapArray of length `length`
+    """
+
+    arr_type = unwrap_typeref(_arr_typ)
+    struct_arr_type = bodo.libs.struct_arr_ext.StructArrayType(
+        (arr_type.key_arr_type, arr_type.value_arr_type), ("key", "value")
+    )
+
+    def impl(scalar_val, length, _arr_typ):  # pragma: no cover
+        out_arr = pre_alloc_map_array(length, (-1,), struct_arr_type)
+        for i in range(length):
+            out_arr[i] = scalar_val
+        return out_arr
+
+    return impl
