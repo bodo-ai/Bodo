@@ -119,6 +119,16 @@ def overload_semi_safe_equals(arg0, arg1):
 
         return impl
 
+    # Map array scalar values
+    if isinstance(arg0, bodo.libs.map_arr_ext.MapScalarType) or isinstance(
+        arg1, bodo.libs.map_arr_ext.MapScalarType
+    ):
+        # Reuse dict implementation above
+        def impl(arg0, arg1):  # pragma: no cover
+            return semi_safe_equals(dict(arg0), dict(arg1))
+
+        return impl
+
     # Fallback implementation for most scalars.
     def impl(arg0, arg1):  # pragma: no cover
         return arg0 == arg1
