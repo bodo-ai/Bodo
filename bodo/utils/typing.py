@@ -1460,15 +1460,15 @@ def dtype_to_array_type(dtype, convert_nullable=False):
     """
     dtype = types.unliteral(dtype)
 
-    # UDFs may return lists, but we store array of array for output
-    if isinstance(dtype, types.List):
-        dtype = dtype_to_array_type(dtype.dtype)
-
     # UDFs may use Optional types for setting array values.
     # These should use the nullable type of the non-null case
     if isinstance(dtype, types.Optional):
         dtype = dtype.type
         convert_nullable = True
+
+    # UDFs may return lists, but we store array of array for output
+    if isinstance(dtype, types.List):
+        dtype = dtype_to_array_type(dtype.dtype, convert_nullable)
 
     # null array
     if dtype == bodo.null_dtype:
@@ -1518,13 +1518,15 @@ def dtype_to_array_type(dtype, convert_nullable=False):
 
     # tuple array
     if isinstance(dtype, types.BaseTuple):
-        return bodo.TupleArrayType(tuple(dtype_to_array_type(t) for t in dtype.types))
+        return bodo.TupleArrayType(
+            tuple(dtype_to_array_type(t, convert_nullable) for t in dtype.types)
+        )
 
     # map array
     if isinstance(dtype, types.DictType):
         return bodo.MapArrayType(
-            dtype_to_array_type(dtype.key_type),
-            dtype_to_array_type(dtype.value_type),
+            dtype_to_array_type(dtype.key_type, convert_nullable),
+            dtype_to_array_type(dtype.value_type, convert_nullable),
         )
 
     # DatetimeTZDtype are stored as pandas Datetime array
@@ -1567,6 +1569,11 @@ def get_udf_out_arr_type(f_return_type, return_nullable=False):
     # UDF output can be Optional if None is returned in a code path
     if isinstance(f_return_type, types.Optional):
         f_return_type = f_return_type.type
+        return_nullable = True
+
+    # Needed for MapArrayType since we use MapScalarType in getitem, not Dict
+    # See test_map_array.py::test_map_apply_simple
+    if isinstance(f_return_type, types.DictType):
         return_nullable = True
 
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
@@ -1684,6 +1691,17 @@ def to_nullable_type(t):
             and bodo.libs.float_arr_ext._use_nullable_float
         ):
             return bodo.libs.float_arr_ext.FloatingArrayType(t.dtype)
+
+    if isinstance(t, bodo.ArrayItemArrayType):
+        return bodo.ArrayItemArrayType(to_nullable_type(t.dtype))
+
+    if isinstance(t, bodo.StructArrayType):
+        return bodo.StructArrayType(tuple(to_nullable_type(a) for a in t.data), t.names)
+
+    if isinstance(t, bodo.MapArrayType):
+        return bodo.MapArrayType(
+            to_nullable_type(t.key_arr_type), to_nullable_type(t.value_arr_type)
+        )
 
     return t
 

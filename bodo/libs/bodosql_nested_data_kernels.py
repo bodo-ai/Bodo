@@ -73,8 +73,13 @@ def object_keys_util(arr):
         scalar_text = (
             f"res[i] = bodo.libs.str_arr_ext.str_list_to_array({list(typ.names)})"
         )
-    elif isinstance(typ, bodo.libs.map_arr_ext.MapArrayType) or (
-        isinstance(typ, types.DictType) and typ.key_type == types.unicode_type
+    elif (
+        isinstance(typ, bodo.libs.map_arr_ext.MapArrayType)
+        or (isinstance(typ, types.DictType) and typ.key_type == types.unicode_type)
+        or (
+            isinstance(typ, bodo.libs.map_arr_ext.MapScalarType)
+            and typ.key_arr_type == bodo.string_array_type
+        )
     ):
         scalar_text = "res[i] = bodo.libs.str_arr_ext.str_list_to_array(list(arg0))\n"
     elif typ == bodo.none:

@@ -81,7 +81,7 @@ def overload_object_construct_keep_null(values, names, scalars):
             are_arrays.append(True)
         optionals.append(is_optional)
     out_dtype = bodo.utils.typing.dtype_to_array_type(
-        bodo.libs.struct_arr_ext.StructType(tuple(scalar_dtypes), names)
+        bodo.libs.struct_arr_ext.StructType(tuple(scalar_dtypes), names), True
     )
 
     propagate_null = [False] * len(arg_names)
