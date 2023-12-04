@@ -19,7 +19,7 @@ Bodo provides a simple API for creating _Batch Job Definitions_ and then submitt
 
 Batch job definitions are stored objects which can be used to run your data processing and analysis applications in a Bodo Platform workspace.
 You need to have an available workspace before creating a batch job definitions. Here are the main components of a batch job definition. For details on usage, 
-see [Bodo Platform SDK][bodo-platform-batch-jobs]. 
+see [Bodo Platform SDK docs](https://pypi.org/project/bodosdk/#bodo-platform-batch-jobs). 
 
 !!! note
 
