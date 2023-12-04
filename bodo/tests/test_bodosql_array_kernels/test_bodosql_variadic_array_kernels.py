@@ -1700,7 +1700,7 @@ def test_object_filter_keys(
                     [
                         {"A": 1},
                         {"B": 2, "C": 4},
-                        {"D": 5, "E": 25, "F": 33},
+                        {"D": 5, "E": 25, "F": None},
                     ]
                     * 10
                     + [None, {"G": 4}],
@@ -1713,7 +1713,7 @@ def test_object_filter_keys(
                 [
                     {"id": 10, "data": {"A": 1}},
                     {"id": 11, "data": {"B": 2, "C": 4}},
-                    {"id": 16, "data": {"D": 5, "E": 25, "F": 33}},
+                    {"id": 16, "data": {"D": 5, "E": 25, "F": None}},
                 ]
                 * 10
                 + [{"id": None, "data": None}, {"id": 23, "data": {"G": 4}}],

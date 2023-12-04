@@ -4,6 +4,7 @@
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -103,7 +104,13 @@ def test_map_apply_simple(memory_leak_check):
         return df["A"].apply(lambda x: x)
 
     df = pd.DataFrame(
-        {"A": [{1: 2, 4: 10, 15: 71, 33: 36, 141: 21, 4214: 2, -1: 0, 0: 0, 5: 2}] * 10}
+        {
+            "A": pd.Series(
+                [{1: 2, 4: 10, 15: 71, 33: 36, 141: 21, 4214: 2, -1: 0, 0: 0, 5: 2}]
+                * 10,
+                dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int64())),
+            )
+        }
     )
     check_func(impl, (df,))
 
@@ -131,6 +138,18 @@ def test_map_apply(memory_leak_check):
     )
     keys2 = [str(i + 1) for i in np.arange(6000)]
     check_func(impl, (df2, keys2))
+
+
+def test_getitem_int(map_arr_value):
+    """
+    Tests using a int getitem to select map array values.
+    """
+
+    def impl(map_arr, idx):
+        return map_arr[idx]
+
+    idx = 1
+    check_func(impl, (map_arr_value, idx), py_output=map_arr_value[idx], only_seq=True)
 
 
 def test_getitem_bool(map_arr_value):

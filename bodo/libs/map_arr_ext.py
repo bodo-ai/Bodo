@@ -228,6 +228,21 @@ def map_arr_setitem(arr, ind, val):
 
             return map_arr_setitem_impl
 
+        if isinstance(val, MapScalarType):
+
+            def map_arr_setitem_impl(arr, ind, val):  # pragma: no cover
+                struct_arr = bodo.libs.struct_arr_ext.init_struct_arr(
+                    (val._keys, val._values), val._null_bitmask, ("key", "value")
+                )
+                arr._data[ind] = struct_arr
+
+            return map_arr_setitem_impl
+
+        if not isinstance(val, types.DictType):  # pragma: no cover
+            raise BodoError(
+                f"Unsupported operator.setitem with MapArrays with index '{ind}' and value '{val}'."
+            )
+
         def map_arr_setitem_impl(arr, ind, val):  # pragma: no cover
             keys = val.keys()
 
@@ -259,7 +274,7 @@ def map_arr_setitem(arr, ind, val):
         return map_arr_setitem_impl
 
     raise BodoError(
-        f"Unsupported operator.setitem with MapArrays with index {ind} and value {val}."
+        f"Unsupported operator.setitem with MapArrays with index '{ind}' and value '{val}'."
     )
 
 
@@ -269,19 +284,27 @@ def map_arr_getitem(arr, ind):
         return
 
     if isinstance(ind, types.Integer):
-        # TODO: warning if value is NA?
+
         def map_arr_getitem_impl(arr, ind):  # pragma: no cover
             if ind < 0:
                 ind += len(arr)
-            out = dict()
             offsets = bodo.libs.array_item_arr_ext.get_offsets(arr._data)
             struct_arr = bodo.libs.array_item_arr_ext.get_data(arr._data)
             key_data, value_data = bodo.libs.struct_arr_ext.get_data(struct_arr)
+            nulls = bodo.libs.struct_arr_ext.get_null_bitmap(struct_arr)
             start_offset = offsets[np.int64(ind)]
             end_offset = offsets[np.int64(ind) + 1]
+            new_nulls = np.empty((end_offset - start_offset + 7) >> 3, np.uint8)
+            curr_bit = 0
             for i in range(start_offset, end_offset):
-                out[key_data[i]] = value_data[i]
-            return out
+                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(nulls, i)
+                bodo.libs.int_arr_ext.set_bit_to_arr(new_nulls, curr_bit, bit)
+                curr_bit += 1
+            return init_map_value(
+                key_data[start_offset:end_offset],
+                value_data[start_offset:end_offset],
+                new_nulls,
+            )
 
         return map_arr_getitem_impl
 
@@ -298,3 +321,175 @@ def map_arr_getitem(arr, ind):
     raise BodoError(
         f"getitem for MapArray with indexing type {ind} not supported."
     )  # pragma: no cover
+
+
+class MapScalarType(types.Type):
+    """Data type for map elements taken as scalars from map arrays. A regular
+    dictionary doesn't work in the general case since values can have nulls and a
+    key/value pair could be null, which is not supported by Numba's dictionaries.
+    """
+
+    def __init__(self, key_arr_type, value_arr_type):
+        self.key_arr_type = key_arr_type
+        self.value_arr_type = value_arr_type
+        super(MapScalarType, self).__init__(
+            name=f"MapScalarType({key_arr_type}, {value_arr_type})"
+        )
+
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
+
+
+@register_model(MapScalarType)
+class MapValueTypeModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        # Stores key and value arrays
+        members = [
+            ("keys", fe_type.key_arr_type),
+            ("values", fe_type.value_arr_type),
+            ("null_bitmask", types.Array(types.uint8, 1, "C")),
+        ]
+        models.StructModel.__init__(self, dmm, fe_type, members)
+
+
+make_attribute_wrapper(MapScalarType, "keys", "_keys")
+make_attribute_wrapper(MapScalarType, "values", "_values")
+make_attribute_wrapper(MapScalarType, "null_bitmask", "_null_bitmask")
+
+
+@intrinsic
+def init_map_value(typingctx, key_arr_type, value_arr_type, null_bitmask_type):
+    """Create a MapValue from key and value arrays"""
+    assert null_bitmask_type == types.Array(
+        types.uint8, 1, "C"
+    ), "init_map_value invalid null_bitmask_type"
+
+    def codegen(context, builder, signature, args):
+        map_val = cgutils.create_struct_proxy(signature.return_type)(context, builder)
+        map_val.keys = args[0]
+        map_val.values = args[1]
+        map_val.null_bitmask = args[2]
+
+        # increase refcount of stored values
+        context.nrt.incref(builder, signature.args[0], args[0])
+        context.nrt.incref(builder, signature.args[1], args[1])
+        context.nrt.incref(builder, signature.args[2], args[2])
+
+        return map_val._getvalue()
+
+    out_type = MapScalarType(key_arr_type, value_arr_type)
+    return out_type(key_arr_type, value_arr_type, null_bitmask_type), codegen
+
+
+def key_values_to_dict(key_arr, value_arr, null_bitmask):
+    """Convert key and value arrays into dictionary"""
+    return {
+        k: v
+        for i, (k, v) in enumerate(zip(key_arr, value_arr))
+        if bodo.libs.int_arr_ext.get_bit_bitmap_arr(null_bitmask, i)
+    }
+
+
+@box(MapScalarType)
+def box_map_value(typ, val, c):
+    """box map value into python dictionary objects"""
+
+    map_value = numba.core.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+
+    c.context.nrt.incref(c.builder, typ.key_arr_type, map_value.keys)
+    key_arr_obj = c.pyapi.from_native_value(
+        typ.key_arr_type, map_value.keys, c.env_manager
+    )
+    c.context.nrt.incref(c.builder, typ.value_arr_type, map_value.values)
+    value_arr_obj = c.pyapi.from_native_value(
+        typ.value_arr_type, map_value.values, c.env_manager
+    )
+    c.context.nrt.incref(
+        c.builder, types.Array(types.uint8, 1, "C"), map_value.null_bitmask
+    )
+    null_bitmask_obj = c.pyapi.from_native_value(
+        types.Array(types.uint8, 1, "C"), map_value.null_bitmask, c.env_manager
+    )
+
+    key_values_to_dict_obj = c.pyapi.unserialize(
+        c.pyapi.serialize_object(key_values_to_dict)
+    )
+    dict_obj = c.pyapi.call_function_objargs(
+        key_values_to_dict_obj, [key_arr_obj, value_arr_obj, null_bitmask_obj]
+    )
+    c.pyapi.decref(key_arr_obj)
+    c.pyapi.decref(value_arr_obj)
+    c.pyapi.decref(null_bitmask_obj)
+    c.pyapi.decref(key_values_to_dict_obj)
+
+    c.context.nrt.decref(c.builder, typ, val)
+    return dict_obj
+
+
+@overload(operator.getitem, no_unliteral=True)
+def map_val_getitem(val, ind):
+    if not isinstance(val, MapScalarType):
+        return
+
+    # Convert to dict for proper getitem
+    # NOTE: values can be NA but we assume NA checks are done before accessing the
+    # values to avoid adding complexity of Optional output here
+    return lambda val, ind: dict(val)[ind]  # pragma: no cover
+
+
+@overload(dict)
+def dict_dict_overload(val):
+    """Calling dict() constructor on dict value should be a copy"""
+    if isinstance(val, types.DictType):
+        return lambda val: val.copy()  # pragma: no cover
+
+
+@overload(dict)
+def dict_map_val_overload(val):
+    """Support dict constructor for MapScalarType input"""
+    if not isinstance(val, MapScalarType):
+        return
+
+    key_type = val.key_arr_type.dtype
+    value_type = val.value_arr_type.dtype
+
+    def dict_map_val_impl(val):  # pragma: no cover
+        keys = val._keys
+        values = val._values
+        null_bitmask = val._null_bitmask
+        n = len(val._keys)
+        out = numba.typed.typeddict.Dict.empty(key_type, value_type)
+        for i in range(n):
+            if bodo.libs.int_arr_ext.get_bit_bitmap_arr(null_bitmask, i):
+                k = keys[i]
+                v = values[i]
+                out[k] = v
+        return out
+
+    return dict_map_val_impl
+
+
+@overload(list)
+def list_map_val_overload(val):
+    """Support list constructor for MapScalarType input"""
+    if not isinstance(val, MapScalarType):
+        return
+
+    def list_map_val_impl(val):  # pragma: no cover
+        keys = val._keys
+        null_bitmask = val._null_bitmask
+        n = len(keys)
+        out = []
+        for i in range(n):
+            if bodo.libs.int_arr_ext.get_bit_bitmap_arr(null_bitmask, i):
+                out.append(keys[i])
+        return out
+
+    return list_map_val_impl
