@@ -30,4 +30,4 @@ keys = WorkspaceKeys(
 client = get_bodo_client(keys)
 ```
 
-To learn more about Bodo SDK, refer to this [guide](../integrating_bodo/platform_sdk.md)
+To learn more about Bodo SDK, refer to the docs on the [PyPi page for BodoSDK](https://pypi.org/project/bodosdk/)
