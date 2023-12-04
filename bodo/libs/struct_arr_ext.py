@@ -51,6 +51,7 @@ from bodo.utils.typing import (
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
+    unwrap_typeref,
 )
 
 
@@ -1198,4 +1199,34 @@ def copy_arr_tup_overload(arrs):
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["f"]
+    return impl
+
+
+def scalar_to_struct_array(scalar_val, length, _arr_typ):
+    pass
+
+
+@overload(scalar_to_struct_array)
+def overload_scalar_to_struct_array(scalar_val, length, _arr_typ):
+    """
+    Create an StructArray of length `length` by repeating scalar_val `length` times
+
+    Args:
+        scalar_val (StructType): The struct value to be repeated
+        length (int): Length of the output StructArray
+        _arr_typ (types.Type): StructArrayType for output
+    Returns:
+        An StructArray of length `length`
+    """
+
+    arr_type = unwrap_typeref(_arr_typ)
+    dtypes = arr_type.data
+    names = arr_type.names
+
+    def impl(scalar_val, length, _arr_typ):  # pragma: no cover
+        out_arr = pre_alloc_struct_array(length, (-1,), dtypes, names)
+        for i in range(length):
+            out_arr[i] = scalar_val
+        return out_arr
+
     return impl

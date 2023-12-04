@@ -1529,9 +1529,19 @@ class DistributedPass:
 
         # array_to_repeated_array_item_array() is similar to an allocation and its size
         # argument needs handled similarly
-        if fdef == (
-            "array_to_repeated_array_item_array",
-            "bodo.libs.array_item_arr_ext",
+        if fdef in (
+            (
+                "array_to_repeated_array_item_array",
+                "bodo.libs.array_item_arr_ext",
+            ),
+            (
+                "scalar_to_map_array",
+                "bodo.libs.map_arr_ext",
+            ),
+            (
+                "scalar_to_struct_array",
+                "bodo.libs.struct_arr_ext",
+            ),
         ):
             out = []
             size_var = rhs.args[1]

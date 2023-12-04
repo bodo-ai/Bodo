@@ -807,6 +807,9 @@ def array_item_arr_setitem(A, idx, val):
                 bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, i, bit)
                 val_ind += 1
 
+            if stop == get_n_arrays(A):
+                trim_excess_data(A)
+
         return impl_slice
 
     raise BodoError(
