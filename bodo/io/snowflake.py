@@ -1989,12 +1989,7 @@ def execute_copy_into(
     # Time data: set as string, and data is stored correctly as time based on sf_schema info received.
 
     binary_time_mod = {
-        c: "::binary"
-        if sf_schema[c] == "BINARY"
-        else "::string"
-        if sf_schema[c].startswith("TIME")
-        else ""
-        for c in sf_schema.keys()
+        c: "::binary" if sf_schema[c] == "BINARY" else "" for c in sf_schema.keys()
     }
 
     parquet_columns = ",".join(
