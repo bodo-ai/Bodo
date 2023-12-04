@@ -476,6 +476,22 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type, dict_encode=True):
 
         return impl
 
+    if isinstance(_arr_typ, bodo.MapArrayType):
+
+        def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover
+            return bodo.libs.map_arr_ext.scalar_to_map_array(scalar, length, _arr_typ)
+
+        return impl
+
+    if isinstance(_arr_typ, bodo.StructArrayType):
+
+        def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover
+            return bodo.libs.struct_arr_ext.scalar_to_struct_array(
+                scalar, length, _arr_typ
+            )
+
+        return impl
+
     if scalar == types.none:
         # If the scalar is None we generate an array of all NA
         def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover

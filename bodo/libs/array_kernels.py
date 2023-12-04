@@ -296,6 +296,8 @@ def setna_overload(arr, ind, int_nan_const=0):
         def impl_arr_item(arr, ind, int_nan_const=0):  # pragma: no cover
             # set offset
             offsets = bodo.libs.array_item_arr_ext.get_offsets(arr)
+            if ind == 0:
+                offsets[ind] = 0
             offsets[ind + 1] = offsets[ind]
             # set NA bitmask
             bodo.libs.int_arr_ext.set_bit_to_arr(

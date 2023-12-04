@@ -1577,9 +1577,6 @@ def test_array_remove(
                     )
                 ),
             ),
-            marks=pytest.mark.skip(
-                reason="[BSE-2124] TODO: Make coerce_to_array support struct array"
-            ),
             id="vector_struct",
         ),
         pytest.param(
@@ -1609,9 +1606,6 @@ def test_array_remove(
                     [{"hex": "660c21", "name": "pomegranate"}],
                 ],
                 dtype=pd.ArrowDtype(pa.large_list(pa.map_(pa.string(), pa.string()))),
-            ),
-            marks=pytest.mark.skip(
-                reason="[BSE-2124] TODO: Make coerce_to_array support map array"
             ),
             id="vector_map",
         ),
