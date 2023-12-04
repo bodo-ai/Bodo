@@ -1289,3 +1289,22 @@ SqlCreate SqlCreateView(Span s, boolean replace) :
             query);
     }
 }
+
+SqlNode BodoArrayLiteral() :
+{
+    final List<SqlNode> list;
+    SqlNode e;
+    final Span s;
+}
+{
+    <LBRACKET> { s = span(); }
+    (
+        e = Expression(ExprContext.ACCEPT_SUB_QUERY) { list = startList(e); }
+        ( <COMMA> e = Expression(ExprContext.ACCEPT_SUB_QUERY) { list.add(e); } )*
+    |
+        { list = Collections.emptyList(); }
+    )
+    <RBRACKET> {
+       return ArrayOperatorTable.ARRAY_CONSTRUCT.createCall(s.end(this), list);
+    }
+}
