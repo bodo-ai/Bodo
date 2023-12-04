@@ -14,7 +14,7 @@ from bodo.tests.utils import check_func
 @pytest.fixture(
     params=[
         # simple types to handle in C
-        np.array(
+        pd.array(
             [
                 {1: 1.4, 2: 3.1},
                 {7: -1.2},
@@ -23,10 +23,11 @@ from bodo.tests.utils import check_func
                 {4: 9.4, 6: 4.1},
                 {7: -1.2},
                 {},
-            ]
+            ],
+            pd.ArrowDtype(pa.map_(pa.int32(), pa.float32())),
         ),
         # nested type
-        np.array(
+        pd.array(
             [
                 {1: [3, 1, None], 2: [2, 1]},
                 {3: [5], 7: None},
@@ -37,7 +38,8 @@ from bodo.tests.utils import check_func
                 {1: [-1]},
                 {},
                 {21: None, 9: []},
-            ]
+            ],
+            pd.ArrowDtype(pa.map_(pa.int32(), pa.list_(pa.int32()))),
         ),
     ]
 )
@@ -45,10 +47,8 @@ def map_arr_value(request):
     return request.param
 
 
-# there is a memory leak probably due to the decref issue in to_arr_obj_if_list_obj()
-# TODO: fix leak and enable test
 @pytest.mark.slow
-def test_unbox(map_arr_value):
+def test_unbox(map_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
         return True
@@ -59,14 +59,6 @@ def test_unbox(map_arr_value):
 
     check_func(impl, (map_arr_value,))
     check_func(impl2, (map_arr_value,))
-
-
-@pytest.mark.slow
-def test_dtype(map_arr_value, memory_leak_check):
-    def test_impl(A):
-        return A.dtype
-
-    check_func(test_impl, (map_arr_value,))
 
 
 @pytest.mark.slow
