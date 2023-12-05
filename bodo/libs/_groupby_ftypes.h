@@ -99,6 +99,7 @@ struct Bodo_FTypes {
         // more explicit ftypes. This is used only in the min_row_number_filter
         // window function path.
         idx_n_columns = 67,
+        n_ftypes = 68,
     };
 };
 

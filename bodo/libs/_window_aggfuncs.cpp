@@ -1378,6 +1378,12 @@ void window_frame_computation_dtype_handler(
                 Bodo_CTypes::DECIMAL>(in_arr, out_arr, sorted_groups,
                                       sorted_idx, frame_lo, frame_hi, ftype);
             break;
+        case Bodo_CTypes::INT128:
+            window_frame_computation_ftype_handler<
+                ArrayType, dtype_to_type<Bodo_CTypes::INT128>::type,
+                Bodo_CTypes::INT128>(in_arr, out_arr, sorted_groups, sorted_idx,
+                                     frame_lo, frame_hi, ftype);
+            break;
         case Bodo_CTypes::DATE:
             window_frame_computation_ftype_handler<
                 ArrayType, dtype_to_type<Bodo_CTypes::DATE>::type,

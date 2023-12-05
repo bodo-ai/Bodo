@@ -1036,6 +1036,10 @@ concept dict_array = ArrType == bodo_array_type::arr_type_enum::DICT;
 template <bodo_array_type::arr_type_enum ArrType>
 concept string_or_dict = string_array<ArrType> || dict_array<ArrType>;
 
+template <bodo_array_type::arr_type_enum ArrType>
+concept array_item_array =
+    ArrType == bodo_array_type::arr_type_enum::ARRAY_ITEM;
+
 /**
  * @brief Retrieves an item from an array.
  *
