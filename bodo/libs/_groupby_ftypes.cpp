@@ -76,7 +76,8 @@ const char* Bodo_FTypes_names[] = {"no_op",
                                    "boolxor_eval",
                                    "idxmin_na_first",
                                    "idxmax_na_first",
-                                   "idx_n_columns"};
+                                   "idx_n_columns",
+                                   "n_ftypes"};
 
 const std::string get_name_for_Bodo_FTypes(int enumVal) {
     if (enumVal < 0 || enumVal >= Bodo_FTypes::num_funcs) {

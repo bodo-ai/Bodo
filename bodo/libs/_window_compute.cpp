@@ -599,7 +599,8 @@ void conditional_true_event_computation(
             if (getv<uint8_t>(input_col, idx))
                 counter++;
         } else {
-            if (GetBit((uint8_t*)input_col->data1(), idx))
+            if (input_col->get_null_bit(idx) &&
+                GetBit((uint8_t*)input_col->data1(), idx))
                 counter++;
         }
         getv<int64_t>(out_arr, idx) = counter;

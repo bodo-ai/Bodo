@@ -1344,7 +1344,7 @@ def test_tz_aware_having(memory_leak_check):
     )
 
 
-def test_all_nulls(memory_leak_check):
+def test_all_nulls_1(memory_leak_check):
     """
     Test the case where all values in a group are null.
     """
@@ -1383,6 +1383,84 @@ def test_all_nulls(memory_leak_check):
     from table1 group by A
     """
     check_query(query, ctx, None, check_dtype=False, expected_output=py_output)
+
+
+def test_all_nulls_2(memory_leak_check):
+    """
+    Tests that groupby aggregations work correctly when the
+    data is all-null on the remaining functions.
+
+    Todo items:
+    [BSE-2182] Fix listagg in groupby when strings are all-null
+    [BSE-2133] Fix object_agg in groupby when there are any/all
+               null keys/values.
+    """
+    selects = [
+        "K",
+        "VARIANCE_POP(I) as VP",
+        "STDDEV_POP(I) as SP",
+        "SKEW(I) as SK",
+        "KURTOSIS(I) as KU",
+        "COUNT(*) as CS",
+        "COUNT_IF(B) as CI",
+        "MODE(I) as MO",
+        "MEDIAN(I) as ME",
+        "BOOLAND_AGG(B) as BA",
+        "BOOLXOR_AGG(B) as BX",
+        "BITOR_AGG(I) as BIO",
+        "BITAND_AGG(I) as BIA",
+        "BITXOR_AGG(I) as BIX",
+        # [BSE-2182]
+        # "LISTAGG(I::varchar, ',') as LA", # [BSE-2182]
+        "ARRAY_AGG(I) as AA",
+        # [BSE-2133]
+        # "OBJECT_AGG(I::varchar, I) as OA", # [BSE-2133]
+        "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY I) as PC",
+        "PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY I) as PD",
+    ]
+    query = f"SELECT {', '.join(selects)} FROM table1 GROUP BY K"
+    df = pd.DataFrame(
+        {
+            "K": [0] * 10,
+            "I": pd.array([None] * 10, dtype=pd.Int32Dtype()),
+            "B": pd.array([None] * 10, dtype=pd.BooleanDtype()),
+        }
+    )
+
+    expected = pd.DataFrame(
+        {
+            "K": [0],
+            "VP": pd.Series([None], dtype=pd.Int32Dtype()),
+            "SP": pd.Series([None], dtype=pd.Int32Dtype()),
+            "SK": pd.Series([None], dtype=pd.Int32Dtype()),
+            "KU": pd.Series([None], dtype=pd.Int32Dtype()),
+            "CS": pd.Series([10], dtype=pd.Int32Dtype()),
+            "CI": pd.Series([0], dtype=pd.Int32Dtype()),
+            "MO": pd.Series([None], dtype=pd.Int32Dtype()),
+            "ME": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BA": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BX": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BIO": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BIA": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BIX": pd.Series([None], dtype=pd.Int32Dtype()),
+            # [BSE-2182]
+            # "LA": pd.Series([""]),
+            "AA": pd.Series([[]], dtype=pd.ArrowDtype(pa.large_list(pa.int32()))),
+            # [BSE-2133]
+            # "OA": pd.Series([{}], dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32()))),
+            "PC": pd.Series([None], dtype=pd.Int32Dtype()),
+            "PD": pd.Series([None], dtype=pd.Int32Dtype()),
+        }
+    )
+
+    check_query(
+        query,
+        {"table1": df},
+        None,
+        expected_output=expected,
+        check_dtype=False,
+        sort_output=False,
+    )
 
 
 @pytest.mark.parametrize(
