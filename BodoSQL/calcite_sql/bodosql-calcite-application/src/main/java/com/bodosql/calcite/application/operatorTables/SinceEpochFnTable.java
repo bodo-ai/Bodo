@@ -56,7 +56,7 @@ public final class SinceEpochFnTable implements SqlOperatorTable {
       SqlBasicFunction.create(
           "FROM_DAYS",
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          ReturnTypes.DATE_NULLABLE,
           // What Input Types does the function accept.
           OperandTypes.INTEGER,
           // What group of functions does this fall into?

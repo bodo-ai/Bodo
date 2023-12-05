@@ -2524,11 +2524,7 @@ def overload_from_days_util(arr):
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
-    is_input_arr = bodo.utils.utils.is_array_typ(arr, False)
-    if is_input_arr:
-        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
-    else:
-        out_dtype = bodo.pd_timestamp_tz_naive_type
+    out_dtype = DatetimeDateArrayType()
 
     # Value to subtract to days to get to unix time
     prefix_code = "unix_days_to_year_zero = 719528\n"
@@ -2537,13 +2533,8 @@ def overload_from_days_util(arr):
     scalar_text = (
         "  nanoseconds = (arg0 - unix_days_to_year_zero) * nanoseconds_divisor\n"
     )
-    if is_input_arr:
-        # Avoid unboxing into a Timestamp for the array case.
-        scalar_text += (
-            "  res[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(nanoseconds)\n"
-        )
-    else:
-        scalar_text += "  res[i] = pd.Timestamp(nanoseconds)\n"
+
+    scalar_text += "  res[i] = pd.Timestamp(nanoseconds).date()\n"
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -3813,10 +3804,11 @@ def add_months_util(dt0, num_months):
         out_dtype = bodo.DatetimeArrayType(time_zone)
         scalar_text += f"res[i] = new_arg\n"
     else:
-        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
         if is_valid_date_arg(dt0):
-            scalar_text += f"res[i] = {unbox_str}(pd.Timestamp(new_arg))\n"
+            out_dtype = bodo.datetime_date_array_type
+            scalar_text += f"res[i] = {unbox_str}(new_arg.date())\n"
         else:
+            out_dtype = types.Array(bodo.datetime64ns, 1, "C")
             scalar_text += f"res[i] = {unbox_str}(new_arg)\n"
 
     return gen_vectorized(

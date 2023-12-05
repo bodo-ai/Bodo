@@ -1912,7 +1912,7 @@ def test_from_days(arg, memory_leak_check):
         if pd.isna(int_val):
             return None
         else:
-            return pd.Timestamp((int_val - 719528) * 86400000000000)
+            return pd.Timestamp((int_val - 719528) * 86400000000000).date()
 
     from_days_answer = vectorized_sol((arg,), from_days_scalar_fn, None)
     check_func(
@@ -3206,7 +3206,7 @@ def test_option_from_days(memory_leak_check):
         return bodo.libs.bodosql_array_kernels.from_days(arg)
 
     for flag in [True, False]:
-        answer = pd.Timestamp("2007-01-01") if flag else None
+        answer = pd.Timestamp("2007-01-01").date() if flag else None
         check_func(
             impl,
             (733042, flag),
@@ -3618,18 +3618,18 @@ def test_months_between_series(arg0, arg1, answer, memory_leak_check):
             id="positive-eom-2",
         ),
         pytest.param(
-            datetime.date(2023, 1, 1), -1, pd.Timestamp("2022-12-1"), id="negative-eom"
+            datetime.date(2023, 1, 1), -1, datetime.date(2022, 12, 1), id="negative-eom"
         ),
         pytest.param(
             datetime.date(2023, 1, 31),
             -13,
-            pd.Timestamp("2021-12-31"),
+            datetime.date(2021, 12, 31),
             id="negative-eom-1",
         ),
         pytest.param(
             datetime.date(2023, 2, 28),
             -25,
-            pd.Timestamp("2021-1-31"),
+            datetime.date(2021, 1, 31),
             id="negative-eom-2",
         ),
     ],
